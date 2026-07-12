@@ -163,11 +163,7 @@ defmodule Cadence.Dashboards.DataSource do
     if kind(data_source) == :byo_tsdb do
       errors
       |> require_owner(data_source, :customer, "must be customer for BYO TSDB data sources")
-      |> require_isolation_level(
-        data_source,
-        :customer_owned,
-        "must be customer_owned for BYO TSDB data sources"
-      )
+      |> require_byo_isolation_level(data_source)
       |> require_organization_id(data_source, "must be set for BYO TSDB data sources")
       |> require_credentials_ref(data_source, "must be set for BYO TSDB data sources")
     else
@@ -179,11 +175,15 @@ defmodule Cadence.Dashboards.DataSource do
     if owner(data_source) == expected, do: errors, else: [{:owner, message} | errors]
   end
 
-  defp require_isolation_level(errors, %__MODULE__{} = data_source, expected, message) do
-    if isolation_level(data_source) == expected do
+  defp require_byo_isolation_level(errors, %__MODULE__{} = data_source) do
+    if isolation_level(data_source) in [:customer_owned, :org_isolated, :mission_isolated] do
       errors
     else
-      [{:isolation_level, message} | errors]
+      [
+        {:isolation_level,
+         "must be customer_owned, org_isolated, or mission_isolated for BYO TSDB data sources"}
+        | errors
+      ]
     end
   end
 

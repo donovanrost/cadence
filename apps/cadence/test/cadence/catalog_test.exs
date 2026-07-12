@@ -20,10 +20,14 @@ defmodule Cadence.CatalogTest do
 
   alias Cadence.Missions.Mission
 
-  @organization_id "org-alpha"
-  @mission_id "mission-alpha"
-
   setup do
+    suffix = System.unique_integer([:positive])
+    organization_id = "org-catalog-#{suffix}"
+    mission_id = "mission-catalog-#{suffix}"
+
+    Process.put(:catalog_test_organization_id, organization_id)
+    Process.put(:catalog_test_mission_id, mission_id)
+
     previous_importers = Application.get_env(:cadence, :catalog_importers, [])
 
     Application.put_env(:cadence, :catalog_importers, [
@@ -37,14 +41,20 @@ defmodule Cadence.CatalogTest do
     :ok
   end
 
+  defp organization_id,
+    do: Process.get(:catalog_test_organization_id) || raise("missing catalog test org")
+
+  defp mission_id,
+    do: Process.get(:catalog_test_mission_id) || raise("missing catalog test mission")
+
   test "persists artifacts, lists importers, and executes import runs through the durable job queue" do
-    persist_mission_scope(@organization_id, @mission_id)
+    persist_mission_scope(organization_id(), mission_id())
 
     artifact =
       Artifact.new(%{
         artifact_id: "artifact-alpha",
-        organization_id: @organization_id,
-        mission_id: @mission_id,
+        organization_id: organization_id(),
+        mission_id: mission_id(),
         catalog_family: :telemetry,
         artifact_name: "mission-alpha-tm.json",
         format_key: "fake_tm_json",
@@ -61,14 +71,14 @@ defmodule Cadence.CatalogTest do
     assert [%{descriptor: %{importer_key: "fake_tm_json"}}] = Cadence.list_catalog_importers()
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.persist_catalog_artifact(organization_id(), artifact)
 
     assert persisted_artifact.content_sha256 != ""
 
     assert {:ok, fetched_artifact} =
              Cadence.fetch_catalog_artifact(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                persisted_artifact.artifact_id
              )
 
@@ -76,8 +86,8 @@ defmodule Cadence.CatalogTest do
 
     assert [listed_artifact] =
              Cadence.list_catalog_artifacts(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                catalog_family: :telemetry
              )
 
@@ -85,8 +95,8 @@ defmodule Cadence.CatalogTest do
 
     assert {:ok, queued_run} =
              Cadence.start_catalog_import_run(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                persisted_artifact.artifact_id,
                "fake_tm_json",
                requested_by: %{"service_identity_id" => "svc-bootstrap"},
@@ -105,8 +115,8 @@ defmodule Cadence.CatalogTest do
 
     assert {:ok, completed_run} =
              Cadence.fetch_catalog_import_run(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                queued_run.import_run_id
              )
 
@@ -118,8 +128,8 @@ defmodule Cadence.CatalogTest do
 
     assert {:ok, telemetry_snapshot} =
              Cadence.fetch_catalog_telemetry_snapshot(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                completed_run.snapshot_id
              )
 
@@ -128,8 +138,8 @@ defmodule Cadence.CatalogTest do
 
     assert [listed_snapshot] =
              Cadence.list_catalog_telemetry_snapshots(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                import_run_id: completed_run.import_run_id
              )
 
@@ -137,8 +147,8 @@ defmodule Cadence.CatalogTest do
 
     assert [listed_run] =
              Cadence.list_catalog_import_runs(
-               @organization_id,
-               @mission_id,
+               organization_id(),
+               mission_id(),
                artifact_id: persisted_artifact.artifact_id,
                status: :completed
              )
@@ -158,7 +168,7 @@ defmodule Cadence.CatalogTest do
     end
 
     test "returns the most recent run per artifact" do
-      persist_mission_scope(@organization_id, @mission_id)
+      persist_mission_scope(organization_id(), mission_id())
 
       artifact_a = persist_artifact!("artifact-a")
       artifact_b = persist_artifact!("artifact-b")
@@ -171,7 +181,7 @@ defmodule Cadence.CatalogTest do
       {:ok, only_b} = start_import_run!(artifact_b.artifact_id)
 
       result =
-        Catalog.latest_import_run_by_artifact(@organization_id, @mission_id)
+        Catalog.latest_import_run_by_artifact(organization_id(), mission_id())
 
       assert result[artifact_a.artifact_id].import_run_id == newer_a.import_run_id
       assert result[artifact_b.artifact_id].import_run_id == only_b.import_run_id
@@ -180,16 +190,16 @@ defmodule Cadence.CatalogTest do
 
     test "scopes by mission" do
       %{organization: _org, mission: mission_a} =
-        persist_mission_scope(@organization_id, @mission_id)
+        persist_mission_scope(organization_id(), mission_id())
 
-      other_mission_id = "#{@mission_id}-other"
+      other_mission_id = "#{mission_id()}-other"
 
       # Persist the other mission under the same org.
       {:ok, _} =
         Cadence.persist_mission(
           Mission.new(%{
             mission_id: other_mission_id,
-            organization_id: @organization_id,
+            organization_id: organization_id(),
             slug: other_mission_id,
             display_name: other_mission_id
           })
@@ -199,7 +209,7 @@ defmodule Cadence.CatalogTest do
       {:ok, _} = start_import_run!(artifact.artifact_id)
 
       assert Catalog.latest_import_run_by_artifact(
-               @organization_id,
+               organization_id(),
                other_mission_id
              ) == %{}
     end
@@ -207,10 +217,10 @@ defmodule Cadence.CatalogTest do
 
   describe "catalog database revisions" do
     test "creates a database and revision from a successful revision import" do
-      persist_mission_scope(@organization_id, @mission_id)
+      persist_mission_scope(organization_id(), mission_id())
 
       assert {:ok, %Database{} = database} =
-               Catalog.create_database(@organization_id, @mission_id, %{
+               Catalog.create_database(organization_id(), mission_id(), %{
                  name: "Bus Catalog",
                  slug: "bus-catalog",
                  catalog_family: :telemetry,
@@ -220,8 +230,8 @@ defmodule Cadence.CatalogTest do
 
       artifact =
         Artifact.new(%{
-          organization_id: @organization_id,
-          mission_id: @mission_id,
+          organization_id: organization_id(),
+          mission_id: mission_id(),
           catalog_database_id: database.catalog_database_id,
           catalog_family: :telemetry,
           artifact_name: "bus.json",
@@ -232,8 +242,8 @@ defmodule Cadence.CatalogTest do
 
       assert {:ok, run} =
                Catalog.start_revision_import(
-                 @organization_id,
-                 @mission_id,
+                 organization_id(),
+                 mission_id(),
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
@@ -247,7 +257,11 @@ defmodule Cadence.CatalogTest do
       assert {:ok, _completed_job} = Cadence.Jobs.run_job(job.job_id)
 
       assert {:ok, completed_run} =
-               Cadence.fetch_catalog_import_run(@organization_id, @mission_id, run.import_run_id)
+               Cadence.fetch_catalog_import_run(
+                 organization_id(),
+                 mission_id(),
+                 run.import_run_id
+               )
 
       assert completed_run.status == :completed
       assert completed_run.catalog_database_id == database.catalog_database_id
@@ -256,7 +270,7 @@ defmodule Cadence.CatalogTest do
                completed_run.result_document["catalog_revision"]
 
       assert {:ok, revision} =
-               Catalog.fetch_revision(@organization_id, @mission_id, revision_id)
+               Catalog.fetch_revision(organization_id(), mission_id(), revision_id)
 
       assert revision.catalog_database_id == database.catalog_database_id
       assert revision.revision_number == 1
@@ -267,15 +281,15 @@ defmodule Cadence.CatalogTest do
 
       assert {:ok, latest} =
                Catalog.latest_revision(
-                 @organization_id,
-                 @mission_id,
+                 organization_id(),
+                 mission_id(),
                  database.catalog_database_id
                )
 
       assert latest.catalog_revision_id == revision.catalog_revision_id
 
       assert [operational_event] =
-               Cadence.list_operational_events(@organization_id, @mission_id,
+               Cadence.list_operational_events(organization_id(), mission_id(),
                  category: :catalog,
                  kind: :catalog_revision_registered,
                  source_record_kind: :catalog_revision,
@@ -297,31 +311,31 @@ defmodule Cadence.CatalogTest do
     test "successful revision import invalidates matching dashboard runtime caches" do
       cache = start_supervised!({RuntimeCache, name: nil})
       use_dashboard_runtime_cache!(cache)
-      persist_mission_scope(@organization_id, @mission_id)
+      persist_mission_scope(organization_id(), mission_id())
 
       other_mission_id = "mission-catalog-cache-other"
-      persist_mission_scope(@organization_id, other_mission_id)
+      persist_mission_scope(organization_id(), other_mission_id)
 
       assert {:ok, %Database{} = database} =
-               Catalog.create_database(@organization_id, @mission_id, %{
+               Catalog.create_database(organization_id(), mission_id(), %{
                  name: "Bus Catalog",
                  slug: "bus-catalog",
                  catalog_family: :telemetry,
                  default_importer_key: "fake_tm_json"
                })
 
-      telemetry_plan_key = dashboard_plan_key(@mission_id, :telemetry)
-      limits_plan_key = dashboard_plan_key(@mission_id, :limits)
+      telemetry_plan_key = dashboard_plan_key(mission_id(), :telemetry)
+      limits_plan_key = dashboard_plan_key(mission_id(), :limits)
       other_plan_key = dashboard_plan_key(other_mission_id, :telemetry)
-      telemetry_key = dashboard_source_result_key(@mission_id, :telemetry)
+      telemetry_key = dashboard_source_result_key(mission_id(), :telemetry)
       telemetry_frame_key = dashboard_frame_key(telemetry_key, "frame-telemetry")
-      limits_key = dashboard_source_result_key(@mission_id, :limits)
+      limits_key = dashboard_source_result_key(mission_id(), :limits)
       limits_frame_key = dashboard_frame_key(limits_key, "frame-limits")
       other_key = dashboard_source_result_key(other_mission_id, :telemetry)
       other_frame_key = dashboard_frame_key(other_key, "frame-other")
 
-      telemetry_plan = dashboard_plan(@mission_id, :telemetry, telemetry_plan_key)
-      limits_plan = dashboard_plan(@mission_id, :limits, limits_plan_key)
+      telemetry_plan = dashboard_plan(mission_id(), :telemetry, telemetry_plan_key)
+      limits_plan = dashboard_plan(mission_id(), :limits, limits_plan_key)
       other_plan = dashboard_plan(other_mission_id, :telemetry, other_plan_key)
       telemetry_result = dashboard_source_result(telemetry_key)
       telemetry_frames = dashboard_frames(:telemetry, "frame-telemetry")
@@ -342,8 +356,8 @@ defmodule Cadence.CatalogTest do
 
       artifact =
         Artifact.new(%{
-          organization_id: @organization_id,
-          mission_id: @mission_id,
+          organization_id: organization_id(),
+          mission_id: mission_id(),
           catalog_database_id: database.catalog_database_id,
           catalog_family: :telemetry,
           artifact_name: "bus.json",
@@ -354,8 +368,8 @@ defmodule Cadence.CatalogTest do
 
       assert {:ok, run} =
                Catalog.start_revision_import(
-                 @organization_id,
-                 @mission_id,
+                 organization_id(),
+                 mission_id(),
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json"
@@ -378,10 +392,10 @@ defmodule Cadence.CatalogTest do
     end
 
     test "does not create a revision for a failed revision import" do
-      persist_mission_scope(@organization_id, @mission_id)
+      persist_mission_scope(organization_id(), mission_id())
 
       {:ok, database} =
-        Catalog.create_database(@organization_id, @mission_id, %{
+        Catalog.create_database(organization_id(), mission_id(), %{
           name: "Bus Catalog",
           slug: "bus-catalog",
           catalog_family: :telemetry
@@ -389,8 +403,8 @@ defmodule Cadence.CatalogTest do
 
       artifact =
         Artifact.new(%{
-          organization_id: @organization_id,
-          mission_id: @mission_id,
+          organization_id: organization_id(),
+          mission_id: mission_id(),
           catalog_database_id: database.catalog_database_id,
           catalog_family: :telemetry,
           artifact_name: "invalid.json",
@@ -401,8 +415,8 @@ defmodule Cadence.CatalogTest do
 
       assert {:error, :invalid_fake_tm_json} =
                Catalog.start_revision_import(
-                 @organization_id,
-                 @mission_id,
+                 organization_id(),
+                 mission_id(),
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
@@ -411,8 +425,8 @@ defmodule Cadence.CatalogTest do
 
       assert [] =
                Catalog.list_revisions(
-                 @organization_id,
-                 @mission_id,
+                 organization_id(),
+                 mission_id(),
                  database.catalog_database_id
                )
     end
@@ -422,8 +436,8 @@ defmodule Cadence.CatalogTest do
     artifact =
       Catalog.Artifact.new(%{
         artifact_id: artifact_id,
-        organization_id: @organization_id,
-        mission_id: Keyword.get(opts, :mission_id, @mission_id),
+        organization_id: organization_id(),
+        mission_id: Keyword.get(opts, :mission_id, mission_id()),
         catalog_family: :telemetry,
         artifact_name: "#{artifact_id}.json",
         format_key: "fake_tm_json",
@@ -432,14 +446,14 @@ defmodule Cadence.CatalogTest do
         uploaded_by: %{"service_identity_id" => "svc-test"}
       })
 
-    {:ok, persisted} = Cadence.persist_catalog_artifact(@organization_id, artifact)
+    {:ok, persisted} = Cadence.persist_catalog_artifact(organization_id(), artifact)
     persisted
   end
 
   defp start_import_run!(artifact_id) do
     Cadence.start_catalog_import_run(
-      @organization_id,
-      @mission_id,
+      organization_id(),
+      mission_id(),
       artifact_id,
       "fake_tm_json",
       requested_by: %{"service_identity_id" => "svc-test"}
@@ -476,14 +490,14 @@ defmodule Cadence.CatalogTest do
   defp dashboard_resolve_request(mission_id, logical_source) do
     document = %Document{
       dashboard_id: "dashboard-#{mission_id}-#{logical_source}",
-      organization_id: @organization_id,
+      organization_id: organization_id(),
       mission_id: mission_id,
       name: "Catalog cache dashboard",
       placements: []
     }
 
     %DashboardResolveRequest{
-      organization_id: @organization_id,
+      organization_id: organization_id(),
       mission_id: mission_id,
       dashboard_id: document.dashboard_id,
       document: document
@@ -503,7 +517,7 @@ defmodule Cadence.CatalogTest do
   defp dashboard_source_request(mission_id, logical_source) do
     %PlannedSourceRequest{
       request_id: "source-request-#{mission_id}-#{logical_source}",
-      organization_id: @organization_id,
+      organization_id: organization_id(),
       mission_id: mission_id,
       logical_source: logical_source,
       observables: ["HK.counter"],
@@ -535,7 +549,7 @@ defmodule Cadence.CatalogTest do
   defp dashboard_source_binding(mission_id, logical_source) do
     %DataBinding{
       binding_id: "binding-#{mission_id}-#{logical_source}",
-      organization_id: @organization_id,
+      organization_id: organization_id(),
       mission_id: mission_id,
       realm: :flight,
       logical_source: logical_source,
@@ -550,7 +564,7 @@ defmodule Cadence.CatalogTest do
       owner: :cadence,
       kind: dashboard_source_kind(logical_source),
       adapter: dashboard_source_adapter(logical_source),
-      organization_id: @organization_id,
+      organization_id: organization_id(),
       mission_id: mission_id,
       isolation_level: :mission_isolated,
       capabilities: %{latest?: true, latest_state?: true, event_history?: true, watermarks?: true}

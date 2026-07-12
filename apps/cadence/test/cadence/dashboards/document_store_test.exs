@@ -863,7 +863,15 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
                      %{
                        "placement_id" => "placement-1",
                        "observation_identity_id" => "identity-1",
-                       "decision_status" => "unhandled"
+                       "decision_status" => "unhandled",
+                       "scope_kind" => "transport",
+                       "scope_ids" => ["transport-alpha", "transport-beta"],
+                       "resource_id" => "transport-alpha",
+                       "contact_ids" => ["contact-alpha", "contact-beta"],
+                       "transport_id" => "transport-alpha",
+                       "source_endpoint_id" => "endpoint-alpha",
+                       "ground_station_id" => "dss-14",
+                       "scope_link_id" => "link-alpha"
                      },
                      %{
                        "placement_id" => "placement-2",
@@ -923,6 +931,14 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
     assert resolution_event.payload["affected_placement_ids"] == ["placement-1"]
     assert resolution_event.payload["source_open_count"] == 2
     assert resolution_event.payload["source_open_placement_ids"] == ["placement-1", "placement-2"]
+    assert resolution_event.payload["source_scope_kind"] == "transport"
+    assert resolution_event.payload["source_scope_ids"] == ["transport-alpha", "transport-beta"]
+    assert resolution_event.payload["source_contact_ids"] == ["contact-alpha", "contact-beta"]
+    assert resolution_event.payload["source_resource_ids"] == ["transport-alpha"]
+    assert resolution_event.payload["source_transport_ids"] == ["transport-alpha"]
+    assert resolution_event.payload["source_endpoint_ids"] == ["endpoint-alpha"]
+    assert resolution_event.payload["source_ground_station_ids"] == ["dss-14"]
+    assert resolution_event.payload["source_scope_link_ids"] == ["link-alpha"]
 
     assert resolution_event.payload["source_bulk_decision_actionable_count"] == 1
 

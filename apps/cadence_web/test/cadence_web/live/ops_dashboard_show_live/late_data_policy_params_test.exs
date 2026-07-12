@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParamsTest do
             "sample_count" => "3",
             "dashboard_time_mode" => " replay_run ",
             "dashboard_replay_run_id" => " replay-1 ",
+            "dashboard_data_view" => " all_revisions ",
             "dashboard_limit_mode" => " compare ",
             "confirmed" => "confirmed"
           }
@@ -24,6 +25,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParamsTest do
                sample_count: 3,
                dashboard_time_mode: "replay_run",
                dashboard_replay_run_id: "replay-1",
+               dashboard_data_view: "all_revisions",
                dashboard_limit_mode: "compare",
                confirmed: "confirmed"
              } = params
@@ -54,6 +56,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParamsTest do
           "run_id" => "run-1",
           "dashboard_time_mode" => "replay_run",
           "dashboard_replay_run_id" => "replay-1",
+          "dashboard_data_view" => "all_revisions",
           "dashboard_limit_mode" => "recomputed",
           "realm" => "flight",
           "data_source_id" => "source-1",
@@ -78,6 +81,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParamsTest do
                  "dashboard_context" => %{
                    "dashboard_time_mode" => "replay_run",
                    "dashboard_replay_run_id" => "replay-1",
+                   "dashboard_data_view" => "all_revisions",
                    "dashboard_limit_mode" => "recomputed"
                  }
                },

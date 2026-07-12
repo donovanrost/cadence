@@ -64,7 +64,7 @@ defmodule Cadence.ContactsSchedulerTest do
     assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(future_contact)
     refute GenServer.whereis(Scheduler)
 
-    assert {:ok, summary} = Cadence.reconcile_contact_lifecycle(reference_time)
+    assert {:ok, summary} = Contacts.reconcile(mission_id, reference_time)
 
     assert summary.expired_scheduled_contact_ids == []
     assert summary.completed_scheduled_contact_ids == []
@@ -117,7 +117,8 @@ defmodule Cadence.ContactsSchedulerTest do
     scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
 
     start_supervised!(
-      {Scheduler, name: scheduler_name, auto_schedule?: false, run_on_boot?: false}
+      {Scheduler,
+       name: scheduler_name, mission_id: mission_id, auto_schedule?: false, run_on_boot?: false}
     )
 
     assert {:ok, summary} = Scheduler.reconcile_now(scheduler_name, reference_time)
@@ -522,7 +523,7 @@ defmodule Cadence.ContactsSchedulerTest do
 
     assert Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
 
-    assert {:ok, summary} = Cadence.reconcile_contact_lifecycle(reconcile_time)
+    assert {:ok, summary} = Contacts.reconcile(mission_id, reconcile_time)
 
     assert summary.expired_scheduled_contact_ids == []
     assert summary.completed_scheduled_contact_ids == [scheduled_contact.scheduled_contact_id]
@@ -551,7 +552,7 @@ defmodule Cadence.ContactsSchedulerTest do
 
     assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(missed_contact)
 
-    assert {:ok, summary} = Cadence.reconcile_contact_lifecycle(reference_time)
+    assert {:ok, summary} = Contacts.reconcile(mission_id, reference_time)
 
     assert summary.expired_scheduled_contact_ids == [missed_contact.scheduled_contact_id]
     assert summary.completed_scheduled_contact_ids == []

@@ -173,7 +173,7 @@ defmodule CadenceSimulator.CoordinatorTest do
     end)
 
     assert_eventually(fn ->
-      Repo.aggregate(TelemetrySampleRow, :count, :sample_id) >= 1
+      persisted_tm_sample?(mission_id)
     end)
 
     assert %TelemetrySampleRow{} =
@@ -197,6 +197,15 @@ defmodule CadenceSimulator.CoordinatorTest do
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
     end
+  end
+
+  defp persisted_tm_sample?(mission_id) do
+    TelemetrySampleRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and row.point_name == "TMHK.uptime_seconds"
+    )
+    |> Repo.exists?()
   end
 
   defp stop_coordinator(pid) when is_pid(pid) do

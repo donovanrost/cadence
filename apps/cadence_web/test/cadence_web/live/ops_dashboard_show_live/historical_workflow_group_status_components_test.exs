@@ -82,6 +82,111 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              |> LazyHTML.attribute("value")
   end
 
+  test "group_status summarizes replacement work and exposes scoped job recovery actions" do
+    correction_tasks =
+      [
+        "HK.current run-003 replacement run-003-corrected stage requested next approve",
+        "HK.voltage run-004 replacement run-004-corrected stage approved next start",
+        "HK.gyro run-006 replacement run-006-corrected stage started next complete",
+        "HK.temp run-005 replacement run-005-corrected stage completed next done"
+      ]
+      |> Enum.join("; ")
+
+    html =
+      render_component(&HistoricalWorkflowGroupStatusComponents.group_status/1,
+        workflow_context:
+          group_context()
+          |> Map.put(:request_group_correction_tasks, correction_tasks)
+          |> Map.put(:request_group_job_progress, "queued 1, running 1, failed 1, completed 1")
+          |> Map.put(
+            :request_group_job_items,
+            "3:HK.current run-003-corrected queued job-3 event=event-3; 4:HK.voltage run-004-corrected failed job-4 event=event-4; 6:HK.gyro run-006-corrected running job-6 event=event-6 started=2023-11-14T22:00:00Z; 5:HK.temp run-005-corrected completed job-5 event=event-5 completed=2023-11-14T22:05:00Z"
+          ),
+        workflow_controls:
+          workflow_controls()
+          |> Map.put(:group_retry_action, %{
+            id: "retry-group-failed",
+            eligible?: true,
+            reason: "retryable_group_failures",
+            preview: "Retry failed corrected replacement jobs."
+          })
+          |> Map.put(:group_stage_actions, [
+            %{
+              id: "group-stage-approved",
+              stage: "approved",
+              eligible?: true,
+              eligible_count: 1,
+              reason: "eligible_group_items",
+              preview: "Record approve transition for 1 eligible replacement item.",
+              correction_tasks:
+                "HK.current run-003 replacement run-003-corrected stage requested next approve"
+            },
+            %{
+              id: "group-stage-started",
+              stage: "started",
+              eligible?: true,
+              eligible_count: 1,
+              reason: "eligible_group_items",
+              preview: "Record start transition for 1 eligible replacement item.",
+              correction_tasks:
+                "HK.voltage run-004 replacement run-004-corrected stage approved next start"
+            }
+          ]),
+        dashboard_current_path:
+          "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1&panel=data_link"
+      )
+      |> LazyHTML.from_fragment()
+
+    assert ["4"] =
+             html
+             |> LazyHTML.query("#dashboard-historical-workflow-group-recovery-remaining-work")
+             |> LazyHTML.attribute("data-historical-workflow-group-recovery-remaining-work-count")
+
+    assert ["approve,start,complete"] =
+             html
+             |> LazyHTML.query("#dashboard-historical-workflow-group-recovery-remaining-work")
+             |> LazyHTML.attribute(
+               "data-historical-workflow-group-recovery-remaining-work-next-actions"
+             )
+
+    assert [
+             "run-003-corrected queued job-3 wait_for_replacement_job_start; run-004-corrected failed job-4 inspect_failed_replacement_job; run-006-corrected running job-6 inspect_stale_replacement_job; run-005-corrected completed job-5 replacement_complete"
+           ] =
+             html
+             |> LazyHTML.query("#dashboard-historical-workflow-group-recovery-remaining-work")
+             |> LazyHTML.attribute(
+               "data-historical-workflow-group-recovery-remaining-work-job-summary"
+             )
+
+    assert ["queued", "failed", "running", "completed"] =
+             html
+             |> LazyHTML.query("[data-historical-workflow-group-recovery-remaining-work-item]")
+             |> LazyHTML.attribute(
+               "data-historical-workflow-group-recovery-remaining-work-job-status"
+             )
+
+    assert ["retry_historical_workflow_job"] =
+             html
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["inspect_stale_historical_workflow_replacement_job"] =
+             html
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-stale-replacement-inspect-run-006-corrected"
+             )
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["requeue_stale_historical_workflow_replacement_job"] =
+             html
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-stale-replacement-requeue-run-006-corrected"
+             )
+             |> LazyHTML.attribute("phx-click")
+  end
+
   test "group_status renders no group card when group summary is disabled" do
     html =
       render_component(&HistoricalWorkflowGroupStatusComponents.group_status/1,

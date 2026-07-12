@@ -73,10 +73,49 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
              |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
              |> LazyHTML.attribute("data-workflow-latest-action-retry-nonretryable-run-ids")
 
+    assert ["1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-retry-nonretryable")
+
+    assert ["1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-retry-skipped")
+
+    assert ["0"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-retry-errors")
+
     assert ["failed-event-skipped"] =
              document
              |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
              |> LazyHTML.attribute("data-workflow-latest-action-retry-skipped-event-ids")
+
+    assert [
+             "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed"
+           ] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-retry-skipped-items")
+
+    assert [
+             "run=run-004-corrected event=failed-event-4 job=job-4 reason=queue_down"
+           ] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-retry-error-items")
+
+    assert ["2"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-queued-jobs")
+
+    assert ["0"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+             |> LazyHTML.attribute("data-workflow-latest-action-failed-jobs")
 
     assert ["replay-1"] =
              document
@@ -97,6 +136,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
            |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
            |> LazyHTML.text()
            |> String.contains?("Historical workflow job retry queued.")
+
+    text =
+      document
+      |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
+      |> LazyHTML.text()
+
+    assert text =~
+             "run=run-nonretryable event=failed-event-nonretryable action=correct_workflow_request reason=correction_required"
+
+    assert text =~
+             "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed"
+
+    assert text =~ "run=run-004-corrected event=failed-event-4 job=job-4 reason=queue_down"
 
     handoffs =
       document

@@ -32,6 +32,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
           comparison_review_workflow_selection_count: String.t() | nil,
           comparison_review_primary_data_view: String.t() | nil,
           comparison_review_compare_data_view: String.t() | nil,
+          comparison_review_scope_kind: String.t() | nil,
+          comparison_review_scope_ids: String.t() | nil,
+          comparison_review_contact_ids: String.t() | nil,
+          comparison_review_resource_ids: String.t() | nil,
+          comparison_review_transport_ids: String.t() | nil,
+          comparison_review_source_endpoint_ids: String.t() | nil,
+          comparison_review_ground_station_ids: String.t() | nil,
+          comparison_review_scope_link_ids: String.t() | nil,
           reason: String.t() | nil,
           confirmed: String.t() | nil,
           event_id: String.t() | nil,
@@ -78,6 +86,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
     :comparison_review_workflow_selection_count,
     :comparison_review_primary_data_view,
     :comparison_review_compare_data_view,
+    :comparison_review_scope_kind,
+    :comparison_review_scope_ids,
+    :comparison_review_contact_ids,
+    :comparison_review_resource_ids,
+    :comparison_review_transport_ids,
+    :comparison_review_source_endpoint_ids,
+    :comparison_review_ground_station_ids,
+    :comparison_review_scope_link_ids,
     :reason,
     :confirmed,
     :event_id,
@@ -183,6 +199,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
           "comparison-review-compare-data-view",
           "comparison_review_compare_data_view"
         ),
+      comparison_review_scope_kind:
+        param(params, "comparison-review-scope-kind", "comparison_review_scope_kind"),
+      comparison_review_scope_ids:
+        param(params, "comparison-review-scope-ids", "comparison_review_scope_ids"),
+      comparison_review_contact_ids:
+        param(params, "comparison-review-contact-ids", "comparison_review_contact_ids"),
+      comparison_review_resource_ids:
+        param(params, "comparison-review-resource-ids", "comparison_review_resource_ids"),
+      comparison_review_transport_ids:
+        param(params, "comparison-review-transport-ids", "comparison_review_transport_ids"),
+      comparison_review_source_endpoint_ids:
+        param(
+          params,
+          "comparison-review-source-endpoint-ids",
+          "comparison_review_source_endpoint_ids"
+        ),
+      comparison_review_ground_station_ids:
+        param(
+          params,
+          "comparison-review-ground-station-ids",
+          "comparison_review_ground_station_ids"
+        ),
+      comparison_review_scope_link_ids:
+        param(params, "comparison-review-scope-link-ids", "comparison_review_scope_link_ids"),
       reason: param(params, "reason", "reason"),
       confirmed: param(params, "confirmed", "confirmed"),
       event_id: param(params, "event-id", "event_id"),
@@ -249,6 +289,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
         params.comparison_review_workflow_selection_count,
       "comparison_review_primary_data_view" => params.comparison_review_primary_data_view,
       "comparison_review_compare_data_view" => params.comparison_review_compare_data_view,
+      "comparison_review_scope_kind" => params.comparison_review_scope_kind,
+      "comparison_review_scope_ids" => params.comparison_review_scope_ids,
+      "comparison_review_contact_ids" => params.comparison_review_contact_ids,
+      "comparison_review_resource_ids" => params.comparison_review_resource_ids,
+      "comparison_review_transport_ids" => params.comparison_review_transport_ids,
+      "comparison_review_source_endpoint_ids" => params.comparison_review_source_endpoint_ids,
+      "comparison_review_ground_station_ids" => params.comparison_review_ground_station_ids,
+      "comparison_review_scope_link_ids" => params.comparison_review_scope_link_ids,
       "reason" => params.reason,
       "confirmed" => params.confirmed,
       "event_id" => params.event_id,
@@ -417,7 +465,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
         "workflow_selection_kind" => params.comparison_review_workflow_selection_kind,
         "workflow_selection_count" => params.comparison_review_workflow_selection_count,
         "primary_data_view" => params.comparison_review_primary_data_view,
-        "compare_data_view" => params.comparison_review_compare_data_view
+        "compare_data_view" => params.comparison_review_compare_data_view,
+        "scope_kind" => params.comparison_review_scope_kind,
+        "scope_ids" => params.comparison_review_scope_ids,
+        "contact_ids" => params.comparison_review_contact_ids,
+        "resource_ids" => params.comparison_review_resource_ids,
+        "transport_ids" => params.comparison_review_transport_ids,
+        "source_endpoint_ids" => params.comparison_review_source_endpoint_ids,
+        "ground_station_ids" => params.comparison_review_ground_station_ids,
+        "scope_link_ids" => params.comparison_review_scope_link_ids
       }
       |> compact_payload()
 

@@ -9,6 +9,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicy do
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams
   alias CadenceWeb.OpsDashboardShowLive.SelectionPanel
+  alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
 
   def record_decision(socket, params, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
@@ -34,9 +35,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicy do
 
     SelectionPanel.put_historical_workflow_link_selection(
       socket,
-      selection.query,
+      late_data_policy_selection_query(selection.query, event, params),
       selection.link,
       Keyword.put(opts, :preserve_data_link_action_outcome?, true)
+    )
+  end
+
+  defp late_data_policy_selection_query(query, event, %LateDataPolicyParams{} = params) do
+    query
+    |> SelectionQuery.to_params()
+    |> Map.merge(
+      %{
+        "time_mode" => params.dashboard_time_mode,
+        "replay_run_id" => params.dashboard_replay_run_id,
+        "selected_data_view" => params.dashboard_data_view,
+        "realm" => Map.get(event, :realm),
+        "data_source_id" => Map.get(event, :data_source_id),
+        "source_binding_id" => Map.get(event, :binding_id)
+      }
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
     )
   end
 
@@ -49,6 +67,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicy do
       execution_mode: params.execution_mode,
       dashboard_time_mode: params.dashboard_time_mode,
       dashboard_replay_run_id: params.dashboard_replay_run_id,
+      dashboard_data_view: params.dashboard_data_view,
       dashboard_limit_mode: params.dashboard_limit_mode,
       result_event_id: event_id(event),
       target_event_id: event_id(event),
@@ -66,6 +85,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicy do
       execution_mode: params.execution_mode,
       dashboard_time_mode: params.dashboard_time_mode,
       dashboard_replay_run_id: params.dashboard_replay_run_id,
+      dashboard_data_view: params.dashboard_data_view,
       dashboard_limit_mode: params.dashboard_limit_mode,
       error: reason,
       message: "Failed to apply late-data policy: #{inspect(reason)}"
@@ -81,6 +101,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicy do
       execution_mode: params.execution_mode,
       dashboard_time_mode: params.dashboard_time_mode,
       dashboard_replay_run_id: params.dashboard_replay_run_id,
+      dashboard_data_view: params.dashboard_data_view,
       dashboard_limit_mode: params.dashboard_limit_mode,
       message: "Confirm the late-data policy decision before applying it."
     )

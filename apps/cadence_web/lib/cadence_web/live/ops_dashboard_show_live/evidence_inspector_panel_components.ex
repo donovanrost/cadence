@@ -19,10 +19,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
     limit_definition_lifecycle_event: :limit_definition_lifecycle_event,
     mission_event: :mission_event,
     operational_event: :operational_event,
+    command_queue_entry: :command_queue_entry,
+    command_release_attempt: :command_release_attempt,
+    command_verifier_instance: :command_verifier_instance,
+    transport_action_request: :transport_action_request,
+    transport_capability_record: :transport_capability_record,
     binding_set_interval: :binding_set_interval,
     application_binding_interval: :application_binding_interval,
     catalog_revision_interval: :catalog_revision_interval,
     source_binding_interval: :source_binding_interval,
+    source_health_interval: :source_health_interval,
     transport_execution_interval: :transport_execution_interval,
     transport_connection_state_interval: :transport_connection_state_interval,
     ground_station_connection_state_interval: :ground_station_connection_state_interval,
@@ -129,6 +135,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
             :for={evidence <- @inspector.evidence}
             evidence={evidence}
             inspector={@inspector}
+            dashboard_current_path={@dashboard_current_path}
           />
         </div>
       </section>
@@ -173,6 +180,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
 
   attr :evidence, :map, required: true
   attr :inspector, :map, required: true
+  attr :dashboard_current_path, :string, required: true
 
   defp evidence_ref_card(assigns) do
     assigns = assign(assigns, :data_link, evidence_data_link(assigns.evidence))
@@ -182,7 +190,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
       :if={@data_link}
       type="button"
       phx-click="open_data_link"
-      {DataLinkAttrs.open(@data_link, context_fallback: evidence_ref_context(@inspector))}
+      {DataLinkAttrs.open(@data_link,
+        context_fallback: evidence_ref_context(@inspector, @dashboard_current_path),
+        timestamp_ms: evidence_timestamp_ms(@evidence)
+      )}
       class="grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100"
       data-evidence-ref-kind={@evidence.kind_text}
       data-evidence-ref-id={@evidence.id || ""}
@@ -276,8 +287,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
   defp text_value(value) when is_binary(value), do: value
   defp text_value(value), do: to_string(value)
 
-  defp evidence_ref_context(inspector) when is_map(inspector) do
+  defp evidence_timestamp_ms(evidence) do
+    evidence
+    |> evidence_observed_at()
+    |> datetime_to_unix_ms()
+  end
+
+  defp evidence_observed_at(evidence) when is_map(evidence) do
+    evidence_value(evidence, :observed_at) ||
+      parse_observed_at_text(evidence_value(evidence, :observed_at_text))
+  end
+
+  defp evidence_observed_at(_evidence), do: nil
+
+  defp parse_observed_at_text(value) when is_binary(value) and value != "" do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> datetime
+      _invalid -> nil
+    end
+  end
+
+  defp parse_observed_at_text(_value), do: nil
+
+  defp datetime_to_unix_ms(%DateTime{} = datetime), do: DateTime.to_unix(datetime, :millisecond)
+  defp datetime_to_unix_ms(_datetime), do: nil
+
+  defp evidence_ref_context(inspector, current_path) when is_map(inspector) do
     rows = Map.get(inspector, :subject_rows, []) ++ Map.get(inspector, :detail_rows, [])
+    query = path_query(current_path)
 
     %{
       realm: evidence_row_value(rows, "Realm") || evidence_row_value(rows, "Data realm"),
@@ -286,13 +323,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
       source_binding_id: evidence_row_value(rows, "Source binding"),
       time_mode: evidence_row_value(rows, "Time mode"),
       time_axis: evidence_row_value(rows, "Time axis"),
-      replay_run_id: evidence_row_value(rows, "Replay run")
+      replay_run_id: evidence_row_value(rows, "Replay run"),
+      scope_kind: Map.get(query, "scope_kind"),
+      scope_id: Map.get(query, "scope_id") || Map.get(query, "spacecraft_id"),
+      scope_ids: Map.get(query, "scope_ids")
     }
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
     |> Map.new()
   end
 
-  defp evidence_ref_context(_inspector), do: %{}
+  defp evidence_ref_context(_inspector, _current_path), do: %{}
+
+  defp path_query(current_path) when is_binary(current_path) do
+    current_path
+    |> URI.parse()
+    |> Map.get(:query)
+    |> case do
+      nil -> %{}
+      query -> URI.decode_query(query)
+    end
+  rescue
+    URI.Error -> %{}
+  end
+
+  defp path_query(_current_path), do: %{}
 
   defp evidence_row_value(rows, label) do
     case Enum.find_value(rows, fn
@@ -325,14 +379,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
     kind = evidence_kind(evidence)
 
     Map.get(@evidence_data_link_targets, kind) ||
-      direct_operational_interval_target(kind, evidence)
+      operational_interval_target(kind, evidence)
   end
 
-  defp direct_operational_interval_target(:operational_interval, evidence) do
-    if evidence_kind(evidence, :confidence) == :direct, do: :operational_event
+  defp operational_interval_target(:operational_interval, evidence) do
+    case evidence_kind(evidence, :interval_kind) do
+      :source_health ->
+        :source_health_interval
+
+      _other ->
+        if evidence_kind(evidence, :confidence) == :direct, do: :operational_event
+    end
   end
 
-  defp direct_operational_interval_target(_kind, _evidence), do: nil
+  defp operational_interval_target(_kind, _evidence), do: nil
 
   defp evidence_kind(evidence, key \\ :kind) do
     evidence
@@ -370,6 +430,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
 
   defp evidence_atom("mission_event"), do: :mission_event
   defp evidence_atom("operational_event"), do: :operational_event
+  defp evidence_atom("command_queue_entry"), do: :command_queue_entry
   defp evidence_atom("operational_interval"), do: :operational_interval
   defp evidence_atom("binding_set_interval"), do: :binding_set_interval
   defp evidence_atom("application_binding_interval"), do: :application_binding_interval

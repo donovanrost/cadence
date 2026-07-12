@@ -291,6 +291,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       "scope-id" => source_status_first_value(source_status, :scope_ids),
       "scope-ids" => source_status_list_text(source_status, :scope_ids),
       "contact-id" => source_status_first_value(source_status, :contact_ids),
+      "contact-ids" => source_status_list_text(source_status, :contact_ids),
       "source-endpoint-id" => source_status_first_value(source_status, :source_endpoint_ids),
       "source-health-state" => source_status_first_value(source_status, :source_health_states),
       "source-health-reason" => source_status_first_value(source_status, :source_health_reasons),

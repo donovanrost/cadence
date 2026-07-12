@@ -19,7 +19,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
         {:ok, _state, event} ->
           socket
           |> put_action_flash(action_outcome(:ok, event, params))
-          |> put_decision_event_selection(event, opts)
+          |> put_decision_event_selection(event, params, opts)
 
         {:error, reason} ->
           put_action_flash(socket, action_outcome({:error, reason}, nil, params))
@@ -29,13 +29,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
     end
   end
 
-  defp put_decision_event_selection(socket, event, opts) do
+  defp put_decision_event_selection(socket, event, %RevisionDecisionParams{} = params, opts) do
     query = %{
       "selected_target" => "telemetry_revision_decision_event",
       "selected_id" => event.decision_event_id,
       "realm" => text_value(event.realm),
       "data_source_id" => event.data_source_id,
-      "source_binding_id" => event.binding_id
+      "source_binding_id" => event.binding_id,
+      "time_mode" => dashboard_context_value(params, "dashboard_time_mode"),
+      "replay_run_id" => dashboard_context_value(params, "dashboard_replay_run_id"),
+      "selected_data_view" => dashboard_context_value(params, "dashboard_data_view"),
+      "limit_mode" => params.dashboard_limit_mode
     }
 
     link = %DataLink{
@@ -44,10 +48,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
       target: :telemetry_revision_decision_event,
       target_id: event.decision_event_id,
       context: %{
+        time: %{
+          mode: dashboard_context_value(params, "dashboard_time_mode"),
+          replay_run_id: dashboard_context_value(params, "dashboard_replay_run_id")
+        },
         data: %{
           realm: event.realm,
           data_source_id: event.data_source_id,
-          source_binding_id: event.binding_id
+          source_binding_id: event.binding_id,
+          view: dashboard_context_value(params, "dashboard_data_view"),
+          replay_run_id: dashboard_context_value(params, "dashboard_replay_run_id")
+        },
+        limit: %{
+          semantics_mode: params.dashboard_limit_mode
         }
       },
       source: :annotation
@@ -67,6 +80,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
       kind: :info,
       reason: "revision_decision_applied",
       decision: params.decision,
+      dashboard_time_mode: dashboard_context_value(params, "dashboard_time_mode"),
+      dashboard_replay_run_id: dashboard_context_value(params, "dashboard_replay_run_id"),
+      dashboard_data_view: dashboard_context_value(params, "dashboard_data_view"),
       dashboard_limit_mode: params.dashboard_limit_mode,
       result_event_id: event_id(event),
       target_event_id: event_id(event),
@@ -81,6 +97,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
       kind: :error,
       reason: "revision_decision_failed",
       decision: params.decision,
+      dashboard_time_mode: dashboard_context_value(params, "dashboard_time_mode"),
+      dashboard_replay_run_id: dashboard_context_value(params, "dashboard_replay_run_id"),
+      dashboard_data_view: dashboard_context_value(params, "dashboard_data_view"),
       dashboard_limit_mode: params.dashboard_limit_mode,
       target_observation_identity_id: params.observation_identity_id,
       error: reason,
@@ -94,6 +113,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
       kind: :error,
       reason: "confirmation_required",
       decision: params.decision,
+      dashboard_time_mode: dashboard_context_value(params, "dashboard_time_mode"),
+      dashboard_replay_run_id: dashboard_context_value(params, "dashboard_replay_run_id"),
+      dashboard_data_view: dashboard_context_value(params, "dashboard_data_view"),
       dashboard_limit_mode: params.dashboard_limit_mode,
       target_observation_identity_id: params.observation_identity_id,
       message: "Confirm the telemetry revision decision before applying it."
@@ -112,6 +134,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecision do
   defp text_value(value) when is_atom(value), do: Atom.to_string(value)
   defp text_value(value) when is_binary(value), do: value
   defp text_value(_value), do: nil
+
+  defp dashboard_context_value(%RevisionDecisionParams{dashboard_context: context}, key)
+       when is_map(context) and is_binary(key),
+       do: Map.get(context, key)
 
   defp put_action_flash(socket, %{kind: kind, message: message} = outcome) do
     socket

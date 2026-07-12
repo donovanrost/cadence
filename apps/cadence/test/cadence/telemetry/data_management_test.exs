@@ -703,7 +703,13 @@ defmodule Cadence.Telemetry.DataManagementTest do
           "request_event_id" => "review-request-group",
           "request_kind" => "comparison_open_findings_review",
           "open_count" => "2",
-          "open_placement_ids" => "placement-counter,placement-voltage"
+          "open_placement_ids" => "placement-counter,placement-voltage",
+          "workflow_kind" => "bulk_correction_authority_review",
+          "workflow_action" => "request_comparison_review",
+          "workflow_selection_kind" => "open_comparison_findings",
+          "workflow_selection_count" => "2",
+          "primary_data_view" => "all_revisions",
+          "compare_data_view" => "canonical"
         },
         "operator_note" => "AI&T replay gap"
       }
@@ -737,7 +743,13 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  "request_event_id" => "review-request-group",
                  "request_kind" => "comparison_open_findings_review",
                  "open_count" => "2",
-                 "open_placement_ids" => "placement-counter,placement-voltage"
+                 "open_placement_ids" => "placement-counter,placement-voltage",
+                 "workflow_kind" => "bulk_correction_authority_review",
+                 "workflow_action" => "request_comparison_review",
+                 "workflow_selection_kind" => "open_comparison_findings",
+                 "workflow_selection_count" => "2",
+                 "primary_data_view" => "all_revisions",
+                 "compare_data_view" => "canonical"
                })
            )
 
@@ -1371,7 +1383,13 @@ defmodule Cadence.Telemetry.DataManagementTest do
                          "request_event_id" => "review-request-group-transition",
                          "request_kind" => "comparison_open_findings_review",
                          "open_count" => "2",
-                         "open_placement_ids" => "placement-counter,placement-voltage"
+                         "open_placement_ids" => "placement-counter,placement-voltage",
+                         "workflow_kind" => "bulk_correction_authority_review",
+                         "workflow_action" => "request_comparison_review",
+                         "workflow_selection_kind" => "open_comparison_findings",
+                         "workflow_selection_count" => "2",
+                         "primary_data_view" => "all_revisions",
+                         "compare_data_view" => "canonical"
                        }
                      }
                    },
@@ -1433,7 +1451,13 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  "request_event_id" => "review-request-group-transition",
                  "request_kind" => "comparison_open_findings_review",
                  "open_count" => "2",
-                 "open_placement_ids" => "placement-counter,placement-voltage"
+                 "open_placement_ids" => "placement-counter,placement-voltage",
+                 "workflow_kind" => "bulk_correction_authority_review",
+                 "workflow_action" => "request_comparison_review",
+                 "workflow_selection_kind" => "open_comparison_findings",
+                 "workflow_selection_count" => "2",
+                 "primary_data_view" => "all_revisions",
+                 "compare_data_view" => "canonical"
                })
            )
 
@@ -1568,6 +1592,69 @@ defmodule Cadence.Telemetry.DataManagementTest do
              "dashboard_data_view" => "all_revisions",
              "dashboard_limit_mode" => "observed"
            }
+
+    assert {:ok, [started], [{:ok, started_job}]} =
+             Cadence.record_telemetry_historical_data_workflow_group_transition(
+               "backfill",
+               "started",
+               "backfill-run-correction-group",
+               %{
+                 organization_id: "org-product",
+                 mission_id: "mission-product",
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 authority: :authoritative,
+                 reason: "operator_started_corrected_group_backfill",
+                 actor_id: "operator-2",
+                 actor_kind: "operator"
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert started.backfill_run_id == correction_request.backfill_run_id
+    assert started.payload["group_transition_source"] == "dashboard_group_action"
+    assert started.payload["correction_transition_source"] == "dashboard_correction_transition"
+
+    assert started.payload["correction_transition_source_event_id"] ==
+             approved.backfill_lifecycle_event_id
+
+    assert started.payload["corrects_run_id"] == source_event.backfill_run_id
+    assert started.payload["corrects_event_id"] == source_event.backfill_lifecycle_event_id
+    assert started_job.status == :queued
+    assert started_job.run_id == correction_request.backfill_run_id
+
+    assert {:ok, [completed], [{:ok, nil}]} =
+             Cadence.record_telemetry_historical_data_workflow_group_transition(
+               "backfill",
+               "completed",
+               "backfill-run-correction-group",
+               %{
+                 organization_id: "org-product",
+                 mission_id: "mission-product",
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 authority: :authoritative,
+                 reason: "operator_completed_corrected_group_backfill",
+                 actor_id: "operator-2",
+                 actor_kind: "operator"
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert completed.backfill_run_id == correction_request.backfill_run_id
+    assert completed.payload["group_transition_source"] == "dashboard_group_action"
+    assert completed.payload["correction_transition_source"] == "dashboard_correction_transition"
+
+    assert completed.payload["correction_transition_source_event_id"] ==
+             started.backfill_lifecycle_event_id
+
+    assert completed.payload["requested_event_id"] ==
+             correction_request.backfill_lifecycle_event_id
+
+    assert completed.payload["corrects_run_id"] == source_event.backfill_run_id
+    assert completed.payload["corrects_event_id"] == source_event.backfill_lifecycle_event_id
   end
 
   test "starts corrected import workflow group transition jobs through the product API" do
@@ -1622,6 +1709,15 @@ defmodule Cadence.Telemetry.DataManagementTest do
              source_event.backfill_lifecycle_event_id
 
     assert correction_request.payload["corrects_job_id"] == failed_job.job_id
+
+    assert correction_request.payload["dashboard_context"] == %{
+             "dashboard_id" => "dashboard-import-correction-group",
+             "dashboard_version" => "9",
+             "dashboard_time_mode" => "replay_run",
+             "dashboard_replay_run_id" => "replay-import-correction-group-product",
+             "dashboard_data_view" => "all_revisions",
+             "dashboard_limit_mode" => "observed"
+           }
 
     assert {:ok, [approved], [{:ok, nil}]} =
              Cadence.record_telemetry_historical_data_workflow_group_transition(
@@ -3345,6 +3441,93 @@ defmodule Cadence.Telemetry.DataManagementTest do
     )
   end
 
+  test "applies bulk comparison-review conflict decisions with workflow evidence" do
+    counter =
+      sample(
+        "sample-bulk-conflict-counter",
+        ~U[2026-06-22 11:10:00Z],
+        ~U[2026-06-22 12:10:03Z],
+        point_id: "HK.counter"
+      )
+
+    voltage =
+      sample(
+        "sample-bulk-conflict-voltage",
+        ~U[2026-06-22 11:11:00Z],
+        ~U[2026-06-22 12:11:03Z],
+        point_id: "HK.voltage",
+        raw_value: 28
+      )
+
+    assert :ok =
+             Storage.persist_samples([counter, voltage],
+               organization_id: "org-product",
+               realm: :flight,
+               data_source_id: "managed_questdb_primary",
+               binding_id: "default_flight_telemetry",
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert_receive {:telemetry_storage_envelopes, envelopes}
+
+    counter_envelope = envelope_by_sample_id(envelopes, counter.sample_id)
+    voltage_envelope = envelope_by_sample_id(envelopes, voltage.sample_id)
+
+    assert {:ok, summary} =
+             Cadence.apply_telemetry_observation_identity_decisions(
+               [
+                 %{
+                   observation_identity_id: counter_envelope.observation_identity_id,
+                   evidence_ref: %{
+                     "placement_id" => "placement-counter",
+                     "comparison_finding" => %{"placement_id" => "placement-counter"}
+                   }
+                 },
+                 %{
+                   observation_identity_id: voltage_envelope.observation_identity_id,
+                   evidence_ref: %{
+                     "placement_id" => "placement-voltage",
+                     "comparison_finding" => %{"placement_id" => "placement-voltage"}
+                   }
+                 }
+               ],
+               "mark_conflict",
+               %{
+                 organization_id: "org-product",
+                 mission_id: "mission-product",
+                 realm: :flight,
+                 data_source_id: "managed_questdb_primary",
+                 binding_id: "default_flight_telemetry",
+                 correction_workflow_id: "review-request-1",
+                 authority: "operator",
+                 requested_by: "dashboard_comparison_review",
+                 operator_id: "operator-7",
+                 decision_reason: "dashboard_comparison_review_mark_conflict",
+                 selection_kind: "open_comparison_findings",
+                 evidence_ref: %{"kind" => "dashboard_comparison_review_finding"}
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert summary.workflow_id == "review-request-1"
+    assert summary.decision == :mark_conflict
+    assert summary.requested == 2
+    assert summary.applied == 2
+    assert summary.failed == 0
+
+    assert_bulk_conflict_decision_event!(
+      counter_envelope.observation_identity_id,
+      1,
+      "placement-counter"
+    )
+
+    assert_bulk_conflict_decision_event!(
+      voltage_envelope.observation_identity_id,
+      2,
+      "placement-voltage"
+    )
+  end
+
   test "rejects mixed-mission backfill samples before writing" do
     first = sample("sample-backfill-1", ~U[2026-06-22 11:00:00Z], ~U[2026-06-22 12:00:03Z])
     second = %{first | sample_id: "sample-backfill-2", mission_id: "mission-other"}
@@ -3424,6 +3607,53 @@ defmodule Cadence.Telemetry.DataManagementTest do
              "kind" => "telemetry_correction_authority_workflow",
              "operator_id" => "operator-7",
              "reason" => "operator_accepted_bulk_correction_authority_review",
+             "requested_by" => "dashboard_comparison_review",
+             "selection_kind" => "open_comparison_findings"
+           }
+  end
+
+  defp assert_bulk_conflict_decision_event!(
+         observation_identity_id,
+         item_index,
+         placement_id
+       ) do
+    assert [event] =
+             Storage.list_observation_identity_decision_events(
+               observation_identity_id,
+               organization_id: "org-product",
+               mission_id: "mission-product",
+               realm: :flight,
+               data_source_id: "managed_questdb_primary",
+               binding_id: "default_flight_telemetry"
+             )
+
+    assert event.decision == :mark_conflict
+    assert event.decision_reason == "dashboard_comparison_review_mark_conflict"
+    assert event.actor_id == "operator-7"
+    assert event.actor_kind == "operator"
+    assert event.new_state["validity_state"] == "conflict"
+    assert event.evidence_ref["kind"] == "dashboard_comparison_review_finding"
+    assert event.evidence_ref["placement_id"] == placement_id
+    assert event.evidence_ref["comparison_finding"]["placement_id"] == placement_id
+
+    assert event.evidence_ref["bulk_workflow_item"] == %{
+             "kind" => "telemetry_correction_authority_workflow_item",
+             "workflow_id" => "review-request-1",
+             "item_index" => item_index,
+             "item_count" => 2,
+             "observation_identity_id" => observation_identity_id,
+             "selection_kind" => "open_comparison_findings"
+           }
+
+    assert event.evidence_ref["correction_workflow"] == %{
+             "authority" => "operator",
+             "id" => "review-request-1",
+             "item_count" => 2,
+             "item_index" => item_index,
+             "item_observation_identity_id" => observation_identity_id,
+             "kind" => "telemetry_correction_authority_workflow",
+             "operator_id" => "operator-7",
+             "reason" => "dashboard_comparison_review_mark_conflict",
              "requested_by" => "dashboard_comparison_review",
              "selection_kind" => "open_comparison_findings"
            }

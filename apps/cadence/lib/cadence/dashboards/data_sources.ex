@@ -287,6 +287,210 @@ defmodule Cadence.Dashboards.DataSources do
     end)
   end
 
+  @spec reconcile_tsdb_backend(binary(), map(), keyword()) ::
+          {:ok, DataSource.t()} | {:error, term()}
+  def reconcile_tsdb_backend(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    occurred_at = occurred_at(attrs, opts)
+
+    with {:ok, %DataSource{} = current} <- fetch_data_source(data_source_id),
+         :ok <- validate_dedicated_byo_tsdb_backend(current) do
+      lifecycle_metadata =
+        tsdb_backend_lifecycle_metadata(
+          current,
+          attrs,
+          occurred_at,
+          "reconcile",
+          "reconciled",
+          "reconciled_at"
+        )
+
+      payload =
+        opts
+        |> Keyword.get(:payload, %{})
+        |> Map.merge(%{
+          operation: "reconcile_tsdb_backend",
+          data_source_id: current.data_source_id,
+          deployment_backend: Map.get(lifecycle_metadata, "backend"),
+          deployment_boundary: Map.get(lifecycle_metadata, "physical_boundary"),
+          lifecycle_status: Map.get(lifecycle_metadata, "status")
+        })
+
+      current
+      |> put_tsdb_backend_lifecycle(lifecycle_metadata)
+      |> persist_data_source(
+        opts
+        |> Keyword.put(:occurred_at, occurred_at)
+        |> Keyword.put(:payload, payload)
+      )
+    end
+  end
+
+  @spec request_tsdb_backend_deprovisioning(binary(), map(), keyword()) ::
+          {:ok, DataSource.t()} | {:error, term()}
+  def request_tsdb_backend_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    occurred_at = occurred_at(attrs, opts)
+
+    with {:ok, %DataSource{} = current} <- fetch_data_source(data_source_id),
+         :ok <- validate_dedicated_byo_tsdb_backend(current) do
+      lifecycle_metadata =
+        tsdb_backend_lifecycle_metadata(
+          current,
+          attrs,
+          occurred_at,
+          "deprovision",
+          "deprovision_requested",
+          "deprovision_requested_at"
+        )
+
+      payload =
+        opts
+        |> Keyword.get(:payload, %{})
+        |> Map.merge(%{
+          operation: "request_tsdb_backend_deprovisioning",
+          data_source_id: current.data_source_id,
+          deployment_backend: Map.get(lifecycle_metadata, "backend"),
+          deployment_boundary: Map.get(lifecycle_metadata, "physical_boundary"),
+          lifecycle_status: Map.get(lifecycle_metadata, "status")
+        })
+
+      current
+      |> put_tsdb_backend_lifecycle(lifecycle_metadata)
+      |> then(fn %DataSource{} = source ->
+        %DataSource{source | status: :disabled, disabled_at: occurred_at}
+      end)
+      |> persist_data_source(
+        opts
+        |> Keyword.put(:occurred_at, occurred_at)
+        |> Keyword.put(:payload, payload)
+      )
+    end
+  end
+
+  @spec request_tsdb_backend_provisioning(binary(), map(), keyword()) ::
+          {:ok, DataSource.t()} | {:error, term()}
+  def request_tsdb_backend_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    occurred_at = occurred_at(attrs, opts)
+
+    with {:ok, %DataSource{} = current} <- fetch_data_source(data_source_id),
+         :ok <- validate_dedicated_byo_tsdb_backend(current) do
+      lifecycle_metadata =
+        tsdb_backend_lifecycle_metadata(
+          current,
+          attrs,
+          occurred_at,
+          "provision",
+          "provision_requested",
+          "provision_requested_at"
+        )
+
+      payload =
+        opts
+        |> Keyword.get(:payload, %{})
+        |> Map.merge(%{
+          operation: "request_tsdb_backend_provisioning",
+          data_source_id: current.data_source_id,
+          deployment_backend: Map.get(lifecycle_metadata, "backend"),
+          deployment_boundary: Map.get(lifecycle_metadata, "physical_boundary"),
+          lifecycle_status: Map.get(lifecycle_metadata, "status")
+        })
+
+      current
+      |> put_tsdb_backend_lifecycle(lifecycle_metadata)
+      |> persist_data_source(
+        opts
+        |> Keyword.put(:occurred_at, occurred_at)
+        |> Keyword.put(:payload, payload)
+      )
+    end
+  end
+
+  @spec complete_tsdb_backend_provisioning(binary(), map(), keyword()) ::
+          {:ok, DataSource.t()} | {:error, term()}
+  def complete_tsdb_backend_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    occurred_at = occurred_at(attrs, opts)
+
+    with {:ok, %DataSource{} = current} <- fetch_data_source(data_source_id),
+         :ok <- validate_dedicated_byo_tsdb_backend(current) do
+      lifecycle_metadata =
+        tsdb_backend_lifecycle_metadata(
+          current,
+          attrs,
+          occurred_at,
+          "provision",
+          "provisioned",
+          "provisioned_at"
+        )
+
+      payload =
+        opts
+        |> Keyword.get(:payload, %{})
+        |> Map.merge(%{
+          operation: "complete_tsdb_backend_provisioning",
+          data_source_id: current.data_source_id,
+          deployment_backend: Map.get(lifecycle_metadata, "backend"),
+          deployment_boundary: Map.get(lifecycle_metadata, "physical_boundary"),
+          lifecycle_status: Map.get(lifecycle_metadata, "status")
+        })
+
+      current
+      |> put_tsdb_backend_lifecycle(lifecycle_metadata)
+      |> then(fn %DataSource{} = source ->
+        %DataSource{source | status: :active, disabled_at: nil}
+      end)
+      |> persist_data_source(
+        opts
+        |> Keyword.put(:occurred_at, occurred_at)
+        |> Keyword.put(:payload, payload)
+      )
+    end
+  end
+
+  @spec complete_tsdb_backend_deprovisioning(binary(), map(), keyword()) ::
+          {:ok, DataSource.t()} | {:error, term()}
+  def complete_tsdb_backend_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    occurred_at = occurred_at(attrs, opts)
+
+    with {:ok, %DataSource{} = current} <- fetch_data_source(data_source_id),
+         :ok <- validate_dedicated_byo_tsdb_backend(current) do
+      lifecycle_metadata =
+        tsdb_backend_lifecycle_metadata(
+          current,
+          attrs,
+          occurred_at,
+          "deprovision",
+          "deprovisioned",
+          "deprovisioned_at"
+        )
+
+      payload =
+        opts
+        |> Keyword.get(:payload, %{})
+        |> Map.merge(%{
+          operation: "complete_tsdb_backend_deprovisioning",
+          data_source_id: current.data_source_id,
+          deployment_backend: Map.get(lifecycle_metadata, "backend"),
+          deployment_boundary: Map.get(lifecycle_metadata, "physical_boundary"),
+          lifecycle_status: Map.get(lifecycle_metadata, "status")
+        })
+
+      current
+      |> put_tsdb_backend_lifecycle(lifecycle_metadata)
+      |> then(fn %DataSource{} = source ->
+        %DataSource{source | status: :disabled, disabled_at: source.disabled_at || occurred_at}
+      end)
+      |> persist_data_source(
+        opts
+        |> Keyword.put(:occurred_at, occurred_at)
+        |> Keyword.put(:payload, payload)
+      )
+    end
+  end
+
   @spec probe_data_source(binary(), map(), keyword()) ::
           SourceHealth.record_result() | {:error, term()}
   def probe_data_source(data_source_id, attrs \\ %{}, opts \\ [])
@@ -552,6 +756,55 @@ defmodule Cadence.Dashboards.DataSources do
       |> update_fun.(occurred_at)
       |> persist_data_source(Keyword.put(opts, :occurred_at, occurred_at))
     end
+  end
+
+  defp validate_dedicated_byo_tsdb_backend(%DataSource{
+         kind: :byo_tsdb,
+         isolation_level: isolation_level
+       })
+       when isolation_level in [:org_isolated, :mission_isolated],
+       do: :ok
+
+  defp validate_dedicated_byo_tsdb_backend(%DataSource{kind: :byo_tsdb}),
+    do: {:error, :dedicated_tsdb_backend_required}
+
+  defp validate_dedicated_byo_tsdb_backend(%DataSource{}),
+    do: {:error, :byo_tsdb_backend_required}
+
+  defp tsdb_backend_lifecycle_metadata(
+         %DataSource{} = source,
+         attrs,
+         occurred_at,
+         operation,
+         default_status,
+         observed_at_key
+       ) do
+    isolation_profile = DataSource.isolation_profile(source)
+
+    %{
+      "operation" => operation,
+      "status" => text(get_attr(attrs, :status, default_status)),
+      observed_at_key => DateTime.to_iso8601(occurred_at),
+      "backend" =>
+        text(Map.get(isolation_profile, :storage) || metadata_value(source.metadata, :storage)),
+      "physical_boundary" => text(Map.get(isolation_profile, :physical_boundary)),
+      "endpoint_ref" => text(Map.get(isolation_profile, :endpoint_ref)),
+      "topology_ref" => text(Map.get(isolation_profile, :topology_ref)),
+      "job_id" => text(get_attr(attrs, :job_id)),
+      "run_id" => text(get_attr(attrs, :run_id)),
+      "executor_status" => text(executor_status(get_attr(attrs, :executor_result)))
+    }
+    |> Enum.reject(fn {_key, value} -> value in [nil, "", "none"] end)
+    |> Map.new()
+  end
+
+  defp put_tsdb_backend_lifecycle(%DataSource{} = source, lifecycle_metadata) do
+    metadata =
+      source.metadata
+      |> normalize_metadata_map()
+      |> Map.put("tsdb_backend_lifecycle", lifecycle_metadata)
+
+    %DataSource{source | metadata: metadata}
   end
 
   defp probe_mission_id(%DataSource{mission_id: mission_id}, _attrs) when is_binary(mission_id),
@@ -1296,6 +1549,12 @@ defmodule Cadence.Dashboards.DataSources do
 
   defp merge_metadata(_metadata, patch) when is_map(patch), do: patch
   defp merge_metadata(metadata, _patch), do: metadata
+
+  defp normalize_metadata_map(metadata) when is_map(metadata), do: metadata
+  defp normalize_metadata_map(_metadata), do: %{}
+
+  defp executor_status(%{} = result), do: metadata_value(result, :status)
+  defp executor_status(_result), do: nil
 
   defp occurred_at(attrs, opts) do
     attrs

@@ -15,7 +15,24 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
           request_ids: [binary()],
           request_ids_attr: binary(),
           placement_ids: [binary()],
-          placements_attr: binary()
+          placements_attr: binary(),
+          scope_kind: binary() | nil,
+          scope_kinds: [binary()],
+          scope_kinds_attr: binary(),
+          scope_ids: [binary()],
+          scope_ids_attr: binary(),
+          contact_ids: [binary()],
+          contact_ids_attr: binary(),
+          resource_ids: [binary()],
+          resource_ids_attr: binary(),
+          transport_ids: [binary()],
+          transport_ids_attr: binary(),
+          source_endpoint_ids: [binary()],
+          source_endpoint_ids_attr: binary(),
+          ground_station_ids: [binary()],
+          ground_station_ids_attr: binary(),
+          scope_link_ids: [binary()],
+          scope_link_ids_attr: binary()
         }
 
   @type request_summary :: %{
@@ -29,6 +46,7 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
           open_count_text: binary(),
           placement_ids: [binary()],
           placements_attr: binary(),
+          operational_context: map(),
           findings: [map()]
         }
 
@@ -53,6 +71,21 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
           source_open_count_text: binary(),
           source_open_placement_ids: [binary()],
           source_open_placements_attr: binary(),
+          source_scope_kind: binary(),
+          source_scope_ids: [binary()],
+          source_scope_ids_attr: binary(),
+          source_contact_ids: [binary()],
+          source_contact_ids_attr: binary(),
+          source_resource_ids: [binary()],
+          source_resource_ids_attr: binary(),
+          source_transport_ids: [binary()],
+          source_transport_ids_attr: binary(),
+          source_endpoint_ids: [binary()],
+          source_endpoint_ids_attr: binary(),
+          source_ground_station_ids: [binary()],
+          source_ground_station_ids_attr: binary(),
+          source_scope_link_ids: [binary()],
+          source_scope_link_ids_attr: binary(),
           source_bulk_decision_actionable_count_text: binary(),
           source_bulk_decision_actionable_placement_ids: [binary()],
           source_bulk_decision_actionable_placements_attr: binary(),
@@ -71,6 +104,12 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       Enum.map(requests, &event_value(&1, :dashboard_lifecycle_event_id)) |> present_values()
 
     placement_ids = Enum.flat_map(requests, &request_placements/1) |> Enum.uniq()
+
+    operational_context =
+      requests
+      |> Enum.flat_map(&request_findings/1)
+      |> operational_context()
+
     count = length(requests)
 
     %{
@@ -82,6 +121,7 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       placement_ids: placement_ids,
       placements_attr: Enum.join(placement_ids, ",")
     }
+    |> Map.merge(operational_context)
   end
 
   @spec open_request_count_text([map()]) :: binary()
@@ -143,6 +183,7 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
   def request_summary(event, events \\ []) do
     placement_ids = request_placements(event)
     findings = request_findings(event)
+    operational_context = operational_context(findings)
     resolved? = request_resolved?(event, events)
 
     %{
@@ -156,8 +197,10 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       open_count_text: request_open_count(event, findings) |> Integer.to_string(),
       placement_ids: placement_ids,
       placements_attr: Enum.join(placement_ids, ","),
+      operational_context: operational_context,
       findings: findings
     }
+    |> Map.merge(operational_context)
   end
 
   @spec request_placements(map()) :: [binary()]
@@ -198,6 +241,13 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       findings when is_list(findings) -> Enum.filter(findings, &is_map/1)
       _value -> []
     end
+  end
+
+  @spec request_operational_context(map()) :: map()
+  def request_operational_context(event) do
+    event
+    |> request_findings()
+    |> operational_context()
   end
 
   @spec request_value(map(), binary()) :: binary()
@@ -260,6 +310,17 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       |> List.wrap()
       |> present_values()
 
+    source_scope_ids = payload |> payload_value("source_scope_ids") |> list_values()
+    source_contact_ids = payload |> payload_value("source_contact_ids") |> list_values()
+    source_resource_ids = payload |> payload_value("source_resource_ids") |> list_values()
+    source_transport_ids = payload |> payload_value("source_transport_ids") |> list_values()
+    source_endpoint_ids = payload |> payload_value("source_endpoint_ids") |> list_values()
+
+    source_ground_station_ids =
+      payload |> payload_value("source_ground_station_ids") |> list_values()
+
+    source_scope_link_ids = payload |> payload_value("source_scope_link_ids") |> list_values()
+
     %{
       source_request_event_id: resolution_value(event, "source_request_event_id"),
       disposition: resolution_value(event, "disposition"),
@@ -275,6 +336,21 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       source_open_count_text: payload |> payload_value("source_open_count") |> count_text(),
       source_open_placement_ids: source_open_placement_ids,
       source_open_placements_attr: Enum.join(source_open_placement_ids, ","),
+      source_scope_kind: resolution_value(event, "source_scope_kind"),
+      source_scope_ids: source_scope_ids,
+      source_scope_ids_attr: Enum.join(source_scope_ids, ","),
+      source_contact_ids: source_contact_ids,
+      source_contact_ids_attr: Enum.join(source_contact_ids, ","),
+      source_resource_ids: source_resource_ids,
+      source_resource_ids_attr: Enum.join(source_resource_ids, ","),
+      source_transport_ids: source_transport_ids,
+      source_transport_ids_attr: Enum.join(source_transport_ids, ","),
+      source_endpoint_ids: source_endpoint_ids,
+      source_endpoint_ids_attr: Enum.join(source_endpoint_ids, ","),
+      source_ground_station_ids: source_ground_station_ids,
+      source_ground_station_ids_attr: Enum.join(source_ground_station_ids, ","),
+      source_scope_link_ids: source_scope_link_ids,
+      source_scope_link_ids_attr: Enum.join(source_scope_link_ids, ","),
       source_bulk_decision_actionable_count_text:
         payload |> payload_value("source_bulk_decision_actionable_count") |> count_text(),
       source_bulk_decision_actionable_placement_ids:
@@ -361,6 +437,80 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
   defp affected_placements_text([]), do: "-"
   defp affected_placements_text(placement_ids), do: Enum.join(placement_ids, ", ")
 
+  defp operational_context(findings) when is_list(findings) do
+    scope_kinds = finding_values(findings, "scope_kind")
+    scope_ids = finding_values(findings, ["scope_ids", "scope_id"])
+    contact_ids = finding_values(findings, ["contact_ids", "contact_id"])
+    resource_ids = finding_values(findings, "resource_id")
+    transport_ids = finding_values(findings, "transport_id")
+    source_endpoint_ids = finding_values(findings, "source_endpoint_id")
+    ground_station_ids = finding_values(findings, "ground_station_id")
+    scope_link_ids = finding_values(findings, "scope_link_id")
+
+    %{
+      scope_kind: single_value(scope_kinds),
+      scope_kinds: scope_kinds,
+      scope_kinds_attr: Enum.join(scope_kinds, ","),
+      scope_ids: scope_ids,
+      scope_ids_attr: Enum.join(scope_ids, ","),
+      contact_ids: contact_ids,
+      contact_ids_attr: Enum.join(contact_ids, ","),
+      resource_ids: resource_ids,
+      resource_ids_attr: Enum.join(resource_ids, ","),
+      transport_ids: transport_ids,
+      transport_ids_attr: Enum.join(transport_ids, ","),
+      source_endpoint_ids: source_endpoint_ids,
+      source_endpoint_ids_attr: Enum.join(source_endpoint_ids, ","),
+      ground_station_ids: ground_station_ids,
+      ground_station_ids_attr: Enum.join(ground_station_ids, ","),
+      scope_link_ids: scope_link_ids,
+      scope_link_ids_attr: Enum.join(scope_link_ids, ",")
+    }
+  end
+
+  defp finding_values(findings, keys) when is_list(keys) do
+    findings
+    |> Enum.flat_map(fn finding ->
+      Enum.flat_map(keys, &finding_values(finding, &1))
+    end)
+    |> Enum.uniq()
+  end
+
+  defp finding_values(findings, key) when is_list(findings) and is_binary(key) do
+    findings
+    |> Enum.flat_map(&finding_values(&1, key))
+    |> Enum.uniq()
+  end
+
+  defp finding_values(finding, key) when is_map(finding) and is_binary(key) do
+    finding
+    |> payload_value(key)
+    |> list_values()
+  end
+
+  defp finding_values(_finding, _key), do: []
+
+  defp list_values(values) when is_list(values) do
+    values
+    |> Enum.flat_map(&list_values/1)
+    |> Enum.uniq()
+  end
+
+  defp list_values(value) when is_binary(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp list_values(nil), do: []
+  defp list_values(value) when is_atom(value), do: [Atom.to_string(value)]
+  defp list_values(value) when is_integer(value), do: [Integer.to_string(value)]
+  defp list_values(_value), do: []
+
+  defp single_value([]), do: nil
+  defp single_value(values), do: Enum.join(values, ",")
+
   defp count_text(value) when is_integer(value) and value >= 0, do: Integer.to_string(value)
   defp count_text(value) when is_binary(value) and value != "", do: value
   defp count_text(_value), do: "-"
@@ -384,6 +534,16 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
   defp known_atom_key("title"), do: :title
   defp known_atom_key("state"), do: :state
   defp known_atom_key("decision_status"), do: :decision_status
+  defp known_atom_key("scope_kind"), do: :scope_kind
+  defp known_atom_key("scope_id"), do: :scope_id
+  defp known_atom_key("scope_ids"), do: :scope_ids
+  defp known_atom_key("resource_id"), do: :resource_id
+  defp known_atom_key("contact_id"), do: :contact_id
+  defp known_atom_key("contact_ids"), do: :contact_ids
+  defp known_atom_key("transport_id"), do: :transport_id
+  defp known_atom_key("source_endpoint_id"), do: :source_endpoint_id
+  defp known_atom_key("ground_station_id"), do: :ground_station_id
+  defp known_atom_key("scope_link_id"), do: :scope_link_id
   defp known_atom_key("disposition"), do: :disposition
   defp known_atom_key("resolution_reason"), do: :resolution_reason
   defp known_atom_key("selected_placement_id"), do: :selected_placement_id
@@ -394,6 +554,14 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
   defp known_atom_key("selection_count"), do: :selection_count
   defp known_atom_key("source_open_count"), do: :source_open_count
   defp known_atom_key("source_open_placement_ids"), do: :source_open_placement_ids
+  defp known_atom_key("source_scope_kind"), do: :source_scope_kind
+  defp known_atom_key("source_scope_ids"), do: :source_scope_ids
+  defp known_atom_key("source_contact_ids"), do: :source_contact_ids
+  defp known_atom_key("source_resource_ids"), do: :source_resource_ids
+  defp known_atom_key("source_transport_ids"), do: :source_transport_ids
+  defp known_atom_key("source_endpoint_ids"), do: :source_endpoint_ids
+  defp known_atom_key("source_ground_station_ids"), do: :source_ground_station_ids
+  defp known_atom_key("source_scope_link_ids"), do: :source_scope_link_ids
   defp known_atom_key(_key), do: nil
 
   defp present?(value), do: is_binary(value) and value != ""

@@ -137,7 +137,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParamsTest do
         "comparison_review_workflow_selection_kind" => "open_comparison_findings",
         "comparison_review_workflow_selection_count" => "2",
         "comparison_review_primary_data_view" => "all_revisions",
-        "comparison_review_compare_data_view" => "canonical"
+        "comparison_review_compare_data_view" => "canonical",
+        "comparison_review_scope_kind" => "transport",
+        "comparison_review_scope_ids" => "transport-alpha,transport-beta",
+        "comparison_review_contact_ids" => "contact-alpha,contact-beta",
+        "comparison_review_resource_ids" => "transport-alpha",
+        "comparison_review_transport_ids" => "transport-alpha",
+        "comparison_review_source_endpoint_ids" => "endpoint-alpha",
+        "comparison_review_ground_station_ids" => "dss-14",
+        "comparison_review_scope_link_ids" => "link-alpha"
       }
 
       scope = %{organization_id: "org-1", user: %{id: "user-1"}}
@@ -163,7 +171,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParamsTest do
                    "workflow_selection_kind" => "open_comparison_findings",
                    "workflow_selection_count" => "2",
                    "primary_data_view" => "all_revisions",
-                   "compare_data_view" => "canonical"
+                   "compare_data_view" => "canonical",
+                   "scope_kind" => "transport",
+                   "scope_ids" => "transport-alpha,transport-beta",
+                   "contact_ids" => "contact-alpha,contact-beta",
+                   "resource_ids" => "transport-alpha",
+                   "transport_ids" => "transport-alpha",
+                   "source_endpoint_ids" => "endpoint-alpha",
+                   "ground_station_ids" => "dss-14",
+                   "scope_link_ids" => "link-alpha"
                  }
                }
              } = HistoricalWorkflowParams.attrs(params, scope, mission)

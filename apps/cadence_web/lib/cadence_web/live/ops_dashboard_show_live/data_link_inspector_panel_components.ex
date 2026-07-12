@@ -282,6 +282,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
         data-late-data-policy-action-dashboard-replay-run-id={
           Map.get(@action_outcome_presentation.metadata, "dashboard_replay_run_id")
         }
+        data-late-data-policy-action-dashboard-data-view={
+          Map.get(@action_outcome_presentation.metadata, "dashboard_data_view")
+        }
         data-late-data-policy-action-dashboard-limit-mode={
           Map.get(@action_outcome_presentation.metadata, "dashboard_limit_mode")
         }
@@ -338,6 +341,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
           type="hidden"
           name={@late_data_form[:dashboard_replay_run_id].name}
           value={@late_data_context.dashboard_replay_run_id}
+        />
+        <input
+          id="dashboard-late-data-policy-dashboard-data-view"
+          type="hidden"
+          name={@late_data_form[:dashboard_data_view].name}
+          value={@late_data_context.dashboard_data_view}
         />
         <input
           id="dashboard-late-data-policy-dashboard-limit-mode"
@@ -511,6 +520,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
         data-revision-decision-action-decision={
           Map.get(@action_outcome_presentation.metadata, "decision")
         }
+        data-revision-decision-action-dashboard-time-mode={
+          Map.get(@action_outcome_presentation.metadata, "dashboard_time_mode")
+        }
+        data-revision-decision-action-dashboard-replay-run-id={
+          Map.get(@action_outcome_presentation.metadata, "dashboard_replay_run_id")
+        }
+        data-revision-decision-action-dashboard-data-view={
+          Map.get(@action_outcome_presentation.metadata, "dashboard_data_view")
+        }
         data-revision-decision-action-dashboard-limit-mode={
           Map.get(@action_outcome_presentation.metadata, "dashboard_limit_mode")
         }
@@ -559,6 +577,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
           type="hidden"
           name={@decision_form[:dashboard_limit_mode].name}
           value={@decision_context.dashboard_limit_mode}
+        />
+        <input
+          id="dashboard-revision-decision-dashboard-time-mode"
+          type="hidden"
+          name={@decision_form[:dashboard_time_mode].name}
+          value={@decision_context.dashboard_time_mode}
+        />
+        <input
+          id="dashboard-revision-decision-dashboard-replay-run-id"
+          type="hidden"
+          name={@decision_form[:dashboard_replay_run_id].name}
+          value={@decision_context.dashboard_replay_run_id}
+        />
+        <input
+          id="dashboard-revision-decision-dashboard-data-view"
+          type="hidden"
+          name={@decision_form[:dashboard_data_view].name}
+          value={@decision_context.dashboard_data_view}
         />
         <input
           id="dashboard-revision-decision-source-target"

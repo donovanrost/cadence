@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
           run_id: String.t() | nil,
           dashboard_time_mode: String.t() | nil,
           dashboard_replay_run_id: String.t() | nil,
+          dashboard_data_view: String.t() | nil,
           dashboard_limit_mode: String.t() | nil,
           realm: String.t() | nil,
           data_source_id: String.t() | nil,
@@ -31,6 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
     :run_id,
     :dashboard_time_mode,
     :dashboard_replay_run_id,
+    :dashboard_data_view,
     :dashboard_limit_mode,
     :realm,
     :data_source_id,
@@ -63,6 +65,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
       run_id: param(params, "run_id"),
       dashboard_time_mode: param(params, "dashboard_time_mode"),
       dashboard_replay_run_id: param(params, "dashboard_replay_run_id"),
+      dashboard_data_view: param(params, "dashboard_data_view"),
       dashboard_limit_mode: param(params, "dashboard_limit_mode"),
       realm: param(params, "realm"),
       data_source_id: param(params, "data_source_id"),
@@ -126,6 +129,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
       "run_id" => params.run_id,
       "dashboard_time_mode" => params.dashboard_time_mode,
       "dashboard_replay_run_id" => params.dashboard_replay_run_id,
+      "dashboard_data_view" => params.dashboard_data_view,
       "dashboard_limit_mode" => params.dashboard_limit_mode,
       "realm" => params.realm,
       "data_source_id" => params.data_source_id,
@@ -158,6 +162,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
   defp atom_key("run_id"), do: :run_id
   defp atom_key("dashboard_time_mode"), do: :dashboard_time_mode
   defp atom_key("dashboard_replay_run_id"), do: :dashboard_replay_run_id
+  defp atom_key("dashboard_data_view"), do: :dashboard_data_view
   defp atom_key("dashboard_limit_mode"), do: :dashboard_limit_mode
   defp atom_key("realm"), do: :realm
   defp atom_key("data_source_id"), do: :data_source_id
@@ -184,6 +189,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
       %{
         "dashboard_time_mode" => params.dashboard_time_mode,
         "dashboard_replay_run_id" => params.dashboard_replay_run_id,
+        "dashboard_data_view" => params.dashboard_data_view,
         "dashboard_limit_mode" => params.dashboard_limit_mode
       }
       |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)

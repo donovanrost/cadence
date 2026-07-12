@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
   import Phoenix.Component, only: [assign: 3]
 
   alias Cadence.Dashboards
+  alias Cadence.Dashboards.ComparisonReviewQueue
   alias CadenceWeb.OpsDashboardShowLive.ComparisonReviewActionOutcome
   alias CadenceWeb.OpsDashboardShowLive.DashboardActionContext
 
@@ -369,7 +370,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
       "primary_revision",
       "compare_revision",
       "primary_data_view",
-      "compare_data_view"
+      "compare_data_view",
+      "scope_kind",
+      "scope_id",
+      "scope_ids",
+      "resource_id",
+      "spacecraft_id",
+      "contact_id",
+      "contact_ids",
+      "transport_id",
+      "source_endpoint_id",
+      "ground_station_id",
+      "scope_link_id"
     ])
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
     |> Map.new()
@@ -418,6 +430,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
 
   defp bulk_decision_outcome(params, request_event, summary, items) do
     failed = summary_count(summary, :failed)
+    operational_context = ComparisonReviewQueue.request_operational_context(request_event)
 
     ComparisonReviewActionOutcome.new(
       status: if(failed == 0, do: :ok, else: :degraded),
@@ -436,6 +449,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
       failed: failed,
       result_event_ids: summary_event_ids(summary),
       target_event_id: event_id(request_event),
+      scope_kind: Map.get(operational_context, :scope_kind),
+      scope_ids: Map.get(operational_context, :scope_ids_attr),
+      contact_ids: Map.get(operational_context, :contact_ids_attr),
+      resource_ids: Map.get(operational_context, :resource_ids_attr),
+      transport_ids: Map.get(operational_context, :transport_ids_attr),
+      source_endpoint_ids: Map.get(operational_context, :source_endpoint_ids_attr),
+      ground_station_ids: Map.get(operational_context, :ground_station_ids_attr),
+      scope_link_ids: Map.get(operational_context, :scope_link_ids_attr),
       message: bulk_decision_message(summary)
     )
   end

@@ -227,6 +227,79 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommandsTest do
   end
 
   describe "retry_group_failed_jobs/5" do
+    test "retries retryable group failures through the product API" do
+      retryable_job = failed_historical_workflow_job("dashboard-command-group-retry-001")
+      nonretryable_job = failed_historical_workflow_job("dashboard-command-group-retry-002")
+
+      assert {:ok, retryable_event} =
+               record_group_failed_event(
+                 "dashboard-command-group-retry-event-1",
+                 "dashboard-command-group-retry-001",
+                 1,
+                 retryable: true,
+                 job_id: retryable_job.job_id
+               )
+
+      assert {:ok, nonretryable_event} =
+               record_group_failed_event(
+                 "dashboard-command-group-retry-event-2",
+                 "dashboard-command-group-retry-002",
+                 2,
+                 retryable: false,
+                 job_id: nonretryable_job.job_id
+               )
+
+      assert {:ok, summary} =
+               HistoricalWorkflowCommands.retry_group_failed_jobs(
+                 " dashboard-command-group-retry ",
+                 @scope,
+                 @mission,
+                 @opts
+               )
+
+      assert summary.retried == 1
+      assert summary.nonretryable == 1
+      assert summary.skipped == 0
+      assert summary.failed == 0
+      assert summary.retry_error_items == []
+
+      assert summary.nonretryable_items == [
+               %{
+                 event_id: nonretryable_event.backfill_lifecycle_event_id,
+                 reason: "nonretryable_failure",
+                 run_id: "dashboard-command-group-retry-002"
+               }
+             ]
+
+      assert [retry_event] = summary.events
+      assert retry_event.event_type == :backfill_retried
+      assert retry_event.actor_id == "operator-command"
+      assert retry_event.payload["retry_action"] == "retry_job"
+
+      assert retry_event.payload["retry_source_event_id"] ==
+               retryable_event.backfill_lifecycle_event_id
+
+      assert retry_event.payload["retry_job_id"] == retryable_job.job_id
+      assert retry_event.payload["retry_job_status"] == "queued"
+      assert retry_event.payload["request_group_id"] == "dashboard-command-group-retry"
+      assert retry_event.payload["request_item_index"] == 1
+      assert retry_event.payload["request_item_count"] == 2
+
+      assert {:ok, retried_job} =
+               Cadence.fetch_telemetry_historical_data_workflow_job(
+                 "dashboard-command-group-retry-001"
+               )
+
+      assert retried_job.status == :queued
+
+      assert {:ok, still_failed_job} =
+               Cadence.fetch_telemetry_historical_data_workflow_job(
+                 "dashboard-command-group-retry-002"
+               )
+
+      assert still_failed_job.status == :failed
+    end
+
     test "normalizes blank request group ids before calling the domain API" do
       assert {:error, {:missing_field, :request_group_id}} =
                HistoricalWorkflowCommands.retry_group_failed_jobs(" ", @scope, @mission, @opts)
@@ -313,7 +386,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommandsTest do
                :telemetry_historical_data_workflow,
                "mission-dashboard-command",
                run_id,
-               %{"workflow" => "backfill", "attrs" => %{}}
+               %{"workflow" => "backfill", "attrs" => %{"backfill_run_id" => run_id}}
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
@@ -324,4 +397,45 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommandsTest do
 
     failed_job
   end
+
+  defp record_group_failed_event(event_id, run_id, item_index, opts) do
+    failure =
+      %{"retryable" => Keyword.fetch!(opts, :retryable)}
+      |> maybe_put("recovery_action", Keyword.get(opts, :recovery_action))
+
+    payload =
+      %{
+        "request_group_id" => "dashboard-command-group-retry",
+        "request_item_index" => item_index,
+        "request_item_count" => 2,
+        "source" => %{"failure" => failure}
+      }
+      |> maybe_put("job_id", Keyword.get(opts, :job_id))
+
+    Cadence.record_telemetry_historical_data_workflow_event(
+      "backfill",
+      "failed",
+      %{
+        backfill_lifecycle_event_id: event_id,
+        backfill_run_id: run_id,
+        organization_id: "org-dashboard-command",
+        mission_id: "mission-dashboard-command",
+        realm: :backfill,
+        data_source_id: "managed_questdb_backfill",
+        binding_id: "backfill_telemetry",
+        observable_id: "HK.group_failed#{item_index}",
+        point_id: "HK.group_failed#{item_index}",
+        source_from: ~U[2026-06-22 10:00:00Z],
+        source_to: ~U[2026-06-22 11:00:00Z],
+        authority: :advisory,
+        reason: "historical_data_job_failed",
+        payload: payload
+      },
+      @opts
+    )
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, _key, ""), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

@@ -146,6 +146,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
             requested: 2,
             applied: 1,
             failed: 1,
+            scope_kind: "transport",
+            scope_ids: "transport-alpha,transport-beta",
+            contact_ids: "contact-alpha,contact-beta",
+            resource_ids: "transport-alpha",
+            transport_ids: "transport-alpha",
+            source_endpoint_ids: "endpoint-alpha",
+            ground_station_ids: "dss-14",
+            scope_link_ids: "link-alpha",
             result_event_ids: "decision-event-1",
             target_event_id: "review-request-1",
             message: "Comparison review decisions applied to 1 findings; 1 failed."
@@ -195,6 +203,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     assert ["1"] =
              LazyHTML.attribute(action, "data-dashboard-comparison-review-action-failed")
 
+    assert ["transport"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-kind")
+
+    assert ["transport-alpha,transport-beta"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-ids")
+
+    assert ["contact-alpha,contact-beta"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-contact-ids")
+
+    assert ["transport-alpha"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-resource-ids")
+
+    assert ["transport-alpha"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-transport-ids")
+
+    assert ["endpoint-alpha"] =
+             LazyHTML.attribute(
+               action,
+               "data-dashboard-comparison-review-action-source-endpoint-ids"
+             )
+
+    assert ["dss-14"] =
+             LazyHTML.attribute(
+               action,
+               "data-dashboard-comparison-review-action-ground-station-ids"
+             )
+
+    assert ["link-alpha"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-link-ids")
+
     assert ["decision-event-1"] =
              LazyHTML.attribute(
                action,
@@ -221,6 +259,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
              "requested" => "2",
              "applied" => "1",
              "failed" => "1",
+             "scope_kind" => "transport",
+             "scope_ids" => "transport-alpha,transport-beta",
+             "contact_ids" => "contact-alpha,contact-beta",
+             "resource_ids" => "transport-alpha",
+             "transport_ids" => "transport-alpha",
+             "source_endpoint_ids" => "endpoint-alpha",
+             "ground_station_ids" => "dss-14",
+             "scope_link_ids" => "link-alpha",
              "result_event_ids" => "decision-event-1",
              "target_event_id" => "review-request-1"
            }
@@ -237,6 +283,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     assert action_text =~ "Applied"
     assert action_text =~ "1"
     assert action_text =~ "Failed"
+    assert action_text =~ "Scope"
+    assert action_text =~ "transport"
+    assert action_text =~ "Scope IDs"
+    assert action_text =~ "transport-alpha,transport-beta"
+    assert action_text =~ "Contacts"
+    assert action_text =~ "contact-alpha,contact-beta"
+    assert action_text =~ "Resources"
+    assert action_text =~ "Source endpoints"
+    assert action_text =~ "Ground stations"
+    assert action_text =~ "Scope links"
     assert action_text =~ "review-request-1"
     assert action_text =~ "decision-event-1"
   end

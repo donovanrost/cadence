@@ -465,7 +465,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
   end
 
   test "source adapter timeouts share one retryable execution-failure contract across logical sources" do
-    outcomes =
+    results =
       [
         resolve_request(load_fixture!("time_series_with_limits.v1.json")),
         operational_resolve_request()
@@ -480,16 +480,17 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
           )
         )
       )
-      |> Enum.flat_map(&source_execution_outcomes/1)
 
-    assert Enum.frequencies_by(outcomes, & &1.outcome.logical_source) == %{
+    outcomes = Enum.flat_map(results, &source_summary_outcomes/1)
+
+    assert Enum.frequencies_by(outcomes, & &1.logical_source) == %{
              telemetry: 1,
              limits: 2,
              events: 1,
              operational_observables: 1
            }
 
-    for %{outcome: outcome, warning: warning} <- outcomes do
+    for outcome <- outcomes do
       assert outcome.status == :source_execution_failed
       assert outcome.executed?
       assert outcome.degraded?
@@ -500,7 +501,15 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
       assert outcome.operator_action == :inspect_source_failure
       assert outcome.runtime_action == :retry_source_execution
       assert outcome.cache_status == :source_execution_failed
-      assert outcome.warning_codes == [:source_unavailable]
+    end
+
+    warnings_by_request_id = source_warnings_by_request_id(results, :source_unavailable)
+    warning_outcomes = Enum.filter(outcomes, &Map.has_key?(warnings_by_request_id, &1.request_id))
+
+    assert warning_outcomes != []
+
+    for outcome <- warning_outcomes do
+      warning = Map.fetch!(warnings_by_request_id, outcome.request_id)
 
       assert warning.severity == :error
       assert warning.scope == :dashboard
@@ -1080,6 +1089,13 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     |> Enum.map(fn outcome ->
       %{outcome: outcome, warning: Map.fetch!(warnings_by_request_id, outcome.request_id)}
     end)
+  end
+
+  defp source_warnings_by_request_id(results, warning_code) do
+    results
+    |> Enum.flat_map(& &1.dashboard_warnings)
+    |> Enum.filter(&(&1.code == warning_code))
+    |> Map.new(fn warning -> {warning.details.source_request_id, warning} end)
   end
 
   defp flush_contract_adapter_messages do

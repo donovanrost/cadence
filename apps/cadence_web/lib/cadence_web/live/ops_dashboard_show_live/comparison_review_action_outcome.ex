@@ -15,6 +15,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActionOutcome do
           failed: non_neg_integer() | String.t() | nil,
           result_event_ids: String.t() | nil,
           target_event_id: String.t() | nil,
+          scope_kind: String.t() | nil,
+          scope_ids: String.t() | nil,
+          contact_ids: String.t() | nil,
+          resource_ids: String.t() | nil,
+          transport_ids: String.t() | nil,
+          source_endpoint_ids: String.t() | nil,
+          ground_station_ids: String.t() | nil,
+          scope_link_ids: String.t() | nil,
           error: term(),
           message: String.t()
         }
@@ -32,6 +40,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActionOutcome do
             failed: nil,
             result_event_ids: nil,
             target_event_id: nil,
+            scope_kind: nil,
+            scope_ids: nil,
+            contact_ids: nil,
+            resource_ids: nil,
+            transport_ids: nil,
+            source_endpoint_ids: nil,
+            ground_station_ids: nil,
+            scope_link_ids: nil,
             error: nil,
             message: "Comparison review decisions applied."
 

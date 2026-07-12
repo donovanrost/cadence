@@ -101,6 +101,50 @@ defmodule Cadence.Dashboards.RuntimeInvalidationRelevanceTest do
            )
   end
 
+  test "ignores telemetry invalidations for documents without telemetry primary data" do
+    document = non_telemetry_document()
+    context = runtime_context()
+
+    events = [
+      invalidation(:data_source_binding_changed,
+        logical_source: :telemetry,
+        observable: "HK.counter",
+        data_source_id: "flight-source"
+      ),
+      invalidation(:source_health_changed,
+        logical_source: :telemetry,
+        data_source_id: "flight-source",
+        source_health: :degraded
+      ),
+      invalidation(:source_watermark_changed,
+        logical_source: :telemetry,
+        observable: "HK.counter",
+        data_source_id: "flight-source"
+      )
+    ]
+
+    for event <- events do
+      refute RuntimeInvalidationRelevance.event_matches?(
+               event,
+               scope(),
+               mission(),
+               document,
+               context
+             )
+
+      assert %{matches?: false, reason: :document_not_relevant} =
+               RuntimeInvalidationRelevance.event_relevance(
+                 event,
+                 scope(),
+                 mission(),
+                 document,
+                 context
+               )
+
+      assert [] = RuntimeInvalidationRelevance.affected_placements(event, document)
+    end
+  end
+
   test "honors realm but lets data source binding changes move to a new source identity" do
     document = telemetry_document()
     context = runtime_context(%{data_realm: :rehearsal})
@@ -840,6 +884,25 @@ defmodule Cadence.Dashboards.RuntimeInvalidationRelevanceTest do
             widget_type_id: "cadence.value_tile",
             title: "Counter",
             binding: %{observables: ["HK.counter"], overlays: overlays}
+          }
+        }
+      ]
+    }
+  end
+
+  defp non_telemetry_document do
+    %Document{
+      dashboard_id: "dashboard-1",
+      organization_id: "org-1",
+      mission_id: "mission-1",
+      name: "Constellation Dashboard",
+      placements: [
+        %Placement{
+          placement_id: "placement-constellation",
+          widget_def: %WidgetDef{
+            widget_type_id: "cadence.constellation_health",
+            title: "Fleet",
+            binding: %{source: :operational_observables}
           }
         }
       ]

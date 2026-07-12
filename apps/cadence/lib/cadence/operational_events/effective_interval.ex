@@ -16,6 +16,7 @@ defmodule Cadence.OperationalEvents.EffectiveInterval do
           | :link_rf_lock_state
           | :operational_observable_state
           | :source_binding
+          | :source_health
           | :transport_connection_state
           | :transport_execution
 

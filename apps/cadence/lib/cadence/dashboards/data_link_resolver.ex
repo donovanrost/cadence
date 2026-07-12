@@ -31,6 +31,10 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   alias Cadence.Persistence.Schemas.{
+    CommandQueueEntryRow,
+    CommandReleaseAttemptRow,
+    CommandRequestRow,
+    CommandVerifierInstanceRow,
     DashboardDataBindingEventRow,
     DashboardSourceHealthEventRow,
     DashboardSourceWatermarkEventRow,
@@ -144,12 +148,55 @@ defmodule Cadence.Dashboards.DataLinkResolver do
        ),
        do: resolve_operational_event(link, organization_id, mission_id)
 
+  defp resolve_scoped_link(
+         %DataLink{target: :command_release_attempt} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_command_release_attempt(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :command_request} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_command_request(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :command_queue_entry} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_command_queue_entry(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :command_verifier_instance} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_command_verifier_instance(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :transport_capability_record} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_transport_capability_record(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :transport_action_request} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_transport_action_request(link, organization_id, mission_id)
+
   defp resolve_scoped_link(%DataLink{target: target} = link, organization_id, mission_id)
        when target in [
               :binding_set_interval,
               :application_binding_interval,
               :catalog_revision_interval,
               :source_binding_interval,
+              :source_health_interval,
               :transport_execution_interval,
               :transport_connection_state_interval,
               :ground_station_connection_state_interval,
@@ -533,6 +580,114 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       nil ->
         {:error,
          inspector(link, :missing, "Operational event was not found in this mission.", [])}
+    end
+  end
+
+  defp resolve_command_verifier_instance(%DataLink{} = link, organization_id, mission_id) do
+    verifier_row =
+      CommandVerifierInstanceRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_verifier_instance_id == ^link.target_id
+      )
+      |> Repo.one()
+
+    case verifier_row do
+      %CommandVerifierInstanceRow{} = verifier_row ->
+        verifier_instance = CommandVerifierInstanceRow.to_domain(verifier_row)
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           command_verifier_instance_rows(verifier_instance),
+           command_verifier_instance_related_links(link, verifier_instance)
+         )}
+
+      nil ->
+        {:error,
+         inspector(
+           link,
+           :missing,
+           "Command verifier instance was not found in this mission.",
+           []
+         )}
+    end
+  end
+
+  defp resolve_transport_capability_record(%DataLink{} = link, organization_id, mission_id) do
+    event_row =
+      OperationalEventRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_record_kind == "transport_capability_record" and
+          row.source_record_id == ^link.target_id
+      )
+      |> order_by([row], asc: row.occurred_at, asc: row.event_id)
+      |> limit(1)
+      |> Repo.one()
+
+    case event_row do
+      %OperationalEventRow{} = event_row ->
+        event = OperationalEventRow.to_domain(event_row)
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           transport_capability_record_rows(event),
+           [related_link(link, :operational_event, event.event_id, "Operational event")]
+         )}
+
+      nil ->
+        {:error,
+         inspector(
+           link,
+           :missing,
+           "Transport capability record was not found in this mission.",
+           []
+         )}
+    end
+  end
+
+  defp resolve_transport_action_request(%DataLink{} = link, organization_id, mission_id) do
+    event_row =
+      OperationalEventRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_record_kind == "transport_action_request" and
+          row.source_record_id == ^link.target_id
+      )
+      |> order_by([row], asc: row.occurred_at, asc: row.event_id)
+      |> limit(1)
+      |> Repo.one()
+
+    case event_row do
+      %OperationalEventRow{} = event_row ->
+        event = OperationalEventRow.to_domain(event_row)
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           transport_action_request_rows(event),
+           [related_link(link, :operational_event, event.event_id, "Operational event")]
+         )}
+
+      nil ->
+        {:error,
+         inspector(
+           link,
+           :missing,
+           "Transport action request was not found in this mission.",
+           []
+         )}
     end
   end
 
@@ -1093,13 +1248,217 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp operational_event_semantic_rows(%{causality: causality} = event) do
-    case state_value(causality, :source_record_kind) do
-      kind when kind in [:source_capability_posture, "source_capability_posture"] ->
-        source_capability_posture_rows(event)
+    causality
+    |> state_value(:source_record_kind)
+    |> operational_event_semantic_rows_for(event)
+  end
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:transport_action_request, "transport_action_request"],
+       do: transport_action_request_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:transport_capability_record, "transport_capability_record"],
+       do: transport_capability_record_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:transport_timer_event, "transport_timer_event"],
+       do: transport_timer_event_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:managed_timer_event, "managed_timer_event"],
+       do: managed_timer_event_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:managed_action_request, "managed_action_request"],
+       do: managed_action_request_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:managed_capability_record, "managed_capability_record"],
+       do: managed_capability_record_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:source_capability_posture, "source_capability_posture"],
+       do: source_capability_posture_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:source_health_event, "source_health_event"],
+       do: source_health_operational_event_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:connection_state_snapshot, "connection_state_snapshot"],
+       do: connection_state_operational_event_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [
+              :link_rf_lock_state_snapshot,
+              "link_rf_lock_state_snapshot",
+              :link_frame_sync_state_snapshot,
+              "link_frame_sync_state_snapshot"
+            ],
+       do: link_rf_state_operational_event_rows(event)
+
+  defp operational_event_semantic_rows_for(kind, event)
+       when kind in [:operational_observable_snapshot, "operational_observable_snapshot"],
+       do: operational_observable_snapshot_operational_event_rows(event)
+
+  defp operational_event_semantic_rows_for(_kind, _event), do: []
+
+  defp operational_observable_snapshot_operational_event_rows(event) do
+    case event.kind do
+      kind
+      when kind in [
+             :operational_observable_metric_sampled,
+             "operational_observable_metric_sampled"
+           ] ->
+        operational_observable_metric_operational_event_rows(event)
 
       _other ->
-        []
+        operational_observable_state_operational_event_rows(event)
     end
+  end
+
+  defp operational_observable_metric_operational_event_rows(event) do
+    payload = event.payload || %{}
+    current = event.current || %{}
+    causality = event.causality || %{}
+
+    [
+      row("Operational metric sample", state_value(causality, :source_record_id)),
+      row("Observed", event.occurred_at),
+      row("Observable", state_value(payload, :observable_id)),
+      row("Resource", state_value(payload, :resource_id)),
+      row("Scope kind", state_value(payload, :scope_kind)),
+      row("Transport", state_value(payload, :transport_id)),
+      row("Source endpoint", state_value(payload, :source_endpoint_id)),
+      row("Ground station", state_value(payload, :ground_station_id)),
+      row("Link", state_value(payload, :link_id)),
+      row("Value", operational_metric_value(current, payload)),
+      row("Unit", state_value(payload, :unit)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp operational_metric_value(current, payload) do
+    [
+      :value,
+      :downlink_bitrate,
+      :downlink_bitrate_bps,
+      :uplink_bitrate,
+      :uplink_bitrate_bps,
+      :bitrate,
+      :snr_db,
+      :snr,
+      :signal_to_noise_ratio_db,
+      :eb_n0_db,
+      :ebn0_db,
+      :energy_per_bit_to_noise_density_db,
+      :symbol_rate_sps,
+      :symbol_rate,
+      :symbols_per_second,
+      :doppler_hz,
+      :doppler,
+      :frequency_offset_hz,
+      :carrier_frequency_offset_hz
+    ]
+    |> Enum.find_value(fn field ->
+      state_value(current, field) || state_value(payload, field)
+    end)
+  end
+
+  defp operational_observable_state_operational_event_rows(event) do
+    payload = event.payload || %{}
+    current = event.current || %{}
+    causality = event.causality || %{}
+
+    [
+      row("Operational observable snapshot", state_value(causality, :source_record_id)),
+      row("Observed", event.occurred_at),
+      row("Observable", state_value(payload, :observable_id)),
+      row("Resource", state_value(payload, :resource_id)),
+      row("Scope kind", state_value(payload, :scope_kind)),
+      row("Transport", state_value(payload, :transport_id)),
+      row("Source endpoint", state_value(payload, :source_endpoint_id)),
+      row("Ground station", state_value(payload, :ground_station_id)),
+      row("Link", state_value(payload, :link_id)),
+      row("State", state_value(current, :state) || state_value(payload, :state)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp link_rf_state_operational_event_rows(event) do
+    payload = event.payload || %{}
+    current = event.current || %{}
+    causality = event.causality || %{}
+
+    [
+      row("RF state snapshot", state_value(causality, :source_record_id)),
+      row("Observed", event.occurred_at),
+      row("Observable", state_value(payload, :observable_id)),
+      row("Resource", state_value(payload, :resource_id)),
+      row("Scope kind", state_value(payload, :scope_kind)),
+      row("Transport", state_value(payload, :transport_id)),
+      row("Source endpoint", state_value(payload, :source_endpoint_id)),
+      row("Ground station", state_value(payload, :ground_station_id)),
+      row("Link", state_value(payload, :link_id)),
+      row("RF state", state_value(current, :state) || state_value(payload, :state)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp connection_state_operational_event_rows(event) do
+    payload = event.payload || %{}
+    current = event.current || %{}
+    causality = event.causality || %{}
+
+    [
+      row("Connection state snapshot", state_value(causality, :source_record_id)),
+      row("Observed", event.occurred_at),
+      row("Observable", state_value(payload, :observable_id)),
+      row("Resource", state_value(payload, :resource_id)),
+      row("Scope kind", state_value(payload, :scope_kind)),
+      row("Transport", state_value(payload, :transport_id)),
+      row("Spacecraft", state_value(payload, :spacecraft_id)),
+      row("Contact", state_value(payload, :contact_id)),
+      row("Source endpoint", state_value(payload, :source_endpoint_id)),
+      row("Ground station", state_value(payload, :ground_station_id)),
+      row("Link", state_value(payload, :link_id)),
+      row("Adapter", state_value(payload, :adapter_key)),
+      row(
+        "Connection state",
+        state_value(current, :connection_state) || state_value(payload, :connection_state)
+      ),
+      row(
+        "Normalized state",
+        state_value(current, :normalized_state) || state_value(payload, :normalized_state)
+      ),
+      row("State", state_value(current, :state) || state_value(payload, :state)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp source_health_operational_event_rows(event) do
+    payload = event.payload || %{}
+    current = event.current || %{}
+
+    [
+      row("Source health event", state_value(payload, :source_health_event_id)),
+      row("Observed", event.occurred_at),
+      row("Logical source", state_value(payload, :logical_source)),
+      row("Data source", state_value(payload, :data_source_id)),
+      row("Source binding", state_value(payload, :source_binding_id)),
+      row("Realm", state_value(payload, :data_realm)),
+      row("Dataset", state_value(payload, :dataset)),
+      row("Replay run", state_value(payload, :replay_run_id)),
+      row("Event type", state_value(payload, :event_type)),
+      row(
+        "Source health",
+        state_value(current, :source_health) || state_value(payload, :source_health)
+      ),
+      row("Previous source health", state_value(payload, :previous_source_health)),
+      row("Reason", state_value(current, :reason) || state_value(payload, :reason)),
+      row("Source payload", state_value(payload, :source_payload))
+    ]
   end
 
   defp source_capability_posture_rows(event) do
@@ -1143,6 +1502,558 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       ),
       row("Source execution warnings", state_value(payload, :source_execution_warning_codes))
     ]
+  end
+
+  defp transport_capability_record_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Transport capability record", state_value(payload, :transport_record_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Contact", state_value(payload, :contact_id)),
+      row("Path", state_value(payload, :path_id)),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Event kind", state_value(payload, :event_kind)),
+      row("Timer", state_value(payload, :timer_key)),
+      row("Emitted record kinds", state_value(payload, :emitted_record_kinds)),
+      row("Emitted record count", state_value(payload, :emitted_record_count)),
+      row("Action request count", state_value(payload, :action_request_count)),
+      row("State snapshot", state_value(payload, :state_snapshot)),
+      row("Record metadata", state_value(payload, :record_metadata)),
+      row("Recorded", state_value(payload, :recorded_at)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp transport_action_request_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Transport action request", state_value(payload, :action_request_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Contact", state_value(payload, :contact_id)),
+      row("Path", state_value(payload, :path_id)),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Source endpoint", state_value(payload, :source_endpoint_ref)),
+      row("Command release attempt", state_value(payload, :command_release_attempt_id)),
+      row("Command request", state_value(payload, :command_request_id)),
+      row("Command", state_value(payload, :command_name)),
+      row("Signal phase", state_value(payload, :signal_phase)),
+      row("Action kind", state_value(payload, :action_kind)),
+      row("Request document", state_value(payload, :request_document)),
+      row("Requested", state_value(payload, :requested_at)),
+      row("Action metadata", state_value(payload, :action_metadata)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp transport_timer_event_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Transport timer event", state_value(payload, :timer_event_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Contact", state_value(payload, :contact_id)),
+      row("Path", state_value(payload, :path_id)),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Timer", state_value(payload, :timer_key)),
+      row("Event kind", state_value(payload, :event_kind)),
+      row("Due", state_value(payload, :due_at)),
+      row("Timer metadata", state_value(payload, :timer_metadata)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp managed_timer_event_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Managed timer event", state_value(payload, :timer_event_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Packet", state_value(payload, :packet_id)),
+      row("Evidence", state_value(payload, :evidence_id)),
+      row("Timer", state_value(payload, :timer_key)),
+      row("Event kind", state_value(payload, :event_kind)),
+      row("Due", state_value(payload, :due_at)),
+      row("Timer metadata", state_value(payload, :timer_metadata)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp managed_action_request_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Managed action request", state_value(payload, :action_request_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Packet", state_value(payload, :packet_id)),
+      row("Evidence", state_value(payload, :evidence_id)),
+      row("Action kind", state_value(payload, :action_kind)),
+      row("Request document", state_value(payload, :request_document)),
+      row("Requested", state_value(payload, :requested_at)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp managed_capability_record_rows(event) do
+    payload = event.payload || %{}
+
+    [
+      row("Managed capability record", state_value(payload, :capability_record_id)),
+      row("Operational event", event.event_id),
+      row("Occurred", event.occurred_at),
+      row("Kind", event.kind),
+      row("Capability instance", state_value(payload, :capability_instance_id)),
+      row("Family", state_value(payload, :family_key)),
+      row("Binding set", state_value(payload, :binding_set_id)),
+      row("Binding set version", state_value(payload, :binding_set_version)),
+      row("Activation", state_value(payload, :activation_id)),
+      row("Partition affinity", state_value(payload, :partition_affinity)),
+      row("Partition value", state_value(payload, :partition_value)),
+      row("Packet", state_value(payload, :packet_id)),
+      row("Evidence", state_value(payload, :evidence_id)),
+      row("Timer", state_value(payload, :timer_key)),
+      row("Event kind", state_value(payload, :event_kind)),
+      row("Emitted record kinds", state_value(payload, :emitted_record_kinds)),
+      row("Emitted record count", state_value(payload, :emitted_record_count)),
+      row("Action request count", state_value(payload, :action_request_count)),
+      row("State snapshot", state_value(payload, :state_snapshot)),
+      row("Record metadata", state_value(payload, :record_metadata)),
+      row("Recorded", state_value(payload, :recorded_at)),
+      row("Replay run", state_value(payload, :replay_run_id))
+    ]
+  end
+
+  defp resolve_command_release_attempt(%DataLink{} = link, organization_id, mission_id) do
+    release_attempt_row =
+      CommandReleaseAttemptRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_release_attempt_id == ^link.target_id
+      )
+      |> Repo.one()
+
+    case release_attempt_row do
+      %CommandReleaseAttemptRow{} = release_attempt_row ->
+        release_attempt = CommandReleaseAttemptRow.to_domain(release_attempt_row)
+
+        transport_action_event =
+          command_release_attempt_transport_action_event(
+            release_attempt,
+            organization_id,
+            mission_id
+          )
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           command_release_attempt_rows(release_attempt, transport_action_event),
+           command_release_attempt_related_links(
+             link,
+             release_attempt,
+             organization_id,
+             mission_id
+           )
+         )}
+
+      nil ->
+        {:error,
+         inspector(
+           link,
+           :missing,
+           "Command release attempt was not found in this mission.",
+           []
+         )}
+    end
+  end
+
+  defp resolve_command_queue_entry(%DataLink{} = link, organization_id, mission_id) do
+    queue_entry_row =
+      CommandQueueEntryRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_queue_entry_id == ^link.target_id
+      )
+      |> Repo.one()
+
+    case queue_entry_row do
+      %CommandQueueEntryRow{} = queue_entry_row ->
+        queue_entry = CommandQueueEntryRow.to_domain(queue_entry_row)
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           command_queue_entry_rows(queue_entry),
+           command_queue_entry_related_links(link, queue_entry)
+         )}
+
+      nil ->
+        {:error,
+         inspector(link, :missing, "Command queue entry was not found in this mission.", [])}
+    end
+  end
+
+  defp command_queue_entry_rows(queue_entry) do
+    [
+      row("Command queue entry", queue_entry.command_queue_entry_id),
+      row("Lifecycle state", queue_entry.lifecycle_state),
+      row("Command request", queue_entry.command_request_id),
+      row("Source endpoint", queue_entry.source_endpoint_ref),
+      row("Queue lane", queue_entry.queue_lane_key),
+      row("Priority", queue_entry.priority),
+      row("Queue sequence", queue_entry.queue_sequence),
+      row("Not before", queue_entry.not_before),
+      row("Expires at", queue_entry.expires_at),
+      row("Enqueued at", queue_entry.enqueued_at),
+      row("Enqueued by", queue_entry.enqueued_by),
+      row("Metadata", queue_entry.metadata)
+    ]
+  end
+
+  defp command_queue_entry_related_links(%DataLink{} = link, queue_entry) do
+    [
+      related_link(
+        link,
+        :command_request,
+        queue_entry.command_request_id,
+        "Command request"
+      )
+    ]
+  end
+
+  defp resolve_command_request(%DataLink{} = link, organization_id, mission_id) do
+    request_row =
+      CommandRequestRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_request_id == ^link.target_id
+      )
+      |> Repo.one()
+
+    case request_row do
+      %CommandRequestRow{} = request_row ->
+        request = CommandRequestRow.to_domain(request_row)
+
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           command_request_rows(request),
+           command_request_related_links(link, request, organization_id, mission_id)
+         )}
+
+      nil ->
+        {:error, inspector(link, :missing, "Command request was not found in this mission.", [])}
+    end
+  end
+
+  defp command_request_rows(request) do
+    [
+      row("Command request", request.command_request_id),
+      row("Lifecycle state", request.lifecycle_state),
+      row("Verification state", request.verification_state),
+      row("Source endpoint", request.source_endpoint_ref),
+      row("Command", request.command_name),
+      row("Command display name", request.command_display_name),
+      row("Command id", request.command_id),
+      row("Command snapshot", request.command_snapshot_id),
+      row("Priority", request.priority),
+      row("Not before", request.not_before),
+      row("Expires at", request.expires_at),
+      row("Requested at", request.requested_at),
+      row("Requested by", request.requested_by),
+      row("Source command stage", request.source_command_stage_id),
+      row("Source staged command item", request.source_staged_command_item_id),
+      row("Argument values", request.argument_values),
+      row("Resolved argument values", request.resolved_argument_values),
+      row("Significance", request.significance),
+      row("Critical", request.critical),
+      row("Hazardous", request.hazardous),
+      row("Subsystem", request.subsystem),
+      row("Group", request.group_name),
+      row("Preferred uplink service", request.preferred_uplink_service),
+      row("Release policy hint", request.release_policy_hint),
+      row("APID", request.apid),
+      row("Service type", request.service_type),
+      row("Service subtype", request.service_subtype),
+      row("Opcode", request.opcode),
+      row("Metadata", request.metadata)
+    ]
+  end
+
+  defp command_request_related_links(%DataLink{} = link, request, organization_id, mission_id) do
+    queue_entry_links =
+      CommandQueueEntryRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_request_id == ^request.command_request_id
+      )
+      |> order_by([row], asc: row.enqueued_at, asc: row.command_queue_entry_id)
+      |> Repo.all()
+      |> Enum.map(fn queue_entry_row ->
+        related_link(
+          link,
+          :command_queue_entry,
+          queue_entry_row.command_queue_entry_id,
+          "Command queue entry"
+        )
+      end)
+
+    release_attempt_links =
+      CommandReleaseAttemptRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_request_id == ^request.command_request_id
+      )
+      |> order_by([row], asc: row.attempted_at, asc: row.command_release_attempt_id)
+      |> Repo.all()
+      |> Enum.map(fn release_attempt_row ->
+        related_link(
+          link,
+          :command_release_attempt,
+          release_attempt_row.command_release_attempt_id,
+          "Command release attempt"
+        )
+      end)
+
+    queue_entry_links ++ release_attempt_links
+  end
+
+  defp command_release_attempt_rows(release_attempt, transport_action_event) do
+    transport_action_payload =
+      case transport_action_event do
+        nil -> %{}
+        event -> event.payload || %{}
+      end
+
+    [
+      row("Command release attempt", release_attempt.command_release_attempt_id),
+      row("Lifecycle state", release_attempt.lifecycle_state),
+      row("Verification state", release_attempt.verification_state),
+      row("Failure reason", release_attempt.failure_reason),
+      row("Command request", release_attempt.command_request_id),
+      row("Command queue entry", release_attempt.command_queue_entry_id),
+      row("Command", release_attempt.command_name),
+      row("Command id", release_attempt.command_id),
+      row("Command snapshot", release_attempt.command_snapshot_id),
+      row("Source endpoint", release_attempt.source_endpoint_ref),
+      row("Transport action request", state_value(transport_action_payload, :action_request_id)),
+      row("Signal phase", state_value(transport_action_payload, :signal_phase)),
+      row("Action kind", state_value(transport_action_payload, :action_kind)),
+      row(
+        "Transport operational event",
+        transport_action_event && transport_action_event.event_id
+      ),
+      row("Realized contact", release_attempt.realized_contact_id),
+      row("Path", release_attempt.path_id),
+      row("Transport binding", release_attempt.transport_binding_id),
+      row("Layout kind", release_attempt.layout_kind),
+      row("Preferred uplink service", release_attempt.preferred_uplink_service),
+      row("APID", release_attempt.apid),
+      row("Service type", release_attempt.service_type),
+      row("Service subtype", release_attempt.service_subtype),
+      row("Opcode", release_attempt.opcode),
+      row("Encoded size bytes", release_attempt.encoded_size_bytes),
+      row("Attempted at", release_attempt.attempted_at),
+      row("Released at", release_attempt.released_at),
+      row("Released by", release_attempt.released_by),
+      row("Metadata", release_attempt.metadata)
+    ]
+  end
+
+  defp command_release_attempt_transport_action_event(
+         release_attempt,
+         organization_id,
+         mission_id
+       ) do
+    case state_value(release_attempt.metadata, :transport_action_request_id) do
+      action_request_id when is_binary(action_request_id) and action_request_id != "" ->
+        OperationalEventRow
+        |> where(
+          [row],
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.source_record_kind == "transport_action_request" and
+            row.source_record_id == ^action_request_id
+        )
+        |> order_by([row], asc: row.occurred_at, asc: row.event_id)
+        |> limit(1)
+        |> Repo.one()
+        |> case do
+          %OperationalEventRow{} = event_row -> OperationalEventRow.to_domain(event_row)
+          nil -> nil
+        end
+
+      _missing ->
+        nil
+    end
+  end
+
+  defp command_release_attempt_related_links(
+         %DataLink{} = link,
+         release_attempt,
+         organization_id,
+         mission_id
+       ) do
+    verifier_links =
+      CommandVerifierInstanceRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_release_attempt_id == ^release_attempt.command_release_attempt_id
+      )
+      |> order_by([row], asc: row.matched_at, asc: row.command_verifier_instance_id)
+      |> Repo.all()
+      |> Enum.map(fn verifier_row ->
+        related_link(
+          link,
+          :command_verifier_instance,
+          verifier_row.command_verifier_instance_id,
+          "Command verifier instance"
+        )
+      end)
+
+    [
+      related_link(
+        link,
+        :command_request,
+        release_attempt.command_request_id,
+        "Command request"
+      ),
+      related_link(
+        link,
+        :command_queue_entry,
+        release_attempt.command_queue_entry_id,
+        "Command queue entry"
+      ),
+      related_link(
+        link,
+        :source_endpoint,
+        release_attempt.source_endpoint_ref,
+        "Source endpoint"
+      ),
+      related_link(
+        link,
+        :contact,
+        release_attempt.realized_contact_id,
+        "Contact"
+      ),
+      related_link(
+        link,
+        :transport_action_request,
+        state_value(release_attempt.metadata, :transport_action_request_id),
+        "Transport action request"
+      )
+      | verifier_links
+    ]
+  end
+
+  defp command_verifier_instance_rows(verifier_instance) do
+    [
+      row("Command verifier instance", verifier_instance.command_verifier_instance_id),
+      row("Verifier", verifier_instance.verifier_id),
+      row("Verifier name", verifier_instance.verifier_name),
+      row("Lifecycle state", verifier_instance.lifecycle_state),
+      row("Severity", verifier_instance.severity),
+      row("Phase", verifier_instance.phase),
+      row("Command release attempt", verifier_instance.command_release_attempt_id),
+      row("Command request", verifier_instance.command_request_id),
+      row("Command", verifier_instance.command_name),
+      row("Command id", verifier_instance.command_id),
+      row("Command snapshot", verifier_instance.command_snapshot_id),
+      row("Source endpoint", verifier_instance.source_endpoint_ref),
+      row("Matched record kind", verifier_instance.matched_record_kind),
+      row("Matched record", verifier_instance.matched_record_id),
+      row("Matched at", verifier_instance.matched_at),
+      row("Failure reason", verifier_instance.failure_reason),
+      row("Delay until", verifier_instance.delay_until),
+      row("Timeout at", verifier_instance.timeout_at),
+      row("Success criteria", verifier_instance.success_criteria),
+      row("Failure criteria", verifier_instance.failure_criteria),
+      row("Metadata", verifier_instance.metadata)
+    ]
+  end
+
+  defp command_verifier_instance_related_links(%DataLink{} = link, verifier_instance) do
+    [
+      related_link(
+        link,
+        :command_release_attempt,
+        verifier_instance.command_release_attempt_id,
+        "Command release attempt"
+      ),
+      related_link(
+        link,
+        :command_request,
+        verifier_instance.command_request_id,
+        "Command request"
+      ),
+      matched_record_related_link(
+        link,
+        verifier_instance.matched_record_kind,
+        verifier_instance.matched_record_id
+      )
+    ]
+  end
+
+  defp matched_record_related_link(%DataLink{} = link, matched_record_kind, matched_record_id) do
+    with target when is_atom(target) <- DataLink.parse_resolvable_target(matched_record_kind),
+         id when is_binary(id) and id != "" <- string_id(matched_record_id) do
+      related_link(link, target, id, target_text(target))
+    else
+      _missing -> nil
+    end
   end
 
   defp source_health_event_rows(event) do
@@ -1462,6 +2373,38 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       row(
         "Comparison review compare data view",
         comparison_review_origin_value(event.payload, :compare_data_view)
+      ),
+      row(
+        "Comparison review scope kind",
+        comparison_review_origin_value(event.payload, :scope_kind)
+      ),
+      row(
+        "Comparison review scope ids",
+        comparison_review_origin_value(event.payload, :scope_ids)
+      ),
+      row(
+        "Comparison review contact ids",
+        comparison_review_origin_value(event.payload, :contact_ids)
+      ),
+      row(
+        "Comparison review resource ids",
+        comparison_review_origin_value(event.payload, :resource_ids)
+      ),
+      row(
+        "Comparison review transport ids",
+        comparison_review_origin_value(event.payload, :transport_ids)
+      ),
+      row(
+        "Comparison review source endpoint ids",
+        comparison_review_origin_value(event.payload, :source_endpoint_ids)
+      ),
+      row(
+        "Comparison review ground station ids",
+        comparison_review_origin_value(event.payload, :ground_station_ids)
+      ),
+      row(
+        "Comparison review scope link ids",
+        comparison_review_origin_value(event.payload, :scope_link_ids)
       ),
       row("Request mode", backfill_lifecycle_payload_value(event.payload, :request_mode)),
       row("Request group", backfill_lifecycle_payload_value(event.payload, :request_group_id)),
@@ -2188,7 +3131,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp realized_contact_rows(%RealizedContact{} = contact) do
     [
-      row("Contact", contact.realized_contact_id),
+      row("Realized contact", contact.realized_contact_id),
       row("Contact type", :realized_contact),
       row("Lifecycle state", contact.lifecycle_state),
       row("Scheduled contact", contact.scheduled_contact_id),
@@ -2818,6 +3761,9 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp effective_intervals(:source_binding_interval, organization_id, mission_id, opts),
     do: OperationalEvents.source_binding_intervals(organization_id, mission_id, opts)
+
+  defp effective_intervals(:source_health_interval, organization_id, mission_id, opts),
+    do: OperationalEvents.source_health_intervals(organization_id, mission_id, opts)
 
   defp effective_intervals(:transport_execution_interval, organization_id, mission_id, opts),
     do: OperationalEvents.transport_execution_intervals(organization_id, mission_id, opts)

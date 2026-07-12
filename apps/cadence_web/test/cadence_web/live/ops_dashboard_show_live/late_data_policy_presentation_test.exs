@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentationTest do
       source_binding_id: "binding-flight",
       dashboard_time_mode: "live",
       dashboard_replay_run_id: nil,
+      dashboard_data_view: "all_revisions",
       dashboard_limit_mode: "compare",
       observable_id: "HK.counter",
       point_id: "HK.counter",
@@ -39,6 +40,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentationTest do
              "run_id" => "run-1",
              "dashboard_time_mode" => "live",
              "dashboard_replay_run_id" => "",
+             "dashboard_data_view" => "all_revisions",
              "dashboard_limit_mode" => "compare",
              "realm" => "flight",
              "data_source_id" => "questdb-flight",
@@ -68,6 +70,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentationTest do
         source_binding_id: "binding-flight",
         dashboard_time_mode: "replay_run",
         dashboard_replay_run_id: "replay-1",
+        dashboard_data_view: "all_revisions",
         dashboard_limit_mode: "compare",
         observable_id: "HK.counter",
         point_id: "HK.counter",
@@ -82,6 +85,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentationTest do
     assert policy.form_params["execution_mode"] == "event_only"
     assert policy.form_params["dashboard_time_mode"] == "replay_run"
     assert policy.form_params["dashboard_replay_run_id"] == "replay-1"
+    assert policy.form_params["dashboard_data_view"] == "all_revisions"
     assert policy.form_params["dashboard_limit_mode"] == "compare"
   end
 

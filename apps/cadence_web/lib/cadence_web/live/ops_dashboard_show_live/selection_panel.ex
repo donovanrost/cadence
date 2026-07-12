@@ -331,11 +331,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanel do
   end
 
   defp data_link_action_outcome_query_matches?(socket, selection_query) do
-    stored_query = socket.assigns[:data_link_action_outcome_query]
+    stored_query = SelectionQuery.to_params(socket.assigns[:data_link_action_outcome_query])
+    selection_query = SelectionQuery.to_params(selection_query)
 
-    is_map(stored_query) and
-      stored_query != %{} and
-      stored_query == SelectionQuery.to_params(selection_query)
+    stored_query != %{} and
+      (stored_query == selection_query or same_selected_identity?(stored_query, selection_query))
+  end
+
+  defp same_selected_identity?(stored_query, selection_query) do
+    selected_target = stored_query["selected_target"]
+    selected_id = stored_query["selected_id"]
+
+    is_binary(selected_target) and
+      selected_target != "" and
+      is_binary(selected_id) and
+      selected_id != "" and
+      selected_target == selection_query["selected_target"] and
+      selected_id == selection_query["selected_id"]
   end
 
   defp data_link_panel_query_only?(inspector) when is_map(inspector) do

@@ -36,6 +36,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrs do
     "resource-id" => "phx-value-resource-id",
     "spacecraft-id" => "phx-value-spacecraft-id",
     "contact-id" => "phx-value-contact-id",
+    "contact-ids" => "phx-value-contact-ids",
     "transport-id" => "phx-value-transport-id",
     "source-endpoint-id" => "phx-value-source-endpoint-id",
     "ground-station-id" => "phx-value-ground-station-id",
@@ -88,6 +89,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrs do
     resource_id: "resource-id",
     spacecraft_id: "spacecraft-id",
     contact_id: "contact-id",
+    contact_ids: "contact-ids",
     transport_id: "transport-id",
     source_endpoint_id: "source-endpoint-id",
     ground_station_id: "ground-station-id",
@@ -159,7 +161,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrs do
         first_nested_value(source, data, [:replay_run_id]) || map_value(time, :replay_run_id),
       "scope-kind" => first_nested_value(source, scope, [:scope_kind]) || scope_kind_value(scope),
       "scope-id" => first_nested_value(source, scope, [:scope_id]) || scope_id_value(scope),
-      "scope-ids" => scope_ids_value(first_nested_value(source, scope, [:scope_ids]) || scope)
+      "scope-ids" => scope_ids_value(first_nested_value(source, scope, [:scope_ids]) || scope),
+      "contact-ids" =>
+        contact_ids_value(first_nested_value(source, scope, [:contact_ids]) || scope)
     }
     |> compact_flat()
   end
@@ -236,6 +240,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrs do
     do: value |> ScopeContext.primary_ids() |> Enum.join(",")
 
   defp scope_ids_value(value), do: value
+
+  defp contact_ids_value(value) when is_map(value) do
+    case ScopeContext.primary_kind(value) do
+      kind when kind in [:contact, "contact"] -> scope_ids_value(value)
+      _other -> nil
+    end
+  end
+
+  defp contact_ids_value(value), do: scope_ids_value(value)
 
   defp attrs_map(attrs) when is_list(attrs), do: Map.new(attrs)
   defp attrs_map(attrs) when is_map(attrs), do: attrs

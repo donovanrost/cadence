@@ -111,8 +111,8 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert contact_event.summary == "weather"
     assert contact_event.scheduled_contact_id == scheduled_contact.scheduled_contact_id
 
-    assert Repo.aggregate(MissionEventRow, :count, :mission_event_id) == 2
-    assert {2, _rows} = Repo.delete_all(MissionEventRow)
+    assert mission_event_count(mission_id) == 2
+    assert {2, _rows} = delete_mission_events(mission_id)
 
     assert {:ok, 2} = Cadence.rebuild_mission_events(organization_id, mission_id)
 
@@ -230,9 +230,9 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert operational_event.event_id == activation_event.source_record_id
     assert operational_event.subject == %{kind: :binding_set, id: binding_set.binding_set_id}
 
-    assert Repo.aggregate(MissionEventRow, :count, :mission_event_id) == 1
-    assert {1, _rows} = Repo.delete_all(MissionEventRow)
-    assert {1, _rows} = Repo.delete_all(BindingSetActivationRow)
+    assert mission_event_count(mission_id) == 1
+    assert {1, _rows} = delete_mission_events(mission_id)
+    assert {1, _rows} = delete_binding_set_activations(mission_id)
 
     assert {:ok, 1} = Cadence.rebuild_mission_events(organization_id, mission_id)
 
@@ -447,7 +447,8 @@ defmodule Cadence.Reads.MissionEventsTest do
                  payload: %{frame: 1, source: "beta"},
                  quality_score: 10
                },
-               occurred_at: DateTime.from_unix!(1_700_060_510, :second)
+               occurred_at: DateTime.from_unix!(1_700_060_510, :second),
+               call_timeout: :infinity
              )
 
     assert {:ok, _second_outputs} =
@@ -463,7 +464,8 @@ defmodule Cadence.Reads.MissionEventsTest do
                  payload: %{frame: 1, source: "alpha"},
                  quality_score: 5
                },
-               occurred_at: DateTime.from_unix!(1_700_060_515, :second)
+               occurred_at: DateTime.from_unix!(1_700_060_515, :second),
+               call_timeout: :infinity
              )
 
     transport_events =
@@ -506,8 +508,8 @@ defmodule Cadence.Reads.MissionEventsTest do
                reason: "antenna maintenance"
              )
 
-    assert Repo.aggregate(MissionEventRow, :count, :mission_event_id) == 1
-    assert {1, _rows} = Repo.delete_all(MissionEventRow)
+    assert mission_event_count(mission_id) == 1
+    assert {1, _rows} = delete_mission_events(mission_id)
 
     assert {:ok, rebuild_run} = Cadence.start_rebuild_mission_events(organization_id, mission_id)
     assert rebuild_run.status == :running
@@ -654,5 +656,23 @@ defmodule Cadence.Reads.MissionEventsTest do
         transport_bindings: []
       })
     ]
+  end
+
+  defp mission_event_count(mission_id) do
+    MissionEventRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.aggregate(:count, :mission_event_id)
+  end
+
+  defp delete_mission_events(mission_id) do
+    MissionEventRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.delete_all()
+  end
+
+  defp delete_binding_set_activations(mission_id) do
+    BindingSetActivationRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.delete_all()
   end
 end

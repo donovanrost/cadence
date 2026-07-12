@@ -76,6 +76,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
         workflow_selection_count_text: workflow_summary.workflow_selection_count_text,
         source_open_count_text: workflow_summary.source_open_count_text,
         source_open_placements_attr: workflow_summary.source_open_placements_attr,
+        source_scope_kind: workflow_summary.source_scope_kind,
+        source_scope_ids_attr: workflow_summary.source_scope_ids_attr,
+        source_contact_ids_attr: workflow_summary.source_contact_ids_attr,
+        source_resource_ids_attr: workflow_summary.source_resource_ids_attr,
+        source_transport_ids_attr: workflow_summary.source_transport_ids_attr,
+        source_endpoint_ids_attr: workflow_summary.source_endpoint_ids_attr,
+        source_ground_station_ids_attr: workflow_summary.source_ground_station_ids_attr,
+        source_scope_link_ids_attr: workflow_summary.source_scope_link_ids_attr,
         source_bulk_decision_actionable_count_text:
           workflow_summary.source_bulk_decision_actionable_count_text,
         source_bulk_decision_actionable_placements_attr:
@@ -114,6 +122,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
       state: summary.state,
       decision_status: summary.decision_status,
       observation_identity_id: observation_identity_id(finding),
+      scope_kind: ComparisonReviewFocus.payload_value(finding, "scope_kind"),
+      scope_id: ComparisonReviewFocus.payload_value(finding, "scope_id"),
+      scope_ids: list_text(ComparisonReviewFocus.payload_value(finding, "scope_ids")),
+      resource_id: ComparisonReviewFocus.payload_value(finding, "resource_id"),
+      spacecraft_id: ComparisonReviewFocus.payload_value(finding, "spacecraft_id"),
+      contact_id: ComparisonReviewFocus.payload_value(finding, "contact_id"),
+      contact_ids: list_text(ComparisonReviewFocus.payload_value(finding, "contact_ids")),
+      transport_id: ComparisonReviewFocus.payload_value(finding, "transport_id"),
+      source_endpoint_id: ComparisonReviewFocus.payload_value(finding, "source_endpoint_id"),
+      ground_station_id: ComparisonReviewFocus.payload_value(finding, "ground_station_id"),
+      scope_link_id: ComparisonReviewFocus.payload_value(finding, "scope_link_id"),
       bulk_decision_status: bulk_decision_status.status,
       bulk_decision_reason: bulk_decision_status.reason,
       bulk_decision_label: bulk_decision_status.label,
@@ -191,6 +210,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
   defp bulk_decision_skipped_label(items) do
     "#{length(items)} #{pluralize("finding", length(items))} skipped for bulk action."
   end
+
+  defp list_text(values) when is_list(values) do
+    values
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+    |> Enum.join(",")
+  end
+
+  defp list_text(value) when is_binary(value), do: value
+  defp list_text(_value), do: nil
 
   defp finding_bulk_decision_status(finding) when is_map(finding) do
     observation_identity_id = observation_identity_id(finding)
@@ -351,6 +381,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
       source_open_count_text:
         payload |> ComparisonReviewFocus.payload_value("source_open_count") |> count_text(),
       source_open_placements_attr: Enum.join(source_open_placement_ids, ","),
+      source_scope_kind:
+        payload |> ComparisonReviewFocus.payload_value("source_scope_kind") |> display_text(),
+      source_scope_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_scope_ids") |> list_text() || "",
+      source_contact_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_contact_ids") |> list_text() || "",
+      source_resource_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_resource_ids") |> list_text() || "",
+      source_transport_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_transport_ids") |> list_text() ||
+          "",
+      source_endpoint_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_endpoint_ids") |> list_text() || "",
+      source_ground_station_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_ground_station_ids") |> list_text() ||
+          "",
+      source_scope_link_ids_attr:
+        payload |> ComparisonReviewFocus.payload_value("source_scope_link_ids") |> list_text() ||
+          "",
       source_bulk_decision_actionable_count_text: actionable_count_text,
       source_bulk_decision_actionable_placements_attr:
         Enum.join(source_bulk_decision_actionable_placement_ids, ","),

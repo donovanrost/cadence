@@ -128,6 +128,114 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
         name={@form[:request_item_run_id].name}
         value={@form[:run_id].value || ""}
       />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-request-event-id"
+        type="hidden"
+        name={@form[:comparison_review_request_event_id].name}
+        value={Map.get(@workflow_context, :comparison_review_request_event_id) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-request-kind"
+        type="hidden"
+        name={@form[:comparison_review_request_kind].name}
+        value={Map.get(@workflow_context, :comparison_review_request_kind) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-open-count"
+        type="hidden"
+        name={@form[:comparison_review_open_count].name}
+        value={Map.get(@workflow_context, :comparison_review_open_count) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-open-placement-ids"
+        type="hidden"
+        name={@form[:comparison_review_open_placement_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_open_placement_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-workflow-kind"
+        type="hidden"
+        name={@form[:comparison_review_workflow_kind].name}
+        value={Map.get(@workflow_context, :comparison_review_workflow_kind) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-workflow-action"
+        type="hidden"
+        name={@form[:comparison_review_workflow_action].name}
+        value={Map.get(@workflow_context, :comparison_review_workflow_action) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-workflow-selection-kind"
+        type="hidden"
+        name={@form[:comparison_review_workflow_selection_kind].name}
+        value={Map.get(@workflow_context, :comparison_review_workflow_selection_kind) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-workflow-selection-count"
+        type="hidden"
+        name={@form[:comparison_review_workflow_selection_count].name}
+        value={Map.get(@workflow_context, :comparison_review_workflow_selection_count) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-primary-data-view"
+        type="hidden"
+        name={@form[:comparison_review_primary_data_view].name}
+        value={Map.get(@workflow_context, :comparison_review_primary_data_view) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-compare-data-view"
+        type="hidden"
+        name={@form[:comparison_review_compare_data_view].name}
+        value={Map.get(@workflow_context, :comparison_review_compare_data_view) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-scope-kind"
+        type="hidden"
+        name={@form[:comparison_review_scope_kind].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_kind) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-scope-ids"
+        type="hidden"
+        name={@form[:comparison_review_scope_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-contact-ids"
+        type="hidden"
+        name={@form[:comparison_review_contact_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_contact_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-resource-ids"
+        type="hidden"
+        name={@form[:comparison_review_resource_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_resource_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-transport-ids"
+        type="hidden"
+        name={@form[:comparison_review_transport_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_transport_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-source-endpoint-ids"
+        type="hidden"
+        name={@form[:comparison_review_source_endpoint_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_source_endpoint_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-ground-station-ids"
+        type="hidden"
+        name={@form[:comparison_review_ground_station_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_ground_station_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-correction-comparison-review-scope-link-ids"
+        type="hidden"
+        name={@form[:comparison_review_scope_link_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_link_ids) || ""}
+      />
       <div class="flex items-center justify-between gap-2">
         <h4 class="hud-label">Correct Request</h4>
         <span class="badge badge-xs badge-warning">New run</span>

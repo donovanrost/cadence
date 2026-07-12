@@ -1790,6 +1790,22 @@ defmodule Cadence do
     OperationalEvents.source_binding_intervals(organization_id, mission_id, opts)
   end
 
+  @spec operational_source_health_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_source_health_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.source_health_intervals(mission_id, opts)
+  end
+
+  @spec operational_source_health_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_source_health_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.source_health_intervals(organization_id, mission_id, opts)
+  end
+
   @spec operational_transport_execution_intervals(binary(), keyword()) :: [
           Cadence.OperationalEvents.EffectiveInterval.t()
         ]

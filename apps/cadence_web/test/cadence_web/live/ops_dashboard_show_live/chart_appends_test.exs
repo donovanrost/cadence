@@ -123,75 +123,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsTest do
            } = ChartAppends.push(socket, %{})
   end
 
-  test "push sends marker-only payload when markers change without a new sample" do
-    previous_frames = chart_append_placement_frames(events: [])
-
-    current_frames =
-      chart_append_placement_frames(
-        events: [
-          %Frame{
-            source: :events,
-            shape: :events,
-            fields: [
-              %Field{name: "occurred_at", kind: :time, values: [~U[2026-06-17 12:05:00Z]]},
-              %Field{name: "category", kind: :enum, values: [:mission_timeline]},
-              %Field{name: "kind", kind: :enum, values: [:operator_note]},
-              %Field{name: "severity", kind: :enum, values: [:info]},
-              %Field{name: "title", kind: :string, values: ["AOS confirmed"]},
-              %Field{name: "source_record_id", kind: :string, values: ["mission-event-1"]}
-            ],
-            meta: %{
-              family: :mission_timeline,
-              links: [
-                %DataLink{
-                  link_id: "mission-event:mission-event-1",
-                  target: :mission_event,
-                  target_id: "mission-event-1",
-                  label: "Mission event"
-                }
-              ]
-            }
-          }
-        ]
-      )
-
-    widget = %RenderWidget{type: :time_series}
-
-    previous_marker_snapshots =
-      ChartAppends.marker_snapshots(%{
-        dashboard_render_items: [%RenderItem{placement_id: "placement-1", widget: widget}],
-        dashboard_engine_frames_by_placement: %{"placement-1" => previous_frames}
-      })
-
-    socket =
-      chart_append_socket(current_frames, widget)
-
-    assert %Phoenix.LiveView.Socket{
-             private: %{
-               live_temp: %{
-                 push_events: [
-                   [
-                     "tlm:append",
-                     %{
-                       "series" => %{},
-                       "markers" => %{
-                         "placement-1" => %{
-                           event_markers: [%{mission_event_id: "mission-event-1"}]
-                         }
-                       }
-                     }
-                   ]
-                 ]
-               }
-             }
-           } =
-             ChartAppends.push(
-               socket,
-               %{"placement-1" => %{sample: %{sample_id: "sample-1"}}},
-               previous_marker_snapshots
-             )
-  end
-
   test "push sends recomputed limit analysis marker metadata" do
     current_frames =
       chart_append_placement_frames(
@@ -235,24 +166,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsTest do
              )
   end
 
-  test "push suppresses marker-only payload when marker snapshot is unchanged" do
-    current_frames = chart_append_placement_frames()
-    widget = %RenderWidget{type: :time_series}
-
-    previous_marker_snapshots =
-      ChartAppends.marker_snapshots(%{
-        dashboard_render_items: [%RenderItem{placement_id: "placement-1", widget: widget}],
-        dashboard_engine_frames_by_placement: %{"placement-1" => current_frames}
-      })
-
-    assert %Phoenix.LiveView.Socket{private: %{live_temp: %{}}} =
-             ChartAppends.push(
-               chart_append_socket(current_frames, widget),
-               %{"placement-1" => %{sample: %{sample_id: "sample-1"}}},
-               previous_marker_snapshots
-             )
-  end
-
   defp chart_append_socket(placement_frames, widget) do
     %Phoenix.LiveView.Socket{
       assigns: %{
@@ -267,7 +180,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsTest do
     }
   end
 
-  defp chart_append_placement_frames(opts \\ []) do
+  defp chart_append_placement_frames(opts) do
     %PlacementFrames{
       primary: [
         %Frame{

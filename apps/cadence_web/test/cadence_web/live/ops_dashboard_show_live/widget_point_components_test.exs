@@ -56,6 +56,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
              |> String.trim()
   end
 
+  test "value_tile omits comparison delta for non-numeric comparison data" do
+    html =
+      render_component(&WidgetPointComponents.value_tile/1,
+        widget: widget(:value_tile),
+        data: point_data(42),
+        compare_data: point_data("nominal"),
+        point: %{unit: "V"},
+        compare_data_view: "canonical"
+      )
+
+    assert [] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("[data-widget-compare-delta]")
+             |> LazyHTML.attribute("data-widget-compare-delta")
+  end
+
   test "time_series_chart exposes chart hook payload and data-management attrs" do
     html =
       render_component(&WidgetPointComponents.time_series_chart/1,
@@ -105,6 +122,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
     assert %{"series" => [%{"id" => "primary", "points" => [[_, 42, _]]}]} =
              Jason.decode!(encoded_backfill)
 
+    [encoded_compare_backfill] = LazyHTML.attribute(chart, "data-compare-backfill")
+
+    assert %{
+             "series" => [
+               %{
+                 "id" => "compare",
+                 "points" => [
+                   [
+                     _,
+                     40,
+                     %{
+                       "sample_id" => "compare-sample"
+                     }
+                   ]
+                 ]
+               }
+             ]
+           } = Jason.decode!(encoded_compare_backfill)
+
     [encoded_selected] = LazyHTML.attribute(chart, "data-selected-ref")
     assert %{"kind" => "sample", "id" => "sample-1"} = Jason.decode!(encoded_selected)
 
@@ -112,6 +148,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
              document
              |> LazyHTML.query("[data-chart-data-view-comparison]")
              |> LazyHTML.attribute("data-primary-data-view")
+
+    assert ["canonical"] =
+             document
+             |> LazyHTML.query("[data-chart-data-view-comparison]")
+             |> LazyHTML.attribute("data-compare-data-view")
   end
 
   test "constellation_health renders counts and per-spacecraft state dots" do

@@ -568,6 +568,60 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
               replay_run_id: "replay-run-1"
             ),
             metric_sample(
+              "rf-doppler-live-1",
+              "link.doppler_hz",
+              -42.5,
+              ~U[2026-06-30 12:00:45Z]
+            ),
+            metric_sample(
+              "rf-doppler-replay-1",
+              "link.doppler_hz",
+              -40.25,
+              ~U[2026-06-30 12:01:45Z],
+              replay_run_id: "replay-run-1"
+            ),
+            metric_sample(
+              "rf-doppler-other-replay",
+              "link.doppler_hz",
+              11.5,
+              ~U[2026-06-30 12:02:45Z],
+              replay_run_id: "replay-run-2"
+            ),
+            metric_sample(
+              "rf-doppler-replay-2",
+              "link.doppler_hz",
+              -38.0,
+              ~U[2026-06-30 12:03:45Z],
+              replay_run_id: "replay-run-1"
+            ),
+            metric_sample(
+              "rf-symbol-rate-live-1",
+              "link.symbol_rate_sps",
+              1_024_000.0,
+              ~U[2026-06-30 12:00:50Z]
+            ),
+            metric_sample(
+              "rf-symbol-rate-replay-1",
+              "link.symbol_rate_sps",
+              1_048_000.0,
+              ~U[2026-06-30 12:01:50Z],
+              replay_run_id: "replay-run-1"
+            ),
+            metric_sample(
+              "rf-symbol-rate-other-replay",
+              "link.symbol_rate_sps",
+              512_000.0,
+              ~U[2026-06-30 12:02:50Z],
+              replay_run_id: "replay-run-2"
+            ),
+            metric_sample(
+              "rf-symbol-rate-replay-2",
+              "link.symbol_rate_sps",
+              2_048_000.0,
+              ~U[2026-06-30 12:03:50Z],
+              replay_run_id: "replay-run-1"
+            ),
+            metric_sample(
               "bitrate-live-1",
               "comms.transport.downlink_bitrate",
               64_000.0,
@@ -709,6 +763,115 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
     assert replay_eb_n0_frame.meta.replay_run_id == "replay-run-1"
     assert field_values(replay_eb_n0_frame, "link.eb_n0_db") == [9.25, 10.0]
 
+    assert operational_event_link_ids(replay_eb_n0_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-ebn0-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-ebn0-replay-2"
+           ]
+
+    assert operational_event_evidence_ids(replay_eb_n0_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-ebn0-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-ebn0-replay-2"
+           ]
+
+    live_doppler_result =
+      organization_id
+      |> source_request(mission_id)
+      |> link_rf_doppler_history_request()
+      |> OperationalObservables.resolve(
+        transports_fun: transports_fun(organization_id, mission_id),
+        source_binding: source_binding()
+      )
+
+    assert %SourceResult{frames: [%Frame{} = live_doppler_frame], warnings: []} =
+             live_doppler_result
+
+    assert live_doppler_frame.meta.realm == :flight
+    assert live_doppler_frame.meta.replay_run_id == nil
+    assert field_values(live_doppler_frame, "link.doppler_hz") == [-42.5]
+
+    replay_doppler_result =
+      organization_id
+      |> source_request(mission_id)
+      |> link_rf_doppler_history_request()
+      |> replay_request_context()
+      |> OperationalObservables.resolve(
+        transports_fun: transports_fun(organization_id, mission_id),
+        source_binding: replay_source_binding()
+      )
+
+    assert %SourceResult{frames: [%Frame{} = replay_doppler_frame], warnings: []} =
+             replay_doppler_result
+
+    assert replay_doppler_frame.meta.realm == :replay
+    assert replay_doppler_frame.meta.data_source_id == "managed_operational_observables_replay"
+    assert replay_doppler_frame.meta.source_binding_id == "replay-operational-observables"
+    assert replay_doppler_frame.meta.dataset == "operational_observables_replay"
+    assert replay_doppler_frame.meta.replay_run_id == "replay-run-1"
+    assert field_values(replay_doppler_frame, "link.doppler_hz") == [-40.25, -38.0]
+
+    assert operational_event_link_ids(replay_doppler_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-doppler-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-doppler-replay-2"
+           ]
+
+    assert operational_event_evidence_ids(replay_doppler_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-doppler-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-doppler-replay-2"
+           ]
+
+    live_symbol_rate_result =
+      organization_id
+      |> source_request(mission_id)
+      |> link_rf_symbol_rate_history_request()
+      |> OperationalObservables.resolve(
+        transports_fun: transports_fun(organization_id, mission_id),
+        source_binding: source_binding()
+      )
+
+    assert %SourceResult{frames: [%Frame{} = live_symbol_rate_frame], warnings: []} =
+             live_symbol_rate_result
+
+    assert live_symbol_rate_frame.meta.realm == :flight
+    assert live_symbol_rate_frame.meta.replay_run_id == nil
+    assert field_values(live_symbol_rate_frame, "link.symbol_rate_sps") == [1_024_000.0]
+
+    replay_symbol_rate_result =
+      organization_id
+      |> source_request(mission_id)
+      |> link_rf_symbol_rate_history_request()
+      |> replay_request_context()
+      |> OperationalObservables.resolve(
+        transports_fun: transports_fun(organization_id, mission_id),
+        source_binding: replay_source_binding()
+      )
+
+    assert %SourceResult{frames: [%Frame{} = replay_symbol_rate_frame], warnings: []} =
+             replay_symbol_rate_result
+
+    assert replay_symbol_rate_frame.meta.realm == :replay
+
+    assert replay_symbol_rate_frame.meta.data_source_id ==
+             "managed_operational_observables_replay"
+
+    assert replay_symbol_rate_frame.meta.source_binding_id == "replay-operational-observables"
+    assert replay_symbol_rate_frame.meta.dataset == "operational_observables_replay"
+    assert replay_symbol_rate_frame.meta.replay_run_id == "replay-run-1"
+
+    assert field_values(replay_symbol_rate_frame, "link.symbol_rate_sps") == [
+             1_048_000.0,
+             2_048_000.0
+           ]
+
+    assert operational_event_link_ids(replay_symbol_rate_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-symbol-rate-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-symbol-rate-replay-2"
+           ]
+
+    assert operational_event_evidence_ids(replay_symbol_rate_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-symbol-rate-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:rf-symbol-rate-replay-2"
+           ]
+
     live_bitrate_result =
       organization_id
       |> source_request(mission_id)
@@ -786,6 +949,16 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
     assert field_values(replay_uplink_bitrate_frame, "comms.transport.uplink_bitrate") == [
              5_600.0,
              8_400.0
+           ]
+
+    assert operational_event_link_ids(replay_uplink_bitrate_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:uplink-bitrate-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:uplink-bitrate-replay-2"
+           ]
+
+    assert operational_event_evidence_ids(replay_uplink_bitrate_frame) == [
+             "operational_event:operational_observable_snapshot:replay-run-1:uplink-bitrate-replay-1",
+             "operational_event:operational_observable_snapshot:replay-run-1:uplink-bitrate-replay-2"
            ]
   end
 
@@ -988,6 +1161,32 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
   defp link_rf_eb_n0_history_request(%PlannedSourceRequest{} = request) do
     request
     |> Map.put(:observables, ["link.eb_n0_db"])
+    |> Map.put(:sampling, %{mode: :raw_series, limit: 10})
+    |> Map.put(:time_context, %{
+      from: ~U[2026-06-30 11:59:00Z],
+      to: ~U[2026-06-30 12:05:00Z]
+    })
+    |> Map.put(:scope_context, %{
+      primary: %{kind: :link, mode: :one, ids: ["link-alpha"]}
+    })
+  end
+
+  defp link_rf_doppler_history_request(%PlannedSourceRequest{} = request) do
+    request
+    |> Map.put(:observables, ["link.doppler_hz"])
+    |> Map.put(:sampling, %{mode: :raw_series, limit: 10})
+    |> Map.put(:time_context, %{
+      from: ~U[2026-06-30 11:59:00Z],
+      to: ~U[2026-06-30 12:05:00Z]
+    })
+    |> Map.put(:scope_context, %{
+      primary: %{kind: :link, mode: :one, ids: ["link-alpha"]}
+    })
+  end
+
+  defp link_rf_symbol_rate_history_request(%PlannedSourceRequest{} = request) do
+    request
+    |> Map.put(:observables, ["link.symbol_rate_sps"])
     |> Map.put(:sampling, %{mode: :raw_series, limit: 10})
     |> Map.put(:time_context, %{
       from: ~U[2026-06-30 11:59:00Z],
@@ -1225,6 +1424,12 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
   defp operational_observable_metric_resource_id("link.eb_n0_db", _source_endpoint_id),
     do: "link-alpha"
 
+  defp operational_observable_metric_resource_id("link.doppler_hz", _source_endpoint_id),
+    do: "link-alpha"
+
+  defp operational_observable_metric_resource_id("link.symbol_rate_sps", _source_endpoint_id),
+    do: "link-alpha"
+
   defp operational_observable_metric_resource_id(
          "ingress.processing_latency_ms",
          source_endpoint_id
@@ -1236,6 +1441,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
 
   defp operational_observable_metric_scope_kind("link.snr_db"), do: :link
   defp operational_observable_metric_scope_kind("link.eb_n0_db"), do: :link
+  defp operational_observable_metric_scope_kind("link.doppler_hz"), do: :link
+  defp operational_observable_metric_scope_kind("link.symbol_rate_sps"), do: :link
 
   defp operational_observable_metric_scope_kind("ingress.processing_latency_ms"),
     do: :source_endpoint
@@ -1244,6 +1451,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
 
   defp operational_observable_metric_value_key("link.snr_db"), do: :snr_db
   defp operational_observable_metric_value_key("link.eb_n0_db"), do: :value
+  defp operational_observable_metric_value_key("link.doppler_hz"), do: :doppler_hz
+  defp operational_observable_metric_value_key("link.symbol_rate_sps"), do: :symbol_rate_sps
   defp operational_observable_metric_value_key("ingress.processing_latency_ms"), do: :value
 
   defp operational_observable_metric_value_key("comms.transport.uplink_bitrate"),
@@ -1253,6 +1462,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest
 
   defp operational_observable_metric_unit("link.snr_db"), do: "dB"
   defp operational_observable_metric_unit("link.eb_n0_db"), do: "dB"
+  defp operational_observable_metric_unit("link.doppler_hz"), do: "Hz"
+  defp operational_observable_metric_unit("link.symbol_rate_sps"), do: "sym/s"
   defp operational_observable_metric_unit("comms.transport.downlink_bitrate"), do: "bit/s"
   defp operational_observable_metric_unit("comms.transport.uplink_bitrate"), do: "bit/s"
   defp operational_observable_metric_unit("ingress.processing_latency_ms"), do: "ms"

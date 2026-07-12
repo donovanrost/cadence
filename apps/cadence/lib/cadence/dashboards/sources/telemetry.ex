@@ -2549,16 +2549,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp contact_source_endpoint_ids(%PlannedSourceRequest{} = request, opts) do
-    case ScopeContext.scope_id(request.scope_context, :contact) do
-      contact_id when is_binary(contact_id) and contact_id != "" ->
-        organization_id = request.organization_id
-        mission_id = request.mission_id
+    request.scope_context
+    |> ScopeContext.scope_ids(:contact)
+    |> Enum.flat_map(fn contact_id ->
+      organization_id = request.organization_id
+      mission_id = request.mission_id
 
-        fetch_contact_source_endpoint_ids(organization_id, mission_id, contact_id, opts)
-
-      _other ->
-        []
-    end
+      fetch_contact_source_endpoint_ids(organization_id, mission_id, contact_id, opts)
+    end)
   end
 
   defp fetch_contact_source_endpoint_ids(organization_id, mission_id, contact_id, opts) do

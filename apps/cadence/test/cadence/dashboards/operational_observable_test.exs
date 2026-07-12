@@ -26,6 +26,8 @@ defmodule Cadence.Dashboards.OperationalObservableTest do
     assert "link.doppler_hz" in ids
     assert "contacts.phase" in ids
     assert "commanding.queue_depth" in ids
+    assert "runtime.managed_activity" in ids
+    assert "runtime.transport_activity" in ids
     assert "ingress.processing_latency_ms" in ids
   end
 
@@ -134,6 +136,29 @@ defmodule Cadence.Dashboards.OperationalObservableTest do
     assert :link in execution_state.optional_scopes
     assert execution_state.product == :comms_transport
     assert :control_input_handled in execution_state.enum_values
+
+    assert {:ok, managed_activity} = OperationalObservable.fetch("runtime.managed_activity")
+
+    assert managed_activity.value_kind == :state
+    assert managed_activity.value_type == :enum
+    assert managed_activity.state_color_policy == :managed_runtime_activity
+    assert managed_activity.primary_scope == :mission
+    assert :spacecraft in managed_activity.optional_scopes
+    assert managed_activity.product == :runtime_managed
+    assert :managed_action_requested in managed_activity.enum_values
+    assert :managed_timer_fired in managed_activity.enum_values
+
+    assert {:ok, transport_activity} = OperationalObservable.fetch("runtime.transport_activity")
+
+    assert transport_activity.value_kind == :state
+    assert transport_activity.value_type == :enum
+    assert transport_activity.state_color_policy == :transport_runtime_activity
+    assert transport_activity.primary_scope == :mission
+    assert :transport in transport_activity.optional_scopes
+    assert :contact in transport_activity.optional_scopes
+    assert transport_activity.product == :runtime_transport
+    assert :transport_action_requested in transport_activity.enum_values
+    assert :transport_timer_fired in transport_activity.enum_values
   end
 
   test "exports serializable registry metadata for source capabilities" do
@@ -157,6 +182,8 @@ defmodule Cadence.Dashboards.OperationalObservableTest do
              "link.doppler_hz",
              "contacts.phase",
              "commanding.queue_depth",
+             "runtime.managed_activity",
+             "runtime.transport_activity",
              "ingress.processing_latency_ms"
            ]
 
@@ -187,6 +214,8 @@ defmodule Cadence.Dashboards.OperationalObservableTest do
     assert OperationalObservable.backed?("link.symbol_rate_sps")
     assert OperationalObservable.backed?("link.doppler_hz")
     assert OperationalObservable.backed?("commanding.queue_depth")
+    assert OperationalObservable.backed?("runtime.managed_activity")
+    assert OperationalObservable.backed?("runtime.transport_activity")
     assert OperationalObservable.backed?("ingress.processing_latency_ms")
     refute OperationalObservable.backed?("HK.counter")
   end

@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewFocus do
 
   alias Cadence.Dashboards.ComparisonReviewQueue
 
+  @spec open_summary([map()]) :: ComparisonReviewQueue.open_summary()
   defdelegate open_summary(events), to: ComparisonReviewQueue
   defdelegate open_request_count_text(events), to: ComparisonReviewQueue
   defdelegate open_request_ids_attr(events), to: ComparisonReviewQueue

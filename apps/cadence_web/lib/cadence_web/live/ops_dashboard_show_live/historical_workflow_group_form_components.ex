@@ -154,6 +154,54 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponents 
         name={@form[:comparison_review_compare_data_view].name}
         value={Map.get(@workflow_context, :comparison_review_compare_data_view) || ""}
       />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-scope-kind"
+        type="hidden"
+        name={@form[:comparison_review_scope_kind].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_kind) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-scope-ids"
+        type="hidden"
+        name={@form[:comparison_review_scope_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-contact-ids"
+        type="hidden"
+        name={@form[:comparison_review_contact_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_contact_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-resource-ids"
+        type="hidden"
+        name={@form[:comparison_review_resource_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_resource_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-transport-ids"
+        type="hidden"
+        name={@form[:comparison_review_transport_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_transport_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-source-endpoint-ids"
+        type="hidden"
+        name={@form[:comparison_review_source_endpoint_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_source_endpoint_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-ground-station-ids"
+        type="hidden"
+        name={@form[:comparison_review_ground_station_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_ground_station_ids) || ""}
+      />
+      <input
+        id="dashboard-historical-workflow-group-comparison-review-scope-link-ids"
+        type="hidden"
+        name={@form[:comparison_review_scope_link_ids].name}
+        value={Map.get(@workflow_context, :comparison_review_scope_link_ids) || ""}
+      />
       <div class="flex items-center justify-between gap-2">
         <h4 class="hud-label">Group Actions</h4>
         <span class="badge badge-xs badge-primary">{@workflow_context.request_item_count} items</span>
@@ -256,6 +304,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponents 
         }
         data-historical-workflow-group-start-review-compare-data-view={
           Map.get(@workflow_context, :comparison_review_compare_data_view)
+        }
+        data-historical-workflow-group-start-review-scope-kind={
+          Map.get(@workflow_context, :comparison_review_scope_kind)
+        }
+        data-historical-workflow-group-start-review-scope-ids={
+          Map.get(@workflow_context, :comparison_review_scope_ids)
+        }
+        data-historical-workflow-group-start-review-contact-ids={
+          Map.get(@workflow_context, :comparison_review_contact_ids)
+        }
+        data-historical-workflow-group-start-review-resource-ids={
+          Map.get(@workflow_context, :comparison_review_resource_ids)
+        }
+        data-historical-workflow-group-start-review-transport-ids={
+          Map.get(@workflow_context, :comparison_review_transport_ids)
+        }
+        data-historical-workflow-group-start-review-source-endpoint-ids={
+          Map.get(@workflow_context, :comparison_review_source_endpoint_ids)
+        }
+        data-historical-workflow-group-start-review-ground-station-ids={
+          Map.get(@workflow_context, :comparison_review_ground_station_ids)
+        }
+        data-historical-workflow-group-start-review-scope-link-ids={
+          Map.get(@workflow_context, :comparison_review_scope_link_ids)
         }
       >
         <div class="flex items-center justify-between gap-2">

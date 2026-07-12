@@ -32,7 +32,7 @@ defmodule Cadence.ContactsTest do
 
     scheduled_contact =
       ScheduledContact.new(%{
-        scheduled_contact_id: "scheduled-contact-alpha",
+        scheduled_contact_id: contact_id(mission_id, "scheduled-contact-alpha"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         starts_at: starts_at,
@@ -87,7 +87,7 @@ defmodule Cadence.ContactsTest do
                initial_time: starts_at
              )
 
-    assert realized_contact.realized_contact_id == "scheduled-contact-alpha_run"
+    assert realized_contact.realized_contact_id == "#{scheduled_contact.scheduled_contact_id}_run"
     assert realized_contact.scheduled_contact_id == scheduled_contact.scheduled_contact_id
     assert realized_contact.lifecycle_state == :active
     assert realized_contact.clock_mode == :replay
@@ -157,7 +157,7 @@ defmodule Cadence.ContactsTest do
   } do
     realized_contact =
       RealizedContact.new(%{
-        realized_contact_id: "manual-realized-contact",
+        realized_contact_id: contact_id(mission_id, "manual-realized-contact"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         paths: contact_paths(),
@@ -272,7 +272,7 @@ defmodule Cadence.ContactsTest do
 
     scheduled_contact =
       ScheduledContact.new(%{
-        scheduled_contact_id: "templated-contact-alpha",
+        scheduled_contact_id: contact_id(mission_id, "templated-contact-alpha"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         path_template_ids: ["uplink-template-alpha", "downlink-template-alpha"],
@@ -395,7 +395,7 @@ defmodule Cadence.ContactsTest do
              Cadence.persist_scheduled_contact(
                organization_id,
                ScheduledContact.new(%{
-                 scheduled_contact_id: "templated-contact-versioned",
+                 scheduled_contact_id: contact_id(mission_id, "templated-contact-versioned"),
                  mission_id: mission_id,
                  source_endpoint_refs: ["source-endpoint-alpha"],
                  path_template_ids: ["uplink-template-versioned", "downlink-template-versioned"],
@@ -475,7 +475,7 @@ defmodule Cadence.ContactsTest do
   } do
     scheduled_contact =
       ScheduledContact.new(%{
-        scheduled_contact_id: "cancel-before-run",
+        scheduled_contact_id: contact_id(mission_id, "cancel-before-run"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         starts_at: DateTime.from_unix!(1_700_041_000, :second),
@@ -551,7 +551,7 @@ defmodule Cadence.ContactsTest do
 
     scheduled_contact =
       ScheduledContact.new(%{
-        scheduled_contact_id: "linked-contact-alpha",
+        scheduled_contact_id: contact_id(mission_id, "linked-contact-alpha"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         starts_at: starts_at,
@@ -642,7 +642,7 @@ defmodule Cadence.ContactsTest do
 
     scheduled_contact =
       ScheduledContact.new(%{
-        scheduled_contact_id: "cancel-during-run",
+        scheduled_contact_id: contact_id(mission_id, "cancel-during-run"),
         mission_id: mission_id,
         source_endpoint_refs: ["source-endpoint-alpha"],
         starts_at: starts_at,
@@ -731,6 +731,8 @@ defmodule Cadence.ContactsTest do
   defp contact_event_value(event, key) when is_atom(key) do
     Map.get(event.current, key) || Map.get(event.current, Atom.to_string(key))
   end
+
+  defp contact_id(mission_id, suffix), do: "#{mission_id}-#{suffix}"
 
   defp same_datetime?(value, %DateTime{} = expected) when is_binary(value) do
     case DateTime.from_iso8601(value) do

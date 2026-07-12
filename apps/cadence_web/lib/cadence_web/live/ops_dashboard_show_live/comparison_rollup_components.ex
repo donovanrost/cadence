@@ -314,9 +314,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
                 data-dashboard-comparison-rollup-compare-link-target={item |> comparison_rollup_item_link(:compare_data_link) |> comparison_rollup_link_target()}
                 data-dashboard-comparison-rollup-scope-kind={comparison_rollup_item_value(item, :scope_kind)}
                 data-dashboard-comparison-rollup-scope-id={comparison_rollup_item_value(item, :scope_id)}
+                data-dashboard-comparison-rollup-scope-ids={comparison_rollup_item_list_text(item, :scope_ids)}
                 data-dashboard-comparison-rollup-resource-id={comparison_rollup_item_value(item, :resource_id)}
                 data-dashboard-comparison-rollup-spacecraft-id={comparison_rollup_item_value(item, :spacecraft_id)}
                 data-dashboard-comparison-rollup-contact-id={comparison_rollup_item_value(item, :contact_id)}
+                data-dashboard-comparison-rollup-contact-ids={comparison_rollup_item_list_text(item, :contact_ids)}
                 data-dashboard-comparison-rollup-transport-id={comparison_rollup_item_value(item, :transport_id)}
                 data-dashboard-comparison-rollup-source-endpoint-id={comparison_rollup_item_value(item, :source_endpoint_id)}
                 data-dashboard-comparison-rollup-ground-station-id={comparison_rollup_item_value(item, :ground_station_id)}
@@ -344,6 +346,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
                         "comparison-decision:#{comparison_rollup_item_value(item, :decision_event_id)}",
                       target: "telemetry_revision_decision_event",
                       target_id: comparison_rollup_item_value(item, :decision_event_id),
+                      scope_kind: comparison_rollup_item_value(item, :scope_kind),
+                      scope_id: comparison_rollup_item_value(item, :scope_id),
+                      scope_ids: comparison_rollup_item_list_text(item, :scope_ids),
+                      resource_id: comparison_rollup_item_value(item, :resource_id),
+                      spacecraft_id: comparison_rollup_item_value(item, :spacecraft_id),
+                      contact_id: comparison_rollup_item_value(item, :contact_id),
+                      contact_ids: comparison_rollup_item_list_text(item, :contact_ids),
+                      transport_id: comparison_rollup_item_value(item, :transport_id),
+                      source_endpoint_id:
+                        comparison_rollup_item_value(item, :source_endpoint_id),
+                      ground_station_id:
+                        comparison_rollup_item_value(item, :ground_station_id),
+                      scope_link_id: comparison_rollup_item_value(item, :scope_link_id),
                       data_view: comparison_rollup_item_value(item, :primary_view)
                     )}
                     class="btn btn-ghost btn-xs btn-square"
@@ -392,9 +407,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
                         ),
                       scope_kind: comparison_rollup_item_value(item, :scope_kind),
                       scope_id: comparison_rollup_item_value(item, :scope_id),
+                      scope_ids: comparison_rollup_item_list_text(item, :scope_ids),
                       resource_id: comparison_rollup_item_value(item, :resource_id),
                       spacecraft_id: comparison_rollup_item_value(item, :spacecraft_id),
                       contact_id: comparison_rollup_item_value(item, :contact_id),
+                      contact_ids: comparison_rollup_item_list_text(item, :contact_ids),
                       transport_id: comparison_rollup_item_value(item, :transport_id),
                       source_endpoint_id:
                         comparison_rollup_item_value(item, :source_endpoint_id),

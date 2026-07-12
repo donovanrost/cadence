@@ -158,7 +158,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentationTest do
              "ground.station.antenna_pointing_state",
              "link.rf_lock_state",
              "link.frame_sync_state",
-             "contacts.phase"
+             "contacts.phase",
+             "runtime.managed_activity",
+             "runtime.transport_activity"
            ]
 
     assert WidgetFormPresentation.filter_operational_observables(

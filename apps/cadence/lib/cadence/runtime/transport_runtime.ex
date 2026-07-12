@@ -63,7 +63,11 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   @spec handle_transport_event(pid(), term(), keyword()) :: {:ok, [term()]} | {:error, term()}
   def handle_transport_event(transport_runtime, event, opts \\ []) when is_list(opts) do
-    GenServer.call(transport_runtime, {:handle_transport_event, event, opts})
+    GenServer.call(
+      transport_runtime,
+      {:handle_transport_event, event, opts},
+      Keyword.get(opts, :call_timeout, 5_000)
+    )
   end
 
   @spec handle_control_input(pid(), term(), keyword()) :: {:ok, [term()]} | {:error, term()}

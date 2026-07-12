@@ -45,6 +45,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentation do
       "run_id" => context_value(context, :run_id),
       "dashboard_time_mode" => context_value(context, :dashboard_time_mode),
       "dashboard_replay_run_id" => context_value(context, :dashboard_replay_run_id),
+      "dashboard_data_view" => context_value(context, :dashboard_data_view),
       "dashboard_limit_mode" => context_value(context, :dashboard_limit_mode),
       "realm" => context_value(context, :realm),
       "data_source_id" => context_value(context, :data_source_id),

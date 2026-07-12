@@ -12,6 +12,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionContext do
       source_link_label: Map.get(inspector, :link_label),
       observation_identity_id: row_value(rows, "Observation identity"),
       source_decision: row_value(rows, "Decision"),
+      dashboard_time_mode:
+        row_value(rows, "Dashboard context time mode") || row_value(context_rows, "Time mode"),
+      dashboard_replay_run_id:
+        row_value(rows, "Dashboard context replay run") || row_value(context_rows, "Replay run"),
+      dashboard_data_view:
+        row_value(rows, "Dashboard context data view") || row_value(context_rows, "Data view"),
       dashboard_limit_mode:
         row_value(rows, "Dashboard context limit mode") || row_value(context_rows, "Limit mode"),
       realm: row_value(rows, "Realm"),

@@ -277,12 +277,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatus do
     (context_values(source_facts, watermark_key(key)) ++
        context_values(source_facts, key) ++
        context_values(source_facts, alias_key(key)) ++
-       context_values(source_facts, requested_source_fact_key(key)) ++
+       source_requested_values(source_facts, requested_source_fact_keys(key)) ++
        context_values(source_contexts, key) ++
        context_values(source_contexts, alias_key(key)) ++
-       context_values(source_contexts, requested_key(key)))
+       source_requested_values(source_contexts, requested_keys(key)))
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
+  end
+
+  defp source_requested_values(contexts, keys) when is_list(keys) do
+    Enum.flat_map(keys, &context_values(contexts, &1))
   end
 
   defp context_values(contexts, key) when is_list(contexts) do
@@ -303,13 +307,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatus do
   defp requested_key(:source_binding_id), do: :requested_source_binding_id
   defp requested_key(:scope_kind), do: :requested_scope_kind
   defp requested_key(:scope_ids), do: :requested_scope_ids
-  defp requested_key(:contact_id), do: :requested_contact_id
   defp requested_key(key), do: key
+
+  defp requested_keys(:contact_id), do: [:requested_contact_id, :requested_contact_ids]
+  defp requested_keys(key), do: [requested_key(key)]
 
   defp requested_source_fact_key(:scope_kind), do: :requested_scope_kind
   defp requested_source_fact_key(:scope_ids), do: :requested_scope_ids
-  defp requested_source_fact_key(:contact_id), do: :requested_contact_id
   defp requested_source_fact_key(_key), do: nil
+
+  defp requested_source_fact_keys(:contact_id),
+    do: [:requested_contact_id, :requested_contact_ids]
+
+  defp requested_source_fact_keys(key), do: [requested_source_fact_key(key)]
 
   defp alias_key(:source_binding_id), do: :binding_id
   defp alias_key(_key), do: nil

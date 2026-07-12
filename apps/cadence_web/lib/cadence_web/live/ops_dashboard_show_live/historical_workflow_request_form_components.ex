@@ -90,6 +90,46 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
         name={@form[:comparison_review_compare_data_view].name}
         value={@form[:comparison_review_compare_data_view].value}
       />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_scope_kind].name}
+        value={@form[:comparison_review_scope_kind].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_scope_ids].name}
+        value={@form[:comparison_review_scope_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_contact_ids].name}
+        value={@form[:comparison_review_contact_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_resource_ids].name}
+        value={@form[:comparison_review_resource_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_transport_ids].name}
+        value={@form[:comparison_review_transport_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_source_endpoint_ids].name}
+        value={@form[:comparison_review_source_endpoint_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_ground_station_ids].name}
+        value={@form[:comparison_review_ground_station_ids].value}
+      />
+      <input
+        type="hidden"
+        name={@form[:comparison_review_scope_link_ids].name}
+        value={@form[:comparison_review_scope_link_ids].value}
+      />
       <section
         id="dashboard-historical-workflow-request-preview"
         class="space-y-2 rounded border border-info/30 bg-info/10 p-2 text-xs"
@@ -175,7 +215,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
       %{field: "window", label: "Window", value: window_preview(form)},
       %{field: "dashboard", label: "Dashboard", value: dashboard_preview(form)},
       %{field: "runtime", label: "Runtime", value: runtime_preview(form)},
-      %{field: "comparison", label: "Comparison", value: comparison_preview(form)}
+      %{field: "comparison", label: "Comparison", value: comparison_preview(form)},
+      %{
+        field: "comparison_scope",
+        label: "Comparison Scope",
+        value: comparison_scope_preview(form)
+      }
     ]
   end
 
@@ -247,6 +292,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
       form_value(form, :comparison_review_workflow_selection_count),
       form_value(form, :comparison_review_primary_data_view),
       form_value(form, :comparison_review_compare_data_view)
+    ]
+    |> text_join()
+  end
+
+  defp comparison_scope_preview(form) do
+    [
+      form_value(form, :comparison_review_scope_kind),
+      form_value(form, :comparison_review_scope_ids),
+      form_value(form, :comparison_review_contact_ids),
+      form_value(form, :comparison_review_transport_ids),
+      form_value(form, :comparison_review_source_endpoint_ids),
+      form_value(form, :comparison_review_ground_station_ids),
+      form_value(form, :comparison_review_scope_link_ids)
     ]
     |> text_join()
   end

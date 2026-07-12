@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelection
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelectionResult
   alias CadenceWeb.OpsDashboardShowLive.SelectionPanel
+  alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
 
   @dashboard_context_keys [
     :dashboard_id,
@@ -282,7 +283,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             |> with_dashboard_context(dashboard_context)
           )
         )
-        |> put_event_selection(retry_event, %{}, opts)
+        |> put_event_selection(retry_event, dashboard_context, opts)
 
       {:error, reason} ->
         put_action_flash(
@@ -317,7 +318,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             |> with_dashboard_context(dashboard_context)
           )
         )
-        |> put_event_selection(inspection_event, %{}, opts)
+        |> put_event_selection(inspection_event, dashboard_context, opts)
 
       {:error, reason} ->
         put_action_flash(
@@ -356,7 +357,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             |> with_dashboard_context(dashboard_context)
           )
         )
-        |> put_event_selection(inspection_event, %{}, opts)
+        |> put_event_selection(inspection_event, dashboard_context, opts)
 
       {:error, reason} ->
         put_action_flash(
@@ -389,7 +390,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             |> with_dashboard_context(dashboard_context)
           )
         )
-        |> put_event_selection(requeue_event, %{}, opts)
+        |> put_event_selection(requeue_event, dashboard_context, opts)
 
       {:error, reason} ->
         put_action_flash(
@@ -410,7 +411,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
     case retry_group_failed_jobs_command(opts, request_group_id, scope, mission) do
       {:ok, summary} ->
-        selection = HistoricalWorkflowSelection.retry_selection(summary, event_id)
+        selection =
+          HistoricalWorkflowSelection.retry_selection(summary, event_id, dashboard_context)
 
         socket
         |> put_action_flash(
@@ -520,6 +522,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
       |> Enum.uniq()
 
     first_point_id = List.first(point_ids) || ""
+    operational_context = ComparisonReviewQueue.request_operational_context(event)
 
     %{
       "workflow" => "backfill",
@@ -554,6 +557,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
       "comparison_review_compare_data_view" =>
         ComparisonReviewQueue.payload_value(workflow_intent, "compare_data_view") ||
           ComparisonReviewQueue.payload_value(comparison, "compare_data_view"),
+      "comparison_review_scope_kind" => Map.get(operational_context, :scope_kind),
+      "comparison_review_scope_ids" => Map.get(operational_context, :scope_ids_attr),
+      "comparison_review_contact_ids" => Map.get(operational_context, :contact_ids_attr),
+      "comparison_review_resource_ids" => Map.get(operational_context, :resource_ids_attr),
+      "comparison_review_transport_ids" => Map.get(operational_context, :transport_ids_attr),
+      "comparison_review_source_endpoint_ids" =>
+        Map.get(operational_context, :source_endpoint_ids_attr),
+      "comparison_review_ground_station_ids" =>
+        Map.get(operational_context, :ground_station_ids_attr),
+      "comparison_review_scope_link_ids" => Map.get(operational_context, :scope_link_ids_attr),
       "reason" => "operator_requested_bulk_correction_authority_review"
     }
   end
@@ -688,6 +701,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
     |> selected_panel_inspector()
     |> HistoricalWorkflowContext.build()
     |> dashboard_context()
+    |> with_selection_dashboard_context(Map.get(assigns, :dashboard_selection_query))
   end
 
   defp selected_panel_inspector({:data_link, inspector}), do: inspector
@@ -695,6 +709,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
   defp dashboard_context(%HistoricalWorkflowContext{} = context) do
     Enum.reduce(@dashboard_context_keys, %{}, &put_context_value(&2, &1, context))
+  end
+
+  defp with_selection_dashboard_context(context, query) when is_map(context) do
+    query = SelectionQuery.to_params(query)
+
+    context
+    |> put_context_value(:dashboard_time_mode, %{"dashboard_time_mode" => query["time_mode"]})
+    |> put_context_value(:dashboard_replay_run_id, %{
+      "dashboard_replay_run_id" => query["replay_run_id"]
+    })
+    |> put_context_value(:dashboard_data_view, %{
+      "dashboard_data_view" => query["selected_data_view"] || query["data_view"]
+    })
+    |> put_context_value(:dashboard_limit_mode, %{"dashboard_limit_mode" => query["limit_mode"]})
   end
 
   defp event_request_group_id(%{payload: payload}) when is_map(payload) do

@@ -59,6 +59,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParamsTest do
           "source_target_id" => "placement-1",
           "source_link_label" => "Comparison finding",
           "source_decision" => "mark_advisory",
+          "dashboard_time_mode" => "replay_run",
+          "dashboard_replay_run_id" => "replay-1",
+          "dashboard_data_view" => "all_revisions",
           "dashboard_limit_mode" => "compare",
           "comparison_state" => "increased",
           "comparison_delta" => "+2",
@@ -100,7 +103,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParamsTest do
                  "source_link_label" => "Comparison finding",
                  "source_panel" => "data_link_inspector",
                  "source_decision" => "mark_advisory",
-                 "dashboard_context" => %{"dashboard_limit_mode" => "compare"},
+                 "dashboard_context" => %{
+                   "dashboard_time_mode" => "replay_run",
+                   "dashboard_replay_run_id" => "replay-1",
+                   "dashboard_data_view" => "all_revisions",
+                   "dashboard_limit_mode" => "compare"
+                 },
                  "comparison_finding" => %{
                    "placement_id" => "placement-1",
                    "state" => "increased",

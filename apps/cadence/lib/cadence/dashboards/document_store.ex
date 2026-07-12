@@ -1211,6 +1211,9 @@ defmodule Cadence.Dashboards.DocumentStore do
        when is_map(payload) do
     bulk_decision_summary = comparison_review_bulk_decision_source_summary(payload)
 
+    operational_context =
+      ComparisonReviewQueue.request_operational_context(%LifecycleEvent{payload: payload})
+
     %{
       "workflow_intent" => payload_value(payload, "workflow_intent"),
       "open_findings" => payload_value(payload, "open_findings"),
@@ -1218,7 +1221,15 @@ defmodule Cadence.Dashboards.DocumentStore do
       "source_open_placement_ids" =>
         comparison_review_request_placement_ids(%LifecycleEvent{
           payload: payload
-        })
+        }),
+      "source_scope_kind" => Map.get(operational_context, :scope_kind),
+      "source_scope_ids" => Map.get(operational_context, :scope_ids),
+      "source_contact_ids" => Map.get(operational_context, :contact_ids),
+      "source_resource_ids" => Map.get(operational_context, :resource_ids),
+      "source_transport_ids" => Map.get(operational_context, :transport_ids),
+      "source_endpoint_ids" => Map.get(operational_context, :source_endpoint_ids),
+      "source_ground_station_ids" => Map.get(operational_context, :ground_station_ids),
+      "source_scope_link_ids" => Map.get(operational_context, :scope_link_ids)
     }
     |> Map.merge(bulk_decision_summary)
     |> Enum.reject(fn {_key, value} -> value in [nil, [], ""] end)

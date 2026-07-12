@@ -360,9 +360,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesData do
          value_field when not is_nil(value_field) <- value_field(fields),
          %DateTime{} = time <- List.last(times),
          value when not is_nil(value) <- List.last(value_field.values) do
+      observable_id = observable_id(frame) || metadata_value(value_field.metadata, :observable_id)
+
       %{
         kind: :point,
         spacecraft_id: spacecraft_id(frame.scope),
+        observable_id: observable_id,
         sample: %{
           sample_id:
             value_field.metadata

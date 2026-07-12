@@ -47,7 +47,8 @@ defmodule Cadence.Runtime.ContactCoordinator do
       when is_binary(path_id) and is_binary(transport_binding_id) and is_list(opts) do
     GenServer.call(
       contact_runtime,
-      {:handle_transport_event, path_id, transport_binding_id, event, opts}
+      {:handle_transport_event, path_id, transport_binding_id, event, opts},
+      Keyword.get(opts, :call_timeout, 5_000)
     )
   end
 

@@ -704,6 +704,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   defp frame_evidence?(%{engine_backed?: true, links: links}) when is_list(links), do: links != []
   defp frame_evidence?(_data), do: false
 
+  defp widget_evidence_observable(%{observable_id: observable_id})
+       when is_binary(observable_id) and observable_id != "",
+       do: observable_id
+
   defp widget_evidence_observable(%{links: links}) when is_list(links) do
     Enum.find_value(links, fn
       %{target: :telemetry_point, target_id: target_id} when is_binary(target_id) -> target_id

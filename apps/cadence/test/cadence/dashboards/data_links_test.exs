@@ -219,6 +219,105 @@ defmodule Cadence.Dashboards.DataLinksTest do
              ])
   end
 
+  test "command queue entry evidence refs identify durable queue rows" do
+    assert [
+             %EvidenceRef{
+               kind: :command_queue_entry,
+               id: "queue-entry-1",
+               observed_at: ~U[2026-06-17 12:00:00Z],
+               source: :operational_observables,
+               confidence: :direct
+             }
+           ] =
+             DataLinks.command_queue_entry_evidence_refs([
+               %{
+                 command_queue_entry_id: "queue-entry-1",
+                 enqueued_at: ~U[2026-06-17 12:00:00Z]
+               },
+               %{
+                 command_queue_entry_id: "queue-entry-1",
+                 enqueued_at: ~U[2026-06-17 12:00:00Z]
+               },
+               %{command_queue_entry_id: nil}
+             ])
+  end
+
+  test "command verifier instance evidence refs identify durable verifier rows" do
+    assert [
+             %EvidenceRef{
+               kind: :command_verifier_instance,
+               id: "verifier-instance-1",
+               observed_at: ~U[2026-06-17 12:01:45Z],
+               source: :operational_observables,
+               confidence: :direct
+             }
+           ] =
+             DataLinks.command_verifier_instance_evidence_refs([
+               %{
+                 command_verifier_instance_id: "verifier-instance-1",
+                 matched_at: ~U[2026-06-17 12:01:45Z]
+               },
+               %{
+                 command_verifier_instance_id: "verifier-instance-1",
+                 matched_at: ~U[2026-06-17 12:01:45Z]
+               },
+               %{command_verifier_instance_id: nil}
+             ])
+  end
+
+  test "command verifier matched record evidence refs identify durable matched records" do
+    assert [
+             %EvidenceRef{
+               kind: :telemetry_sample,
+               id: "sample-1",
+               observed_at: ~U[2026-06-17 12:01:45Z],
+               source: :operational_observables,
+               confidence: :direct
+             },
+             %EvidenceRef{
+               kind: :transport_action_request,
+               id: "action-request-1",
+               observed_at: ~U[2026-06-17 12:01:46Z],
+               source: :operational_observables,
+               confidence: :direct
+             },
+             %EvidenceRef{
+               kind: :transport_capability_record,
+               id: "transport-record-1",
+               observed_at: ~U[2026-06-17 12:01:47Z],
+               source: :operational_observables,
+               confidence: :direct
+             }
+           ] =
+             DataLinks.command_verifier_matched_record_evidence_refs([
+               %{
+                 matched_record_kind: :telemetry_sample,
+                 matched_record_id: "sample-1",
+                 matched_at: ~U[2026-06-17 12:01:45Z]
+               },
+               %{
+                 matched_record_kind: "transport_action_request",
+                 matched_record_id: "action-request-1",
+                 matched_at: ~U[2026-06-17 12:01:46Z]
+               },
+               %{
+                 matched_record_kind: :transport_capability_record,
+                 matched_record_id: "transport-record-1",
+                 matched_at: ~U[2026-06-17 12:01:47Z]
+               },
+               %{
+                 matched_record_kind: :transport_action_request,
+                 matched_record_id: "action-request-1",
+                 matched_at: ~U[2026-06-17 12:01:46Z]
+               },
+               %{
+                 matched_record_kind: nil,
+                 matched_record_id: nil,
+                 matched_at: ~U[2026-06-17 12:01:48Z]
+               }
+             ])
+  end
+
   test "source binding interval evidence refs identify selected binding events" do
     assert [
              %EvidenceRef{

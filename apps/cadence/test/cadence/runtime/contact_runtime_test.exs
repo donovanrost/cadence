@@ -405,7 +405,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
                  payload: %{frame: 1, source: "beta"},
                  quality_score: 10
                },
-               occurred_at: DateTime.from_unix!(1_700_030_510, :second)
+               occurred_at: DateTime.from_unix!(1_700_030_510, :second),
+               call_timeout: :infinity
              )
 
     assert Enum.any?(first_outputs, &match?(%DownlinkObservation{}, &1))
@@ -428,7 +429,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
                  payload: %{frame: 1, source: "alpha"},
                  quality_score: 5
                },
-               occurred_at: DateTime.from_unix!(1_700_030_515, :second)
+               occurred_at: DateTime.from_unix!(1_700_030_515, :second),
+               call_timeout: :infinity
              )
 
     assert Enum.any?(second_outputs, &match?(%DownlinkObservation{}, &1))

@@ -15,6 +15,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
       "execution_mode" => "sample_execution",
       "run_id" => "late-policy-run-1",
       "dashboard_time_mode" => "live",
+      "dashboard_data_view" => "all_revisions",
       "dashboard_limit_mode" => "compare",
       "realm" => "flight",
       "data_source_id" => "managed_questdb_primary",
@@ -55,6 +56,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
     assert event.payload["source_event_type"] == "backfill_completed"
     assert event.payload["dashboard_context"]["dashboard_time_mode"] == "live"
     refute Map.has_key?(event.payload["dashboard_context"], "dashboard_replay_run_id")
+    assert event.payload["dashboard_context"]["dashboard_data_view"] == "all_revisions"
     assert event.payload["dashboard_context"]["dashboard_limit_mode"] == "compare"
     assert event.payload["selected_sample_count"] == 0
     assert event.payload["write_validity_state"] == "canonical"
@@ -108,6 +110,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
         "run_id" => "late-policy-replay-run",
         "dashboard_time_mode" => "replay_run",
         "dashboard_replay_run_id" => "replay-policy-1",
+        "dashboard_data_view" => "all_revisions",
         "dashboard_limit_mode" => "compare",
         "realm" => "flight",
         "data_source_id" => "managed_questdb_primary",
@@ -135,6 +138,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
     assert event.payload["source_event_type"] == "backfill_completed"
     assert event.payload["dashboard_context"]["dashboard_time_mode"] == "replay_run"
     assert event.payload["dashboard_context"]["dashboard_replay_run_id"] == "replay-policy-1"
+    assert event.payload["dashboard_context"]["dashboard_data_view"] == "all_revisions"
     assert event.payload["dashboard_context"]["dashboard_limit_mode"] == "compare"
     refute Map.has_key?(event.payload, "selected_sample_count")
     assert event.payload["write_validity_state"] == "canonical"

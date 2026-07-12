@@ -153,6 +153,18 @@ defmodule Cadence.OperationalEvents do
     build_source_binding_intervals(organization_id, mission_id, opts)
   end
 
+  @spec source_health_intervals(binary(), keyword()) :: [EffectiveInterval.t()]
+  def source_health_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    build_source_health_intervals(nil, mission_id, opts)
+  end
+
+  @spec source_health_intervals(binary(), binary(), keyword()) :: [EffectiveInterval.t()]
+  def source_health_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    build_source_health_intervals(organization_id, mission_id, opts)
+  end
+
   @spec transport_execution_intervals(binary(), keyword()) :: [EffectiveInterval.t()]
   def transport_execution_intervals(mission_id, opts \\ [])
       when is_binary(mission_id) and is_list(opts) do
@@ -415,6 +427,30 @@ defmodule Cadence.OperationalEvents do
     |> maybe_filter_interval_payload(:logical_source, Keyword.get(opts, :logical_source))
     |> maybe_filter_interval_payload(:realm, Keyword.get(opts, :realm))
     |> maybe_filter_interval_payload(:data_source_id, Keyword.get(opts, :data_source_id))
+    |> maybe_filter_at(Keyword.get(opts, :at))
+    |> Enum.filter(&EffectiveInterval.overlaps?(&1, from_time(opts), to_time(opts)))
+    |> order_intervals(Keyword.get(opts, :order, :asc))
+  end
+
+  defp build_source_health_intervals(organization_id, mission_id, opts) do
+    organization_id
+    |> source_health_events(mission_id, opts)
+    |> Enum.group_by(&source_health_key/1)
+    |> Enum.flat_map(fn {_source_health_key, events} ->
+      events
+      |> Enum.sort_by(&event_sort_key/1)
+      |> source_health_events_to_intervals()
+    end)
+    |> maybe_filter_subject_id(Keyword.get(opts, :data_source_id))
+    |> maybe_filter_interval_payload(:source_binding_id, Keyword.get(opts, :source_binding_id))
+    |> maybe_filter_interval_payload(:source_health, Keyword.get(opts, :source_health))
+    |> maybe_filter_interval_payload(
+      :previous_source_health,
+      Keyword.get(opts, :previous_source_health)
+    )
+    |> maybe_filter_interval_payload(:logical_source, Keyword.get(opts, :logical_source))
+    |> maybe_filter_interval_payload(:realm, Keyword.get(opts, :realm))
+    |> maybe_filter_interval_payload(:dataset, Keyword.get(opts, :dataset))
     |> maybe_filter_at(Keyword.get(opts, :at))
     |> Enum.filter(&EffectiveInterval.overlaps?(&1, from_time(opts), to_time(opts)))
     |> order_intervals(Keyword.get(opts, :order, :asc))
@@ -693,6 +729,30 @@ defmodule Cadence.OperationalEvents do
     end)
   end
 
+  defp source_health_events(organization_id, mission_id, opts) do
+    event_opts = [
+      source_record_kind: :source_health_event,
+      order: :asc,
+      replay_run_id: Keyword.get(opts, :replay_run_id, :none),
+      limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+
+    if is_binary(organization_id) do
+      list_events(organization_id, mission_id, event_opts)
+    else
+      list_events(mission_id, event_opts)
+    end
+  end
+
+  defp source_health_events_to_intervals(events) do
+    events
+    |> Enum.with_index()
+    |> Enum.map(fn {%Event{} = event, index} ->
+      next_event = Enum.at(events, index + 1)
+      source_health_interval(event, next_event)
+    end)
+  end
+
   defp binding_set_interval(%Event{} = event, next_event) do
     starts_at = event.effective_at || event.occurred_at
     ends_at = next_event && (next_event.effective_at || next_event.occurred_at)
@@ -842,7 +902,7 @@ defmodule Cadence.OperationalEvents do
         "binding_version" => payload_value(event, :binding_version),
         "status" => current_value(event, :status),
         "logical_source" => payload_value(event, :logical_source),
-        "realm" => payload_value(event, :realm),
+        "realm" => payload_value(event, :data_realm) || payload_value(event, :realm),
         "data_source_id" => payload_value(event, :data_source_id),
         "dataset" => payload_value(event, :dataset),
         "priority" => payload_value(event, :priority),
@@ -852,6 +912,46 @@ defmodule Cadence.OperationalEvents do
       metadata: %{
         "source_record_kind" => causality_value(event, :source_record_kind),
         "source_record_id" => causality_value(event, :source_record_id)
+      }
+    }
+  end
+
+  defp source_health_interval(%Event{} = event, next_event) do
+    starts_at = event.effective_at || event.occurred_at
+    ends_at = next_event && (next_event.effective_at || next_event.occurred_at)
+    data_source_id = payload_value(event, :data_source_id) || subject_id(event)
+
+    %EffectiveInterval{
+      interval_id: "effective_interval:source_health:#{event.event_id}",
+      organization_id: event.organization_id,
+      mission_id: event.mission_id,
+      kind: :source_health,
+      subject_kind: :data_source,
+      subject_id: data_source_id,
+      starts_at: starts_at,
+      ends_at: ends_at,
+      source_event_id: event.event_id,
+      superseded_by_event_id: next_event && next_event.event_id,
+      payload: %{
+        "source_health_event_id" => payload_value(event, :source_health_event_id),
+        "source_health_key" => payload_value(event, :source_health_key),
+        "event_type" => payload_value(event, :event_type),
+        "logical_source" => payload_value(event, :logical_source),
+        "data_source_id" => data_source_id,
+        "source_binding_id" => payload_value(event, :source_binding_id),
+        "realm" => payload_value(event, :data_realm) || payload_value(event, :realm),
+        "dataset" => payload_value(event, :dataset),
+        "source_health" => current_value(event, :source_health),
+        "previous_source_health" => payload_value(event, :previous_source_health),
+        "reason" => current_value(event, :reason),
+        "replay_run_id" =>
+          causality_value(event, :replay_run_id) || payload_value(event, :replay_run_id)
+      },
+      metadata: %{
+        "source_record_kind" => causality_value(event, :source_record_kind),
+        "source_record_id" => causality_value(event, :source_record_id),
+        "replay_run_id" => causality_value(event, :replay_run_id),
+        "event_kind" => event.kind
       }
     }
   end
@@ -1252,6 +1352,9 @@ defmodule Cadence.OperationalEvents do
 
   defp source_binding_id(%Event{} = event),
     do: payload_value(event, :binding_id) || subject_id(event)
+
+  defp source_health_key(%Event{} = event),
+    do: payload_value(event, :source_health_key) || subject_id(event)
 
   defp transport_capability_id(%Event{} = event),
     do: payload_value(event, :capability_instance_id) || subject_id(event)

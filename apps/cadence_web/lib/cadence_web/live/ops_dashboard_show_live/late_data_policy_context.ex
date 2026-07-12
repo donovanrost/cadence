@@ -13,6 +13,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyContext do
         row_value(rows, "Dashboard context time mode") || row_value(context_rows, "Time mode"),
       dashboard_replay_run_id:
         row_value(rows, "Dashboard context replay run") || row_value(context_rows, "Replay run"),
+      dashboard_data_view:
+        row_value(rows, "Dashboard context data view") || row_value(context_rows, "Data view"),
       dashboard_limit_mode:
         row_value(rows, "Dashboard context limit mode") || row_value(context_rows, "Limit mode"),
       realm: row_value(rows, "Realm"),

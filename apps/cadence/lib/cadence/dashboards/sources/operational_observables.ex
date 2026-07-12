@@ -26,6 +26,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   alias Cadence.Contacts
   alias Cadence.Limits.Event
   alias Cadence.OperationalEvents
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
@@ -52,6 +53,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @transport_execution_observable_ids ["comms.transport.execution_state"]
   @ingress_latency_observable_ids ["ingress.processing_latency_ms"]
   @command_queue_observable_ids ["commanding.queue_depth"]
+  @managed_runtime_observable_ids ["runtime.managed_activity"]
+  @transport_runtime_observable_ids ["runtime.transport_activity"]
   @latest_observable_ids @bitrate_observable_ids ++
                            @command_queue_observable_ids ++
                            @ingress_latency_observable_ids ++
@@ -82,7 +85,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
                                   @link_rf_lock_observable_ids ++
                                   @link_rf_frame_sync_observable_ids ++
                                   @antenna_pointing_observable_ids ++
-                                  @transport_execution_observable_ids ++ ["contacts.phase"]
+                                  @transport_execution_observable_ids ++
+                                  @managed_runtime_observable_ids ++
+                                  @transport_runtime_observable_ids ++ ["contacts.phase"]
   @latest_contracts [
     %{
       observables: ["contacts.phase"],
@@ -199,6 +204,20 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       shape: :events
     },
     %{
+      observables: @managed_runtime_observable_ids,
+      product: :managed_runtime_activity_history,
+      product_family: :runtime_managed,
+      sampling: :event_history,
+      shape: :events
+    },
+    %{
+      observables: @transport_runtime_observable_ids,
+      product: :transport_runtime_activity_history,
+      product_family: :runtime_transport,
+      sampling: :event_history,
+      shape: :events
+    },
+    %{
       observables: @state_history_observable_ids,
       product: :operational_state_history,
       product_family: :operational_state,
@@ -209,6 +228,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @backed_observable_ids @bitrate_observable_ids ++
                            @transport_execution_observable_ids ++
                            @command_queue_observable_ids ++
+                           @managed_runtime_observable_ids ++
+                           @transport_runtime_observable_ids ++
                            @ingress_latency_observable_ids ++
                            @connection_observable_ids ++
                            @antenna_pointing_observable_ids ++
@@ -219,6 +240,35 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @antenna_pointing_states [:idle, :slewing, :acquiring, :tracking, :stowed, :degraded, :unknown]
   @rf_lock_states [:locked, :acquiring, :degraded, :unlocked, :unknown]
   @frame_sync_states [:synchronized, :acquiring, :degraded, :lost, :unknown]
+  @managed_runtime_event_kinds [
+    :managed_capability_initialized,
+    :managed_capability_record_handled,
+    :managed_capability_timer_handled,
+    :managed_action_requested,
+    :managed_timer_scheduled,
+    :managed_timer_fired,
+    :managed_timer_canceled
+  ]
+  @managed_runtime_source_record_kinds [
+    :managed_capability_record,
+    :managed_action_request,
+    :managed_timer_event
+  ]
+  @transport_runtime_event_kinds [
+    :transport_initialized,
+    :transport_event_handled,
+    :transport_control_input_handled,
+    :transport_timer_handled,
+    :transport_action_requested,
+    :transport_timer_scheduled,
+    :transport_timer_fired,
+    :transport_timer_canceled
+  ]
+  @transport_runtime_source_record_kinds [
+    :transport_capability_record,
+    :transport_action_request,
+    :transport_timer_event
+  ]
 
   @type contact_fun :: (binary(), binary(), keyword() -> [struct()])
   @type connection_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
@@ -271,6 +321,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         :transport_bitrate,
         :transport_bitrate_history,
         :transport_execution_state_history,
+        :managed_runtime_activity_history,
+        :transport_runtime_activity_history,
         :ingress_processing_latency_history,
         :operational_metric_history,
         :operational_latest,
@@ -520,6 +572,34 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp operational_product_revision(
+         :managed_runtime_activity_history,
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    managed_runtime_activity_revision(request, source_binding, organization_id, mission_id, opts)
+  end
+
+  defp operational_product_revision(
+         :transport_runtime_activity_history,
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    transport_runtime_activity_revision(
+      request,
+      source_binding,
+      organization_id,
+      mission_id,
+      opts
+    )
+  end
+
+  defp operational_product_revision(
          :operational_metric_history,
          request,
          source_binding,
@@ -701,6 +781,32 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       "ingress.processing_latency_ms" in observables,
       fn ->
         ingress_processing_latency_revision(
+          request,
+          source_binding,
+          organization_id,
+          mission_id,
+          opts
+        )
+      end
+    )
+    |> maybe_add_family_revision(
+      :managed_runtime_activity,
+      Enum.any?(observables, &(&1 in @managed_runtime_observable_ids)),
+      fn ->
+        managed_runtime_activity_revision(
+          request,
+          source_binding,
+          organization_id,
+          mission_id,
+          opts
+        )
+      end
+    )
+    |> maybe_add_family_revision(
+      :transport_runtime_activity,
+      Enum.any?(observables, &(&1 in @transport_runtime_observable_ids)),
+      fn ->
+        transport_runtime_activity_revision(
           request,
           source_binding,
           organization_id,
@@ -942,6 +1048,48 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
+  defp managed_runtime_activity_revision(
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    revision_fun =
+      Keyword.get(
+        opts,
+        :managed_runtime_activity_revision_fun,
+        &default_managed_runtime_activity_revision/3
+      )
+
+    revision_fun.(
+      organization_id,
+      mission_id,
+      adapter_opts(request, source_binding)
+    )
+  end
+
+  defp transport_runtime_activity_revision(
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    revision_fun =
+      Keyword.get(
+        opts,
+        :transport_runtime_activity_revision_fun,
+        &default_transport_runtime_activity_revision/3
+      )
+
+    revision_fun.(
+      organization_id,
+      mission_id,
+      adapter_opts(request, source_binding)
+    )
+  end
+
   defp ingress_processing_latency_revision(
          request,
          source_binding,
@@ -1102,39 +1250,35 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   defp event_history_product(%PlannedSourceRequest{} = request) do
     observables = request.observables
 
-    cond do
-      connection_observables?(observables) ->
-        {:ok, :connection_state_history}
+    event_history_product_for_observables(observables) ||
+      {:warning,
+       warning(
+         request,
+         :unsupported_operational_observable_history,
+         :warning,
+         "Operational observables source can only resolve state-valued event history",
+         %{
+           requested_mode: :event_history,
+           observables: observables,
+           supported_observables: @state_history_observable_ids
+         }
+       )}
+  end
 
-      antenna_pointing_observables?(observables) ->
-        {:ok, :ground_station_antenna_pointing_state_history}
-
-      link_rf_lock_observables?(observables) ->
-        {:ok, :link_rf_lock_state_history}
-
-      link_rf_frame_sync_observables?(observables) ->
-        {:ok, :link_rf_frame_sync_state_history}
-
-      transport_execution_observables?(observables) ->
-        {:ok, :transport_execution_state_history}
-
-      state_history_observables?(observables) ->
-        {:ok, :operational_state_history}
-
-      true ->
-        {:warning,
-         warning(
-           request,
-           :unsupported_operational_observable_history,
-           :warning,
-           "Operational observables source can only resolve state-valued event history",
-           %{
-             requested_mode: :event_history,
-             observables: observables,
-             supported_observables: @state_history_observable_ids
-           }
-         )}
-    end
+  defp event_history_product_for_observables(observables) do
+    [
+      {&connection_observables?/1, :connection_state_history},
+      {&antenna_pointing_observables?/1, :ground_station_antenna_pointing_state_history},
+      {&link_rf_lock_observables?/1, :link_rf_lock_state_history},
+      {&link_rf_frame_sync_observables?/1, :link_rf_frame_sync_state_history},
+      {&transport_execution_observables?/1, :transport_execution_state_history},
+      {&managed_runtime_observables?/1, :managed_runtime_activity_history},
+      {&transport_runtime_observables?/1, :transport_runtime_activity_history},
+      {&state_history_observables?/1, :operational_state_history}
+    ]
+    |> Enum.find_value(fn {matches?, product} ->
+      if matches?.(observables), do: {:ok, product}, else: false
+    end)
   end
 
   defp metric_history_product(%PlannedSourceRequest{} = request) do
@@ -1292,6 +1436,20 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp transport_execution_observables?(_observables), do: false
+
+  defp managed_runtime_observables?(observables)
+       when is_list(observables) and observables != [] do
+    Enum.all?(observables, &(&1 in @managed_runtime_observable_ids))
+  end
+
+  defp managed_runtime_observables?(_observables), do: false
+
+  defp transport_runtime_observables?(observables)
+       when is_list(observables) and observables != [] do
+    Enum.all?(observables, &(&1 in @transport_runtime_observable_ids))
+  end
+
+  defp transport_runtime_observables?(_observables), do: false
 
   defp command_queue_observables?(observables) when is_list(observables) and observables != [] do
     Enum.all?(observables, &(&1 in @command_queue_observable_ids))
@@ -1561,6 +1719,54 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   defp resolve_supported_product(
          request,
          source_binding,
+         :managed_runtime_activity_history,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    frame =
+      managed_runtime_activity_history_frame(
+        request,
+        source_binding,
+        managed_runtime_activity_history_rows(
+          request,
+          source_binding,
+          organization_id,
+          mission_id,
+          opts
+        )
+      )
+
+    source_result(request, source_binding, :managed_runtime_activity_history, [frame])
+  end
+
+  defp resolve_supported_product(
+         request,
+         source_binding,
+         :transport_runtime_activity_history,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    frame =
+      transport_runtime_activity_history_frame(
+        request,
+        source_binding,
+        transport_runtime_activity_history_rows(
+          request,
+          source_binding,
+          organization_id,
+          mission_id,
+          opts
+        )
+      )
+
+    source_result(request, source_binding, :transport_runtime_activity_history, [frame])
+  end
+
+  defp resolve_supported_product(
+         request,
+         source_binding,
          :link_rf_metric,
          organization_id,
          mission_id,
@@ -1638,6 +1844,20 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         opts
       )
       |> maybe_add_transport_execution_state_history_frame(
+        request,
+        source_binding,
+        organization_id,
+        mission_id,
+        opts
+      )
+      |> maybe_add_managed_runtime_activity_history_frame(
+        request,
+        source_binding,
+        organization_id,
+        mission_id,
+        opts
+      )
+      |> maybe_add_transport_runtime_activity_history_frame(
         request,
         source_binding,
         organization_id,
@@ -2225,6 +2445,62 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           request,
           source_binding,
           transport_execution_history_rows(
+            request,
+            source_binding,
+            organization_id,
+            mission_id,
+            opts
+          )
+        )
+
+      frames ++ [frame]
+    else
+      frames
+    end
+  end
+
+  defp maybe_add_managed_runtime_activity_history_frame(
+         frames,
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    if Enum.any?(request.observables, &(&1 in @managed_runtime_observable_ids)) do
+      frame =
+        managed_runtime_activity_history_frame(
+          request,
+          source_binding,
+          managed_runtime_activity_history_rows(
+            request,
+            source_binding,
+            organization_id,
+            mission_id,
+            opts
+          )
+        )
+
+      frames ++ [frame]
+    else
+      frames
+    end
+  end
+
+  defp maybe_add_transport_runtime_activity_history_frame(
+         frames,
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    if Enum.any?(request.observables, &(&1 in @transport_runtime_observable_ids)) do
+      frame =
+        transport_runtime_activity_history_frame(
+          request,
+          source_binding,
+          transport_runtime_activity_history_rows(
             request,
             source_binding,
             organization_id,
@@ -3348,6 +3624,126 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
+  defp managed_runtime_activity_history_frame(request, source_binding, rows) do
+    %Frame{
+      frame_id: "#{request.request_id}:managed_runtime_activity_history",
+      source: :operational_observables,
+      shape: :events,
+      time_axis: :occurred_at,
+      scope: request.scope_context,
+      fields: [
+        %Field{
+          name: "time",
+          kind: :time,
+          values: Enum.map(rows, & &1.starts_at),
+          metadata: %{axis: :occurred_at}
+        },
+        %Field{
+          name: "observable_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.observable_id)
+        },
+        %Field{name: "resource_id", kind: :string, values: Enum.map(rows, & &1.resource_id)},
+        %Field{name: "lane_id", kind: :string, values: Enum.map(rows, & &1.lane_id)},
+        %Field{name: "label", kind: :string, values: Enum.map(rows, & &1.label)},
+        %Field{name: "scope_kind", kind: :enum, values: Enum.map(rows, & &1.scope_kind)},
+        %Field{
+          name: "capability_instance_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.capability_instance_id)
+        },
+        %Field{name: "family_key", kind: :enum, values: Enum.map(rows, & &1.family_key)},
+        %Field{name: "activation_id", kind: :string, values: Enum.map(rows, & &1.activation_id)},
+        %Field{
+          name: "binding_set_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.binding_set_id)
+        },
+        %Field{name: "packet_id", kind: :string, values: Enum.map(rows, & &1.packet_id)},
+        %Field{name: "evidence_id", kind: :string, values: Enum.map(rows, & &1.evidence_id)},
+        %Field{name: "timer_key", kind: :string, values: Enum.map(rows, & &1.timer_key)},
+        %Field{name: "action_kind", kind: :enum, values: Enum.map(rows, & &1.action_kind)},
+        %Field{
+          name: "action_request_document_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.action_request_document_json)
+        },
+        %Field{
+          name: "record_event_kind",
+          kind: :enum,
+          values: Enum.map(rows, & &1.record_event_kind)
+        },
+        %Field{
+          name: "emitted_record_kinds",
+          kind: :string,
+          values: Enum.map(rows, & &1.emitted_record_kinds)
+        },
+        %Field{
+          name: "emitted_record_count",
+          kind: :number,
+          values: Enum.map(rows, & &1.emitted_record_count)
+        },
+        %Field{
+          name: "action_request_count",
+          kind: :number,
+          values: Enum.map(rows, & &1.action_request_count)
+        },
+        %Field{
+          name: "state_snapshot_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.state_snapshot_json)
+        },
+        %Field{
+          name: "record_metadata_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.record_metadata_json)
+        },
+        %Field{
+          name: "runtime_fact_kind",
+          kind: :enum,
+          values: Enum.map(rows, & &1.runtime_fact_kind)
+        },
+        %Field{
+          name: "runtime_fact_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.runtime_fact_id)
+        },
+        %Field{
+          name: "source_event_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.source_event_id)
+        },
+        %Field{name: "state", kind: :enum, values: Enum.map(rows, & &1.state)},
+        %Field{
+          name: "normalized_state",
+          kind: :enum,
+          values: Enum.map(rows, & &1.normalized_state)
+        }
+      ],
+      meta: %{
+        source_request_id: request.request_id,
+        logical_source: :operational_observables,
+        source_binding_id: source_binding_id(source_binding),
+        dataset: dataset(source_binding),
+        sampling: :event_history,
+        supported_capability: :managed_runtime_activity_history,
+        product_family: :runtime_managed,
+        state_color_policy: :managed_runtime_activity,
+        observable_ids: observable_ids(rows),
+        observable_id: "runtime.managed_activity",
+        realm: realm(request, source_binding),
+        data_source_id: data_source_id(request, source_binding),
+        replay_run_id: replay_run_id(request),
+        runtime_fact_ids: managed_runtime_fact_ids(rows),
+        returned_points: length(rows),
+        warning_codes: [],
+        links: operational_history_links(request, rows),
+        evidence_refs:
+          DataLinks.operational_event_evidence_refs(rows, source: :operational_observables)
+      }
+    }
+  end
+
   defp link_rf_lock_state_frame(request, source_binding, lock_rows) do
     %Frame{
       frame_id: "#{request.request_id}:link_rf_lock_state",
@@ -4069,13 +4465,43 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         realm: realm(request, source_binding),
         data_source_id: data_source_id(request, source_binding),
         replay_run_id: replay_run_id(request),
+        command_queue_entry_ids: command_queue_entry_ids(depth_rows),
         returned_points: length(depth_rows),
         freshness_policy: latest_freshness_policy(depth_rows),
         freshness_checked_at: latest_freshness_checked_at(depth_rows),
         warning_codes: latest_freshness_warning_codes(depth_rows),
-        links: DataLinks.operational_resource_links(request, depth_rows, source: :frame)
+        links: DataLinks.operational_resource_links(request, depth_rows, source: :frame),
+        evidence_refs: command_queue_entry_evidence_refs(depth_rows)
       }
     }
+  end
+
+  defp command_queue_entry_evidence_refs(depth_rows) do
+    depth_rows
+    |> command_queue_entries_from_rows()
+    |> DataLinks.command_queue_entry_evidence_refs(source: :operational_observables)
+  end
+
+  defp command_queue_entry_ids(depth_rows) do
+    depth_rows
+    |> command_queue_entries_from_rows()
+    |> Enum.map(&attr(&1, :command_queue_entry_id))
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
+  defp command_queue_entries_from_rows(depth_rows) do
+    depth_rows
+    |> List.wrap()
+    |> Enum.flat_map(fn row ->
+      row
+      |> attr(:source)
+      |> case do
+        %{entries: entries} when is_list(entries) -> entries
+        %{"entries" => entries} when is_list(entries) -> entries
+        _other -> []
+      end
+    end)
   end
 
   defp ingress_processing_latency_frame(request, source_binding, latency_rows) do
@@ -5207,6 +5633,492 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
+  defp transport_runtime_activity_history_frame(request, source_binding, rows) do
+    %Frame{
+      frame_id: "#{request.request_id}:transport_runtime_activity_history",
+      source: :operational_observables,
+      shape: :events,
+      time_axis: :occurred_at,
+      scope: request.scope_context,
+      fields: [
+        %Field{
+          name: "time",
+          kind: :time,
+          values: Enum.map(rows, & &1.starts_at),
+          metadata: %{axis: :occurred_at}
+        },
+        %Field{
+          name: "observable_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.observable_id)
+        },
+        %Field{name: "resource_id", kind: :string, values: Enum.map(rows, & &1.resource_id)},
+        %Field{name: "lane_id", kind: :string, values: Enum.map(rows, & &1.lane_id)},
+        %Field{name: "label", kind: :string, values: Enum.map(rows, & &1.label)},
+        %Field{name: "scope_kind", kind: :enum, values: Enum.map(rows, & &1.scope_kind)},
+        %Field{name: "transport_id", kind: :string, values: Enum.map(rows, & &1.transport_id)},
+        %Field{name: "contact_id", kind: :string, values: Enum.map(rows, & &1.contact_id)},
+        %Field{name: "path_id", kind: :string, values: Enum.map(rows, & &1.path_id)},
+        %Field{
+          name: "source_endpoint_ref",
+          kind: :string,
+          values: Enum.map(rows, & &1.source_endpoint_ref)
+        },
+        %Field{
+          name: "capability_instance_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.capability_instance_id)
+        },
+        %Field{name: "family_key", kind: :enum, values: Enum.map(rows, & &1.family_key)},
+        %Field{name: "activation_id", kind: :string, values: Enum.map(rows, & &1.activation_id)},
+        %Field{
+          name: "binding_set_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.binding_set_id)
+        },
+        %Field{name: "timer_key", kind: :string, values: Enum.map(rows, & &1.timer_key)},
+        %Field{name: "action_kind", kind: :enum, values: Enum.map(rows, & &1.action_kind)},
+        %Field{
+          name: "command_release_attempt_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_release_attempt_id)
+        },
+        %Field{
+          name: "command_request_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_request_id)
+        },
+        %Field{
+          name: "command_verifier_instance_ids",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_verifier_instance_ids)
+        },
+        %Field{
+          name: "command_verification_state",
+          kind: :enum,
+          values: Enum.map(rows, & &1.command_verification_state)
+        },
+        %Field{
+          name: "command_verifier_lifecycle_states",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_verifier_lifecycle_states)
+        },
+        %Field{
+          name: "command_verifier_matched_record_ids",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_verifier_matched_record_ids)
+        },
+        %Field{
+          name: "command_verifier_failure_reasons",
+          kind: :string,
+          values: Enum.map(rows, & &1.command_verifier_failure_reasons)
+        },
+        %Field{name: "command_name", kind: :string, values: Enum.map(rows, & &1.command_name)},
+        %Field{name: "signal_phase", kind: :enum, values: Enum.map(rows, & &1.signal_phase)},
+        %Field{
+          name: "action_request_document_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.action_request_document_json)
+        },
+        %Field{
+          name: "record_event_kind",
+          kind: :enum,
+          values: Enum.map(rows, & &1.record_event_kind)
+        },
+        %Field{
+          name: "emitted_record_kinds",
+          kind: :string,
+          values: Enum.map(rows, & &1.emitted_record_kinds)
+        },
+        %Field{
+          name: "emitted_record_count",
+          kind: :number,
+          values: Enum.map(rows, & &1.emitted_record_count)
+        },
+        %Field{
+          name: "action_request_count",
+          kind: :number,
+          values: Enum.map(rows, & &1.action_request_count)
+        },
+        %Field{
+          name: "state_snapshot_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.state_snapshot_json)
+        },
+        %Field{
+          name: "record_metadata_json",
+          kind: :string,
+          values: Enum.map(rows, & &1.record_metadata_json)
+        },
+        %Field{
+          name: "runtime_fact_kind",
+          kind: :enum,
+          values: Enum.map(rows, & &1.runtime_fact_kind)
+        },
+        %Field{
+          name: "runtime_fact_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.runtime_fact_id)
+        },
+        %Field{
+          name: "source_event_id",
+          kind: :string,
+          values: Enum.map(rows, & &1.source_event_id)
+        },
+        %Field{name: "state", kind: :enum, values: Enum.map(rows, & &1.state)},
+        %Field{
+          name: "normalized_state",
+          kind: :enum,
+          values: Enum.map(rows, & &1.normalized_state)
+        }
+      ],
+      meta: %{
+        source_request_id: request.request_id,
+        logical_source: :operational_observables,
+        source_binding_id: source_binding_id(source_binding),
+        dataset: dataset(source_binding),
+        sampling: :event_history,
+        supported_capability: :transport_runtime_activity_history,
+        product_family: :runtime_transport,
+        state_color_policy: :transport_runtime_activity,
+        observable_ids: observable_ids(rows),
+        observable_id: "runtime.transport_activity",
+        realm: realm(request, source_binding),
+        data_source_id: data_source_id(request, source_binding),
+        replay_run_id: replay_run_id(request),
+        runtime_fact_ids: managed_runtime_fact_ids(rows),
+        returned_points: length(rows),
+        warning_codes: [],
+        links: operational_history_links(request, rows),
+        evidence_refs:
+          rows
+          |> DataLinks.operational_event_evidence_refs(source: :operational_observables)
+          |> Kernel.++(
+            DataLinks.command_release_attempt_evidence_refs(rows,
+              source: :operational_observables
+            )
+          )
+          |> Kernel.++(
+            rows
+            |> Enum.flat_map(& &1.command_verifier_instances)
+            |> DataLinks.command_verifier_instance_evidence_refs(source: :operational_observables)
+          )
+          |> Kernel.++(
+            rows
+            |> Enum.flat_map(& &1.command_verifier_instances)
+            |> DataLinks.command_verifier_matched_record_evidence_refs(
+              source: :operational_observables
+            )
+          )
+          |> Enum.uniq_by(&{&1.kind, &1.id})
+      }
+    }
+  end
+
+  defp managed_runtime_activity_history_rows(
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    managed_runtime_events_fun =
+      Keyword.get(opts, :managed_runtime_events_fun, &default_managed_runtime_events/3)
+
+    managed_runtime_events_fun.(
+      organization_id,
+      mission_id,
+      adapter_opts(request, source_binding)
+    )
+    |> Enum.filter(&matches_managed_runtime_activity_scope?(&1, request))
+    |> Enum.map(&managed_runtime_activity_history_row/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(&time_in_request_window?(&1.starts_at, request))
+    |> Enum.sort_by(&datetime_sort_key(&1.starts_at))
+    |> apply_request_limit(request)
+  end
+
+  defp managed_runtime_activity_history_row(event) do
+    payload = attr(event, :payload) || attr(event, :current) || %{}
+    causality = attr(event, :causality) || %{}
+    source_record_kind = attr(causality, :source_record_kind)
+    source_record_id = attr(causality, :source_record_id)
+    event_kind = attr(event, :kind)
+
+    capability_instance_id =
+      attr(payload, :capability_instance_id) || managed_event_subject_id(event)
+
+    occurred_at = attr(event, :occurred_at)
+
+    if is_nil(occurred_at) do
+      nil
+    else
+      %{
+        observable_id: "runtime.managed_activity",
+        resource_id: capability_instance_id,
+        lane_id: capability_instance_id,
+        label: managed_runtime_activity_label(capability_instance_id),
+        scope_kind: :mission,
+        capability_instance_id: capability_instance_id,
+        family_key: attr(payload, :family_key),
+        activation_id: attr(payload, :activation_id),
+        binding_set_id: attr(payload, :binding_set_id),
+        packet_id: attr(payload, :packet_id),
+        evidence_id: attr(payload, :evidence_id),
+        timer_key: attr(payload, :timer_key),
+        action_kind: attr(payload, :action_kind),
+        action_request_document_json: deterministic_json(attr(payload, :request_document)),
+        record_event_kind: attr(payload, :event_kind),
+        emitted_record_kinds: emitted_record_kinds_text(attr(payload, :emitted_record_kinds)),
+        emitted_record_count: attr(payload, :emitted_record_count),
+        action_request_count: attr(payload, :action_request_count),
+        state_snapshot_json: deterministic_json(attr(payload, :state_snapshot)),
+        record_metadata_json: deterministic_json(attr(payload, :record_metadata)),
+        runtime_fact_kind: source_record_kind,
+        runtime_fact_id: source_record_id,
+        source_event_id: attr(event, :event_id),
+        state: event_kind,
+        normalized_state: event_kind,
+        starts_at: occurred_at,
+        event: event
+      }
+    end
+  end
+
+  defp transport_runtime_activity_history_rows(
+         request,
+         source_binding,
+         organization_id,
+         mission_id,
+         opts
+       ) do
+    transport_runtime_events_fun =
+      Keyword.get(opts, :transport_runtime_events_fun, &default_transport_runtime_events/3)
+
+    adapter_opts = adapter_opts(request, source_binding)
+
+    rows =
+      transport_runtime_events_fun.(
+        organization_id,
+        mission_id,
+        adapter_opts
+      )
+      |> Enum.filter(&matches_transport_runtime_activity_scope?(&1, request))
+      |> Enum.map(&transport_runtime_activity_history_row/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(&time_in_request_window?(&1.starts_at, request))
+      |> Enum.sort_by(&datetime_sort_key(&1.starts_at))
+      |> apply_request_limit(request)
+
+    command_verifier_instances_fun =
+      Keyword.get(
+        opts,
+        :command_verifier_instances_fun,
+        &default_command_verifier_instances/3
+      )
+
+    command_verifier_instances =
+      command_verifier_instances_fun.(
+        organization_id,
+        mission_id,
+        Keyword.put(
+          adapter_opts,
+          :command_release_attempt_ids,
+          command_release_attempt_ids(rows)
+        )
+      )
+
+    attach_command_verifier_outcomes(rows, command_verifier_instances)
+  end
+
+  defp transport_runtime_activity_history_row(event) do
+    payload = attr(event, :payload) || attr(event, :current) || %{}
+    causality = attr(event, :causality) || %{}
+    source_record_kind = attr(causality, :source_record_kind)
+    source_record_id = attr(causality, :source_record_id)
+    event_kind = attr(event, :kind)
+    transport_id = attr(payload, :capability_instance_id) || managed_event_subject_id(event)
+    occurred_at = attr(event, :occurred_at)
+
+    if is_nil(occurred_at) do
+      nil
+    else
+      %{
+        observable_id: "runtime.transport_activity",
+        resource_id: transport_id,
+        lane_id: transport_id,
+        label: transport_runtime_activity_label(transport_id),
+        scope_kind: :transport,
+        transport_id: transport_id,
+        contact_id: attr(payload, :contact_id) || attr(payload, :realized_contact_id),
+        path_id: attr(payload, :path_id),
+        source_endpoint_ref: attr(payload, :source_endpoint_ref),
+        capability_instance_id: transport_id,
+        family_key: attr(payload, :family_key),
+        activation_id: attr(payload, :activation_id),
+        binding_set_id: attr(payload, :binding_set_id),
+        timer_key: attr(payload, :timer_key),
+        action_kind: attr(payload, :action_kind),
+        command_release_attempt_id: attr(payload, :command_release_attempt_id),
+        command_request_id: attr(payload, :command_request_id),
+        command_verifier_instances: [],
+        command_verifier_instance_ids: nil,
+        command_verification_state: nil,
+        command_verifier_lifecycle_states: nil,
+        command_verifier_matched_record_ids: nil,
+        command_verifier_failure_reasons: nil,
+        command_name: attr(payload, :command_name),
+        signal_phase: attr(payload, :signal_phase),
+        action_request_document_json: deterministic_json(attr(payload, :request_document)),
+        record_event_kind: attr(payload, :event_kind),
+        emitted_record_kinds: emitted_record_kinds_text(attr(payload, :emitted_record_kinds)),
+        emitted_record_count: attr(payload, :emitted_record_count),
+        action_request_count: attr(payload, :action_request_count),
+        state_snapshot_json: deterministic_json(attr(payload, :state_snapshot)),
+        record_metadata_json:
+          deterministic_json(
+            attr(payload, :record_metadata) ||
+              attr(payload, :action_metadata) ||
+              attr(payload, :timer_metadata)
+          ),
+        runtime_fact_kind: source_record_kind,
+        runtime_fact_id: source_record_id,
+        source_event_id: attr(event, :event_id),
+        state: event_kind,
+        normalized_state: event_kind,
+        starts_at: occurred_at,
+        event: event
+      }
+    end
+  end
+
+  defp managed_runtime_activity_label(capability_instance_id)
+       when is_binary(capability_instance_id) and capability_instance_id != "" do
+    "Managed runtime / #{capability_instance_id}"
+  end
+
+  defp managed_runtime_activity_label(_capability_instance_id), do: "Managed runtime"
+
+  defp transport_runtime_activity_label(transport_id)
+       when is_binary(transport_id) and transport_id != "" do
+    "Transport runtime / #{transport_id}"
+  end
+
+  defp transport_runtime_activity_label(_transport_id), do: "Transport runtime"
+
+  defp managed_event_subject_id(event) do
+    event
+    |> attr(:subject)
+    |> attr(:id)
+  end
+
+  defp emitted_record_kinds_text(values) when is_list(values) do
+    values
+    |> Enum.map(&to_string/1)
+    |> Enum.sort()
+    |> Enum.join(",")
+  end
+
+  defp emitted_record_kinds_text(_values), do: nil
+
+  defp deterministic_json(value) when is_map(value) and map_size(value) > 0 do
+    value
+    |> JsonDocument.encode()
+    |> Jason.encode!()
+  end
+
+  defp deterministic_json(_value), do: nil
+
+  defp attach_command_verifier_outcomes(rows, command_verifier_instances)
+       when is_list(rows) and is_list(command_verifier_instances) do
+    verifier_instances_by_release_attempt_id =
+      command_verifier_instances
+      |> Enum.sort_by(&command_verifier_sort_key/1)
+      |> Enum.group_by(&attr(&1, :command_release_attempt_id))
+
+    Enum.map(rows, fn row ->
+      verifier_instances =
+        Map.get(
+          verifier_instances_by_release_attempt_id,
+          row.command_release_attempt_id,
+          []
+        )
+
+      %{
+        row
+        | command_verifier_instances: verifier_instances,
+          command_verifier_instance_ids:
+            joined_attr_values(verifier_instances, :command_verifier_instance_id),
+          command_verification_state: command_verification_state(verifier_instances),
+          command_verifier_lifecycle_states:
+            joined_attr_values(verifier_instances, :lifecycle_state),
+          command_verifier_matched_record_ids:
+            joined_attr_values(verifier_instances, :matched_record_id),
+          command_verifier_failure_reasons:
+            joined_attr_values(verifier_instances, :failure_reason)
+      }
+    end)
+  end
+
+  defp command_release_attempt_ids(rows) when is_list(rows) do
+    rows
+    |> Enum.map(& &1.command_release_attempt_id)
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
+  defp command_release_attempt_ids_from_events(events) when is_list(events) do
+    events
+    |> Enum.map(fn event ->
+      event
+      |> then(&(attr(&1, :payload) || attr(&1, :current)))
+      |> attr(:command_release_attempt_id)
+    end)
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
+  defp command_verifier_sort_key(verifier_instance) do
+    {
+      datetime_sort_key(attr(verifier_instance, :matched_at)),
+      attr(verifier_instance, :command_verifier_instance_id) || ""
+    }
+  end
+
+  defp joined_attr_values(items, key) when is_list(items) do
+    items
+    |> Enum.map(&attr(&1, key))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+    |> case do
+      [] -> nil
+      values -> Enum.join(values, ",")
+    end
+  end
+
+  defp command_verification_state([]), do: nil
+
+  defp command_verification_state(verifier_instances) when is_list(verifier_instances) do
+    lifecycle_states = Enum.map(verifier_instances, &attr(&1, :lifecycle_state))
+
+    cond do
+      Enum.any?(lifecycle_states, &(&1 in [:failed, "failed"])) -> :failed
+      Enum.any?(lifecycle_states, &(&1 in [:timed_out, "timed_out"])) -> :timed_out
+      Enum.any?(lifecycle_states, &(&1 in [:pending, "pending"])) -> :pending
+      Enum.all?(lifecycle_states, &(&1 in [:satisfied, "satisfied"])) -> :satisfied
+      true -> nil
+    end
+  end
+
+  defp managed_runtime_fact_ids(rows) do
+    rows
+    |> Enum.map(& &1.runtime_fact_id)
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
   defp transport_connection_row(transport, snapshots) do
     transport_id = attr(transport, :transport_id)
 
@@ -5626,6 +6538,26 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       matches_scope?(row.ground_station_id, scope_ids(request, :ground_station)) and
       matches_scope?(row.link_id, scope_ids(request, :link)) and
       matches_scope?(row.contact_id, scope_ids(request, :contact))
+  end
+
+  defp matches_managed_runtime_activity_scope?(event, request) do
+    payload = attr(event, :payload) || attr(event, :current) || %{}
+
+    attr(event, :kind) in @managed_runtime_event_kinds and
+      matches_scope?(attr(payload, :partition_value), scope_ids(request, :spacecraft))
+  end
+
+  defp matches_transport_runtime_activity_scope?(event, request) do
+    payload = attr(event, :payload) || attr(event, :current) || %{}
+
+    attr(event, :kind) in @transport_runtime_event_kinds and
+      matches_scope?(attr(payload, :capability_instance_id), scope_ids(request, :transport)) and
+      matches_scope?(
+        attr(payload, :contact_id) || attr(payload, :realized_contact_id),
+        scope_ids(request, :contact)
+      ) and
+      matches_scope?(attr(payload, :source_endpoint_ref), scope_ids(request, :source_endpoint)) and
+      matches_scope?(attr(payload, :path_id), scope_ids(request, :link))
   end
 
   defp interval_overlaps_request?(row, request) do
@@ -6190,6 +7122,65 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
 
+  defp default_managed_runtime_events(organization_id, mission_id, opts) do
+    OperationalEvents.list_events(
+      organization_id,
+      mission_id,
+      managed_runtime_event_opts(opts)
+    )
+  end
+
+  defp managed_runtime_event_opts(opts) do
+    [
+      category: :runtime,
+      kind: @managed_runtime_event_kinds,
+      source_record_kind: @managed_runtime_source_record_kinds,
+      from_occurred_at: Keyword.get(opts, :from),
+      to_occurred_at: Keyword.get(opts, :to),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      order: :asc,
+      limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp default_transport_runtime_events(organization_id, mission_id, opts) do
+    OperationalEvents.list_events(
+      organization_id,
+      mission_id,
+      transport_runtime_event_opts(opts)
+    )
+  end
+
+  defp default_command_verifier_instances(organization_id, mission_id, opts) do
+    case Keyword.get(opts, :command_release_attempt_ids, []) do
+      [] ->
+        []
+
+      command_release_attempt_ids when is_list(command_release_attempt_ids) ->
+        command_release_attempt_ids
+        |> Enum.flat_map(fn command_release_attempt_id ->
+          Cadence.list_command_verifier_instances(organization_id, mission_id,
+            command_release_attempt_id: command_release_attempt_id
+          )
+        end)
+    end
+  end
+
+  defp transport_runtime_event_opts(opts) do
+    [
+      category: :comms,
+      kind: @transport_runtime_event_kinds,
+      source_record_kind: @transport_runtime_source_record_kinds,
+      from_occurred_at: Keyword.get(opts, :from),
+      to_occurred_at: Keyword.get(opts, :to),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      order: :asc,
+      limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
+
   defp default_contact_phase_revision(organization_id, mission_id, opts) do
     "contacts_phase:" <>
       RuntimeCacheKey.fingerprint(%{
@@ -6267,6 +7258,41 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> default_transport_execution_intervals(mission_id, opts)
           |> Enum.map(&transport_execution_interval_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || "", &1.starts_at || ""})
+      })
+  end
+
+  defp default_managed_runtime_activity_revision(organization_id, mission_id, opts) do
+    "managed_runtime_activity:" <>
+      RuntimeCacheKey.fingerprint(%{
+        events:
+          organization_id
+          |> default_managed_runtime_events(mission_id, opts)
+          |> Enum.map(&managed_runtime_event_revision_entry/1)
+          |> Enum.sort_by(&{&1.source_event_id || "", &1.occurred_at || ""})
+      })
+  end
+
+  defp default_transport_runtime_activity_revision(organization_id, mission_id, opts) do
+    events = default_transport_runtime_events(organization_id, mission_id, opts)
+
+    "transport_runtime_activity:" <>
+      RuntimeCacheKey.fingerprint(%{
+        events:
+          events
+          |> Enum.map(&managed_runtime_event_revision_entry/1)
+          |> Enum.sort_by(&{&1.source_event_id || "", &1.occurred_at || ""}),
+        command_verifier_instances:
+          organization_id
+          |> default_command_verifier_instances(
+            mission_id,
+            Keyword.put(
+              opts,
+              :command_release_attempt_ids,
+              command_release_attempt_ids_from_events(events)
+            )
+          )
+          |> Enum.map(&command_verifier_instance_revision_entry/1)
+          |> Enum.sort_by(&(&1.command_verifier_instance_id || ""))
       })
   end
 
@@ -6474,6 +7500,34 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       not_before: attr(entry, :not_before),
       expires_at: attr(entry, :expires_at),
       metadata: attr(entry, :metadata)
+    }
+  end
+
+  defp managed_runtime_event_revision_entry(event) do
+    causality = attr(event, :causality) || %{}
+
+    %{
+      source_event_id: attr(event, :event_id),
+      source_record_kind: attr(causality, :source_record_kind),
+      source_record_id: attr(causality, :source_record_id),
+      kind: attr(event, :kind),
+      occurred_at: attr(event, :occurred_at),
+      replay_run_id: attr(event, :replay_run_id)
+    }
+  end
+
+  defp command_verifier_instance_revision_entry(verifier_instance) do
+    %{
+      command_verifier_instance_id: attr(verifier_instance, :command_verifier_instance_id),
+      command_release_attempt_id: attr(verifier_instance, :command_release_attempt_id),
+      command_request_id: attr(verifier_instance, :command_request_id),
+      phase: attr(verifier_instance, :phase),
+      severity: attr(verifier_instance, :severity),
+      lifecycle_state: attr(verifier_instance, :lifecycle_state),
+      matched_record_kind: attr(verifier_instance, :matched_record_kind),
+      matched_record_id: attr(verifier_instance, :matched_record_id),
+      matched_at: attr(verifier_instance, :matched_at),
+      failure_reason: attr(verifier_instance, :failure_reason)
     }
   end
 

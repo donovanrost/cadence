@@ -30,15 +30,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewFocusTest do
       )
     ]
 
-    assert ComparisonReviewFocus.open_summary(events) == %{
-             count: 1,
-             count_text: "1",
-             requests: [Enum.at(events, 0)],
-             request_ids: ["request-1"],
-             request_ids_attr: "request-1",
-             placement_ids: ["placement-1", "placement-2"],
-             placements_attr: "placement-1,placement-2"
-           }
+    summary = ComparisonReviewFocus.open_summary(events)
+
+    assert summary.count == 1
+    assert summary.count_text == "1"
+    assert summary.requests == [Enum.at(events, 0)]
+    assert summary.request_ids == ["request-1"]
+    assert summary.request_ids_attr == "request-1"
+    assert summary.placement_ids == ["placement-1", "placement-2"]
+    assert summary.placements_attr == "placement-1,placement-2"
+    assert summary.scope_kind == nil
+    assert summary.scope_kinds == []
+    assert summary.scope_kinds_attr == ""
+    assert summary.scope_ids == []
+    assert summary.scope_ids_attr == ""
+    assert summary.contact_ids == []
+    assert summary.contact_ids_attr == ""
+    assert summary.resource_ids == []
+    assert summary.resource_ids_attr == ""
+    assert summary.transport_ids == []
+    assert summary.transport_ids_attr == ""
+    assert summary.source_endpoint_ids == []
+    assert summary.source_endpoint_ids_attr == ""
+    assert summary.ground_station_ids == []
+    assert summary.ground_station_ids_attr == ""
+    assert summary.scope_link_ids == []
+    assert summary.scope_link_ids_attr == ""
   end
 
   test "request_summary normalizes request payload details" do

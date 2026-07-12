@@ -1188,6 +1188,12 @@ defmodule Cadence.CommandingTest do
 
   defp cleanup_static_command_queue_scope do
     Repo.delete_all(
+      from(row in TransportActionRequestRow,
+        where: row.mission_id == ^@mission_id
+      )
+    )
+
+    Repo.delete_all(
       from(row in CommandQueueEntryRow,
         where: row.organization_id == ^@organization_id and row.mission_id == ^@mission_id
       )

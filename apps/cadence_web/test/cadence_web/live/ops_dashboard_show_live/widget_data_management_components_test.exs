@@ -184,6 +184,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              |> LazyHTML.attribute("phx-click")
   end
 
+  test "data_management_badge renders late-data execution summaries" do
+    html =
+      render_component(&WidgetDataManagementComponents.data_management_badge/1,
+        badge: late_data_accepted_badge()
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert "Late data accepted" ==
+             document
+             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
+             |> LazyHTML.text()
+             |> String.trim()
+
+    assert [
+             "2 selected samples; writes canonical history; refreshes current/latest; effect canonical_history_and_current_projection"
+           ] =
+             document
+             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
+             |> LazyHTML.attribute("data-data-management-summary")
+
+    assert [
+             "Late data accepted - 2 selected samples; writes canonical history; refreshes current/latest; effect canonical_history_and_current_projection"
+           ] =
+             document
+             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
+             |> LazyHTML.attribute("title")
+  end
+
   test "chart_data_management_strip combines primary and compare badges with view labels" do
     html =
       render_component(&WidgetDataManagementComponents.chart_data_management_strip/1,
@@ -253,6 +282,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
       time_mode: "replay_run",
       time_axis: "generation_time",
       replay_run_id: "replay-run-1"
+    }
+  end
+
+  defp late_data_accepted_badge do
+    %{
+      kind: :historical_workflow,
+      value: "late_data_accepted",
+      label: "Late data accepted",
+      status: :info,
+      code: "late_data_accepted",
+      data_link_target: :telemetry_backfill_lifecycle_event,
+      data_link_id: "late-data-event-1",
+      summary:
+        "2 selected samples; writes canonical history; refreshes current/latest; effect canonical_history_and_current_projection"
     }
   end
 

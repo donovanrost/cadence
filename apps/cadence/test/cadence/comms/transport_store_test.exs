@@ -49,11 +49,15 @@ defmodule Cadence.Comms.TransportStoreTest do
 
   describe "persist_transport/2 and queries" do
     test "persists, fetches, lists, versions, and materializes provider compatibility" do
-      persist_mission_scope("org-transport", "mission-transport")
+      suffix = Integer.to_string(System.unique_integer([:positive]))
+      organization_id = "org-transport-" <> suffix
+      mission_id = "mission-transport-" <> suffix
+
+      persist_mission_scope(organization_id, mission_id)
 
       transport =
         Transport.new(%{
-          mission_id: "mission-transport",
+          mission_id: mission_id,
           display_name: "Lab TCP",
           transport_kind: :tcp_socket,
           direction_capability: :inbound,
@@ -68,16 +72,16 @@ defmodule Cadence.Comms.TransportStoreTest do
           }
         })
 
-      assert {:ok, persisted_v1} = Cadence.persist_transport("org-transport", transport)
-      assert persisted_v1.organization_id == "org-transport"
+      assert {:ok, persisted_v1} = Cadence.persist_transport(organization_id, transport)
+      assert persisted_v1.organization_id == organization_id
       assert persisted_v1.version == 1
       assert persisted_v1.direction_capability == :inbound
       assert is_binary(persisted_v1.materialized_provider_profile_id)
 
       assert {:ok, provider} =
                Cadence.fetch_provider_profile(
-                 "org-transport",
-                 "mission-transport",
+                 organization_id,
+                 mission_id,
                  persisted_v1.materialized_provider_profile_id
                )
 
@@ -86,8 +90,8 @@ defmodule Cadence.Comms.TransportStoreTest do
 
       assert {:ok, latest} =
                Cadence.fetch_transport(
-                 "org-transport",
-                 "mission-transport",
+                 organization_id,
+                 mission_id,
                  persisted_v1.transport_id
                )
 
@@ -95,8 +99,8 @@ defmodule Cadence.Comms.TransportStoreTest do
 
       assert {:ok, persisted_v2} =
                Cadence.version_transport(
-                 "org-transport",
-                 "mission-transport",
+                 organization_id,
+                 mission_id,
                  persisted_v1.transport_id,
                  %{
                    display_name: "Lab TCP",
@@ -119,13 +123,13 @@ defmodule Cadence.Comms.TransportStoreTest do
       refute persisted_v2.materialized_provider_profile_id ==
                persisted_v1.materialized_provider_profile_id
 
-      assert [listed] = Cadence.list_transports("org-transport", "mission-transport")
+      assert [listed] = Cadence.list_transports(organization_id, mission_id)
       assert listed.version == 2
 
       assert [v2, v1] =
                Cadence.list_transport_versions(
-                 "org-transport",
-                 "mission-transport",
+                 organization_id,
+                 mission_id,
                  persisted_v1.transport_id
                )
 

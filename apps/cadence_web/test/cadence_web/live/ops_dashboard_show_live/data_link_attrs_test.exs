@@ -83,6 +83,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrsTest do
         target_id: "transport-beta",
         context: %{
           scope: %{
+            contact_ids: ["contact-alpha", "contact-beta"],
             primary: %{
               kind: "transport",
               mode: "many",
@@ -95,6 +96,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkAttrsTest do
     assert attrs["phx-value-scope-kind"] == "transport"
     assert attrs["phx-value-scope-id"] == "transport-alpha"
     assert attrs["phx-value-scope-ids"] == "transport-alpha,transport-beta"
+    assert attrs["phx-value-contact-ids"] == "contact-alpha,contact-beta"
+  end
+
+  test "open derives contact ids from primary contact scope context" do
+    attrs =
+      DataLinkAttrs.open(%{
+        link_id: "contact:contact-beta",
+        target: :contact,
+        target_id: "contact-beta",
+        context: %{
+          scope: %{
+            primary: %{
+              kind: "contact",
+              mode: "many",
+              ids: ["contact-alpha", "contact-beta"]
+            }
+          }
+        }
+      })
+
+    assert attrs["phx-value-scope-kind"] == "contact"
+    assert attrs["phx-value-scope-id"] == "contact-alpha"
+    assert attrs["phx-value-scope-ids"] == "contact-alpha,contact-beta"
+    assert attrs["phx-value-contact-ids"] == "contact-alpha,contact-beta"
   end
 
   test "open carries navigation breadcrumb attrs" do

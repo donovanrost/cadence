@@ -18,6 +18,7 @@ defmodule Cadence.Jobs.Job do
           | :catalog_import_run
           | :telemetry_historical_data_workflow
           | :managed_questdb_provisioning
+          | :dashboard_tsdb_backend_lifecycle
 
   @type t :: %__MODULE__{
           job_id: binary(),

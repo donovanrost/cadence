@@ -9,6 +9,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceCapabilities,
     SourceCredentials,
     SourceHealth,
+    SourceProbePolicy,
     SourceReadiness,
     SourceWatermarks,
     TSDBDeploymentStatus
@@ -93,6 +94,98 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     end
   end
 
+  def handle_event(
+        "rotate_source_credential",
+        %{"credentials-ref" => credentials_ref, "data-source-id" => data_source_id},
+        socket
+      ) do
+    %{current_scope: scope} = socket.assigns
+
+    attrs = %{
+      data_source_id: data_source_id,
+      payload: source_action_payload(socket, %{data_source_id: data_source_id})
+    }
+
+    case SourceCredentials.rotate_reference(credentials_ref, attrs,
+           actor_id: current_user_id(scope)
+         ) do
+      {:ok, _reference, _event} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "Credential reference rotated.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Failed to rotate credential: #{error_text(reason)}")}
+    end
+  end
+
+  def handle_event("reconcile_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
+    %{current_scope: scope} = socket.assigns
+
+    case DataSources.reconcile_tsdb_backend(data_source_id, %{},
+           actor_id: current_user_id(scope),
+           payload: source_action_payload(socket, %{data_source_id: data_source_id})
+         ) do
+      {:ok, _source} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "TSDB backend reconciled.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Failed to reconcile backend: #{error_text(reason)}")}
+    end
+  end
+
+  def handle_event("deprovision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
+    %{current_scope: scope} = socket.assigns
+
+    case Cadence.Dashboards.request_tsdb_backend_deprovisioning(data_source_id, %{},
+           actor_id: current_user_id(scope),
+           payload: source_action_payload(socket, %{data_source_id: data_source_id})
+         ) do
+      {:ok, _source, _job} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "TSDB backend deprovisioning requested.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Failed to request backend deprovisioning: #{error_text(reason)}"
+         )}
+    end
+  end
+
+  def handle_event("provision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
+    %{current_scope: scope} = socket.assigns
+
+    case Cadence.Dashboards.request_tsdb_backend_provisioning(data_source_id, %{},
+           actor_id: current_user_id(scope),
+           payload: source_action_payload(socket, %{data_source_id: data_source_id})
+         ) do
+      {:ok, _source, _job} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "TSDB backend provisioning requested.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Failed to request backend provisioning: #{error_text(reason)}"
+         )}
+    end
+  end
+
   def handle_event("probe_source", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     source = find_data_source(socket.assigns.data_sources, data_source_id)
@@ -118,7 +211,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   def handle_event("retry_deployment_run", %{"job-id" => job_id}, socket) do
-    case Cadence.Dashboards.retry_managed_questdb_provisioning_run(job_id) do
+    case retry_deployment_run(job_id) do
       {:ok, run} ->
         {:noreply,
          socket
@@ -132,7 +225,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   def handle_event("requeue_deployment_run", %{"job-id" => job_id}, socket) do
-    case Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job_id) do
+    case requeue_deployment_run(job_id) do
       {:ok, run} ->
         {:noreply,
          socket
@@ -671,6 +764,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                   data-source-readiness-reasons={source.source_readiness_reason_text}
                   data-source-readiness-policy={source.source_readiness_policy_id}
                   data-source-probe-kind={source.probe_kind_text}
+                  data-source-probe-policy={source.probe_policy_text}
+                  data-source-probe-stale-after-ms={source.probe_stale_after_ms_text}
                   data-source-probe-message={source.probe_message_text}
                   data-source-probe-metadata={source.probe_metadata_text}
                   data-source-probe-diagnostic-kind={source.probe_diagnostic_kind_text}
@@ -692,6 +787,13 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                   data-source-deployment-job-id={source.deployment_job_id_text}
                   data-source-deployment-run-id={source.deployment_run_id_text}
                   data-source-deployment-remediation={source.deployment_remediation_text}
+                  data-source-deployment-lifecycle-operation={
+                    source.deployment_lifecycle_operation_text
+                  }
+                  data-source-deployment-lifecycle-status={source.deployment_lifecycle_status_text}
+                  data-source-deployment-lifecycle-observed-at={
+                    source.deployment_lifecycle_observed_at_text
+                  }
                   data-source-supported-sampling={source.supported_sampling_text}
                   data-source-supported-products={source.supported_products_text}
                   data-source-supported-metric-history-products={
@@ -714,6 +816,49 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                         <.status_pill status={source.health_status} />
                       </div>
                       <.button
+                        :if={source.credential_action?}
+                        id={"rotate-credential-#{source.data_source_id}"}
+                        variant={:ghost}
+                        size={:xs}
+                        phx-click="rotate_source_credential"
+                        phx-value-data-source-id={source.data_source_id}
+                        phx-value-credentials-ref={source.credentials_ref}
+                        data-confirm="Rotate this credential reference?"
+                      >
+                        <.icon name="hero-key" class="h-3.5 w-3.5" /> Rotate Credential
+                      </.button>
+                      <.button
+                        :if={source.backend_reconcile_action?}
+                        id={"reconcile-backend-#{source.data_source_id}"}
+                        variant={:ghost}
+                        size={:xs}
+                        phx-click="reconcile_tsdb_backend"
+                        phx-value-data-source-id={source.data_source_id}
+                      >
+                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Reconcile Backend
+                      </.button>
+                      <.button
+                        :if={source.backend_provision_action?}
+                        id={"provision-backend-#{source.data_source_id}"}
+                        variant={:secondary}
+                        size={:xs}
+                        phx-click="provision_tsdb_backend"
+                        phx-value-data-source-id={source.data_source_id}
+                      >
+                        <.icon name="hero-server-stack" class="h-3.5 w-3.5" /> Provision Backend
+                      </.button>
+                      <.button
+                        :if={source.backend_deprovision_action?}
+                        id={"deprovision-backend-#{source.data_source_id}"}
+                        variant={:danger}
+                        size={:xs}
+                        phx-click="deprovision_tsdb_backend"
+                        phx-value-data-source-id={source.data_source_id}
+                        data-confirm="Request deprovisioning for this dedicated TSDB backend?"
+                      >
+                        <.icon name="hero-trash" class="h-3.5 w-3.5" /> Deprovision Backend
+                      </.button>
+                      <.button
                         :if={source.status_text == "active"}
                         id={"probe-source-#{source.data_source_id}"}
                         variant={:ghost}
@@ -735,7 +880,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                         <.icon name="hero-pause" class="h-3.5 w-3.5" /> Disable
                       </.button>
                       <.button
-                        :if={source.status_text == "disabled"}
+                        :if={source.enable_action?}
                         id={"enable-source-#{source.data_source_id}"}
                         variant={:secondary}
                         size={:xs}
@@ -753,6 +898,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                     <.kv label="ready reason" value={source.source_readiness_reason_text} />
                     <.kv label="health reason" value={source.health_reason_text} />
                     <.kv label="probe kind" value={source.probe_kind_text} />
+                    <.kv label="probe policy" value={source.probe_policy_text} />
+                    <.kv label="probe stale" value={source.probe_stale_after_ms_text} />
                     <.kv label="probe message" value={source.probe_message_text} />
                     <.kv label="probe metadata" value={source.probe_metadata_text} />
                     <.kv label="diagnostic" value={source.probe_diagnostic_kind_text} />
@@ -777,6 +924,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                     <.kv label="deploy job" value={source.deployment_job_id_text} />
                     <.kv label="deploy run" value={source.deployment_run_id_text} />
                     <.kv label="deploy fix" value={source.deployment_remediation_text} />
+                    <.kv label="backend op" value={source.deployment_lifecycle_operation_text} />
+                    <.kv label="backend state" value={source.deployment_lifecycle_status_text} />
+                    <.kv label="backend seen" value={source.deployment_lifecycle_observed_at_text} />
                     <.kv label="capability" value={source.capability_text} />
                     <.kv label="sampling" value={source.supported_sampling_text} />
                     <.kv label="products" value={source.supported_products_text} />
@@ -787,7 +937,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
               </div>
             </.card>
 
-            <.card heading="Deployment Runs" subtitle="Managed TSDB provisioning jobs" padding={:none}>
+            <.card heading="Deployment Runs" subtitle="TSDB backend lifecycle jobs" padding={:none}>
               <div
                 :if={@deployment_run_rows == []}
                 class="px-4 py-5 text-sm text-base-content/70"
@@ -972,7 +1122,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       DataSources.list_data_source_events(scope.organization_id, mission.mission_id, limit: 12)
 
     deployment_runs =
-      Cadence.Dashboards.list_managed_questdb_provisioning_runs(mission.mission_id)
+      mission.mission_id
+      |> tsdb_deployment_runs()
+      |> Enum.sort_by(&deployment_run_sort_key/1, {:desc, DateTime})
 
     binding_events =
       data_bindings
@@ -1927,6 +2079,44 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp source_focus_return_activity_event(_focus), do: nil
 
+  defp retry_deployment_run(job_id) do
+    case Cadence.Dashboards.retry_managed_questdb_provisioning_run(job_id) do
+      {:ok, run} ->
+        {:ok, run}
+
+      {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
+        Cadence.Dashboards.retry_tsdb_backend_lifecycle_run(job_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp requeue_deployment_run(job_id) do
+    case Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job_id) do
+      {:ok, run} ->
+        {:ok, run}
+
+      {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
+        Cadence.Dashboards.requeue_tsdb_backend_lifecycle_run(job_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp tsdb_deployment_runs(mission_id) do
+    Cadence.Dashboards.list_managed_questdb_provisioning_runs(mission_id) ++
+      Cadence.Dashboards.list_tsdb_backend_lifecycle_runs(mission_id)
+  end
+
+  defp deployment_run_sort_key(run) do
+    run.started_at ||
+      run.completed_at ||
+      (Map.get(run, :job) && Map.get(run.job, :started_at)) ||
+      DateTime.from_unix!(0)
+  end
+
   defp source_focus_return_refresh_readiness(%{
          source_return_activity_filter: "publish_readiness"
        }),
@@ -2451,6 +2641,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       credential_status = source_credential_rollup(source, credential, health.connection_profile)
       capabilities = effective_source_capabilities(source)
       deployment_status = TSDBDeploymentStatus.from_data_source(source)
+      probe_policy = SourceProbePolicy.from_data_source(source)
 
       %{
         data_source_id: source.data_source_id,
@@ -2459,6 +2650,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         owner_text: text(source.owner),
         isolation_text: text(source.isolation_level),
         adapter_text: module_text(source.adapter),
+        credentials_ref: source.credentials_ref,
+        credential_action?: credential_action?(source, credential),
+        backend_reconcile_action?: backend_reconcile_action?(source),
+        backend_provision_action?: backend_provision_action?(source, deployment_status),
+        backend_deprovision_action?: backend_deprovision_action?(source),
+        enable_action?: enable_action?(source, deployment_status),
         credential_ref_text: credential_text(source, credential),
         credential_state_text: credential_status.state,
         credential_provider_text: credential_status.provider,
@@ -2473,6 +2670,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         deployment_job_id_text: text(deployment_status.job_id),
         deployment_run_id_text: text(deployment_status.run_id),
         deployment_remediation_text: deployment_status.remediation,
+        deployment_lifecycle_operation_text: deployment_status.lifecycle_operation_text,
+        deployment_lifecycle_status_text: deployment_status.lifecycle_status_text,
+        deployment_lifecycle_observed_at_text: deployment_status.lifecycle_observed_at_text,
         capability_text: capability_text(source.capabilities),
         supported_sampling_text: source_supported_sampling_text(capabilities),
         supported_products_text: source_supported_products_text(capabilities),
@@ -2481,6 +2681,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         supported_product_families_text: source_supported_product_families_text(capabilities),
         health_status: health.status,
         health_reason_text: health.reason,
+        probe_policy_text: probe_policy.policy_id,
+        probe_stale_after_ms_text: SourceProbePolicy.stale_after_ms_text(probe_policy),
         source_readiness_status: health.readiness_status,
         source_readiness_policy_id: health.readiness_policy_id,
         source_readiness_reason_text: health.readiness_reason,
@@ -2499,6 +2701,50 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     end)
     |> Enum.sort_by(& &1.data_source_id)
   end
+
+  defp credential_action?(%DataSource{credentials_ref: nil}, _credential), do: false
+  defp credential_action?(%DataSource{}, nil), do: false
+  defp credential_action?(%DataSource{}, _credential), do: true
+
+  defp backend_reconcile_action?(%DataSource{
+         status: :active,
+         kind: :byo_tsdb,
+         isolation_level: isolation_level
+       })
+       when isolation_level in [:org_isolated, :mission_isolated],
+       do: true
+
+  defp backend_reconcile_action?(%DataSource{}), do: false
+
+  defp backend_provision_action?(
+         %DataSource{
+           status: :active,
+           kind: :byo_tsdb,
+           isolation_level: isolation_level
+         },
+         deployment_status
+       )
+       when isolation_level in [:org_isolated, :mission_isolated] do
+    deployment_status.lifecycle_status_text not in ["provision_requested", "provisioned"]
+  end
+
+  defp backend_provision_action?(%DataSource{}, _deployment_status), do: false
+
+  defp backend_deprovision_action?(%DataSource{
+         status: :active,
+         kind: :byo_tsdb,
+         isolation_level: isolation_level
+       })
+       when isolation_level in [:org_isolated, :mission_isolated],
+       do: true
+
+  defp backend_deprovision_action?(%DataSource{}), do: false
+
+  defp enable_action?(%DataSource{status: :disabled}, %{lifecycle_status_text: lifecycle_status}) do
+    lifecycle_status != "deprovision_requested"
+  end
+
+  defp enable_action?(%DataSource{}, _deployment_status), do: false
 
   defp register_source_defaults do
     %{
@@ -2652,10 +2898,14 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp parse_isolation_level("customer_owned"), do: {:ok, :customer_owned}
   defp parse_isolation_level(_value), do: {:error, "Choose an isolation model."}
 
-  defp validate_kind_isolation(:byo_tsdb, :customer_owned), do: :ok
+  defp validate_kind_isolation(:byo_tsdb, isolation_level)
+       when isolation_level in [:customer_owned, :org_isolated, :mission_isolated],
+       do: :ok
 
   defp validate_kind_isolation(:byo_tsdb, _isolation_level),
-    do: {:error, "BYO TSDB sources must use customer_owned isolation."}
+    do:
+      {:error,
+       "BYO TSDB sources must use customer_owned, org_isolated, or mission_isolated isolation."}
 
   defp validate_kind_isolation(:managed_tsdb, :customer_owned),
     do: {:error, "Managed TSDB sources cannot use customer_owned isolation."}

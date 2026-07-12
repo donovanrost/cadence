@@ -55,7 +55,11 @@ defmodule Cadence.Runtime.PathCoordinator do
           {:ok, [term()]} | {:error, term()}
   def handle_transport_event(path_runtime, transport_binding_id, event, opts \\ [])
       when is_binary(transport_binding_id) and is_list(opts) do
-    GenServer.call(path_runtime, {:handle_transport_event, transport_binding_id, event, opts})
+    GenServer.call(
+      path_runtime,
+      {:handle_transport_event, transport_binding_id, event, opts},
+      Keyword.get(opts, :call_timeout, 5_000)
+    )
   end
 
   @spec handle_control_input(pid(), binary(), term(), keyword()) ::

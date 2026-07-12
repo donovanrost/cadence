@@ -125,6 +125,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlsPresentation
       {"dashboard_replay_run_id", :dashboard_replay_run_id},
       {"dashboard_data_view", :dashboard_data_view},
       {"dashboard_limit_mode", :dashboard_limit_mode},
+      {"comparison_review_request_event_id", :comparison_review_request_event_id},
+      {"comparison_review_request_kind", :comparison_review_request_kind},
+      {"comparison_review_open_count", :comparison_review_open_count},
+      {"comparison_review_open_placement_ids", :comparison_review_open_placement_ids},
+      {"comparison_review_workflow_kind", :comparison_review_workflow_kind},
+      {"comparison_review_workflow_action", :comparison_review_workflow_action},
+      {"comparison_review_workflow_selection_kind", :comparison_review_workflow_selection_kind},
+      {"comparison_review_workflow_selection_count", :comparison_review_workflow_selection_count},
+      {"comparison_review_primary_data_view", :comparison_review_primary_data_view},
+      {"comparison_review_compare_data_view", :comparison_review_compare_data_view},
+      {"comparison_review_scope_kind", :comparison_review_scope_kind},
+      {"comparison_review_scope_ids", :comparison_review_scope_ids},
+      {"comparison_review_contact_ids", :comparison_review_contact_ids},
+      {"comparison_review_resource_ids", :comparison_review_resource_ids},
+      {"comparison_review_transport_ids", :comparison_review_transport_ids},
+      {"comparison_review_source_endpoint_ids", :comparison_review_source_endpoint_ids},
+      {"comparison_review_ground_station_ids", :comparison_review_ground_station_ids},
+      {"comparison_review_scope_link_ids", :comparison_review_scope_link_ids},
       {"request_group_id", :request_group_id},
       {"request_mode", :request_mode},
       {"source_from", :source_from},
@@ -153,6 +171,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlsPresentation
       "dashboard_replay_run_id" => context_value(context, [:dashboard_replay_run_id]),
       "dashboard_data_view" => context_value(context, [:dashboard_data_view]),
       "dashboard_limit_mode" => context_value(context, [:dashboard_limit_mode]),
+      "comparison_review_request_event_id" =>
+        context_value(context, [:comparison_review_request_event_id]),
+      "comparison_review_request_kind" =>
+        context_value(context, [:comparison_review_request_kind]),
+      "comparison_review_open_count" => context_value(context, [:comparison_review_open_count]),
+      "comparison_review_open_placement_ids" =>
+        context_value(context, [:comparison_review_open_placement_ids]),
+      "comparison_review_workflow_kind" =>
+        context_value(context, [:comparison_review_workflow_kind]),
+      "comparison_review_workflow_action" =>
+        context_value(context, [:comparison_review_workflow_action]),
+      "comparison_review_workflow_selection_kind" =>
+        context_value(context, [:comparison_review_workflow_selection_kind]),
+      "comparison_review_workflow_selection_count" =>
+        context_value(context, [:comparison_review_workflow_selection_count]),
+      "comparison_review_primary_data_view" =>
+        context_value(context, [:comparison_review_primary_data_view]),
+      "comparison_review_compare_data_view" =>
+        context_value(context, [:comparison_review_compare_data_view]),
+      "comparison_review_scope_kind" => context_value(context, [:comparison_review_scope_kind]),
+      "comparison_review_scope_ids" => context_value(context, [:comparison_review_scope_ids]),
+      "comparison_review_contact_ids" => context_value(context, [:comparison_review_contact_ids]),
+      "comparison_review_resource_ids" =>
+        context_value(context, [:comparison_review_resource_ids]),
+      "comparison_review_transport_ids" =>
+        context_value(context, [:comparison_review_transport_ids]),
+      "comparison_review_source_endpoint_ids" =>
+        context_value(context, [:comparison_review_source_endpoint_ids]),
+      "comparison_review_ground_station_ids" =>
+        context_value(context, [:comparison_review_ground_station_ids]),
+      "comparison_review_scope_link_ids" =>
+        context_value(context, [:comparison_review_scope_link_ids]),
       "request_mode" => context_value(context, [:request_mode]),
       "request_group_id" => context_value(context, [:request_group_id]),
       "request_item_index" => request_item_index(context),

@@ -19,6 +19,7 @@ defmodule Cadence.Dashboards.EvidenceRef do
     :application_binding_interval,
     :catalog_revision_interval,
     :source_binding_interval,
+    :source_health_interval,
     :transport_execution_interval,
     :transport_connection_state_interval,
     :ground_station_connection_state_interval,
@@ -28,6 +29,11 @@ defmodule Cadence.Dashboards.EvidenceRef do
     :source_health_event,
     :source_watermark_event,
     :source_binding_event,
+    :command_queue_entry,
+    :command_release_attempt,
+    :command_verifier_instance,
+    :transport_action_request,
+    :transport_capability_record,
     :telemetry_revision_decision_event,
     :telemetry_backfill_lifecycle_event,
     :contact,
@@ -55,6 +61,7 @@ defmodule Cadence.Dashboards.EvidenceRef do
           | :application_binding_interval
           | :catalog_revision_interval
           | :source_binding_interval
+          | :source_health_interval
           | :transport_execution_interval
           | :transport_connection_state_interval
           | :ground_station_connection_state_interval
@@ -64,6 +71,11 @@ defmodule Cadence.Dashboards.EvidenceRef do
           | :source_health_event
           | :source_watermark_event
           | :source_binding_event
+          | :command_queue_entry
+          | :command_release_attempt
+          | :command_verifier_instance
+          | :transport_action_request
+          | :transport_capability_record
           | :telemetry_revision_decision_event
           | :telemetry_backfill_lifecycle_event
           | :contact

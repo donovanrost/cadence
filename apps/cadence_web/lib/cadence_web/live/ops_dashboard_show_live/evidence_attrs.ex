@@ -41,6 +41,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceAttrs do
       "scope-id" => first_event_value(source_status, :scope_ids),
       "scope-ids" => event_values(source_status, :scope_ids),
       "contact-id" => first_event_value(source_status, :contact_ids),
+      "contact-ids" => event_values(source_status, :contact_ids),
       "source-endpoint-id" => first_event_value(source_status, :source_endpoint_ids),
       "source-health-state" => first_event_value(source_status, :source_health_states),
       "source-health-event-id" => first_event_value(source_status, :source_health_event_ids),

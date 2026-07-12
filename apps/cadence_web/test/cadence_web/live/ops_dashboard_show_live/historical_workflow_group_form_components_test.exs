@@ -139,6 +139,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponentsT
              |> LazyHTML.query("#dashboard-historical-workflow-group-start-orchestration")
              |> LazyHTML.attribute("data-historical-workflow-group-start-review-placements")
 
+    assert ["transport-alpha,transport-beta"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-comparison-review-scope-ids")
+             |> LazyHTML.attribute("value")
+
+    assert ["contact-alpha,contact-beta"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-group-comparison-review-contact-ids"
+             )
+             |> LazyHTML.attribute("value")
+
+    assert ["transport-alpha,transport-beta"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-start-orchestration")
+             |> LazyHTML.attribute("data-historical-workflow-group-start-review-scope-ids")
+
+    assert ["contact-alpha,contact-beta"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-start-orchestration")
+             |> LazyHTML.attribute("data-historical-workflow-group-start-review-contact-ids")
+
     assert ["eligible_group_items"] =
              document
              |> LazyHTML.query("#dashboard-historical-workflow-group-start-orchestration")
@@ -238,6 +260,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponentsT
       comparison_review_request_kind: "comparison_open_findings_review",
       comparison_review_open_count: "3",
       comparison_review_open_placement_ids: "placement-1,placement-2,placement-3",
+      comparison_review_scope_kind: "transport",
+      comparison_review_scope_ids: "transport-alpha,transport-beta",
+      comparison_review_contact_ids: "contact-alpha,contact-beta",
+      comparison_review_resource_ids: "transport-alpha",
+      comparison_review_transport_ids: "transport-alpha",
+      comparison_review_source_endpoint_ids: "endpoint-alpha",
+      comparison_review_ground_station_ids: "dss-14",
+      comparison_review_scope_link_ids: "link-alpha",
       reason: "operator group transition"
     }
   end

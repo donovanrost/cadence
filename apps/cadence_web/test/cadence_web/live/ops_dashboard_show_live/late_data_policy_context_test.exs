@@ -12,6 +12,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyContextTest do
           %{label: "Backfill run", value: "run-1"},
           %{label: "Dashboard context time mode", value: "replay_run"},
           %{label: "Dashboard context replay run", value: "replay-1"},
+          %{label: "Dashboard context data view", value: "all_revisions"},
           %{label: "Dashboard context limit mode", value: "compare"},
           %{label: "Realm", value: "flight"},
           %{label: "Data source", value: "questdb-flight"},
@@ -34,6 +35,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyContextTest do
              run_id: "run-1",
              dashboard_time_mode: "replay_run",
              dashboard_replay_run_id: "replay-1",
+             dashboard_data_view: "all_revisions",
              dashboard_limit_mode: "compare",
              realm: "flight",
              data_source_id: "questdb-flight",
@@ -80,12 +82,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyContextTest do
         context_rows: [
           %{label: "Time mode", value: "replay_run"},
           %{label: "Replay run", value: "replay-1"},
+          %{label: "Data view", value: "all_revisions"},
           %{label: "Limit mode", value: "recomputed"}
         ]
       })
 
     assert context.dashboard_time_mode == "replay_run"
     assert context.dashboard_replay_run_id == "replay-1"
+    assert context.dashboard_data_view == "all_revisions"
     assert context.dashboard_limit_mode == "recomputed"
   end
 
@@ -100,6 +104,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyContextTest do
     assert context.source_binding_id == nil
     assert context.dashboard_time_mode == nil
     assert context.dashboard_replay_run_id == nil
+    assert context.dashboard_data_view == nil
     assert context.dashboard_limit_mode == nil
   end
 end

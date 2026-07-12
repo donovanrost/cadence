@@ -108,9 +108,20 @@ defmodule Cadence.DataCase do
   rescue
     DBConnection.ConnectionError ->
       retry_repo_operation(fun, attempts)
+
+    error in RuntimeError ->
+      if retryable_repo_runtime_error?(error) do
+        retry_repo_operation(fun, attempts)
+      else
+        reraise error, __STACKTRACE__
+      end
   catch
-    :exit, :shutdown ->
-      retry_repo_operation(fun, attempts)
+    :exit, reason ->
+      if retryable_repo_exit?(reason) do
+        retry_repo_operation(fun, attempts)
+      else
+        exit(reason)
+      end
   end
 
   defp with_repo_operation_retry(fun, _attempts), do: fun.()
@@ -120,6 +131,23 @@ defmodule Cadence.DataCase do
     ensure_cadence_started!()
     with_repo_operation_retry(fun, attempts - 1)
   end
+
+  defp retryable_repo_runtime_error?(%RuntimeError{message: message}) do
+    String.contains?(message, "could not lookup Ecto repo Cadence.Repo") or
+      String.contains?(message, "Cadence.Repo did not become ready in time")
+  end
+
+  defp retryable_repo_exit?(:shutdown), do: true
+
+  defp retryable_repo_exit?({:noproc, _call}), do: true
+
+  defp retryable_repo_exit?(reason) when is_tuple(reason) do
+    reason
+    |> Tuple.to_list()
+    |> Enum.any?(&retryable_repo_exit?/1)
+  end
+
+  defp retryable_repo_exit?(_reason), do: false
 
   defp telemetry_current_value_store_module do
     Application.get_env(:cadence, :telemetry_current_value_store, [])

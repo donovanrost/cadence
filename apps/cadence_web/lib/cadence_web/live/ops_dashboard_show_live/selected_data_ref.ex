@@ -21,6 +21,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedDataRef do
     "series_role" => :series_role,
     "spacecraft_id" => :spacecraft_id,
     "contact_id" => :contact_id,
+    "contact_ids" => :contact_ids,
     "transport_id" => :transport_id,
     "source_endpoint_id" => :source_endpoint_id,
     "ground_station_id" => :ground_station_id,

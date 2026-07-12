@@ -20,10 +20,17 @@ defmodule Cadence.Dashboards.DataLink do
     :limit_definition_lifecycle_event,
     :mission_event,
     :operational_event,
+    :command_request,
+    :command_queue_entry,
+    :command_release_attempt,
+    :command_verifier_instance,
+    :transport_action_request,
+    :transport_capability_record,
     :binding_set_interval,
     :application_binding_interval,
     :catalog_revision_interval,
     :source_binding_interval,
+    :source_health_interval,
     :transport_execution_interval,
     :transport_connection_state_interval,
     :ground_station_connection_state_interval,
@@ -68,10 +75,17 @@ defmodule Cadence.Dashboards.DataLink do
           | :limit_definition_lifecycle_event
           | :mission_event
           | :operational_event
+          | :command_request
+          | :command_queue_entry
+          | :command_release_attempt
+          | :command_verifier_instance
+          | :transport_action_request
+          | :transport_capability_record
           | :binding_set_interval
           | :application_binding_interval
           | :catalog_revision_interval
           | :source_binding_interval
+          | :source_health_interval
           | :transport_execution_interval
           | :transport_connection_state_interval
           | :ground_station_connection_state_interval

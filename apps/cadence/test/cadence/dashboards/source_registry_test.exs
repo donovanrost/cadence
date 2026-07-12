@@ -13,6 +13,8 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     SourceCircuitBreaker,
     SourceExecutionPolicy,
     SourceFacts,
+    SourceHealthEvent,
+    SourceHealthStatus,
     SourceRegistry
   }
 
@@ -88,6 +90,8 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
              :transport_bitrate,
              :transport_bitrate_history,
              :transport_execution_state_history,
+             :managed_runtime_activity_history,
+             :transport_runtime_activity_history,
              :ingress_processing_latency_history,
              :operational_metric_history,
              :operational_latest,
@@ -108,6 +112,8 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     assert "link.symbol_rate_sps" in capabilities.metadata.backed_observable_ids
     assert "link.doppler_hz" in capabilities.metadata.backed_observable_ids
     assert "commanding.queue_depth" in capabilities.metadata.backed_observable_ids
+    assert "runtime.managed_activity" in capabilities.metadata.backed_observable_ids
+    assert "runtime.transport_activity" in capabilities.metadata.backed_observable_ids
     assert "ingress.processing_latency_ms" in capabilities.metadata.backed_observable_ids
 
     assert capabilities.metadata.metric_history_contracts == [
@@ -867,6 +873,128 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     assert application_opts[:source_endpoint_ref] == "endpoint-alpha"
   end
 
+  test "enriches operational observable frames with source-health interval evidence" do
+    parent = self()
+    observed_at = ~U[2026-06-21 20:30:00Z]
+    source_health_event_id = "source-health-operational-observables-1"
+    operational_event_id = "operational_event:source_health_event:#{source_health_event_id}"
+
+    status =
+      source_health_status(%{
+        source_health_event_id: source_health_event_id,
+        source_health: :degraded,
+        reason: :source_probe_failed,
+        observed_at: observed_at
+      })
+
+    source_health_interval = %EffectiveInterval{
+      interval_id: "effective_interval:source_health:#{operational_event_id}",
+      organization_id: "org-1",
+      mission_id: "mission-1",
+      kind: :source_health,
+      subject_kind: :data_source,
+      subject_id: "managed_operational_observables",
+      starts_at: observed_at,
+      source_event_id: operational_event_id,
+      payload: %{
+        "source_health_event_id" => source_health_event_id,
+        "source_health" => "degraded",
+        "reason" => "source_probe_failed"
+      }
+    }
+
+    result =
+      SourceRegistry.resolve(
+        source_request(
+          logical_source: :operational_observables,
+          observables: ["comms.transport.connection_state"],
+          sampling: %{mode: :latest}
+        ),
+        source_opts: %{
+          operational_observables: [
+            transports_fun: fn organization_id, mission_id, opts ->
+              send(parent, {:source_health_transports, organization_id, mission_id, opts})
+
+              [
+                %{
+                  transport_id: "transport-alpha",
+                  source_endpoint_id: "endpoint-alpha",
+                  ground_station_id: "dss-14",
+                  display_name: "Transport Alpha"
+                }
+              ]
+            end,
+            source_endpoints_fun: fn organization_id, mission_id, opts ->
+              send(parent, {:source_health_source_endpoints, organization_id, mission_id, opts})
+              []
+            end,
+            connection_snapshots_fun: fn organization_id, mission_id, opts ->
+              send(parent, {:source_health_snapshots, organization_id, mission_id, opts})
+
+              [
+                %{
+                  observable_id: "comms.transport.connection_state",
+                  transport_id: "transport-alpha",
+                  connection_state: :degraded,
+                  observed_at: observed_at
+                }
+              ]
+            end
+          ]
+        },
+        data_sources: [DataSources.default_operational_observables_data_source()],
+        data_bindings: [DataSources.default_flight_operational_observables_binding()],
+        source_health_events?: true,
+        record_source_health_events?: false,
+        source_health_statuses: [status],
+        source_health_freshness: %{default_max_age_ms: 2_000_000_000},
+        source_health_intervals_fun: fn organization_id, mission_id, opts ->
+          send(parent, {:source_health_intervals, organization_id, mission_id, opts})
+          [source_health_interval]
+        end
+      )
+
+    assert %{frames: [%Frame{} = frame]} = result
+    assert result.meta.source_health == :degraded
+    assert result.meta.source_health_event_id == source_health_event_id
+    assert result.meta.source_health_interval_id == source_health_interval.interval_id
+    assert result.meta.source_health_interval_source_event_id == operational_event_id
+    assert result.meta.degraded?
+
+    assert frame.meta.source_health == :degraded
+    assert frame.meta.source_health_event_id == source_health_event_id
+    assert frame.meta.source_health_interval_id == source_health_interval.interval_id
+    assert frame.meta.source_health_interval.source_event_id == operational_event_id
+    assert frame.meta.source_health_interval.kind == :source_health
+    assert frame.meta.degraded?
+
+    assert evidence_ref(
+             frame.meta.evidence,
+             :source_health_interval,
+             source_health_interval.interval_id
+           )
+
+    assert evidence_ref(frame.meta.evidence, :operational_interval, operational_event_id)
+    assert evidence_ref(frame.meta.evidence, :source_health_event, source_health_event_id)
+
+    assert_received {:source_health_intervals, "org-1", "mission-1", interval_opts}
+    assert interval_opts[:at] == observed_at
+    assert interval_opts[:logical_source] == :operational_observables
+    assert interval_opts[:data_source_id] == "managed_operational_observables"
+    assert interval_opts[:source_binding_id] == "default_flight_operational_observables"
+    assert interval_opts[:realm] == :flight
+    assert interval_opts[:dataset] == "operational_observables"
+
+    assert_received {:source_health_transports, "org-1", "mission-1", transport_opts}
+    assert transport_opts[:data_source_id] == "managed_operational_observables"
+
+    assert_received {:source_health_source_endpoints, "org-1", "mission-1", endpoint_opts}
+    assert endpoint_opts[:dataset] == "operational_observables"
+
+    assert_received {:source_health_snapshots, "org-1", "mission-1", snapshot_opts}
+    assert snapshot_opts[:source_binding_id] == "default_flight_operational_observables"
+  end
+
   test "enriches all operational metric-history product frames with selected intervals" do
     selected_at = ~U[2026-06-21 20:30:00Z]
     from_time = ~U[2026-06-21 20:00:00Z]
@@ -1575,6 +1703,35 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     )
   end
 
+  defp source_health_status(overrides) do
+    attrs =
+      %{
+        organization_id: "org-1",
+        mission_id: "mission-1",
+        logical_source: :operational_observables,
+        data_source_id: "managed_operational_observables",
+        source_binding_id: "default_flight_operational_observables",
+        realm: :flight,
+        dataset: "operational_observables",
+        replay_run_id: nil,
+        source_health_event_id: "source-health-operational-observables-1",
+        event_type: :degraded,
+        source_health: :degraded,
+        previous_source_health: :healthy,
+        reason: :source_probe_failed,
+        observed_at: ~U[2026-06-21 20:30:00Z],
+        last_seen_at: ~U[2026-06-21 20:30:00Z],
+        transition_count: 1,
+        payload: %{}
+      }
+      |> Map.merge(overrides)
+
+    struct!(
+      SourceHealthStatus,
+      Map.put(attrs, :source_health_key, SourceHealthEvent.source_health_key(attrs))
+    )
+  end
+
   defp data_binding(data_source_id) do
     %DataBinding{
       binding_id: "flight-telemetry",
@@ -1715,6 +1872,8 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
           :transport_bitrate,
           :transport_bitrate_history,
           :transport_execution_state_history,
+          :managed_runtime_activity_history,
+          :transport_runtime_activity_history,
           :ingress_processing_latency_history,
           :operational_metric_history,
           :operational_latest,

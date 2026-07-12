@@ -25,7 +25,10 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
           required(:physical_boundary_text) => binary(),
           required(:job_id) => binary() | nil,
           required(:run_id) => binary() | nil,
-          required(:remediation) => binary()
+          required(:remediation) => binary(),
+          required(:lifecycle_operation_text) => binary(),
+          required(:lifecycle_status_text) => binary(),
+          required(:lifecycle_observed_at_text) => binary()
         }
 
   @spec from_data_source(DataSource.t()) :: t()
@@ -38,6 +41,7 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
     status = deployment_status(data_source, metadata, provisioning, mode)
     backend = deployment_backend(metadata, provisioning)
     physical_boundary = physical_boundary(isolation_profile, provisioning)
+    lifecycle = lifecycle_metadata(metadata)
 
     %{
       status: status,
@@ -50,7 +54,18 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
       physical_boundary_text: text(physical_boundary),
       job_id: text_or_nil(value(provisioning, :job_id) || value(metadata, :deployment_job_id)),
       run_id: text_or_nil(value(provisioning, :run_id) || value(metadata, :provisioning_run_id)),
-      remediation: remediation(status, mode)
+      remediation: remediation(status, mode, physical_boundary),
+      lifecycle_operation_text: text(value(lifecycle, :operation)),
+      lifecycle_status_text: text(value(lifecycle, :status)),
+      lifecycle_observed_at_text:
+        text(
+          value(lifecycle, :reconciled_at) ||
+            value(lifecycle, :provision_requested_at) ||
+            value(lifecycle, :provisioned_at) ||
+            value(lifecycle, :deprovision_requested_at) ||
+            value(lifecycle, :deprovisioned_at) ||
+            value(lifecycle, :observed_at)
+        )
     }
   end
 
@@ -73,7 +88,10 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
       physical_boundary_text: text(physical_boundary),
       job_id: job.job_id,
       run_id: job.run_id,
-      remediation: remediation(status, mode)
+      remediation: remediation(status, mode, physical_boundary),
+      lifecycle_operation_text: "none",
+      lifecycle_status_text: "none",
+      lifecycle_observed_at_text: "none"
     }
   end
 
@@ -128,13 +146,27 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
   defp job_backend(%Job{job_type: :managed_questdb_provisioning}, _payload), do: :questdb
   defp job_backend(_job, payload), do: payload |> value(:storage) |> backend()
 
-  defp remediation(:planned, :managed_questdb), do: "enqueue_managed_questdb_provisioning"
-  defp remediation(:queued, :managed_questdb), do: "wait_for_provisioning_worker"
-  defp remediation(:provisioning, :managed_questdb), do: "monitor_schema_migration_job"
-  defp remediation(:failed, :managed_questdb), do: "inspect_provisioning_job_and_retry"
-  defp remediation(:ready, :managed_questdb), do: "probe_source_health"
-  defp remediation(:external, :byo_tsdb), do: "monitor_customer_owned_backend"
-  defp remediation(_status, _mode), do: "inspect_source_configuration"
+  defp remediation(:planned, :managed_questdb, _boundary),
+    do: "enqueue_managed_questdb_provisioning"
+
+  defp remediation(:queued, :managed_questdb, _boundary), do: "wait_for_provisioning_worker"
+  defp remediation(:provisioning, :managed_questdb, _boundary), do: "monitor_schema_migration_job"
+  defp remediation(:failed, :managed_questdb, _boundary), do: "inspect_provisioning_job_and_retry"
+  defp remediation(:ready, :managed_questdb, _boundary), do: "probe_source_health"
+
+  defp remediation(:queued, :byo_tsdb, _boundary), do: "wait_for_tsdb_lifecycle_worker"
+  defp remediation(:provisioning, :byo_tsdb, _boundary), do: "monitor_tsdb_lifecycle_worker"
+  defp remediation(:failed, :byo_tsdb, _boundary), do: "inspect_tsdb_lifecycle_job_and_retry"
+  defp remediation(:ready, :byo_tsdb, _boundary), do: "probe_source_health"
+
+  defp remediation(:external, :byo_tsdb, :organization),
+    do: "monitor_customer_dedicated_org_backend"
+
+  defp remediation(:external, :byo_tsdb, :mission),
+    do: "monitor_customer_dedicated_mission_backend"
+
+  defp remediation(:external, :byo_tsdb, _boundary), do: "monitor_customer_owned_backend"
+  defp remediation(_status, _mode, _boundary), do: "inspect_source_configuration"
 
   defp status(:planned), do: :planned
   defp status(:queued), do: :queued
@@ -178,6 +210,12 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
   defp physical_boundary_from_isolation("customer_owned"), do: :customer_connection
   defp physical_boundary_from_isolation(_other), do: :unknown
 
+  defp lifecycle_metadata(metadata) do
+    metadata
+    |> value(:tsdb_backend_lifecycle)
+    |> normalize_map()
+  end
+
   defp value(map, key) when is_map(map) and is_atom(key) do
     Map.get(map, key, Map.get(map, Atom.to_string(key)))
   end
@@ -195,5 +233,9 @@ defmodule Cadence.Dashboards.TSDBDeploymentStatus do
   defp text_or_nil(value) when is_atom(value), do: Atom.to_string(value)
   defp text_or_nil(_other), do: nil
 
+  defp text(nil), do: "none"
   defp text(value) when is_atom(value), do: Atom.to_string(value)
+  defp text(value) when is_binary(value) and value != "", do: value
+  defp text(""), do: "none"
+  defp text(value), do: to_string(value)
 end

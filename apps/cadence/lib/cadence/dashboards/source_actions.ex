@@ -232,11 +232,13 @@ defmodule Cadence.Dashboards.SourceActions do
     scope_context = ScopeContext.from_map(scope_context)
     kind = ScopeContext.primary_kind(scope_context)
     ids = ScopeContext.primary_ids(scope_context)
+    contact_ids = ScopeContext.scope_ids(scope_context, :contact)
 
     %{
       requested_scope_kind: kind,
       requested_scope_ids: ids,
-      requested_contact_id: ScopeContext.scope_id(scope_context, :contact)
+      requested_contact_id: List.first(contact_ids),
+      requested_contact_ids: contact_ids
     }
   end
 

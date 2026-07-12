@@ -118,6 +118,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelectionTest do
                "selected_id" => "event-1"
              }
     end
+
+    test "preserves replay dashboard context in lifecycle event data-link queries" do
+      query =
+        HistoricalWorkflowSelection.event_query("event-1", %{
+          dashboard_time_mode: "replay_run",
+          dashboard_replay_run_id: "replay-1",
+          dashboard_data_view: "all_revisions",
+          dashboard_limit_mode: "compare"
+        })
+
+      assert SelectionQuery.to_params(query) == %{
+               "selected_target" => "telemetry_backfill_lifecycle_event",
+               "selected_id" => "event-1",
+               "time_mode" => "replay_run",
+               "replay_run_id" => "replay-1",
+               "selected_data_view" => "all_revisions",
+               "limit_mode" => "compare"
+             }
+    end
   end
 
   describe "retry_selection/2" do
@@ -132,6 +151,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelectionTest do
                HistoricalWorkflowSelection.retry_selection(%{events: [event]}, "fallback-event")
 
       assert SelectionQuery.value(query, "selected_id") == "retry-event-1"
+    end
+
+    test "preserves replay dashboard context when selecting retry events" do
+      event = %{backfill_lifecycle_event_id: "retry-event-1"}
+
+      assert %HistoricalWorkflowSelectionResult{query: %SelectionQuery{} = query} =
+               HistoricalWorkflowSelection.retry_selection(
+                 %{events: [event]},
+                 "fallback-event",
+                 %{
+                   "dashboard_time_mode" => "replay_run",
+                   "dashboard_replay_run_id" => "replay-1",
+                   "dashboard_data_view" => "all_revisions",
+                   "dashboard_limit_mode" => "compare"
+                 }
+               )
+
+      assert SelectionQuery.to_params(query) == %{
+               "selected_target" => "telemetry_backfill_lifecycle_event",
+               "selected_id" => "retry-event-1",
+               "time_mode" => "replay_run",
+               "replay_run_id" => "replay-1",
+               "selected_data_view" => "all_revisions",
+               "limit_mode" => "compare"
+             }
     end
 
     test "falls back to the original event when no retry event is available" do

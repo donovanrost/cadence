@@ -79,6 +79,22 @@ defmodule Cadence.Dashboards.ScopeContext do
     :link => :link_id,
     "link" => :link_id
   }
+  @scope_filter_fields %{
+    :mission => :mission_ids,
+    "mission" => :mission_ids,
+    :spacecraft => :spacecraft_ids,
+    "spacecraft" => :spacecraft_ids,
+    :contact => :contact_ids,
+    "contact" => :contact_ids,
+    :ground_station => :ground_station_ids,
+    "ground_station" => :ground_station_ids,
+    :source_endpoint => :source_endpoint_ids,
+    "source_endpoint" => :source_endpoint_ids,
+    :transport => :transport_ids,
+    "transport" => :transport_ids,
+    :link => :link_ids,
+    "link" => :link_ids
+  }
   @single_id_modes [nil, :context, "context", :one, "one"]
 
   @spec resolve(map() | t() | nil, map() | t() | nil, map() | t() | nil) :: t()
@@ -125,6 +141,17 @@ defmodule Cadence.Dashboards.ScopeContext do
     typed_scope_id(context, field) || primary_scope_id(context, kind)
   end
 
+  @spec scope_ids(t() | map() | nil, atom() | binary()) :: [binary()]
+  def scope_ids(context, kind) when is_atom(kind) or is_binary(kind) do
+    context = from_map(context)
+    field = Map.get(@scope_fields, kind)
+
+    (List.wrap(typed_scope_id(context, field)) ++
+       primary_scope_ids(context, kind) ++ filter_scope_ids(context, kind))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
   @spec primary_kind(t() | map() | nil) :: atom() | binary() | nil
   def primary_kind(context) do
     context
@@ -141,10 +168,10 @@ defmodule Cadence.Dashboards.ScopeContext do
   end
 
   defp merge(left, nil), do: to_known_map(left)
-  defp merge(left, right), do: Map.merge(to_known_map(left), to_known_map(right))
+  defp merge(left, right), do: merge_known_maps(to_known_map(left), to_known_map(right))
 
   defp to_known_map(%__MODULE__{} = context),
-    do: context |> Map.from_struct() |> drop_nil_values()
+    do: context |> Map.from_struct() |> put_primary_scope_filter() |> drop_nil_values()
 
   defp to_known_map(nil), do: %{}
 
@@ -157,6 +184,20 @@ defmodule Cadence.Dashboards.ScopeContext do
         normalized_key -> maybe_put(acc, normalized_key, value)
       end
     end)
+    |> put_primary_scope_filter()
+  end
+
+  defp merge_known_maps(left, right) when is_map(left) and is_map(right) do
+    filters =
+      Map.merge(
+        normalize_filters(Map.get(left, :filters)),
+        normalize_filters(Map.get(right, :filters))
+      )
+
+    left
+    |> Map.merge(right)
+    |> Map.put(:filters, filters)
+    |> drop_empty_values()
   end
 
   defp normalize_key(key) when key in [:primary, "primary"], do: :primary
@@ -208,6 +249,23 @@ defmodule Cadence.Dashboards.ScopeContext do
 
   defp primary_scope_id(_context, _kind), do: nil
 
+  defp primary_scope_ids(%__MODULE__{primary: primary}, kind) when is_map(primary) do
+    if same_scope_kind?(Map.get(primary, :kind), kind) do
+      primary
+      |> Map.get(:ids)
+      |> normalize_ids()
+    else
+      []
+    end
+  end
+
+  defp primary_scope_ids(_context, _kind), do: []
+
+  defp filter_scope_ids(%__MODULE__{filters: filters}, kind) do
+    filters
+    |> filter_scope_ids_from_filters(kind)
+  end
+
   defp typed_scope_id(context, field) when is_atom(field) and not is_nil(field) do
     case Map.get(context, field) do
       id when is_binary(id) and id != "" -> id
@@ -233,8 +291,57 @@ defmodule Cadence.Dashboards.ScopeContext do
 
   defp scope_field(kind), do: Map.get(@scope_fields, kind)
 
+  defp filter_scope_ids_from_filters(filters, kind) when is_map(filters) do
+    filters
+    |> get_attr(scope_filter_field(kind))
+    |> normalize_ids()
+  end
+
+  defp filter_scope_ids_from_filters(_filters, _kind), do: []
+
+  defp scope_filter_field(kind), do: Map.get(@scope_filter_fields, kind)
+
+  defp put_primary_scope_filter(%{primary: primary} = context) when is_map(primary) do
+    ids = primary |> Map.get(:ids) |> normalize_ids()
+
+    case {scope_filter_field(Map.get(primary, :kind)), ids} do
+      {field, [_id | _rest]} when is_atom(field) ->
+        filters =
+          context
+          |> Map.get(:filters)
+          |> normalize_filters()
+          |> Map.put_new(field, ids)
+
+        Map.put(context, :filters, filters)
+
+      _other ->
+        context
+    end
+  end
+
+  defp put_primary_scope_filter(context), do: context
+
   defp selector_attr(selector, key) when is_map(selector), do: get_attr(selector, key)
   defp selector_attr(_selector, _key), do: nil
+
+  defp normalize_filters(filters) when is_map(filters) do
+    Map.new(filters, fn {key, value} -> {normalize_filter_key(key), normalize_ids(value)} end)
+    |> drop_empty_values()
+  end
+
+  defp normalize_filters(_filters), do: %{}
+
+  defp normalize_filter_key(key) when is_atom(key), do: key
+
+  defp normalize_filter_key(key) when is_binary(key) do
+    key
+    |> String.trim()
+    |> String.to_existing_atom()
+  rescue
+    ArgumentError -> key
+  end
+
+  defp normalize_filter_key(key), do: key
 
   defp normalize_ids(ids) when is_list(ids) do
     Enum.filter(ids, fn id -> is_binary(id) and id != "" end)
@@ -251,6 +358,10 @@ defmodule Cadence.Dashboards.ScopeContext do
 
   defp drop_nil_values(map) do
     Map.reject(map, fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp drop_empty_values(map) do
+    Map.reject(map, fn {_key, value} -> value in [nil, "", [], %{}] end)
   end
 
   defp maybe_add(errors, false, _error), do: errors

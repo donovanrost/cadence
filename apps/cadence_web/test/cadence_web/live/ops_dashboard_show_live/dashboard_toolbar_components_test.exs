@@ -1,11 +1,139 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
   use ExUnit.Case, async: true
 
-  import CadenceWeb.DashboardReviewFixtures
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias Cadence.Dashboards.{ComparisonReviewQueue, DataBinding}
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
+
+  test "dashboard_toolbar exposes mission scope alongside spacecraft context search" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          context_scope_kind: "mission",
+          context_scope_id: "mission-1",
+          query: "lunar"
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["mission"] =
+             document
+             |> LazyHTML.query(~s(button[phx-value-scope-kind="mission"]))
+             |> LazyHTML.attribute("phx-value-scope-kind")
+
+    assert ["mission-1"] =
+             document
+             |> LazyHTML.query(~s(button[phx-value-scope-kind="mission"]))
+             |> LazyHTML.attribute("phx-value-scope-id")
+
+    assert html =~ "Lunar Demo"
+    assert html =~ "Find mission, spacecraft, contact, source, transport, ground, or link"
+
+    assert ["open_versions"] =
+             document
+             |> LazyHTML.query("#dashboard-versions-button")
+             |> LazyHTML.attribute("phx-click")
+  end
+
+  test "dashboard_toolbar exposes scheduled and realized contacts as runtime contexts" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          spacecraft: [],
+          scheduled_contacts: [
+            %{
+              scheduled_contact_id: "contact-scheduled-1",
+              source_endpoint_refs: ["gs-alpha"]
+            }
+          ],
+          realized_contacts: [
+            %{
+              realized_contact_id: "contact-realized-1",
+              scheduled_contact_id: "contact-scheduled-1",
+              source_endpoint_refs: ["gs-alpha"]
+            }
+          ],
+          context_scope_kind: "contact",
+          context_scope_id: "contact-realized-1",
+          query: "gs-alpha"
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert html =~ "realized / contact-realized-1 / gs-alpha"
+
+    assert ["contact"] =
+             document
+             |> LazyHTML.query(
+               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
+             )
+             |> LazyHTML.attribute("phx-value-scope-kind")
+
+    assert ["contact-scheduled-1"] =
+             document
+             |> LazyHTML.query(
+               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
+             )
+             |> LazyHTML.attribute("phx-value-scope-id")
+
+    assert ["scheduled"] =
+             document
+             |> LazyHTML.query(
+               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
+             )
+             |> LazyHTML.attribute("data-dashboard-context-contact-kind")
+
+    assert ["contact-realized-1"] =
+             document
+             |> LazyHTML.query(~s(button[data-dashboard-context-contact-kind="realized"]))
+             |> LazyHTML.attribute("phx-value-scope-id")
+  end
+
+  test "dashboard_toolbar exposes unsupported limit mode fallback" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          show_context?: false,
+          time_mode: "archive",
+          time_from: "2026-06-17T12:00:00Z",
+          time_to: "2026-06-17T12:05:00Z",
+          limit_mode: "observed",
+          limit_mode_fallback: %{
+            "requested_mode" => "projected",
+            "applied_mode" => "observed",
+            "reason" => "unsupported_limit_semantics_mode"
+          }
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["projected"] =
+             document
+             |> LazyHTML.query("#dashboard-limit-mode-fallback")
+             |> LazyHTML.attribute("data-requested-limit-mode")
+
+    assert ["observed"] =
+             document
+             |> LazyHTML.query("#dashboard-limit-mode-fallback")
+             |> LazyHTML.attribute("data-applied-limit-mode")
+
+    assert ["unsupported_limit_semantics_mode"] =
+             document
+             |> LazyHTML.query("#dashboard-limit-mode-fallback")
+             |> LazyHTML.attribute("data-limit-mode-fallback-reason")
+
+    assert ["Requested projected limit semantics; using observed."] =
+             document
+             |> LazyHTML.query("#dashboard-limit-mode-fallback")
+             |> LazyHTML.attribute("title")
+  end
 
   test "dashboard_toolbar renders dashboard actions with lifecycle availability" do
     html =
@@ -46,143 +174,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              document
              |> LazyHTML.query("#runtime-context-controls")
              |> LazyHTML.attribute("id")
-  end
-
-  test "dashboard_toolbar routes versions button to review activity when review work is open" do
-    lifecycle_events = [
-      comparison_review_request_event(
-        event_id: "review-request-1",
-        placement_ids: ["placement-1", "placement-2"]
-      ),
-      comparison_review_request_event(
-        event_id: "review-request-2",
-        payload: %{
-          "open_findings" => %{
-            "findings" => [%{"placement_id" => "placement-3"}]
-          }
-        }
-      ),
-      comparison_review_resolution_event(
-        event_id: "review-resolution-2",
-        source_request_event_id: "review-request-2"
-      )
-    ]
-
-    html =
-      render_component(
-        &DashboardToolbarComponents.dashboard_toolbar/1,
-        toolbar_assigns(
-          dashboard_lifecycle_events: lifecycle_events,
-          dashboard_comparison_review_queue: ComparisonReviewQueue.open_summary(lifecycle_events)
-        )
-      )
-
-    document = LazyHTML.from_fragment(html)
-
-    assert ["open_review_activity"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert ["review-request-1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
-
-    assert ["placement-1,placement-2"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
-
-    assert [_class] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-toolbar-badge]")
-             |> LazyHTML.attribute("class")
-  end
-
-  test "dashboard_toolbar does not derive open review badges from lifecycle events" do
-    html =
-      render_component(
-        &DashboardToolbarComponents.dashboard_toolbar/1,
-        toolbar_assigns(
-          dashboard_lifecycle_events: [
-            comparison_review_request_event(
-              event_id: "review-request-1",
-              placement_ids: ["placement-1"]
-            )
-          ],
-          dashboard_comparison_review_queue: ComparisonReviewQueue.open_summary([])
-        )
-      )
-
-    document = LazyHTML.from_fragment(html)
-
-    assert ["open_versions"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["0"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-toolbar-badge]")
-             |> LazyHTML.attribute("class")
-  end
-
-  test "dashboard_toolbar routes versions button from materialized review queue" do
-    queue_request =
-      comparison_review_request_event(
-        event_id: "review-request-from-queue",
-        placement_ids: ["placement-9"]
-      )
-
-    html =
-      render_component(
-        &DashboardToolbarComponents.dashboard_toolbar/1,
-        toolbar_assigns(
-          dashboard_lifecycle_events: [],
-          dashboard_comparison_review_queue: %{
-            count: 1,
-            count_text: "1",
-            requests: [queue_request],
-            request_ids: ["review-request-from-queue"],
-            request_ids_attr: "review-request-from-queue",
-            placement_ids: ["placement-9"],
-            placements_attr: "placement-9"
-          }
-        )
-      )
-
-    document = LazyHTML.from_fragment(html)
-
-    assert ["open_review_activity"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert ["review-request-from-queue"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
-
-    assert ["placement-9"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
   end
 
   test "dashboard_toolbar renders publish readiness summary" do

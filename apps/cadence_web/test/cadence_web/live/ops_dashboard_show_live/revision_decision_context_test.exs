@@ -13,6 +13,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionContextTest do
           %{label: "Revision decision event", value: "decision-event-1"},
           %{label: "Observation identity", value: "identity-1"},
           %{label: "Decision", value: "mark_advisory"},
+          %{label: "Dashboard context time mode", value: "replay_run"},
+          %{label: "Dashboard context replay run", value: "replay-1"},
+          %{label: "Dashboard context data view", value: "all_revisions"},
           %{label: "Dashboard context limit mode", value: "compare"},
           %{label: "Realm", value: "flight"},
           %{label: "Data source", value: "questdb-flight"},
@@ -43,6 +46,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionContextTest do
              source_link_label: "Comparison finding",
              observation_identity_id: "identity-1",
              source_decision: "mark_advisory",
+             dashboard_time_mode: "replay_run",
+             dashboard_replay_run_id: "replay-1",
+             dashboard_data_view: "all_revisions",
              dashboard_limit_mode: "compare",
              realm: "flight",
              data_source_id: "questdb-flight",
@@ -106,13 +112,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionContextTest do
     assert context.source_binding_id == "binding-flight"
   end
 
-  test "build falls back to inspector context rows for dashboard limit mode" do
+  test "build falls back to inspector context rows for dashboard runtime context" do
     context =
       RevisionDecisionContext.build(%{
         rows: [%{label: "Observation identity", value: "identity-1"}],
-        context_rows: [%{label: "Limit mode", value: "recomputed"}]
+        context_rows: [
+          %{label: "Time mode", value: "replay_run"},
+          %{label: "Replay run", value: "replay-context-1"},
+          %{label: "Data view", value: "all_revisions"},
+          %{label: "Limit mode", value: "recomputed"}
+        ]
       })
 
+    assert context.dashboard_time_mode == "replay_run"
+    assert context.dashboard_replay_run_id == "replay-context-1"
+    assert context.dashboard_data_view == "all_revisions"
     assert context.dashboard_limit_mode == "recomputed"
   end
 

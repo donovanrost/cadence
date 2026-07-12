@@ -5,13 +5,17 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
   alias Cadence.Dashboards.{Document, InvestigationPreset}
 
   test "saves, lists, fetches, and deletes dashboard investigation presets" do
-    persist_dashboard!("org-preset", "mission-preset", "dashboard-preset")
+    organization_id = unique_id("org-preset")
+    mission_id = unique_id("mission-preset")
+    dashboard_id = unique_id("dashboard-preset")
+
+    persist_dashboard!(organization_id, mission_id, dashboard_id)
 
     assert {:ok, %InvestigationPreset{} = preset} =
              Dashboards.save_dashboard_investigation_preset(
-               "org-preset",
-               "mission-preset",
-               "dashboard-preset",
+               organization_id,
+               mission_id,
+               dashboard_id,
                %{
                  name: "Late data comparison",
                  description: "Compare canonical against all revisions",
@@ -21,9 +25,9 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
                actor_id: "operator-2"
              )
 
-    assert preset.organization_id == "org-preset"
-    assert preset.mission_id == "mission-preset"
-    assert preset.dashboard_id == "dashboard-preset"
+    assert preset.organization_id == organization_id
+    assert preset.mission_id == mission_id
+    assert preset.dashboard_id == dashboard_id
     assert preset.name == "Late data comparison"
     assert preset.schema == "dashboard_comparison_investigation_preset.v1"
     assert preset.preset_kind == :comparison
@@ -41,18 +45,18 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
 
     assert [listed] =
              Dashboards.list_dashboard_investigation_presets(
-               "org-preset",
-               "mission-preset",
-               "dashboard-preset"
+               organization_id,
+               mission_id,
+               dashboard_id
              )
 
     assert listed.dashboard_investigation_preset_id == preset.dashboard_investigation_preset_id
 
     assert {:ok, fetched} =
              Dashboards.fetch_dashboard_investigation_preset(
-               "org-preset",
-               "mission-preset",
-               "dashboard-preset",
+               organization_id,
+               mission_id,
+               dashboard_id,
                preset.dashboard_investigation_preset_id
              )
 
@@ -60,38 +64,42 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
 
     assert :ok =
              Dashboards.delete_dashboard_investigation_preset(
-               "org-preset",
-               "mission-preset",
-               "dashboard-preset",
+               organization_id,
+               mission_id,
+               dashboard_id,
                preset.dashboard_investigation_preset_id
              )
 
     assert [] =
              Dashboards.list_dashboard_investigation_presets(
-               "org-preset",
-               "mission-preset",
-               "dashboard-preset"
+               organization_id,
+               mission_id,
+               dashboard_id
              )
   end
 
   test "requires unique preset names within one dashboard" do
-    persist_dashboard!("org-preset-unique", "mission-preset-unique", "dashboard-preset-unique")
+    organization_id = unique_id("org-preset-unique")
+    mission_id = unique_id("mission-preset-unique")
+    dashboard_id = unique_id("dashboard-preset-unique")
+
+    persist_dashboard!(organization_id, mission_id, dashboard_id)
 
     attrs = %{name: "Rehearsal discrepancy", payload: comparison_payload()}
 
     assert {:ok, %InvestigationPreset{}} =
              Dashboards.save_dashboard_investigation_preset(
-               "org-preset-unique",
-               "mission-preset-unique",
-               "dashboard-preset-unique",
+               organization_id,
+               mission_id,
+               dashboard_id,
                attrs
              )
 
     assert {:error, changeset} =
              Dashboards.save_dashboard_investigation_preset(
-               "org-preset-unique",
-               "mission-preset-unique",
-               "dashboard-preset-unique",
+               organization_id,
+               mission_id,
+               dashboard_id,
                attrs
              )
 
@@ -100,31 +108,31 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
   end
 
   test "rejects saving presets for missing or archived dashboards" do
-    persist_dashboard!(
-      "org-preset-archived",
-      "mission-preset-archived",
-      "dashboard-preset-archived"
-    )
+    organization_id = unique_id("org-preset-archived")
+    mission_id = unique_id("mission-preset-archived")
+    dashboard_id = unique_id("dashboard-preset-archived")
+
+    persist_dashboard!(organization_id, mission_id, dashboard_id)
 
     assert :ok =
              Dashboards.archive_document(
-               "org-preset-archived",
-               "mission-preset-archived",
-               "dashboard-preset-archived"
+               organization_id,
+               mission_id,
+               dashboard_id
              )
 
     assert {:error, :dashboard_archived} =
              Dashboards.save_dashboard_investigation_preset(
-               "org-preset-archived",
-               "mission-preset-archived",
-               "dashboard-preset-archived",
+               organization_id,
+               mission_id,
+               dashboard_id,
                %{name: "Archived compare", payload: comparison_payload()}
              )
 
     assert {:error, :dashboard_not_found} =
              Dashboards.save_dashboard_investigation_preset(
-               "org-preset-archived",
-               "mission-preset-archived",
+               organization_id,
+               mission_id,
                "missing-dashboard",
                %{name: "Missing compare", payload: comparison_payload()}
              )
@@ -143,6 +151,8 @@ defmodule Cadence.Dashboards.InvestigationPresetsTest do
 
     assert {:ok, %Document{}} = Dashboards.persist_document(organization_id, document)
   end
+
+  defp unique_id(prefix), do: "#{prefix}-#{System.unique_integer([:positive])}"
 
   defp comparison_payload do
     %{

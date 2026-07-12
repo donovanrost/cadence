@@ -34,15 +34,21 @@ defmodule Cadence.CommandingDispatcherTest do
       Application.put_env(:cadence, :catalog_importers, previous_importers)
     end)
 
-    persist_mission_scope(@organization_id, @mission_id)
+    dispatcher_scope = dispatcher_scope()
 
-    source_endpoint = persist_source_endpoint()
-    command_snapshot = import_command_snapshot()
+    persist_mission_scope(dispatcher_scope.organization_id, dispatcher_scope.mission_id)
 
-    {:ok, source_endpoint: source_endpoint, command_snapshot: command_snapshot}
+    source_endpoint = persist_source_endpoint(dispatcher_scope)
+    command_snapshot = import_command_snapshot(dispatcher_scope)
+
+    {:ok,
+     dispatcher_scope: dispatcher_scope,
+     source_endpoint: source_endpoint,
+     command_snapshot: command_snapshot}
   end
 
   test "dispatcher releases queued commands automatically in priority order within a lane", %{
+    dispatcher_scope: dispatcher_scope,
     source_endpoint: source_endpoint,
     command_snapshot: command_snapshot
   } do
@@ -55,34 +61,46 @@ defmodule Cadence.CommandingDispatcherTest do
     )
 
     low_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 5, %{"label" => "low"})
+      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 5, %{
+        "label" => "low"
+      })
 
     high_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "high"})
+      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 1, %{
+        "label" => "high"
+      })
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
              Cadence.enqueue_command_request(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                low_priority_request.command_request_id,
                %{"user_id" => "queue-operator"}
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
              Cadence.enqueue_command_request(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                high_priority_request.command_request_id,
                %{"user_id" => "queue-operator"}
              )
 
-    assert Cadence.list_command_release_attempts(@organization_id, @mission_id) == []
+    assert Cadence.list_command_release_attempts(
+             dispatcher_scope.organization_id,
+             dispatcher_scope.mission_id
+           ) == []
 
-    _realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
+    _realized_contact =
+      persist_active_uplink_contact(dispatcher_scope, source_endpoint.source_endpoint_id)
 
     release_attempts =
       wait_until(fn ->
-        attempts = Cadence.list_command_release_attempts(@organization_id, @mission_id)
+        attempts =
+          Cadence.list_command_release_attempts(
+            dispatcher_scope.organization_id,
+            dispatcher_scope.mission_id
+          )
 
         if length(attempts) == 2 and Enum.all?(attempts, &(&1.lifecycle_state == :released)) do
           {:ok, attempts}
@@ -98,15 +116,15 @@ defmodule Cadence.CommandingDispatcherTest do
 
     assert {:ok, released_high_priority_queue_entry} =
              Cadence.fetch_command_queue_entry(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                high_priority_queue_entry.command_queue_entry_id
              )
 
     assert {:ok, released_low_priority_queue_entry} =
              Cadence.fetch_command_queue_entry(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                low_priority_queue_entry.command_queue_entry_id
              )
 
@@ -115,7 +133,10 @@ defmodule Cadence.CommandingDispatcherTest do
 
     transport_action_request_count =
       TransportActionRequestRow
-      |> where([row], row.mission_id == ^@mission_id and row.action_kind == "uplink_request")
+      |> where(
+        [row],
+        row.mission_id == ^dispatcher_scope.mission_id and row.action_kind == "uplink_request"
+      )
       |> select([row], count(row.action_request_id))
       |> Repo.one!()
 
@@ -123,6 +144,7 @@ defmodule Cadence.CommandingDispatcherTest do
   end
 
   test "dispatcher retries pending commands until an uplink contact becomes available", %{
+    dispatcher_scope: dispatcher_scope,
     source_endpoint: source_endpoint,
     command_snapshot: command_snapshot
   } do
@@ -137,12 +159,14 @@ defmodule Cadence.CommandingDispatcherTest do
     )
 
     command_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "delayed"})
+      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 1, %{
+        "label" => "delayed"
+      })
 
     assert {:ok, %{queue_entry: queue_entry}} =
              Cadence.enqueue_command_request(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                command_request.command_request_id,
                %{"user_id" => "queue-operator"}
              )
@@ -153,9 +177,14 @@ defmodule Cadence.CommandingDispatcherTest do
     end)
 
     Process.sleep(80)
-    assert Cadence.list_command_release_attempts(@organization_id, @mission_id) == []
 
-    _realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
+    assert Cadence.list_command_release_attempts(
+             dispatcher_scope.organization_id,
+             dispatcher_scope.mission_id
+           ) == []
+
+    _realized_contact =
+      persist_active_uplink_contact(dispatcher_scope, source_endpoint.source_endpoint_id)
 
     assert_lane_dispatcher_event(:dispatch_result, fn measurements, metadata ->
       measurements.count == 1 and metadata.result == :released and
@@ -164,7 +193,10 @@ defmodule Cadence.CommandingDispatcherTest do
 
     release_attempt =
       wait_until(fn ->
-        case Cadence.list_command_release_attempts(@organization_id, @mission_id) do
+        case Cadence.list_command_release_attempts(
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id
+             ) do
           [release_attempt] when release_attempt.lifecycle_state == :released ->
             {:ok, release_attempt}
 
@@ -178,8 +210,8 @@ defmodule Cadence.CommandingDispatcherTest do
 
     assert {:ok, released_queue_entry} =
              Cadence.fetch_command_queue_entry(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                queue_entry.command_queue_entry_id
              )
 
@@ -235,39 +267,52 @@ defmodule Cadence.CommandingDispatcherTest do
     end
   end
 
-  defp persist_source_endpoint do
+  defp dispatcher_scope do
+    suffix = System.unique_integer([:positive]) |> Integer.to_string()
+
+    %{
+      suffix: suffix,
+      organization_id: "#{@organization_id}-#{suffix}",
+      mission_id: "#{@mission_id}-#{suffix}",
+      spacecraft_id: "#{@spacecraft_id}-#{suffix}",
+      source_endpoint_id: "#{@source_endpoint_id}-#{suffix}"
+    }
+  end
+
+  defp persist_source_endpoint(dispatcher_scope) do
     spacecraft =
       Spacecraft.new(%{
-        spacecraft_id: @spacecraft_id,
-        mission_id: @mission_id,
+        spacecraft_id: dispatcher_scope.spacecraft_id,
+        mission_id: dispatcher_scope.mission_id,
         display_name: "SC Dispatcher"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.persist_spacecraft(dispatcher_scope.organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
-        source_endpoint_id: @source_endpoint_id,
-        mission_id: @mission_id,
-        spacecraft_id: @spacecraft_id,
+        source_endpoint_id: dispatcher_scope.source_endpoint_id,
+        mission_id: dispatcher_scope.mission_id,
+        spacecraft_id: dispatcher_scope.spacecraft_id,
         source_ref: "SC-DISPATCHER",
         display_name: "SC Dispatcher Endpoint"
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(@organization_id, source_endpoint)
+             Cadence.persist_source_endpoint(dispatcher_scope.organization_id, source_endpoint)
 
     persisted_source_endpoint
   end
 
-  defp import_command_snapshot do
+  defp import_command_snapshot(dispatcher_scope) do
     artifact =
       Artifact.new(%{
-        artifact_id: "artifact-command-dispatcher",
-        organization_id: @organization_id,
-        mission_id: @mission_id,
+        artifact_id: "artifact-command-dispatcher-#{dispatcher_scope.suffix}",
+        organization_id: dispatcher_scope.organization_id,
+        mission_id: dispatcher_scope.mission_id,
         catalog_family: :combined,
-        artifact_name: "command-dispatcher.yaml",
+        artifact_name: "command-dispatcher-#{dispatcher_scope.suffix}.yaml",
         format_key: "cadence_yaml",
         media_type: "application/yaml",
         source_artifact: """
@@ -282,12 +327,12 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.persist_catalog_artifact(dispatcher_scope.organization_id, artifact)
 
     assert {:ok, queued_run} =
              Cadence.start_catalog_import_run(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                persisted_artifact.artifact_id,
                "cadence_yaml",
                requested_by: %{"service_identity_id" => "svc-bootstrap"}
@@ -303,8 +348,8 @@ defmodule Cadence.CommandingDispatcherTest do
 
     assert {:ok, completed_run} =
              Cadence.fetch_catalog_import_run(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                queued_run.import_run_id
              )
 
@@ -312,18 +357,24 @@ defmodule Cadence.CommandingDispatcherTest do
 
     assert {:ok, %CommandSnapshot{} = command_snapshot} =
              Cadence.fetch_catalog_command_snapshot(
-               @organization_id,
-               @mission_id,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
                command_snapshot_id
              )
 
     command_snapshot
   end
 
-  defp persist_safe_command_request(command_snapshot, source_endpoint, priority, metadata) do
+  defp persist_safe_command_request(
+         dispatcher_scope,
+         command_snapshot,
+         source_endpoint,
+         priority,
+         metadata
+       ) do
     command_request =
       CommandRequest.new(%{
-        mission_id: @mission_id,
+        mission_id: dispatcher_scope.mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
         command_snapshot_id: command_snapshot.snapshot_id,
         command_id: fetch_command_id(command_snapshot, "NOOP"),
@@ -333,18 +384,19 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.persist_command_request(dispatcher_scope.organization_id, command_request)
 
     persisted_request
   end
 
-  defp persist_active_uplink_contact(source_endpoint_ref) do
+  defp persist_active_uplink_contact(dispatcher_scope, source_endpoint_ref) do
     realized_contact =
       RealizedContact.new(%{
         realized_contact_id:
-          "realized-contact-dispatcher-" <> Integer.to_string(System.unique_integer([:positive])),
-        organization_id: @organization_id,
-        mission_id: @mission_id,
+          "realized-contact-dispatcher-#{dispatcher_scope.suffix}-" <>
+            Integer.to_string(System.unique_integer([:positive])),
+        organization_id: dispatcher_scope.organization_id,
+        mission_id: dispatcher_scope.mission_id,
         source_endpoint_refs: [source_endpoint_ref],
         clock_mode: :replay,
         initial_time: DateTime.from_unix!(1_700_500_000, :second),
@@ -367,7 +419,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, _persisted_realized_contact} =
-             Cadence.persist_realized_contact(@organization_id, realized_contact)
+             Cadence.persist_realized_contact(dispatcher_scope.organization_id, realized_contact)
 
     realized_contact
   end

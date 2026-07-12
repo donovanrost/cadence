@@ -29,6 +29,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContextTest do
           %{label: "Comparison review kind", value: "comparison_open_findings_review"},
           %{label: "Comparison review open count", value: "2"},
           %{label: "Comparison review placements", value: "placement-1,placement-2"},
+          %{label: "Comparison review scope kind", value: "transport"},
+          %{label: "Comparison review scope ids", value: "transport-alpha,transport-beta"},
+          %{label: "Comparison review contact ids", value: "contact-alpha,contact-beta"},
+          %{label: "Comparison review resource ids", value: "transport-alpha"},
+          %{label: "Comparison review transport ids", value: "transport-alpha"},
+          %{label: "Comparison review source endpoint ids", value: "endpoint-alpha"},
+          %{label: "Comparison review ground station ids", value: "dss-14"},
+          %{label: "Comparison review scope link ids", value: "link-alpha"},
           %{label: "Reason", value: "operator_request"},
           %{label: "Request mode", value: "bulk_points"},
           %{label: "Request group", value: "group-1"},
@@ -94,6 +102,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContextTest do
     assert context.comparison_review_request_kind == "comparison_open_findings_review"
     assert context.comparison_review_open_count == "2"
     assert context.comparison_review_open_placement_ids == "placement-1,placement-2"
+    assert context.comparison_review_scope_kind == "transport"
+    assert context.comparison_review_scope_ids == "transport-alpha,transport-beta"
+    assert context.comparison_review_contact_ids == "contact-alpha,contact-beta"
+    assert context.comparison_review_resource_ids == "transport-alpha"
+    assert context.comparison_review_transport_ids == "transport-alpha"
+    assert context.comparison_review_source_endpoint_ids == "endpoint-alpha"
+    assert context.comparison_review_ground_station_ids == "dss-14"
+    assert context.comparison_review_scope_link_ids == "link-alpha"
     assert context.reason == "operator_request"
     assert context.request_mode == "bulk_points"
     assert context.request_group_id == "group-1"

@@ -228,6 +228,7 @@ defmodule Cadence.Dashboards.FrameMaterializer do
       requested_scope_kind: Map.get(scope_context, :kind),
       requested_scope_ids: Map.get(scope_context, :ids),
       requested_contact_id: Map.get(scope_context, :contact_id),
+      requested_contact_ids: Map.get(scope_context, :contact_ids),
       time_mode: Map.get(source_request_time_context, :mode),
       time_axis: Map.get(source_request_time_context, :axis),
       replay_run_id:
@@ -247,11 +248,13 @@ defmodule Cadence.Dashboards.FrameMaterializer do
     scope_context = ScopeContext.from_map(scope_context)
     kind = ScopeContext.primary_kind(scope_context)
     ids = ScopeContext.primary_ids(scope_context)
+    contact_ids = ScopeContext.scope_ids(scope_context, :contact)
 
     %{
       kind: kind,
       ids: ids,
-      contact_id: ScopeContext.scope_id(scope_context, :contact)
+      contact_id: List.first(contact_ids),
+      contact_ids: contact_ids
     }
     |> drop_nil_values()
   end

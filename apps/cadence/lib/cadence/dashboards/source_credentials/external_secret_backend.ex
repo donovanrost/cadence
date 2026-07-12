@@ -33,9 +33,36 @@ defmodule Cadence.Dashboards.SourceCredentials.ExternalSecretBackend do
         credential_config_value(:external_secret_manager_url)
 
     case configured do
-      url when is_binary(url) and url != "" -> {:ok, compose_url(url, opts)}
-      _missing -> {:error, :external_secret_manager_not_configured}
+      url when is_binary(url) and url != "" ->
+        url
+        |> compose_url(opts)
+        |> validate_url(opts)
+
+      _missing ->
+        {:error, :external_secret_manager_not_configured}
     end
+  end
+
+  defp validate_url(url, opts) do
+    case URI.parse(url) do
+      %URI{scheme: "https", host: host, userinfo: nil} when is_binary(host) ->
+        {:ok, url}
+
+      %URI{scheme: "http", host: host, userinfo: nil} when is_binary(host) ->
+        if allow_insecure_http?(opts) do
+          {:ok, url}
+        else
+          {:error, {:invalid_external_secret_manager_url, :https_required}}
+        end
+
+      _other ->
+        {:error, {:invalid_external_secret_manager_url, :invalid_url}}
+    end
+  end
+
+  defp allow_insecure_http?(opts) do
+    Keyword.get(opts, :allow_insecure_secret_manager_http?, false) ||
+      credential_config_value(:allow_insecure_secret_manager_http?) == true
   end
 
   defp request_material(url, %ResolvedSourceCredential{} = credential, opts) do

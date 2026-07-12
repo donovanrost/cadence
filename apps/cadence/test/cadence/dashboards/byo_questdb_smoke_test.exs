@@ -25,7 +25,6 @@ defmodule Cadence.Dashboards.BYOQuestDBSmokeTest do
 
     assert {:ok, result} =
              BYOQuestDBSmoke.run(
-               start_cadence?: false,
                exec_fun: exec_fun,
                http_endpoint: @http_endpoint,
                organization_id: @organization_id,
@@ -70,7 +69,6 @@ defmodule Cadence.Dashboards.BYOQuestDBSmokeTest do
 
     assert {:ok, result} =
              BYOQuestDBSmoke.run(
-               start_cadence?: false,
                cleanup?: true,
                exec_fun: exec_fun,
                http_endpoint: @http_endpoint,
@@ -115,7 +113,6 @@ defmodule Cadence.Dashboards.BYOQuestDBSmokeTest do
 
     assert {:ok, result} =
              BYOQuestDBSmoke.run(
-               start_cadence?: false,
                exec_fun: exec_fun,
                http_endpoint: @http_endpoint,
                organization_id: @organization_id,

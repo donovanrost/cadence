@@ -1,7 +1,7 @@
 defmodule Cadence.Dashboards.PlacementEditorTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{Placement, PlacementEditor, WidgetDef}
+  alias Cadence.Dashboards.{Document, Placement, PlacementEditor, RenderItem, WidgetDef}
 
   test "builds a canonical value-tile placement from add-widget params" do
     assert {:ok, %Placement{} = placement} =
@@ -166,6 +166,51 @@ defmodule Cadence.Dashboards.PlacementEditorTest do
            }
 
     assert placement.widget_def.options == %{precision: 1, window_seconds: 300}
+  end
+
+  test "render items preserve multi-observable placement bindings" do
+    assert {:ok, %Placement{} = matrix} =
+             PlacementEditor.build_placement(
+               %{
+                 "type" => "status_matrix",
+                 "title" => "HK Matrix",
+                 "mode" => "context",
+                 "precision" => "0"
+               },
+               ["HK.counter", "HK.voltage"],
+               :add_widget
+             )
+
+    assert {:ok, %Placement{} = table} =
+             PlacementEditor.build_placement(
+               %{
+                 "type" => "data_table",
+                 "title" => "HK Table",
+                 "mode" => "context",
+                 "precision" => "1"
+               },
+               ["HK.counter", "HK.voltage"],
+               :add_widget
+             )
+
+    document =
+      %Document{
+        dashboard_id: "dashboard-1",
+        organization_id: "org-1",
+        mission_id: "mission-1",
+        name: "Power",
+        metadata: %{version: 1}
+      }
+      |> Document.put_placement(matrix)
+      |> Document.put_placement(table)
+
+    assert [
+             %{widget: %{type: :status_matrix, binding: %{point_ids: matrix_points}}},
+             %{widget: %{type: :data_table, binding: %{point_ids: table_points}}}
+           ] = RenderItem.from_document(document)
+
+    assert matrix_points == ["HK.counter", "HK.voltage"]
+    assert table_points == ["HK.counter", "HK.voltage"]
   end
 
   test "builds event timeline placements without point bindings" do

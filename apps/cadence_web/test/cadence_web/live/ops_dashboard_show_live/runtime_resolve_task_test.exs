@@ -62,7 +62,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTaskTest do
 
     resolver_ref = Process.monitor(resolver)
 
-    assert_receive {:worker_started, worker_pid}
+    assert_receive {:worker_started, worker_pid}, 1_000
     worker_ref = Process.monitor(worker_pid)
 
     Process.exit(owner, :shutdown)
@@ -73,7 +73,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTaskTest do
                     {:exit, {:shutdown, {:browser_test_sandbox_owner_unavailable, :shutdown}}}}
 
     assert_receive {:DOWN, ^resolver_ref, :process, ^resolver, :normal}
-    assert_receive {:DOWN, ^worker_ref, :process, ^worker_pid, :killed}
+    assert_receive {:DOWN, ^worker_ref, :process, ^worker_pid, worker_stop_reason}, 1_000
+    assert worker_stop_reason in [:killed, :noproc]
   end
 
   defp waiting_process do

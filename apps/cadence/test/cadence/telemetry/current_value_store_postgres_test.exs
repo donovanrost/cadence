@@ -8,18 +8,29 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
   alias Cadence.Telemetry.Sample
 
   setup do
-    persist_mission_scope("org-postgres-current", "mission-postgres-current")
-    :ok
+    scope_id = Integer.to_string(System.unique_integer([:positive]))
+    mission_id = "mission-postgres-current-" <> scope_id
+
+    persist_mission_scope("org-postgres-current-" <> scope_id, mission_id)
+
+    {:ok, mission_id: mission_id, scope_id: scope_id}
   end
 
-  test "does not replace current state with a late-arriving older source-time sample" do
+  test "does not replace current state with a late-arriving older source-time sample", %{
+    mission_id: mission_id,
+    scope_id: scope_id
+  } do
     current_sample =
       sample("sample-current", 20, ~U[2026-06-21 12:10:05Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
         generation_time: ~U[2026-06-21 12:10:00Z]
       )
 
     late_arrival =
       sample("sample-late", 10, ~U[2026-06-21 12:15:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
         generation_time: ~U[2026-06-21 12:00:00Z]
       )
 
@@ -29,31 +40,56 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
     assert :ok = Postgres.record_samples([current_sample])
     assert :ok = Postgres.record_samples([late_arrival])
 
-    latest_sample = Postgres.latest_value("mission-postgres-current", "HK.counter", [])
-    assert latest_sample.sample_id == "sample-current"
+    latest_sample = Postgres.latest_value(mission_id, "HK.counter", [])
+    assert latest_sample.sample_id == scoped_id("sample-current", scope_id)
     assert latest_sample.raw_value == 20
   end
 
-  test "uses receipt time when generation time is missing" do
-    older_sample = sample("sample-old", 10, ~U[2026-06-21 12:00:00Z], generation_time: nil)
-    newer_sample = sample("sample-new", 20, ~U[2026-06-21 12:00:01Z], generation_time: nil)
+  test "uses receipt time when generation time is missing", %{
+    mission_id: mission_id,
+    scope_id: scope_id
+  } do
+    older_sample =
+      sample("sample-old", 10, ~U[2026-06-21 12:00:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
+        generation_time: nil
+      )
+
+    newer_sample =
+      sample("sample-new", 20, ~U[2026-06-21 12:00:01Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
+        generation_time: nil
+      )
 
     persist_sample_scope!(older_sample)
     persist_sample_scope!(newer_sample)
 
     assert :ok = Postgres.record_samples([older_sample, newer_sample])
 
-    latest_sample = Postgres.latest_value("mission-postgres-current", "HK.counter", [])
-    assert latest_sample.sample_id == "sample-new"
+    latest_sample = Postgres.latest_value(mission_id, "HK.counter", [])
+    assert latest_sample.sample_id == scoped_id("sample-new", scope_id)
     assert latest_sample.raw_value == 20
   end
 
-  test "does not replace canonical current state with unresolved conflicts" do
+  test "does not replace canonical current state with unresolved conflicts", %{
+    mission_id: mission_id,
+    scope_id: scope_id
+  } do
     canonical =
-      sample("sample-canonical", 20, ~U[2026-06-21 12:10:00Z], validity_state: :canonical)
+      sample("sample-canonical", 20, ~U[2026-06-21 12:10:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
+        validity_state: :canonical
+      )
 
     conflict =
-      sample("sample-conflict", 99, ~U[2026-06-21 12:11:00Z], validity_state: :conflict)
+      sample("sample-conflict", 99, ~U[2026-06-21 12:11:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
+        validity_state: :conflict
+      )
 
     persist_sample_scope!(canonical)
     persist_sample_scope!(conflict)
@@ -61,19 +97,24 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
     assert :ok = Postgres.record_samples([canonical])
     assert :ok = Postgres.record_samples([conflict])
 
-    latest_sample = Postgres.latest_value("mission-postgres-current", "HK.counter", [])
-    assert latest_sample.sample_id == "sample-canonical"
+    latest_sample = Postgres.latest_value(mission_id, "HK.counter", [])
+    assert latest_sample.sample_id == scoped_id("sample-canonical", scope_id)
     assert latest_sample.raw_value == 20
 
     assert [] =
-             Postgres.latest_values_for_mission("mission-postgres-current",
+             Postgres.latest_values_for_mission(mission_id,
                validity_state: :conflict
              )
   end
 
-  test "separates current values by storage source context" do
+  test "separates current values by storage source context", %{
+    mission_id: mission_id,
+    scope_id: scope_id
+  } do
     flight_sample =
       sample("sample-flight", 1, ~U[2026-06-21 12:00:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
         realm: :flight,
         data_source_id: "flight-questdb",
         binding_id: "flight-binding"
@@ -81,6 +122,8 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
 
     rehearsal_sample =
       sample("sample-rehearsal", 2, ~U[2026-06-21 12:01:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
         realm: :rehearsal,
         data_source_id: "rehearsal-questdb",
         binding_id: "rehearsal-binding"
@@ -91,36 +134,39 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
 
     assert :ok = Postgres.record_samples([flight_sample, rehearsal_sample])
 
-    assert Postgres.latest_value("mission-postgres-current", "HK.counter",
+    assert Postgres.latest_value(mission_id, "HK.counter",
              realm: :flight,
              data_source_id: "flight-questdb",
              source_binding_id: "flight-binding"
            ).raw_value == 1
 
-    assert Postgres.latest_value("mission-postgres-current", "HK.counter",
+    assert Postgres.latest_value(mission_id, "HK.counter",
              realm: :rehearsal,
              data_source_id: "rehearsal-questdb",
              source_binding_id: "rehearsal-binding"
            ).raw_value == 2
 
     assert [] =
-             Postgres.latest_values_for_mission("mission-postgres-current",
+             Postgres.latest_values_for_mission(mission_id,
                realm: :rehearsal,
                data_source_id: "flight-questdb"
              )
   end
 
   defp sample(sample_id, raw_value, receipt_time, opts) do
+    scope_id = Keyword.fetch!(opts, :scope_id)
+    scoped_sample_id = scoped_id(sample_id, scope_id)
+
     %Sample{
-      sample_id: sample_id,
-      mission_id: "mission-postgres-current",
+      sample_id: scoped_sample_id,
+      mission_id: Keyword.fetch!(opts, :mission_id),
       spacecraft_id: nil,
       point_id: "HK.counter",
       point_name: "HK.counter",
       packet_definition_id: "packet-1",
       packet_definition_version: 1,
-      packet_id: "packet-" <> sample_id,
-      evidence_id: "evidence-" <> sample_id,
+      packet_id: "packet-" <> scoped_sample_id,
+      evidence_id: "evidence-" <> scoped_sample_id,
       raw_value: raw_value,
       engineering_value: raw_value,
       quality_state: :good,
@@ -129,6 +175,8 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
       provenance: provenance(opts)
     }
   end
+
+  defp scoped_id(value, scope_id), do: value <> "-" <> scope_id
 
   defp provenance(opts) do
     storage =

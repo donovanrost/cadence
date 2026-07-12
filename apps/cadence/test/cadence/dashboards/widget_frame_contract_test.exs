@@ -314,6 +314,8 @@ defmodule Cadence.Dashboards.WidgetFrameContractTest do
              :connection_state,
              :ground_station,
              :link_rf,
+             :runtime_managed,
+             :runtime_transport,
              :transport_execution_state
            ]
 

@@ -25,13 +25,30 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     SourceWatermarks
   }
 
+  alias Cadence.Commanding.{
+    CommandQueueEntry,
+    CommandReleaseAttempt,
+    CommandRequest,
+    CommandVerifierInstance
+  }
+
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.{Definition, DefinitionLifecycle}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Runtime.TransportCapabilityRecord
+
+  alias Cadence.Runtime.{
+    ManagedActionRequest,
+    ManagedCapabilityRecord,
+    TransportActionRequest,
+    TransportCapabilityRecord
+  }
 
   alias Cadence.Persistence.Schemas.{
+    CommandQueueEntryRow,
+    CommandReleaseAttemptRow,
+    CommandRequestRow,
+    CommandVerifierInstanceRow,
     DashboardLifecycleEventRow,
     OpsDashboardRow,
     TelemetryObservationIdentityDecisionEventRow,
@@ -45,6 +62,146 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
+
+  test "resolves command queue entry links from persisted mission-scoped queue rows" do
+    organization_id = "org-command-queue-entry-link"
+    mission_id = "mission-command-queue-entry-link"
+    persist_mission_scope(organization_id, mission_id)
+
+    queue_entry =
+      CommandQueueEntry.new(%{
+        command_queue_entry_id: "queue-entry-1",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_request_id: "command-request-1",
+        source_endpoint_ref: "source-endpoint-alpha",
+        queue_lane_key: "source-endpoint-alpha",
+        priority: 2,
+        queue_sequence: 7,
+        lifecycle_state: :pending,
+        enqueued_by: %{user_id: "resolver-test"},
+        enqueued_at: ~U[2026-06-30 12:00:00Z],
+        metadata: %{transport_action_request_id: "transport-action-request-1"}
+      })
+
+    command_request =
+      CommandRequest.new(%{
+        command_request_id: "command-request-1",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        source_endpoint_ref: "source-endpoint-alpha",
+        command_snapshot_id: "command-snapshot-1",
+        command_id: "noop-command",
+        command_name: "NOOP",
+        command_display_name: "NOOP",
+        lifecycle_state: :queued,
+        priority: 2,
+        requested_by: %{user_id: "resolver-test"},
+        requested_at: ~U[2026-06-30 11:59:00Z],
+        metadata: %{}
+      })
+
+    assert %CommandRequestRow{} = Repo.insert!(CommandRequestRow.changeset(command_request))
+
+    assert %CommandQueueEntryRow{} =
+             Repo.insert!(CommandQueueEntryRow.changeset(queue_entry))
+
+    release_attempt =
+      CommandReleaseAttempt.new(%{
+        command_release_attempt_id: "release-attempt-1",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_queue_entry_id: "queue-entry-1",
+        command_request_id: "command-request-1",
+        source_endpoint_ref: "source-endpoint-alpha",
+        realized_contact_id: "realized-contact-1",
+        path_id: "path-1",
+        transport_binding_id: "transport-binding-1",
+        command_snapshot_id: "command-snapshot-1",
+        command_id: "noop-command",
+        command_name: "NOOP",
+        layout_kind: :ccsds_space_packet,
+        preferred_uplink_service: "tc",
+        apid: 42,
+        service_type: 17,
+        service_subtype: 1,
+        opcode: %{kind: "noop"},
+        encoded_binary_base64: Base.encode64("NOOP"),
+        encoded_size_bytes: 4,
+        lifecycle_state: :released,
+        verification_state: :pending,
+        released_by: %{user_id: "resolver-test"},
+        attempted_at: ~U[2026-06-30 12:00:30Z],
+        released_at: ~U[2026-06-30 12:00:31Z],
+        metadata: %{}
+      })
+
+    assert %CommandReleaseAttemptRow{} =
+             Repo.insert!(CommandReleaseAttemptRow.changeset(release_attempt))
+
+    link = %DataLink{
+      label: "Command queue entry",
+      target: :command_queue_entry,
+      target_id: "queue-entry-1",
+      context: %{source_request_id: "events-request-1", logical_source: :operational_observables},
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :command_queue_entry
+    assert row_value(inspector.rows, "Command queue entry") == "queue-entry-1"
+    assert row_value(inspector.rows, "Lifecycle state") == "pending"
+    assert row_value(inspector.rows, "Command request") == "command-request-1"
+    assert row_value(inspector.rows, "Source endpoint") == "source-endpoint-alpha"
+    assert row_value(inspector.rows, "Queue lane") == "source-endpoint-alpha"
+    assert row_value(inspector.rows, "Priority") == "2"
+    assert row_value(inspector.rows, "Queue sequence") == "7"
+    assert row_value(inspector.rows, "Enqueued at") =~ "2026-06-30T12:00:00"
+    assert row_value(inspector.rows, "Enqueued by") =~ "resolver-test"
+    assert row_value(inspector.rows, "Metadata") =~ "transport-action-request-1"
+
+    assert related_link(inspector.related_links, :command_request, "command-request-1")
+
+    request_link = %DataLink{
+      label: "Command request",
+      target: :command_request,
+      target_id: "command-request-1",
+      context: %{source_request_id: "events-request-1", logical_source: :operational_observables},
+      source: :annotation
+    }
+
+    assert {:ok, request_inspector} =
+             DataLinkResolver.resolve(request_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert request_inspector.status == :resolved
+    assert request_inspector.target == :command_request
+    assert row_value(request_inspector.rows, "Command request") == "command-request-1"
+    assert row_value(request_inspector.rows, "Lifecycle state") == "queued"
+    assert row_value(request_inspector.rows, "Source endpoint") == "source-endpoint-alpha"
+    assert row_value(request_inspector.rows, "Command") == "NOOP"
+    assert row_value(request_inspector.rows, "Command display name") == "NOOP"
+    assert row_value(request_inspector.rows, "Command id") == "noop-command"
+    assert row_value(request_inspector.rows, "Command snapshot") == "command-snapshot-1"
+    assert row_value(request_inspector.rows, "Priority") == "2"
+    assert row_value(request_inspector.rows, "Requested at") =~ "2026-06-30T11:59:00"
+    assert row_value(request_inspector.rows, "Requested by") =~ "resolver-test"
+    assert related_link(request_inspector.related_links, :command_queue_entry, "queue-entry-1")
+
+    assert related_link(
+             request_inspector.related_links,
+             :command_release_attempt,
+             "release-attempt-1"
+           )
+  end
 
   test "resolves telemetry sample links from persisted mission-scoped samples" do
     %{
@@ -1028,6 +1185,241 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert related_link(inspector.related_links, :operational_event, persisted_event.event_id)
     assert related_link(inspector.related_links, :transport, "uplink-heartbeat")
     assert related_link(inspector.related_links, :contact, "realized-contact-1")
+
+    capability_link = %DataLink{
+      label: "Transport capability record",
+      target: :transport_capability_record,
+      target_id: "transport-record-1",
+      context: %{source_request_id: "events-request-1", logical_source: :events},
+      source: :frame
+    }
+
+    assert {:ok, capability_inspector} =
+             DataLinkResolver.resolve(capability_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert capability_inspector.status == :resolved
+    assert capability_inspector.target == :transport_capability_record
+
+    assert row_value(capability_inspector.rows, "Transport capability record") ==
+             "transport-record-1"
+
+    assert row_value(capability_inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(capability_inspector.rows, "Capability instance") == "uplink-heartbeat"
+    assert row_value(capability_inspector.rows, "State snapshot") =~ "heartbeat_count"
+
+    assert related_link(
+             capability_inspector.related_links,
+             :operational_event,
+             persisted_event.event_id
+           )
+
+    assert {:ok, persisted_action_event} =
+             transport_action_request(
+               mission_id,
+               "transport-action-request-1",
+               "uplink-heartbeat",
+               :release_command,
+               ~U[2026-06-30 12:00:30Z],
+               request_document: %{command_request_id: "command-request-1", frame_count: 1},
+               metadata: %{release_attempt_id: "release-attempt-1"}
+             )
+             |> Event.from_transport_action_request()
+             |> OperationalEvents.persist_event()
+
+    action_link = %DataLink{
+      label: "Transport action request",
+      target: :transport_action_request,
+      target_id: "transport-action-request-1",
+      context: %{source_request_id: "events-request-1", logical_source: :events},
+      source: :frame
+    }
+
+    assert {:ok, action_inspector} =
+             DataLinkResolver.resolve(action_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert action_inspector.status == :resolved
+    assert action_inspector.target == :transport_action_request
+
+    assert row_value(action_inspector.rows, "Transport action request") ==
+             "transport-action-request-1"
+
+    assert row_value(action_inspector.rows, "Operational event") ==
+             persisted_action_event.event_id
+
+    assert row_value(action_inspector.rows, "Command release attempt") == "release-attempt-1"
+    assert row_value(action_inspector.rows, "Command request") == "command-request-1"
+    assert row_value(action_inspector.rows, "Request document") =~ "frame_count"
+
+    assert related_link(
+             action_inspector.related_links,
+             :operational_event,
+             persisted_action_event.event_id
+           )
+
+    release_attempt =
+      CommandReleaseAttempt.new(%{
+        command_release_attempt_id: "release-attempt-1",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_queue_entry_id: "command-queue-entry-1",
+        command_request_id: "command-request-1",
+        source_endpoint_ref: "source-endpoint-alpha",
+        realized_contact_id: "realized-contact-1",
+        path_id: "path-1",
+        transport_binding_id: "transport-binding-1",
+        command_snapshot_id: "command-snapshot-1",
+        command_id: "noop-command",
+        command_name: "NOOP",
+        layout_kind: :ccsds_space_packet,
+        preferred_uplink_service: "tc",
+        apid: 42,
+        service_type: 17,
+        service_subtype: 1,
+        opcode: %{kind: "noop"},
+        encoded_binary_base64: Base.encode64("NOOP"),
+        encoded_size_bytes: 4,
+        lifecycle_state: :released,
+        verification_state: :failed,
+        released_by: %{user_id: "resolver-test"},
+        attempted_at: ~U[2026-06-30 12:00:30Z],
+        released_at: ~U[2026-06-30 12:00:31Z],
+        metadata: %{transport_action_request_id: "transport-action-request-1"}
+      })
+
+    assert %CommandReleaseAttemptRow{} =
+             Repo.insert!(CommandReleaseAttemptRow.changeset(release_attempt))
+
+    verifier_instance =
+      CommandVerifierInstance.new(%{
+        command_verifier_instance_id: "verifier-instance-failed",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_request_id: "command-request-1",
+        command_release_attempt_id: "release-attempt-1",
+        source_endpoint_ref: "source-endpoint-alpha",
+        command_snapshot_id: "command-snapshot-1",
+        command_id: "noop-command",
+        command_name: "NOOP",
+        verifier_id: "transport-verifier-1",
+        verifier_name: "Transport action rejected",
+        phase: :start,
+        severity: :error,
+        lifecycle_state: :failed,
+        matched_record_kind: :transport_action_request,
+        matched_record_id: "transport-action-request-1",
+        matched_at: ~U[2026-06-30 12:00:35Z],
+        failure_reason: "failure_criteria_matched",
+        metadata: %{transport_action_request_id: "transport-action-request-1"}
+      })
+
+    assert %CommandVerifierInstanceRow{} =
+             Repo.insert!(CommandVerifierInstanceRow.changeset(verifier_instance))
+
+    release_attempt_link = %DataLink{
+      label: "Command release attempt",
+      target: :command_release_attempt,
+      target_id: "release-attempt-1",
+      context: %{source_request_id: "events-request-1", logical_source: :events},
+      source: :frame
+    }
+
+    assert {:ok, release_attempt_inspector} =
+             DataLinkResolver.resolve(release_attempt_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert release_attempt_inspector.status == :resolved
+    assert release_attempt_inspector.target == :command_release_attempt
+
+    assert row_value(release_attempt_inspector.rows, "Command release attempt") ==
+             "release-attempt-1"
+
+    assert row_value(release_attempt_inspector.rows, "Lifecycle state") == "released"
+    assert row_value(release_attempt_inspector.rows, "Verification state") == "failed"
+    assert row_value(release_attempt_inspector.rows, "Command request") == "command-request-1"
+    assert row_value(release_attempt_inspector.rows, "Command") == "NOOP"
+    assert row_value(release_attempt_inspector.rows, "Source endpoint") == "source-endpoint-alpha"
+
+    assert row_value(release_attempt_inspector.rows, "Transport action request") ==
+             "transport-action-request-1"
+
+    assert row_value(release_attempt_inspector.rows, "Signal phase") == "start"
+    assert row_value(release_attempt_inspector.rows, "Metadata") =~ "transport_action_request_id"
+
+    assert related_link(
+             release_attempt_inspector.related_links,
+             :command_request,
+             "command-request-1"
+           )
+
+    assert related_link(
+             release_attempt_inspector.related_links,
+             :command_queue_entry,
+             "command-queue-entry-1"
+           )
+
+    assert related_link(
+             release_attempt_inspector.related_links,
+             :transport_action_request,
+             "transport-action-request-1"
+           )
+
+    assert related_link(
+             release_attempt_inspector.related_links,
+             :command_verifier_instance,
+             "verifier-instance-failed"
+           )
+
+    verifier_link = %DataLink{
+      label: "Command verifier instance",
+      target: :command_verifier_instance,
+      target_id: "verifier-instance-failed",
+      context: %{source_request_id: "events-request-1", logical_source: :events},
+      source: :frame
+    }
+
+    assert {:ok, verifier_inspector} =
+             DataLinkResolver.resolve(verifier_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert verifier_inspector.status == :resolved
+    assert verifier_inspector.target == :command_verifier_instance
+
+    assert row_value(verifier_inspector.rows, "Command verifier instance") ==
+             "verifier-instance-failed"
+
+    assert row_value(verifier_inspector.rows, "Lifecycle state") == "failed"
+    assert row_value(verifier_inspector.rows, "Matched record kind") == "transport_action_request"
+    assert row_value(verifier_inspector.rows, "Matched record") == "transport-action-request-1"
+    assert row_value(verifier_inspector.rows, "Failure reason") == "failure_criteria_matched"
+    assert row_value(verifier_inspector.rows, "Command release attempt") == "release-attempt-1"
+
+    assert related_link(
+             verifier_inspector.related_links,
+             :command_release_attempt,
+             "release-attempt-1"
+           )
+
+    assert related_link(
+             verifier_inspector.related_links,
+             :command_request,
+             "command-request-1"
+           )
+
+    assert related_link(
+             verifier_inspector.related_links,
+             :transport_action_request,
+             "transport-action-request-1"
+           )
   end
 
   test "resolves replay-scoped native RF interval links from link context" do
@@ -1121,6 +1513,199 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
              :operational_event,
              replay_interval.source_event_id
            )
+  end
+
+  test "resolves RF state operational events with semantic rows" do
+    organization_id = "org-resolver-rf-state-operational-event"
+    mission_id = "mission-resolver-rf-state-operational-event"
+    replay_run_id = "replay-run-rf-state-operational-event"
+    observed_at = ~U[2026-06-30 12:07:00Z]
+    persist_mission_scope(organization_id, mission_id)
+
+    assert {:ok, persisted_event} =
+             %{
+               snapshot_id: "rf-state-operational-event-resolver",
+               organization_id: organization_id,
+               mission_id: mission_id,
+               observable_id: "link.rf_lock_state",
+               resource_id: "link-alpha",
+               scope_kind: :link,
+               transport_id: "transport-alpha",
+               source_endpoint_id: "endpoint-alpha",
+               ground_station_id: "dss-14",
+               link_id: "link-alpha",
+               state: :locked,
+               replay_run_id: replay_run_id,
+               observed_at: observed_at
+             }
+             |> Event.from_operational_observable_state_snapshot()
+             |> OperationalEvents.persist_event()
+
+    link = %DataLink{
+      label: "RF state operational event",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-rf-state",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-questdb",
+          source_binding_id: "ops-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(inspector.rows, "RF state snapshot") == "rf-state-operational-event-resolver"
+    assert row_value(inspector.rows, "Observable") == "link.rf_lock_state"
+    assert row_value(inspector.rows, "Resource") == "link-alpha"
+    assert row_value(inspector.rows, "Link") == "link-alpha"
+    assert row_value(inspector.rows, "RF state") == "locked"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves antenna pointing operational events with semantic rows" do
+    organization_id = "org-resolver-antenna-pointing-operational-event"
+    mission_id = "mission-resolver-antenna-pointing-operational-event"
+    replay_run_id = "replay-run-antenna-pointing-operational-event"
+    observed_at = ~U[2026-06-30 12:09:00Z]
+    persist_mission_scope(organization_id, mission_id)
+
+    assert {:ok, persisted_event} =
+             %{
+               snapshot_id: "antenna-pointing-operational-event-resolver",
+               organization_id: organization_id,
+               mission_id: mission_id,
+               observable_id: "ground.station.antenna_pointing_state",
+               resource_id: "dss-14",
+               scope_kind: :ground_station,
+               transport_id: "transport-alpha",
+               source_endpoint_id: "endpoint-alpha",
+               ground_station_id: "dss-14",
+               state: :tracking,
+               replay_run_id: replay_run_id,
+               observed_at: observed_at
+             }
+             |> Event.from_operational_observable_state_snapshot()
+             |> OperationalEvents.persist_event()
+
+    link = %DataLink{
+      label: "Antenna pointing operational event",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-antenna-pointing",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-questdb",
+          source_binding_id: "ops-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Operational observable snapshot") ==
+             "antenna-pointing-operational-event-resolver"
+
+    assert row_value(inspector.rows, "Observable") == "ground.station.antenna_pointing_state"
+    assert row_value(inspector.rows, "Resource") == "dss-14"
+    assert row_value(inspector.rows, "Ground station") == "dss-14"
+    assert row_value(inspector.rows, "State") == "tracking"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves metric sample operational events with semantic rows" do
+    organization_id = "org-resolver-metric-sample-operational-event"
+    mission_id = "mission-resolver-metric-sample-operational-event"
+    replay_run_id = "replay-run-metric-sample-operational-event"
+    observed_at = ~U[2026-06-30 12:11:00Z]
+    persist_mission_scope(organization_id, mission_id)
+
+    assert {:ok, persisted_event} =
+             %{
+               sample_id: "metric-sample-operational-event-resolver",
+               organization_id: organization_id,
+               mission_id: mission_id,
+               observable_id: "link.snr_db",
+               resource_id: "link-alpha",
+               scope_kind: :link,
+               transport_id: "transport-alpha",
+               source_endpoint_id: "endpoint-alpha",
+               ground_station_id: "dss-14",
+               link_id: "link-alpha",
+               value: 12.25,
+               unit: "dB",
+               replay_run_id: replay_run_id,
+               observed_at: observed_at
+             }
+             |> Event.from_operational_observable_metric_sample()
+             |> OperationalEvents.persist_event()
+
+    link = %DataLink{
+      label: "Metric sample operational event",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-metric-sample",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-questdb",
+          source_binding_id: "ops-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Operational metric sample") ==
+             "metric-sample-operational-event-resolver"
+
+    assert row_value(inspector.rows, "Observable") == "link.snr_db"
+    assert row_value(inspector.rows, "Resource") == "link-alpha"
+    assert row_value(inspector.rows, "Link") == "link-alpha"
+    assert row_value(inspector.rows, "Value") == "12.250"
+    assert row_value(inspector.rows, "Unit") == "dB"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
   end
 
   test "resolves mission event and contact links" do
@@ -1307,6 +1892,331 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
              )
 
     assert missing_inspector.status == :missing
+  end
+
+  test "resolves managed action request operational events with semantic rows" do
+    organization_id = "org-resolver-managed-action"
+    mission_id = "mission-resolver-managed-action"
+    replay_run_id = "replay-run-managed-action"
+    requested_at = ~U[2026-06-30 12:01:30Z]
+
+    persist_mission_scope(organization_id, mission_id)
+
+    action_request = %ManagedActionRequest{
+      action_request_id: "managed-action-request-resolver",
+      mission_id: mission_id,
+      capability_instance_id: "managed-capability-alpha",
+      family_key: :packet_counter,
+      activation_id: "managed-activation-alpha",
+      binding_set_id: "managed-binding-set-alpha",
+      binding_set_version: 4,
+      partition_affinity: :spacecraft,
+      partition_value: "spacecraft-alpha",
+      action_kind: :schedule_timer,
+      packet_id: "managed-packet-alpha",
+      evidence_id: "managed-evidence-alpha",
+      request_document: %{"delay_ms" => 1_000, "timer_key" => "flush"},
+      requested_at: requested_at
+    }
+
+    assert {:ok, persisted_event} =
+             action_request
+             |> Event.from_managed_action_request(replay_run_id)
+             |> Map.put(:organization_id, organization_id)
+             |> OperationalEvents.persist_event()
+
+    action_link = %DataLink{
+      label: "Managed action request",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-managed-action",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-source-managed-action",
+          source_binding_id: "ops-binding-managed-action"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(action_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+    assert row_value(inspector.rows, "Managed action request") == action_request.action_request_id
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(inspector.rows, "Capability instance") == "managed-capability-alpha"
+    assert row_value(inspector.rows, "Family") == "packet_counter"
+    assert row_value(inspector.rows, "Binding set") == "managed-binding-set-alpha"
+    assert row_value(inspector.rows, "Binding set version") == "4"
+    assert row_value(inspector.rows, "Partition affinity") == "spacecraft"
+    assert row_value(inspector.rows, "Partition value") == "spacecraft-alpha"
+    assert row_value(inspector.rows, "Action kind") == "schedule_timer"
+    assert row_value(inspector.rows, "Request document") =~ "timer_key"
+    assert row_value(inspector.rows, "Requested") == DateTime.to_iso8601(requested_at)
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves managed capability record operational events with semantic rows" do
+    organization_id = "org-resolver-managed-capability"
+    mission_id = "mission-resolver-managed-capability"
+    replay_run_id = "replay-run-managed-capability"
+    recorded_at = ~U[2026-06-30 12:02:30Z]
+
+    persist_mission_scope(organization_id, mission_id)
+
+    capability_record = %ManagedCapabilityRecord{
+      capability_record_id: "managed-capability-record-resolver",
+      mission_id: mission_id,
+      capability_instance_id: "managed-capability-alpha",
+      family_key: :packet_counter,
+      activation_id: "managed-activation-alpha",
+      binding_set_id: "managed-binding-set-alpha",
+      binding_set_version: 4,
+      partition_affinity: :spacecraft,
+      partition_value: "spacecraft-alpha",
+      event_kind: :record_handled,
+      packet_id: "managed-packet-alpha",
+      evidence_id: "managed-evidence-alpha",
+      timer_key: nil,
+      emitted_record_kinds: [:derived_metric, :limit_state],
+      emitted_record_count: 2,
+      action_request_count: 1,
+      state_snapshot: %{active?: true, heartbeat_count: 1},
+      recorded_at: recorded_at,
+      metadata: %{
+        "action_request_ids" => ["managed-action-request-resolver"],
+        "emitted_record_refs" => ["limit-state-1", "derived-metric-1"]
+      }
+    }
+
+    assert {:ok, persisted_event} =
+             capability_record
+             |> Event.from_managed_capability_record(replay_run_id)
+             |> Map.put(:organization_id, organization_id)
+             |> OperationalEvents.persist_event()
+
+    capability_link = %DataLink{
+      label: "Managed capability record",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-managed-capability",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-source-managed-capability",
+          source_binding_id: "ops-binding-managed-capability"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(capability_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Managed capability record") ==
+             capability_record.capability_record_id
+
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(inspector.rows, "Capability instance") == "managed-capability-alpha"
+    assert row_value(inspector.rows, "Family") == "packet_counter"
+    assert row_value(inspector.rows, "Binding set") == "managed-binding-set-alpha"
+    assert row_value(inspector.rows, "Binding set version") == "4"
+    assert row_value(inspector.rows, "Partition affinity") == "spacecraft"
+    assert row_value(inspector.rows, "Partition value") == "spacecraft-alpha"
+    assert row_value(inspector.rows, "Event kind") == "record_handled"
+    assert row_value(inspector.rows, "Emitted record kinds") == "derived_metric,limit_state"
+    assert row_value(inspector.rows, "Emitted record count") == "2"
+    assert row_value(inspector.rows, "Action request count") == "1"
+    assert row_value(inspector.rows, "State snapshot") =~ "heartbeat_count"
+    assert row_value(inspector.rows, "Record metadata") =~ "managed-action-request-resolver"
+    assert row_value(inspector.rows, "Recorded") == "2026-06-30T12:02:30.000000Z"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves transport capability record operational events with semantic rows" do
+    organization_id = "org-resolver-transport-capability-event"
+    mission_id = "mission-resolver-transport-capability-event"
+    replay_run_id = "replay-run-transport-capability-event"
+    recorded_at = ~U[2026-06-30 12:04:30Z]
+
+    persist_mission_scope(organization_id, mission_id)
+
+    capability_record =
+      transport_capability_record(
+        mission_id,
+        "transport-capability-record-resolver",
+        "transport-capability-alpha",
+        :control_input_handled,
+        recorded_at,
+        emitted_record_kinds: [:uplink_frame, :cop1_status],
+        emitted_record_count: 2,
+        action_request_count: 1,
+        state_snapshot: %{cop1_state: "active", heartbeat_count: 4, vcid: 7},
+        metadata: %{
+          "action_request_ids" => ["transport-action-request-resolver"],
+          "emitted_record_refs" => ["uplink-frame-1", "cop1-status-1"]
+        }
+      )
+
+    assert {:ok, persisted_event} =
+             capability_record
+             |> Event.from_transport_capability_record(replay_run_id)
+             |> Map.put(:organization_id, organization_id)
+             |> OperationalEvents.persist_event()
+
+    capability_link = %DataLink{
+      label: "Transport capability record",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-transport-capability",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-source-transport-capability",
+          source_binding_id: "ops-binding-transport-capability"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(capability_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Transport capability record") ==
+             capability_record.transport_record_id
+
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(inspector.rows, "Capability instance") == "transport-capability-alpha"
+    assert row_value(inspector.rows, "Family") == "heartbeat_monitor"
+    assert row_value(inspector.rows, "Contact") == "realized-contact-1"
+    assert row_value(inspector.rows, "Path") == "uplink-path-alpha"
+    assert row_value(inspector.rows, "Binding set") == "binding-set-1"
+    assert row_value(inspector.rows, "Binding set version") == "4"
+    assert row_value(inspector.rows, "Partition affinity") == "source_endpoint"
+    assert row_value(inspector.rows, "Partition value") == "source-endpoint-alpha"
+    assert row_value(inspector.rows, "Event kind") == "control_input_handled"
+    assert row_value(inspector.rows, "Emitted record kinds") == "uplink_frame,cop1_status"
+    assert row_value(inspector.rows, "Emitted record count") == "2"
+    assert row_value(inspector.rows, "Action request count") == "1"
+    assert row_value(inspector.rows, "State snapshot") =~ "heartbeat_count"
+    assert row_value(inspector.rows, "Record metadata") =~ "transport-action-request-resolver"
+    assert row_value(inspector.rows, "Recorded") == "2026-06-30T12:04:30.000000Z"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves transport action request operational events with semantic rows" do
+    organization_id = "org-resolver-transport-action-event"
+    mission_id = "mission-resolver-transport-action-event"
+    replay_run_id = "replay-run-transport-action-event"
+    requested_at = ~U[2026-06-30 12:05:30Z]
+
+    persist_mission_scope(organization_id, mission_id)
+
+    action_request =
+      transport_action_request(
+        mission_id,
+        "transport-action-request-resolver",
+        "transport-capability-alpha",
+        :release_command,
+        requested_at,
+        command_release_attempt_id: "release-attempt-resolver",
+        command_request_id: "command-request-resolver",
+        source_endpoint_ref: "source-endpoint-resolver",
+        command_name: "NOOP",
+        signal_phase: :start,
+        request_document: %{
+          "command_request_id" => "command-request-resolver",
+          "frame_count" => 2
+        },
+        metadata: %{"release_attempt_id" => "release-attempt-resolver"}
+      )
+
+    assert {:ok, persisted_event} =
+             action_request
+             |> Event.from_transport_action_request(replay_run_id)
+             |> Map.put(:organization_id, organization_id)
+             |> OperationalEvents.persist_event()
+
+    action_link = %DataLink{
+      label: "Transport action request",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-transport-action",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-source-transport-action",
+          source_binding_id: "ops-binding-transport-action"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(action_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Transport action request") ==
+             action_request.action_request_id
+
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+    assert row_value(inspector.rows, "Capability instance") == "transport-capability-alpha"
+    assert row_value(inspector.rows, "Family") == "heartbeat_monitor"
+    assert row_value(inspector.rows, "Contact") == "realized-contact-1"
+    assert row_value(inspector.rows, "Path") == "uplink-path-alpha"
+    assert row_value(inspector.rows, "Binding set") == "binding-set-1"
+    assert row_value(inspector.rows, "Binding set version") == "4"
+    assert row_value(inspector.rows, "Partition affinity") == "source_endpoint"
+    assert row_value(inspector.rows, "Partition value") == "source-endpoint-alpha"
+    assert row_value(inspector.rows, "Source endpoint") == "source-endpoint-resolver"
+    assert row_value(inspector.rows, "Command release attempt") == "release-attempt-resolver"
+    assert row_value(inspector.rows, "Command request") == "command-request-resolver"
+    assert row_value(inspector.rows, "Command") == "NOOP"
+    assert row_value(inspector.rows, "Signal phase") == "start"
+    assert row_value(inspector.rows, "Action kind") == "release_command"
+    assert row_value(inspector.rows, "Request document") =~ "frame_count"
+    assert row_value(inspector.rows, "Requested") == DateTime.to_iso8601(requested_at)
+    assert row_value(inspector.rows, "Action metadata") =~ "release-attempt-resolver"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
   end
 
   test "resolves projection-only mission events from canonical operational events" do
@@ -1555,6 +2465,249 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert row_value(inspector.rows, "Previous source health") == "healthy"
     assert row_value(inspector.rows, "Reason") == "source_probe_failed"
     assert row_value(inspector.context_rows, "Logical source") == "events"
+  end
+
+  test "resolves source health operational events with semantic rows" do
+    organization_id = "org-resolver-source-health-operational-event"
+    mission_id = "mission-resolver-source-health-operational-event"
+    replay_run_id = "replay-run-source-health-operational-event"
+    persist_mission_scope(organization_id, mission_id)
+
+    assert {:ok, _healthy_event, _status} =
+             SourceHealth.record_source_health(
+               %{
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 logical_source: :operational_observables,
+                 data_source_id: "ops-questdb",
+                 source_binding_id: "ops-binding",
+                 realm: :replay,
+                 dataset: "operational_observables_replay",
+                 replay_run_id: replay_run_id,
+                 source_health: :healthy,
+                 reason: :source_probe_succeeded,
+                 observed_at: ~U[2026-06-21 12:00:00Z]
+               },
+               invalidate_runtime_cache?: false
+             )
+
+    assert {:ok, source_health_event, _status} =
+             SourceHealth.record_source_health(
+               %{
+                 source_health_event_id: "source-health-operational-event-resolver",
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 logical_source: :operational_observables,
+                 data_source_id: "ops-questdb",
+                 source_binding_id: "ops-binding",
+                 realm: :replay,
+                 dataset: "operational_observables_replay",
+                 replay_run_id: replay_run_id,
+                 source_health: :degraded,
+                 reason: :source_probe_failed,
+                 observed_at: ~U[2026-06-21 12:02:00Z],
+                 payload: %{probe_id: "probe-operational-event"}
+               },
+               invalidate_runtime_cache?: false
+             )
+
+    operational_event_id = Event.from_source_health_event(source_health_event).event_id
+    assert {:ok, _operational_event} = Cadence.fetch_operational_event(operational_event_id)
+
+    link = %DataLink{
+      label: "Source health operational event",
+      target: :operational_event,
+      target_id: operational_event_id,
+      context: %{
+        source_request_id: "events-request-source-health",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-questdb",
+          source_binding_id: "ops-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == operational_event_id
+    assert row_value(inspector.rows, "Operational event") == operational_event_id
+
+    assert row_value(inspector.rows, "Source health event") ==
+             source_health_event.source_health_event_id
+
+    assert row_value(inspector.rows, "Logical source") == "operational_observables"
+    assert row_value(inspector.rows, "Data source") == "ops-questdb"
+    assert row_value(inspector.rows, "Source binding") == "ops-binding"
+    assert row_value(inspector.rows, "Realm") == "replay"
+    assert row_value(inspector.rows, "Dataset") == "operational_observables_replay"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.rows, "Event type") == "degraded"
+    assert row_value(inspector.rows, "Source health") == "degraded"
+    assert row_value(inspector.rows, "Previous source health") == "healthy"
+    assert row_value(inspector.rows, "Reason") == "source_probe_failed"
+    assert row_value(inspector.rows, "Source payload") =~ "probe-operational-event"
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+  end
+
+  test "resolves replay source health interval links within replay scope" do
+    organization_id = "org-resolver-source-health-interval"
+    mission_id = "mission-resolver-source-health-interval"
+    replay_run_id = "replay-run-source-health-interval"
+    persist_mission_scope(organization_id, mission_id)
+
+    for {health, observed_at} <- [
+          {:healthy, ~U[2026-07-11 12:00:00Z]},
+          {:degraded, ~U[2026-07-11 12:02:00Z]}
+        ] do
+      assert {:ok, _event, _status} =
+               SourceHealth.record_source_health(
+                 %{
+                   organization_id: organization_id,
+                   mission_id: mission_id,
+                   logical_source: :operational_observables,
+                   data_source_id: "ops-replay",
+                   source_binding_id: "ops-replay-binding",
+                   realm: :replay,
+                   dataset: "operational_observables_replay",
+                   replay_run_id: replay_run_id,
+                   source_health: health,
+                   reason: :source_probe_completed,
+                   observed_at: observed_at
+                 },
+                 invalidate_runtime_cache?: false
+               )
+    end
+
+    [interval | _rest] =
+      OperationalEvents.source_health_intervals(organization_id, mission_id,
+        replay_run_id: replay_run_id,
+        order: :asc
+      )
+
+    link = %DataLink{
+      label: "Source health interval",
+      target: :source_health_interval,
+      target_id: interval.interval_id,
+      context: %{
+        logical_source: :operational_observables,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-replay",
+          source_binding_id: "ops-replay-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.target == :source_health_interval
+    assert row_value(inspector.rows, "Operational interval") == interval.interval_id
+    assert row_value(inspector.rows, "Kind") == "source_health"
+    assert row_value(inspector.rows, "Source event") == interval.source_event_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
+    assert related_link(inspector.related_links, :operational_event, interval.source_event_id)
+
+    wrong_replay_link = put_in(link.context.data.replay_run_id, "another-replay-run")
+
+    assert {:error, missing_inspector} =
+             DataLinkResolver.resolve(wrong_replay_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert missing_inspector.status == :missing
+  end
+
+  test "resolves connection state operational events with semantic rows" do
+    organization_id = "org-resolver-connection-state-operational-event"
+    mission_id = "mission-resolver-connection-state-operational-event"
+    replay_run_id = "replay-run-connection-state-operational-event"
+    observed_at = ~U[2026-06-21 12:04:00Z]
+    persist_mission_scope(organization_id, mission_id)
+
+    assert {:ok, persisted_event} =
+             %{
+               snapshot_id: "connection-state-operational-event-resolver",
+               organization_id: organization_id,
+               mission_id: mission_id,
+               observable_id: "comms.transport.connection_state",
+               resource_id: "transport-alpha",
+               scope_kind: :transport,
+               transport_id: "transport-alpha",
+               source_endpoint_id: "endpoint-alpha",
+               ground_station_id: "dss-14",
+               adapter_key: :tcp_socket,
+               connection_state: :degraded,
+               normalized_state: :degraded,
+               state: :degraded,
+               replay_run_id: replay_run_id,
+               observed_at: observed_at
+             }
+             |> Event.from_operational_observable_state_snapshot()
+             |> OperationalEvents.persist_event()
+
+    link = %DataLink{
+      label: "Connection state operational event",
+      target: :operational_event,
+      target_id: persisted_event.event_id,
+      context: %{
+        source_request_id: "events-request-connection-state",
+        logical_source: :events,
+        data: %{
+          realm: :replay,
+          replay_run_id: replay_run_id,
+          data_source_id: "ops-questdb",
+          source_binding_id: "ops-binding"
+        }
+      },
+      source: :frame
+    }
+
+    assert {:ok, inspector} =
+             DataLinkResolver.resolve(link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert inspector.status == :resolved
+    assert inspector.target == :operational_event
+    assert inspector.target_id == persisted_event.event_id
+    assert row_value(inspector.rows, "Operational event") == persisted_event.event_id
+
+    assert row_value(inspector.rows, "Connection state snapshot") ==
+             "connection-state-operational-event-resolver"
+
+    assert row_value(inspector.rows, "Observed") ==
+             DateTime.to_iso8601(persisted_event.occurred_at)
+
+    assert row_value(inspector.rows, "Observable") == "comms.transport.connection_state"
+    assert row_value(inspector.rows, "Resource") == "transport-alpha"
+    assert row_value(inspector.rows, "Scope kind") == "transport"
+    assert row_value(inspector.rows, "Transport") == "transport-alpha"
+    assert row_value(inspector.rows, "Source endpoint") == "endpoint-alpha"
+    assert row_value(inspector.rows, "Ground station") == "dss-14"
+    assert row_value(inspector.rows, "Adapter") == "tcp_socket"
+    assert row_value(inspector.rows, "Connection state") == "degraded"
+    assert row_value(inspector.rows, "Normalized state") == "degraded"
+    assert row_value(inspector.rows, "State") == "degraded"
+    assert row_value(inspector.rows, "Replay run") == replay_run_id
+    assert row_value(inspector.context_rows, "Replay run") == replay_run_id
   end
 
   test "resolves source binding event links from persisted data bindings" do
@@ -2025,7 +3178,15 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
                      "request_event_id" => comparison_review_request.dashboard_lifecycle_event_id,
                      "request_kind" => "comparison_open_findings_review",
                      "open_count" => "2",
-                     "open_placement_ids" => "placement-1,placement-2"
+                     "open_placement_ids" => "placement-1,placement-2",
+                     "scope_kind" => "transport",
+                     "scope_ids" => "transport-alpha,transport-beta",
+                     "contact_ids" => "contact-alpha,contact-beta",
+                     "resource_ids" => "transport-alpha",
+                     "transport_ids" => "transport-alpha",
+                     "source_endpoint_ids" => "endpoint-alpha",
+                     "ground_station_ids" => "dss-14",
+                     "scope_link_ids" => "link-alpha"
                    }
                  }
                },
@@ -2087,6 +3248,19 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
 
     assert row_value(inspector.rows, "Comparison review open count") == "2"
     assert row_value(inspector.rows, "Comparison review placements") == "placement-1,placement-2"
+    assert row_value(inspector.rows, "Comparison review scope kind") == "transport"
+
+    assert row_value(inspector.rows, "Comparison review scope ids") ==
+             "transport-alpha,transport-beta"
+
+    assert row_value(inspector.rows, "Comparison review contact ids") ==
+             "contact-alpha,contact-beta"
+
+    assert row_value(inspector.rows, "Comparison review resource ids") == "transport-alpha"
+    assert row_value(inspector.rows, "Comparison review transport ids") == "transport-alpha"
+    assert row_value(inspector.rows, "Comparison review source endpoint ids") == "endpoint-alpha"
+    assert row_value(inspector.rows, "Comparison review ground station ids") == "dss-14"
+    assert row_value(inspector.rows, "Comparison review scope link ids") == "link-alpha"
     assert row_value(inspector.rows, "Replay run") == "replay-run-backfill"
     assert row_value(inspector.rows, "Data source") == "flight-questdb"
     assert row_value(inspector.rows, "Source binding") == "flight-telemetry"
@@ -3171,6 +4345,39 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
       action_request_count: Keyword.get(opts, :action_request_count, 0),
       state_snapshot: Keyword.fetch!(opts, :state_snapshot),
       recorded_at: recorded_at,
+      metadata: Keyword.get(opts, :metadata, %{})
+    }
+  end
+
+  defp transport_action_request(
+         mission_id,
+         action_request_id,
+         capability_instance_id,
+         action_kind,
+         requested_at,
+         opts
+       ) do
+    %TransportActionRequest{
+      action_request_id: action_request_id,
+      mission_id: mission_id,
+      realized_contact_id: "realized-contact-1",
+      path_id: Keyword.get(opts, :path_id, "uplink-path-alpha"),
+      capability_instance_id: capability_instance_id,
+      family_key: :heartbeat_monitor,
+      activation_id: "activation-1",
+      binding_set_id: "binding-set-1",
+      binding_set_version: 4,
+      partition_affinity: :source_endpoint,
+      partition_value: "source-endpoint-alpha",
+      command_release_attempt_id:
+        Keyword.get(opts, :command_release_attempt_id, "release-attempt-1"),
+      command_request_id: Keyword.get(opts, :command_request_id, "command-request-1"),
+      source_endpoint_ref: Keyword.get(opts, :source_endpoint_ref, "source-endpoint-alpha"),
+      command_name: Keyword.get(opts, :command_name, "NOOP"),
+      signal_phase: Keyword.get(opts, :signal_phase, :start),
+      action_kind: action_kind,
+      request_document: Keyword.fetch!(opts, :request_document),
+      requested_at: requested_at,
       metadata: Keyword.get(opts, :metadata, %{})
     }
   end

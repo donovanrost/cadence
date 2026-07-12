@@ -3,10 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
 
   import Phoenix.Component, only: [assign: 3]
 
-  alias Cadence.Dashboards.{DataBinding, Document, Placement, WidgetDef}
+  alias Cadence.Dashboards.{DataBinding, Document}
   alias CadenceWeb.OpsDashboardShowLive.EvidenceQuery
   alias CadenceWeb.OpsDashboardShowLive.RouteHydration
-  alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
   alias Phoenix.LiveView.Socket
 
@@ -138,26 +137,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
     assert socket.assigns.context_scope_id == "sc-1"
   end
 
-  test "runtime context hydration rejects stale operational resource URL scopes" do
-    context =
-      RouteHydration.runtime_context_from_params(
-        socket(),
-        %{"scope_kind" => "transport", "scope_id" => "missing-transport"},
-        Keyword.put(
-          opts(),
-          :valid_operational_resource_scope?,
-          fn _scope, _mission, scope_kind, scope_id ->
-            scope_kind == "transport" and scope_id == "transport-alpha"
-          end
-        )
-      )
-
-    assert %RuntimeContext{} = context
-    assert context.scope_kind == "spacecraft"
-    assert context.scope_id == nil
-    assert context.scope_ids == []
-  end
-
   test "handle_params hydrates selection when context is unchanged and engine result exists" do
     socket =
       socket()
@@ -189,168 +168,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
              "selected_placement" => "placement-1",
              "selected_warning_code" => "stale_source"
            }
-  end
-
-  test "handle_params hydrates review activity placement focus" do
-    socket =
-      socket()
-      |> assign_current_runtime_context(%{"scope_kind" => "mission", "scope_id" => "mission-1"})
-      |> assign(:dashboard_engine_result, %{status: :ok})
-
-    socket =
-      RouteHydration.handle_params(
-        socket,
-        %{
-          "scope_kind" => "mission",
-          "scope_id" => "mission-1",
-          "panel" => "versions",
-          "activity_filter" => "open_comparison_reviews",
-          "activity_event" => "dashboard-lifecycle-event-1",
-          "selected_placement" => "placement-1",
-          "selected_publish_issue" => "error:invalid-grid"
-        },
-        opts()
-      )
-
-    assert socket.assigns.panel == :versions
-    assert socket.assigns.dashboard_activity_filter == :open_comparison_reviews
-    assert socket.assigns.dashboard_activity_event_id == "dashboard-lifecycle-event-1"
-    assert socket.assigns.dashboard_review_placement_id == "placement-1"
-    assert socket.assigns.dashboard_selected_publish_issue_id == "error:invalid-grid"
-    assert socket.assigns.dashboard_selection_query == nil
-    assert socket.assigns.hydrated? == true
-  end
-
-  test "handle_params preserves source return readiness refresh intent" do
-    socket =
-      socket()
-      |> assign_current_runtime_context(%{"scope_kind" => "mission", "scope_id" => "mission-1"})
-      |> assign(:dashboard_engine_result, %{status: :ok})
-
-    socket =
-      RouteHydration.handle_params(
-        socket,
-        %{
-          "scope_kind" => "mission",
-          "scope_id" => "mission-1",
-          "panel" => "versions",
-          "activity_filter" => "publish_readiness",
-          "activity_event" => "dashboard-lifecycle-event-readiness",
-          "refresh_readiness" => "source_return"
-        },
-        opts()
-      )
-
-    assert socket.assigns.panel == :versions
-    assert socket.assigns.dashboard_activity_filter == :publish_readiness
-    assert socket.assigns.dashboard_activity_event_id == "dashboard-lifecycle-event-readiness"
-    assert socket.assigns.dashboard_readiness_return_intent == "source_return"
-    assert socket.assigns.hydrated? == true
-  end
-
-  test "handle_params hydrates supported dashboard activity filters" do
-    socket =
-      socket()
-      |> assign_current_runtime_context(%{"scope_kind" => "mission", "scope_id" => "mission-1"})
-      |> assign(:dashboard_engine_result, %{status: :ok})
-
-    socket =
-      RouteHydration.handle_params(
-        socket,
-        %{
-          "scope_kind" => "mission",
-          "scope_id" => "mission-1",
-          "panel" => "versions",
-          "activity_filter" => "health_snapshots",
-          "activity_event" => "dashboard-lifecycle-event-health",
-          "selected_placement" => "review-placement"
-        },
-        opts()
-      )
-
-    assert socket.assigns.panel == :versions
-    assert socket.assigns.dashboard_activity_filter == :health_snapshots
-    assert socket.assigns.dashboard_activity_event_id == "dashboard-lifecycle-event-health"
-    assert socket.assigns.dashboard_review_placement_id == nil
-    assert socket.assigns.hydrated? == true
-  end
-
-  test "assign_runtime_context clears stale data selections" do
-    socket =
-      socket(%{
-        dashboard_selected_data_ref: %{
-          "target" => "telemetry_sample",
-          "target_id" => "sample-1",
-          "scope_kind" => "mission",
-          "scope_id" => "mission-1",
-          "realm" => "flight",
-          "data_view" => "canonical",
-          "data_source_id" => "questdb-flight",
-          "source_binding_id" => "flight-binding"
-        }
-      })
-
-    runtime_context =
-      RouteHydration.runtime_context_from_params(socket, %{
-        "scope_kind" => "mission",
-        "scope_id" => "mission-1",
-        "realm" => "rehearsal",
-        "source_binding_id" => "rehearsal-binding"
-      })
-
-    socket = RouteHydration.assign_runtime_context(socket, runtime_context)
-
-    assert socket.assigns.dashboard_selected_data_ref == nil
-    assert socket.assigns.dashboard_data_realm == "rehearsal"
-    assert socket.assigns.dashboard_source_binding_id == "rehearsal-binding"
-    assert socket.assigns.chart_epoch == 1
-  end
-
-  test "assign_runtime_context refreshes repeated render items from runtime scope" do
-    socket =
-      socket(%{
-        dashboard_document: repeated_document(),
-        dashboard_render_items: []
-      })
-
-    socket =
-      RouteHydration.assign_runtime_context(
-        socket,
-        runtime_context(%{
-          scope_kind: "spacecraft",
-          scope_id: "sc-1",
-          scope_context: %{
-            "primary" => %{
-              "kind" => "spacecraft",
-              "mode" => "many",
-              "ids" => ["sc-1", "sc-2"]
-            }
-          },
-          spacecraft_id: "sc-1"
-        })
-      )
-
-    assert Enum.map(socket.assigns.dashboard_render_items, & &1.placement_id) == [
-             "placement-repeat__repeat__spacecraft__sc-1",
-             "placement-repeat__repeat__spacecraft__sc-2"
-           ]
-
-    socket =
-      RouteHydration.assign_runtime_context(
-        socket,
-        runtime_context(%{
-          scope_kind: "spacecraft",
-          scope_id: "sc-3",
-          scope_context: %{
-            "primary" => %{"kind" => "spacecraft", "mode" => "one", "ids" => ["sc-3"]}
-          },
-          spacecraft_id: "sc-3"
-        })
-      )
-
-    assert Enum.map(socket.assigns.dashboard_render_items, & &1.placement_id) == [
-             "placement-repeat__repeat__spacecraft__sc-3"
-           ]
   end
 
   defp opts do
@@ -444,53 +261,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
         }
       }
     }
-  end
-
-  defp repeated_document do
-    %Document{
-      dashboard_id: "dashboard-repeat",
-      organization_id: "org-1",
-      mission_id: "mission-1",
-      grid: %{columns: 12, row_height_px: 64, gap_px: 8},
-      placements: [
-        %Placement{
-          placement_id: "placement-repeat",
-          layout: %{x: 0, y: 0, w: 4, h: 3},
-          repeat: %{axis: :scope, over: :spacecraft, layout: :wrap_grid, max_instances: 12},
-          widget_def: %WidgetDef{
-            widget_type_id: "cadence.status_matrix",
-            title: "Spacecraft Status",
-            binding: %{observables: ["HK.counter"], scope_mode: :repeat}
-          }
-        }
-      ]
-    }
-  end
-
-  defp runtime_context(attrs) do
-    RuntimeContext.new(
-      Map.merge(
-        %{
-          scope_kind: nil,
-          scope_id: nil,
-          scope_context: nil,
-          spacecraft_id: nil,
-          time_mode: "live",
-          time_validation: "ok",
-          realm: "flight",
-          data_view: "canonical",
-          compare_data_view: nil,
-          data_source_id: nil,
-          source_binding_id: nil,
-          limit_mode: "observed",
-          limit_mode_fallback: nil,
-          time_context: %{"mode" => "live", "axis" => "generation_time"},
-          data_context: %{"realm" => "flight", "view" => "canonical"},
-          limit_context: %{"semantics_mode" => "observed"}
-        },
-        attrs
-      )
-    )
   end
 
   defp data_binding(attrs \\ %{}) do

@@ -34,6 +34,7 @@ defmodule Cadence.Dashboards do
     SourceHealthEvent,
     SourceHealthStatus,
     SourceResult,
+    TSDBBackendLifecycleJobs,
     ValidationResult,
     Version
   }
@@ -561,5 +562,40 @@ defmodule Cadence.Dashboards do
           {:ok, ManagedQuestDBProvisioningRuns.t()} | {:error, term()}
   def requeue_managed_questdb_provisioning_run(job_id) when is_binary(job_id) do
     ManagedQuestDBProvisioningRuns.requeue_running(job_id)
+  end
+
+  @spec request_tsdb_backend_deprovisioning(binary(), map(), keyword()) ::
+          {:ok, Cadence.Dashboards.DataSource.t(), Cadence.Jobs.Job.t()} | {:error, term()}
+  def request_tsdb_backend_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    TSDBBackendLifecycleJobs.request_deprovisioning(data_source_id, attrs, opts)
+  end
+
+  @spec request_tsdb_backend_provisioning(binary(), map(), keyword()) ::
+          {:ok, Cadence.Dashboards.DataSource.t(), Cadence.Jobs.Job.t()} | {:error, term()}
+  def request_tsdb_backend_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    TSDBBackendLifecycleJobs.request_provisioning(data_source_id, attrs, opts)
+  end
+
+  @spec execute_enqueued_tsdb_backend_lifecycle(binary()) :: {:ok, map()} | {:error, term()}
+  def execute_enqueued_tsdb_backend_lifecycle(run_id) when is_binary(run_id) do
+    TSDBBackendLifecycleJobs.execute_enqueued_run(run_id)
+  end
+
+  @spec list_tsdb_backend_lifecycle_runs(binary(), keyword()) :: [map()]
+  def list_tsdb_backend_lifecycle_runs(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    TSDBBackendLifecycleJobs.list_for_mission(mission_id, opts)
+  end
+
+  @spec retry_tsdb_backend_lifecycle_run(binary()) :: {:ok, map()} | {:error, term()}
+  def retry_tsdb_backend_lifecycle_run(job_id) when is_binary(job_id) do
+    TSDBBackendLifecycleJobs.retry_failed(job_id)
+  end
+
+  @spec requeue_tsdb_backend_lifecycle_run(binary()) :: {:ok, map()} | {:error, term()}
+  def requeue_tsdb_backend_lifecycle_run(job_id) when is_binary(job_id) do
+    TSDBBackendLifecycleJobs.requeue_running(job_id)
   end
 end

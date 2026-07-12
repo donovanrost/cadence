@@ -10,6 +10,7 @@ defmodule Cadence.Dashboards.EvidenceRefTest do
     assert EvidenceRef.kind?(:source_watermark_event)
     assert EvidenceRef.kind?(:source_binding_event)
     assert EvidenceRef.kind?(:source_binding_interval)
+    assert EvidenceRef.kind?(:source_health_interval)
     assert EvidenceRef.kind?(:binding_set_interval)
     assert EvidenceRef.kind?(:application_binding_interval)
     assert EvidenceRef.kind?(:catalog_revision_interval)
@@ -17,6 +18,11 @@ defmodule Cadence.Dashboards.EvidenceRefTest do
     assert EvidenceRef.kind?(:operational_event)
     assert EvidenceRef.kind?(:operational_interval)
     assert EvidenceRef.kind?(:transport_execution_interval)
+    assert EvidenceRef.kind?(:command_queue_entry)
+    assert EvidenceRef.kind?(:command_release_attempt)
+    assert EvidenceRef.kind?(:command_verifier_instance)
+    assert EvidenceRef.kind?(:transport_action_request)
+    assert EvidenceRef.kind?(:transport_capability_record)
 
     assert EvidenceRef.source?(:telemetry)
     assert EvidenceRef.source?(:operational_observables)
@@ -42,6 +48,23 @@ defmodule Cadence.Dashboards.EvidenceRefTest do
                "observed_at" => ~U[2026-06-17 12:00:00Z],
                "source" => "telemetry",
                "confidence" => "best_effort"
+             })
+  end
+
+  test "normalizes command queue entry refs from serialized evidence maps" do
+    assert %EvidenceRef{
+             kind: :command_queue_entry,
+             id: "queue-entry-1",
+             observed_at: ~U[2026-06-17 12:00:00Z],
+             source: :operational_observables,
+             confidence: :direct
+           } =
+             EvidenceRef.normalize(%{
+               "kind" => "command_queue_entry",
+               "id" => "queue-entry-1",
+               "observed_at" => ~U[2026-06-17 12:00:00Z],
+               "source" => "operational_observables",
+               "confidence" => "direct"
              })
   end
 

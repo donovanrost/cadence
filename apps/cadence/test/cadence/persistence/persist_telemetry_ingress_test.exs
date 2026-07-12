@@ -1,6 +1,8 @@
 defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
@@ -86,11 +88,11 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, result} =
              Cadence.process_and_persist_telemetry_ingress(raw_evidence, binding_set)
 
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 1
-    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 1
-    assert Repo.aggregate(DispatchDecisionRow, :count, :dispatch_decision_id) == 0
-    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 2
-    assert Repo.aggregate(TelemetryLatestValueRow, :count, :id) == 2
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-alpha") == 1
+    assert count_for_mission(PacketRecordRow, :packet_id, "mission-alpha") == 1
+    assert count_dispatch_decisions_for_evidence(raw_evidence.evidence_id) == 0
+    assert count_for_mission(TelemetrySampleRow, :sample_id, "mission-alpha") == 2
+    assert count_for_mission(TelemetryLatestValueRow, :id, "mission-alpha") == 2
 
     evidence_row = Repo.get!(RawEvidenceRow, raw_evidence.evidence_id)
     assert evidence_row.mission_id == "mission-alpha"
@@ -117,6 +119,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
     telemetry_samples =
       TelemetrySampleRow
+      |> where([row], row.mission_id == "mission-alpha")
       |> order_by(asc: :point_name)
       |> Repo.all()
 
@@ -159,7 +162,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       })
 
     assert {:ok, _binding_set} = Cadence.persist_binding_set(binding_set)
-    assert Repo.aggregate(BindingSetRow, :count, :id) == 1
+    assert count_for_mission(BindingSetRow, :id, "mission-alpha") == 1
 
     raw_evidence =
       RawEvidence.new(%{
@@ -177,7 +180,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     [dispatch_decision] = result.dispatch_decisions
     assert dispatch_decision.status == :matched
     assert Enum.map(result.outputs, & &1.raw_value) == [7]
-    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 1
+    assert count_for_mission(TelemetrySampleRow, :sample_id, "mission-alpha") == 1
   end
 
   test "loads persisted little-endian packet definitions and decodes samples correctly" do
@@ -246,6 +249,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
     telemetry_samples =
       TelemetrySampleRow
+      |> where([row], row.mission_id == "mission-alpha")
       |> order_by(asc: :point_name)
       |> Repo.all()
 
@@ -321,9 +325,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
              Cadence.process_and_persist_telemetry_ingress(raw_evidence, binding_set)
 
     assert result.outputs == []
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 0
-    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 0
-    assert Repo.aggregate(DispatchDecisionRow, :count, :dispatch_decision_id) == 0
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-dispatch-archive") == 0
+    assert count_for_mission(PacketRecordRow, :packet_id, "mission-dispatch-archive") == 0
+    assert count_dispatch_decisions_for_evidence(raw_evidence.evidence_id) == 0
 
     [dispatch_decision] = result.dispatch_decisions
     assert dispatch_decision.packet_id
@@ -472,7 +476,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
              :frame_sequence_discontinuity
            ]
 
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 0
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-alpha") == 0
 
     latency_events =
       OperationalEvents.list_events("mission-alpha",
@@ -524,7 +528,11 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert Enum.all?(latency_samples, &(&1.unit == "ms"))
     assert Enum.all?(latency_samples, &(&1.value > 0))
 
-    [anomaly_row] = Repo.all(ProtocolAnomalyRow)
+    [anomaly_row] =
+      ProtocolAnomalyRow
+      |> where([row], row.mission_id == "mission-alpha")
+      |> Repo.all()
+
     assert anomaly_row.anomaly_kind == "frame_sequence_discontinuity"
     assert anomaly_row.evidence_id == raw_evidence_two.evidence_id
   end
@@ -682,7 +690,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
                record_current_values?: false
              )
 
-    assert Repo.aggregate(ProtocolAnomalyRow, :count, :anomaly_id) == 1
+    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, mission_id) == 1
   end
 
   test "persists multiple processing results in one batch with Postgres archive backends" do
@@ -751,12 +759,13 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
                record_current_values?: false
              )
 
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 2
-    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 2
-    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 2
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-alpha") == 2
+    assert count_for_mission(PacketRecordRow, :packet_id, "mission-alpha") == 2
+    assert count_for_mission(TelemetrySampleRow, :sample_id, "mission-alpha") == 2
 
     sample_values =
       TelemetrySampleRow
+      |> where([row], row.mission_id == "mission-alpha")
       |> order_by(asc: :receipt_time, asc: :sample_id)
       |> Repo.all()
       |> Enum.map(fn row -> row.raw_value["value"] end)
@@ -839,27 +848,33 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert first_result.packet_records == []
     assert length(first_result.transfer_frame_records) == 1
     assert first_result.protocol_anomalies == []
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 1
-    assert Repo.aggregate(TransferFrameRecordRow, :count, :frame_record_id) == 1
-    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 0
-    assert Repo.aggregate(ProtocolAnomalyRow, :count, :anomaly_id) == 0
-    assert Repo.aggregate(DispatchDecisionRow, :count, :dispatch_decision_id) == 0
-    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 0
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-alpha") == 1
+    assert count_for_mission(TransferFrameRecordRow, :frame_record_id, "mission-alpha") == 1
+    assert count_for_mission(PacketRecordRow, :packet_id, "mission-alpha") == 0
+    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, "mission-alpha") == 0
+    assert count_dispatch_decisions_for_evidence(raw_evidence_one.evidence_id) == 0
+    assert count_for_mission(TelemetrySampleRow, :sample_id, "mission-alpha") == 0
 
     assert {:ok, second_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence_two)
     [packet_record] = second_result.packet_records
     assert length(second_result.transfer_frame_records) == 1
     assert second_result.protocol_anomalies == []
     assert packet_record.protocol_family == :tm
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 2
-    assert Repo.aggregate(TransferFrameRecordRow, :count, :frame_record_id) == 2
-    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 1
-    assert Repo.aggregate(ProtocolAnomalyRow, :count, :anomaly_id) == 0
-    assert Repo.aggregate(DispatchDecisionRow, :count, :dispatch_decision_id) == 0
-    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 1
+    assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-alpha") == 2
+    assert count_for_mission(TransferFrameRecordRow, :frame_record_id, "mission-alpha") == 2
+    assert count_for_mission(PacketRecordRow, :packet_id, "mission-alpha") == 1
+    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, "mission-alpha") == 0
+
+    assert count_dispatch_decisions_for_evidence([
+             raw_evidence_one.evidence_id,
+             raw_evidence_two.evidence_id
+           ]) == 0
+
+    assert count_for_mission(TelemetrySampleRow, :sample_id, "mission-alpha") == 1
 
     [first_frame_row, second_frame_row] =
       TransferFrameRecordRow
+      |> where([row], row.mission_id == "mission-alpha")
       |> order_by(asc: :inserted_at)
       |> Repo.all()
 
@@ -950,12 +965,30 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
              :frame_sequence_discontinuity
            ]
 
-    [anomaly_row] = Repo.all(ProtocolAnomalyRow)
+    [anomaly_row] =
+      ProtocolAnomalyRow
+      |> where([row], row.mission_id == "mission-alpha")
+      |> Repo.all()
+
     assert anomaly_row.anomaly_kind == "frame_sequence_discontinuity"
     assert anomaly_row.protocol_family == "tm"
     assert anomaly_row.vcid == 2
     assert anomaly_row.metadata["expected_frame_seq"] == 2
     assert anomaly_row.metadata["observed_frame_seq"] == 3
+  end
+
+  defp count_for_mission(schema, field, mission_id) do
+    schema
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.aggregate(:count, field)
+  end
+
+  defp count_dispatch_decisions_for_evidence(evidence_ids) do
+    evidence_ids = List.wrap(evidence_ids)
+
+    DispatchDecisionRow
+    |> where([row], row.evidence_id in ^evidence_ids)
+    |> Repo.aggregate(:count, :dispatch_decision_id)
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

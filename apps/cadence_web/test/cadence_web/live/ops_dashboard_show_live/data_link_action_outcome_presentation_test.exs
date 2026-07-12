@@ -124,6 +124,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
           kind: :error,
           reason: "revision_decision_failed",
           decision: "mark_conflict",
+          dashboard_time_mode: "replay_run",
+          dashboard_replay_run_id: "replay-1",
+          dashboard_data_view: "all_revisions",
+          dashboard_limit_mode: "compare",
           result_event_id: "decision-event-1",
           target_event_id: "decision-event-1",
           target_observation_identity_id: "identity-1",
@@ -137,6 +141,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
 
     assert presentation.metadata == %{
              "decision" => "mark_conflict",
+             "dashboard_time_mode" => "replay_run",
+             "dashboard_replay_run_id" => "replay-1",
+             "dashboard_data_view" => "all_revisions",
+             "dashboard_limit_mode" => "compare",
              "result_event_id" => "decision-event-1",
              "target_event_id" => "decision-event-1",
              "target_observation_identity_id" => "identity-1"
@@ -194,6 +202,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
           execution_mode: "sample_execution",
           dashboard_time_mode: "replay_run",
           dashboard_replay_run_id: "replay-1",
+          dashboard_data_view: "all_revisions",
           dashboard_limit_mode: "compare",
           result_event_id: "late-event-1",
           target_event_id: "late-event-1",
@@ -208,6 +217,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
              action_suffix: "action"
            ) == %{
              "data-data-link-action-outcome-action" => "late_data_policy",
+             "data-data-link-action-outcome-dashboard-data-view" => "all_revisions",
              "data-data-link-action-outcome-dashboard-limit-mode" => "compare",
              "data-data-link-action-outcome-dashboard-replay-run-id" => "replay-1",
              "data-data-link-action-outcome-dashboard-time-mode" => "replay_run",
@@ -235,6 +245,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
           requested: 2,
           applied: 2,
           failed: 0,
+          scope_kind: "transport",
+          scope_ids: "transport-alpha,transport-beta",
+          contact_ids: "contact-alpha,contact-beta",
+          resource_ids: "transport-alpha",
+          transport_ids: "transport-alpha",
+          source_endpoint_ids: "endpoint-alpha",
+          ground_station_ids: "dss-14",
+          scope_link_ids: "link-alpha",
           result_event_ids: "decision-1,decision-2",
           target_event_id: "request-1"
         ),
@@ -256,6 +274,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
     assert attrs["data-dashboard-comparison-review-action-requested"] == "2"
     assert attrs["data-dashboard-comparison-review-action-applied"] == "2"
     assert attrs["data-dashboard-comparison-review-action-failed"] == "0"
+    assert attrs["data-dashboard-comparison-review-action-scope-kind"] == "transport"
+
+    assert attrs["data-dashboard-comparison-review-action-scope-ids"] ==
+             "transport-alpha,transport-beta"
+
+    assert attrs["data-dashboard-comparison-review-action-contact-ids"] ==
+             "contact-alpha,contact-beta"
+
+    assert attrs["data-dashboard-comparison-review-action-resource-ids"] == "transport-alpha"
+    assert attrs["data-dashboard-comparison-review-action-transport-ids"] == "transport-alpha"
+
+    assert attrs["data-dashboard-comparison-review-action-source-endpoint-ids"] ==
+             "endpoint-alpha"
+
+    assert attrs["data-dashboard-comparison-review-action-ground-station-ids"] == "dss-14"
+    assert attrs["data-dashboard-comparison-review-action-scope-link-ids"] == "link-alpha"
 
     assert attrs["data-dashboard-comparison-review-action-result-event-ids"] ==
              "decision-1,decision-2"

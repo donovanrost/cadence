@@ -9,7 +9,22 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
       request_event("request-1",
         payload: %{
           "open_placement_ids" => ["placement-1", "placement-2"],
-          "open_count" => 2
+          "open_count" => 2,
+          "open_findings" => %{
+            "findings" => [
+              %{
+                "placement_id" => "placement-1",
+                "scope_kind" => "transport",
+                "scope_ids" => ["transport-alpha", "transport-beta"],
+                "contact_ids" => ["contact-alpha", "contact-beta"],
+                "resource_id" => "transport-alpha",
+                "transport_id" => "transport-alpha",
+                "source_endpoint_id" => "endpoint-alpha",
+                "ground_station_id" => "dss-14",
+                "scope_link_id" => "link-alpha"
+              }
+            ]
+          }
         }
       ),
       request_event("request-2",
@@ -31,7 +46,24 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
              request_ids: ["request-1"],
              request_ids_attr: "request-1",
              placement_ids: ["placement-1", "placement-2"],
-             placements_attr: "placement-1,placement-2"
+             placements_attr: "placement-1,placement-2",
+             scope_kind: "transport",
+             scope_kinds: ["transport"],
+             scope_kinds_attr: "transport",
+             scope_ids: ["transport-alpha", "transport-beta"],
+             scope_ids_attr: "transport-alpha,transport-beta",
+             contact_ids: ["contact-alpha", "contact-beta"],
+             contact_ids_attr: "contact-alpha,contact-beta",
+             resource_ids: ["transport-alpha"],
+             resource_ids_attr: "transport-alpha",
+             transport_ids: ["transport-alpha"],
+             transport_ids_attr: "transport-alpha",
+             source_endpoint_ids: ["endpoint-alpha"],
+             source_endpoint_ids_attr: "endpoint-alpha",
+             ground_station_ids: ["dss-14"],
+             ground_station_ids_attr: "dss-14",
+             scope_link_ids: ["link-alpha"],
+             scope_link_ids_attr: "link-alpha"
            }
   end
 
@@ -44,8 +76,26 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
           open_count: "bad-count",
           open_findings: %{
             findings: [
-              %{placement_id: "placement-1", title: "Voltage", decision_status: "unhandled"},
-              %{"placement_id" => "placement-2", "state" => "missing"}
+              %{
+                placement_id: "placement-1",
+                title: "Voltage",
+                decision_status: "unhandled",
+                scope_kind: "transport",
+                scope_ids: ["transport-alpha", "transport-beta"],
+                contact_ids: ["contact-alpha", "contact-beta"],
+                resource_id: "transport-alpha",
+                transport_id: "transport-alpha",
+                source_endpoint_id: "endpoint-alpha",
+                ground_station_id: "dss-14",
+                scope_link_id: "link-alpha"
+              },
+              %{
+                "placement_id" => "placement-2",
+                "state" => "missing",
+                "scope_kind" => "transport",
+                "scope_id" => "transport-gamma",
+                "contact_id" => "contact-gamma"
+              }
             ]
           }
         }
@@ -61,6 +111,17 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
     assert summary.open_count_text == "2"
     assert summary.placement_ids == ["placement-1", "placement-2"]
     assert summary.placements_attr == "placement-1,placement-2"
+    assert summary.scope_kind == "transport"
+    assert summary.scope_ids == ["transport-alpha", "transport-beta", "transport-gamma"]
+    assert summary.scope_ids_attr == "transport-alpha,transport-beta,transport-gamma"
+    assert summary.contact_ids == ["contact-alpha", "contact-beta", "contact-gamma"]
+    assert summary.contact_ids_attr == "contact-alpha,contact-beta,contact-gamma"
+    assert summary.resource_ids == ["transport-alpha"]
+    assert summary.transport_ids == ["transport-alpha"]
+    assert summary.source_endpoint_ids == ["endpoint-alpha"]
+    assert summary.ground_station_ids == ["dss-14"]
+    assert summary.scope_link_ids == ["link-alpha"]
+    assert summary.operational_context.scope_ids == summary.scope_ids
 
     assert Enum.map(summary.findings, &ComparisonReviewQueue.finding_summary/1) == [
              %{
@@ -105,6 +166,14 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
           },
           "source_open_count" => 2,
           "source_open_placement_ids" => ["placement-1", "placement-2"],
+          "source_scope_kind" => "transport",
+          "source_scope_ids" => ["transport-alpha", "transport-beta"],
+          "source_contact_ids" => ["contact-alpha", "contact-beta"],
+          "source_resource_ids" => ["transport-alpha"],
+          "source_transport_ids" => ["transport-alpha"],
+          "source_endpoint_ids" => ["endpoint-alpha"],
+          "source_ground_station_ids" => ["dss-14"],
+          "source_scope_link_ids" => ["link-alpha"],
           "source_bulk_decision_actionable_count" => 1,
           "source_bulk_decision_actionable_placement_ids" => ["placement-1"],
           "source_bulk_decision_skipped_count" => 1,
@@ -127,6 +196,21 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
              source_open_count_text: "2",
              source_open_placement_ids: ["placement-1", "placement-2"],
              source_open_placements_attr: "placement-1,placement-2",
+             source_scope_kind: "transport",
+             source_scope_ids: ["transport-alpha", "transport-beta"],
+             source_scope_ids_attr: "transport-alpha,transport-beta",
+             source_contact_ids: ["contact-alpha", "contact-beta"],
+             source_contact_ids_attr: "contact-alpha,contact-beta",
+             source_resource_ids: ["transport-alpha"],
+             source_resource_ids_attr: "transport-alpha",
+             source_transport_ids: ["transport-alpha"],
+             source_transport_ids_attr: "transport-alpha",
+             source_endpoint_ids: ["endpoint-alpha"],
+             source_endpoint_ids_attr: "endpoint-alpha",
+             source_ground_station_ids: ["dss-14"],
+             source_ground_station_ids_attr: "dss-14",
+             source_scope_link_ids: ["link-alpha"],
+             source_scope_link_ids_attr: "link-alpha",
              source_bulk_decision_actionable_count_text: "1",
              source_bulk_decision_actionable_placement_ids: ["placement-1"],
              source_bulk_decision_actionable_placements_attr: "placement-1",

@@ -98,6 +98,99 @@ defmodule Cadence.Dashboards.PublishReadinessPayloadTest do
            ] = payload["typed_remediation_actions"]
   end
 
+  test "builds publish readiness payload for repeated invalid runtime default contexts" do
+    validation = %ValidationResult{
+      valid?: false,
+      errors: [
+        %{
+          code: :invalid_runtime_default_context,
+          details: %{context: :time, errors: [:unsupported_time_mode]}
+        },
+        %{
+          code: :invalid_runtime_default_context,
+          details: %{context: :data, errors: [:unsupported_data_realm]}
+        }
+      ]
+    }
+
+    payload =
+      PublishReadinessPayload.publish_readiness_payload_for(
+        document(1, %{
+          "time" => %{"mode" => "unsupported"},
+          "data" => %{"realm" => "lab"}
+        }),
+        validation,
+        %{draft_version: 1, latest_version: 1, published_version: nil}
+      )
+
+    assert payload["result"] == "still_blocked"
+    assert payload["error_count"] == 2
+    assert payload["warning_count"] == 0
+    assert payload["issue_count"] == 2
+
+    assert payload["issue_codes"] == [
+             "invalid_runtime_default_context",
+             "invalid_runtime_default_context"
+           ]
+
+    assert payload["source_warning_codes"] == []
+
+    assert [
+             %{
+               "id" => "error:invalid_runtime_default_context:time:unsupported_time_mode",
+               "severity" => "error",
+               "code" => "invalid_runtime_default_context",
+               "message" => "Dashboard runtime defaults include unsupported time context.",
+               "action" => %{
+                 "issue_id" => "error:invalid_runtime_default_context:time:unsupported_time_mode",
+                 "label" => "Update runtime defaults",
+                 "target" => "dashboard_context",
+                 "params" => %{
+                   "selected_publish_issue" =>
+                     "error:invalid_runtime_default_context:time:unsupported_time_mode"
+                 }
+               }
+             },
+             %{
+               "id" => "error:invalid_runtime_default_context:data:unsupported_data_realm",
+               "severity" => "error",
+               "code" => "invalid_runtime_default_context",
+               "message" => "Dashboard runtime defaults include unsupported data context.",
+               "action" => %{
+                 "issue_id" =>
+                   "error:invalid_runtime_default_context:data:unsupported_data_realm",
+                 "label" => "Update runtime defaults",
+                 "target" => "dashboard_context",
+                 "params" => %{
+                   "selected_publish_issue" =>
+                     "error:invalid_runtime_default_context:data:unsupported_data_realm"
+                 }
+               }
+             }
+           ] = payload["issue_summaries"]
+
+    assert [
+             %{
+               "issue_id" => "error:invalid_runtime_default_context:time:unsupported_time_mode",
+               "label" => "Update runtime defaults",
+               "target" => "dashboard_context",
+               "params" => %{
+                 "selected_publish_issue" =>
+                   "error:invalid_runtime_default_context:time:unsupported_time_mode"
+               }
+             },
+             %{
+               "issue_id" => "error:invalid_runtime_default_context:data:unsupported_data_realm",
+               "label" => "Update runtime defaults",
+               "target" => "dashboard_context",
+               "params" => %{
+                 "selected_publish_issue" =>
+                   "error:invalid_runtime_default_context:data:unsupported_data_realm"
+               }
+             }
+           ] = payload["remediation_targets"]
+  end
+
   defp document(version, defaults) do
     %Document{
       dashboard_id: "dashboard-1",

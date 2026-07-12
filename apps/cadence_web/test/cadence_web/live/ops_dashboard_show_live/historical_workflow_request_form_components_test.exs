@@ -26,7 +26,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
               "comparison_review_request_event_id" => "review-request-1",
               "comparison_review_request_kind" => "comparison_open_findings_review",
               "comparison_review_open_count" => "2",
-              "comparison_review_open_placement_ids" => "placement-1,placement-2"
+              "comparison_review_open_placement_ids" => "placement-1,placement-2",
+              "comparison_review_scope_kind" => "transport",
+              "comparison_review_scope_ids" => "transport-alpha,transport-beta",
+              "comparison_review_contact_ids" => "contact-alpha,contact-beta",
+              "comparison_review_resource_ids" => "transport-alpha",
+              "comparison_review_transport_ids" => "transport-alpha",
+              "comparison_review_source_endpoint_ids" => "endpoint-alpha",
+              "comparison_review_ground_station_ids" => "dss-14",
+              "comparison_review_scope_link_ids" => "link-alpha"
             },
             as: :historical_workflow_request
           )
@@ -128,6 +136,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
              )
              |> LazyHTML.attribute("value")
 
+    assert ["transport"] =
+             document
+             |> LazyHTML.query(
+               ~s(input[name="historical_workflow_request[comparison_review_scope_kind]"])
+             )
+             |> LazyHTML.attribute("value")
+
+    assert ["transport-alpha,transport-beta"] =
+             document
+             |> LazyHTML.query(
+               ~s(input[name="historical_workflow_request[comparison_review_scope_ids]"])
+             )
+             |> LazyHTML.attribute("value")
+
+    assert ["contact-alpha,contact-beta"] =
+             document
+             |> LazyHTML.query(
+               ~s(input[name="historical_workflow_request[comparison_review_contact_ids]"])
+             )
+             |> LazyHTML.attribute("value")
+
+    assert ["endpoint-alpha"] =
+             document
+             |> LazyHTML.query(
+               ~s(input[name="historical_workflow_request[comparison_review_source_endpoint_ids]"])
+             )
+             |> LazyHTML.attribute("value")
+
     assert "Backfill" =
              document
              |> LazyHTML.query(~s([data-preview-field="workflow"] dd))
@@ -146,6 +182,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
     assert "archive / replay-1 / as_recorded / observed" =
              document
              |> LazyHTML.query(~s([data-preview-field="runtime"] dd))
+             |> selected_text()
+
+    assert "transport / transport-alpha,transport-beta / contact-alpha,contact-beta / transport-alpha / endpoint-alpha / dss-14 / link-alpha" =
+             document
+             |> LazyHTML.query(~s([data-preview-field="comparison_scope"] dd))
              |> selected_text()
   end
 

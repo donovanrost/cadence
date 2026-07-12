@@ -221,6 +221,12 @@ scope context, and can deny material access before the secret backend is called.
 Denials are audited as redacted security events. The default path is currently
 permissive and marked `todo(authz)` until the broader RBAC model exists.
 
+External secret-manager URLs must use HTTPS by default. Local or test-only
+deployments that intentionally use plain HTTP must set
+`allow_insecure_secret_manager_http?: true` in the credential resolution opts or
+`:dashboard_source_credentials` config; otherwise material resolution fails
+closed before any request is sent.
+
 For early BYO setup flows, credential metadata may also store non-secret
 environment variable names directly, for example
 `{"material_env_profile": "customer-rehearsal", "http_endpoint_env": "CUSTOMER_REHEARSAL_QUESTDB_HTTP_ENDPOINT"}`.

@@ -15,13 +15,14 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
   test "tcp provider ingests fixed-size TM frames into the active mission runtime" do
     organization_id = unique_id("org-tcp-provider")
-    mission_id = "mission-tcp-provider-" <> Integer.to_string(System.unique_integer([:positive]))
+    fixture_id = Integer.to_string(System.unique_integer([:positive]))
+    mission_id = "mission-tcp-provider-" <> fixture_id
 
     persist_mission_scope(organization_id, mission_id)
 
     spacecraft =
       Spacecraft.new(%{
-        spacecraft_id: "sc-tcp-provider",
+        spacecraft_id: "sc-tcp-provider-" <> fixture_id,
         mission_id: mission_id,
         display_name: "SC TCP"
       })
@@ -30,7 +31,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     source_endpoint =
       SourceEndpoint.new(%{
-        source_endpoint_id: "endpoint-tcp-provider",
+        source_endpoint_id: "endpoint-tcp-provider-" <> fixture_id,
         mission_id: mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
         source_ref: "provider/tcp"
@@ -42,7 +43,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     packet_definition =
       PacketDefinition.new(%{
         mission_id: mission_id,
-        packet_definition_id: "packet-tcp-provider",
+        packet_definition_id: "packet-tcp-provider-" <> fixture_id,
         packet_name: "TMHK",
         apid: 42,
         version: 1,
@@ -54,11 +55,11 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     binding_set =
       BindingSet.new(%{
         mission_id: mission_id,
-        binding_set_id: "tcp-provider-basis",
+        binding_set_id: "tcp-provider-basis-" <> fixture_id,
         version: 1,
         rules: [
           BindingRule.new(%{
-            binding_rule_id: "tcp-provider-telemetry-rule",
+            binding_rule_id: "tcp-provider-telemetry-rule-" <> fixture_id,
             handler_key: :definition_bound_telemetry,
             packet_kind: :space_packet,
             apid: 42,
@@ -81,10 +82,12 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
              )
 
     frame_size = 10
+    downlink_path_id = "tcp-downlink-path-" <> fixture_id
+    provider_binding_id = "tcp-downlink-provider-" <> fixture_id
 
     realized_contact =
       RealizedContact.new(%{
-        realized_contact_id: "tcp-provider-contact",
+        realized_contact_id: "tcp-provider-contact-" <> fixture_id,
         organization_id: organization_id,
         mission_id: mission_id,
         source_endpoint_refs: [persisted_source_endpoint.source_endpoint_id],
@@ -92,19 +95,19 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
         initial_time: DateTime.utc_now(),
         paths: [
           Path.new(%{
-            path_id: "tcp-uplink-path",
+            path_id: "tcp-uplink-path-" <> fixture_id,
             direction: :uplink,
             selection_role: :selected,
             source_endpoint_ref: persisted_source_endpoint.source_endpoint_id
           }),
           Path.new(%{
-            path_id: "tcp-downlink-path",
+            path_id: downlink_path_id,
             direction: :downlink,
             selection_role: :selected,
             source_endpoint_ref: persisted_source_endpoint.source_endpoint_id,
             provider_bindings: [
               ProviderBinding.new(%{
-                provider_binding_id: "tcp-downlink-provider",
+                provider_binding_id: provider_binding_id,
                 adapter_key: :tcp_socket,
                 configuration: %{
                   mode: :listen,
@@ -137,7 +140,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
                organization_id,
                mission_id,
                realized_contact.realized_contact_id,
-               "tcp-downlink-path"
+               downlink_path_id
              )
 
     assert path_snapshot.provider_runtime_count == 1
@@ -159,18 +162,18 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     assert :ok = :gen_tcp.send(socket, frame_one <> frame_two)
 
     assert_eventually(fn ->
-      Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 1
+      count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 1
     end)
 
-    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 2
-    assert Repo.aggregate(TransferFrameRecordRow, :count, :frame_record_id) == 2
+    assert count_for_mission(RawEvidenceRow, :evidence_id, mission_id) == 2
+    assert count_for_mission(TransferFrameRecordRow, :frame_record_id, mission_id) == 2
 
     assert {:ok, refreshed_snapshot} =
              Cadence.path_runtime_snapshot(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id,
-               "tcp-downlink-path"
+               downlink_path_id
              )
 
     [refreshed_provider_runtime_snapshot] = refreshed_snapshot.provider_runtimes
@@ -192,7 +195,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     assert :ok = :gen_tcp.send(socket, frame_three <> frame_four)
 
     assert_eventually(fn ->
-      Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 2
+      count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 2
     end)
 
     assert {:ok, final_snapshot} =
@@ -200,7 +203,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
                organization_id,
                mission_id,
                realized_contact.realized_contact_id,
-               "tcp-downlink-path"
+               downlink_path_id
              )
 
     [final_provider_runtime_snapshot] = final_snapshot.provider_runtimes
@@ -212,13 +215,14 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
   test "tcp provider listen mode recovers when the socket receiver exits unexpectedly" do
     organization_id = unique_id("org-tcp-provider")
-    mission_id = "mission-tcp-provider-" <> Integer.to_string(System.unique_integer([:positive]))
+    fixture_id = Integer.to_string(System.unique_integer([:positive]))
+    mission_id = "mission-tcp-provider-" <> fixture_id
 
     persist_mission_scope(organization_id, mission_id)
 
     spacecraft =
       Spacecraft.new(%{
-        spacecraft_id: "sc-tcp-provider",
+        spacecraft_id: "sc-tcp-provider-" <> fixture_id,
         mission_id: mission_id,
         display_name: "SC TCP"
       })
@@ -227,7 +231,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     source_endpoint =
       SourceEndpoint.new(%{
-        source_endpoint_id: "endpoint-tcp-provider",
+        source_endpoint_id: "endpoint-tcp-provider-" <> fixture_id,
         mission_id: mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
         source_ref: "provider/tcp"
@@ -239,7 +243,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     packet_definition =
       PacketDefinition.new(%{
         mission_id: mission_id,
-        packet_definition_id: "packet-tcp-provider",
+        packet_definition_id: "packet-tcp-provider-" <> fixture_id,
         packet_name: "TMHK",
         apid: 42,
         version: 1,
@@ -251,11 +255,11 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     binding_set =
       BindingSet.new(%{
         mission_id: mission_id,
-        binding_set_id: "tcp-provider-basis",
+        binding_set_id: "tcp-provider-basis-" <> fixture_id,
         version: 1,
         rules: [
           BindingRule.new(%{
-            binding_rule_id: "tcp-provider-telemetry-rule",
+            binding_rule_id: "tcp-provider-telemetry-rule-" <> fixture_id,
             handler_key: :definition_bound_telemetry,
             packet_kind: :space_packet,
             apid: 42,
@@ -278,12 +282,12 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
              )
 
     frame_size = 10
-    path_id = "tcp-downlink-path"
-    provider_binding_id = "tcp-downlink-provider"
+    path_id = "tcp-downlink-path-" <> fixture_id
+    provider_binding_id = "tcp-downlink-provider-" <> fixture_id
 
     realized_contact =
       RealizedContact.new(%{
-        realized_contact_id: "tcp-provider-contact",
+        realized_contact_id: "tcp-provider-contact-" <> fixture_id,
         organization_id: organization_id,
         mission_id: mission_id,
         source_endpoint_refs: [persisted_source_endpoint.source_endpoint_id],
@@ -291,7 +295,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
         initial_time: DateTime.utc_now(),
         paths: [
           Path.new(%{
-            path_id: "tcp-uplink-path",
+            path_id: "tcp-uplink-path-" <> fixture_id,
             direction: :uplink,
             selection_role: :selected,
             source_endpoint_ref: persisted_source_endpoint.source_endpoint_id
@@ -393,7 +397,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     assert :ok = :gen_tcp.send(replacement_socket, frame_one <> frame_two)
 
     assert_eventually(fn ->
-      Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 1
+      count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 1
     end)
 
     assert {:ok, recovered_snapshot} =
@@ -439,6 +443,12 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
   defp unique_id(prefix) do
     prefix <> "-" <> Integer.to_string(System.unique_integer([:positive]))
+  end
+
+  defp count_for_mission(schema, field, mission_id) do
+    schema
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.aggregate(:count, field)
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

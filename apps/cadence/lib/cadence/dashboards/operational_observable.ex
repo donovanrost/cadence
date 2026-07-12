@@ -254,6 +254,53 @@ defmodule Cadence.Dashboards.OperationalObservable do
       storage: :projection
     },
     %{
+      observable_id: "runtime.managed_activity",
+      name: "Managed runtime activity",
+      description:
+        "Managed capability action, timer, and record handling events emitted during runtime or replay.",
+      owner: :runtime,
+      value_kind: :state,
+      value_type: :enum,
+      enum_values: [
+        :managed_capability_initialized,
+        :managed_capability_record_handled,
+        :managed_capability_timer_handled,
+        :managed_action_requested,
+        :managed_timer_scheduled,
+        :managed_timer_fired,
+        :managed_timer_canceled
+      ],
+      primary_scope: :mission,
+      optional_scopes: [:spacecraft],
+      product: :runtime_managed,
+      storage: :projection,
+      state_color_policy: :managed_runtime_activity
+    },
+    %{
+      observable_id: "runtime.transport_activity",
+      name: "Transport runtime activity",
+      description:
+        "Transport capability action, timer, and record handling events emitted during runtime or replay.",
+      owner: :runtime,
+      value_kind: :state,
+      value_type: :enum,
+      enum_values: [
+        :transport_initialized,
+        :transport_event_handled,
+        :transport_control_input_handled,
+        :transport_timer_handled,
+        :transport_action_requested,
+        :transport_timer_scheduled,
+        :transport_timer_fired,
+        :transport_timer_canceled
+      ],
+      primary_scope: :mission,
+      optional_scopes: [:contact, :source_endpoint, :transport, :link],
+      product: :runtime_transport,
+      storage: :projection,
+      state_color_policy: :transport_runtime_activity
+    },
+    %{
       observable_id: "ingress.processing_latency_ms",
       name: "Ingress processing latency",
       description: "Observed latency from ingress receipt to durable processing completion.",
@@ -317,6 +364,8 @@ defmodule Cadence.Dashboards.OperationalObservable do
       "link.doppler_hz",
       "contacts.phase",
       "commanding.queue_depth",
+      "runtime.managed_activity",
+      "runtime.transport_activity",
       "ingress.processing_latency_ms"
     ]
   end

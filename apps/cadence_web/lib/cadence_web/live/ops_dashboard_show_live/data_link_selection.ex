@@ -102,6 +102,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
         resource_id: text_param(params["resource-id"]),
         spacecraft_id: text_param(params["spacecraft-id"]),
         contact_id: text_param(params["contact-id"]),
+        contact_ids: scope_ids_param(params["contact-ids"]),
         transport_id: text_param(params["transport-id"]),
         source_endpoint_id: text_param(params["source-endpoint-id"]),
         ground_station_id: text_param(params["ground-station-id"]),
@@ -205,6 +206,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
         resource_id: text_param(query["selected_resource_id"]),
         spacecraft_id: text_param(query["selected_spacecraft_id"]),
         contact_id: text_param(query["selected_contact_id"]),
+        contact_ids: scope_ids_param(query["selected_contact_ids"]),
         transport_id: text_param(query["selected_transport_id"]),
         source_endpoint_id: text_param(query["selected_source_endpoint_id"]),
         ground_station_id: text_param(query["selected_ground_station_id"]),
@@ -277,6 +279,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
       "spacecraft_id" => data_link_context_spacecraft_id(link.context),
       "resource_id" => data_link_context_value(link.context, :scope, :resource_id),
       "contact_id" => data_link_context_value(link.context, :scope, :contact_id),
+      "contact_ids" => data_link_context_contact_ids_text(link.context),
       "transport_id" =>
         data_link_scope_or_target_resource_value(
           link.context,
@@ -894,6 +897,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
   end
 
   defp data_link_context_value(_context, _key), do: nil
+
+  defp data_link_context_contact_ids_text(context) do
+    scope = data_link_context_value(context, :scope)
+
+    contact_ids =
+      scope
+      |> data_link_context_value(:contact_ids)
+      |> scope_ids_param()
+
+    contact_ids =
+      if contact_ids == [] and contact_scope?(scope) do
+        scope_ids(scope)
+      else
+        contact_ids
+      end
+
+    scope_ids_text(contact_ids)
+  end
+
+  defp contact_scope?(scope) when is_map(scope) do
+    ScopeContext.primary_kind(scope) in [:contact, "contact"]
+  rescue
+    _error -> false
+  end
+
+  defp contact_scope?(_scope), do: false
 
   defp data_link_scope_or_target_resource_value(
          context,

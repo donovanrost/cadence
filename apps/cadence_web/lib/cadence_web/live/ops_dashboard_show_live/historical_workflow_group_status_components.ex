@@ -145,6 +145,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
       data-historical-workflow-group-comparison-review-compare-data-view={
         Map.get(@workflow_context, :comparison_review_compare_data_view)
       }
+      data-historical-workflow-group-comparison-review-scope-kind={
+        Map.get(@workflow_context, :comparison_review_scope_kind)
+      }
+      data-historical-workflow-group-comparison-review-scope-ids={
+        Map.get(@workflow_context, :comparison_review_scope_ids)
+      }
+      data-historical-workflow-group-comparison-review-contact-ids={
+        Map.get(@workflow_context, :comparison_review_contact_ids)
+      }
+      data-historical-workflow-group-comparison-review-resource-ids={
+        Map.get(@workflow_context, :comparison_review_resource_ids)
+      }
+      data-historical-workflow-group-comparison-review-transport-ids={
+        Map.get(@workflow_context, :comparison_review_transport_ids)
+      }
+      data-historical-workflow-group-comparison-review-source-endpoint-ids={
+        Map.get(@workflow_context, :comparison_review_source_endpoint_ids)
+      }
+      data-historical-workflow-group-comparison-review-ground-station-ids={
+        Map.get(@workflow_context, :comparison_review_ground_station_ids)
+      }
+      data-historical-workflow-group-comparison-review-scope-link-ids={
+        Map.get(@workflow_context, :comparison_review_scope_link_ids)
+      }
       data-historical-workflow-group-handoff-summary={@group_recovery.handoff_summary}
     >
       <div class="flex items-center justify-between gap-2">

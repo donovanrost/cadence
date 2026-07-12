@@ -1039,23 +1039,25 @@ defmodule Cadence.Dashboards.SourceRegistry do
           classification =
             SourceHealth.classify_status(status, resolved_binding.data_source, opts)
 
-          merge_source_health_classification(facts, classification)
+          interval = source_health_interval(request, resolved_binding, status, opts)
+
+          merge_source_health_classification(facts, classification, interval)
 
         {:error, :source_health_status_not_found} ->
           classification =
             SourceHealth.classify_status(nil, resolved_binding.data_source, opts)
 
-          merge_source_health_classification(facts, classification)
+          merge_source_health_classification(facts, classification, nil)
       end
     else
       facts
     end
   end
 
-  defp merge_source_health_classification(%SourceFacts{} = facts, classification) do
+  defp merge_source_health_classification(%SourceFacts{} = facts, classification, interval) do
     meta =
       facts.meta
-      |> source_health_classification_meta(classification)
+      |> source_health_classification_meta(classification, interval)
 
     facts =
       SourceFacts.new(%{
@@ -1069,7 +1071,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     facts
   end
 
-  defp source_health_classification_meta(meta, classification) do
+  defp source_health_classification_meta(meta, classification, interval) do
     status = Map.get(classification, :status)
 
     meta
@@ -1106,7 +1108,19 @@ defmodule Cadence.Dashboards.SourceRegistry do
     )
     |> maybe_put(:durable_source_health?, not is_nil(status))
     |> maybe_put(:source_health_event_id, status && status.source_health_event_id)
+    |> put_source_health_interval_meta(interval)
   end
+
+  defp put_source_health_interval_meta(meta, %EffectiveInterval{} = interval) do
+    interval_metadata = EffectiveInterval.metadata(interval)
+
+    meta
+    |> Map.put(:source_health_interval_id, interval.interval_id)
+    |> Map.put(:source_health_interval_source_event_id, interval.source_event_id)
+    |> Map.put(:source_health_interval, interval_metadata)
+  end
+
+  defp put_source_health_interval_meta(meta, _interval), do: meta
 
   defp source_health_payload_value(%{payload: payload}, key) when is_map(payload) do
     Map.get(payload, Atom.to_string(key), Map.get(payload, key))
@@ -2162,11 +2176,17 @@ defmodule Cadence.Dashboards.SourceRegistry do
           classification =
             SourceHealth.classify_status(status, resolved_binding.data_source, opts)
 
+          interval = source_health_interval(request, resolved_binding, status, opts)
+
           meta =
             result.meta
-            |> source_health_classification_meta(classification)
+            |> source_health_classification_meta(classification, interval)
 
-          evidence = DataLinks.source_health_event_evidence_refs([status_metadata(meta)])
+          evidence =
+            DataLinks.source_health_event_evidence_refs([status_metadata(meta)]) ++
+              DataLinks.operational_interval_evidence_refs([interval],
+                source: request.logical_source
+              )
 
           SourceResult.new(%{
             result
@@ -2195,6 +2215,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       frame.meta
       |> ensure_map()
       |> Map.merge(source_health_meta)
+      |> maybe_mark_source_health_degraded()
       |> merge_evidence_refs(evidence)
 
     Frame.new(%{frame | meta: meta})
@@ -2283,6 +2304,74 @@ defmodule Cadence.Dashboards.SourceRegistry do
     do: Map.get(status, key, Map.get(status, Atom.to_string(key)))
 
   defp source_health_status_value(_status, _key), do: nil
+
+  defp source_health_interval(
+         %PlannedSourceRequest{} = request,
+         resolved_binding,
+         %SourceHealthStatus{} = status,
+         opts
+       ) do
+    identity = source_health_identity(request, resolved_binding)
+
+    if source_health_interval_lookup_enabled?(opts) do
+      interval_opts =
+        [
+          at: status.last_seen_at || status.observed_at,
+          logical_source: Map.get(identity, :logical_source),
+          data_source_id: Map.get(identity, :data_source_id),
+          source_binding_id: Map.get(identity, :source_binding_id),
+          realm: Map.get(identity, :realm),
+          dataset: Map.get(identity, :dataset),
+          replay_run_id: Map.get(identity, :replay_run_id)
+        ]
+        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+      request.organization_id
+      |> operational_intervals(:source_health, request.mission_id, interval_opts, opts)
+      |> source_health_interval_for_status(status)
+    end
+  end
+
+  defp source_health_interval(%PlannedSourceRequest{}, _resolved_binding, _status, _opts), do: nil
+
+  defp source_health_interval_lookup_enabled?(opts) do
+    Keyword.get(opts, :persisted?, false) == true or
+      is_function(operational_interval_reader(:source_health, opts), 3)
+  end
+
+  defp source_health_interval_for_status(intervals, %SourceHealthStatus{} = status) do
+    Enum.find(List.wrap(intervals), fn interval ->
+      source_health_interval_matches_status?(interval, status)
+    end) || unique_interval(List.wrap(intervals))
+  end
+
+  defp source_health_interval_matches_status?(
+         %EffectiveInterval{} = interval,
+         %SourceHealthStatus{} = status
+       ) do
+    payload = interval.payload || %{}
+
+    map_value(payload, :source_health_event_id) == status.source_health_event_id or
+      interval.source_event_id == source_health_operational_event_id(status)
+  end
+
+  defp source_health_interval_matches_status?(_interval, _status), do: false
+
+  defp source_health_operational_event_id(%SourceHealthStatus{} = status) do
+    replay_run_id = source_health_status_value(status, :replay_run_id)
+    source_health_event_id = source_health_status_value(status, :source_health_event_id)
+
+    cond do
+      is_binary(replay_run_id) and replay_run_id != "" and is_binary(source_health_event_id) ->
+        "operational_event:source_health_event:#{replay_run_id}:#{source_health_event_id}"
+
+      is_binary(source_health_event_id) ->
+        "operational_event:source_health_event:#{source_health_event_id}"
+
+      true ->
+        nil
+    end
+  end
 
   defp put_frame_provenance(%Frame{} = frame, provenance, link_context, evidence) do
     meta =
@@ -2568,6 +2657,13 @@ defmodule Cadence.Dashboards.SourceRegistry do
   defp default_operational_intervals(_organization_id, :catalog_revision, mission_id, opts),
     do: OperationalEvents.catalog_revision_intervals(mission_id, opts)
 
+  defp default_operational_intervals(organization_id, :source_health, mission_id, opts)
+       when is_binary(organization_id),
+       do: OperationalEvents.source_health_intervals(organization_id, mission_id, opts)
+
+  defp default_operational_intervals(_organization_id, :source_health, mission_id, opts),
+    do: OperationalEvents.source_health_intervals(mission_id, opts)
+
   defp operational_interval_reader(:binding_set, opts) do
     Keyword.get(opts, :binding_set_intervals_fun) ||
       operational_interval_reader_from_map(opts, :binding_set)
@@ -2581,6 +2677,11 @@ defmodule Cadence.Dashboards.SourceRegistry do
   defp operational_interval_reader(:catalog_revision, opts) do
     Keyword.get(opts, :catalog_revision_intervals_fun) ||
       operational_interval_reader_from_map(opts, :catalog_revision)
+  end
+
+  defp operational_interval_reader(:source_health, opts) do
+    Keyword.get(opts, :source_health_intervals_fun) ||
+      operational_interval_reader_from_map(opts, :source_health)
   end
 
   defp operational_interval_reader_from_map(opts, kind) do

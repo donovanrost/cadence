@@ -482,6 +482,55 @@ defmodule Cadence.Dashboards.SourceCredentialsTest do
              )
   end
 
+  test "external secret backend requires HTTPS unless explicitly allowed" do
+    assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
+    parent = self()
+
+    req_request = fn request ->
+      send(parent, {:external_secret_request, request})
+
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{"material" => %{"http_endpoint" => "https://customer-questdb.example.test"}}
+       }}
+    end
+
+    assert {:error,
+            {:credential_material_resolution_failed,
+             {:invalid_external_secret_manager_url, :https_required}}} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material},
+               secret_manager_url: "http://secrets.example.test/",
+               req_request: req_request
+             )
+
+    refute_received {:external_secret_request, _request}
+
+    assert {:ok, %SourceCredentialMaterial{} = material} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material},
+               secret_manager_url: "http://secrets.example.test/",
+               allow_insecure_secret_manager_http?: true,
+               req_request: req_request
+             )
+
+    assert material.material.http_endpoint == "https://customer-questdb.example.test"
+
+    assert_receive {:external_secret_request, request}
+
+    assert request[:url] ==
+             "http://secrets.example.test/v1/dashboard-source-credentials/material"
+  end
+
   test "external secret backend redacts HTTP error bodies from material failures and audit events" do
     assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
 

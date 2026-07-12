@@ -198,6 +198,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
           data-dashboard-comparison-review-finding-observation-identity={
             finding.observation_identity_id
           }
+          data-dashboard-comparison-review-finding-scope-kind={finding.scope_kind}
+          data-dashboard-comparison-review-finding-scope-id={finding.scope_id}
+          data-dashboard-comparison-review-finding-scope-ids={finding.scope_ids}
+          data-dashboard-comparison-review-finding-resource-id={finding.resource_id}
+          data-dashboard-comparison-review-finding-spacecraft-id={finding.spacecraft_id}
+          data-dashboard-comparison-review-finding-contact-id={finding.contact_id}
+          data-dashboard-comparison-review-finding-contact-ids={finding.contact_ids}
+          data-dashboard-comparison-review-finding-transport-id={finding.transport_id}
+          data-dashboard-comparison-review-finding-source-endpoint-id={finding.source_endpoint_id}
+          data-dashboard-comparison-review-finding-ground-station-id={finding.ground_station_id}
+          data-dashboard-comparison-review-finding-scope-link-id={finding.scope_link_id}
           data-dashboard-comparison-review-finding-bulk-decision={
             finding.bulk_decision_status
           }
@@ -260,6 +271,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
       data-dashboard-comparison-review-resolution-source-open-placements={
         @row.source_open_placements_attr
       }
+      data-dashboard-comparison-review-resolution-source-scope-kind={@row.source_scope_kind}
+      data-dashboard-comparison-review-resolution-source-scope-ids={@row.source_scope_ids_attr}
+      data-dashboard-comparison-review-resolution-source-contact-ids={@row.source_contact_ids_attr}
+      data-dashboard-comparison-review-resolution-source-resource-ids={
+        @row.source_resource_ids_attr
+      }
+      data-dashboard-comparison-review-resolution-source-transport-ids={
+        @row.source_transport_ids_attr
+      }
+      data-dashboard-comparison-review-resolution-source-endpoint-ids={
+        @row.source_endpoint_ids_attr
+      }
+      data-dashboard-comparison-review-resolution-source-ground-station-ids={
+        @row.source_ground_station_ids_attr
+      }
+      data-dashboard-comparison-review-resolution-source-scope-link-ids={
+        @row.source_scope_link_ids_attr
+      }
       data-dashboard-comparison-review-resolution-source-actionable-count={
         @row.source_bulk_decision_actionable_count_text
       }
@@ -314,6 +343,86 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
           class="break-all font-mono text-base-content/70"
         >
           {@row.affected_placements_text}
+        </dd>
+        <dt :if={@row.source_scope_kind != "-"} class="hud-label">
+          Scope
+        </dt>
+        <dd
+          :if={@row.source_scope_kind != "-"}
+          data-activity-field="Resolution source scope"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_scope_kind}
+        </dd>
+        <dt :if={@row.source_scope_ids_attr != ""} class="hud-label">
+          Scope IDs
+        </dt>
+        <dd
+          :if={@row.source_scope_ids_attr != ""}
+          data-activity-field="Resolution source scope IDs"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_scope_ids_attr}
+        </dd>
+        <dt :if={@row.source_contact_ids_attr != ""} class="hud-label">
+          Contacts
+        </dt>
+        <dd
+          :if={@row.source_contact_ids_attr != ""}
+          data-activity-field="Resolution source contacts"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_contact_ids_attr}
+        </dd>
+        <dt :if={@row.source_resource_ids_attr != ""} class="hud-label">
+          Resources
+        </dt>
+        <dd
+          :if={@row.source_resource_ids_attr != ""}
+          data-activity-field="Resolution source resources"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_resource_ids_attr}
+        </dd>
+        <dt :if={@row.source_transport_ids_attr != ""} class="hud-label">
+          Transports
+        </dt>
+        <dd
+          :if={@row.source_transport_ids_attr != ""}
+          data-activity-field="Resolution source transports"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_transport_ids_attr}
+        </dd>
+        <dt :if={@row.source_endpoint_ids_attr != ""} class="hud-label">
+          Source endpoints
+        </dt>
+        <dd
+          :if={@row.source_endpoint_ids_attr != ""}
+          data-activity-field="Resolution source endpoints"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_endpoint_ids_attr}
+        </dd>
+        <dt :if={@row.source_ground_station_ids_attr != ""} class="hud-label">
+          Ground stations
+        </dt>
+        <dd
+          :if={@row.source_ground_station_ids_attr != ""}
+          data-activity-field="Resolution source ground stations"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_ground_station_ids_attr}
+        </dd>
+        <dt :if={@row.source_scope_link_ids_attr != ""} class="hud-label">
+          Scope links
+        </dt>
+        <dd
+          :if={@row.source_scope_link_ids_attr != ""}
+          data-activity-field="Resolution source scope links"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_scope_link_ids_attr}
         </dd>
         <dt :if={@row.workflow_intent_kind != "-"} class="hud-label">
           Workflow

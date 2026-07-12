@@ -94,6 +94,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
              workflow_selection_count_text: "-",
              source_open_count_text: "-",
              source_open_placements_attr: "",
+             source_scope_kind: "-",
+             source_scope_ids_attr: "",
+             source_contact_ids_attr: "",
+             source_resource_ids_attr: "",
+             source_transport_ids_attr: "",
+             source_endpoint_ids_attr: "",
+             source_ground_station_ids_attr: "",
+             source_scope_link_ids_attr: "",
              source_bulk_decision_actionable_count_text: "-",
              source_bulk_decision_actionable_placements_attr: "",
              source_bulk_decision_skipped_count_text: "-",
@@ -114,6 +122,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
           },
           "source_open_count" => 2,
           "source_open_placement_ids" => ["placement-1", "placement-2"],
+          "source_scope_kind" => "transport",
+          "source_scope_ids" => ["transport-alpha", "transport-beta"],
+          "source_contact_ids" => ["contact-alpha", "contact-beta"],
+          "source_resource_ids" => ["transport-alpha"],
+          "source_transport_ids" => ["transport-alpha"],
+          "source_endpoint_ids" => ["endpoint-alpha"],
+          "source_ground_station_ids" => ["dss-14"],
+          "source_scope_link_ids" => ["link-alpha"],
           "source_bulk_decision_actionable_count" => 1,
           "source_bulk_decision_actionable_placement_ids" => ["placement-1"],
           "source_bulk_decision_skipped_count" => 1,
@@ -129,6 +145,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
     assert row.workflow_selection_count_text == "2"
     assert row.source_open_count_text == "2"
     assert row.source_open_placements_attr == "placement-1,placement-2"
+    assert row.source_scope_kind == "transport"
+    assert row.source_scope_ids_attr == "transport-alpha,transport-beta"
+    assert row.source_contact_ids_attr == "contact-alpha,contact-beta"
+    assert row.source_resource_ids_attr == "transport-alpha"
+    assert row.source_transport_ids_attr == "transport-alpha"
+    assert row.source_endpoint_ids_attr == "endpoint-alpha"
+    assert row.source_ground_station_ids_attr == "dss-14"
+    assert row.source_scope_link_ids_attr == "link-alpha"
     assert row.source_bulk_decision_actionable_count_text == "1"
     assert row.source_bulk_decision_actionable_placements_attr == "placement-1"
     assert row.source_bulk_decision_skipped_count_text == "1"

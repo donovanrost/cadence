@@ -1,30 +1,65 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceExecutionDiagnosticsTest do
   use ExUnit.Case, async: true
 
-  alias CadenceWeb.OpsDashboardShowLive.RuntimeSourceExecutionDiagnostics
+  alias Cadence.Dashboards.{
+    DashboardResolveResult,
+    Document,
+    PlannedSourceRequest,
+    ResolveWarning,
+    RuntimeCoordinator,
+    SourceWatermark
+  }
 
-  test "build names source execution counts, summaries, and drilldowns" do
-    diagnostics = RuntimeSourceExecutionDiagnostics.build(source_summary())
+  alias CadenceWeb.OpsDashboardShowLive.RuntimeDiagnostics
 
-    assert diagnostics.runtime_actions_text ==
+  test "build handles empty source execution summaries" do
+    assert RuntimeDiagnostics.build(%{
+             engine_result: nil,
+             runtime_coordinator: RuntimeCoordinator.new(status: :idle),
+             decisions: [],
+             resolved?: true,
+             invalidation: %{event_count: 0, artifact_count: 0, boundaries: %{}},
+             last_invalidation: nil,
+             runtime_invalidation_events: [],
+             current_scope: %{organization_id: "org-1"},
+             mission: %{mission_id: "mission-1"},
+             document: %Document{dashboard_id: "dashboard-1"},
+             runtime_context: %{time_mode: "live", data_realm: "flight"}
+           }).source_execution_degraded_summary == %{visible?: false}
+  end
+
+  test "build exposes stale failed and circuit-open source decisions" do
+    diagnostics =
+      RuntimeDiagnostics.build(%{
+        engine_result: source_decision_result(),
+        runtime_coordinator: RuntimeCoordinator.new(status: :idle),
+        decisions: [%{action: :accept_result, resolve_id: 1}],
+        resolved?: true,
+        invalidation: %{event_count: 0, artifact_count: 0, boundaries: %{}},
+        last_invalidation: nil,
+        runtime_invalidation_events: [],
+        current_scope: %{organization_id: "org-1"},
+        mission: %{mission_id: "mission-1"},
+        document: %Document{dashboard_id: "dashboard-1"},
+        runtime_context: %{time_mode: "live", data_realm: "flight"}
+      })
+
+    assert diagnostics.refresh_status == "degraded"
+    assert diagnostics.refresh_reason == "source_execution_degraded"
+    assert diagnostics.source_execution_retryable_count == 3
+    assert diagnostics.source_execution_actionable_count == 2
+    assert diagnostics.source_execution_degraded_count == 2
+
+    assert diagnostics.source_execution_runtime_actions ==
              "refresh_source_result:1 wait_for_source_health:2"
 
-    assert diagnostics.retryable_count == 3
-    assert diagnostics.actionable_count == 2
-    assert diagnostics.degraded_count == 2
-
-    assert diagnostics.degraded_identities_text ==
+    assert diagnostics.source_execution_degraded_identities ==
              "telemetry:req-circuit:source_degraded telemetry:req-unavailable:source_unavailable"
 
-    assert diagnostics.degraded_actions_text ==
+    assert diagnostics.source_execution_degraded_actions ==
              "telemetry:req-circuit:wait_for_source_health:inspect_source_health telemetry:req-unavailable:wait_for_source_health:inspect_source_health"
 
-    assert diagnostics.capability_statuses_text == "fallback:1 native:1"
-
-    assert diagnostics.capability_posture_text ==
-             "telemetry:req-circuit:fallback:generation_time->receipt_time telemetry:req-native:native:generation_time->generation_time"
-
-    assert diagnostics.degraded_summary == %{
+    assert diagnostics.source_execution_degraded_summary == %{
              visible?: true,
              count: 2,
              headline: "Source execution degraded.",
@@ -39,186 +74,145 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceExecutionDiagnosticsTest 
            }
 
     assert [
-             %{request_id: "req-circuit", status: "source_degraded"},
-             %{request_id: "req-unavailable", status: "source_unavailable"}
-           ] = diagnostics.degraded_drilldowns
-
-    assert diagnostics.dependency_degraded_count == 1
-
-    assert diagnostics.dependency_evidence_text ==
-             "limits:req-limits->telemetry:req-circuit:source_degraded:wait_for_source_health:stale"
-
-    assert [
              %{
                request_id: "req-circuit",
                logical_source: "telemetry",
-               status: "fallback",
-               requested_products: "link_rf_metric_history",
-               supported_products: "transport_bitrate_history",
-               requested_time_axis: "generation_time",
-               executed_time_axis: "receipt_time",
-               supported_time_axes: "receipt_time",
-               fallbacks: "time_axis:generation_time:receipt_time:unsupported_time_axis"
+               status: "source_degraded",
+               runtime_action: "wait_for_source_health",
+               operator_action: "inspect_source_health",
+               realm: "flight",
+               data_source_id: "questdb-flight",
+               source_binding_id: "binding-flight"
              },
-             %{request_id: "req-native", status: "native"}
-           ] = diagnostics.capability_postures
-
-    assert [
              %{
-               request_id: "req-limits",
-               request_logical_source: "limits",
+               request_id: "req-unavailable",
                logical_source: "telemetry",
-               products: "latest_sample",
-               reason: "limit_latest_sample_input",
-               upstream_request_id: "req-circuit",
-               upstream_status: "source_degraded",
-               upstream_runtime_action: "wait_for_source_health",
-               upstream_operator_action: "inspect_source_health",
-               upstream_cache_status: "stale",
-               upstream_cache_reasons: "source_degraded",
-               upstream_source_binding_id: "binding-flight",
-               upstream_data_source_id: "questdb-flight",
-               upstream_realm: "flight",
-               upstream_watermark_freshness_state: "stale",
-               upstream_watermark_confidence: "authoritative",
-               upstream_watermark_complete_through: "2026-06-17T12:00:00Z"
+               status: "source_unavailable",
+               runtime_action: "wait_for_source_health",
+               operator_action: "inspect_source_health",
+               realm: "flight",
+               data_source_id: "questdb-flight",
+               source_binding_id: "binding-flight"
              }
-           ] = diagnostics.dependency_evidence
-  end
+           ] = diagnostics.source_execution_degraded_drilldowns
 
-  test "maybe_degrade_refresh_status marks refresh degraded when source execution degraded" do
-    refresh_status = %{status: "settled", reason: "accepted", visible_action: "accept_result"}
-
-    assert RuntimeSourceExecutionDiagnostics.maybe_degrade_refresh_status(
-             refresh_status,
-             RuntimeSourceExecutionDiagnostics.build(source_summary())
-           ) == %{
-             refresh_status
-             | status: "degraded",
-               reason: "source_execution_degraded"
+    assert diagnostics.cache_summary.evidence_state_summary == %{
+             total: 3,
+             resolved: 3,
+             context_only: 0,
+             missing: 0
            }
 
-    assert RuntimeSourceExecutionDiagnostics.maybe_degrade_refresh_status(
-             refresh_status,
-             RuntimeSourceExecutionDiagnostics.build(%{})
-           ) == refresh_status
+    assert Enum.any?(
+             diagnostics.cache_summary.drilldowns,
+             &(&1.request_id == "req-stale" and &1.status == "stale" and
+                 &1.reasons == "source_degraded")
+           )
+
+    assert Enum.any?(
+             diagnostics.cache_summary.drilldowns,
+             &(&1.request_id == "req-circuit" and &1.incident_status == "source_degraded" and
+                 &1.incident_evidence_target == "source_request" and
+                 &1.incident_evidence_target_id == "req-circuit")
+           )
   end
 
-  test "decision_audit_from_summary returns durable audit fields only when source execution exists" do
-    assert RuntimeSourceExecutionDiagnostics.decision_audit_from_summary(%{}) == %{}
-
-    assert RuntimeSourceExecutionDiagnostics.decision_audit_from_summary(source_summary()) == %{
-             source_execution_retryable_count: 3,
-             source_execution_actionable_count: 2,
-             source_execution_degraded_count: 2,
-             source_execution_status_summary: %{source_degraded: 1, source_unavailable: 1},
-             source_execution_severity_summary: %{error: 1, warning: 1},
-             source_execution_runtime_action_summary: %{
-               refresh_source_result: 1,
-               wait_for_source_health: 2
-             },
-             source_execution_operator_action_summary: %{inspect_source_health: 2},
-             source_execution_degraded_identities: [
-               "telemetry:req-circuit:source_degraded",
-               "telemetry:req-unavailable:source_unavailable"
-             ],
-             source_execution_degraded_actions: [
-               "telemetry:req-circuit:wait_for_source_health:inspect_source_health",
-               "telemetry:req-unavailable:wait_for_source_health:inspect_source_health"
-             ],
-             source_capability_posture_summary: %{fallback: 1, native: 1},
-             source_capability_posture_evidence: [
-               "telemetry:req-circuit:fallback:generation_time->receipt_time",
-               "telemetry:req-native:native:generation_time->generation_time"
-             ],
-             source_dependency_degraded_count: 1,
-             source_dependency_evidence: [
-               "limits:req-limits->telemetry:req-circuit:source_degraded:wait_for_source_health:stale"
-             ]
-           }
-  end
-
-  defp source_summary do
-    %{
-      runtime_actions: %{refresh_source_result: 1, wait_for_source_health: 2},
-      retryable_count: 3,
-      actionable_count: 2,
-      degraded_count: 2,
-      statuses: %{source_degraded: 1, source_unavailable: 1},
-      severities: %{warning: 1, error: 1},
-      operator_actions: %{inspect_source_health: 2},
-      capability_postures: [
-        %{
-          request_id: "req-circuit",
-          logical_source: :telemetry,
-          status: :fallback,
-          requested_products: [:link_rf_metric_history],
-          supported_products: [:transport_bitrate_history],
-          requested_time_axis: :generation_time,
-          executed_time_axis: :receipt_time,
-          supported_time_axes: [:receipt_time],
-          fallbacks: [
-            %{
-              capability: :time_axis,
-              requested: :generation_time,
-              executed: :receipt_time,
-              reason: :unsupported_time_axis
-            }
-          ]
-        },
-        %{
-          request_id: "req-native",
-          logical_source: :telemetry,
-          status: :native,
-          requested_time_axis: :generation_time,
-          executed_time_axis: :generation_time,
-          supported_time_axes: [:generation_time, :receipt_time]
-        }
+  defp source_decision_result do
+    %DashboardResolveResult{
+      dashboard_id: "dashboard-1",
+      resolve_mode: :context_change,
+      planned_source_requests: [
+        source_request("req-stale"),
+        source_request("req-unavailable"),
+        source_request("req-circuit")
       ],
-      source_dependencies: [
-        %{
-          request_id: "req-limits",
-          request_logical_source: :limits,
-          logical_source: :telemetry,
-          reason: :limit_latest_sample_input,
-          products: [:latest_sample],
-          upstream_request_id: "req-circuit",
-          upstream_status: :source_degraded,
-          upstream_runtime_action: :wait_for_source_health,
-          upstream_operator_action: :inspect_source_health,
-          upstream_cache_status: :stale,
-          upstream_cache_reasons: [:source_degraded],
-          upstream_source_binding_id: "binding-flight",
-          upstream_data_source_id: "questdb-flight",
-          upstream_realm: :flight,
-          upstream_degraded?: true,
-          upstream_watermark_freshness_state: :stale,
-          upstream_watermark_confidence: :authoritative,
-          upstream_watermark_complete_through: ~U[2026-06-17 12:00:00Z]
-        }
+      watermarks: [
+        source_watermark("req-stale"),
+        source_watermark("req-unavailable"),
+        source_watermark("req-circuit")
       ],
-      degraded_incidents: [
-        %{
-          logical_source: :telemetry,
-          request_id: "req-circuit",
-          status: :source_degraded,
-          runtime_action: :wait_for_source_health,
-          operator_action: :inspect_source_health,
-          realm: :flight,
-          data_source_id: "questdb-flight",
-          source_binding_id: "binding-flight"
-        },
-        %{
-          logical_source: :telemetry,
-          request_id: "req-unavailable",
-          status: :source_unavailable,
-          runtime_action: :wait_for_source_health,
-          operator_action: :inspect_source_health,
-          realm: :flight,
-          data_source_id: "questdb-flight",
-          source_binding_id: "binding-flight"
+      plan_metadata: %{
+        source_request_count: 3,
+        executed_source_request_count: 2,
+        skipped_source_request_count: 1,
+        returned_frame_count: 0,
+        cache: %{
+          source_result_cache_by_request_id: %{
+            "req-stale" => %{status: :stale, reasons: [:source_degraded]},
+            "req-unavailable" => %{status: :disabled},
+            "req-circuit" => %{status: :disabled}
+          }
         }
+      },
+      dashboard_warnings: [
+        source_warning(:source_unavailable, "req-unavailable"),
+        source_warning(:source_degraded, "req-circuit", %{
+          circuit_state: :open,
+          failure_count: 2,
+          failure_threshold: 2,
+          retry_after_ms: 60_000
+        })
       ]
     }
   end
+
+  defp source_request(request_id) do
+    %PlannedSourceRequest{
+      request_id: request_id,
+      logical_source: :telemetry,
+      observables: ["HK.counter"],
+      data_context: %{
+        realm: :flight,
+        source_contexts: %{
+          telemetry: %{
+            data_source_id: "questdb-flight",
+            source_binding_id: "binding-flight",
+            view: :canonical
+          }
+        }
+      },
+      metadata: %{
+        capability_provenance: %{
+          source_binding_id: "binding-flight",
+          data_source_id: "questdb-flight",
+          realm: :flight,
+          dataset: "flight"
+        }
+      }
+    }
+  end
+
+  defp source_watermark(request_id) do
+    %SourceWatermark{
+      logical_source: :telemetry,
+      request_id: request_id,
+      source_binding_id: "binding-flight",
+      data_source_id: "questdb-flight",
+      realm: :flight,
+      dataset: "flight",
+      confidence: :authoritative,
+      freshness_state: :fresh
+    }
+  end
+
+  defp source_warning(code, request_id, extra_details \\ %{}) do
+    %ResolveWarning{
+      code: code,
+      severity: warning_severity(code),
+      details:
+        Map.merge(
+          %{
+            source_request_id: request_id,
+            logical_source: :telemetry,
+            source_binding_id: "binding-flight",
+            data_source_id: "questdb-flight",
+            realm: :flight
+          },
+          extra_details
+        )
+    }
+  end
+
+  defp warning_severity(:source_degraded), do: :warning
+  defp warning_severity(:source_unavailable), do: :error
 end

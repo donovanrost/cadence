@@ -18,6 +18,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults do
           dashboard_replay_run_id: String.t(),
           dashboard_data_view: String.t(),
           dashboard_limit_mode: String.t(),
+          comparison_review_scope_kind: String.t(),
+          comparison_review_scope_ids: String.t(),
+          comparison_review_contact_ids: String.t(),
+          comparison_review_resource_ids: String.t(),
+          comparison_review_transport_ids: String.t(),
+          comparison_review_source_endpoint_ids: String.t(),
+          comparison_review_ground_station_ids: String.t(),
+          comparison_review_scope_link_ids: String.t(),
           reason: String.t(),
           confirmed: String.t()
         }
@@ -38,6 +46,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults do
             dashboard_replay_run_id: "",
             dashboard_data_view: "",
             dashboard_limit_mode: "",
+            comparison_review_scope_kind: "",
+            comparison_review_scope_ids: "",
+            comparison_review_contact_ids: "",
+            comparison_review_resource_ids: "",
+            comparison_review_transport_ids: "",
+            comparison_review_source_endpoint_ids: "",
+            comparison_review_ground_station_ids: "",
+            comparison_review_scope_link_ids: "",
             reason: "operator_requested_backfill",
             confirmed: ""
 
@@ -65,6 +81,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults do
       dashboard_replay_run_id: text_value(value(context, :dashboard_replay_run_id)),
       dashboard_data_view: text_value(value(context, :dashboard_data_view)),
       dashboard_limit_mode: text_value(value(context, :dashboard_limit_mode)),
+      comparison_review_scope_kind: text_value(value(context, :comparison_review_scope_kind)),
+      comparison_review_scope_ids: text_value(value(context, :comparison_review_scope_ids)),
+      comparison_review_contact_ids: text_value(value(context, :comparison_review_contact_ids)),
+      comparison_review_resource_ids: text_value(value(context, :comparison_review_resource_ids)),
+      comparison_review_transport_ids:
+        text_value(value(context, :comparison_review_transport_ids)),
+      comparison_review_source_endpoint_ids:
+        text_value(value(context, :comparison_review_source_endpoint_ids)),
+      comparison_review_ground_station_ids:
+        text_value(value(context, :comparison_review_ground_station_ids)),
+      comparison_review_scope_link_ids:
+        text_value(value(context, :comparison_review_scope_link_ids)),
       reason: default_text(value(context, :reason), "operator_requested_backfill"),
       confirmed: text_value(value(context, :confirmed))
     }
@@ -91,6 +119,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults do
       "dashboard_replay_run_id" => defaults.dashboard_replay_run_id,
       "dashboard_data_view" => defaults.dashboard_data_view,
       "dashboard_limit_mode" => defaults.dashboard_limit_mode,
+      "comparison_review_scope_kind" => defaults.comparison_review_scope_kind,
+      "comparison_review_scope_ids" => defaults.comparison_review_scope_ids,
+      "comparison_review_contact_ids" => defaults.comparison_review_contact_ids,
+      "comparison_review_resource_ids" => defaults.comparison_review_resource_ids,
+      "comparison_review_transport_ids" => defaults.comparison_review_transport_ids,
+      "comparison_review_source_endpoint_ids" => defaults.comparison_review_source_endpoint_ids,
+      "comparison_review_ground_station_ids" => defaults.comparison_review_ground_station_ids,
+      "comparison_review_scope_link_ids" => defaults.comparison_review_scope_link_ids,
       "reason" => defaults.reason,
       "confirmed" => defaults.confirmed
     }

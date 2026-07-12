@@ -3,13 +3,24 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
   alias Cadence.SpacecraftType
 
-  describe "persist_spacecraft_type/2 and queries" do
-    test "persists, fetches, lists, and tracks versions" do
-      persist_mission_scope("org-st", "mission-st")
+  setup do
+    suffix = System.unique_integer([:positive])
+    organization_id = "org-st-#{suffix}"
+    mission_id = "mission-st-#{suffix}"
 
+    persist_mission_scope(organization_id, mission_id)
+
+    {:ok, organization_id: organization_id, mission_id: mission_id}
+  end
+
+  describe "persist_spacecraft_type/2 and queries" do
+    test "persists, fetches, lists, and tracks versions", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
       type_v1 =
         SpacecraftType.new(%{
-          mission_id: "mission-st",
+          mission_id: mission_id,
           display_name: "Sentinel-X",
           downlink_protocol: :aos,
           uplink_protocol: :tc,
@@ -18,8 +29,8 @@ defmodule Cadence.SpacecraftTypeStoreTest do
           applications: %{"telemetry_decom" => %{}}
         })
 
-      assert {:ok, persisted_v1} = Cadence.persist_spacecraft_type("org-st", type_v1)
-      assert persisted_v1.organization_id == "org-st"
+      assert {:ok, persisted_v1} = Cadence.persist_spacecraft_type(organization_id, type_v1)
+      assert persisted_v1.organization_id == organization_id
       assert persisted_v1.version == 1
       assert persisted_v1.downlink_protocol == :aos
       assert persisted_v1.applications == %{"telemetry_decom" => %{}}
@@ -27,7 +38,7 @@ defmodule Cadence.SpacecraftTypeStoreTest do
       type_v2 =
         SpacecraftType.new(%{
           spacecraft_type_id: persisted_v1.spacecraft_type_id,
-          mission_id: "mission-st",
+          mission_id: mission_id,
           version: 2,
           display_name: "Sentinel-X",
           downlink_protocol: :uslp,
@@ -41,14 +52,14 @@ defmodule Cadence.SpacecraftTypeStoreTest do
           applications: %{"telemetry_decom" => %{}}
         })
 
-      assert {:ok, persisted_v2} = Cadence.persist_spacecraft_type("org-st", type_v2)
+      assert {:ok, persisted_v2} = Cadence.persist_spacecraft_type(organization_id, type_v2)
       assert persisted_v2.version == 2
       assert persisted_v2.downlink_protocol == :uslp
 
       assert {:ok, latest} =
                Cadence.fetch_spacecraft_type(
-                 "org-st",
-                 "mission-st",
+                 organization_id,
+                 mission_id,
                  persisted_v1.spacecraft_type_id
                )
 
@@ -56,34 +67,35 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
       assert {:ok, v1_fetch} =
                Cadence.fetch_spacecraft_type_version(
-                 "org-st",
-                 "mission-st",
+                 organization_id,
+                 mission_id,
                  persisted_v1.spacecraft_type_id,
                  1
                )
 
       assert v1_fetch.downlink_protocol == :aos
 
-      assert [listed] = Cadence.list_spacecraft_types("org-st", "mission-st")
+      assert [listed] = Cadence.list_spacecraft_types(organization_id, mission_id)
       assert listed.spacecraft_type_id == persisted_v1.spacecraft_type_id
       assert listed.version == 2
 
       versions =
         Cadence.list_spacecraft_type_versions(
-          "org-st",
-          "mission-st",
+          organization_id,
+          mission_id,
           persisted_v1.spacecraft_type_id
         )
 
       assert Enum.map(versions, & &1.version) == [2, 1]
     end
 
-    test "keeps custom application keys as strings" do
-      persist_mission_scope("org-st", "mission-st")
-
+    test "keeps custom application keys as strings", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
       type =
         SpacecraftType.new(%{
-          mission_id: "mission-st",
+          mission_id: mission_id,
           display_name: "Custom Apps",
           downlink_protocol: :tm,
           uplink_protocol: :tc,
@@ -98,24 +110,25 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
       assert type.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
 
-      assert {:ok, persisted} = Cadence.persist_spacecraft_type("org-st", type)
+      assert {:ok, persisted} = Cadence.persist_spacecraft_type(organization_id, type)
       assert persisted.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
 
       assert {:ok, fetched} =
                Cadence.fetch_spacecraft_type(
-                 "org-st",
-                 "mission-st",
+                 organization_id,
+                 mission_id,
                  persisted.spacecraft_type_id
                )
 
       assert fetched.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
     end
 
-    test "returns not_found for missing types" do
-      persist_mission_scope("org-st", "mission-st")
-
+    test "returns not_found for missing types", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
       assert {:error, :spacecraft_type_not_found} =
-               Cadence.fetch_spacecraft_type("org-st", "mission-st", "missing")
+               Cadence.fetch_spacecraft_type(organization_id, mission_id, "missing")
     end
   end
 end

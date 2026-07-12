@@ -22,9 +22,9 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     missing = persist_source!("scheduler-missing")
     stale = persist_source!("scheduler-stale")
     fresh = persist_source!("scheduler-fresh")
-    _disabled = persist_source!("scheduler-disabled", status: :disabled)
+    disabled = persist_source!("scheduler-disabled", status: :disabled)
 
-    _unscoped =
+    unscoped =
       persist_source!("scheduler-unscoped", mission_id: nil, isolation_level: :org_isolated)
 
     record_physical_health!(stale, :healthy, ~U[2026-06-21 14:58:00Z])
@@ -34,6 +34,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     summary =
       SourceProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [missing, stale, fresh, disabled, unscoped] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
         now: @now,
@@ -67,6 +68,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     summary =
       SourceProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [source] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
         invalidate_runtime_cache?: false,
@@ -89,6 +91,63 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     assert status.payload["source"] == "dashboard_source_probe_scheduler"
   end
 
+  test "run_once honors per-source probe policy freshness and disabled scheduling" do
+    strict =
+      persist_source!("scheduler-strict-policy",
+        metadata: %{
+          storage: :test,
+          probe_policy: %{id: "strict-policy", stale_after_ms: 10_000}
+        }
+      )
+
+    relaxed =
+      persist_source!("scheduler-relaxed-policy",
+        metadata: %{
+          storage: :test,
+          probe_policy: %{id: "relaxed-policy", stale_after_ms: 180_000}
+        }
+      )
+
+    disabled_by_policy =
+      persist_source!("scheduler-policy-disabled",
+        metadata: %{
+          storage: :test,
+          probe_policy: %{id: "disabled-policy", enabled?: false, stale_after_ms: 10_000}
+        }
+      )
+
+    record_physical_health!(strict, :healthy, ~U[2026-06-21 14:59:30Z])
+    record_physical_health!(relaxed, :healthy, ~U[2026-06-21 14:58:00Z])
+
+    test_pid = self()
+
+    summary =
+      SourceProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [strict, relaxed, disabled_by_policy] end,
+        source_health_events?: true,
+        source_health_freshness: [default_max_age_ms: 60_000],
+        now: @now,
+        probe_fun: fn data_source_id, _attrs, opts ->
+          send(test_pid, {:scheduled_probe, data_source_id, Keyword.fetch!(opts, :payload)})
+          {:ok, :unchanged, %{data_source_id: data_source_id}}
+        end
+      )
+
+    assert summary.checked == 3
+    assert summary.probed == 1
+    assert summary.skipped_fresh == 1
+    assert summary.skipped_policy == 1
+    assert summary.errors == []
+
+    assert_receive {:scheduled_probe, "scheduler-strict-policy", payload}
+    assert payload.source == "dashboard_source_probe_scheduler"
+    assert payload.probe_policy_id == "strict-policy"
+    assert payload.probe_stale_after_ms == 10_000
+
+    refute_receive {:scheduled_probe, "scheduler-relaxed-policy", _payload}
+    refute_receive {:scheduled_probe, "scheduler-policy-disabled", _payload}
+  end
+
   test "run_once bounds slow BYO probes while managed probes still record health" do
     assert {:ok, _reference, _event} =
              SourceCredentials.register_reference(%{
@@ -103,7 +162,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
                metadata: %{endpoint_ref: "endpoint://customer/scheduler-byo-slow"}
              })
 
-    _byo_source =
+    byo_source =
       persist_source!("scheduler-byo-slow",
         owner: :customer,
         kind: :byo_tsdb,
@@ -116,16 +175,17 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     summary =
       SourceProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [byo_source, managed_source] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
         invalidate_runtime_cache?: false,
         now: @now,
-        max_concurrency: 2,
-        probe_timeout_ms: 25,
+        max_concurrency: 1,
+        probe_timeout_ms: 500,
         probe_fun: fn
           "scheduler-byo-slow", _attrs, _opts ->
             send(test_pid, {:probe_started, "scheduler-byo-slow"})
-            Process.sleep(250)
+            Process.sleep(2_000)
             flunk("slow BYO probe should be killed by scheduler timeout")
 
           "scheduler-managed-fast", attrs, opts ->
@@ -161,10 +221,19 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     assert managed_status.reason == :source_probe_succeeded
     assert managed_status.payload["source"] == "dashboard_source_probe_scheduler"
 
-    assert [] =
+    assert [byo_status] =
              SourceHealth.list_source_health_statuses(@organization_id, @mission_id,
                data_source_id: "scheduler-byo-slow"
              )
+
+    assert byo_status.source_health == :unavailable
+    assert byo_status.reason == :source_probe_timeout
+    assert byo_status.payload["source"] == "dashboard_source_probe_scheduler"
+    assert byo_status.payload["probe_kind"] == "scheduler"
+    assert byo_status.payload["probe_message"] == "Source probe exceeded scheduler timeout."
+    assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == 500
+    assert byo_status.payload["connection_test_result"] == "blocked"
+    assert byo_status.payload["connection_test_kind"] == "scheduler_timeout"
   end
 
   test "run_once does nothing when source health events are disabled" do
@@ -195,7 +264,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
       credentials_ref: Keyword.get(attrs, :credentials_ref),
       status: Keyword.get(attrs, :status, :active),
       capabilities: %{latest?: true},
-      metadata: %{storage: :test}
+      metadata: Keyword.get(attrs, :metadata, %{storage: :test})
     }
 
     assert {:ok, persisted} = DataSources.persist_data_source(data_source)

@@ -379,6 +379,122 @@ defmodule Cadence.OperationalEventsTest do
     assert listed_watermark.payload["replay_run_id"] == "replay-run-1"
   end
 
+  test "projects source health transitions as replay-scoped intervals", %{
+    organization_id: organization_id,
+    mission_id: mission_id
+  } do
+    live_at = ~U[2026-06-26 12:00:00Z]
+    replay_first_at = ~U[2026-06-26 12:01:00Z]
+    other_replay_at = ~U[2026-06-26 12:02:00Z]
+    replay_second_at = ~U[2026-06-26 12:03:00Z]
+
+    assert {:ok, _event} =
+             source_health_transition_event(
+               organization_id,
+               mission_id,
+               "source-health-live-1",
+               "live-questdb",
+               nil,
+               live_at,
+               :degraded,
+               :healthy
+             )
+             |> OperationalEvents.persist_event()
+
+    assert {:ok, _event} =
+             source_health_transition_event(
+               organization_id,
+               mission_id,
+               "source-health-replay-1",
+               "replay-questdb",
+               "replay-run-1",
+               replay_first_at,
+               :degraded,
+               :healthy
+             )
+             |> OperationalEvents.persist_event()
+
+    assert {:ok, _event} =
+             source_health_transition_event(
+               organization_id,
+               mission_id,
+               "source-health-other-replay",
+               "replay-questdb",
+               "replay-run-2",
+               other_replay_at,
+               :unavailable,
+               :healthy
+             )
+             |> OperationalEvents.persist_event()
+
+    assert {:ok, _event} =
+             source_health_transition_event(
+               organization_id,
+               mission_id,
+               "source-health-replay-2",
+               "replay-questdb",
+               "replay-run-1",
+               replay_second_at,
+               :healthy,
+               :degraded
+             )
+             |> OperationalEvents.persist_event()
+
+    [live_interval] =
+      Cadence.operational_source_health_intervals(organization_id, mission_id,
+        data_source_id: "live-questdb",
+        order: :asc
+      )
+
+    assert live_interval.kind == :source_health
+    assert live_interval.subject_id == "live-questdb"
+    assert live_interval.ends_at == nil
+    assert live_interval.payload["realm"] == "live"
+    assert live_interval.payload["source_health"] == "degraded"
+    assert live_interval.payload["previous_source_health"] == "healthy"
+    assert live_interval.payload["replay_run_id"] == nil
+
+    [replay_first, replay_second] =
+      Cadence.operational_source_health_intervals(organization_id, mission_id,
+        data_source_id: "replay-questdb",
+        replay_run_id: "replay-run-1",
+        order: :asc
+      )
+
+    assert replay_first.source_event_id ==
+             "operational_event:source_health_event:replay-run-1:source-health-replay-1"
+
+    assert replay_first.superseded_by_event_id ==
+             "operational_event:source_health_event:replay-run-1:source-health-replay-2"
+
+    assert DateTime.compare(replay_first.ends_at, replay_second_at) == :eq
+    assert replay_first.payload["realm"] == "replay"
+    assert replay_first.payload["source_health"] == "degraded"
+    assert replay_first.payload["previous_source_health"] == "healthy"
+    assert replay_first.payload["replay_run_id"] == "replay-run-1"
+
+    assert replay_second.source_event_id ==
+             "operational_event:source_health_event:replay-run-1:source-health-replay-2"
+
+    assert replay_second.ends_at == nil
+    assert replay_second.payload["source_health"] == "healthy"
+    assert replay_second.payload["previous_source_health"] == "degraded"
+    assert replay_second.payload["replay_run_id"] == "replay-run-1"
+
+    [other_replay_interval] =
+      Cadence.operational_source_health_intervals(organization_id, mission_id,
+        data_source_id: "replay-questdb",
+        replay_run_id: "replay-run-2",
+        order: :asc
+      )
+
+    assert other_replay_interval.source_event_id ==
+             "operational_event:source_health_event:replay-run-2:source-health-other-replay"
+
+    assert other_replay_interval.payload["source_health"] == "unavailable"
+    assert other_replay_interval.payload["replay_run_id"] == "replay-run-2"
+  end
+
   test "segregates native transport operational events by replay run id", %{
     organization_id: organization_id,
     mission_id: mission_id
@@ -2018,6 +2134,40 @@ defmodule Cadence.OperationalEventsTest do
       dataset: "replay",
       source_health: :degraded,
       previous_source_health: :healthy,
+      reason: :source_probe_failed,
+      observed_at: observed_at
+    }
+    |> SourceHealthEvent.new()
+    |> Event.from_source_health_event()
+  end
+
+  defp source_health_transition_event(
+         organization_id,
+         mission_id,
+         source_health_event_id,
+         data_source_id,
+         replay_run_id,
+         observed_at,
+         source_health,
+         previous_source_health
+       ) do
+    realm = if replay_run_id, do: :replay, else: :live
+
+    dataset =
+      if replay_run_id, do: "operational_observables_replay", else: "operational_observables"
+
+    %{
+      source_health_event_id: source_health_event_id,
+      organization_id: organization_id,
+      mission_id: mission_id,
+      logical_source: :operational_observables,
+      data_source_id: data_source_id,
+      source_binding_id: "operational-observables",
+      realm: realm,
+      replay_run_id: replay_run_id,
+      dataset: dataset,
+      source_health: source_health,
+      previous_source_health: previous_source_health,
       reason: :source_probe_failed,
       observed_at: observed_at
     }

@@ -19,6 +19,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams do
           source_target_id: String.t() | nil,
           source_link_label: String.t() | nil,
           source_decision: String.t() | nil,
+          dashboard_context: map(),
           dashboard_limit_mode: String.t() | nil,
           comparison_state: String.t() | nil,
           comparison_delta: String.t() | nil,
@@ -64,7 +65,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams do
     :primary_count,
     :compare_count,
     :widget_id,
-    :widget_title
+    :widget_title,
+    dashboard_context: %{}
   ]
 
   @spec from_event(map()) :: t()
@@ -94,6 +96,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams do
       source_target_id: param(params, "source_target_id"),
       source_link_label: param(params, "source_link_label"),
       source_decision: param(params, "source_decision"),
+      dashboard_context: dashboard_context(params),
       dashboard_limit_mode: param(params, "dashboard_limit_mode"),
       comparison_state: param(params, "comparison_state"),
       comparison_delta: param(params, "comparison_delta"),
@@ -176,12 +179,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams do
     |> empty_to_nil()
   end
 
-  defp dashboard_context_ref(%__MODULE__{dashboard_limit_mode: limit_mode})
-       when is_binary(limit_mode) do
-    %{"dashboard_limit_mode" => limit_mode}
+  defp dashboard_context_ref(%__MODULE__{} = params) do
+    params.dashboard_context
+    |> Map.put("dashboard_limit_mode", params.dashboard_limit_mode)
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+    |> empty_to_nil()
   end
 
-  defp dashboard_context_ref(_params), do: nil
+  defp dashboard_context(params) when is_map(params) do
+    %{
+      "dashboard_time_mode" => param(params, "dashboard_time_mode"),
+      "dashboard_replay_run_id" => param(params, "dashboard_replay_run_id"),
+      "dashboard_data_view" => param(params, "dashboard_data_view")
+    }
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+  end
 
   defp param(params, key) do
     params
@@ -206,6 +220,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams do
   defp atom_key("source_target_id"), do: :source_target_id
   defp atom_key("source_link_label"), do: :source_link_label
   defp atom_key("source_decision"), do: :source_decision
+  defp atom_key("dashboard_time_mode"), do: :dashboard_time_mode
+  defp atom_key("dashboard_replay_run_id"), do: :dashboard_replay_run_id
+  defp atom_key("dashboard_data_view"), do: :dashboard_data_view
   defp atom_key("dashboard_limit_mode"), do: :dashboard_limit_mode
   defp atom_key("comparison_state"), do: :comparison_state
   defp atom_key("comparison_delta"), do: :comparison_delta

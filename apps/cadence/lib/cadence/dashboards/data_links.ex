@@ -228,6 +228,54 @@ defmodule Cadence.Dashboards.DataLinks do
     |> Enum.uniq_by(&{&1.kind, &1.id})
   end
 
+  @spec command_queue_entry_evidence_refs([map() | struct()], keyword()) :: [EvidenceRef.t()]
+  def command_queue_entry_evidence_refs(entries, opts \\ []) do
+    source = Keyword.get(opts, :source, :operational_observables)
+
+    entries
+    |> List.wrap()
+    |> Enum.map(&command_queue_entry_evidence_ref(&1, source))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(&{&1.kind, &1.id})
+  end
+
+  @spec command_release_attempt_evidence_refs([map() | struct()], keyword()) :: [EvidenceRef.t()]
+  def command_release_attempt_evidence_refs(attempts, opts \\ []) do
+    source = Keyword.get(opts, :source, :operational_observables)
+
+    attempts
+    |> List.wrap()
+    |> Enum.map(&command_release_attempt_evidence_ref(&1, source))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(&{&1.kind, &1.id})
+  end
+
+  @spec command_verifier_instance_evidence_refs([map() | struct()], keyword()) :: [
+          EvidenceRef.t()
+        ]
+  def command_verifier_instance_evidence_refs(verifier_instances, opts \\ []) do
+    source = Keyword.get(opts, :source, :operational_observables)
+
+    verifier_instances
+    |> List.wrap()
+    |> Enum.map(&command_verifier_instance_evidence_ref(&1, source))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(&{&1.kind, &1.id})
+  end
+
+  @spec command_verifier_matched_record_evidence_refs([map() | struct()], keyword()) :: [
+          EvidenceRef.t()
+        ]
+  def command_verifier_matched_record_evidence_refs(verifier_instances, opts \\ []) do
+    source = Keyword.get(opts, :source, :operational_observables)
+
+    verifier_instances
+    |> List.wrap()
+    |> Enum.map(&command_verifier_matched_record_evidence_ref(&1, source))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(&{&1.kind, &1.id})
+  end
+
   @spec mission_event_evidence_refs([map() | struct()]) :: [EvidenceRef.t()]
   def mission_event_evidence_refs(events) do
     events
@@ -645,6 +693,87 @@ defmodule Cadence.Dashboards.DataLinks do
         nil
     end
   end
+
+  defp command_queue_entry_evidence_ref(entry, source) do
+    case string_id(attr(entry, :command_queue_entry_id)) do
+      nil ->
+        nil
+
+      entry_id ->
+        %EvidenceRef{
+          kind: :command_queue_entry,
+          id: entry_id,
+          observed_at: attr(entry, :enqueued_at),
+          source: normalize_source(source),
+          confidence: :direct
+        }
+    end
+  end
+
+  defp command_release_attempt_evidence_ref(attempt, source) do
+    case string_id(attr(attempt, :command_release_attempt_id)) do
+      nil ->
+        nil
+
+      attempt_id ->
+        %EvidenceRef{
+          kind: :command_release_attempt,
+          id: attempt_id,
+          observed_at:
+            attr(attempt, :attempted_at) || attr(attempt, :released_at) ||
+              attr(attempt, :requested_at) || attr(attempt, :starts_at),
+          source: normalize_source(source),
+          confidence: :direct
+        }
+    end
+  end
+
+  defp command_verifier_instance_evidence_ref(verifier_instance, source) do
+    case string_id(attr(verifier_instance, :command_verifier_instance_id)) do
+      nil ->
+        nil
+
+      verifier_instance_id ->
+        %EvidenceRef{
+          kind: :command_verifier_instance,
+          id: verifier_instance_id,
+          observed_at:
+            attr(verifier_instance, :matched_at) || attr(verifier_instance, :timeout_at) ||
+              attr(verifier_instance, :delay_until),
+          source: normalize_source(source),
+          confidence: :direct
+        }
+    end
+  end
+
+  defp command_verifier_matched_record_evidence_ref(verifier_instance, source) do
+    with kind when not is_nil(kind) <-
+           matched_record_evidence_kind(attr(verifier_instance, :matched_record_kind)),
+         id when not is_nil(id) <- string_id(attr(verifier_instance, :matched_record_id)) do
+      %EvidenceRef{
+        kind: kind,
+        id: id,
+        observed_at: attr(verifier_instance, :matched_at),
+        source: normalize_source(source),
+        confidence: :direct
+      }
+    else
+      _other -> nil
+    end
+  end
+
+  defp matched_record_evidence_kind(:telemetry_sample), do: :telemetry_sample
+  defp matched_record_evidence_kind("telemetry_sample"), do: :telemetry_sample
+  defp matched_record_evidence_kind(:transport_action_request), do: :transport_action_request
+  defp matched_record_evidence_kind("transport_action_request"), do: :transport_action_request
+
+  defp matched_record_evidence_kind(:transport_capability_record),
+    do: :transport_capability_record
+
+  defp matched_record_evidence_kind("transport_capability_record"),
+    do: :transport_capability_record
+
+  defp matched_record_evidence_kind(_other), do: nil
 
   defp limit_event_evidence_ref(event) do
     case string_id(attr(event, :limit_event_id)) do
@@ -1083,6 +1212,8 @@ defmodule Cadence.Dashboards.DataLinks do
   defp operational_interval_kind("catalog_revision"), do: :catalog_revision_interval
   defp operational_interval_kind(:source_binding), do: :source_binding_interval
   defp operational_interval_kind("source_binding"), do: :source_binding_interval
+  defp operational_interval_kind(:source_health), do: :source_health_interval
+  defp operational_interval_kind("source_health"), do: :source_health_interval
   defp operational_interval_kind(:transport_execution), do: :transport_execution_interval
   defp operational_interval_kind("transport_execution"), do: :transport_execution_interval
 

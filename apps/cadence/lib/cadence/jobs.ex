@@ -9,6 +9,7 @@ defmodule Cadence.Jobs do
 
   alias Cadence.Catalog
   alias Cadence.Dashboards.ManagedQuestDBProvisioningJobs
+  alias Cadence.Dashboards.TSDBBackendLifecycleJobs
   alias Cadence.DerivedTelemetry
   alias Cadence.Jobs.Dispatcher
   alias Cadence.Jobs.Job
@@ -299,6 +300,10 @@ defmodule Cadence.Jobs do
 
   defp dispatch(%Job{job_type: :managed_questdb_provisioning, run_id: provisioning_run_id}) do
     ManagedQuestDBProvisioningJobs.execute_enqueued_run(provisioning_run_id)
+  end
+
+  defp dispatch(%Job{job_type: :dashboard_tsdb_backend_lifecycle, run_id: lifecycle_run_id}) do
+    TSDBBackendLifecycleJobs.execute_enqueued_run(lifecycle_run_id)
   end
 
   defp safe_dispatch(%Job{} = job) do

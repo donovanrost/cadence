@@ -335,6 +335,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
                   :connection_state,
                   :ground_station,
                   :link_rf,
+                  :runtime_managed,
+                  :runtime_transport,
                   :transport_execution_state
                 ],
                 observable_value_kinds: [:state]
