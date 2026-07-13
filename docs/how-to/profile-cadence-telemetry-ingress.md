@@ -22,11 +22,16 @@ iex --sname cadence -S mix phx.server
 
 ## 2. Start a traffic source
 
-For the normal local path, use the profile-driven simulator:
+Start the external provider simulator in another shell, then schedule a contact
+from Cadence using its configured provider profile:
 
 ```bash
-mix cadence.simulator demo_spacecraft
+cd apps/cadence_simulator
+CADENCE_SIMULATOR_HTTP_ENABLED=true mix run --no-halt
 ```
+
+See [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
+for provider and mission setup.
 
 ## 3. Watch the live profiler
 
@@ -56,16 +61,18 @@ Adjust sampling duration and interval:
 mix cadence.profile demo_spacecraft --duration 20 --interval 500
 ```
 
-## 4. Run a stepped sweep
+## 4. Compare selected rates
 
-To sweep through rates while the profiler samples the live node:
+Update the simulator-owned scenario/run rate, reset the profiler, and capture a
+snapshot for each selected rate:
 
 ```bash
-mix cadence.profile_sweep demo_spacecraft --rates 100,200,400 --sample-seconds 30 -- --metrics-sample-rate 0
+mix cadence.profile demo_spacecraft --reset
+mix cadence.profile demo_spacecraft --snapshot
 ```
 
-This is the main tool for comparing throughput changes between branches or
-architectural changes.
+Record the simulator run ID and rate with each sample so comparisons remain
+reproducible.
 
 ## 5. Read the output
 
@@ -98,14 +105,8 @@ Interpret the columns carefully:
 ## 6. When to use sink benchmarking instead
 
 If you need to separate simulator throughput from Cadence throughput, use the
-sink benchmark:
-
-```bash
-mix cadence.sink_sweep demo_spacecraft --rates 800,1600,3200 --sample-seconds 30 --sink-port 4200 -- --metrics-sample-rate 0
-```
-
-That removes Cadence from the loop and shows how fast the simulator can drive a
-dumb TCP receiver.
+[standalone sink benchmark](benchmark-simulator-throughput.md). That removes
+Cadence from the loop.
 
 ## 7. When you need deeper inspection
 

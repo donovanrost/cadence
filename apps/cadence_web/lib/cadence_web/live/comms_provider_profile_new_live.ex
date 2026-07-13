@@ -76,6 +76,7 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
         <.connection_section form={@form} />
         <.framing_section form={@form} />
         <.reliability_section form={@form} />
+        <.scheduling_section form={@form} />
 
         <details class="rounded border border-base-300 bg-base-100/40 p-4 text-sm">
           <summary class="cursor-pointer hud-label hover:text-primary">
@@ -169,6 +170,43 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
     """
   end
 
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp scheduling_section(assigns) do
+    ~H"""
+    <.form_section number="05" title="Contact Scheduling API">
+      <p class="text-sm text-base-content/60">
+        Optional provider control plane for discovering, reserving, and canceling contacts.
+      </p>
+      <.input
+        field={@form[:scheduling_enabled]}
+        type="select"
+        label="External Scheduling"
+        options={enabled_options()}
+        required
+      />
+      <.input
+        field={@form[:scheduling_client]}
+        type="select"
+        label="Provider Integration"
+        options={scheduling_client_options()}
+      />
+      <.input field={@form[:scheduling_base_url]} type="url" label="Provider API URL" />
+      <.input field={@form[:scheduling_api_token]} type="password" label="Provider API Token" />
+      <.input
+        field={@form[:scheduling_delivery_host]}
+        type="text"
+        label="Cadence Telemetry Delivery Host"
+      />
+      <.input
+        field={@form[:scheduling_run_id]}
+        type="text"
+        label="Provider Environment / Run ID"
+      />
+    </.form_section>
+    """
+  end
+
   defp empty_form do
     to_form(
       empty_form_params(),
@@ -186,7 +224,13 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
       "framing_mode" => "raw",
       "frame_size" => "",
       "reconnect_policy" => "none",
-      "tls_enabled" => "false"
+      "tls_enabled" => "false",
+      "scheduling_enabled" => "false",
+      "scheduling_client" => "simulator_http",
+      "scheduling_base_url" => "",
+      "scheduling_api_token" => "",
+      "scheduling_delivery_host" => "127.0.0.1",
+      "scheduling_run_id" => ""
     }
   end
 
@@ -199,6 +243,7 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
     framing = Map.get(configuration, "framing", %{})
     tls = Map.get(configuration, "tls", %{})
     reconnect = Map.get(configuration, "reconnect", %{})
+    scheduling = Map.get(configuration, "scheduling", %{})
 
     %{
       "display_name" => display_name(provider_profile, :provider_profile_id),
@@ -213,7 +258,13 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
             Map.get(configuration, "fixed_message_bytes", "")
         ),
       "reconnect_policy" => Map.get(reconnect, "policy", "none"),
-      "tls_enabled" => boolean_string(Map.get(tls, "enabled", false))
+      "tls_enabled" => boolean_string(Map.get(tls, "enabled", false)),
+      "scheduling_enabled" => boolean_string(scheduling != %{}),
+      "scheduling_client" => Map.get(scheduling, "client", "simulator_http"),
+      "scheduling_base_url" => Map.get(scheduling, "base_url", ""),
+      "scheduling_api_token" => Map.get(scheduling, "api_token", ""),
+      "scheduling_delivery_host" => Map.get(scheduling, "delivery_host", ""),
+      "scheduling_run_id" => Map.get(scheduling, "run_id", "")
     }
   end
 
@@ -225,7 +276,8 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
          {:ok, framing_mode} <- framing_mode(params["framing_mode"]),
          {:ok, frame_size} <- frame_size(params["frame_size"], framing_mode),
          {:ok, reconnect_policy} <- reconnect_policy(params["reconnect_policy"], mode),
-         {:ok, tls_enabled} <- boolean(params["tls_enabled"]) do
+         {:ok, tls_enabled} <- boolean(params["tls_enabled"]),
+         {:ok, scheduling} <- scheduling_configuration(params) do
       {:ok,
        build_tcp_configuration(
          mode,
@@ -236,7 +288,8 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
          frame_size,
          reconnect_policy,
          tls_enabled
-       )}
+       )
+       |> maybe_put_scheduling(scheduling)}
     end
   end
 
@@ -274,6 +327,46 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
 
   defp compact(map) do
     Map.reject(map, fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp maybe_put_scheduling(configuration, nil), do: configuration
+
+  defp maybe_put_scheduling(configuration, scheduling),
+    do: Map.put(configuration, "scheduling", scheduling)
+
+  defp scheduling_configuration(%{"scheduling_enabled" => enabled} = params)
+       when enabled in [true, "true"] do
+    with {:ok, client} <- scheduling_client(params["scheduling_client"]),
+         {:ok, base_url} <- provider_base_url(params["scheduling_base_url"]),
+         {:ok, delivery_host} <-
+           required_text(
+             params["scheduling_delivery_host"],
+             "Cadence telemetry delivery host is required."
+           ) do
+      {:ok,
+       compact(%{
+         "client" => client,
+         "base_url" => base_url,
+         "api_token" => normalize_text(params["scheduling_api_token"]),
+         "delivery_host" => delivery_host,
+         "run_id" => normalize_text(params["scheduling_run_id"])
+       })}
+    end
+  end
+
+  defp scheduling_configuration(_params), do: {:ok, nil}
+
+  defp scheduling_client("simulator_http"), do: {:ok, "simulator_http"}
+  defp scheduling_client(_value), do: {:error, "Provider integration is invalid."}
+
+  defp provider_base_url(value) do
+    with base_url when is_binary(base_url) <- normalize_text(value),
+         %URI{scheme: scheme, host: host}
+         when scheme in ["http", "https"] and is_binary(host) <- URI.parse(base_url) do
+      {:ok, base_url}
+    else
+      _other -> {:error, "Provider API URL must be an absolute HTTP or HTTPS URL."}
+    end
   end
 
   defp tcp_mode("listen"), do: {:ok, "listen"}
@@ -363,6 +456,8 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
   end
 
   defp tls_options, do: [{"Disabled", "false"}, {"Enabled", "true"}]
+  defp enabled_options, do: [{"Disabled", "false"}, {"Enabled", "true"}]
+  defp scheduling_client_options, do: [{"Cadence Ground Network Simulator", "simulator_http"}]
 
   defp host_label(form) do
     if tcp_client?(form), do: "Remote Host", else: "Bind Host / Interface"
@@ -383,7 +478,13 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
       "framing_mode" => form_value(form, :framing_mode),
       "frame_size" => form_value(form, :frame_size),
       "reconnect_policy" => form_value(form, :reconnect_policy),
-      "tls_enabled" => form_value(form, :tls_enabled)
+      "tls_enabled" => form_value(form, :tls_enabled),
+      "scheduling_enabled" => form_value(form, :scheduling_enabled),
+      "scheduling_client" => form_value(form, :scheduling_client),
+      "scheduling_base_url" => form_value(form, :scheduling_base_url),
+      "scheduling_api_token" => form_value(form, :scheduling_api_token),
+      "scheduling_delivery_host" => form_value(form, :scheduling_delivery_host),
+      "scheduling_run_id" => form_value(form, :scheduling_run_id)
     }
 
     case tcp_configuration(params) do

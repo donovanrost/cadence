@@ -34,10 +34,9 @@ out. Use these guides when you need to accomplish a specific task.
 - [Archive Backlog and Backpressure](archive-backlog-and-backpressure.md)
 - [BEAM-Native Improvement Inventory](beam-native-improvement-inventory.md)
 
-## Lower-Level and Debugging Flows
+## Provider Integration
 
-- [Simulator Contact Bootstrap Flow](../simulator_contact_bootstrap_flow.md)
+- [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 
-The bootstrap flow document is intentionally lower-level. The normal daily
-workflow should usually use the profile-driven tasks from the local development
-guide instead of manually stitching together contact and runtime ids.
+The integration guide follows the same provider configuration and contact
+scheduling boundary used by external ground-station providers.

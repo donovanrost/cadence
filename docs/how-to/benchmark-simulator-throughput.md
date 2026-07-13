@@ -17,57 +17,61 @@ Use this when you need to answer:
 - how much throughput can the simulator drive into a dumb TCP receiver?
 - did a simulator-only optimization change real wire throughput?
 
-## 1. Use the sink sweep task
+## 1. Start a dumb TCP sink
 
-The simplest path is:
+For a quick local measurement, listen on a dedicated port and discard the
+received bytes:
 
 ```bash
-mix cadence.sink_sweep demo_spacecraft --rates 800,1600,3200 --sample-seconds 30 --sink-port 4200 -- --metrics-sample-rate 0
+nc -l 4200 > /dev/null
 ```
 
-This task:
+Use a production-grade traffic sink or packet counter when you need exact byte
+and connection metrics; `nc` is only a convenient smoke benchmark.
 
-- loads the simulator config from the named profile
-- overrides the TCP output to point at a local dumb sink
-- starts the sink locally
-- starts the simulator locally
-- steps through the requested rates
-- prints simulator-side and sink-side throughput
+## 2. Run the simulator directly
+
+Build and run the simulator from its own application directory:
+
+```bash
+cd apps/cadence_simulator
+mix escript.build
+./cadence_simulator telemetry \
+  --definitions ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml \
+  --tcp 127.0.0.1:4200 \
+  --rate 800 \
+  --metrics-sample-rate 0
+```
+
+Repeat the command at the rates you want to compare. This path:
+
+- runs only the simulator application and its shared CCSDS dependency;
+- sends directly to the selected sink;
+- does not start or compile Cadence in production mode.
 
 Cadence does not need to be running for this benchmark.
 
-## 2. Compare the current simulator to Cadence-coupled runs
+## 3. Compare against Cadence-coupled runs
 
-The most useful comparison is:
-
-Cadence-coupled sweep:
-
-```bash
-mix cadence.profile_sweep demo_spacecraft --rates 800,1600,3200 --sample-seconds 30 -- --metrics-sample-rate 0
-```
-
-Simulator-only sink sweep:
+Run the same scenario/rate through a provider reservation and capture a Cadence
+profiler snapshot:
 
 ```bash
-mix cadence.sink_sweep demo_spacecraft --rates 800,1600,3200 --sample-seconds 30 --sink-port 4200 -- --metrics-sample-rate 0
+mix cadence.profile demo_spacecraft --reset
+mix cadence.profile demo_spacecraft --snapshot
 ```
 
 If sink throughput is much higher than Cadence-coupled throughput, the current
 bottleneck is on the Cadence side. If both plateau together, the simulator is
 still the likely limiter.
 
-## 3. Read the output
+## 4. Read the output
 
-The sink sweep prints:
+Compare:
 
-- `sim(tx/s/mbps/q/fl/sz_kb)`
-  simulator-side transmit rate, wire Mbps, queue depth, flushes per second, and
-  average KB per flush
-- `sink(rx/mbps/ch_s/acc/open)`
-  sink-side receive Mbps, chunks per second, accepted connections, and open
-  connections
-- `sim_ms(gen/fr/send)`
-  simulator generation, framing, and send timing
+- simulator transmit telemetry;
+- sink-side received bytes or Mbps;
+- Cadence ingress, packet, sample, and queue rates from the profiler snapshot.
 
 The key comparison is:
 
@@ -76,7 +80,7 @@ The key comparison is:
 If those match closely, the sink is receiving everything the simulator is
 actually sending.
 
-## 4. Keep measurement overhead low
+## 5. Keep measurement overhead low
 
 For throughput runs, prefer sampled or disabled timing metrics:
 
@@ -93,17 +97,15 @@ or fully disabled:
 When metrics are sampled or disabled, the throughput numbers are more important
 than the `sim_ms(...)` timings.
 
-## 5. Try simulator variants explicitly
+## 6. Try simulator variants explicitly
 
-You can still pass simulator overrides after `--`.
-
-For example:
+Pass variants directly to the simulator CLI. For example:
 
 ```bash
-mix cadence.sink_sweep demo_spacecraft \
-  --rates 800,1600,3200 \
-  --sample-seconds 30 \
-  --sink-port 4200 -- \
+./cadence_simulator telemetry \
+  --definitions ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml \
+  --tcp 127.0.0.1:4200 \
+  --rate 1600 \
   --metrics-sample-rate 0 \
   --provider database
 ```
@@ -111,7 +113,7 @@ mix cadence.sink_sweep demo_spacecraft \
 If you are testing a simulator-specific throughput mode, pass that mode
 explicitly there as well.
 
-## 6. Use this benchmark for architecture decisions
+## 7. Use this benchmark for architecture decisions
 
 The sink benchmark is not just a low-level optimization tool. It is also a
 useful architecture discriminator:

@@ -179,6 +179,49 @@ defmodule CadenceWeb.CommsLiveTest do
       assert provider.configuration["tls"] == %{"enabled" => true}
     end
 
+    test "configures the simulator through the normal provider setup flow" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/providers/new")
+
+      assert has_element?(view, "select[name='provider_profile[scheduling_enabled]']")
+      assert has_element?(view, "input[name='provider_profile[scheduling_base_url]']")
+
+      assert {:error, {:live_redirect, %{to: _target}}} =
+               view
+               |> form("#provider-profile-form",
+                 provider_profile: %{
+                   display_name: "Ground Network Simulator",
+                   tcp_mode: "listen",
+                   direction: "downlink",
+                   host: "0.0.0.0",
+                   port: "4100",
+                   framing_mode: "fixed_size",
+                   frame_size: "1115",
+                   reconnect_policy: "on_disconnect",
+                   tls_enabled: "false",
+                   scheduling_enabled: "true",
+                   scheduling_client: "simulator_http",
+                   scheduling_base_url: "http://127.0.0.1:4101",
+                   scheduling_api_token: "development-token",
+                   scheduling_delivery_host: "127.0.0.1",
+                   scheduling_run_id: "run-alpha"
+                 }
+               )
+               |> render_submit()
+
+      [provider] = Cadence.list_provider_profiles(org.organization_id, mission.mission_id)
+
+      assert provider.configuration["scheduling"] == %{
+               "client" => "simulator_http",
+               "base_url" => "http://127.0.0.1:4101",
+               "api_token" => "development-token",
+               "delivery_host" => "127.0.0.1",
+               "run_id" => "run-alpha"
+             }
+    end
+
     test "shows and versions TCP providers" do
       {conn, org, mission} = signed_in_org_and_mission()
 

@@ -189,17 +189,24 @@ The current reference file is:
 
 After wiring the adapter:
 
-1. add or update a dev profile that uses the new adapter
-2. run the local development flow
+1. configure a mission provider profile that uses the new adapter
+2. run the external-provider development flow
 3. verify the path runtime snapshot shows your provider runtime
 4. confirm ingress reaches the executor and projector as expected
 
 Start with:
 
 ```bash
+# Cadence shell
 iex --sname cadence -S mix phx.server
-mix cadence.simulator demo_spacecraft
 mix cadence.profile demo_spacecraft --snapshot
+```
+
+```bash
+# Simulator shell
+# In another shell, start the external provider simulator.
+cd apps/cadence_simulator
+CADENCE_SIMULATOR_HTTP_ENABLED=true mix run --no-halt
 ```
 
 ## Checklist
@@ -211,4 +218,4 @@ mix cadence.profile demo_spacecraft --snapshot
 - adapter hands off to `ProviderIngressExecutor`
 - `snapshot/1` is operationally useful
 - tests cover connect/listen/session and handoff paths
-- profile-driven local workflow still works
+- external-provider local workflow still works

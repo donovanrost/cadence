@@ -6,7 +6,8 @@ Cadence is now structured as an umbrella project.
 
 - `apps/cadence` - new core application for the redesigned ground data system
 - `apps/cadence_web` - new web/application boundary for Cadence
-- `apps/cadence_simulator` - external simulator and local performance tooling
+- `apps/cadence_ccsds` - shared CCSDS protocol library
+- `apps/cadence_simulator` - independently runnable external provider simulator
 - `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
 ## Documentation
@@ -14,7 +15,8 @@ Cadence is now structured as an umbrella project.
 - [Developer Architecture Guide](docs/developer-architecture-guide.md) - current implementation shape, storage tiers, runtime boundaries, and local development workflow
 - [How-To Guides](docs/how-to/_index.md) - practical workflows for local development, profiling, and benchmarking
 - [Architecture Decision Records](docs/decisions/_index.md) - accepted architectural decisions for the redesigned system
-- [Simulator Contact Bootstrap Flow](docs/simulator_contact_bootstrap_flow.md) - lower-level control-plane bootstrap flow for simulator-backed contacts
+- [Contact Scheduling and Ground Network Simulation Design](docs/superpowers/specs/2026-07-12-contact-scheduling-and-ground-network-simulation-design.md) - idealized provider-neutral scheduling and simulator end state
+- [Simulator Provider Integration Flow](docs/simulator_provider_integration_flow.md) - configure the simulator through Cadence's ordinary provider boundary
 
 ## Legacy Code
 

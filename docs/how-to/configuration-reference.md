@@ -306,7 +306,6 @@ Common fields include:
 These provide defaults for:
 
 - `mix cadence.profile`
-- `mix cadence.profile_sweep`
 
 ## 5. Named-node attachment and cookies
 
@@ -330,7 +329,6 @@ They also respect:
 This matters for:
 
 - `mix cadence.profile`
-- `mix cadence.profile_sweep`
 
 ## 6. Simulator performance flags commonly used in docs
 
@@ -342,12 +340,8 @@ docs bundle:
 - `--tm-worker-fast-path`
 - `--sink-port <port>`
 
-These are primarily used by:
-
-- `mix cadence.profile_sweep`
-- `mix cadence.sink_sweep`
-
-Use them as task-level overrides, not application config.
+Use these as direct `cadence_simulator` CLI options, not Cadence application
+configuration.
 
 ## 7. Where to add new config
 

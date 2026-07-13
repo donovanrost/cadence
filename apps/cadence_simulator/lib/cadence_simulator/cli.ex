@@ -5,7 +5,6 @@ defmodule CadenceSimulator.CLI do
 
   alias CadenceSimulator.CadenceRuntimeBootstrap
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
-  alias CadenceSimulator.SimulatorContactBootstrap
 
   @telemetry_switches [
     config: :string,
@@ -56,40 +55,6 @@ defmodule CadenceSimulator.CLI do
   ]
   @loopback_aliases [h: :help]
 
-  @bootstrap_switches [
-    cadence_url: :string,
-    api_token: :string,
-    organization_id: :string,
-    organization_slug: :string,
-    organization_display_name: :string,
-    mission_id: :string,
-    mission_slug: :string,
-    mission_display_name: :string,
-    service_identity_id: :string,
-    service_identity_display_name: :string,
-    mission_service_identity_id: :string,
-    mission_service_identity_display_name: :string,
-    spacecraft_id: :string,
-    spacecraft_display_name: :string,
-    source_endpoint_id: :string,
-    source_ref: :string,
-    source_endpoint_display_name: :string,
-    definitions: :string,
-    provider_profile_id: :string,
-    transport_profile_id: :string,
-    downlink_path_template_id: :string,
-    uplink_path_template_id: :string,
-    downlink_path_id: :string,
-    uplink_path_id: :string,
-    scheduled_contact_id: :string,
-    provider_contact_ref: :string,
-    contact_start_delay_seconds: :integer,
-    contact_duration_seconds: :integer,
-    skip_realize: :boolean,
-    help: :boolean
-  ]
-  @bootstrap_aliases [d: :definitions, h: :help]
-
   @runtime_modes %{
     "telemetry" => :telemetry,
     "cop1_loopback" => :cop1_loopback
@@ -114,12 +79,6 @@ defmodule CadenceSimulator.CLI do
   @spec parse_args([String.t()]) :: {:ok, keyword()} | {:help, String.t()} | {:error, String.t()}
   def parse_args(["--help"]), do: {:help, usage()}
   def parse_args(["-h"]), do: {:help, usage()}
-  def parse_args(["bootstrap_contact", "--help"]), do: {:help, usage(:bootstrap_contact)}
-  def parse_args(["bootstrap_contact", "-h"]), do: {:help, usage(:bootstrap_contact)}
-
-  def parse_args(["bootstrap_contact" | args]) when is_list(args) do
-    parse_bootstrap_args(args)
-  end
 
   def parse_args(args) when is_list(args) do
     with {:ok, runtime_mode, mode_args, config_root} <- resolve_runtime_mode(args) do
@@ -134,16 +93,13 @@ defmodule CadenceSimulator.CLI do
       cadence_simulator --config PATH
       cadence_simulator [telemetry] --definitions PATH [options]
       cadence_simulator cop1_loopback --tcp HOST:PORT --tc-frame-size BYTES [options]
-      cadence_simulator bootstrap_contact [options]
 
     Runtime Modes:
       telemetry      Generate downlink packet or TM frame output (default)
       cop1_loopback  Connect to a TCP uplink provider and reply with CLCW reports
-      bootstrap_contact  Create the Cadence mission/contact resources for simulator runs
 
     Run `cadence_simulator telemetry --help` or
-    `cadence_simulator cop1_loopback --help` or
-    `cadence_simulator bootstrap_contact --help` for mode-specific options.
+    `cadence_simulator cop1_loopback --help` for mode-specific options.
     """
   end
 
@@ -225,69 +181,8 @@ defmodule CadenceSimulator.CLI do
     """
   end
 
-  defp usage(:bootstrap_contact) do
-    """
-    Usage:
-      cadence_simulator bootstrap_contact [options]
-
-    This command is HTTP-only. It does not start the Cadence application in the
-    current BEAM, so it avoids creating a second local runtime while bootstrapping.
-
-    Common:
-      --cadence-url URL                Cadence base URL (default: http://127.0.0.1:4001)
-      --api-token TOKEN                Existing authenticated token to reuse
-      --definitions, -d PATH           Catalog definitions YAML to import
-
-    Scope:
-      --organization-id ID             Organization id (default: org-alpha)
-      --organization-slug SLUG         Organization slug
-      --organization-display-name NAME Organization display name
-      --mission-id ID                  Mission id (default: mission-alpha)
-      --mission-slug SLUG              Mission slug
-      --mission-display-name NAME      Mission display name
-
-    Service Identities:
-      --service-identity-id ID         Bootstrap service identity id
-      --service-identity-display-name NAME
-                                      Bootstrap service identity display name
-      --mission-service-identity-id ID Mission-scoped simulator service identity id
-      --mission-service-identity-display-name NAME
-                                      Mission-scoped simulator service identity display name
-
-    Resources:
-      --spacecraft-id ID               Spacecraft id
-      --spacecraft-display-name NAME   Spacecraft display name
-      --source-endpoint-id ID          Source endpoint id
-      --source-ref REF                 Source endpoint source_ref
-      --source-endpoint-display-name NAME
-                                      Source endpoint display name
-      --provider-profile-id ID         Downlink TCP provider profile id
-      --transport-profile-id ID        Uplink transport profile id
-      --uplink-path-template-id ID     Uplink path template id
-      --downlink-path-template-id ID   Downlink path template id
-      --uplink-path-id ID              Uplink path id
-      --downlink-path-id ID            Downlink path id
-      --scheduled-contact-id ID        Scheduled contact id
-      --provider-contact-ref REF       Provider contact reference
-
-    Timing:
-      --contact-start-delay-seconds N  Delay before contact start (default: 60)
-      --contact-duration-seconds N     Contact duration (default: 600)
-      --skip-realize                   Create the scheduled contact without realizing it
-
-    If Cadence has already been bootstrapped, pass --api-token or set
-    CADENCE_API_TOKEN. There is no unauthenticated token recovery endpoint.
-    """
-  end
-
   defp run!(opts) do
-    case opts[:command] do
-      :bootstrap_contact ->
-        run_bootstrap!(Keyword.delete(opts, :command))
-
-      _other ->
-        run_runtime!(opts)
-    end
+    run_runtime!(opts)
   end
 
   defp run_runtime!(opts) do
@@ -299,19 +194,6 @@ defmodule CadenceSimulator.CLI do
 
       {:error, reason} ->
         IO.puts(:stderr, "failed to resolve simulator bootstrap: #{inspect(reason)}")
-        System.halt(1)
-    end
-  end
-
-  defp run_bootstrap!(opts) do
-    {:ok, _started} = Application.ensure_all_started(:req)
-
-    try do
-      _summary = SimulatorContactBootstrap.run(Map.new(opts))
-      System.halt(0)
-    rescue
-      exception ->
-        IO.puts(:stderr, Exception.message(exception))
         System.halt(1)
     end
   end
@@ -403,29 +285,6 @@ defmodule CadenceSimulator.CLI do
     end
   end
 
-  defp parse_bootstrap_args(args) do
-    {parsed, positional, invalid} =
-      OptionParser.parse(args, strict: @bootstrap_switches, aliases: @bootstrap_aliases)
-
-    cond do
-      parsed[:help] ->
-        {:help, usage(:bootstrap_contact)}
-
-      invalid != [] ->
-        {:error,
-         "invalid bootstrap_contact options: #{format_invalid_options(invalid)}\n\n" <>
-           usage(:bootstrap_contact)}
-
-      positional != [] ->
-        {:error,
-         "unexpected bootstrap_contact arguments: #{Enum.join(positional, " ")}\n\n" <>
-           usage(:bootstrap_contact)}
-
-      true ->
-        {:ok, build_bootstrap_options(parsed)}
-    end
-  end
-
   defp build_telemetry_options(parsed) do
     with {:ok, definitions_path} <-
            require_string(parsed, :definitions, "--definitions is required"),
@@ -487,43 +346,6 @@ defmodule CadenceSimulator.CLI do
           {:ok, opts}
       end
     end
-  end
-
-  defp build_bootstrap_options(parsed) do
-    []
-    |> Keyword.put(:command, :bootstrap_contact)
-    |> maybe_put(:base_url, parsed[:cadence_url])
-    |> maybe_put(:api_token, parsed[:api_token])
-    |> maybe_put(:organization_id, parsed[:organization_id])
-    |> maybe_put(:organization_slug, parsed[:organization_slug])
-    |> maybe_put(:organization_display_name, parsed[:organization_display_name])
-    |> maybe_put(:mission_id, parsed[:mission_id])
-    |> maybe_put(:mission_slug, parsed[:mission_slug])
-    |> maybe_put(:mission_display_name, parsed[:mission_display_name])
-    |> maybe_put(:service_identity_id, parsed[:service_identity_id])
-    |> maybe_put(:service_identity_display_name, parsed[:service_identity_display_name])
-    |> maybe_put(:mission_service_identity_id, parsed[:mission_service_identity_id])
-    |> maybe_put(
-      :mission_service_identity_display_name,
-      parsed[:mission_service_identity_display_name]
-    )
-    |> maybe_put(:spacecraft_id, parsed[:spacecraft_id])
-    |> maybe_put(:spacecraft_display_name, parsed[:spacecraft_display_name])
-    |> maybe_put(:source_endpoint_id, parsed[:source_endpoint_id])
-    |> maybe_put(:source_ref, parsed[:source_ref])
-    |> maybe_put(:source_endpoint_display_name, parsed[:source_endpoint_display_name])
-    |> maybe_put(:definitions_path, parsed[:definitions])
-    |> maybe_put(:provider_profile_id, parsed[:provider_profile_id])
-    |> maybe_put(:transport_profile_id, parsed[:transport_profile_id])
-    |> maybe_put(:downlink_path_template_id, parsed[:downlink_path_template_id])
-    |> maybe_put(:uplink_path_template_id, parsed[:uplink_path_template_id])
-    |> maybe_put(:downlink_path_id, parsed[:downlink_path_id])
-    |> maybe_put(:uplink_path_id, parsed[:uplink_path_id])
-    |> maybe_put(:scheduled_contact_id, parsed[:scheduled_contact_id])
-    |> maybe_put(:provider_contact_ref, parsed[:provider_contact_ref])
-    |> maybe_put(:contact_start_delay_seconds, parsed[:contact_start_delay_seconds])
-    |> maybe_put(:contact_duration_seconds, parsed[:contact_duration_seconds])
-    |> maybe_put(:realize_contact?, if(parsed[:skip_realize], do: false, else: nil))
   end
 
   defp start_runtime(runtime_opts) do

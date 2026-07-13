@@ -30,10 +30,14 @@ defmodule CadenceSimulator.SendBuffer do
     :mode,
     :coordinator_pid,
     :socket_owner,
+    :packet_loss_rate,
+    :latency_ms,
+    :jitter_ms,
     buffer: [],
     buffer_bytes: 0,
     packets_buffered: 0,
     packets_sent: 0,
+    packets_dropped: 0,
     bytes_sent: 0,
     flushes: 0,
     status_version: 0
@@ -105,6 +109,8 @@ defmodule CadenceSimulator.SendBuffer do
     max_batch_size =
       Keyword.get(opts, :max_batch_size, batch_size * @default_batch_size_multiplier)
 
+    fault_profile = Keyword.get(opts, :fault_profile, %{})
+
     state = %__MODULE__{
       output: output,
       runtime_resolver: Keyword.get(opts, :runtime_resolver),
@@ -117,7 +123,10 @@ defmodule CadenceSimulator.SendBuffer do
       batch_size: batch_size,
       mode: Keyword.get(opts, :mode, :connect),
       coordinator_pid: Keyword.get(opts, :coordinator_pid),
-      socket_owner: nil
+      socket_owner: nil,
+      packet_loss_rate: Map.get(fault_profile, "packet_loss_rate", 0.0),
+      latency_ms: Map.get(fault_profile, "latency_ms", 0),
+      jitter_ms: Map.get(fault_profile, "jitter_ms", 0)
     }
 
     {:ok, connect_output(state)}
@@ -182,6 +191,7 @@ defmodule CadenceSimulator.SendBuffer do
        buffer_bytes: state.buffer_bytes,
        packets_buffered: state.packets_buffered,
        packets_sent: state.packets_sent,
+       packets_dropped: state.packets_dropped,
        bytes_sent: state.bytes_sent,
        flushes: state.flushes
      }, state}
@@ -219,6 +229,7 @@ defmodule CadenceSimulator.SendBuffer do
     send_start =
       if send_sample?, do: System.monotonic_time(:microsecond), else: nil
 
+    maybe_apply_network_delay(state)
     iolist = Enum.reverse(state.buffer)
 
     case do_send(state, iolist) do
@@ -272,7 +283,9 @@ defmodule CadenceSimulator.SendBuffer do
   defp connect_output(state), do: do_connect_output(state, true)
 
   defp do_connect_output(%{output: nil} = state, _allow_refresh?), do: state
-  defp do_connect_output(%{mode: :listen, output: {:tcp, _, _}} = state, _allow_refresh?), do: state
+
+  defp do_connect_output(%{mode: :listen, output: {:tcp, _, _}} = state, _allow_refresh?),
+    do: state
 
   defp do_connect_output(%{output: {:tcp, host, port}} = state, allow_refresh?) do
     opts = [
@@ -296,7 +309,11 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp do_connect_output(%{output: {:udp, _host, _port}} = state, _allow_refresh?) do
-    case :gen_udp.open(0, [:binary, sndbuf: @default_tcp_socket_buffer, recbuf: @default_tcp_socket_buffer]) do
+    case :gen_udp.open(0, [
+           :binary,
+           sndbuf: @default_tcp_socket_buffer,
+           recbuf: @default_tcp_socket_buffer
+         ]) do
       {:ok, socket} ->
         %{state | socket: socket, socket_owner: :internal}
 
@@ -329,7 +346,18 @@ defmodule CadenceSimulator.SendBuffer do
 
   defp enqueue_packets(state, [], _packet_count, _total_bytes), do: state
 
-  defp enqueue_packets(state, packets, packet_count, total_bytes) do
+  defp enqueue_packets(state, packets, _packet_count, _total_bytes) do
+    {packets, dropped_count} = apply_packet_loss(state, packets)
+    {packet_count, total_bytes} = batch_stats(packets, nil)
+
+    state = %{state | packets_dropped: state.packets_dropped + dropped_count}
+
+    do_enqueue_packets(state, packets, packet_count, total_bytes)
+  end
+
+  defp do_enqueue_packets(state, [], _packet_count, _total_bytes), do: state
+
+  defp do_enqueue_packets(state, packets, packet_count, total_bytes) do
     was_empty = state.buffer == []
 
     updated_state = %{
@@ -351,6 +379,39 @@ defmodule CadenceSimulator.SendBuffer do
       true ->
         updated_state
     end
+  end
+
+  defp apply_packet_loss(%{packet_loss_rate: rate}, packets) when rate <= 0,
+    do: {packets, 0}
+
+  defp apply_packet_loss(%{packet_loss_rate: rate}, packets) when rate >= 1,
+    do: {[], length(packets)}
+
+  defp apply_packet_loss(state, packets) do
+    ordinal = state.packets_sent + state.packets_dropped + state.packets_buffered
+
+    {kept, dropped} =
+      packets
+      |> Enum.with_index(ordinal)
+      |> Enum.reduce({[], 0}, fn {packet, index}, {kept, dropped} ->
+        roll = :erlang.phash2({index, packet}, 1_000_000) / 1_000_000
+
+        if roll < state.packet_loss_rate,
+          do: {kept, dropped + 1},
+          else: {[packet | kept], dropped}
+      end)
+
+    {Enum.reverse(kept), dropped}
+  end
+
+  defp maybe_apply_network_delay(%{latency_ms: latency_ms, jitter_ms: jitter_ms} = state) do
+    jitter =
+      if jitter_ms > 0,
+        do: rem(:erlang.phash2({state.flushes, state.bytes_sent}), jitter_ms * 2 + 1) - jitter_ms,
+        else: 0
+
+    delay_ms = max(0, latency_ms + jitter)
+    if delay_ms > 0, do: Process.sleep(delay_ms)
   end
 
   defp maybe_publish_status(new_state, previous_state) do

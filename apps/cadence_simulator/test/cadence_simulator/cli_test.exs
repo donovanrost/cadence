@@ -98,38 +98,6 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:tc_frame_size] == 32
   end
 
-  test "parse_args builds bootstrap_contact options" do
-    assert {:ok, opts} =
-             CLI.parse_args([
-               "bootstrap_contact",
-               "--cadence-url",
-               "http://127.0.0.1:4001",
-               "--api-token",
-               "token-alpha",
-               "--organization-id",
-               "org-alpha",
-               "--mission-id",
-               "mission-alpha",
-               "--definitions",
-               "priv/databases/demo_spacecraft.yaml",
-               "--contact-start-delay-seconds",
-               "120",
-               "--contact-duration-seconds",
-               "300",
-               "--skip-realize"
-             ])
-
-    assert opts[:command] == :bootstrap_contact
-    assert opts[:base_url] == "http://127.0.0.1:4001"
-    assert opts[:api_token] == "token-alpha"
-    assert opts[:organization_id] == "org-alpha"
-    assert opts[:mission_id] == "mission-alpha"
-    assert opts[:definitions_path] == "priv/databases/demo_spacecraft.yaml"
-    assert opts[:contact_start_delay_seconds] == 120
-    assert opts[:contact_duration_seconds] == 300
-    assert opts[:realize_contact?] == false
-  end
-
   test "parse_args loads telemetry runtime options from yaml config" do
     config_path =
       write_config!("""
@@ -359,7 +327,6 @@ defmodule CadenceSimulator.CLITest do
     assert usage =~ "cadence_simulator --config PATH"
     assert usage =~ "cadence_simulator [telemetry] --definitions PATH [options]"
     assert usage =~ "cadence_simulator cop1_loopback --tcp HOST:PORT --tc-frame-size BYTES"
-    assert usage =~ "cadence_simulator bootstrap_contact [options]"
   end
 
   test "parse_args returns loopback help text" do
@@ -368,15 +335,16 @@ defmodule CadenceSimulator.CLITest do
     assert usage =~ "cadence_simulator cop1_loopback --tcp HOST:PORT --tc-frame-size BYTES"
   end
 
-  test "parse_args returns bootstrap help text" do
-    assert {:help, usage} = CLI.parse_args(["bootstrap_contact", "--help"])
-    assert usage =~ "cadence_simulator bootstrap_contact [options]"
-    assert usage =~ "--cadence-url URL"
-    assert usage =~ "--skip-realize"
+  test "the test environment starts Cadence only for end-to-end integration coverage" do
+    assert Mix.env() == :test
+    assert :cadence in Application.spec(:cadence_simulator, :applications)
   end
 
-  test "cadence is not a runtime application dependency of cadence_simulator" do
-    refute :cadence in Application.spec(:cadence_simulator, :applications)
+  test "cadence is test-only while CCSDS is a production dependency" do
+    mix_source = File.read!(Path.expand("../../mix.exs", __DIR__))
+
+    assert mix_source =~ "{:cadence, in_umbrella: true, only: :test}"
+    assert mix_source =~ "{:cadence_ccsds, in_umbrella: true}"
   end
 
   defp write_config!(yaml_content) do

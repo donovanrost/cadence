@@ -914,6 +914,19 @@ defmodule Cadence.Contacts do
     end
   end
 
+  @spec fetch_scheduled_contact_by_provider_ref(binary(), binary()) ::
+          {:ok, ScheduledContact.t()} | {:error, :scheduled_contact_not_found}
+  def fetch_scheduled_contact_by_provider_ref(mission_id, provider_contact_ref)
+      when is_binary(mission_id) and is_binary(provider_contact_ref) do
+    case Repo.get_by(ScheduledContactRow,
+           mission_id: mission_id,
+           provider_contact_ref: provider_contact_ref
+         ) do
+      nil -> {:error, :scheduled_contact_not_found}
+      %ScheduledContactRow{} = row -> {:ok, ScheduledContactRow.to_domain(row)}
+    end
+  end
+
   @spec list_scheduled_contacts(binary()) :: [ScheduledContact.t()]
   def list_scheduled_contacts(mission_id) when is_binary(mission_id) do
     ScheduledContactRow

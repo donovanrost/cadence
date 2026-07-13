@@ -38,9 +38,12 @@ Cadence is a multi-tenant control plane plus a reconciled mission runtime.
 At the umbrella level:
 
 - `apps/cadence` contains the core domain, runtime, persistence, replay, and
-  simulator-facing platform logic.
-- `apps/cadence_web` contains the Phoenix API and future UI boundary.
-- `apps/cadence_simulator` contains the external simulator and profiling tools.
+  provider-client boundary.
+- `apps/cadence_web` contains the Phoenix API and UI boundary.
+- `apps/cadence_ccsds` contains protocol primitives shared by Cadence and
+  external peers.
+- `apps/cadence_simulator` contains the independently runnable external ground
+  network simulator.
 - `legacy/cadence_legacy` is a preserved reference snapshot of the previous
   system and is useful for migration and performance comparisons.
 
@@ -366,55 +369,44 @@ Relevant environment variables:
 This is a real persisted user account, not a hidden bypass. The bootstrap login
 path exists only while the env configuration is enabled.
 
-### 8.3 Profile-driven simulator and profiling tasks
+### 8.3 Run the external simulator
 
-Preferred local commands:
+Start the provider simulator in its own application directory and BEAM:
 
 ```bash
-mix cadence.simulator demo_spacecraft
-mix cadence.profile demo_spacecraft
-mix cadence.profile_sweep demo_spacecraft --rates 100,200,400
-mix cadence.sink_sweep demo_spacecraft --rates 800,1600,3200 --sink-port 4200
+cd apps/cadence_simulator
+CADENCE_SIMULATOR_HTTP_ENABLED=true mix run --no-halt
 ```
 
-What they do:
+Cadence neither supervises this process nor exposes simulator administration in
+its web UI. Configure its scheduling API and telemetry delivery settings on an
+ordinary mission provider profile.
 
-- `mix cadence.simulator` starts the simulator as its own local BEAM process
-- `mix cadence.profile` connects to the running Cadence node and samples ingress
-  profiler state
-- `mix cadence.profile_sweep` drives the simulator across rates while sampling a
-  running Cadence node
-- `mix cadence.sink_sweep` benchmarks the simulator against a dumb TCP drain
-  sink to isolate simulator-side throughput from Cadence-side throughput
+See [Simulator Provider Integration Flow](simulator_provider_integration_flow.md)
+for the complete setup.
 
-The simulator and profiler are intentionally separate from the Cadence server
-process.
+### 8.4 Runtime profiling
 
-### 8.4 Dev profiles
+The Cadence-owned profiler task remains available for inspecting a running
+Cadence node:
 
-Named dev profiles live under `dev/profiles`.
+```bash
+mix cadence.profile demo_spacecraft
+```
 
-Today the main example is:
+Named profiler defaults live under `dev/profiles`. These files are Cadence-side
+developer tooling, not simulator lifecycle configuration.
 
-- `dev/profiles/demo_spacecraft.yaml`
+### 8.5 Provider integration boundary
 
-Profiles are the user-facing unit for local development. They should capture:
+The simulator implements a provider-style HTTP control plane. Cadence discovers
+opportunities and reserves contacts through the provider client configured on
+the mission's `ProviderProfile`. Telemetry then arrives through the same
+contact-time TCP ingress used by other providers.
 
-- simulator settings
-- bootstrap scope defaults
-- profiler node and mission defaults
-
-Developers should not need to manually stitch together realized contact ids,
-provider binding ids, or low-level socket commands for normal local work.
-
-### 8.5 Low-level bootstrap flow
-
-`docs/simulator_contact_bootstrap_flow.md` documents the lower-level control
-plane flow for contact/bootstrap setup.
-
-That document is still useful when debugging the raw API or bootstrap
-mechanics, but the normal day-to-day path should use the profile-driven tasks
-above.
+The simulator may use authenticated runtime lookup to discover an already
+realized contact's data-plane endpoint. It must not create or administer
+Cadence mission resources.
 
 ## 9. Where Code Lives
 
@@ -441,10 +433,13 @@ When adding new code, these are the first places to look.
 
 - `apps/cadence_web/lib/cadence_web`
 
-### Simulator and local performance tooling
+### Shared CCSDS library
+
+- `apps/cadence_ccsds/lib/cadence/ccsds`
+
+### External simulator
 
 - `apps/cadence_simulator/lib/cadence_simulator`
-- `apps/cadence_simulator/lib/mix/tasks`
 
 ## 10. Documentation Expectations
 

@@ -47,10 +47,12 @@ The fastest first check is:
 mix cadence.profile demo_spacecraft --snapshot
 ```
 
-Or a stepped sweep:
+For a rate comparison, update the simulator scenario/run and take a reset
+snapshot at each selected rate:
 
 ```bash
-mix cadence.profile_sweep demo_spacecraft --rates 100,200,400 --sample-seconds 30 -- --metrics-sample-rate 0
+mix cadence.profile demo_spacecraft --reset
+mix cadence.profile demo_spacecraft --snapshot
 ```
 
 The most important archive column is:
@@ -215,11 +217,8 @@ Treat that as a real signal, not noise. It often tells you whether you have:
 
 ## 7. Distinguish Cadence pressure from simulator pressure
 
-Use the sink benchmark when needed:
-
-```bash
-mix cadence.sink_sweep demo_spacecraft --rates 800,1600,3200 --sample-seconds 30 --sink-port 4200 -- --metrics-sample-rate 0
-```
+Use the [standalone sink benchmark](benchmark-simulator-throughput.md) when
+needed.
 
 If the simulator can deliver much higher Mbps to a dumb sink than Cadence sees,
 then the bottleneck is in the Cadence-coupled path.
@@ -261,9 +260,9 @@ Choose the action that matches the failing layer.
 When investigating a throughput problem, use this order:
 
 1. run `mix cadence.profile ... --snapshot`
-2. run `mix cadence.profile_sweep ...`
+2. compare profiler snapshots across selected simulator run rates
 3. inspect the path runtime snapshot
-4. compare against `mix cadence.sink_sweep ...`
+4. compare against the standalone sink benchmark
 5. only then move to live BEAM process profiling
 
 That keeps the investigation grounded in the existing observability surfaces

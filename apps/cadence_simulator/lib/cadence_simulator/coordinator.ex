@@ -143,7 +143,8 @@ defmodule CadenceSimulator.Coordinator do
           batch_size: send_batch_size,
           metrics_id: metrics_id,
           metrics_sample_rate: metrics_sample_rate,
-          coordinator_pid: self()
+          coordinator_pid: self(),
+          fault_profile: Keyword.get(opts, :fault_profile, %{})
         ]
 
       {:ok, send_buffer} = SendBuffer.start_link(send_buffer_opts)

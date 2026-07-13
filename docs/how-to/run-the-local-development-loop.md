@@ -1,6 +1,6 @@
 ---
 title: Run the Local Development Loop
-tags: [how-to, developer, simulator, profiler, bootstrap]
+tags: [how-to, developer, simulator, profiler, provider]
 status: active
 created: 2026-04-03
 updated: 2026-04-03
@@ -17,8 +17,8 @@ The intended process model is:
 - one simulator BEAM
 - one short-lived profiler task process
 
-The simulator and profiler are intentionally not run inside the Cadence server
-process.
+The simulator is never run inside the Cadence server process. The profiler is a
+short-lived Cadence developer task.
 
 ## 1. Prepare bootstrap admin env
 
@@ -42,8 +42,7 @@ CADENCE_BOOTSTRAP_ADMIN_DISPLAY_NAME = "Bootstrap Admin"
 CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS = "86400"
 ```
 
-This gives the tooling a real persisted bootstrap admin user for first-boot
-setup and profile bootstrap flows.
+This creates a real persisted bootstrap admin user for first-boot setup.
 
 ## 2. Prepare the database
 
@@ -66,28 +65,31 @@ iex --sname cadence -S mix phx.server
 
 Using `--sname cadence` lets the profiler tasks attach to the live node.
 
-## 4. Start the simulator from a dev profile
+## 4. Start the simulator independently
 
-The normal simulator entrypoint is profile-driven:
-
-```bash
-mix cadence.simulator demo_spacecraft
-```
-
-This task:
-
-- loads `dev/profiles/demo_spacecraft.yaml`
-- ensures the profile’s dev mission/contact/runtime exists
-- resolves the simulator runtime settings
-- starts the simulator in its own local BEAM process
-
-You can pass normal simulator overrides after the profile name, for example:
+From a second shell, start the external provider simulator:
 
 ```bash
-mix cadence.simulator demo_spacecraft --rate 25.0
+cd apps/cadence_simulator
+export CADENCE_SIMULATOR_HTTP_ENABLED=true
+export CADENCE_SIMULATOR_PORT=4101
+export CADENCE_SIMULATOR_API_TOKEN=local-simulator-token
+mix run --no-halt
 ```
 
-## 5. Inspect the live ingress path
+The simulator has its own configuration and supervision tree. Starting it does
+not create a mission, contact, or runtime inside Cadence.
+
+## 5. Configure the mission
+
+In Cadence, create an ordinary provider profile under **Comms → Providers** and
+enable its external scheduling integration. Point it at the simulator URL and
+token, then configure the normal telemetry listener and mission paths.
+
+Follow [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
+for the complete setup.
+
+## 6. Inspect the live ingress path
 
 To sample the live profiler while the simulator is running:
 
@@ -107,27 +109,24 @@ To print one cumulative snapshot:
 mix cadence.profile demo_spacecraft --snapshot
 ```
 
-## 6. Run a stepped rate sweep
+## 7. Run a stepped rate sweep
 
-To sweep simulator rates against the live Cadence runtime:
+Create or update simulator scenarios and runs through its provider API, then
+sample Cadence after each selected rate:
 
 ```bash
-mix cadence.profile_sweep demo_spacecraft --rates 100,200,400 --sample-seconds 30 -- --metrics-sample-rate 0
+mix cadence.profile demo_spacecraft --reset
+mix cadence.profile demo_spacecraft --snapshot
 ```
 
-This task:
+Keep contact scheduling and scenario control separate: Cadence reserves the
+provider contact, while the simulator owns scenario/run administration.
 
-- starts the simulator locally
-- changes rates step by step
-- resets and samples the live Cadence profiler
-- prints Cadence-side and simulator-side summary metrics
+## 8. Exercise the external provider boundary
 
-## 7. Use the lower-level bootstrap flow only when needed
+To run the simulator independently and configure it through the same mission
+provider surface used by a commercial ground-station provider, use:
 
-If you need to debug raw control-plane behavior, provider profiles, path
-templates, or realized contact runtime state directly, use:
+- [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 
-- [Simulator Contact Bootstrap Flow](../simulator_contact_bootstrap_flow.md)
-
-That guide is for low-level debugging. It is not the preferred inner-loop
-workflow.
+The simulator does not create or administer Cadence mission resources.
