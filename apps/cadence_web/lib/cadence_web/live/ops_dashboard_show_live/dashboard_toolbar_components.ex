@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   alias Cadence.Dashboards.ComparisonReviewQueue
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents
+  alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
 
   attr :dashboard_document, :any, required: true
   attr :dashboard_lifecycle_status, :any, required: true
@@ -44,56 +45,165 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   attr :limit_mode_fallback, :map, default: nil
   attr :selected_data_ref, :any, default: nil
   attr :query, :string, required: true
+  attr :dashboard_warnings, :list, default: []
+  attr :dashboard_degraded?, :boolean, default: false
+  attr :dashboard_health, :map, default: %{}
 
   def dashboard_toolbar(assigns) do
+    assigns =
+      assigns
+      |> assign(:data_issue_count, data_issue_count(assigns))
+      |> assign(:data_issue_status, data_issue_status(assigns))
+
     ~H"""
-    <div class="min-h-9 shrink-0 flex flex-wrap items-center gap-2 px-2 py-1 border-b border-base-300/60 bg-base-200/60">
-      <h1
-        class="min-w-0 flex-1 basis-40 text-sm font-semibold truncate"
-        title={@dashboard_document.description}
-      >
-        {@dashboard_document.name}
-      </h1>
-      <DashboardRuntimeContextComponents.context_selector
-        :if={@show_context? and not @edit_mode?}
-        current_mission={@current_mission}
-        spacecraft={@spacecraft}
-        source_endpoints={@source_endpoints}
-        transports={@transports}
-        ground_stations={@ground_stations}
-        link_assignments={@link_assignments}
-        scheduled_contacts={@scheduled_contacts}
-        realized_contacts={@realized_contacts}
-        context_spacecraft_id={@context_spacecraft_id}
-        context_scope_kind={@context_scope_kind}
-        context_scope_id={@context_scope_id}
-        context_scope_ids={@context_scope_ids}
-        query={@query}
-      />
-      <DashboardRuntimeControlsComponents.runtime_context_controls
+    <div
+      id="dashboard-telemetry-toolbar"
+      class="min-h-11 shrink-0 flex items-center gap-2 border-b border-base-300/60 bg-base-200/45 px-3 py-1.5"
+    >
+      <div class="min-w-0 flex-1">
+        <h1 class="truncate text-sm font-semibold tracking-tight" title={@dashboard_document.description}>
+          {@dashboard_document.name}
+        </h1>
+        <p class="hidden truncate text-[0.65rem] text-base-content/50 sm:block">
+          Telemetry dashboard
+        </p>
+      </div>
+
+      <.popover
         :if={not @edit_mode?}
-        time_mode={@time_mode}
-        time_from={@time_from}
-        time_to={@time_to}
-        replay_run_id={@replay_run_id}
-        time_validation={@time_validation}
-        data_realm={@data_realm}
-        data_realms={@data_realms}
-        data_view={@data_view}
-        compare_data_view={@compare_data_view}
-        data_source_id={@data_source_id}
-        source_binding_id={@source_binding_id}
-        data_bindings={@data_bindings}
-        replay_runs={@replay_runs}
-        selected_replay_run={@selected_replay_run}
-        limit_mode={@limit_mode}
-        limit_mode_fallback={@limit_mode_fallback}
-        selected_data_ref={@selected_data_ref}
-        time_axis={@time_axis}
-      />
-      <div class="flex-1"></div>
+        id="dashboard-data-controls"
+        trigger_id="dashboard-data-controls-toggle"
+        panel_id="dashboard-data-controls-panel"
+        label="Dashboard scope and time controls"
+        width={:viewport}
+      >
+        <:trigger>
+          <span
+          class="btn btn-ghost btn-xs h-7 gap-1.5 border border-base-300/70 bg-base-100/50 px-2 font-normal"
+          >
+            <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5 text-base-content/55" />
+            <span class="hidden max-w-36 truncate font-mono text-[0.68rem] sm:inline">
+              {runtime_scope_label(@current_mission, @spacecraft, @context_scope_kind, @context_scope_id, @context_scope_ids)}
+            </span>
+            <span class="text-base-content/35">/</span>
+            <span
+              class="font-mono text-[0.68rem] font-semibold uppercase tracking-wide"
+              data-dashboard-time-summary={@time_mode}
+            >
+              {time_mode_label(@time_mode)}
+            </span>
+            <.icon name="hero-chevron-down" class="h-3 w-3 text-base-content/40" />
+          </span>
+        </:trigger>
+        <div class="p-3">
+          <div class="mb-3 flex items-center gap-2 border-b border-base-300/60 pb-2">
+            <div>
+              <p class="hud-label">Scope & time</p>
+              <p class="mt-0.5 text-xs text-base-content/55">
+                Refine what the telemetry canvas is showing.
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-col gap-3">
+            <DashboardRuntimeContextComponents.context_selector
+              :if={@show_context?}
+              current_mission={@current_mission}
+              spacecraft={@spacecraft}
+              source_endpoints={@source_endpoints}
+              transports={@transports}
+              ground_stations={@ground_stations}
+              link_assignments={@link_assignments}
+              scheduled_contacts={@scheduled_contacts}
+              realized_contacts={@realized_contacts}
+              context_spacecraft_id={@context_spacecraft_id}
+              context_scope_kind={@context_scope_kind}
+              context_scope_id={@context_scope_id}
+              context_scope_ids={@context_scope_ids}
+              query={@query}
+            />
+            <DashboardRuntimeControlsComponents.runtime_context_controls
+              time_mode={@time_mode}
+              time_from={@time_from}
+              time_to={@time_to}
+              replay_run_id={@replay_run_id}
+              time_validation={@time_validation}
+              data_realm={@data_realm}
+              data_realms={@data_realms}
+              data_view={@data_view}
+              compare_data_view={@compare_data_view}
+              data_source_id={@data_source_id}
+              source_binding_id={@source_binding_id}
+              data_bindings={@data_bindings}
+              replay_runs={@replay_runs}
+              selected_replay_run={@selected_replay_run}
+              limit_mode={@limit_mode}
+              limit_mode_fallback={@limit_mode_fallback}
+              selected_data_ref={@selected_data_ref}
+              time_axis={@time_axis}
+            />
+          </div>
+        </div>
+      </.popover>
+
+      <.popover
+        :if={@data_issue_count > 0}
+        id="dashboard-data-issues"
+        label="Dashboard data health"
+        width={:md}
+        data-dashboard-data-issue-count={@data_issue_count}
+        data-dashboard-data-issue-status={@data_issue_status}
+        data-dashboard-data-issue-codes={data_issue_codes(@dashboard_warnings)}
+      >
+        <:trigger>
+          <span
+            class={[
+              "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[0.68rem] font-semibold",
+              data_issue_class(@data_issue_status)
+            ]}
+            title="Open data health summary"
+            data-dashboard-data-issues-toggle
+          >
+            <.icon name="hero-exclamation-triangle" class="h-3.5 w-3.5" />
+            <span>{@data_issue_count}</span>
+            <span class="hidden sm:inline">
+              data {if @data_issue_count == 1, do: "issue", else: "issues"}
+            </span>
+          </span>
+        </:trigger>
+        <div class="p-3 text-xs">
+          <div class="flex items-start gap-2 border-b border-base-300/60 pb-2">
+            <.icon name="hero-signal" class="mt-0.5 h-4 w-4 text-warning" />
+            <div class="min-w-0">
+              <p class="font-semibold text-base-content">Data health</p>
+              <p class="mt-0.5 text-base-content/60">{data_issue_summary(@dashboard_health)}</p>
+            </div>
+          </div>
+          <div :if={@dashboard_warnings != []} class="mt-2 flex flex-wrap gap-1">
+            <WidgetWarningComponents.engine_warning_badge
+              :for={warning <- @dashboard_warnings}
+              warning={warning}
+            />
+          </div>
+          <p
+            :if={@dashboard_degraded? and @dashboard_warnings == []}
+            class="mt-2 text-base-content/65"
+          >
+            One or more sources returned degraded data.
+          </p>
+          <button
+            id="dashboard-data-issues-open"
+            type="button"
+            phx-click="open_diagnostics"
+            class="btn btn-outline btn-xs mt-3 w-full justify-start"
+          >
+            <.icon name="hero-chart-bar-square" class="h-3.5 w-3.5" />
+            Open diagnostics
+          </button>
+        </div>
+      </.popover>
+
       <button
-        :if={@dashboard_publish_readiness}
+        :if={@edit_mode? and @dashboard_publish_readiness}
         id="dashboard-publish-readiness-summary"
         type="button"
         phx-click="open_versions"
@@ -119,58 +229,72 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         Live updates paused while editing
       </span>
       <.button
+        :if={@edit_mode?}
         id="edit-layout-toggle"
-        variant={if @edit_mode?, do: :primary, else: :ghost}
+        variant={:primary}
         size={:xs}
         phx-click="toggle_edit"
       >
         <.icon name="hero-arrows-pointing-out" class="h-3.5 w-3.5" />
-        {if @edit_mode?, do: "Done", else: "Edit Layout"}
+        Done
       </.button>
-      <.button id="add-widget-button" variant={:ghost} size={:xs} phx-click="open_add_widget">
+      <.button
+        :if={@edit_mode?}
+        id="add-widget-button"
+        variant={:ghost}
+        size={:xs}
+        phx-click="open_add_widget"
+      >
         <.icon name="hero-plus" class="h-3.5 w-3.5" /> Widget
       </.button>
-      <.button
-        id="dashboard-historical-workflow-request-button"
-        variant={:ghost}
-        size={:xs}
-        phx-click="open_historical_workflow_request"
-      >
-        <.icon name="hero-document-plus" class="h-3.5 w-3.5" /> Data Request
-      </.button>
-      <.button
-        id="dashboard-versions-button"
-        variant={:ghost}
-        size={:xs}
-        phx-click={versions_button_event(@dashboard_comparison_review_queue)}
-        data-dashboard-comparison-review-open-count={
-          comparison_review_open_request_count(@dashboard_comparison_review_queue)
-        }
-        data-dashboard-comparison-review-open-requests={
-          comparison_review_open_request_ids_attr(@dashboard_comparison_review_queue)
-        }
-        data-dashboard-comparison-review-open-placements={
-          comparison_review_open_placements_attr(@dashboard_comparison_review_queue)
-        }
-      >
-        <.icon name="hero-clock" class="h-3.5 w-3.5" /> Versions
-        <span
-          :if={comparison_review_open_request_count(@dashboard_comparison_review_queue) != "0"}
-          class="badge badge-warning badge-xs"
-          data-dashboard-comparison-review-open-toolbar-badge
-        >
-          {comparison_review_open_request_count(@dashboard_comparison_review_queue)}
-        </span>
-      </.button>
-      <.button
-        id="dashboard-diagnostics-button"
-        variant={:ghost}
-        size={:xs}
-        phx-click="open_diagnostics"
-      >
-        <.icon name="hero-chart-bar-square" class="h-3.5 w-3.5" /> Diagnostics
-      </.button>
       <.action_menu id="dashboard-menu">
+        <:action :if={not @edit_mode?}>
+          <button id="edit-layout-toggle" phx-click="toggle_edit">
+            <.icon name="hero-arrows-pointing-out" class="h-4 w-4" /> Edit layout
+          </button>
+        </:action>
+        <:action :if={not @edit_mode?}>
+          <button id="add-widget-button" phx-click="open_add_widget">
+            <.icon name="hero-plus" class="h-4 w-4" /> Add widget
+          </button>
+        </:action>
+        <:action>
+          <button
+            id="dashboard-versions-button"
+            phx-click={versions_button_event(@dashboard_comparison_review_queue)}
+            data-dashboard-comparison-review-open-count={
+              comparison_review_open_request_count(@dashboard_comparison_review_queue)
+            }
+            data-dashboard-comparison-review-open-requests={
+              comparison_review_open_request_ids_attr(@dashboard_comparison_review_queue)
+            }
+            data-dashboard-comparison-review-open-placements={
+              comparison_review_open_placements_attr(@dashboard_comparison_review_queue)
+            }
+          >
+            <.icon name="hero-clock" class="h-4 w-4" /> Versions & activity
+            <span
+              :if={comparison_review_open_request_count(@dashboard_comparison_review_queue) != "0"}
+              class="badge badge-warning badge-xs"
+              data-dashboard-comparison-review-open-toolbar-badge
+            >
+              {comparison_review_open_request_count(@dashboard_comparison_review_queue)}
+            </span>
+          </button>
+        </:action>
+        <:action>
+          <button
+            id="dashboard-historical-workflow-request-button"
+            phx-click="open_historical_workflow_request"
+          >
+            <.icon name="hero-document-plus" class="h-4 w-4" /> Request historical data
+          </button>
+        </:action>
+        <:action>
+          <button id="dashboard-diagnostics-button" phx-click="open_diagnostics">
+            <.icon name="hero-chart-bar-square" class="h-4 w-4" /> Diagnostics
+          </button>
+        </:action>
         <:action>
           <button phx-click="save_runtime_defaults">
             <.icon name="hero-bookmark-square" class="h-4 w-4" /> Save runtime defaults
@@ -208,6 +332,99 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
     </div>
     """
   end
+
+  defp runtime_scope_label(_mission, _spacecraft, scope_kind, _scope_id, scope_ids)
+       when is_list(scope_ids) and length(scope_ids) > 1 do
+    "#{length(scope_ids)} #{scope_kind_label(scope_kind)}"
+  end
+
+  defp runtime_scope_label(current_mission, _spacecraft, "mission", _scope_id, _scope_ids) do
+    map_value(current_mission, :display_name) || "Mission"
+  end
+
+  defp runtime_scope_label(_mission, spacecraft, "spacecraft", scope_id, _scope_ids) do
+    spacecraft
+    |> Enum.find(&(map_value(&1, :spacecraft_id) == scope_id))
+    |> map_value(:display_name)
+    |> then(&(&1 || scope_id || "Spacecraft"))
+  end
+
+  defp runtime_scope_label(current_mission, _spacecraft, scope_kind, scope_id, _scope_ids) do
+    if present_text?(scope_id) do
+      "#{scope_kind_label(scope_kind)} · #{scope_id}"
+    else
+      map_value(current_mission, :display_name) || "Mission"
+    end
+  end
+
+  defp scope_kind_label(value) when is_binary(value) do
+    value
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp scope_kind_label(_value), do: "contexts"
+
+  defp time_mode_label("live"), do: "Live"
+  defp time_mode_label("archive"), do: "Archive"
+  defp time_mode_label("replay_run"), do: "Replay"
+  defp time_mode_label(_mode), do: "Time"
+
+  defp data_issue_count(assigns) do
+    warning_count = length(assigns.dashboard_warnings)
+    affected_count = map_value(assigns.dashboard_health, :affected_count) || 0
+    degraded_count = if assigns.dashboard_degraded?, do: 1, else: 0
+
+    Enum.max([warning_count, affected_count, degraded_count])
+  end
+
+  defp data_issue_status(assigns) do
+    health_state = map_value(assigns.dashboard_health, :state)
+
+    cond do
+      health_state == :blocked -> :critical
+      Enum.any?(assigns.dashboard_warnings, &(map_value(&1, :severity) == :error)) -> :critical
+      data_issue_count(assigns) > 0 -> :warning
+      true -> :nominal
+    end
+  end
+
+  defp data_issue_codes(warnings) do
+    warnings
+    |> Enum.map(&(map_value(&1, :code_text) || map_value(&1, :code)))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&to_string/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.join(",")
+  end
+
+  defp data_issue_summary(health) do
+    case {map_value(health, :label), map_value(health, :affected_count)} do
+      {label, count} when is_binary(label) and is_integer(count) ->
+        "#{label}; #{count} affected #{if count == 1, do: "widget", else: "widgets"}."
+
+      {_label, count} when is_integer(count) and count > 0 ->
+        "#{count} affected #{if count == 1, do: "widget", else: "widgets"}."
+
+      _other ->
+        "Inspect the affected sources and widget evidence."
+    end
+  end
+
+  defp data_issue_class(:critical), do: "border-error/40 bg-error/10 text-error"
+  defp data_issue_class(:warning), do: "border-warning/40 bg-warning/10 text-warning"
+  defp data_issue_class(_status), do: "border-base-300 bg-base-100 text-base-content/70"
+
+  defp map_value(nil, _key), do: nil
+
+  defp map_value(map, key) when is_map(map) do
+    Map.get(map, key, Map.get(map, Atom.to_string(key)))
+  end
+
+  defp map_value(_value, _key), do: nil
+
+  defp present_text?(value), do: is_binary(value) and String.trim(value) != ""
 
   defp lifecycle_action_available?(%{publish_available?: available?}, :publish),
     do: available? == true

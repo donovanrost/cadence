@@ -295,36 +295,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-source-health[data-source-cache*="Telemetry:source=miss"])
+               ~s(#ops-dashboard-show-page[data-engine-source-cache-statuses*="miss"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-execution*="Telemetry:cache_miss"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-execution-severity*="Telemetry:info"][data-source-execution-action*="Telemetry:none"])
-             )
-
-      assert has_element?(
-               view,
-               ~s([data-source-cache-detail="Telemetry:miss"] [data-source-health-field="Source cache"]),
-               "miss"
-             )
-
-      assert has_element?(
-               view,
-               ~s([data-source-execution-detail="Telemetry:cache_miss"] [data-source-health-field="Execution status"]),
-               "cache_miss"
-             )
-
-      assert has_element?(
-               view,
-               ~s([data-source-execution-action-detail="Telemetry:none"] [data-source-health-field="Execution action"]),
-               "none"
-             )
+      refute has_element?(view, "#dashboard-source-health")
 
       backfill = chart_backfill(html, trend_widget.widget_id)
       older_meta = point_meta(Enum.at(backfill, 0))

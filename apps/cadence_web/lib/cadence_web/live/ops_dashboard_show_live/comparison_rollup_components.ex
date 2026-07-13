@@ -173,18 +173,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
           <.icon name="hero-bookmark" class="h-3.5 w-3.5" /> Save
         </button>
       </form>
-      <details
+      <.popover
         :if={@saved_presets != []}
         id="dashboard-comparison-saved-presets"
-        class="dropdown dropdown-end"
+        label="Saved comparison presets"
+        width={:lg}
         data-dashboard-comparison-saved-presets={length(@saved_presets)}
       >
-        <summary class="btn btn-ghost btn-xs gap-1">
+        <:trigger><span class="btn btn-ghost btn-xs gap-1">
           <.icon name="hero-book-open" class="h-3.5 w-3.5" />
           Saved
           <span class="badge badge-xs">{length(@saved_presets)}</span>
-        </summary>
-        <div class="dropdown-content z-[var(--z-popover)] mt-1 w-96 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+        </span></:trigger>
+        <div class="p-2 text-xs">
           <div
             :for={preset <- @saved_presets}
             class="border-b border-base-300/60 py-2 last:border-b-0"
@@ -229,17 +230,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
             </div>
           </div>
         </div>
-      </details>
-      <details
+      </.popover>
+      <.popover
         :if={@groups != []}
         id="dashboard-comparison-rollup-detail"
-        class="dropdown dropdown-end"
+        label="Comparison details"
+        width={:lg}
         data-dashboard-comparison-rollup-detail
       >
-        <summary class="btn btn-ghost btn-xs gap-1">
+        <:trigger><span class="btn btn-ghost btn-xs gap-1">
           <.icon name="hero-list-bullet" class="h-3.5 w-3.5" /> Details
-        </summary>
-        <div class="dropdown-content z-[var(--z-popover)] mt-1 w-96 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+        </span></:trigger>
+        <div class="p-2 text-xs">
           <div
             :for={group <- @workflow_groups}
             class="border-b border-base-300/60 py-2 last:border-b-0"
@@ -460,7 +462,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
             </ul>
           </div>
         </div>
-      </details>
+      </.popover>
     </div>
     """
   end

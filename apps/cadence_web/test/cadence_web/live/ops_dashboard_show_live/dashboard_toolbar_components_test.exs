@@ -181,6 +181,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
         toolbar_assigns(
+          edit_mode?: true,
           dashboard_publish_readiness: %{
             status: "blocked",
             label: "blocked",
@@ -217,6 +218,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
         toolbar_assigns(
+          edit_mode?: true,
           dashboard_publish_readiness: %{
             status: "stale",
             label: "needs re-check",
@@ -233,6 +235,79 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.attribute("data-dashboard-publish-readiness-status")
 
     assert html =~ "Re-check publish"
+  end
+
+  test "dashboard_toolbar keeps telemetry primary and consolidates data issues" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          dashboard_degraded?: true,
+          dashboard_warnings: [
+            %{
+              code: :stale_data,
+              code_text: "stale_data",
+              severity: :warning,
+              label: "Stale data",
+              message: "One widget is stale",
+              details: %{},
+              detail_rows: [],
+              evidence: [],
+              links: []
+            }
+          ],
+          dashboard_health: %{state: :degraded, affected_count: 3}
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["dashboard-telemetry-toolbar"] =
+             document
+             |> LazyHTML.query("#dashboard-telemetry-toolbar")
+             |> LazyHTML.attribute("id")
+
+    assert ["live"] =
+             document
+             |> LazyHTML.query("[data-dashboard-time-summary]")
+             |> LazyHTML.attribute("data-dashboard-time-summary")
+
+    assert ["3"] =
+             document
+             |> LazyHTML.query("#dashboard-data-issues")
+             |> LazyHTML.attribute("data-dashboard-data-issue-count")
+
+    assert ["open_diagnostics"] =
+             document
+             |> LazyHTML.query("#dashboard-data-issues-open")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["dashboard-data-controls-panel"] =
+             document
+             |> LazyHTML.query("#dashboard-data-controls-panel")
+             |> LazyHTML.attribute("id")
+
+    assert ["dashboard-menu-menu"] =
+             document
+             |> LazyHTML.query("#dashboard-menu-menu")
+             |> LazyHTML.attribute("id")
+  end
+
+  test "publish readiness stays out of the viewing toolbar" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          dashboard_publish_readiness: %{status: "blocked", issues: [%{severity: :error}]}
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert [] =
+             document
+             |> LazyHTML.query("#dashboard-publish-readiness-summary")
+             |> LazyHTML.attribute("id")
   end
 
   defp toolbar_assigns(overrides) do

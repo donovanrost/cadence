@@ -51,8 +51,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       )
 
     ~H"""
-    <details
-      class="dropdown dropdown-end"
+    <.popover
+      id={"widget-query-#{@placement_id}"}
+      label="Widget query diagnostics"
+      width={:md}
       data-widget-query-diagnostics
       data-widget-query-data-view={query_diagnostic_value(@data_view)}
       data-widget-query-compare-data-view={query_diagnostic_value(@compare_data_view)}
@@ -80,15 +82,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       data-widget-query-empty-reason={source_status_empty_reason_text(@source_status)}
       data-widget-query-warning-codes={warning_codes(@warnings)}
     >
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label="Inspect widget query"
-        title={widget_query_diagnostic_title(@rows)}
-        data-widget-query-diagnostics-open
-      >
-        <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-80 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title={widget_query_diagnostic_title(@rows)} data-widget-query-diagnostics-open>
+          <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-2 text-xs">
         <div class="font-semibold text-base-content">Widget query</div>
         <dl class="mt-2 grid grid-cols-[7.25rem_minmax(0,1fr)] gap-x-2 gap-y-1">
           <%= for row <- @rows do %>
@@ -109,7 +108,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
           Open query evidence
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 

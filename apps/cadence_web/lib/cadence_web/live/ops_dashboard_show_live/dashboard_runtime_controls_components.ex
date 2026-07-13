@@ -26,8 +26,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
 
   def runtime_context_controls(assigns) do
     ~H"""
-    <div id="runtime-context-controls" class="hidden 2xl:flex items-center gap-1">
-      <form id="runtime-context-form" phx-change="set_runtime_context" class="flex items-center gap-1">
+    <div id="runtime-context-controls" class="flex flex-wrap items-center gap-1">
+      <form
+        id="runtime-context-form"
+        phx-change="set_runtime_context"
+        class="flex flex-wrap items-center gap-1"
+      >
         <input
           :if={@time_mode != "replay_run"}
           id="dashboard-replay-run-id"

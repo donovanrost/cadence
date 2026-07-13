@@ -266,6 +266,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.PanelEventsTest do
     assert socket.assigns.patched_query["selected_evidence_kind"] == nil
   end
 
+  test "close clears data link panel state and route query" do
+    socket =
+      socket(%{
+        panel: {:data_link, %{kind: "telemetry_sample"}},
+        dashboard_selection_query: %{
+          "panel" => "data_link",
+          "selected_link" => "sample-1",
+          "selected_id" => "sample-1"
+        },
+        dashboard_selected_data_ref: %{target_id: "sample-1"},
+        data_link_action_outcome: %{action: :inspect},
+        data_link_action_outcome_query: %{"selected_id" => "sample-1"}
+      })
+      |> PanelEvents.close(
+        patch: fn socket, query ->
+          assign(socket, :patched_query, query)
+        end
+      )
+
+    assert socket.assigns.panel == nil
+    assert socket.assigns.dashboard_selection_query == nil
+    assert socket.assigns.dashboard_selected_data_ref == %{target_id: "sample-1"}
+    assert socket.assigns.data_link_action_outcome == nil
+    assert socket.assigns.data_link_action_outcome_query == nil
+    assert socket.assigns.patched_query["panel"] == nil
+    assert socket.assigns.patched_query["selected_link"] == nil
+    assert socket.assigns.patched_query["selected_id"] == nil
+  end
+
   defp socket(assigns) do
     %Socket{
       assigns:

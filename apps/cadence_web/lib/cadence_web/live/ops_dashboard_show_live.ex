@@ -575,9 +575,9 @@ defmodule CadenceWeb.OpsDashboardShowLive do
     <div {render_model.page_attrs}>
       <.dashboard_toolbar
         {render_model.toolbar_props}
-      />
-      <.dashboard_warnings
-        {render_model.dashboard_warning_props}
+        dashboard_warnings={render_model.dashboard_warning_props.warnings}
+        dashboard_degraded?={render_model.dashboard_warning_props.degraded?}
+        dashboard_health={render_model.dashboard_health}
       />
       <div class="flex flex-1 min-h-0">
         <div {render_model.content_attrs}>

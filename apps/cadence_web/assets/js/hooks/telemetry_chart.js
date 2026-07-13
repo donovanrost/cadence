@@ -10,6 +10,8 @@ const TelemetryChart = {
     this.widgetId = this.el.dataset.widgetId
     this.placementId = this.el.dataset.placementId
     this.windowSeconds = parseInt(this.el.dataset.windowSeconds, 10) || 300
+    this.liveWindowEnd = null
+    if (this.liveMode()) this.advanceLiveWindow(Date.now())
 
     const backfill = JSON.parse(this.el.dataset.backfill || "[]")
     const compareBackfill = JSON.parse(this.el.dataset.compareBackfill || "[]")
@@ -41,14 +43,15 @@ const TelemetryChart = {
     this.handleClick = (event) => this.openPointInspector(event)
     this.el.addEventListener("click", this.handleClick)
 
-    this.handleEvent("tlm:append", ({ series, markers }) => {
+    this.handleEvent("tlm:append", ({ series, markers, window_end_ms: windowEndMs }) => {
       const points = series && (series[this.widgetId] || series[this.placementId])
       const previousPlotSeriesLength = (this.plotSeries || []).length
       const appendedSeries = this.appendSeriesPayload(points)
 
       const markerAppends = markers && (markers[this.widgetId] || markers[this.placementId])
       const appendedMarkers = this.appendMarkerPayload(markerAppends)
-      if (!appendedSeries && !appendedMarkers) return
+      const advancedLiveWindow = this.advanceLiveWindow(windowEndMs)
+      if (!appendedSeries && !appendedMarkers && !advancedLiveWindow) return
 
       this.trimToWindow()
 
@@ -339,8 +342,10 @@ const TelemetryChart = {
   },
 
   trimToWindow() {
-    if (this.xs.length === 0) return
-    const cutoff = this.xs[this.xs.length - 1] - this.windowSeconds
+    const windowEnd = this.chartWindowEnd()
+    if (!Number.isFinite(windowEnd)) return
+
+    const cutoff = windowEnd - this.windowSeconds
     this.seriesList = this.seriesList.map((series) => ({
       ...series,
       points: series.points.filter(([timestampMs]) => timestampMs / 1000 >= cutoff),
@@ -1941,9 +1946,31 @@ const TelemetryChart = {
 
   intervalMarkerOverlapsWindow(marker, cutoff) {
     const start = marker.starts_at_ms && marker.starts_at_ms / 1000
-    const end = marker.ends_at_ms ? marker.ends_at_ms / 1000 : this.xs[this.xs.length - 1]
+    const end = marker.ends_at_ms ? marker.ends_at_ms / 1000 : this.chartWindowEnd()
     if (!start) return false
     return end >= cutoff
+  },
+
+  liveMode() {
+    return this.el.dataset.timeMode === "live"
+  },
+
+  advanceLiveWindow(windowEndMs) {
+    if (!this.liveMode()) return false
+
+    const windowEnd = Number(windowEndMs) / 1000
+    if (!Number.isFinite(windowEnd) || windowEnd <= 0) return false
+
+    this.liveWindowEnd = windowEnd
+    this.el.dataset.liveWindowStartMs = `${Math.round((windowEnd - this.windowSeconds) * 1000)}`
+    this.el.dataset.liveWindowEndMs = `${Math.round(windowEnd * 1000)}`
+    return true
+  },
+
+  chartWindowEnd() {
+    if (this.liveMode() && Number.isFinite(this.liveWindowEnd)) return this.liveWindowEnd
+    if (this.xs.length === 0) return null
+    return this.xs[this.xs.length - 1]
   },
 
   dedupeMarkers(markers) {
@@ -2010,6 +2037,12 @@ const TelemetryChart = {
   },
 
   chartXRange(dataMin, dataMax) {
+    const liveWindowEnd = this.liveMode() ? this.chartWindowEnd() : null
+
+    if (Number.isFinite(liveWindowEnd)) {
+      return [liveWindowEnd - this.windowSeconds, liveWindowEnd]
+    }
+
     const values = [dataMin, dataMax]
       .concat(this.markerXValues(this.limitMarkers))
       .concat(this.markerXValues(this.eventMarkers))

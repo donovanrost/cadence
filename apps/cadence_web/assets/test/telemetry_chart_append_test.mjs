@@ -561,4 +561,50 @@ function chartWithPlot(limitMarkers = []) {
   )
 }
 
+{
+  const chart = chartWithMarkers()
+  chart.windowSeconds = 300
+  chart.liveWindowEnd = 1781697900
+  chart.xs = [1781694000, 1781694060]
+
+  assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781697600, 1781697900])
+}
+
+{
+  const chart = chartWithMarkers()
+  chart.windowSeconds = 300
+  chart.liveWindowEnd = 1781697900
+  chart.seriesList = [
+    {
+      id: "HK.counter",
+      label: "Counter",
+      role: "primary",
+      envelope: null,
+      points: [
+        [1781697540000, 1, {}],
+        [1781697840000, 2, {}],
+      ],
+    },
+  ]
+  chart.rebuildPlotData()
+  chart.trimToWindow()
+
+  assert.deepEqual(plain(chart.seriesList[0].points), [[1781697840000, 2, {}]])
+  assert.equal(chart.advanceLiveWindow(1781697960000), true)
+  assert.equal(chart.liveWindowEnd, 1781697960)
+  assert.equal(chart.el.dataset.liveWindowStartMs, "1781697660000")
+  assert.equal(chart.el.dataset.liveWindowEndMs, "1781697960000")
+}
+
+{
+  const chart = chartWithMarkers()
+  chart.el.dataset.timeMode = "archive"
+  chart.windowSeconds = 300
+  chart.liveWindowEnd = 1781697900
+  chart.xs = [1781694000, 1781694060]
+
+  assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
+  assert.equal(chart.advanceLiveWindow(1781697960000), false)
+}
+
 console.log("telemetry_chart_append_test passed")

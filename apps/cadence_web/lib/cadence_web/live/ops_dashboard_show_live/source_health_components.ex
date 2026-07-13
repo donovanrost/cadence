@@ -29,16 +29,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponents do
 
   defp source_health_badge(assigns) do
     ~H"""
-    <details
-      class="dropdown dropdown-end"
+    <.popover
+      id={"source-health-#{Map.get(@source, :request_id) || @source.logical_source_text}-#{Map.get(@source, :data_source_id) || "default"}"}
+      label={@source.label}
+      width={:md}
       data-source-health-detail={"#{@source.logical_source_text}:#{@source.state_text}"}
       data-source-cache-detail={"#{@source.logical_source_text}:#{@source.source_cache_text}"}
       data-source-circuit-detail={"#{@source.logical_source_text}:#{@source.circuit_state_text}"}
       data-source-execution-detail={"#{@source.logical_source_text}:#{@source.execution_status_text}"}
       data-source-execution-action-detail={"#{@source.logical_source_text}:#{@source.execution_operator_action_text}"}
     >
-      <summary
-        class={["badge badge-xs cursor-pointer", source_health_badge_class(@source)]}
+      <:trigger>
+        <span class={["badge badge-xs cursor-pointer", source_health_badge_class(@source)]}
         data-source-health-source={@source.logical_source_text}
         data-source-health-state={@source.state_text}
         data-source-cache-state={@source.source_cache_text}
@@ -54,10 +56,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponents do
         }
         data-source-execution-retryable={if @source.execution_retryable?, do: "true", else: "false"}
         title={@source.label}
-      >
-        {@source.label}
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-80 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+        >{@source.label}</span>
+      </:trigger>
+      <div class="p-2 text-xs">
         <div class="font-semibold text-base-content">{@source.label}</div>
         <p class="mt-1 text-base-content/70">
           Realm {@source.realm_text}; confidence {@source.confidence_text};
@@ -88,7 +89,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponents do
           <% end %>
         </dl>
       </div>
-    </details>
+    </.popover>
     """
   end
 

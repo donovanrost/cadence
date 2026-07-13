@@ -48,6 +48,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
                |> LazyHTML.query(selector)
                |> LazyHTML.attribute("data-widget-lifecycle-reasons")
 
+      assert ["widget-details-placement-1"] =
+               document
+               |> LazyHTML.query("#widget-details-placement-1")
+               |> LazyHTML.attribute("id")
+
+      assert [""] =
+               document
+               |> LazyHTML.query("#widget-details-placement-1 [data-widget-detail-indicators]")
+               |> LazyHTML.attribute("data-widget-detail-indicators")
+
       assert html =~ label
     end
   end
@@ -120,7 +130,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
     assert html =~ "This widget cannot load because its source failed."
   end
 
-  test "partial data table keeps rows visible and explains degraded coverage" do
+  test "partial data table keeps rows visible and reduces degraded coverage to an indicator" do
     html =
       render_component(&Components.widget/1,
         widget: data_table(),
@@ -141,10 +151,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
-    assert ["partial"] =
+    assert [] =
              document
              |> LazyHTML.query("[data-widget-body-notice]")
              |> LazyHTML.attribute("data-widget-body-notice")
+
+    assert ["partial"] =
+             document
+             |> LazyHTML.query("[data-widget-lifecycle-indicator]")
+             |> LazyHTML.attribute("data-widget-lifecycle-indicator")
 
     assert ["tlm.hk.battery_voltage"] =
              document

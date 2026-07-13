@@ -95,7 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceSelectionComponentsTest do
 
     assert ["selected"] =
              document
-             |> LazyHTML.query(~s(summary[data-source-selection="req-telemetry"]))
+             |> LazyHTML.query(~s([data-source-selection="req-telemetry"]))
              |> LazyHTML.attribute("data-source-selection-state")
 
     assert ["primary-questdb"] =

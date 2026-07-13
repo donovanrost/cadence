@@ -98,6 +98,9 @@ html, body {
 /* daisyUI Component Overrides — restyles daisyUI primitives for HUD aesthetic */
 @import "./components/component-overrides.css";
 
+/* Cadence-owned overlay, menu, popover, and sheet primitives. */
+@import "./components/overlay.css";
+
 /* Collapsible Sidebar */
 @import "./components/sidebar.css";
 

@@ -101,6 +101,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentationFrameTest do
            )
   end
 
+  test "frame omits nominal source-health evidence" do
+    frame = %Frame{
+      meta: %{
+        analysis_basis: :recomputed_analysis,
+        source_health: :healthy,
+        source_health_freshness: :fresh,
+        source_health_event_id: "source-health-event-1"
+      }
+    }
+
+    assert %{badges: badges} = DataManagementPresentation.frame(frame)
+    refute Enum.any?(badges, &(&1.kind == :source_health))
+  end
+
   test "frame derives revision badges from structured revision state" do
     frame = %Frame{
       meta: %{
@@ -119,7 +133,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentationFrameTest do
     assert badge?(badges, :revision_state, "corrected", "corrected_range")
     assert badge?(badges, :revision_state, "backfill", "advisory_backfill")
     assert badge?(badges, :revision_state, "conflict", "conflicting_observations")
-    assert badge?(badges, :revision_state, "mixed", "mixed_revisions")
+    refute badge?(badges, :revision_state, "mixed", "mixed_revisions")
   end
 
   test "frame summarizes active historical workflow metadata" do

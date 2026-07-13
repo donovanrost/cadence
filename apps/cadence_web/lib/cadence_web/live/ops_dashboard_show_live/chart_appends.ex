@@ -18,9 +18,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
   def push(socket, previous_data, previous_marker_snapshots \\ %{}) do
     engine_frames_by_placement = current_engine_frames_by_placement(socket)
 
-    {appends, marker_appends} =
+    chart_items =
       socket.assigns.dashboard_render_items
       |> Enum.filter(&(&1.widget.type == :time_series))
+
+    {appends, marker_appends} =
+      chart_items
       |> Enum.reduce({%{}, %{}}, fn item, {series_acc, marker_acc} ->
         placement_frames = Map.get(engine_frames_by_placement, item.placement_id)
 
@@ -39,11 +42,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
         }
       end)
 
-    if appends == %{} and marker_appends == %{} do
+    if chart_items == [] do
       socket
     else
       payload =
-        %{"series" => appends}
+        %{
+          "series" => appends,
+          "window_end_ms" => System.system_time(:millisecond)
+        }
         |> maybe_put("markers", marker_appends, marker_appends == %{})
 
       push_event(socket, "tlm:append", payload)

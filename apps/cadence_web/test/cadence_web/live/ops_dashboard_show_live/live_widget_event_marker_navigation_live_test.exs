@@ -369,6 +369,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
 
       view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
 
+      closed_path = assert_patch(view)
+      refute closed_path =~ "panel=data_link"
+      refute has_element?(view, "#dashboard-panel")
+
       mission_event_link_id = mission_event_marker["link_id"]
       mission_event_id = mission_event_marker["mission_event_id"]
       mission_event_timestamp_ms = mission_event_marker["timestamp_ms"]

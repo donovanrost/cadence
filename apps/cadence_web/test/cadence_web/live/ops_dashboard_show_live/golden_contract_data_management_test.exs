@@ -160,8 +160,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractDataManagementTest do
     assert Enum.map(badges, &{&1.kind, &1.value, &1.code}) == [
              {:data_view, "all_revisions", "all_revisions_view"},
              {:revision_state, "corrected", "corrected_range"},
-             {:revision_state, "backfill", "advisory_backfill"},
-             {:revision_state, "mixed", "mixed_revisions"}
+             {:revision_state, "backfill", "advisory_backfill"}
            ]
   end
 

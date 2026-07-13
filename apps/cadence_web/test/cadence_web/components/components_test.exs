@@ -365,7 +365,7 @@ defmodule CadenceWeb.ComponentsTest do
           ]
         )
 
-      assert html =~ ~s(phx-hook="DropdownMenu")
+      assert html =~ ~s(phx-hook="Overlay")
       assert html =~ ~s(<button)
       assert html =~ ~s(aria-haspopup="menu")
       assert html =~ ~s(aria-expanded="false")

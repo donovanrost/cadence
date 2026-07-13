@@ -36,7 +36,7 @@ defmodule CadenceWeb.Components.OpsContextRail do
       aria-label="Operational context"
       data-ops-context-rail
       data-storage-key="cadence-ops-context-rail"
-      data-default-expanded
+      data-rail-role="context"
       class="group/ctx relative w-12 data-[expanded]:w-72 shrink-0 flex flex-col border-l border-primary/20 bg-base-200 hud-grid overflow-hidden transition-[width] duration-150"
     >
       <div

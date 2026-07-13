@@ -85,14 +85,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
         >
           <.icon name="hero-bookmark-square" class="h-3.5 w-3.5" />
         </button>
-        <details
+        <.popover
           :for={group <- dashboard_health_groups(@health)}
-          class="dropdown dropdown-end"
+          id={"dashboard-health-group-#{group.key}"}
+          label={"#{group.label} widgets"}
+          width={:md}
           data-dashboard-health-group={group.key}
           data-dashboard-health-group-count={group.count}
           data-dashboard-health-group-placements={group.placement_ids}
         >
-          <summary
+          <:trigger>
+          <span
             class={["badge badge-xs cursor-pointer gap-1", dashboard_health_group_class(group)]}
             data-dashboard-health-badge={group.key}
             data-dashboard-health-badge-count={group.count}
@@ -102,8 +105,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
             <.icon name={dashboard_health_group_icon(group)} class="h-3 w-3" />
             <span>{group.label}</span>
             <span class="font-mono">{group.count}</span>
-          </summary>
-          <div class="dropdown-content z-[var(--z-popover)] mt-1 w-80 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+          </span>
+          </:trigger>
+          <div class="p-2 text-xs">
             <div class="font-semibold text-base-content">{group.label} widgets</div>
             <div class="mt-2 space-y-1">
               <a
@@ -122,7 +126,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
               </a>
             </div>
           </div>
-        </details>
+        </.popover>
       </div>
     </div>
     """

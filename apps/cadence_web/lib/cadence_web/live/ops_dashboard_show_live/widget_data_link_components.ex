@@ -9,16 +9,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
 
   def widget_data_link_menu(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-widget-data-links>
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label="Inspect widget data"
-        title="Inspect widget data"
-        data-widget-data-link-menu
-      >
-        <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-56 rounded border border-base-300 bg-base-100 p-1 text-xs shadow-lg">
+    <.popover id={"widget-data-links-#{@placement_id}"} label="Inspect widget data" width={:sm} data-widget-data-links>
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title="Inspect widget data" data-widget-data-link-menu>
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-1 text-xs">
         <button
           :for={link <- @links}
           type="button"
@@ -36,7 +33,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
           <span class="font-mono text-base-content/60 truncate">{link.target_id}</span>
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 
@@ -46,16 +43,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
 
   def status_matrix_row_link_menu(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-status-matrix-row-links={@row.observable_id}>
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label={"Inspect #{@row.observable_id}"}
-        title={"Inspect #{@row.observable_id}"}
-        data-status-matrix-row-link-menu={@row.observable_id}
-      >
-        <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-56 rounded border border-base-300 bg-base-100 p-1 text-xs shadow-lg">
+    <.popover id={"status-row-links-#{@placement_id}-#{@row.observable_id}"} label={"Inspect #{@row.observable_id}"} width={:sm} data-status-matrix-row-links={@row.observable_id}>
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title={"Inspect #{@row.observable_id}"} data-status-matrix-row-link-menu={@row.observable_id}>
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-1 text-xs">
         <button
           type="button"
           phx-click="open_evidence"
@@ -82,7 +76,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
           <span class="truncate text-right font-mono text-base-content/60">{link.target_id}</span>
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 
@@ -92,16 +86,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
 
   def data_table_row_link_menu(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-data-table-row-links={@row.observable_id}>
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label={"Inspect #{@row.observable_id}"}
-        title={"Inspect #{@row.observable_id}"}
-        data-data-table-row-link-menu={@row.observable_id}
-      >
-        <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-56 rounded border border-base-300 bg-base-100 p-1 text-xs shadow-lg">
+    <.popover id={"data-row-links-#{@placement_id}-#{@row.observable_id}"} label={"Inspect #{@row.observable_id}"} width={:sm} data-data-table-row-links={@row.observable_id}>
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title={"Inspect #{@row.observable_id}"} data-data-table-row-link-menu={@row.observable_id}>
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-1 text-xs">
         <button
           type="button"
           phx-click="open_evidence"
@@ -128,7 +119,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
           <span class="truncate text-right font-mono text-base-content/60">{link.target_id}</span>
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 
@@ -138,16 +129,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
 
   def state_timeline_row_link_menu(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-state-timeline-row-links={@row.row_id}>
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label={"Inspect #{Map.get(@row, :observable_id)} state transition"}
-        title={"Inspect #{Map.get(@row, :observable_id)} state transition"}
-        data-state-timeline-row-link-menu={@row.row_id}
-      >
-        <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-60 rounded border border-base-300 bg-base-100 p-1 text-xs shadow-lg">
+    <.popover id={"state-row-links-#{@placement_id}-#{@row.row_id}"} label={"Inspect #{Map.get(@row, :observable_id)} state transition"} width={:sm} data-state-timeline-row-links={@row.row_id}>
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title={"Inspect #{Map.get(@row, :observable_id)} state transition"} data-state-timeline-row-link-menu={@row.row_id}>
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-1 text-xs">
         <button
           type="button"
           phx-click="open_evidence"
@@ -177,7 +165,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
           <span class="truncate text-right font-mono text-base-content/60">{link.target_id}</span>
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 
@@ -187,16 +175,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
 
   def event_timeline_row_link_menu(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-event-timeline-row-links={@row.row_id}>
-      <summary
-        class="btn btn-ghost btn-xs btn-square"
-        aria-label={"Inspect #{Map.get(@row, :title)}"}
-        title={"Inspect #{Map.get(@row, :title)}"}
-        data-event-timeline-row-link-menu={@row.row_id}
-      >
-        <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-60 rounded border border-base-300 bg-base-100 p-1 text-xs shadow-lg">
+    <.popover id={"event-row-links-#{@placement_id}-#{@row.row_id}"} label={"Inspect #{Map.get(@row, :title)}"} width={:sm} data-event-timeline-row-links={@row.row_id}>
+      <:trigger>
+        <span class="btn btn-ghost btn-xs btn-square" title={"Inspect #{Map.get(@row, :title)}"} data-event-timeline-row-link-menu={@row.row_id}>
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+        </span>
+      </:trigger>
+      <div class="p-1 text-xs">
         <button
           :for={link <- @links}
           type="button"
@@ -215,7 +200,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
           <span class="truncate text-right font-mono text-base-content/60">{link.target_id}</span>
         </button>
       </div>
-    </details>
+    </.popover>
     """
   end
 

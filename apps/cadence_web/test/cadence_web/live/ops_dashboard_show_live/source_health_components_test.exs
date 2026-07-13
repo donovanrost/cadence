@@ -75,22 +75,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponentsTest do
 
     assert ["Telemetry"] =
              document
-             |> LazyHTML.query(~s(summary[data-source-health-source="Telemetry"]))
+             |> LazyHTML.query(~s([data-source-health-source="Telemetry"]))
              |> LazyHTML.attribute("data-source-health-source")
 
     assert ["true"] =
              document
-             |> LazyHTML.query(~s(summary[data-source-health-source="Telemetry"]))
+             |> LazyHTML.query(~s([data-source-health-source="Telemetry"]))
              |> LazyHTML.attribute("data-source-execution-degraded")
 
     assert ["true"] =
              document
-             |> LazyHTML.query(~s(summary[data-source-health-source="Telemetry"]))
+             |> LazyHTML.query(~s([data-source-health-source="Telemetry"]))
              |> LazyHTML.attribute("data-source-execution-actionable")
 
     assert ["true"] =
              document
-             |> LazyHTML.query(~s(summary[data-source-health-source="Telemetry"]))
+             |> LazyHTML.query(~s([data-source-health-source="Telemetry"]))
              |> LazyHTML.attribute("data-source-execution-retryable")
 
     assert ["open_evidence", "open_evidence"] =

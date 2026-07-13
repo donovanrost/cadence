@@ -184,10 +184,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
     badge(:revision_state, "conflict", "Conflict", :warning, :conflicting_observations)
   end
 
-  defp warning_code_badge(:mixed_revisions) do
-    badge(:revision_state, "mixed", "Mixed", :attention, :mixed_revisions)
-  end
-
   defp warning_code_badge(_code), do: nil
 
   defp event_row_badges(row) do
@@ -320,7 +316,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
   defp source_health_badge(meta) when is_map(meta) do
     source_health = context_value(meta, :source_health)
     freshness = context_value(meta, :source_health_freshness)
-    event_id = context_value(meta, :source_health_event_id)
 
     cond do
       source_health in [:unavailable, "unavailable"] ->
@@ -337,9 +332,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
 
       freshness in [:missing, "missing"] ->
         source_health_badge(meta, "missing", "Source health missing", :warning)
-
-      source_health in [:healthy, "healthy"] and event_id_present?(event_id) ->
-        source_health_badge(meta, "healthy", "Source healthy", :info)
 
       true ->
         nil
@@ -422,13 +414,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
         :has_conflicts?,
         :conflict_count,
         :conflicting_observations
-      ),
-      revision_badge(
-        revision_state,
-        :mixed_revisions?,
-        :identity_count,
-        :mixed_revisions,
-        &mixed_revision_state?/1
       )
     ]
   end
@@ -450,17 +435,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
       true ->
         nil
     end
-  end
-
-  defp mixed_revision_state?(revision_state) when is_map(revision_state) do
-    Enum.any?(
-      [:has_conflicts?, :has_duplicates?, :has_superseded?, :has_advisory?],
-      &truthy?(context_value(revision_state, &1))
-    ) or
-      Enum.any?(
-        [:conflict_count, :duplicate_count, :superseded_count, :advisory_count],
-        &positive?(context_value(revision_state, &1))
-      )
   end
 
   defp truthy?(true), do: true
@@ -778,8 +752,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataManagementPresentation do
 
   defp request_context_or_empty(context) when is_map(context), do: context
   defp request_context_or_empty(_context), do: %{}
-
-  defp event_id_present?(event_id), do: is_binary(event_id) and event_id != ""
 
   defp value_text(%{"tuple" => values}) when is_list(values) do
     Enum.map_join(values, ":", &value_text/1)

@@ -44,20 +44,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
 
   def widget_panel(assigns) do
     ~H"""
-    <section
+    <.sheet
       id="dashboard-panel"
-      class="fixed right-0 inset-y-0 w-96 max-w-full z-[var(--z-modal)] bg-base-200 border-l border-primary/20 flex flex-col"
-      aria-label={panel_title(@panel)}
-      phx-window-keydown="close_panel"
-      phx-key="Escape"
+      title={panel_title(@panel)}
+      width={:md}
+      close_event="close_panel"
     >
-      <header class="h-9 shrink-0 flex items-center justify-between px-3 border-b border-primary/20">
-        <h2 class="hud-label">{panel_title(@panel)}</h2>
-        <.button variant={:ghost} size={:xs} phx-click="close_panel" aria-label="Close panel">
-          <.icon name="hero-x-mark" class="h-4 w-4" />
-        </.button>
-      </header>
-      <div class="flex-1 overflow-y-auto p-3">
         <.rename_form :if={@panel == :rename} dashboard_document={@dashboard_document} />
         <HistoricalWorkflowRequestFormComponents.request_form
           :if={@panel == :historical_workflow_request}
@@ -120,8 +112,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
           error={@error}
           mission_id={@mission_id}
         />
-      </div>
-    </section>
+    </.sheet>
     """
   end
 

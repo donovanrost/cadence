@@ -16,7 +16,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
 
     assert ["source_degraded"] =
              document
-             |> LazyHTML.query(~s(summary[data-engine-warning="source_degraded"]))
+             |> LazyHTML.query(~s([data-engine-warning="source_degraded"]))
              |> LazyHTML.attribute("data-engine-warning")
 
     assert ["open_evidence"] =

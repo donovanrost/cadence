@@ -29,6 +29,11 @@ defmodule CadenceWeb.Components.OpsContextRailTest do
              |> LazyHTML.query("#test-context-rail")
              |> LazyHTML.attribute("data-storage-key")
 
+    assert [] =
+             document
+             |> LazyHTML.query("#test-context-rail")
+             |> LazyHTML.attribute("data-default-expanded")
+
     assert ["Toggle context panel"] =
              document
              |> LazyHTML.query("#test-context-rail-toggle")

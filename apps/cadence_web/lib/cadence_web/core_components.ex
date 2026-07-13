@@ -4,6 +4,7 @@ defmodule CadenceWeb.CoreComponents do
   use Phoenix.Component
 
   import CadenceWeb.Components.Button, only: [button: 1]
+  import CadenceWeb.Components.Overlay, only: [menu: 1]
 
   attr :name, :string, required: true
   attr :class, :string, default: nil
@@ -41,28 +42,9 @@ defmodule CadenceWeb.CoreComponents do
 
   def action_menu(assigns) do
     ~H"""
-    <div id={@id} phx-hook="DropdownMenu" class={["dropdown dropdown-end", @class]}>
-      <button
-        type="button"
-        data-dropdown-trigger
-        aria-haspopup="menu"
-        aria-expanded="false"
-        aria-controls={"#{@id}-menu"}
-        aria-label="Actions"
-        class="btn btn-ghost btn-xs"
-      >
-        <span class="hero-ellipsis-vertical h-5 w-5"></span>
-      </button>
-      <ul
-        id={"#{@id}-menu"}
-        role="menu"
-        class="dropdown-content menu bg-base-200 z-[var(--z-popover)] w-52 p-2 shadow-lg border border-primary/20"
-      >
-        <li :for={action <- @action} role="none">
-          {render_slot(action)}
-        </li>
-      </ul>
-    </div>
+    <.menu id={@id} label="Actions" class={@class} trigger_class="btn btn-ghost btn-xs">
+      <:item :for={action <- @action}>{render_slot(action)}</:item>
+    </.menu>
     """
   end
 

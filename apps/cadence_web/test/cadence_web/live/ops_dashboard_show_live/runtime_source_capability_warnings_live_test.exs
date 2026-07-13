@@ -214,7 +214,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
 
       assert has_element?(
                view,
-               ~s(#dashboard-engine-warnings[data-engine-degraded="true"][data-warning-codes*="unsupported_source_capability"])
+               ~s(#dashboard-data-issues[data-dashboard-data-issue-codes*="unsupported_source_capability"])
              )
 
       assert has_element?(

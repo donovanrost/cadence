@@ -198,10 +198,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationContextDiagnosticsL
                ~s(#ops-dashboard-show-page[data-engine-source-cache-statuses*="miss"][data-engine-frame-cache-statuses*="miss"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-execution*="Telemetry:cache_miss"])
-             )
+      refute has_element?(view, "#dashboard-source-health")
 
       view
       |> element("#runtime-context-form")
@@ -237,15 +234,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationContextDiagnosticsL
                ~s(#ops-dashboard-show-page[data-engine-source-cache-statuses*="hit"][data-engine-frame-cache-statuses*="hit"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-execution*="Telemetry:cache_hit"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-execution-severity*="Telemetry:ok"][data-source-execution-action*="Telemetry:none"])
-             )
+      refute has_element?(view, "#dashboard-source-health")
     end
   end
 end

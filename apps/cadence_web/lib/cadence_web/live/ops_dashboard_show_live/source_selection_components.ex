@@ -32,8 +32,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceSelectionComponents do
 
   defp source_selection_badge(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end" data-source-selection-detail={@selection.request_id}>
-      <summary
+    <.popover id={"source-selection-#{@selection.request_id}"} label={"#{@selection.logical_source_text} source selection"} width={:lg} data-source-selection-detail={@selection.request_id}>
+      <:trigger>
+      <span
         class={[
           "badge badge-xs cursor-pointer gap-1",
           source_selection_badge_class(@selection)
@@ -50,8 +51,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceSelectionComponents do
       >
         <.icon name="hero-adjustments-horizontal" class="h-3 w-3" />
         <span>{@selection.logical_source_text}</span>
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-[34rem] rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+      </span>
+      </:trigger>
+      <div class="p-2 text-xs">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
             <div class="font-semibold text-base-content">
@@ -154,7 +156,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceSelectionComponents do
           </div>
         </div>
       </div>
-    </details>
+    </.popover>
     """
   end
 

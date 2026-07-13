@@ -10,6 +10,8 @@
 // persisted with the expanded state.
 const SNAP_WIDTH = 140
 const MAX_WIDTH = 480
+const MIN_CANVAS_WIDTH = 360
+const COORDINATED_BREAKPOINT = 1100
 
 const NavRail = {
   mounted() {
@@ -18,11 +20,25 @@ const NavRail = {
     this.readState()
     this.apply()
 
+    this.onViewportResize = () => this.apply()
+    this.onPeerExpanded = (event) => {
+      if (event.detail !== this.el && window.innerWidth < COORDINATED_BREAKPOINT && this.expanded) {
+        this.expanded = false
+        this.persist()
+        this.apply()
+      }
+    }
+    window.addEventListener("resize", this.onViewportResize)
+    window.addEventListener("cadence:rail-expanded", this.onPeerExpanded)
+
     this.el.addEventListener("click", (event) => {
       if (event.target.closest("[data-rail-toggle]")) {
         this.expanded = !this.expanded
         this.persist()
         this.apply()
+        if (this.expanded) {
+          window.dispatchEvent(new CustomEvent("cadence:rail-expanded", {detail: this.el}))
+        }
       }
     })
 
@@ -31,6 +47,11 @@ const NavRail = {
 
   updated() {
     this.apply()
+  },
+
+  destroyed() {
+    window.removeEventListener("resize", this.onViewportResize)
+    window.removeEventListener("cadence:rail-expanded", this.onPeerExpanded)
   },
 
   readState() {
@@ -65,7 +86,14 @@ const NavRail = {
   apply() {
     if (this.expanded) {
       this.el.setAttribute("data-expanded", "")
-      this.el.style.width = this.handle && this.width ? `${this.width}px` : ""
+      const peerWidth = Array.from(document.querySelectorAll("[data-rail-role]"))
+        .filter((rail) => rail !== this.el)
+        .reduce((width, rail) => width + rail.getBoundingClientRect().width, 0)
+      const available = Math.max(SNAP_WIDTH, window.innerWidth - peerWidth - MIN_CANVAS_WIDTH)
+      const defaultWidth = this.el.dataset.railRole === "context" ? 288 : 224
+      const preferredWidth = this.handle && this.width ? this.width : defaultWidth
+      const width = Math.min(preferredWidth, available, MAX_WIDTH)
+      this.el.style.width = width < preferredWidth || this.width ? `${width}px` : ""
     } else {
       this.el.removeAttribute("data-expanded")
       this.el.style.width = ""

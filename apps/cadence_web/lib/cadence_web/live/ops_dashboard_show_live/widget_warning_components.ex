@@ -9,21 +9,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents do
 
   def engine_warning_badge(assigns) do
     ~H"""
-    <details
-      class="dropdown dropdown-end"
+    <.popover
+      id={"engine-warning-#{@placement_id || "dashboard"}-#{@warning.code_text}"}
+      label={@warning.label}
+      width={:md}
       data-engine-warning-detail={@warning.code_text}
       data-limit-selected-clock={warning_detail_value(@warning, :selected_limit_clock)}
       data-limit-missing-samples={warning_detail_value(@warning, :missing_sample_ids)}
       data-limit-mode={warning_detail_value(@warning, :requested_semantics_mode)}
     >
-      <summary
-        class={["badge badge-xs cursor-pointer", warning_badge_class(@warning)]}
-        data-engine-warning={@warning.code_text}
-        title={@warning.message}
-      >
-        {@warning.label}
-      </summary>
-      <div class="dropdown-content z-[var(--z-popover)] mt-1 w-80 rounded border border-base-300 bg-base-100 p-2 text-xs shadow-lg">
+      <:trigger>
+        <span
+          class={["badge badge-xs cursor-pointer", warning_badge_class(@warning)]}
+          data-engine-warning={@warning.code_text}
+          title={@warning.message}
+        >{@warning.label}</span>
+      </:trigger>
+      <div class="p-2 text-xs">
         <div class="font-semibold text-base-content">{@warning.label}</div>
         <p class="mt-1 text-base-content/70">{@warning.message}</p>
         <button
@@ -85,7 +87,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents do
           </button>
         </div>
       </div>
-    </details>
+    </.popover>
     """
   end
 

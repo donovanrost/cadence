@@ -110,6 +110,7 @@ defmodule CadenceWeb.Components.OpsShell do
       id="ops-nav-rail"
       phx-hook="NavRail"
       data-storage-key="cadence-ops-rail"
+      data-rail-role="navigation"
       class="group/rail w-12 data-[expanded]:w-56 shrink-0 flex flex-col border-r border-primary/20 bg-base-200 hud-grid overflow-y-auto overflow-x-hidden transition-[width] duration-150"
     >
       <button

@@ -82,7 +82,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsMarkerSnapshotsTest do
              )
   end
 
-  test "push suppresses marker-only payload when marker snapshot is unchanged" do
+  test "push sends a live window heartbeat when samples and markers are unchanged" do
     current_frames = chart_append_placement_frames()
     widget = %RenderWidget{type: :time_series}
 
@@ -92,11 +92,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsMarkerSnapshotsTest do
         dashboard_engine_frames_by_placement: %{"placement-1" => current_frames}
       })
 
-    assert %Phoenix.LiveView.Socket{private: %{live_temp: %{}}} =
+    assert %Phoenix.LiveView.Socket{
+             private: %{
+               live_temp: %{
+                 push_events: [
+                   [
+                     "tlm:append",
+                     %{"series" => %{}, "window_end_ms" => window_end_ms}
+                   ]
+                 ]
+               }
+             }
+           } =
              ChartAppends.push(
                chart_append_socket(current_frames, widget),
                %{"placement-1" => %{sample: %{sample_id: "sample-1"}}},
                previous_marker_snapshots
+             )
+
+    assert is_integer(window_end_ms)
+  end
+
+  test "push does not send a heartbeat without time-series widgets" do
+    current_frames = chart_append_placement_frames()
+    widget = %RenderWidget{type: :value_tile}
+
+    assert %Phoenix.LiveView.Socket{private: %{live_temp: %{}}} =
+             ChartAppends.push(
+               chart_append_socket(current_frames, widget),
+               %{"placement-1" => %{sample: %{sample_id: "sample-1"}}}
              )
   end
 

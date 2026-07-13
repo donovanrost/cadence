@@ -101,6 +101,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.PanelEvents do
 
   def close(socket, opts \\ []) do
     case socket.assigns.panel do
+      {:data_link, _inspector} ->
+        socket =
+          socket
+          |> assign(:panel, nil)
+          |> assign(:dashboard_activity_filter, nil)
+          |> assign(:dashboard_activity_event_id, nil)
+          |> assign(:dashboard_review_placement_id, nil)
+          |> assign(:dashboard_selection_query, nil)
+          |> assign(:data_link_action_outcome, nil)
+          |> assign(:data_link_action_outcome_query, nil)
+
+        patch(opts).(socket, DataLinkSelection.clear_panel_query(:data_link))
+
       {:evidence, _inspector} ->
         socket =
           socket

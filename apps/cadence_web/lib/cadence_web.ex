@@ -57,6 +57,7 @@ defmodule CadenceWeb do
       import CadenceWeb.Components.Forms
       import CadenceWeb.Components.ListControls
       import CadenceWeb.Components.OpsContextRail
+      import CadenceWeb.Components.Overlay
       import CadenceWeb.Components.PageHeader
       import CadenceWeb.Components.Table
       import CadenceWeb.CoreComponents

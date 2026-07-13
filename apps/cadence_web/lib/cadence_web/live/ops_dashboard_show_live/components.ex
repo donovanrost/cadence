@@ -50,6 +50,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :limit_mode_fallback, :map, default: nil
   attr :selected_data_ref, :any, default: nil
   attr :query, :string, required: true
+  attr :dashboard_warnings, :list, default: []
+  attr :dashboard_degraded?, :boolean, default: false
+  attr :dashboard_health, :map, default: %{}
 
   def dashboard_toolbar(assigns) do
     DashboardToolbarComponents.dashboard_toolbar(assigns)
@@ -212,11 +215,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             point={@point}
             compare_data_view={@compare_data_view}
           />
-          <.widget_lifecycle_notice
-            :if={lifecycle_body_notice?(@data)}
-            data={@data}
-            compact
-          />
       <% end %>
     </div>
     """
@@ -236,11 +234,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             default="No historical samples in this time range."
           />
         <% true -> %>
-          <.widget_lifecycle_notice
-            :if={lifecycle_body_notice?(@data) or lifecycle_blocking?(@data)}
-            data={@data}
-            compact
-          />
+          <.widget_lifecycle_notice :if={lifecycle_blocking?(@data)} data={@data} compact />
           <WidgetPointComponents.time_series_chart
             widget={@widget}
             placement_id={@placement_id}
@@ -283,7 +277,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% @data.rows == [] -> %>
           <.widget_lifecycle_notice data={@data} default="No current rows." />
         <% true -> %>
-          <.widget_lifecycle_notice :if={lifecycle_body_notice?(@data)} data={@data} compact />
           <WidgetRowComponents.status_matrix_table
             data={@data}
             widget={@widget}
@@ -309,7 +302,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% @data.rows == [] -> %>
           <.widget_lifecycle_notice data={@data} default="No rows for this table." />
         <% true -> %>
-          <.widget_lifecycle_notice :if={lifecycle_body_notice?(@data)} data={@data} compact />
           <WidgetRowComponents.data_table
             data={@data}
             widget={@widget}
@@ -338,7 +330,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             default="No state transitions in this time range."
           />
         <% true -> %>
-          <.widget_lifecycle_notice :if={lifecycle_body_notice?(@data)} data={@data} compact />
           <WidgetRowComponents.state_timeline data={@data} placement_id={@placement_id} />
       <% end %>
     </div>
@@ -360,7 +351,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% @data.rows == [] -> %>
           <.widget_lifecycle_notice data={@data} default="No events in this time range." />
         <% true -> %>
-          <.widget_lifecycle_notice :if={lifecycle_body_notice?(@data)} data={@data} compact />
           <WidgetRowComponents.event_timeline data={@data} placement_id={@placement_id} />
       <% end %>
     </div>
@@ -379,7 +369,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% lifecycle_blocking?(@data) -> %>
           <.widget_lifecycle_notice data={@data} />
         <% true -> %>
-        <.widget_lifecycle_notice :if={lifecycle_body_notice?(@data)} data={@data} compact />
         <WidgetPointComponents.constellation_health data={@data} />
       <% end %>
     </div>
@@ -420,41 +409,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       data-widget-comparison-primary-count={comparison_summary_value(@comparison_summary, :primary_count)}
       data-widget-comparison-compare-count={comparison_summary_value(@comparison_summary, :compare_count)}
     >
-      <h3 class="hud-label truncate">{@widget.title}</h3>
-      <span class="font-mono text-[0.625rem] text-base-content/60 truncate hidden sm:inline">
-        {binding_caption(@widget, @data, @spacecraft)}
-      </span>
+      <h3 class="hud-label min-w-0 flex-1 truncate">{@widget.title}</h3>
       <div class="ml-auto flex shrink-0 items-center gap-1">
         <.severity_badge
-          :if={point_data?(@data) && @data.limit_event}
+          :if={point_data?(@data) && actionable_limit_event?(@data.limit_event)}
           severity={normalized_severity(@data.limit_event.normalized_state)}
           label={state_label(@data.limit_event.normalized_state)}
-        />
-        <.status_badge
-          :if={lifecycle_status(@data)}
-          status={lifecycle_status(@data)}
-          label={lifecycle_label(@data)}
-        />
-        <WidgetSourceStatusComponents.source_status_badge
-          :if={WidgetSourceStatusComponents.source_status_badge?(@data)}
-          source_status={WidgetSourceStatusComponents.source_status(@data)}
-          mission_id={@mission_id}
-        />
-        <WidgetSourceStatusComponents.widget_query_diagnostics
-          :if={
-            WidgetSourceStatusComponents.widget_query_diagnostics?(
-              @widget,
-              @data,
-              @data_view,
-              @compare_data_view
-            )
-          }
-          widget={@widget}
-          placement_id={@placement_id}
-          data={@data}
-          data_view={@data_view}
-          compare_data_view={@compare_data_view}
-          warnings={@warnings}
         />
         <span
           :if={@comparison_summary}
@@ -474,41 +434,102 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
           {@comparison_summary.label}
         </span>
         <.status_badge
-          :if={point_data?(@data) && @data.stale? && is_nil(lifecycle_status(@data))}
-          status={:attention}
-          label="Stale"
-        />
-        <WidgetDataManagementComponents.data_management_badge
-          :for={badge <- WidgetDataManagementComponents.data_management_badges(@data)}
-          badge={badge}
-        />
-        <.status_badge
           :if={point_data?(@data) && quality_status(@data)}
           status={quality_status(@data)}
           label={quality_label(@data)}
         />
-        <button
-          :if={frame_evidence?(@data)}
-          type="button"
-          phx-click="open_evidence"
-          {EvidenceAttrs.widget_frame(@placement_id, widget_evidence_observable(@data), @data)}
-          class="btn btn-ghost btn-xs btn-square"
-          title="Inspect frame evidence"
-          aria-label="Inspect frame evidence"
-          data-widget-frame-evidence
+        <span
+          :if={lifecycle_body_notice?(@data)}
+          class={["inline-flex", lifecycle_indicator_class(@data)]}
+          title={lifecycle_notice(@data, "Data is incomplete.")}
+          aria-label={lifecycle_notice(@data, "Data is incomplete.")}
+          data-widget-lifecycle-indicator={lifecycle_state(@data)}
         >
-          <.icon name="hero-document-magnifying-glass" class="h-3.5 w-3.5" />
-        </button>
-        <WidgetDataLinkComponents.widget_data_link_menu
-          :if={widget_links(@data) != []}
-          links={widget_links(@data)}
-          placement_id={@placement_id}
-        />
-        <WidgetWarningComponents.engine_warning_badge
-          :for={warning <- @warnings}
-          warning={warning}
-          placement_id={@placement_id}
-        />
+          <.icon name={lifecycle_indicator_icon(@data)} class="h-3.5 w-3.5" />
+        </span>
+        <.popover
+          id={"widget-details-#{@placement_id}"}
+          label={"#{@widget.title} widget details"}
+          width={:md}
+          data-widget-details
+        >
+          <:trigger>
+            <span
+              class="btn btn-ghost btn-xs btn-square text-base-content/55 hover:text-base-content"
+              title="Widget details"
+              data-widget-details-toggle
+            >
+              <.icon name="hero-ellipsis-vertical" class="h-4 w-4" />
+            </span>
+          </:trigger>
+          <div class="p-3 text-xs">
+            <div class="border-b border-base-300/60 pb-2">
+              <p class="font-semibold text-base-content">{@widget.title}</p>
+              <p class="mt-0.5 break-all font-mono text-[0.65rem] text-base-content/55">
+                {binding_caption(@widget, @data, @spacecraft)}
+              </p>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-1" data-widget-detail-indicators>
+              <.status_badge
+                :if={lifecycle_status(@data)}
+                status={lifecycle_status(@data)}
+                label={lifecycle_label(@data)}
+              />
+              <WidgetSourceStatusComponents.source_status_badge
+                :if={WidgetSourceStatusComponents.source_status_badge?(@data)}
+                source_status={WidgetSourceStatusComponents.source_status(@data)}
+                mission_id={@mission_id}
+              />
+              <WidgetDataManagementComponents.data_management_badge
+                :for={badge <- WidgetDataManagementComponents.data_management_badges(@data)}
+                badge={badge}
+              />
+              <WidgetWarningComponents.engine_warning_badge
+                :for={warning <- @warnings}
+                warning={warning}
+                placement_id={@placement_id}
+              />
+            </div>
+            <div
+              class="mt-2 flex items-center gap-1 border-t border-base-300/60 pt-2"
+              data-widget-detail-actions
+            >
+              <WidgetSourceStatusComponents.widget_query_diagnostics
+                :if={
+                  WidgetSourceStatusComponents.widget_query_diagnostics?(
+                    @widget,
+                    @data,
+                    @data_view,
+                    @compare_data_view
+                  )
+                }
+                widget={@widget}
+                placement_id={@placement_id}
+                data={@data}
+                data_view={@data_view}
+                compare_data_view={@compare_data_view}
+                warnings={@warnings}
+              />
+              <button
+                :if={frame_evidence?(@data)}
+                type="button"
+                phx-click="open_evidence"
+                {EvidenceAttrs.widget_frame(@placement_id, widget_evidence_observable(@data), @data)}
+                class="btn btn-ghost btn-xs btn-square"
+                title="Inspect frame evidence"
+                aria-label="Inspect frame evidence"
+                data-widget-frame-evidence
+              >
+                <.icon name="hero-document-magnifying-glass" class="h-3.5 w-3.5" />
+              </button>
+              <WidgetDataLinkComponents.widget_data_link_menu
+                :if={widget_links(@data) != []}
+                links={widget_links(@data)}
+                placement_id={@placement_id}
+              />
+            </div>
+          </div>
+        </.popover>
         <.button
           :if={@edit_mode?}
           variant={:ghost}
@@ -589,6 +610,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
     do: true
 
   defp lifecycle_body_notice?(_data), do: false
+
+  defp lifecycle_indicator_icon(%{lifecycle_state: :stale}), do: "hero-clock"
+  defp lifecycle_indicator_icon(%{lifecycle_state: :partial}), do: "hero-chart-pie"
+
+  defp lifecycle_indicator_class(%{lifecycle_state: :stale}), do: "text-warning"
+  defp lifecycle_indicator_class(%{lifecycle_state: :partial}), do: "text-warning"
 
   defp lifecycle_state(%{lifecycle_state: state}) when is_atom(state), do: state
   defp lifecycle_state(nil), do: :no_data
@@ -698,6 +725,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   defp point_data?(%{kind: :point}), do: true
   defp point_data?(_data), do: false
 
+  defp actionable_limit_event?(%{normalized_state: state}) when state in [:red, :yellow, :blue],
+    do: true
+
+  defp actionable_limit_event?(_limit_event), do: false
+
   defp engine_backed?(%{engine_backed?: true}), do: true
   defp engine_backed?(_data), do: false
 
@@ -719,13 +751,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   defp normalized_severity(:red), do: :critical
   defp normalized_severity(:yellow), do: :warning
   defp normalized_severity(:blue), do: :info
-  defp normalized_severity(_state), do: :nominal
 
   defp state_label(:red), do: "Red"
   defp state_label(:yellow), do: "Yellow"
   defp state_label(:blue), do: "Blue"
-  defp state_label(:green), do: "Green"
-  defp state_label(nil), do: "No data"
 
   defp quality_status(%{sample: %{quality_state: :suspect}}), do: :attention
   defp quality_status(%{sample: %{quality_state: :bad}}), do: :blocked

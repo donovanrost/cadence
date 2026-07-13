@@ -217,13 +217,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
 
       assert has_element?(
                view,
-               ~s(#dashboard-engine-warnings[data-engine-degraded="true"][data-warning-codes*="missing_source_binding"])
+               ~s(#dashboard-data-issues[data-dashboard-data-issue-codes*="missing_source_binding"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-health[data-source-health*="Telemetry:unknown"])
-             )
+      refute has_element?(view, "#dashboard-source-health")
 
       assert has_element?(
                view,
@@ -279,32 +276,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
              )
 
-      view
-      |> element(
-        ~s(#dashboard-source-health [data-source-evidence-open][phx-value-logical-source="telemetry"])
-      )
-      |> render_click()
-
-      source_evidence_path = assert_patch(view)
-      assert source_evidence_path =~ "panel=evidence"
-      assert source_evidence_path =~ "selected_evidence_kind=source"
-      assert source_evidence_path =~ "selected_source_evidence_mode=health"
-      assert source_evidence_path =~ "selected_logical_source=telemetry"
-      assert source_evidence_path =~ "realm=rehearsal"
-      refute source_evidence_path =~ "selected_link="
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="unknown"])
-             )
-
-      {:ok, source_evidence_view, _html} = live(conn, source_evidence_path)
-      render_dashboard_async(source_evidence_view)
-
-      assert has_element?(
-               source_evidence_view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="unknown"])
-             )
+      refute has_element?(view, "#dashboard-source-health")
 
       missing_warning_path =
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "evidence", selected_evidence_kind: "warning", selected_placement: widget.widget_id, selected_warning_code: "missing_warning", selected_source_request: "stale-source-request", selected_logical_source: "limits", selected_realm: "rehearsal"}}"

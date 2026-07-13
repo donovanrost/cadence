@@ -5,6 +5,7 @@ import ClipboardButton from "./hooks/clipboard_button"
 import DashboardGrid from "./hooks/dashboard_grid"
 import DropdownMenu from "./hooks/dropdown_menu"
 import NavRail from "./hooks/nav_rail"
+import Overlay from "./hooks/overlay"
 import ResizablePanel from "./hooks/resizable_panel"
 import TelemetryChart from "./hooks/telemetry_chart"
 import UtcClock from "./hooks/utc_clock"
@@ -14,6 +15,7 @@ const Hooks = {
   DashboardGrid,
   DropdownMenu,
   NavRail,
+  Overlay,
   ResizablePanel,
   TelemetryChart,
   UtcClock

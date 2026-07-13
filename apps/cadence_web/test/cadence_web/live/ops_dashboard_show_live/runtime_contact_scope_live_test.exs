@@ -240,15 +240,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-health-state="stale"][data-dashboard-health-stale-placements="#{trend_item.placement_id}"][data-dashboard-health-affected-placements="#{trend_item.placement_id}"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-health-rollup[data-dashboard-health-state="stale"][data-dashboard-health-affected="1"][data-dashboard-health-stale-placements="#{trend_item.placement_id}"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-health-rollup [data-dashboard-health-item="#{trend_item.placement_id}"][href="#widget-#{trend_item.placement_id}"][data-dashboard-health-item-source="unknown"])
-             )
+      assert has_element?(view, "#dashboard-data-issues")
+      refute has_element?(view, "#dashboard-health-rollup")
+      refute has_element?(view, ~s([data-ops-context-section="dashboard_health"]))
+      refute has_element?(view, ~s([data-ops-context-section="source_status"]))
+      refute has_element?(view, ~s([data-ops-context-section="source_selection"]))
 
       assert has_element?(
                view,
