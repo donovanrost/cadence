@@ -4,6 +4,14 @@ The ground-network simulator is an external provider peer. It does not bootstrap
 or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
+> This walkthrough describes the implemented Stage 1 API. The accepted
+> [Simulator Provider Contract v1](superpowers/specs/2026-07-13-simulator-provider-contract-v1.md)
+> and
+> [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md)
+> replace the shared `/v1` surface with `/admin/v1` and `/provider/v1`, then
+> provision the TCP destination as a Delivery Profile instead of sending it in
+> each reservation.
+
 ## 1. Start the simulator
 
 ```bash

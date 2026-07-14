@@ -1,6 +1,6 @@
 # Design: Contact Scheduling and External Ground Network Simulation
 
-- Status: draft for product and architecture review
+- Status: accepted; Stage 1 implemented and Stage 2 planned
 - Created: 2026-07-12
 - Scope: Define the idealized end state for provider-neutral contact scheduling
   in Cadence and for an independent ground-network simulator that exercises the
@@ -11,6 +11,8 @@
   - [ADR-013: Shared CCSDS Library Boundary](../../decisions/013-shared-ccsds-library-boundary.md)
 - Related designs:
   - [Comms Transport, Routing, and Spacecraft Profile UX](2026-06-01-comms-transport-routing-and-spacecraft-profile-design.md)
+  - [Simulator Provider Contract v1](2026-07-13-simulator-provider-contract-v1.md)
+  - [Stage 2 Provider and Delivery Contract](../plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md)
   - [Ground Network Simulator](../../ground-network-simulator.md)
 
 ## Summary
@@ -140,6 +142,12 @@ This completes Stage 1, not the full contact-planning product. Contact
 Requirements, versioned Contact Plans, provider accounts and secret references,
 durable event cursors or webhooks, provider-fleet reconciliation, and automated
 multi-spacecraft planning remain target state.
+
+The accepted Stage 2 contract separates simulator administration from the
+customer/provider API, replaces per-reservation TCP fields with Service and
+Delivery Profile references, distinguishes contact and delivery lifecycles, and
+introduces provider-managed Transport origin. The current runtime and manual
+instructions remain Stage 1 until that implementation plan is executed.
 
 ## Stage 1 Decisions
 
@@ -419,6 +427,9 @@ capabilities
 validate_connection
 list_spacecraft or resolve_spacecraft
 list_ground_stations
+list_service_profiles
+list_delivery_profiles
+provision_delivery_profile, when supported
 search_opportunities
 reserve_contact
 describe_contact
@@ -429,9 +440,11 @@ acknowledge or verify webhook delivery, when supported
 ```
 
 Each operation accepts the provider account, mission provider context, a
-correlation ID, and operation-specific parameters. Mutating operations require
-an idempotency key generated and durably recorded by Cadence before the request
-is sent.
+correlation ID, and operation-specific parameters. Cadence generates and
+durably records an internal idempotency key before every mutation. The adapter
+uses native provider idempotency when available, correlation/tag recovery when
+that is the provider's supported mechanism, or preserves an ambiguous outcome
+for reconciliation when no safe provider retry exists.
 
 ### Error contract
 
@@ -535,6 +548,9 @@ only one, but Cadence's canonical reconciliation semantics remain the same.
 Reconciliation must never rely solely on process memory.
 
 ## Data-Plane Contract
+
+The concrete simulator wire shape is defined by
+[Simulator Provider Contract v1](2026-07-13-simulator-provider-contract-v1.md).
 
 A confirmed reservation produces or references a data-plane descriptor. The
 descriptor should represent:
@@ -894,15 +910,31 @@ Status: implemented.
 The automated proof crosses the provider HTTP boundary and the ordinary Cadence
 TCP telemetry boundary without direct simulator injection.
 
-### Stage 2: Durable integration semantics
+### Stage 2: Provider and delivery contract
+
+Status: planned.
+
+- separate simulator administration and provider APIs
+- mission Provider control-plane setup
+- provider capability and profile synchronization
+- direct versus provider-managed Transport origin
+- Service and Delivery Profile references during reservation
+- distinct contact, pass, and delivery lifecycles
+- native-idempotency and client-reference recovery behavior
+- preserve the separate-app TCP/TM proof
+
+See the
+[Stage 2 implementation plan](../plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
+
+### Stage 3: Durable integration semantics
 
 - durable event cursors or webhook ingestion where provider capabilities justify
-  moving beyond Stage 1 status polling
-- secret references
+  moving beyond status polling
+- production secret-store integration and organization-owned Provider Accounts
 - reservation modification and provider-initiated change handling
 - complete audit evidence
 
-### Stage 3: Requirements and planning
+### Stage 4: Requirements and planning
 
 - Contact Requirement model and workflow
 - versioned Contact Plans
@@ -911,7 +943,7 @@ TCP telemetry boundary without direct simulator injection.
 - approval workflow
 - unsatisfied-requirement reporting
 
-### Stage 4: Fleet scheduling and automation
+### Stage 5: Fleet scheduling and automation
 
 - batched several-hundred-spacecraft planning
 - policy scoring and hard constraints
@@ -920,7 +952,7 @@ TCP telemetry boundary without direct simulator injection.
 - quotas, budgets, and redundancy policy
 - scale and chaos qualification
 
-### Stage 5: Commercial provider proof
+### Stage 6: Commercial provider proof
 
 - implement one real provider adapter
 - run the same conformance and end-to-end workflow
