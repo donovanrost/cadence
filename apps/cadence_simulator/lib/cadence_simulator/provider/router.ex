@@ -4,6 +4,7 @@ defmodule CadenceSimulator.Provider.Router do
   use Plug.Router
 
   alias CadenceSimulator.Provider
+  alias CadenceSimulator.Provider.{AdminRouter, ApiRouter, Auth}
   alias CadenceSimulator.Provider.Store
 
   plug(Plug.RequestId)
@@ -11,6 +12,9 @@ defmodule CadenceSimulator.Provider.Router do
   plug(Plug.Parsers, parsers: [:json], pass: ["application/json"], json_decoder: Jason)
   plug(:authenticate)
   plug(:dispatch)
+
+  forward("/admin", to: AdminRouter)
+  forward("/provider", to: ApiRouter)
 
   get "/health" do
     json(conn, 200, %{"status" => "ok", "service" => "cadence-ground-network-simulator"})
@@ -93,19 +97,28 @@ defmodule CadenceSimulator.Provider.Router do
   end
 
   defp authenticate(conn, _opts) do
-    expected_token = Application.get_env(:cadence_simulator, :provider_api_token)
+    if conn.request_path == "/health" or
+         String.starts_with?(conn.request_path, ["/admin/", "/provider/"]) do
+      conn
+    else
+      authenticate_legacy(conn)
+    end
+  end
 
-    cond do
-      is_nil(expected_token) or expected_token == "" ->
-        conn
+  defp authenticate_legacy(conn) do
+    expected_token =
+      Application.get_env(
+        :cadence_simulator,
+        :legacy_provider_api_token,
+        Application.get_env(:cadence_simulator, :provider_api_token)
+      )
 
-      get_req_header(conn, "authorization") == ["Bearer #{expected_token}"] ->
-        conn
-
-      true ->
-        conn
-        |> error(401, "unauthorized", "a valid bearer token is required")
-        |> halt()
+    if Auth.authorized?(conn, expected_token) do
+      conn
+    else
+      conn
+      |> error(401, "unauthorized", "a valid bearer token is required")
+      |> halt()
     end
   end
 

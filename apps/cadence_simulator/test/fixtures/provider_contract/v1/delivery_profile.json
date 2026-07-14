@@ -1,0 +1,16 @@
+{
+  "id": "delivery-cadence-primary",
+  "version": 1,
+  "display_name": "Cadence primary telemetry ingress",
+  "direction": "downlink",
+  "delivery_kind": "realtime_stream",
+  "supported_service_profile_refs": ["service-realtime-ttc-downlink"],
+  "state": "ready",
+  "operator_summary": "Streaming to Cadence",
+  "diagnostics": {
+    "protocol": "tcp",
+    "framing_family": "ccsds_tm",
+    "endpoint_health": "healthy"
+  },
+  "extensions": {}
+}

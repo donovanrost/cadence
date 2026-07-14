@@ -1,6 +1,14 @@
 # Stage 2 Provider and Delivery Contract Implementation Plan
 
-**Status:** ready for implementation
+**Status:** in progress
+
+**Progress (2026-07-13):** The additive simulator contract foundation is
+implemented: versioned envelopes and fixtures, separate `/admin/v1` and
+`/provider/v1` authentication, provider environment resolution, capabilities,
+inventory, Service Profile discovery, and Delivery Profile discovery. Legacy
+`/v1` remains covered until the Cadence adapter and Contact contract migrate.
+Delivery Profile provisioning and the Contact/delivery lifecycle begin in the
+next checkpoint.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes
@@ -641,4 +649,3 @@ mix precommit
 3. Leaf MQTT TT&C after customer topic, QoS, and payload documentation exists.
 4. Durable event cursors and webhooks once a commercial adapter makes their
    exact semantics concrete.
-

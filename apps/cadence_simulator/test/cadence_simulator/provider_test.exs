@@ -63,6 +63,29 @@ defmodule CadenceSimulator.ProviderTest do
     assert reservation["status_reason"] == "fault_profile_scheduling_rejection"
   end
 
+  test "scenario rejects duplicate or malformed provider profiles" do
+    duplicate_service = %{
+      "id" => "service-duplicate",
+      "display_name" => "Duplicate service"
+    }
+
+    assert {:error, {:invalid, "service_profiles ids must be unique"}} =
+             Provider.create_scenario(%{
+               "service_profiles" => [duplicate_service, duplicate_service]
+             })
+
+    assert {:error, {:invalid, "delivery_profiles[0].diagnostics is invalid"}} =
+             Provider.create_scenario(%{
+               "delivery_profiles" => [
+                 %{
+                   "id" => "delivery-invalid",
+                   "display_name" => "Invalid delivery",
+                   "diagnostics" => "not-an-object"
+                 }
+               ]
+             })
+  end
+
   test "orchestrator advances a contact through acquisition, active, and completion" do
     {:ok, scenario} = Provider.create_scenario(%{"spacecraft_count" => 1})
     {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 9})

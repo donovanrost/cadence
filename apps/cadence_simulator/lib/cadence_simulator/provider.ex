@@ -6,7 +6,7 @@ defmodule CadenceSimulator.Provider do
   exposing internal structs or atoms.
   """
 
-  alias CadenceSimulator.Provider.{Ids, Store}
+  alias CadenceSimulator.Provider.{Capabilities, DeliveryProfiles, Ids, ServiceProfiles, Store}
 
   @terminal_run_states ["completed", "failed"]
   @terminal_reservation_states ["rejected", "canceled", "completed", "failed", "terminated_early"]
@@ -28,7 +28,15 @@ defmodule CadenceSimulator.Provider do
 
     with :ok <- validate_range(spacecraft_count, 1, 10_000, "spacecraft_count"),
          {:ok, stations} <-
-           normalize_stations(Map.get(attrs, "ground_stations", @default_stations)) do
+           normalize_stations(Map.get(attrs, "ground_stations", @default_stations)),
+         {:ok, behavior} <-
+           Capabilities.normalize_behavior(Map.get(attrs, "provider_behavior", %{})),
+         {:ok, service_profiles} <-
+           ServiceProfiles.normalize(
+             Map.get(attrs, "service_profiles", ServiceProfiles.default())
+           ),
+         {:ok, delivery_profiles} <-
+           DeliveryProfiles.normalize(Map.get(attrs, "delivery_profiles", [])) do
       scenario = %{
         "id" => Map.get(attrs, "id", Ids.new("scenario")),
         "name" => Map.get(attrs, "name", "Constellation rehearsal"),
@@ -36,6 +44,9 @@ defmodule CadenceSimulator.Provider do
         "spacecraft_count" => spacecraft_count,
         "spacecraft_prefix" => Map.get(attrs, "spacecraft_prefix", "SC"),
         "ground_stations" => stations,
+        "provider_behavior" => behavior,
+        "service_profiles" => service_profiles,
+        "delivery_profiles" => delivery_profiles,
         "pass_model" => %{
           "cadence_seconds" => nested_integer(attrs, "pass_model", "cadence_seconds", 5_400),
           "duration_seconds" => nested_integer(attrs, "pass_model", "duration_seconds", 600),
@@ -65,8 +76,11 @@ defmodule CadenceSimulator.Provider do
       now = DateTime.utc_now()
       state = Map.get(attrs, "state", "running")
 
+      run_id = Map.get(attrs, "id", Ids.new("run"))
+
       run = %{
-        "id" => Map.get(attrs, "id", Ids.new("run")),
+        "id" => run_id,
+        "provider_environment_ref" => run_id,
         "scenario_id" => scenario_id,
         "state" => state,
         "speed" => speed * 1.0,
