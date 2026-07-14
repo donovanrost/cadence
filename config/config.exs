@@ -72,6 +72,11 @@ config :cadence,
   ],
   contact_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
   contact_scheduler_global_safety: [enabled: false, safety_poll_interval_ms: 300_000],
+  provider_reservation_reconciler: [
+    enabled: true,
+    safety_poll_interval_ms: 5_000,
+    max_concurrency: 4
+  ],
   command_dispatcher: [
     enabled: true,
     safety_poll_interval_ms: 60_000,

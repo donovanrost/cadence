@@ -45,11 +45,12 @@ This creates one ordinary mission-owned `ProviderProfile`. The nested scheduling
 configuration selects the provider control-plane adapter, while the existing TCP
 configuration controls contact-time byte ingress.
 
-## 4. Configure spacecraft mappings and paths
+## 4. Configure spacecraft mappings and routes
 
 Create Cadence spacecraft/source endpoints whose provider references match the
-simulator spacecraft inventory, then create the selected downlink path templates
-using the provider profile.
+simulator spacecraft inventory. Create an active downlink link assignment that
+binds the spacecraft and source endpoint to a selected path template and the
+exact provider-profile version.
 
 Cadence owns its spacecraft identity and byte-interpretation catalog. The
 simulator owns its provider spacecraft inventory and telemetry generator
@@ -57,18 +58,74 @@ definitions.
 
 ## 5. Schedule and execute contacts
 
-Cadence uses `Cadence.Contacts.ProviderBooking` to:
+In the authenticated mission UI, open **Ops → Contacts**. Select a ready
+spacecraft route, choose a bounded UTC search window, search the provider, and
+reserve one opportunity.
 
-1. discover opportunities through the configured provider client;
-2. reserve the selected provider opportunity;
-3. persist the canonical Cadence `ScheduledContact` with the external reservation
-   reference;
-4. realize the contact through the existing scheduler;
-5. receive telemetry through the normal TCP provider and TM ingress runtime.
+Cadence then:
 
-Provider terminal events are reconciled through the generic provider-contact
-reconciler supplied with the configured adapter's event function. No global
-simulator process or simulator administration client runs inside Cadence.
+1. resolves the live mission route and searches through the configured provider
+   client;
+2. persists a mission-owned `ProviderReservation` attempt and idempotency key
+   before mutating the provider;
+3. reserves the selected opportunity without holding a database transaction
+   across HTTP;
+4. durably polls uncertain or nonterminal reservations until the provider state
+   converges;
+5. materializes exactly one canonical `ScheduledContact` when provider capacity
+   is confirmed;
+6. realizes the contact through the existing scheduler;
+7. receives telemetry through the normal TCP provider and TM ingress runtime.
+
+The page displays provider reservation state separately from Cadence contact
+state. Cancellation also crosses the provider boundary and is reconciled from
+the durable reservation record. No global simulator process, in-memory event
+cursor, or simulator administration client runs inside Cadence.
+
+## Manual two-BEAM smoke test
+
+Keep the simulator BEAM from step 1 running. In another terminal, create a
+small scenario and run:
+
+```bash
+export SIMULATOR_URL=http://127.0.0.1:4101
+export SIMULATOR_TOKEN=local-simulator-token
+
+SCENARIO_ID=$(curl --silent --fail \
+  --request POST "$SIMULATOR_URL/v1/scenarios" \
+  --header "Authorization: Bearer $SIMULATOR_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Cadence manual scheduling smoke",
+    "spacecraft_count": 3,
+    "spacecraft_prefix": "SC",
+    "pass_model": {
+      "cadence_seconds": 60,
+      "duration_seconds": 30,
+      "jitter_seconds": 0
+    },
+    "telemetry_profile": {
+      "rate_hz": 5.0,
+      "noise_amplitude": 0.1
+    }
+  }' | jq --raw-output '.data.id')
+
+RUN_ID=$(curl --silent --fail \
+  --request POST "$SIMULATOR_URL/v1/scenarios/$SCENARIO_ID/runs" \
+  --header "Authorization: Bearer $SIMULATOR_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"seed": 2026, "speed": 1.0}' | jq --raw-output '.data.id')
+
+echo "$RUN_ID"
+```
+
+Start Cadence in a second BEAM. Configure the mission provider with that run ID,
+map one source endpoint to `SC-001`, and create the active downlink link
+assignment. In **Ops → Contacts**, search a future window, reserve an
+opportunity, and observe the provider state move from pending to confirmed and
+then active/completed. The Scheduled Contact should appear only after
+confirmation, and telemetry should arrive through the mission's ordinary TCP/TM
+ingress path while the contact is active.
 
 See [Ground Network Simulator](ground-network-simulator.md) for API and scenario
 details.

@@ -115,22 +115,31 @@ needs. Runtime code upload and an all-purpose plugin framework are out of scope.
 
 ## Current Baseline
 
-The repository currently provides preparation for this design:
+The repository now provides the first operator-visible vertical slice of this
+design:
 
 - `cadence_simulator` can run independently and expose a provider-style HTTP
   API for scenarios, runs, opportunities, reservations, and ordered events.
-- Cadence has a provider-client behaviour, simulator HTTP client, booking
-  coordinator, and initial event reconciler.
+- Cadence has a provider-client behaviour, normalized simulator HTTP client,
+  durable booking saga, and supervised status reconciler.
 - Mission provider configuration can select the simulator scheduling client.
+- Provider Reservation is first-class, mission-scoped integration state with
+  durable idempotency, provider evidence, exact route versions, ambiguous-outcome
+  recovery, and idempotent Scheduled Contact materialization.
+- **Ops → Contacts** provides readiness, provider opportunity search,
+  reservation, cancellation, and separate provider/Cadence lifecycle state
+  inside the authenticated mission Ops surface.
 - The existing contact scheduler realizes canonical scheduled contacts into
   path-local runtime.
+- The end-to-end boundary proof reserves over simulator HTTP and receives
+  decoded telemetry through Cadence's normal TCP/TM ingress pipeline.
 - CCSDS framing, segmentation, reassembly, and COP-1 primitives live in the
   shared `cadence_ccsds` application.
 
-This is foundation work, not the completed contact-scheduling product. In
-particular, durable provider reservation records, durable event cursors,
-operator planning workflows, and provider-fleet reconciliation remain target
-state.
+This completes Stage 1, not the full contact-planning product. Contact
+Requirements, versioned Contact Plans, provider accounts and secret references,
+durable event cursors or webhooks, provider-fleet reconciliation, and automated
+multi-spacecraft planning remain target state.
 
 ## Stage 1 Decisions
 
@@ -175,7 +184,7 @@ The repo-grounded task sequence is defined in the
 | Contact Requirement | A statement of needed service, constraints, priority, and acceptable delivery outcomes. | New target-state concept. |
 | Opportunity | A time-limited provider proposal for specific resources and service. | Returned by provider opportunity search; not canonical mission state. |
 | Contact Plan | A versioned selection of opportunities intended to satisfy one or more requirements. | New target-state concept. |
-| Provider Reservation | Cadence's durable mirror of a provider-side booking and its reconciliation state. | Currently represented by provider reference and metadata on `ScheduledContact`; should become first-class. |
+| Provider Reservation | Cadence's durable mirror of a provider-side booking and its reconciliation state. | First-class mission-owned persistence with durable idempotency and status reconciliation. |
 | Scheduled Contact | Cadence's canonical time-bounded execution intent after capacity is committed or explicitly planned for a non-reserving transport. | Existing `ScheduledContact`. |
 | Realized Contact | Runtime realization containing active paths, links, bindings, and observations. | Existing `RealizedContact`. |
 | Contact Result | Planned-versus-delivered summary including timing, volume, failures, and provider evidence. | New projection over contact and runtime records. |
@@ -871,6 +880,8 @@ Status: substantially present.
 
 ### Stage 1: One contact, end to end
 
+Status: implemented.
+
 - provider readiness check and spacecraft mapping
 - operator opportunity search for one spacecraft
 - opportunity selection and durable reservation attempt
@@ -880,16 +891,15 @@ Status: substantially present.
 - contact detail showing provider and Cadence lifecycle
 - terminal result reconciliation
 
-This stage is the next recommended implementation slice.
+The automated proof crosses the provider HTTP boundary and the ordinary Cadence
+TCP telemetry boundary without direct simulator injection.
 
 ### Stage 2: Durable integration semantics
 
-- first-class Provider Reservation persistence
-- durable idempotency and ambiguous-outcome recovery
-- durable event cursors and supervised provider reconciliation
-- webhook ingestion where applicable
+- durable event cursors or webhook ingestion where provider capabilities justify
+  moving beyond Stage 1 status polling
 - secret references
-- cancellation and provider-change handling
+- reservation modification and provider-initiated change handling
 - complete audit evidence
 
 ### Stage 3: Requirements and planning

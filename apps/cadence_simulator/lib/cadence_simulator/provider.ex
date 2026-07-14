@@ -211,10 +211,13 @@ defmodule CadenceSimulator.Provider do
   def list_reservations(filters \\ %{}) do
     Store.list(:reservation)
     |> Enum.filter(fn reservation ->
-      Enum.all?(["run_id", "spacecraft_id", "ground_station_id", "status"], fn key ->
-        filter = Map.get(filters, key)
-        is_nil(filter) or filter == "" or reservation[key] == filter
-      end)
+      Enum.all?(
+        ["run_id", "spacecraft_id", "ground_station_id", "status", "idempotency_key"],
+        fn key ->
+          filter = Map.get(filters, key)
+          is_nil(filter) or filter == "" or reservation[key] == filter
+        end
+      )
     end)
   end
 

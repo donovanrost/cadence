@@ -266,6 +266,10 @@ defmodule CadenceWeb.Router do
            OpsDataSourcesLive,
            :index
 
+      live "/missions/:mission_id/ops/contacts",
+           OpsContactScheduleLive,
+           :index
+
       live "/missions/:mission_id/ops/telemetry/explore",
            OpsTelemetryExploreLive,
            :show

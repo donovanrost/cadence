@@ -136,6 +136,12 @@ defmodule CadenceWeb.Components.OpsShell do
           label="Data Sources"
           active={@active_item == :data_sources}
         />
+        <.rail_link
+          navigate={~p"/missions/#{@mission.mission_id}/ops/contacts"}
+          icon="hero-calendar-days"
+          label="Contacts"
+          active={@active_item == :contacts}
+        />
         <.rail_item icon="hero-command-line" label="Commands" active={false} disabled={true} />
         <.rail_item icon="hero-bell-alert" label="Alarms" active={false} disabled={true} />
         <.rail_item icon="hero-clock" label="Timeline" active={false} disabled={true} />

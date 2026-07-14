@@ -1,114 +1,311 @@
 defmodule Cadence.Contacts.ProviderBooking do
   @moduledoc """
-  Coordinates provider reservations with Cadence scheduled contacts.
+  Durable provider reservation saga.
 
-  The provider reservation is created first. If local persistence fails, the
-  provider reservation is canceled as a compensating action.
+  Cadence writes a `ProviderReservation` before making an external mutation.
+  Provider calls happen outside database transactions and every result is
+  persisted before a canonical Scheduled Contact is materialized.
   """
 
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ProviderClients.Registry, ScheduledContact}
+
+  alias Cadence.Contacts.{
+    ProviderClients.Registry,
+    ProviderProfile,
+    ProviderReservation,
+    ProviderReservations,
+    ScheduledContact
+  }
+
   alias Cadence.Ids
+  alias Cadence.Persistence.JsonDocument
+
+  @provider_request_fields [
+    "opportunity_id",
+    "run_id",
+    "spacecraft_id",
+    "ground_station_id",
+    "antenna_id",
+    "starts_at",
+    "ends_at",
+    "mission_profile_ref",
+    "dataflow_profile_ref",
+    "data_plane"
+  ]
+
+  @type booking_result :: %{
+          provider_reservation: ProviderReservation.t(),
+          scheduled_contact: ScheduledContact.t() | nil
+        }
 
   @spec search(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def search(organization_id, mission_id, provider_profile_id, params, opts \\ []) do
     with {:ok, provider_profile} <-
-           Contacts.fetch_provider_profile(organization_id, mission_id, provider_profile_id),
+           fetch_provider_profile(
+             organization_id,
+             mission_id,
+             provider_profile_id,
+             Keyword.get(opts, :provider_profile_version)
+           ),
          {:ok, client} <- resolve_client(provider_profile, opts) do
       client.search_opportunities(provider_profile, params, opts)
     end
   end
 
-  @spec book(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{provider_reservation: map(), scheduled_contact: ScheduledContact.t()}}
-          | {:error, term()}
-  def book(organization_id, mission_id, provider_profile_id, attrs, opts \\ []) do
+  @spec reserve(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, booking_result()} | {:error, term()}
+  def reserve(organization_id, mission_id, provider_profile_id, attrs, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(provider_profile_id) and is_map(attrs) and is_list(opts) do
     with {:ok, provider_profile} <-
-           Contacts.fetch_provider_profile(organization_id, mission_id, provider_profile_id),
-         {:ok, client} <- resolve_client(provider_profile, opts),
-         {:ok, reservation} <-
-           client.reserve_contact(
-             provider_profile,
-             attrs
-             |> provider_reservation_attrs()
-             |> Map.put("mission_profile_ref", mission_id),
-             Keyword.put_new(opts, :idempotency_key, idempotency_key(attrs))
+           fetch_provider_profile(
+             organization_id,
+             mission_id,
+             provider_profile_id,
+             Map.get(attrs, "provider_profile_version") ||
+               Map.get(attrs, :provider_profile_version)
            ),
-         {:ok, starts_at} <- parse_time(reservation["starts_at"]),
-         {:ok, ends_at} <- parse_time(reservation["ends_at"]) do
-      scheduled_contact_attrs =
-        %{
-          mission_id: mission_id,
-          organization_id: organization_id,
-          scheduled_contact_id:
-            Map.get(attrs, "scheduled_contact_id") || Ids.new("scheduled_contact"),
-          source_endpoint_refs: Map.fetch!(attrs, "source_endpoint_refs"),
-          contact_intents: Map.get(attrs, "contact_intents", ["telemetry_downlink"]),
-          path_template_ids: Map.fetch!(attrs, "path_template_ids"),
-          starts_at: starts_at,
-          ends_at: ends_at,
-          provider_contact_ref: reservation["id"],
-          metadata: %{
-            "provider_profile_id" => provider_profile_id,
-            "provider_reservation" => reservation
-          }
-        }
-
-      scheduled_contact = ScheduledContact.new(scheduled_contact_attrs)
-
-      case Contacts.persist_scheduled_contact(organization_id, scheduled_contact) do
-        {:ok, scheduled_contact} ->
-          {:ok, %{provider_reservation: reservation, scheduled_contact: scheduled_contact}}
-
-        {:error, reason} ->
-          _compensation = client.cancel_contact(provider_profile, reservation["id"], opts)
-          {:error, {:scheduled_contact_persistence_failed, reason}}
+         {:ok, client} <- resolve_client(provider_profile, opts),
+         {:ok, attempt} <- build_attempt(organization_id, mission_id, provider_profile, attrs),
+         {:ok, reservation, outcome} <-
+           ProviderReservations.create_attempt_with_outcome(organization_id, attempt) do
+      case outcome do
+        :existing -> booking_result(reservation)
+        :created -> submit_reservation(reservation, provider_profile, client, attrs, opts)
       end
     end
-  rescue
-    KeyError -> {:error, {:invalid_provider_booking, :missing_contact_configuration}}
   end
 
-  @spec cancel(binary(), binary(), binary(), binary(), keyword()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def cancel(organization_id, mission_id, provider_profile_id, scheduled_contact_id, opts \\ []) do
-    with {:ok, provider_profile} <-
-           Contacts.fetch_provider_profile(organization_id, mission_id, provider_profile_id),
+  @doc "Stage 1 compatibility delegate; new callers should use `reserve/5`."
+  @spec book(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, booking_result()} | {:error, term()}
+  def book(organization_id, mission_id, provider_profile_id, attrs, opts \\ []) do
+    reserve(organization_id, mission_id, provider_profile_id, attrs, opts)
+  end
+
+  @spec cancel(binary(), binary(), binary(), keyword()) ::
+          {:ok, booking_result()} | {:error, term()}
+  def cancel(organization_id, mission_id, provider_reservation_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(provider_reservation_id) and is_list(opts) do
+    with {:ok, reservation} <-
+           ProviderReservations.mark_canceling(
+             organization_id,
+             mission_id,
+             provider_reservation_id
+           ),
+         {:ok, provider_profile} <-
+           Contacts.fetch_provider_profile_version(
+             organization_id,
+             mission_id,
+             reservation.provider_profile_id,
+             reservation.provider_profile_version
+           ),
          {:ok, client} <- resolve_client(provider_profile, opts),
-         {:ok, scheduled_contact} <-
-           Contacts.fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id),
-         {:ok, _provider_reservation} <-
-           client.cancel_contact(provider_profile, scheduled_contact.provider_contact_ref, opts) do
-      Contacts.cancel_scheduled_contact(
-        organization_id,
-        mission_id,
-        scheduled_contact_id,
-        actor: %{"kind" => "system", "id" => "provider_booking"},
-        reason: "provider_reservation_canceled"
-      )
+         {:ok, provider_control_ref} <- require_provider_control_ref(reservation) do
+      case client.cancel_contact(provider_profile, provider_control_ref, opts) do
+        {:ok, response} ->
+          complete_cancellation(reservation, response)
+
+        {:error, reason} ->
+          persist_saga_error(reservation, reason, error_lifecycle(reason))
+      end
     end
   end
 
-  defp provider_reservation_attrs(attrs) do
-    Map.take(attrs, [
-      "opportunity_id",
-      "run_id",
-      "spacecraft_id",
-      "ground_station_id",
-      "antenna_id",
-      "starts_at",
-      "ends_at",
-      "mission_profile_ref",
-      "dataflow_profile_ref",
-      "data_plane"
-    ])
+  defp complete_cancellation(reservation, response) do
+    with :ok <- validate_reservation_result(response),
+         {:ok, updated} <-
+           ProviderReservations.apply_provider_status(
+             reservation.organization_id,
+             reservation.mission_id,
+             reservation.provider_reservation_id,
+             response
+           ) do
+      booking_result(updated)
+    else
+      {:error, reason} -> persist_saga_error(reservation, reason, :unknown)
+    end
   end
 
-  defp idempotency_key(attrs) do
-    Map.get(attrs, "idempotency_key") ||
-      "cadence:#{Map.get(attrs, "scheduled_contact_id", Map.fetch!(attrs, "opportunity_id"))}"
+  defp submit_reservation(reservation, provider_profile, client, attrs, opts) do
+    provider_attrs =
+      attrs
+      |> stringify_keys()
+      |> Map.put("spacecraft_id", reservation.provider_spacecraft_ref)
+      |> Map.put("starts_at", DateTime.to_iso8601(reservation.starts_at))
+      |> Map.put("ends_at", DateTime.to_iso8601(reservation.ends_at))
+      |> Map.put("mission_profile_ref", reservation.mission_id)
+      |> Map.take(@provider_request_fields)
+
+    call_opts = Keyword.put(opts, :idempotency_key, reservation.idempotency_key)
+
+    case client.reserve_contact(provider_profile, provider_attrs, call_opts) do
+      {:ok, response} ->
+        with :ok <- validate_reservation_result(response),
+             :ok <- validate_response_matches_attempt(response, reservation),
+             {:ok, updated} <-
+               ProviderReservations.apply_provider_status(
+                 reservation.organization_id,
+                 reservation.mission_id,
+                 reservation.provider_reservation_id,
+                 response
+               ) do
+          booking_result(updated)
+        else
+          {:error, reason} -> persist_saga_error(reservation, reason, :unknown)
+        end
+
+      {:error, reason} ->
+        persist_saga_error(reservation, reason, error_lifecycle(reason))
+    end
   end
+
+  defp build_attempt(organization_id, mission_id, %ProviderProfile{} = profile, attrs) do
+    string_attrs = stringify_keys(attrs)
+
+    with {:ok, starts_at} <- parse_time(string_attrs["starts_at"], :starts_at),
+         {:ok, ends_at} <- parse_time(string_attrs["ends_at"], :ends_at),
+         :ok <- validate_interval(starts_at, ends_at),
+         {:ok, opportunity_id} <- required_binary(string_attrs, "opportunity_id"),
+         {:ok, provider_spacecraft_ref} <- provider_spacecraft_ref(string_attrs),
+         {:ok, spacecraft_id} <- canonical_spacecraft_id(string_attrs),
+         {:ok, source_endpoint_refs} <- required_binary_list(string_attrs, "source_endpoint_refs"),
+         {:ok, path_template_ids} <- required_binary_list(string_attrs, "path_template_ids") do
+      scheduled_contact_id =
+        string_attrs["scheduled_contact_id"] || Ids.new("scheduled_contact")
+
+      provider_reservation_id =
+        string_attrs["provider_reservation_id"] || Ids.new("provider_reservation")
+
+      idempotency_key =
+        string_attrs["idempotency_key"] || "cadence:#{scheduled_contact_id}"
+
+      request_document = %{
+        "provider_request" =>
+          string_attrs
+          |> Map.put("spacecraft_id", provider_spacecraft_ref)
+          |> Map.take(@provider_request_fields),
+        "routing" => %{
+          "source_endpoint_refs" => source_endpoint_refs,
+          "path_template_refs" => path_template_refs(string_attrs, path_template_ids)
+        }
+      }
+
+      {:ok,
+       ProviderReservation.new(%{
+         provider_reservation_id: provider_reservation_id,
+         organization_id: organization_id,
+         mission_id: mission_id,
+         provider_profile_id: profile.provider_profile_id,
+         provider_profile_version: profile.version,
+         scheduled_contact_id: scheduled_contact_id,
+         provider_opportunity_ref: opportunity_id,
+         idempotency_key: idempotency_key,
+         lifecycle_state: :requesting,
+         spacecraft_id: spacecraft_id,
+         provider_spacecraft_ref: provider_spacecraft_ref,
+         source_endpoint_refs: source_endpoint_refs,
+         path_template_ids: path_template_ids,
+         starts_at: starts_at,
+         ends_at: ends_at,
+         request_document: request_document,
+         metadata: %{
+           "ground_station_id" => string_attrs["ground_station_id"],
+           "antenna_id" => string_attrs["antenna_id"]
+         }
+       })}
+    end
+  rescue
+    error in [ArgumentError, KeyError] -> {:error, {:invalid_provider_booking, error.message}}
+  end
+
+  defp booking_result(reservation) do
+    scheduled_contact =
+      case Contacts.fetch_scheduled_contact(
+             reservation.organization_id,
+             reservation.mission_id,
+             reservation.scheduled_contact_id
+           ) do
+        {:ok, scheduled_contact} -> scheduled_contact
+        {:error, :scheduled_contact_not_found} -> nil
+      end
+
+    {:ok, %{provider_reservation: reservation, scheduled_contact: scheduled_contact}}
+  end
+
+  defp persist_saga_error(reservation, reason, lifecycle_state) do
+    error_document = %{
+      "lifecycle_state" => Atom.to_string(lifecycle_state),
+      "reason" => JsonDocument.encode(reason),
+      "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    case ProviderReservations.record_provider_error(
+           reservation.organization_id,
+           reservation.mission_id,
+           reservation.provider_reservation_id,
+           error_document
+         ) do
+      {:ok, updated} ->
+        {:error, {:provider_reservation_not_confirmed, updated}}
+
+      {:error, persistence_reason} ->
+        {:error, {:provider_saga_persistence_failed, reason, persistence_reason}}
+    end
+  end
+
+  defp error_lifecycle({:provider_rejected, _status, _body}), do: :rejected
+  defp error_lifecycle({:provider_unavailable, _reason}), do: :failed
+  defp error_lifecycle(_reason), do: :unknown
+
+  defp validate_reservation_result(response) when is_map(response) do
+    with {:ok, _id} <- required_binary(response, "id"),
+         {:ok, _provider_contact_ref} <- required_binary(response, "provider_contact_ref"),
+         {:ok, status} <- required_binary(response, "status"),
+         true <- status in ~w(pending confirmed active completed rejected canceled failed),
+         {:ok, _starts_at} <- parse_time(response["starts_at"], :starts_at),
+         {:ok, _ends_at} <- parse_time(response["ends_at"], :ends_at) do
+      :ok
+    else
+      false -> {:error, {:malformed_provider_response, :status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_reservation_result(_response),
+    do: {:error, {:malformed_provider_response, :reservation}}
+
+  defp validate_response_matches_attempt(response, reservation) do
+    with {:ok, response_starts_at} <- parse_time(response["starts_at"], :starts_at),
+         {:ok, response_ends_at} <- parse_time(response["ends_at"], :ends_at) do
+      if DateTime.compare(response_starts_at, reservation.starts_at) == :eq and
+           DateTime.compare(response_ends_at, reservation.ends_at) == :eq do
+        :ok
+      else
+        {:error,
+         {:provider_counteroffer_not_supported, response["starts_at"], response["ends_at"]}}
+      end
+    end
+  end
+
+  defp fetch_provider_profile(organization_id, mission_id, provider_profile_id, nil) do
+    Contacts.fetch_provider_profile(organization_id, mission_id, provider_profile_id)
+  end
+
+  defp fetch_provider_profile(organization_id, mission_id, provider_profile_id, version)
+       when is_integer(version) and version > 0 do
+    Contacts.fetch_provider_profile_version(
+      organization_id,
+      mission_id,
+      provider_profile_id,
+      version
+    )
+  end
+
+  defp fetch_provider_profile(_organization_id, _mission_id, _provider_profile_id, version),
+    do: {:error, {:invalid_provider_profile_version, version}}
 
   defp resolve_client(provider_profile, opts) do
     case Keyword.fetch(opts, :client) do
@@ -117,10 +314,71 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp parse_time(value) do
+  defp parse_time(%DateTime{} = value, _field), do: {:ok, value}
+
+  defp parse_time(value, field) when is_binary(value) do
     case DateTime.from_iso8601(value) do
       {:ok, datetime, _offset} -> {:ok, datetime}
-      _error -> {:error, {:invalid_provider_time, value}}
+      _error -> {:error, {:invalid_provider_time, field, value}}
     end
+  end
+
+  defp parse_time(value, field), do: {:error, {:invalid_provider_time, field, value}}
+
+  defp validate_interval(starts_at, ends_at) do
+    if DateTime.before?(starts_at, ends_at), do: :ok, else: {:error, :invalid_contact_interval}
+  end
+
+  defp required_binary(map, key) do
+    case Map.get(map, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _other -> {:error, {:missing_provider_booking_field, key}}
+    end
+  end
+
+  defp required_binary_list(map, key) do
+    case Map.get(map, key) do
+      values when is_list(values) and values != [] ->
+        if Enum.all?(values, &(is_binary(&1) and &1 != "")) do
+          {:ok, values}
+        else
+          {:error, {:invalid_provider_booking_field, key}}
+        end
+
+      _other ->
+        {:error, {:missing_provider_booking_field, key}}
+    end
+  end
+
+  defp provider_spacecraft_ref(attrs) do
+    case attrs["provider_spacecraft_ref"] || attrs["spacecraft_id"] do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _other -> {:error, {:missing_provider_booking_field, "provider_spacecraft_ref"}}
+    end
+  end
+
+  defp canonical_spacecraft_id(attrs) do
+    case attrs["cadence_spacecraft_id"] || attrs["spacecraft_id"] do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _other -> {:error, {:missing_provider_booking_field, "cadence_spacecraft_id"}}
+    end
+  end
+
+  defp require_provider_control_ref(%ProviderReservation{} = reservation) do
+    case reservation.response_document["id"] || reservation.provider_contact_ref do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _other -> {:error, :provider_contact_reference_unknown}
+    end
+  end
+
+  defp path_template_refs(attrs, path_template_ids) do
+    case attrs["path_template_refs"] do
+      refs when is_list(refs) and refs != [] -> refs
+      _other -> Enum.map(path_template_ids, &%{"path_template_id" => &1, "version" => 1})
+    end
+  end
+
+  defp stringify_keys(map) do
+    Map.new(map, fn {key, value} -> {to_string(key), value} end)
   end
 end

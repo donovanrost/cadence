@@ -52,7 +52,11 @@ defmodule Cadence do
     ContactAction,
     LinkAssignment,
     PathTemplate,
+    ProviderBooking,
     ProviderProfile,
+    ProviderReservation,
+    ProviderReservations,
+    ProviderScheduling,
     RealizedContact,
     ScheduledContact,
     TransportProfile
@@ -1685,6 +1689,52 @@ defmodule Cadence do
   def list_scheduled_contacts(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
     ContactsService.list_scheduled_contacts(organization_id, mission_id)
+  end
+
+  @spec fetch_provider_reservation(binary(), binary(), binary()) ::
+          {:ok, ProviderReservation.t()} | {:error, term()}
+  def fetch_provider_reservation(organization_id, mission_id, provider_reservation_id) do
+    ProviderReservations.fetch(organization_id, mission_id, provider_reservation_id)
+  end
+
+  @spec list_provider_reservations(binary(), binary()) :: [ProviderReservation.t()]
+  def list_provider_reservations(organization_id, mission_id) do
+    ProviderReservations.list_for_mission(organization_id, mission_id)
+  end
+
+  @spec reserve_provider_contact(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, ProviderBooking.booking_result()} | {:error, term()}
+  def reserve_provider_contact(
+        organization_id,
+        mission_id,
+        provider_profile_id,
+        attrs,
+        opts \\ []
+      ) do
+    ProviderBooking.reserve(organization_id, mission_id, provider_profile_id, attrs, opts)
+  end
+
+  @spec cancel_provider_reservation(binary(), binary(), binary(), keyword()) ::
+          {:ok, ProviderBooking.booking_result()} | {:error, term()}
+  def cancel_provider_reservation(
+        organization_id,
+        mission_id,
+        provider_reservation_id,
+        opts \\ []
+      ) do
+    ProviderBooking.cancel(organization_id, mission_id, provider_reservation_id, opts)
+  end
+
+  @spec list_ready_downlink_routes(binary(), binary(), binary()) ::
+          {:ok, %{routes: [map()], findings: [map()]}} | {:error, term()}
+  def list_ready_downlink_routes(organization_id, mission_id, spacecraft_id) do
+    ProviderScheduling.list_ready_downlink_routes(organization_id, mission_id, spacecraft_id)
+  end
+
+  @spec search_contact_opportunities(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def search_contact_opportunities(organization_id, mission_id, route_key, window, opts \\ []) do
+    ProviderScheduling.search_opportunities(organization_id, mission_id, route_key, window, opts)
   end
 
   @spec list_contact_actions(binary(), keyword()) :: [ContactAction.t()]

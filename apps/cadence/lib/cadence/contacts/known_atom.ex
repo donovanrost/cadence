@@ -59,6 +59,19 @@ defmodule Cadence.Contacts.KnownAtom do
     "realized_contact_ended_early" => :realized_contact_ended_early
   }
 
+  @provider_reservation_lifecycle_states %{
+    "requesting" => :requesting,
+    "pending" => :pending,
+    "confirmed" => :confirmed,
+    "active" => :active,
+    "completed" => :completed,
+    "unknown" => :unknown,
+    "rejected" => :rejected,
+    "canceling" => :canceling,
+    "canceled" => :canceled,
+    "failed" => :failed
+  }
+
   @spec direction!(atom() | binary()) :: :uplink | :downlink
   def direction!(value), do: normalize_known_atom!(value, @directions, :direction)
 
@@ -96,6 +109,21 @@ defmodule Cadence.Contacts.KnownAtom do
           :scheduled_contact_canceled | :realized_contact_ended_early
   def contact_action_kind!(value) do
     normalize_known_atom!(value, @contact_action_kinds, :action_kind)
+  end
+
+  @spec provider_reservation_lifecycle_state!(atom() | binary()) ::
+          :requesting
+          | :pending
+          | :confirmed
+          | :active
+          | :completed
+          | :unknown
+          | :rejected
+          | :canceling
+          | :canceled
+          | :failed
+  def provider_reservation_lifecycle_state!(value) do
+    normalize_known_atom!(value, @provider_reservation_lifecycle_states, :lifecycle_state)
   end
 
   @spec provider_adapter_key!(atom() | binary()) :: atom()

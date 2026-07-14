@@ -1,6 +1,6 @@
 # Stage 1 Contact Scheduling Implementation Plan
 
-**Status:** ready for implementation
+**Status:** implemented and verified
 
 **Goal:** Deliver one provider-backed downlink contact end to end: an operator
 searches opportunities under mission Ops, reserves one through a durable saga,
@@ -38,8 +38,8 @@ comms configuration:
 - the selected `Spacecraft` is canonical mission identity;
 - a spacecraft-bound `SourceEndpoint.source_ref` is the provider spacecraft
   reference;
-- an active downlink `PathTemplate` selects the source endpoint and routing
-  intent;
+- an active downlink `LinkAssignment` binds the spacecraft/source endpoint to
+  an exact `PathTemplate` version and routing intent;
 - a referenced active `ProviderProfile` with scheduling configuration selects
   the Provider Client;
 - the provider profile's TCP configuration remains the contact-time data plane.

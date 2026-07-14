@@ -44,7 +44,7 @@ It does not load Cadence's database or Phoenix runtime configuration.
 3. Create a mission provider with TCP downlink delivery and the simulator
    scheduling integration.
 4. Map Cadence spacecraft/source endpoints to the provider spacecraft IDs.
-5. Search and reserve contacts through Cadence's provider boundary.
+5. Open **Ops → Contacts**, search the provider, and reserve an opportunity.
 6. During an active contact, the simulator connects to the advertised Cadence
    telemetry endpoint and streams CCSDS frames.
 
@@ -68,6 +68,7 @@ Bearer token. Reservation creation also accepts an `Idempotency-Key` header.
 | `GET` | `/v1/ground-stations?run_id=...` | List simulated sites and antenna capacity |
 | `POST` | `/v1/contact-opportunities/search` | Generate deterministic synthetic windows |
 | `POST` | `/v1/contact-reservations` | Reserve an opportunity |
+| `GET` | `/v1/contact-reservations?run_id=...&idempotency_key=...` | Recover a reservation after an ambiguous mutation outcome |
 | `GET` | `/v1/contact-reservations/:id` | Read current provider lifecycle state |
 | `POST` | `/v1/contact-reservations/:id/cancel` | Cancel provider capacity |
 | `GET` | `/v1/events?cursor=...` | Consume the ordered provider event feed |
@@ -127,10 +128,28 @@ simulator configuration in Cadence. The control-plane client is selected from th
 compile-time provider-client registry. A future plugin model can extend the same
 registry and behaviour without changing booking semantics.
 
-`Cadence.Contacts.ProviderBooking` reserves provider capacity first and then
-persists the Cadence `ScheduledContact`. A local persistence failure triggers a
-best-effort provider cancellation. Contact realization continues through the
-existing contact scheduler and TCP provider runtime.
+`Cadence.Contacts.ProviderBooking` persists a first-class
+`ProviderReservation`, including its idempotency key and preallocated Scheduled
+Contact ID, before requesting provider capacity. The provider call occurs
+outside the database transaction. Confirmed capacity materializes the Scheduled
+Contact idempotently; pending or ambiguous outcomes remain durable for the
+supervised status reconciler to resolve after process restart. Contact
+realization continues through the existing contact scheduler and TCP provider
+runtime.
+
+Scheduling readiness is derived from the mission's existing comms graph:
+
+- the spacecraft-bound source endpoint supplies the provider spacecraft
+  reference;
+- an active downlink link assignment selects the exact path-template version;
+- that route selects the exact provider-profile version;
+- the provider has an enabled scheduling client and a usable TCP listen,
+  delivery-host, port, and fixed-size framing configuration.
+
+The authenticated operator workflow lives at
+`/missions/:mission_id/ops/contacts`. It shows provider reservation lifecycle
+separately from the canonical Cadence contact lifecycle and supports search,
+reservation, durable convergence, and cancellation.
 
 Telemetry definitions remain simulator-owned. Cadence sends the advertised
 delivery host, port, and frame size during reservation; it does not send simulator
@@ -153,6 +172,17 @@ contact end:
 ```bash
 mix test apps/cadence_simulator/test/cadence_simulator/provider_scale_test.exs
 ```
+
+The scheduling boundary test starts a real simulator HTTP listener, reserves and
+reconciles through that API, realizes the ordinary Cadence contact, and verifies
+decoded telemetry received through the configured TCP provider:
+
+```bash
+mix test apps/cadence_simulator/test/cadence_simulator/contact_scheduling_integration_test.exs
+```
+
+For a manual two-BEAM walkthrough, including scenario/run creation, see
+[Simulator Provider Integration Flow](simulator_provider_integration_flow.md).
 
 Run the full repository gate after changes:
 

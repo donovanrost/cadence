@@ -13,6 +13,7 @@ config :cadence, Cadence.Repo,
 config :cadence, start_background_jobs: false
 config :cadence, contact_scheduler: [enabled: false]
 config :cadence, contact_scheduler_global_safety: [enabled: false]
+config :cadence, provider_reservation_reconciler: [enabled: false]
 config :cadence, command_dispatcher: [enabled: false]
 config :cadence, command_verifier_scheduler: [enabled: false]
 config :cadence, password_hash_iterations: 1_000
