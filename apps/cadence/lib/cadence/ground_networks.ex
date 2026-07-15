@@ -138,17 +138,7 @@ defmodule Cadence.GroundNetworks do
   end
 
   defp context_from_provider(%MissionProvider{} = provider) do
-    ProviderContext.new(%{
-      provider_ref: provider.provider_id,
-      organization_id: provider.organization_id,
-      mission_id: provider.mission_id,
-      client_key: Atom.to_string(provider.client_key),
-      base_url: provider.base_url,
-      credential_ref: provider.credential_ref,
-      environment_ref: provider.environment_ref,
-      capabilities: empty_to_nil(provider.capabilities_document),
-      metadata: provider.metadata
-    })
+    ProviderContext.from_mission_provider(provider)
   end
 
   defp resolve_client(context, opts) do
@@ -254,9 +244,6 @@ defmodule Cadence.GroundNetworks do
 
   defp encode_error(%ProviderError{} = error), do: ProviderError.to_map(error)
   defp encode_error(reason), do: Validation.sanitize(reason)
-
-  defp empty_to_nil(document) when document == %{}, do: nil
-  defp empty_to_nil(document), do: document
 
   defp now(opts),
     do: Keyword.get(opts, :now, DateTime.utc_now()) |> DateTime.truncate(:microsecond)

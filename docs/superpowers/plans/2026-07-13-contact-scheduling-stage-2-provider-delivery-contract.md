@@ -25,10 +25,14 @@ bounded inventory/profile synchronization; and the authenticated Mission
 Provider list, create, and detail journey. Task 7 adds explicit direct and
 provider-managed Transport origins, an allow-listed Transport Kind registry,
 exact Provider and profile version snapshots, provider-derived TCP runtime
-materialization, and the progressive Transport journey. Tasks 1-7 are complete;
-Task 8, binding scheduling to Provider and Transport versions, is next. The
-runtime scheduling bridge to Provider Profile remains intentionally temporary
-until that checkpoint.
+materialization, and the progressive Transport journey. Task 8 binds provider
+opportunity search and reservations to exact Routing Rule, Transport, Mission
+Provider, Service Profile, and Delivery Profile versions; validates immutable
+delivery descriptors before runtime use; persists pass and delivery observations
+separately; and exposes the complete chain in Ops Contacts. Tasks 1-8 are
+complete; Task 9, preserving the separate-app TCP proof through only the new
+boundaries, is next. The runtime Provider Profile remains execution evidence,
+not control-plane identity.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

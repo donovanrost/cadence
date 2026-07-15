@@ -1,36 +1,50 @@
 defmodule Cadence.Contacts.ProviderScheduling do
   @moduledoc """
-  Resolves mission comms configuration into provider-ready downlink routes.
+  Resolves durable mission routing into provider opportunity-search routes.
 
-  This keeps provider mapping, readiness findings, and opportunity validation
-  outside the web layer. Route keys are re-resolved in organization and mission
-  scope before every search or reservation.
+  External scheduling is available only when an enabled Routing Rule selects
+  an exact provider-managed Transport version. The Transport binds the exact
+  Mission Provider, Service Profile, Delivery Profile, and runtime bridge that
+  a later reservation must snapshot before mutating provider state.
   """
 
+  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport, TransportStore}
   alias Cadence.Contacts
   alias Cadence.Contacts.{LinkAssignment, ProviderBooking, ProviderClients.Registry}
-  alias Cadence.GroundNetworks.{Opportunity, ProviderContext}
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.{MissionProvider, Opportunity, ProviderContext}
   alias Cadence.SourceEndpoints
+  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
 
   @default_result_limit 100
   @maximum_horizon_seconds 7 * 24 * 60 * 60
   @past_grace_seconds 60
 
+  @type profile_ref :: map()
   @type ready_route :: %{
           route_key: binary(),
           spacecraft_id: binary(),
           spacecraft_display_name: binary(),
           provider_spacecraft_ref: binary(),
           source_endpoint_id: binary(),
+          routing_rule_id: binary(),
           link_assignment_id: binary(),
           path_template_id: binary(),
           path_template_version: pos_integer(),
+          transport_id: binary(),
+          transport_version: pos_integer(),
+          transport_display_name: binary(),
+          provider_id: binary(),
+          provider_version: pos_integer(),
           provider_profile_id: binary(),
           provider_profile_version: pos_integer(),
-          service_profile_ref: binary(),
-          delivery_profile_ref: binary(),
+          service_profile_ref: profile_ref(),
+          delivery_profile_ref: profile_ref(),
           provider_display_name: binary(),
+          service_display_name: binary(),
+          delivery_display_name: binary(),
+          delivery_operator_summary: binary(),
           route_display_name: binary(),
           client: module()
         }
@@ -48,14 +62,12 @@ defmodule Cadence.Contacts.ProviderScheduling do
           spacecraft_id: spacecraft_id
         )
 
-      assignments = Contacts.list_link_assignments(organization_id, mission_id)
+      rules =
+        organization_id
+        |> RoutingRuleStore.list_routing_rules_for_spacecraft(mission_id, spacecraft_id)
+        |> Enum.filter(&downlink_rule?/1)
 
-      {routes, findings} =
-        endpoints
-        |> Enum.reduce({[], []}, fn endpoint, acc ->
-          resolve_endpoint(spacecraft, endpoint, assignments, acc)
-        end)
-        |> add_missing_endpoint_finding(endpoints, spacecraft_id)
+      {routes, findings} = resolve_rules(spacecraft, endpoints, rules)
 
       {:ok,
        %{
@@ -100,17 +112,17 @@ defmodule Cadence.Contacts.ProviderScheduling do
            ProviderBooking.search(
              organization_id,
              mission_id,
-             route.provider_profile_id,
+             route.provider_id,
              %{
                "spacecraft_refs" => [route.provider_spacecraft_ref],
                "ground_station_refs" => [],
-               "service_profile_ref" => route.service_profile_ref,
+               "service_profile_ref" => route.service_profile_ref["id"],
                "starts_at" => DateTime.to_iso8601(starts_at),
                "ends_at" => DateTime.to_iso8601(ends_at),
                "page_size" => result_limit,
                "cursor" => nil
              },
-             Keyword.put(opts, :provider_profile_version, route.provider_profile_version)
+             Keyword.put(opts, :provider_version, route.provider_version)
            ),
          {:ok, opportunities} <-
            validate_opportunities(response, route, starts_at, ends_at, result_limit) do
@@ -121,7 +133,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
            Enum.map(opportunities, fn opportunity ->
              opportunity
              |> Map.put("route_key", route.route_key)
-             |> Map.put("delivery_profile_ref", route.delivery_profile_ref)
+             |> Map.put("delivery_profile_ref", route.delivery_profile_ref["id"])
            end)
        }}
     else
@@ -130,202 +142,306 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
-  defp resolve_endpoint(spacecraft, endpoint, assignments, {routes, findings}) do
-    if blank?(endpoint.source_ref) do
-      {routes,
-       [
-         finding(
-           :missing_provider_spacecraft_reference,
-           "Source endpoint needs a provider spacecraft reference.",
-           endpoint.source_endpoint_id
-         )
-         | findings
-       ]}
-    else
-      resolve_endpoint_assignments(spacecraft, endpoint, assignments, {routes, findings})
-    end
+  defp resolve_rules(spacecraft, [], _rules) do
+    {[],
+     [
+       finding(
+         :missing_source_endpoint,
+         "Spacecraft needs a provider spacecraft mapping before contacts can be scheduled.",
+         spacecraft.spacecraft_id
+       )
+     ]}
   end
 
-  defp resolve_endpoint_assignments(spacecraft, endpoint, assignments, {routes, findings}) do
-    matching_assignments =
-      Enum.filter(assignments, fn assignment ->
-        assignment.lifecycle_state == :active and assignment.direction == :downlink and
-          assignment.spacecraft_id == spacecraft.spacecraft_id and
-          assignment.source_endpoint_ref == endpoint.source_endpoint_id
-      end)
-
-    if matching_assignments == [] do
-      {routes,
-       [
-         finding(
-           :missing_downlink_route,
-           "Source endpoint needs an active downlink link assignment.",
-           endpoint.source_endpoint_id
-         )
-         | findings
-       ]}
-    else
-      Enum.reduce(matching_assignments, {routes, findings}, fn assignment, acc ->
-        resolve_assignment(spacecraft, endpoint, assignment, acc)
-      end)
-    end
+  defp resolve_rules(spacecraft, _endpoints, []) do
+    {[],
+     [
+       finding(
+         :missing_downlink_route,
+         "Spacecraft needs an enabled inbound Routing Rule before contacts can be scheduled.",
+         spacecraft.spacecraft_id
+       )
+     ]}
   end
 
-  defp resolve_assignment(spacecraft, endpoint, assignment, {routes, findings}) do
-    case Contacts.fetch_path_template_version(
-           spacecraft.organization_id,
-           spacecraft.mission_id,
-           assignment.path_template_id,
-           assignment.path_template_version
-         ) do
-      {:ok, template} ->
-        resolve_template(spacecraft, endpoint, assignment, template, {routes, findings})
+  defp resolve_rules(spacecraft, endpoints, rules) do
+    Enum.reduce(rules, {[], []}, fn rule, {routes, findings} ->
+      case resolve_rule(spacecraft, endpoints, rule) do
+        {:ok, route} ->
+          {[route | routes], findings}
 
-      {:error, _reason} ->
-        {routes,
-         [
-           finding(
-             :missing_downlink_route,
-             "Assigned downlink path template version is not available.",
-             assignment.link_assignment_id
-           )
-           | findings
-         ]}
-    end
-  end
-
-  defp resolve_template(spacecraft, endpoint, assignment, template, {routes, findings}) do
-    profile_refs = provider_profile_refs(assignment, template)
-
-    if profile_refs == [] do
-      {routes,
-       [
-         finding(
-           :missing_provider_profile,
-           "Downlink path needs an active provider profile.",
-           template.path_template_id
-         )
-         | findings
-       ]}
-    else
-      Enum.reduce(profile_refs, {routes, findings}, fn profile_ref, acc ->
-        resolve_provider(spacecraft, endpoint, assignment, template, profile_ref, acc)
-      end)
-    end
-  end
-
-  defp resolve_provider(
-         spacecraft,
-         endpoint,
-         assignment,
-         template,
-         profile_ref,
-         {routes, findings}
-       ) do
-    case Contacts.fetch_provider_profile_version(
-           spacecraft.organization_id,
-           spacecraft.mission_id,
-           profile_ref["provider_profile_id"],
-           profile_ref["version"]
-         ) do
-      {:ok, provider_profile} ->
-        case provider_readiness(provider_profile) do
-          {:ok, client} ->
-            route =
-              ready_route(
-                spacecraft,
-                endpoint,
-                assignment,
-                template,
-                provider_profile,
-                client
-              )
-
-            {[route | routes], findings}
-
-          {:error, code, message} ->
-            {routes, [finding(code, message, provider_profile.provider_profile_id) | findings]}
-        end
-
-      {:error, _reason} ->
-        {routes,
-         [
-           finding(
-             :missing_provider_profile,
-             "Referenced provider profile version is not available.",
-             profile_ref["provider_profile_id"]
-           )
-           | findings
-         ]}
-    end
-  end
-
-  defp provider_readiness(provider_profile) do
-    scheduling = Map.get(provider_profile.configuration, "scheduling", %{})
-
-    with :ok <- validate_active_provider(provider_profile),
-         :ok <- validate_scheduling_api(scheduling),
-         :ok <- validate_environment_scope(scheduling),
-         :ok <- validate_profile_reference(scheduling, "service_profile_ref"),
-         :ok <- validate_profile_reference(scheduling, "delivery_profile_ref") do
-      fetch_scheduling_client(provider_profile)
-    end
-  end
-
-  defp validate_active_provider(provider_profile) do
-    if provider_profile.lifecycle_state == :active do
-      :ok
-    else
-      {:error, :inactive_provider_profile, "Provider profile is not active."}
-    end
-  end
-
-  defp validate_scheduling_api(scheduling) do
-    if blank?(scheduling["client"]) or blank?(scheduling["base_url"]) do
-      {:error, :missing_scheduling_client, "Provider scheduling API is not configured."}
-    else
-      :ok
-    end
-  end
-
-  defp validate_environment_scope(scheduling) do
-    if blank?(scheduling["environment_ref"] || scheduling["run_id"]) do
-      {:error, :missing_provider_environment, "Provider environment reference is required."}
-    else
-      :ok
-    end
-  end
-
-  defp validate_profile_reference(scheduling, key) do
-    if blank?(scheduling[key]) do
-      {:error, :missing_provider_profile_reference, "Provider #{key} is required."}
-    else
-      :ok
-    end
-  end
-
-  defp fetch_scheduling_client(provider_profile) do
-    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
-      case Registry.fetch(context) do
-        {:ok, client} ->
-          {:ok, client}
-
-        {:error, _reason} ->
-          {:error, :unknown_scheduling_client, "Provider scheduling client is not supported."}
+        {:error, code, message, resource_id} ->
+          {routes, [finding(code, message, resource_id) | findings]}
       end
+    end)
+  end
+
+  defp resolve_rule(spacecraft, endpoints, rule) do
+    with {:ok, assignment} <- downlink_assignment(rule),
+         {:ok, template} <- path_template(rule, assignment),
+         {:ok, endpoint} <- source_endpoint(endpoints, assignment.source_endpoint_ref),
+         :ok <- provider_spacecraft_mapping(endpoint),
+         {:ok, transport} <- exact_transport(rule),
+         :ok <- externally_schedulable_transport(transport),
+         {:ok, provider} <- exact_provider(transport),
+         :ok <- provider_ready(provider),
+         {:ok, service_profile} <-
+           exact_profile(provider, "service_profiles", transport.service_profile_ref),
+         {:ok, delivery_profile} <-
+           exact_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
+         :ok <- profiles_compatible(service_profile, delivery_profile),
+         :ok <- transport_snapshot_matches(transport, provider, service_profile, delivery_profile),
+         {:ok, runtime_profile} <- runtime_profile(transport),
+         {:ok, context} <- ProviderContext.from_mission_provider(provider),
+         {:ok, client} <- Registry.fetch(context) do
+      {:ok,
+       ready_route(%{
+         spacecraft: spacecraft,
+         endpoint: endpoint,
+         rule: rule,
+         assignment: assignment,
+         template: template,
+         transport: transport,
+         provider: provider,
+         runtime_profile: runtime_profile,
+         service_profile: service_profile,
+         delivery_profile: delivery_profile,
+         client: client
+       })}
+    else
+      {:error, :contact_link_assignment_not_found} ->
+        route_error(
+          :missing_downlink_path,
+          "Routing Rule has no materialized downlink path.",
+          rule
+        )
+
+      {:error, :contact_path_template_not_found} ->
+        route_error(:missing_downlink_path, "Routing Rule path version is unavailable.", rule)
+
+      {:error, :source_endpoint_not_found} ->
+        route_error(
+          :missing_source_endpoint,
+          "Routing Rule source endpoint is unavailable.",
+          rule
+        )
+
+      {:error, :transport_not_found} ->
+        route_error(
+          :missing_transport_version,
+          "Routing Rule Transport version is unavailable.",
+          rule
+        )
+
+      {:error, code, message} ->
+        route_error(code, message, rule)
+
+      {:error, reason} ->
+        route_error(:provider_route_not_ready, readiness_message(reason), rule)
     end
   end
 
-  defp ready_route(spacecraft, endpoint, assignment, template, provider_profile, client) do
+  defp downlink_rule?(%RoutingRule{} = rule) do
+    rule.lifecycle_state == :active and rule.enabled? and
+      rule.direction in [:inbound, :bidirectional]
+  end
+
+  defp downlink_assignment(rule) do
+    rule
+    |> materialized_assignment_ids()
+    |> Enum.reduce_while({:error, :contact_link_assignment_not_found}, fn assignment_id, _acc ->
+      case Contacts.fetch_link_assignment(rule.organization_id, rule.mission_id, assignment_id) do
+        {:ok, %LinkAssignment{direction: :downlink} = assignment} ->
+          {:halt, {:ok, assignment}}
+
+        _other ->
+          {:cont, {:error, :contact_link_assignment_not_found}}
+      end
+    end)
+  end
+
+  defp materialized_assignment_ids(rule) do
+    ids = Map.get(rule.metadata, "materialized_link_assignment_ids", [])
+
+    if ids == [] and is_binary(rule.materialized_link_assignment_id),
+      do: [rule.materialized_link_assignment_id],
+      else: ids
+  end
+
+  defp path_template(rule, assignment) do
+    Contacts.fetch_path_template_version(
+      rule.organization_id,
+      rule.mission_id,
+      assignment.path_template_id,
+      assignment.path_template_version
+    )
+  end
+
+  defp source_endpoint(endpoints, source_endpoint_id) do
+    assigned = Enum.find(endpoints, &(&1.source_endpoint_id == source_endpoint_id))
+    mapped = Enum.find(endpoints, &present?(&1.source_ref))
+
+    case mapped || assigned do
+      %SourceEndpoint{} = endpoint -> {:ok, endpoint}
+      nil -> {:error, :source_endpoint_not_found}
+    end
+  end
+
+  defp provider_spacecraft_mapping(%SourceEndpoint{source_ref: source_ref}) do
+    if present?(source_ref),
+      do: :ok,
+      else:
+        {:error, :missing_provider_spacecraft_reference,
+         "Source endpoint needs a provider spacecraft reference."}
+  end
+
+  defp exact_transport(rule) do
+    TransportStore.fetch_transport_version(
+      rule.organization_id,
+      rule.mission_id,
+      rule.transport_id,
+      rule.transport_version
+    )
+  end
+
+  defp externally_schedulable_transport(%Transport{
+         origin: :provider_managed,
+         lifecycle_state: :active
+       }),
+       do: :ok
+
+  defp externally_schedulable_transport(%Transport{origin: :direct}) do
+    {:error, :direct_transport_not_provider_schedulable,
+     "Direct Transport remains available for local scheduling but has no external opportunity source."}
+  end
+
+  defp externally_schedulable_transport(%Transport{}) do
+    {:error, :transport_not_active, "Selected Transport version is not active."}
+  end
+
+  defp exact_provider(transport) do
+    GroundNetworks.fetch_provider_version(
+      transport.organization_id,
+      transport.mission_id,
+      transport.mission_provider_id,
+      transport.mission_provider_version
+    )
+  end
+
+  defp provider_ready(%MissionProvider{} = provider) do
+    cond do
+      provider.lifecycle_state != :active ->
+        {:error, :mission_provider_not_active, "Mission Provider version is not active."}
+
+      not match?(%DateTime{}, provider.last_validated_at) or
+          get_in(provider.metadata, ["control_plane", "status"]) != "healthy" ->
+        {:error, :mission_provider_not_validated, "Mission Provider must validate successfully."}
+
+      not match?(%DateTime{}, provider.last_synced_at) ->
+        {:error, :mission_provider_profiles_not_synced,
+         "Mission Provider profiles are not synchronized."}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp exact_profile(provider, collection, reference) do
+    with {:ok, id, version} <- profile_reference(reference),
+         items when is_list(items) <-
+           get_in(provider.inventory_sync_document, [collection, "items"]),
+         profile when is_map(profile) <-
+           Enum.find(items, &(&1["id"] == id and &1["version"] == version)) do
+      {:ok, profile}
+    else
+      _other -> {:error, :provider_profile_version_not_available}
+    end
+  end
+
+  defp profile_reference(reference) when is_map(reference) do
+    id = Map.get(reference, "id", Map.get(reference, :id))
+    version = Map.get(reference, "version", Map.get(reference, :version))
+
+    if present?(id) and is_integer(version) and version > 0,
+      do: {:ok, id, version},
+      else: {:error, :invalid_provider_profile_reference}
+  end
+
+  defp profile_reference(_reference), do: {:error, :invalid_provider_profile_reference}
+
+  defp profiles_compatible(service_profile, delivery_profile) do
+    cond do
+      service_profile["state"] != "active" ->
+        {:error, :provider_service_profile_not_active}
+
+      delivery_profile["state"] != "ready" ->
+        {:error, :provider_delivery_profile_not_ready}
+
+      service_profile["direction"] != "downlink" or delivery_profile["direction"] != "downlink" ->
+        {:error, :provider_profile_direction_not_supported}
+
+      service_profile["id"] not in (delivery_profile["supported_service_profile_refs"] || []) ->
+        {:error, :provider_profiles_not_compatible}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp transport_snapshot_matches(transport, provider, service_profile, delivery_profile) do
+    snapshot = transport.provider_configuration_snapshot
+
+    if get_in(snapshot, ["provider", "id"]) == provider.provider_id and
+         get_in(snapshot, ["provider", "version"]) == provider.version and
+         get_in(snapshot, ["service_profile", "id"]) == service_profile["id"] and
+         get_in(snapshot, ["service_profile", "version"]) == service_profile["version"] and
+         get_in(snapshot, ["delivery_profile", "id"]) == delivery_profile["id"] and
+         get_in(snapshot, ["delivery_profile", "version"]) == delivery_profile["version"] do
+      :ok
+    else
+      {:error, :transport_provider_snapshot_mismatch}
+    end
+  end
+
+  defp runtime_profile(%Transport{materialized_provider_profile_id: id} = transport)
+       when is_binary(id) and id != "" do
+    with {:ok, profile} <-
+           Contacts.fetch_provider_profile(transport.organization_id, transport.mission_id, id),
+         true <- profile.metadata["materialized_from_transport_id"] == transport.transport_id,
+         true <- profile.metadata["materialized_from_transport_version"] == transport.version do
+      {:ok, profile}
+    else
+      _other -> {:error, :transport_runtime_profile_mismatch}
+    end
+  end
+
+  defp runtime_profile(_transport), do: {:error, :transport_runtime_profile_not_materialized}
+
+  defp ready_route(%{
+         spacecraft: spacecraft,
+         endpoint: endpoint,
+         rule: rule,
+         assignment: assignment,
+         template: template,
+         transport: transport,
+         provider: provider,
+         runtime_profile: runtime_profile,
+         service_profile: service_profile,
+         delivery_profile: delivery_profile,
+         client: client
+       }) do
     route_key =
       [
         spacecraft.spacecraft_id,
-        endpoint.source_endpoint_id,
-        assignment.link_assignment_id,
-        template.path_template_id,
-        template.version,
-        provider_profile.provider_profile_id,
-        provider_profile.version
+        rule.routing_rule_id,
+        transport.transport_id,
+        transport.version,
+        provider.provider_id,
+        provider.version,
+        service_profile["id"],
+        service_profile["version"],
+        delivery_profile["id"],
+        delivery_profile["version"]
       ]
       |> Enum.join(":")
 
@@ -334,42 +450,64 @@ defmodule Cadence.Contacts.ProviderScheduling do
       spacecraft_id: spacecraft.spacecraft_id,
       spacecraft_display_name: spacecraft.display_name,
       provider_spacecraft_ref: endpoint.source_ref,
-      source_endpoint_id: endpoint.source_endpoint_id,
+      source_endpoint_id: assignment.source_endpoint_ref,
+      routing_rule_id: rule.routing_rule_id,
       link_assignment_id: assignment.link_assignment_id,
       path_template_id: template.path_template_id,
       path_template_version: template.version,
-      provider_profile_id: provider_profile.provider_profile_id,
-      provider_profile_version: provider_profile.version,
-      service_profile_ref:
-        get_in(provider_profile.configuration, ["scheduling", "service_profile_ref"]),
-      delivery_profile_ref:
-        get_in(provider_profile.configuration, ["scheduling", "delivery_profile_ref"]),
-      provider_display_name:
-        display_name(provider_profile.metadata, provider_profile.provider_profile_id),
-      route_display_name: display_name(template.metadata, template.path_id),
+      transport_id: transport.transport_id,
+      transport_version: transport.version,
+      transport_display_name: transport.display_name,
+      provider_id: provider.provider_id,
+      provider_version: provider.version,
+      provider_profile_id: runtime_profile.provider_profile_id,
+      provider_profile_version: runtime_profile.version,
+      service_profile_ref: exact_profile_ref(service_profile),
+      delivery_profile_ref: exact_profile_ref(delivery_profile),
+      provider_display_name: provider.display_name,
+      service_display_name: service_profile["display_name"] || service_profile["id"],
+      delivery_display_name: delivery_profile["display_name"] || delivery_profile["id"],
+      delivery_operator_summary:
+        delivery_profile["operator_summary"] || delivery_profile["display_name"],
+      route_display_name: rule.display_name,
       client: client
     }
   end
 
-  defp provider_profile_refs(%LinkAssignment{provider_profile_refs: refs}, _template)
-       when refs != [],
-       do: refs
+  defp exact_profile_ref(profile),
+    do: %{"id" => profile["id"], "version" => profile["version"]}
 
-  defp provider_profile_refs(_assignment, template), do: template.provider_profile_refs
+  defp route_error(code, message, rule),
+    do: {:error, code, message, rule.routing_rule_id}
 
-  defp add_missing_endpoint_finding({routes, findings}, [], spacecraft_id) do
-    {routes,
-     [
-       finding(
-         :missing_source_endpoint,
-         "Spacecraft needs a source endpoint before contacts can be scheduled.",
-         spacecraft_id
-       )
-       | findings
-     ]}
-  end
+  defp readiness_message(:mission_provider_not_found),
+    do: "Bound Mission Provider version is unavailable."
 
-  defp add_missing_endpoint_finding(result, _endpoints, _spacecraft_id), do: result
+  defp readiness_message(:provider_profile_version_not_available),
+    do: "Bound provider profile version is unavailable."
+
+  defp readiness_message(:provider_service_profile_not_active),
+    do: "Bound Service Profile is not active."
+
+  defp readiness_message(:provider_delivery_profile_not_ready),
+    do: "Bound Delivery Profile is not ready."
+
+  defp readiness_message(:provider_profiles_not_compatible),
+    do: "Bound Service and Delivery Profiles are not compatible."
+
+  defp readiness_message(:transport_provider_snapshot_mismatch),
+    do: "Transport provider snapshot does not match its exact bindings."
+
+  defp readiness_message(:transport_runtime_profile_mismatch),
+    do: "Transport runtime materialization does not match the selected version."
+
+  defp readiness_message(:transport_runtime_profile_not_materialized),
+    do: "Transport runtime compatibility profile is unavailable."
+
+  defp readiness_message({:unknown_provider_client, _client}),
+    do: "Mission Provider scheduling client is not supported."
+
+  defp readiness_message(_reason), do: "Provider scheduling route is not ready."
 
   defp validate_window(starts_at, ends_at, opts) do
     now = Keyword.get(opts, :now, DateTime.utc_now())
@@ -425,14 +563,12 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp validate_opportunity(%Opportunity{} = opportunity, route, window_starts_at, window_ends_at) do
     with true <- opportunity.spacecraft_ref == route.provider_spacecraft_ref,
-         true <- opportunity.service_profile_ref == route.service_profile_ref,
+         true <- opportunity.service_profile_ref == route.service_profile_ref["id"],
          starts_at = opportunity.starts_at,
          ends_at = opportunity.ends_at,
          true <- DateTime.compare(starts_at, window_starts_at) in [:eq, :gt],
          true <- DateTime.compare(ends_at, window_ends_at) in [:eq, :lt] do
-      {:ok,
-       opportunity
-       |> Opportunity.to_map()}
+      {:ok, Opportunity.to_map(opportunity)}
     else
       false -> {:error, {:invalid_provider_opportunity, opportunity.id}}
     end
@@ -474,8 +610,5 @@ defmodule Cadence.Contacts.ProviderScheduling do
     %{code: code, message: message, resource_id: resource_id, remediation: :comms}
   end
 
-  defp display_name(metadata, fallback),
-    do: Map.get(metadata, "display_name", Map.get(metadata, :display_name, fallback))
-
-  defp blank?(value), do: not (is_binary(value) and String.trim(value) != "")
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 end

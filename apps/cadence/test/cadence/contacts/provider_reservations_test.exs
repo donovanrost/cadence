@@ -1,7 +1,10 @@
 defmodule Cadence.Contacts.ProviderReservationsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Contacts.{PathTemplate, ProviderProfile, ProviderReservations}
+  alias Cadence.Comms.Transport
+  alias Cadence.Contacts.{PathTemplate, ProviderReservations}
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.MissionProvider
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -9,15 +12,28 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
     mission_id = "mission-provider-reservations-#{suffix}"
     persist_mission_scope(organization_id, mission_id)
 
-    {:ok, provider} =
-      Cadence.persist_provider_profile(
+    provider = persist_provider!(organization_id, mission_id, suffix)
+
+    {:ok, transport} =
+      Cadence.persist_transport(
         organization_id,
-        ProviderProfile.new(%{
-          provider_profile_id: "provider-#{suffix}",
+        Transport.new(%{
+          transport_id: "transport-#{suffix}",
           mission_id: mission_id,
-          adapter_key: :tcp_socket,
-          configuration: %{"mode" => "listen", "port" => 4_100}
+          display_name: "Provider telemetry",
+          origin: :provider_managed,
+          mission_provider_id: provider.provider_id,
+          mission_provider_version: provider.version,
+          service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+          delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
         })
+      )
+
+    {:ok, runtime_profile} =
+      Cadence.fetch_provider_profile(
+        organization_id,
+        mission_id,
+        transport.materialized_provider_profile_id
       )
 
     {:ok, path_template} =
@@ -30,7 +46,12 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
           direction: :downlink,
           selection_role: :selected,
           source_endpoint_ref: "source-#{suffix}",
-          provider_profile_ids: [provider.provider_profile_id]
+          provider_profile_refs: [
+            %{
+              "provider_profile_id" => runtime_profile.provider_profile_id,
+              "version" => runtime_profile.version
+            }
+          ]
         })
       )
 
@@ -38,6 +59,8 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
       organization_id: organization_id,
       mission_id: mission_id,
       provider: provider,
+      transport: transport,
+      runtime_profile: runtime_profile,
       path_template: path_template,
       suffix: suffix
     }
@@ -273,8 +296,14 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
     %{
       provider_reservation_id: "provider-reservation-#{context.suffix}-#{suffix}",
       mission_id: context.mission_id,
-      provider_profile_id: context.provider.provider_profile_id,
-      provider_profile_version: context.provider.version,
+      provider_id: context.provider.provider_id,
+      provider_version: context.provider.version,
+      transport_id: context.transport.transport_id,
+      transport_version: context.transport.version,
+      service_profile_ref: context.transport.service_profile_ref,
+      delivery_profile_ref: context.transport.delivery_profile_ref,
+      provider_profile_id: context.runtime_profile.provider_profile_id,
+      provider_profile_version: context.runtime_profile.version,
       scheduled_contact_id: "scheduled-contact-#{context.suffix}-#{suffix}",
       provider_opportunity_ref: "opportunity-#{suffix}",
       idempotency_key: "idempotency-#{suffix}",
@@ -307,5 +336,61 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
       "starts_at" => DateTime.to_iso8601(reservation.starts_at),
       "ends_at" => DateTime.to_iso8601(reservation.ends_at)
     }
+  end
+
+  defp persist_provider!(organization_id, mission_id, suffix) do
+    now = ~U[2026-07-14 12:00:00.000000Z]
+
+    provider =
+      MissionProvider.new(%{
+        provider_id: "provider-#{suffix}",
+        mission_id: mission_id,
+        display_name: "Simulator",
+        provider_type: :simulator,
+        base_url: "http://simulator.test",
+        credential_ref: "config://simulator",
+        environment_ref: "run-alpha",
+        last_validated_at: now,
+        last_synced_at: now,
+        metadata: %{"control_plane" => %{"status" => "healthy"}},
+        inventory_sync_document: %{
+          "service_profiles" => %{
+            "items" => [
+              %{
+                "id" => "service-downlink",
+                "version" => 3,
+                "display_name" => "Realtime telemetry",
+                "direction" => "downlink",
+                "state" => "active"
+              }
+            ]
+          },
+          "delivery_profiles" => %{
+            "items" => [
+              %{
+                "id" => "delivery-cadence",
+                "version" => 7,
+                "display_name" => "Cadence primary ingress",
+                "direction" => "downlink",
+                "delivery_kind" => "realtime_stream",
+                "supported_service_profile_refs" => ["service-downlink"],
+                "state" => "ready",
+                "operator_summary" => "Streaming to Cadence",
+                "diagnostics" => %{
+                  "protocol" => "tcp",
+                  "mode" => "provider_connects",
+                  "host" => "127.0.0.1",
+                  "port" => 5100,
+                  "framing_family" => "ccsds_tm",
+                  "frame_bytes" => 1115
+                }
+              }
+            ]
+          }
+        }
+      })
+
+    {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
+    provider
   end
 end

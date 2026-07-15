@@ -9,26 +9,29 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
 
   def opportunity_row(assigns) do
     ~H"""
-    <article id={@id} class="group grid gap-4 border-b border-base-300/70 px-4 py-4 transition-colors hover:bg-primary/[0.035] xl:grid-cols-[minmax(0,1fr)_11rem_8rem] xl:items-center">
+    <article id={@id} class="group grid gap-4 border-b border-base-300/70 px-4 py-4 transition-colors hover:bg-primary/[0.035] xl:grid-cols-[minmax(0,1.2fr)_minmax(11rem,0.7fr)_8rem] xl:items-center">
       <div class="min-w-0">
         <div class="mb-1 flex items-center gap-2">
           <span class="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_8px_currentColor]"></span>
           <span class="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-base-content/50">
-            {@opportunity["ground_station_id"] || "Ground station"}
+            {@opportunity["provider_display_name"] || "Ground station provider"}
           </span>
         </div>
         <p class="truncate text-sm font-semibold text-base-content">
           {format_time(@opportunity["starts_at"])} — {format_time(@opportunity["ends_at"])}
         </p>
         <p class="mt-1 truncate font-mono text-[0.68rem] text-base-content/45">
-          {@opportunity["id"]}
+          {@opportunity["service_display_name"] || @opportunity["service_profile_ref"]} · {@opportunity["delivery_operator_summary"] || @opportunity["delivery_display_name"]}
         </p>
       </div>
 
       <div class="border-l border-base-300/70 pl-4">
-        <p class="hud-label">Antenna</p>
+        <p class="hud-label">Delivery / antenna</p>
         <p class="mt-1 truncate font-mono text-xs text-base-content/70">
-          {@opportunity["antenna_id"] || "Provider assigned"}
+          {@opportunity["delivery_display_name"] || "Provider managed"}
+        </p>
+        <p class="mt-1 truncate font-mono text-[0.65rem] text-base-content/40">
+          {@opportunity["antenna_or_service_pool_ref"] || "Provider assigned"}
         </p>
       </div>
 
@@ -89,21 +92,51 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
         </button>
       </div>
 
-      <div class="mt-3 grid grid-cols-2 gap-3 border-t border-base-300/60 pt-3 text-xs">
-        <div>
-          <p class="hud-label">Provider contact</p>
-          <p class="mt-1 truncate font-mono text-base-content/65">
-            {@reservation.provider_contact_ref || "Not confirmed"}
+      <div class="mt-3 grid grid-cols-3 gap-px border border-base-300/60 bg-base-300/60 text-xs">
+        <.observation_cell
+          id={"reservation-contact-status-#{@reservation.provider_reservation_id}"}
+          label="Contact"
+          value={@reservation.provider_status || @reservation.lifecycle_state}
+        />
+        <.observation_cell
+          id={"reservation-pass-phase-#{@reservation.provider_reservation_id}"}
+          label="Pass"
+          value={@reservation.pass_phase}
+        />
+        <.observation_cell
+          id={"reservation-delivery-status-#{@reservation.provider_reservation_id}"}
+          label="Delivery"
+          value={@reservation.delivery_state}
+        />
+      </div>
+
+      <div class="mt-3 grid gap-3 border-t border-base-300/60 pt-3 text-xs sm:grid-cols-2">
+        <div id={"reservation-provider-#{@reservation.provider_reservation_id}"}>
+          <p class="hud-label">Provider</p>
+          <p class="mt-1 truncate text-base-content/70">
+            {@reservation.metadata["provider_display_name"] || @reservation.provider_id}
+            <span class="font-mono text-base-content/40">v{@reservation.provider_version}</span>
           </p>
         </div>
-        <div>
-          <p class="hud-label">Cadence contact</p>
-          <p class="mt-1 truncate font-mono text-base-content/65">
-            <%= if @row.scheduled_contact do %>
-              {@row.scheduled_contact.lifecycle_state}
-            <% else %>
-              Not materialized
-            <% end %>
+        <div id={"reservation-transport-#{@reservation.provider_reservation_id}"}>
+          <p class="hud-label">Transport</p>
+          <p class="mt-1 truncate text-base-content/70">
+            {@reservation.metadata["transport_display_name"] || @reservation.transport_id}
+            <span class="font-mono text-base-content/40">v{@reservation.transport_version}</span>
+          </p>
+        </div>
+        <div id={"reservation-service-#{@reservation.provider_reservation_id}"}>
+          <p class="hud-label">Service</p>
+          <p class="mt-1 truncate text-base-content/70">
+            {@reservation.metadata["service_display_name"] || @reservation.service_profile_ref["id"]}
+            <span class="font-mono text-base-content/40">v{@reservation.service_profile_ref["version"]}</span>
+          </p>
+        </div>
+        <div id={"reservation-delivery-#{@reservation.provider_reservation_id}"}>
+          <p class="hud-label">Delivery</p>
+          <p class="mt-1 truncate text-base-content/70">
+            {@reservation.metadata["delivery_operator_summary"] || @reservation.metadata["delivery_display_name"] || @reservation.delivery_profile_ref["id"]}
+            <span class="font-mono text-base-content/40">v{@reservation.delivery_profile_ref["version"]}</span>
           </p>
         </div>
       </div>
@@ -111,7 +144,40 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
       <div :if={@reservation.lifecycle_state in [:unknown, :canceling]} class="mt-3 border-l-2 border-warning/70 pl-3">
         <p class="text-xs text-warning/80">Provider state is uncertain; reconciliation will retry.</p>
       </div>
+
+      <div :if={configuration_failure?(@reservation)} class="mt-3 border-l-2 border-error/70 bg-error/5 px-3 py-2">
+        <p class="text-xs font-semibold text-error">Provider delivery conflicts with approved setup.</p>
+        <p class="mt-1 text-xs text-base-content/55">The reservation remains durable; Cadence will not use the unapproved descriptor.</p>
+      </div>
+
+      <details
+        id={"reservation-diagnostics-#{@reservation.provider_reservation_id}"}
+        class="mt-3 border-t border-base-300/60 pt-3"
+      >
+        <summary class="cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.16em] text-base-content/45 hover:text-primary">
+          Administrator diagnostics
+        </summary>
+        <dl class="mt-3 grid gap-2 font-mono text-[0.65rem] text-base-content/55">
+          <div><dt class="inline text-base-content/35">Provider contact </dt><dd class="inline">{@reservation.provider_contact_ref || "not assigned"}</dd></div>
+          <div><dt class="inline text-base-content/35">Cadence contact </dt><dd class="inline">{contact_state(@row.scheduled_contact)}</dd></div>
+          <div><dt class="inline text-base-content/35">Transport ref </dt><dd class="inline">{@reservation.transport_id}:v{@reservation.transport_version}</dd></div>
+          <div><dt class="inline text-base-content/35">Descriptor </dt><dd class="inline">{descriptor_state(@reservation.delivery_descriptor_document)}</dd></div>
+        </dl>
+      </details>
     </article>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :value, :any, required: true
+
+  def observation_cell(assigns) do
+    ~H"""
+    <div id={@id} class="bg-base-200/70 px-3 py-2">
+      <p class="hud-label">{@label}</p>
+      <p class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70">{@value}</p>
+    </div>
     """
   end
 
@@ -140,6 +206,16 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
   defp status_class(_state), do: "border-info/40 bg-info/10 text-info"
 
   defp cancelable?(state), do: state in [:pending, :confirmed, :active, :unknown]
+
+  defp configuration_failure?(reservation) do
+    reservation.last_error_document["category"] == "provider_configuration_failure"
+  end
+
+  defp contact_state(nil), do: "not materialized"
+  defp contact_state(contact), do: Atom.to_string(contact.lifecycle_state)
+
+  defp descriptor_state(document) when document == %{}, do: "not observed"
+  defp descriptor_state(_document), do: "validated immutable snapshot"
 
   defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%MZ")
 

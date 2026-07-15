@@ -11,13 +11,21 @@ defmodule Cadence.Contacts.ProviderBooking do
 
   alias Cadence.Contacts.{
     ProviderClients.Registry,
-    ProviderProfile,
     ProviderReservation,
     ProviderReservations,
     ScheduledContact
   }
 
-  alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
+  alias Cadence.GroundNetworks
+
+  alias Cadence.GroundNetworks.{
+    CredentialResolver,
+    MissionProvider,
+    ProviderContact,
+    ProviderContext,
+    ProviderError
+  }
+
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
 
@@ -37,15 +45,15 @@ defmodule Cadence.Contacts.ProviderBooking do
 
   @spec search(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
-  def search(organization_id, mission_id, provider_profile_id, params, opts \\ []) do
-    with {:ok, provider_profile} <-
-           fetch_provider_profile(
+  def search(organization_id, mission_id, provider_id, params, opts \\ []) do
+    with {:ok, provider} <-
+           fetch_provider(
              organization_id,
              mission_id,
-             provider_profile_id,
-             Keyword.get(opts, :provider_profile_version)
+             provider_id,
+             Keyword.get(opts, :provider_version)
            ),
-         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider, opts),
          {:ok, client} <- resolve_client(context, opts) do
       client.search_opportunities(context, params, call_opts)
     end
@@ -53,20 +61,19 @@ defmodule Cadence.Contacts.ProviderBooking do
 
   @spec reserve(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, booking_result()} | {:error, term()}
-  def reserve(organization_id, mission_id, provider_profile_id, attrs, opts \\ [])
+  def reserve(organization_id, mission_id, provider_id, attrs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(provider_profile_id) and is_map(attrs) and is_list(opts) do
-    with {:ok, provider_profile} <-
-           fetch_provider_profile(
+             is_binary(provider_id) and is_map(attrs) and is_list(opts) do
+    with {:ok, provider} <-
+           fetch_provider(
              organization_id,
              mission_id,
-             provider_profile_id,
-             Map.get(attrs, "provider_profile_version") ||
-               Map.get(attrs, :provider_profile_version)
+             provider_id,
+             Map.get(attrs, "provider_version") || Map.get(attrs, :provider_version)
            ),
-         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider, opts),
          {:ok, client} <- resolve_client(context, opts),
-         {:ok, attempt} <- build_attempt(organization_id, mission_id, provider_profile, attrs),
+         {:ok, attempt} <- build_attempt(organization_id, mission_id, provider, attrs),
          {:ok, reservation, outcome} <-
            ProviderReservations.create_attempt_with_outcome(organization_id, attempt) do
       case outcome do
@@ -79,8 +86,8 @@ defmodule Cadence.Contacts.ProviderBooking do
   @doc "Stage 1 compatibility delegate; new callers should use `reserve/5`."
   @spec book(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, booking_result()} | {:error, term()}
-  def book(organization_id, mission_id, provider_profile_id, attrs, opts \\ []) do
-    reserve(organization_id, mission_id, provider_profile_id, attrs, opts)
+  def book(organization_id, mission_id, provider_id, attrs, opts \\ []) do
+    reserve(organization_id, mission_id, provider_id, attrs, opts)
   end
 
   @spec cancel(binary(), binary(), binary(), keyword()) ::
@@ -94,14 +101,14 @@ defmodule Cadence.Contacts.ProviderBooking do
              mission_id,
              provider_reservation_id
            ),
-         {:ok, provider_profile} <-
-           Contacts.fetch_provider_profile_version(
+         {:ok, provider} <-
+           GroundNetworks.fetch_provider_version(
              organization_id,
              mission_id,
-             reservation.provider_profile_id,
-             reservation.provider_profile_version
+             reservation.provider_id,
+             reservation.provider_version
            ),
-         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider, opts),
          {:ok, client} <- resolve_client(context, opts),
          {:ok, provider_control_ref} <- require_provider_control_ref(reservation) do
       case client.cancel_contact(context, provider_control_ref, call_opts) do
@@ -126,18 +133,20 @@ defmodule Cadence.Contacts.ProviderBooking do
            ) do
       booking_result(updated)
     else
-      {:error, reason} -> persist_saga_error(reservation, reason, :unknown)
+      {:error, {:provider_configuration_failure, _reservation, _reason} = failure} ->
+        {:error, failure}
+
+      {:error, reason} ->
+        persist_saga_error(reservation, reason, :unknown)
     end
   end
 
-  defp submit_reservation(reservation, context, client, attrs, opts) do
-    string_attrs = stringify_keys(attrs)
-
+  defp submit_reservation(reservation, context, client, _attrs, opts) do
     provider_attrs = %{
       "opportunity_ref" => reservation.provider_opportunity_ref,
       "spacecraft_ref" => reservation.provider_spacecraft_ref,
-      "service_profile_ref" => string_attrs["service_profile_ref"],
-      "delivery_profile_ref" => string_attrs["delivery_profile_ref"],
+      "service_profile_ref" => reservation.service_profile_ref["id"],
+      "delivery_profile_ref" => reservation.delivery_profile_ref["id"],
       "client_reference" => reservation.idempotency_key,
       "tags" => %{"cadence_mission_ref" => reservation.mission_id}
     }
@@ -164,7 +173,11 @@ defmodule Cadence.Contacts.ProviderBooking do
                ) do
           booking_result(updated)
         else
-          {:error, reason} -> persist_saga_error(reservation, reason, :unknown)
+          {:error, {:provider_configuration_failure, _reservation, _reason} = failure} ->
+            {:error, failure}
+
+          {:error, reason} ->
+            persist_saga_error(reservation, reason, :unknown)
         end
 
       {:error, reason} ->
@@ -172,7 +185,7 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp build_attempt(organization_id, mission_id, %ProviderProfile{} = profile, attrs) do
+  defp build_attempt(organization_id, mission_id, %MissionProvider{} = provider, attrs) do
     string_attrs = stringify_keys(attrs)
 
     with {:ok, starts_at} <- parse_time(string_attrs["starts_at"], :starts_at),
@@ -181,8 +194,13 @@ defmodule Cadence.Contacts.ProviderBooking do
          {:ok, opportunity_ref} <- required_binary(string_attrs, "opportunity_ref"),
          {:ok, provider_spacecraft_ref} <- provider_spacecraft_ref(string_attrs),
          {:ok, spacecraft_id} <- canonical_spacecraft_id(string_attrs),
-         {:ok, service_profile_ref} <- required_binary(string_attrs, "service_profile_ref"),
-         {:ok, delivery_profile_ref} <- required_binary(string_attrs, "delivery_profile_ref"),
+         {:ok, transport_id} <- required_binary(string_attrs, "transport_id"),
+         {:ok, transport_version} <- required_positive_integer(string_attrs, "transport_version"),
+         {:ok, service_profile_ref} <- exact_profile_ref(string_attrs, "service_profile_ref"),
+         {:ok, delivery_profile_ref} <- exact_profile_ref(string_attrs, "delivery_profile_ref"),
+         {:ok, provider_profile_id} <- required_binary(string_attrs, "provider_profile_id"),
+         {:ok, provider_profile_version} <-
+           required_positive_integer(string_attrs, "provider_profile_version"),
          {:ok, source_endpoint_refs} <- required_binary_list(string_attrs, "source_endpoint_refs"),
          {:ok, path_template_ids} <- required_binary_list(string_attrs, "path_template_ids") do
       scheduled_contact_id =
@@ -199,15 +217,26 @@ defmodule Cadence.Contacts.ProviderBooking do
           %{
             "opportunity_ref" => opportunity_ref,
             "spacecraft_ref" => provider_spacecraft_ref,
-            "service_profile_ref" => service_profile_ref,
-            "delivery_profile_ref" => delivery_profile_ref,
+            "service_profile_ref" => service_profile_ref["id"],
+            "delivery_profile_ref" => delivery_profile_ref["id"],
             "client_reference" => idempotency_key,
             "tags" => %{"cadence_mission_ref" => mission_id}
           }
           |> Map.take(@provider_request_fields),
         "routing" => %{
+          "routing_rule_id" => string_attrs["routing_rule_id"],
           "source_endpoint_refs" => source_endpoint_refs,
           "path_template_refs" => path_template_refs(string_attrs, path_template_ids)
+        },
+        "bindings" => %{
+          "provider_ref" => %{"id" => provider.provider_id, "version" => provider.version},
+          "transport_ref" => %{"id" => transport_id, "version" => transport_version},
+          "service_profile_ref" => service_profile_ref,
+          "delivery_profile_ref" => delivery_profile_ref,
+          "runtime_provider_profile_ref" => %{
+            "id" => provider_profile_id,
+            "version" => provider_profile_version
+          }
         }
       }
 
@@ -216,8 +245,14 @@ defmodule Cadence.Contacts.ProviderBooking do
          provider_reservation_id: provider_reservation_id,
          organization_id: organization_id,
          mission_id: mission_id,
-         provider_profile_id: profile.provider_profile_id,
-         provider_profile_version: profile.version,
+         provider_id: provider.provider_id,
+         provider_version: provider.version,
+         transport_id: transport_id,
+         transport_version: transport_version,
+         service_profile_ref: service_profile_ref,
+         delivery_profile_ref: delivery_profile_ref,
+         provider_profile_id: provider_profile_id,
+         provider_profile_version: provider_profile_version,
          scheduled_contact_id: scheduled_contact_id,
          provider_opportunity_ref: opportunity_ref,
          idempotency_key: idempotency_key,
@@ -232,8 +267,11 @@ defmodule Cadence.Contacts.ProviderBooking do
          metadata: %{
            "ground_station_ref" => string_attrs["ground_station_ref"],
            "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
-           "service_profile_ref" => service_profile_ref,
-           "delivery_profile_ref" => delivery_profile_ref
+           "provider_display_name" => provider.display_name,
+           "transport_display_name" => string_attrs["transport_display_name"],
+           "service_display_name" => string_attrs["service_display_name"],
+           "delivery_display_name" => string_attrs["delivery_display_name"],
+           "delivery_operator_summary" => string_attrs["delivery_operator_summary"]
          }
        })}
     end
@@ -310,22 +348,18 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp fetch_provider_profile(organization_id, mission_id, provider_profile_id, nil) do
-    Contacts.fetch_provider_profile(organization_id, mission_id, provider_profile_id)
-  end
-
-  defp fetch_provider_profile(organization_id, mission_id, provider_profile_id, version)
+  defp fetch_provider(organization_id, mission_id, provider_id, version)
        when is_integer(version) and version > 0 do
-    Contacts.fetch_provider_profile_version(
+    GroundNetworks.fetch_provider_version(
       organization_id,
       mission_id,
-      provider_profile_id,
+      provider_id,
       version
     )
   end
 
-  defp fetch_provider_profile(_organization_id, _mission_id, _provider_profile_id, version),
-    do: {:error, {:invalid_provider_profile_version, version}}
+  defp fetch_provider(_organization_id, _mission_id, _provider_id, version),
+    do: {:error, {:invalid_provider_version, version}}
 
   defp resolve_client(context, opts) do
     case Keyword.fetch(opts, :client) do
@@ -334,9 +368,14 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp provider_context(provider_profile, opts) do
-    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
-      {:ok, context, ProviderContext.with_legacy_credential(provider_profile, context, opts)}
+  defp provider_context(%MissionProvider{} = provider, opts) do
+    with {:ok, context} <- ProviderContext.from_mission_provider(provider) do
+      call_opts =
+        opts
+        |> Keyword.drop([:client, :provider_version])
+        |> Keyword.put_new(:credential_resolver, CredentialResolver.resolver(opts))
+
+      {:ok, context, call_opts}
     end
   end
 
@@ -379,6 +418,28 @@ defmodule Cadence.Contacts.ProviderBooking do
         else
           {:error, {:invalid_provider_booking_field, key}}
         end
+
+      _other ->
+        {:error, {:missing_provider_booking_field, key}}
+    end
+  end
+
+  defp required_positive_integer(map, key) do
+    case Map.get(map, key) do
+      value when is_integer(value) and value > 0 -> {:ok, value}
+      _other -> {:error, {:missing_provider_booking_field, key}}
+    end
+  end
+
+  defp exact_profile_ref(map, key) do
+    case Map.get(map, key) do
+      %{} = reference ->
+        id = Map.get(reference, "id", Map.get(reference, :id))
+        version = Map.get(reference, "version", Map.get(reference, :version))
+
+        if is_binary(id) and id != "" and is_integer(version) and version > 0,
+          do: {:ok, %{"id" => id, "version" => version}},
+          else: {:error, {:invalid_provider_booking_field, key}}
 
       _other ->
         {:error, {:missing_provider_booking_field, key}}

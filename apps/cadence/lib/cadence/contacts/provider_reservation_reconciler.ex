@@ -9,7 +9,16 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   use GenServer
 
   alias Cadence.Contacts.{ProviderClients.Registry, ProviderReservations}
-  alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
+  alias Cadence.GroundNetworks
+
+  alias Cadence.GroundNetworks.{
+    CredentialResolver,
+    MissionProvider,
+    ProviderContact,
+    ProviderContext,
+    ProviderError
+  }
+
   alias Cadence.Organizations
   alias Cadence.Persistence.JsonDocument
 
@@ -96,14 +105,14 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   end
 
   defp reconcile_one(reservation, opts) do
-    with {:ok, provider_profile} <-
-           Cadence.Contacts.fetch_provider_profile_version(
+    with {:ok, provider} <-
+           GroundNetworks.fetch_provider_version(
              reservation.organization_id,
              reservation.mission_id,
-             reservation.provider_profile_id,
-             reservation.provider_profile_version
+             reservation.provider_id,
+             reservation.provider_version
            ),
-         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider, opts),
          {:ok, client} <- resolve_client(context, opts),
          {:ok, response} <- fetch_provider_state(client, context, reservation, call_opts),
          {:ok, response} <- reservation_result(response),
@@ -166,9 +175,10 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
     end
   end
 
-  defp provider_context(provider_profile, opts) do
-    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
-      {:ok, context, ProviderContext.with_legacy_credential(provider_profile, context, opts)}
+  defp provider_context(%MissionProvider{} = provider, opts) do
+    with {:ok, context} <- ProviderContext.from_mission_provider(provider) do
+      {:ok, context,
+       Keyword.put_new(opts, :credential_resolver, CredentialResolver.resolver(opts))}
     end
   end
 

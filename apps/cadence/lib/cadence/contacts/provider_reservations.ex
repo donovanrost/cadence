@@ -11,8 +11,10 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Ecto.Changeset
   alias Ecto.Multi
 
+  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.Contacts
   alias Cadence.Contacts.{KnownAtom, ProviderReservation, ScheduledContact}
+  alias Cadence.GroundNetworks.Validation
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.Schemas.ProviderReservationRow
@@ -102,15 +104,15 @@ defmodule Cadence.Contacts.ProviderReservations do
   def fetch_by_idempotency_key(
         organization_id,
         mission_id,
-        provider_profile_id,
+        provider_id,
         idempotency_key
       )
       when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(provider_profile_id) and is_binary(idempotency_key) do
+             is_binary(provider_id) and is_binary(idempotency_key) do
     case Repo.get_by(ProviderReservationRow,
            organization_id: organization_id,
            mission_id: mission_id,
-           provider_profile_id: provider_profile_id,
+           provider_id: provider_id,
            idempotency_key: idempotency_key
          ) do
       nil -> {:error, :provider_reservation_not_found}
@@ -171,10 +173,15 @@ defmodule Cadence.Contacts.ProviderReservations do
       when is_map(response) do
     with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id),
          :ok <- validate_document(response, :response_document),
-         {:ok, lifecycle_state} <- normalized_lifecycle_state(response, reservation) do
+         {:ok, lifecycle_state} <- normalized_lifecycle_state(response, reservation),
+         {:ok, observations} <- provider_observations(response, reservation) do
       transition(reservation, lifecycle_state, %{
         provider_contact_ref: provider_contact_ref(response, reservation),
         provider_status: provider_status(response),
+        pass_phase: Atom.to_string(observations.pass_phase),
+        delivery_state: Atom.to_string(observations.delivery_state),
+        delivery_descriptor_document:
+          JsonDocument.wrap_value(observations.delivery_descriptor_document),
         response_document: JsonDocument.wrap_value(response),
         last_error_document: JsonDocument.wrap_value(%{}),
         attempt_count: reservation.attempt_count + 1,
@@ -262,15 +269,27 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def apply_provider_status(organization_id, mission_id, provider_reservation_id, response)
       when is_map(response) do
-    with {:ok, reservation} <-
-           record_provider_response(
-             organization_id,
-             mission_id,
-             provider_reservation_id,
-             response
-           ),
-         :ok <- apply_contact_side_effect(reservation) do
-      fetch(organization_id, mission_id, provider_reservation_id)
+    case record_provider_response(
+           organization_id,
+           mission_id,
+           provider_reservation_id,
+           response
+         ) do
+      {:ok, reservation} ->
+        with :ok <- apply_contact_side_effect(reservation) do
+          fetch(organization_id, mission_id, provider_reservation_id)
+        end
+
+      {:error, {:provider_configuration_mismatch, reason}} ->
+        persist_configuration_failure(
+          organization_id,
+          mission_id,
+          provider_reservation_id,
+          reason
+        )
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -290,7 +309,7 @@ defmodule Cadence.Contacts.ProviderReservations do
     case fetch_by_idempotency_key(
            organization_id,
            reservation.mission_id,
-           reservation.provider_profile_id,
+           reservation.provider_id,
            reservation.idempotency_key
          ) do
       {:ok, existing} ->
@@ -308,6 +327,12 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp immutable_payload(reservation) do
     Map.take(Map.from_struct(reservation), [
       :mission_id,
+      :provider_id,
+      :provider_version,
+      :transport_id,
+      :transport_version,
+      :service_profile_ref,
+      :delivery_profile_ref,
       :provider_profile_id,
       :provider_profile_version,
       :scheduled_contact_id,
@@ -429,6 +454,12 @@ defmodule Cadence.Contacts.ProviderReservations do
             provider_contact_ref: reservation.provider_contact_ref,
             metadata: %{
               "provider_reservation_id" => reservation.provider_reservation_id,
+              "provider_id" => reservation.provider_id,
+              "provider_version" => reservation.provider_version,
+              "transport_id" => reservation.transport_id,
+              "transport_version" => reservation.transport_version,
+              "service_profile_ref" => reservation.service_profile_ref,
+              "delivery_profile_ref" => reservation.delivery_profile_ref,
               "provider_profile_id" => reservation.provider_profile_id,
               "provider_profile_version" => reservation.provider_profile_version
             }
@@ -491,8 +522,173 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp validate_documents(reservation) do
     with :ok <- validate_document(reservation.request_document, :request_document),
          :ok <- validate_document(reservation.response_document, :response_document),
-         :ok <- validate_document(reservation.last_error_document, :last_error_document) do
+         :ok <- validate_document(reservation.last_error_document, :last_error_document),
+         :ok <-
+           validate_document(
+             reservation.delivery_descriptor_document,
+             :delivery_descriptor_document
+           ),
+         :ok <- validate_document(reservation.service_profile_ref, :service_profile_ref),
+         :ok <- validate_document(reservation.delivery_profile_ref, :delivery_profile_ref) do
       validate_document(reservation.metadata, :metadata)
+    end
+  end
+
+  defp provider_observations(response, reservation) do
+    with :ok <- validate_response_bindings(response, reservation),
+         {:ok, pass_phase} <- pass_phase(response, reservation),
+         {:ok, delivery_state} <- delivery_state(response, reservation),
+         {:ok, descriptor_document} <- delivery_descriptor(response, reservation) do
+      {:ok,
+       %{
+         pass_phase: pass_phase,
+         delivery_state: delivery_state,
+         delivery_descriptor_document: descriptor_document
+       }}
+    end
+  end
+
+  defp validate_response_bindings(response, reservation) do
+    checks = [
+      {"client_reference", reservation.idempotency_key},
+      {"opportunity_ref", reservation.provider_opportunity_ref},
+      {"spacecraft_ref", reservation.provider_spacecraft_ref},
+      {"service_profile_ref", reservation.service_profile_ref["id"]},
+      {"delivery_profile_ref", reservation.delivery_profile_ref["id"]}
+    ]
+
+    case Enum.find(checks, fn {key, expected} ->
+           value = Map.get(response, key)
+           not is_nil(value) and value != expected
+         end) do
+      nil -> :ok
+      {key, _expected} -> {:error, {:provider_configuration_mismatch, {:contact_binding, key}}}
+    end
+  end
+
+  defp pass_phase(response, reservation) do
+    response
+    |> Map.get("pass_phase", Atom.to_string(reservation.pass_phase))
+    |> then(&{:ok, KnownAtom.provider_pass_phase!(&1)})
+  rescue
+    ArgumentError -> {:error, {:malformed_provider_response, :pass_phase}}
+  end
+
+  defp delivery_state(response, reservation) do
+    response
+    |> Map.get("delivery_state", Atom.to_string(reservation.delivery_state))
+    |> then(&{:ok, KnownAtom.provider_delivery_state!(&1)})
+  rescue
+    ArgumentError -> {:error, {:malformed_provider_response, :delivery_state}}
+  end
+
+  defp delivery_descriptor(%{"delivery_descriptor" => descriptor}, reservation)
+       when is_map(descriptor) do
+    descriptor = Validation.sanitize(descriptor)
+
+    with {:ok, %Transport{} = transport} <-
+           TransportStore.fetch_transport_version(
+             reservation.organization_id,
+             reservation.mission_id,
+             reservation.transport_id,
+             reservation.transport_version
+           ),
+         :ok <- validate_transport_binding(transport, reservation),
+         :ok <- validate_descriptor_binding(descriptor, transport, reservation),
+         document = immutable_descriptor_document(descriptor),
+         :ok <- validate_immutable_descriptor(document, reservation) do
+      {:ok, document}
+    else
+      {:error, reason} -> {:error, {:provider_configuration_mismatch, reason}}
+    end
+  end
+
+  defp delivery_descriptor(_response, reservation),
+    do: {:ok, reservation.delivery_descriptor_document}
+
+  defp validate_transport_binding(transport, reservation) do
+    cond do
+      transport.origin != :provider_managed ->
+        {:error, :transport_not_provider_managed}
+
+      transport.mission_provider_id != reservation.provider_id or
+          transport.mission_provider_version != reservation.provider_version ->
+        {:error, :transport_provider_binding_changed}
+
+      transport.service_profile_ref != reservation.service_profile_ref or
+          transport.delivery_profile_ref != reservation.delivery_profile_ref ->
+        {:error, :transport_profile_binding_changed}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_descriptor_binding(descriptor, transport, reservation) do
+    delivery_profile =
+      get_in(transport.provider_configuration_snapshot, ["delivery_profile"]) || %{}
+
+    diagnostics = Map.get(delivery_profile, "diagnostics", %{})
+    framing = Map.get(descriptor, "framing", %{})
+    activation_window = Map.get(descriptor, "activation_window", %{})
+
+    checks = [
+      descriptor["direction"] == "downlink",
+      descriptor["delivery_kind"] == delivery_profile["delivery_kind"],
+      descriptor["mode"] == diagnostics["mode"],
+      descriptor["protocol"] == diagnostics["protocol"],
+      descriptor["endpoint_ref"] == reservation.delivery_profile_ref["id"],
+      framing["family"] == diagnostics["framing_family"],
+      framing["frame_bytes"] == diagnostics["frame_bytes"],
+      reservation.provider_spacecraft_ref in (descriptor["allowed_source_refs"] || []),
+      activation_covers?(activation_window, reservation)
+    ]
+
+    if Enum.all?(checks),
+      do: :ok,
+      else: {:error, :delivery_descriptor_conflicts_with_transport}
+  end
+
+  defp activation_covers?(window, reservation) do
+    with {:ok, starts_at, _offset} <- DateTime.from_iso8601(window["starts_at"] || ""),
+         {:ok, ends_at, _offset} <- DateTime.from_iso8601(window["ends_at"] || "") do
+      DateTime.compare(starts_at, reservation.starts_at) in [:lt, :eq] and
+        DateTime.compare(ends_at, reservation.ends_at) in [:gt, :eq]
+    else
+      _error -> false
+    end
+  end
+
+  defp immutable_descriptor_document(descriptor) do
+    Map.drop(descriptor, ["status", "reason", "diagnostics"])
+  end
+
+  defp validate_immutable_descriptor(document, %{delivery_descriptor_document: existing})
+       when existing == %{},
+       do: validate_document(document, :delivery_descriptor_document)
+
+  defp validate_immutable_descriptor(document, %{delivery_descriptor_document: document}), do: :ok
+
+  defp validate_immutable_descriptor(_document, _reservation),
+    do: {:error, :delivery_descriptor_changed}
+
+  defp persist_configuration_failure(organization_id, mission_id, reservation_id, reason) do
+    error_document = %{
+      "lifecycle_state" => "failed",
+      "category" => "provider_configuration_failure",
+      "reason" => JsonDocument.encode(reason),
+      "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "provider_reservation_validation"
+    }
+
+    case record_provider_error(
+           organization_id,
+           mission_id,
+           reservation_id,
+           error_document
+         ) do
+      {:ok, failed} -> {:error, {:provider_configuration_failure, failed, reason}}
+      {:error, persistence_reason} -> {:error, persistence_reason}
     end
   end
 

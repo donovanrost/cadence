@@ -2,7 +2,7 @@ defmodule Cadence.GroundNetworks.ProviderContext do
   @moduledoc "Provider-neutral control-plane context for one mission provider binding."
 
   alias Cadence.Contacts.ProviderProfile
-  alias Cadence.GroundNetworks.ProviderCapabilities
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderCapabilities}
 
   @type t :: %__MODULE__{
           provider_ref: binary(),
@@ -66,6 +66,22 @@ defmodule Cadence.GroundNetworks.ProviderContext do
     })
   end
 
+  @doc "Builds the exact provider control-plane context for a Mission Provider version."
+  @spec from_mission_provider(MissionProvider.t()) :: {:ok, t()} | {:error, term()}
+  def from_mission_provider(%MissionProvider{} = provider) do
+    new(%{
+      provider_ref: provider.provider_id,
+      organization_id: provider.organization_id,
+      mission_id: provider.mission_id,
+      client_key: Atom.to_string(provider.client_key),
+      base_url: provider.base_url,
+      credential_ref: provider.credential_ref,
+      environment_ref: provider.environment_ref,
+      capabilities: empty_to_nil(provider.capabilities_document),
+      metadata: provider.metadata
+    })
+  end
+
   @doc "Adds a request-local resolver for pre-MissionProvider profiles that still contain a token."
   @spec with_legacy_credential(ProviderProfile.t(), t(), keyword()) :: keyword()
   def with_legacy_credential(%ProviderProfile{} = profile, %__MODULE__{} = context, opts) do
@@ -101,6 +117,9 @@ defmodule Cadence.GroundNetworks.ProviderContext do
   defp normalize_capabilities(nil), do: {:ok, nil}
   defp normalize_capabilities(%ProviderCapabilities{} = capabilities), do: {:ok, capabilities}
   defp normalize_capabilities(capabilities), do: ProviderCapabilities.from_external(capabilities)
+
+  defp empty_to_nil(document) when document == %{}, do: nil
+  defp empty_to_nil(document), do: document
 
   defp required(attrs, key) do
     case value(attrs, key) do

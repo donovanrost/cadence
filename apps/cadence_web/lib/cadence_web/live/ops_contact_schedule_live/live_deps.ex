@@ -36,9 +36,9 @@ defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
     end)
   end
 
-  def reserve(organization_id, mission_id, provider_profile_id, attrs) do
-    call(:reserve, [organization_id, mission_id, provider_profile_id, attrs], fn ->
-      Cadence.reserve_provider_contact(organization_id, mission_id, provider_profile_id, attrs)
+  def reserve(organization_id, mission_id, provider_id, attrs) do
+    call(:reserve, [organization_id, mission_id, provider_id, attrs], fn ->
+      Cadence.reserve_provider_contact(organization_id, mission_id, provider_id, attrs)
     end)
   end
 

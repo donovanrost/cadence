@@ -1,15 +1,17 @@
 defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.Transport
+
   alias Cadence.Contacts.{
     PathTemplate,
     ProviderBooking,
-    ProviderProfile,
     ProviderReservationReconciler,
     ProviderReservations
   }
 
-  alias Cadence.GroundNetworks.ProviderError
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderError}
   alias Cadence.TestSupport.FakeProviderClient
 
   setup do
@@ -18,15 +20,28 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
     mission_id = "mission-provider-reconciler-#{suffix}"
     persist_mission_scope(organization_id, mission_id)
 
-    {:ok, provider} =
-      Cadence.persist_provider_profile(
+    provider = persist_provider!(organization_id, mission_id, suffix)
+
+    {:ok, transport} =
+      Cadence.persist_transport(
         organization_id,
-        ProviderProfile.new(%{
-          provider_profile_id: "provider-#{suffix}",
+        Transport.new(%{
+          transport_id: "transport-#{suffix}",
           mission_id: mission_id,
-          adapter_key: :tcp_socket,
-          configuration: %{"mode" => "listen", "port" => 4_100}
+          display_name: "Provider telemetry",
+          origin: :provider_managed,
+          mission_provider_id: provider.provider_id,
+          mission_provider_version: provider.version,
+          service_profile_ref: %{"id" => "service-realtime-ttc-downlink", "version" => 3},
+          delivery_profile_ref: %{"id" => "delivery-cadence-primary", "version" => 7}
         })
+      )
+
+    {:ok, runtime_profile} =
+      Cadence.fetch_provider_profile(
+        organization_id,
+        mission_id,
+        transport.materialized_provider_profile_id
       )
 
     {:ok, path_template} =
@@ -39,7 +54,12 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
           direction: :downlink,
           selection_role: :selected,
           source_endpoint_ref: "source-#{suffix}",
-          provider_profile_ids: [provider.provider_profile_id]
+          provider_profile_refs: [
+            %{
+              "provider_profile_id" => runtime_profile.provider_profile_id,
+              "version" => runtime_profile.version
+            }
+          ]
         })
       )
 
@@ -47,6 +67,8 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
       organization_id: organization_id,
       mission_id: mission_id,
       provider: provider,
+      transport: transport,
+      runtime_profile: runtime_profile,
       path_template: path_template,
       suffix: suffix
     }
@@ -172,6 +194,31 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
              )
   end
 
+  test "describe preserves a durable configuration failure for an unapproved descriptor",
+       context do
+    {reservation, attrs} = pending_reservation(context)
+
+    response =
+      reservation
+      |> provider_response(attrs, "confirmed")
+      |> Map.put("delivery_descriptor", conflicting_descriptor(attrs))
+
+    assert {:ok, %{processed: 1, converged: 0, errors: 1}} =
+             reconcile(context, describe_response: {:ok, response})
+
+    assert {:ok, failed} =
+             ProviderReservations.fetch(
+               context.organization_id,
+               context.mission_id,
+               reservation.provider_reservation_id
+             )
+
+    assert failed.lifecycle_state == :failed
+    assert failed.last_error_document["category"] == "provider_configuration_failure"
+    assert failed.delivery_descriptor_document == %{}
+    assert Cadence.list_scheduled_contacts(context.organization_id, context.mission_id) == []
+  end
+
   test "organization and mission scope constrain durable work", context do
     {_reservation, _attrs} = pending_reservation(context)
 
@@ -247,7 +294,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
              ProviderBooking.reserve(
                context.organization_id,
                context.mission_id,
-               context.provider.provider_profile_id,
+               context.provider.provider_id,
                attrs,
                client: FakeProviderClient,
                reserve_response: {:ok, provider_response(nil, attrs, "pending")}
@@ -268,8 +315,13 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
       "provider_spacecraft_ref" => "SC-#{context.suffix}",
       "ground_station_ref" => "station-alpha",
       "antenna_or_service_pool_ref" => "antenna-alpha",
-      "service_profile_ref" => "service-realtime-ttc-downlink",
-      "delivery_profile_ref" => "delivery-cadence-primary",
+      "provider_version" => context.provider.version,
+      "transport_id" => context.transport.transport_id,
+      "transport_version" => context.transport.version,
+      "service_profile_ref" => context.transport.service_profile_ref,
+      "delivery_profile_ref" => context.transport.delivery_profile_ref,
+      "provider_profile_id" => context.runtime_profile.provider_profile_id,
+      "provider_profile_version" => context.runtime_profile.version,
       "starts_at" => DateTime.to_iso8601(starts_at),
       "ends_at" => starts_at |> DateTime.add(600) |> DateTime.to_iso8601(),
       "source_endpoint_refs" => ["source-#{context.suffix}"],
@@ -294,9 +346,95 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
       "provider_contact_ref" => provider_contact_ref,
       "status" => status,
       "provider_status" => if(status == "confirmed", do: "scheduled", else: status),
+      "pass_phase" => "scheduled",
+      "delivery_state" => if(status == "confirmed", do: "ready", else: "pending"),
+      "client_reference" => attrs["idempotency_key"],
+      "opportunity_ref" => attrs["opportunity_ref"],
+      "spacecraft_ref" => attrs["provider_spacecraft_ref"],
+      "service_profile_ref" => attrs["service_profile_ref"]["id"],
+      "delivery_profile_ref" => attrs["delivery_profile_ref"]["id"],
       "starts_at" => attrs["starts_at"],
       "ends_at" => attrs["ends_at"],
       "provider_evidence" => %{}
+    }
+  end
+
+  defp persist_provider!(organization_id, mission_id, suffix) do
+    now = ~U[2026-07-14 12:00:00.000000Z]
+
+    provider =
+      MissionProvider.new(%{
+        provider_id: "provider-#{suffix}",
+        mission_id: mission_id,
+        display_name: "Simulator",
+        provider_type: :simulator,
+        base_url: "http://simulator.test",
+        credential_ref: "config://simulator",
+        environment_ref: "run-alpha",
+        last_validated_at: now,
+        last_synced_at: now,
+        metadata: %{"control_plane" => %{"status" => "healthy"}},
+        inventory_sync_document: provider_inventory()
+      })
+
+    {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
+    provider
+  end
+
+  defp provider_inventory do
+    %{
+      "service_profiles" => %{
+        "items" => [
+          %{
+            "id" => "service-realtime-ttc-downlink",
+            "version" => 3,
+            "display_name" => "Realtime TT&C downlink",
+            "direction" => "downlink",
+            "state" => "active"
+          }
+        ]
+      },
+      "delivery_profiles" => %{
+        "items" => [
+          %{
+            "id" => "delivery-cadence-primary",
+            "version" => 7,
+            "display_name" => "Cadence primary ingress",
+            "direction" => "downlink",
+            "delivery_kind" => "realtime_stream",
+            "supported_service_profile_refs" => ["service-realtime-ttc-downlink"],
+            "state" => "ready",
+            "operator_summary" => "Streaming to Cadence",
+            "diagnostics" => %{
+              "protocol" => "tcp",
+              "mode" => "provider_connects",
+              "host" => "127.0.0.1",
+              "port" => 5100,
+              "framing_family" => "ccsds_tm",
+              "frame_bytes" => 1115
+            }
+          }
+        ]
+      }
+    }
+  end
+
+  defp conflicting_descriptor(attrs) do
+    %{
+      "status" => "ready",
+      "direction" => "downlink",
+      "delivery_kind" => "realtime_stream",
+      "mode" => "provider_connects",
+      "protocol" => "tcp",
+      "endpoint_ref" => "unapproved-endpoint",
+      "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115},
+      "allowed_source_refs" => [attrs["provider_spacecraft_ref"]],
+      "activation_window" => %{
+        "starts_at" => attrs["starts_at"],
+        "ends_at" => attrs["ends_at"]
+      },
+      "credential_ref" => nil,
+      "diagnostics" => %{}
     }
   end
 end

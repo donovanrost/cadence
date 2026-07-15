@@ -6,7 +6,8 @@ same integration boundary as a commercial provider.
 
 > This walkthrough describes the implemented Simulator Provider Contract v1 and
 > normalized Cadence Provider Client, persisted Mission Provider setup, and
-> provider-managed Transport persistence. Scheduling version binding is next in the
+> provider-managed Transport persistence. Scheduling now binds exact Provider,
+> Transport, Service Profile, and Delivery Profile versions as described in the
 > [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
 
 ## 1. Start the simulator
@@ -65,9 +66,10 @@ TCP endpoint, framing, reconnect, and TLS controls user-configurable.
 ## 5. Configure spacecraft mappings and routes
 
 Create Cadence spacecraft/source endpoints whose provider references match the
-simulator spacecraft inventory. Create an active downlink link assignment that
-binds the spacecraft and source endpoint to a selected path template and the
-exact provider-profile version.
+simulator spacecraft inventory. Create an enabled inbound Routing Rule that
+selects the exact provider-managed Transport version. Cadence materializes the
+runtime path and internal Provider Profile needed by the current execution
+engine; neither is the provider control-plane identity.
 
 Cadence owns its spacecraft identity and byte-interpretation catalog. The
 simulator owns its provider spacecraft inventory and telemetry generator
@@ -81,23 +83,26 @@ reserve one opportunity.
 
 Cadence then:
 
-1. resolves the live mission route and searches through the configured provider
-   client;
-2. persists a mission-owned `ProviderReservation` attempt and idempotency key
-   before mutating the provider;
+1. resolves the spacecraft mapping, Routing Rule, exact provider-managed
+   Transport, Mission Provider, Service Profile, and Delivery Profile;
+2. persists those exact bindings, a mission-owned `ProviderReservation`
+   attempt, and its idempotency key before mutating the provider;
 3. reserves the selected opportunity without holding a database transaction
    across HTTP;
 4. durably polls uncertain or nonterminal reservations until the provider state
    converges;
-5. materializes exactly one canonical `ScheduledContact` when provider capacity
-   is confirmed;
+5. validates the returned delivery descriptor against approved Transport setup
+   and materializes exactly one canonical `ScheduledContact` when provider
+   capacity is confirmed;
 6. realizes the contact through the existing scheduler;
 7. receives telemetry through the normal TCP provider and TM ingress runtime.
 
-The page displays provider reservation state separately from Cadence contact
-state. Cancellation also crosses the provider boundary and is reconciled from
-the durable reservation record. No global simulator process, in-memory event
-cursor, or simulator administration client runs inside Cadence.
+The page displays Provider, Service, Delivery, Transport, Contact status, pass
+phase, and delivery status. A conflicting descriptor remains visible as a
+durable provider/configuration failure and is never connected. Cancellation
+also crosses the provider boundary and is reconciled from the durable
+reservation record. No global simulator process, in-memory event cursor, or
+simulator administration client runs inside Cadence.
 
 ## Manual two-BEAM smoke test
 
@@ -163,13 +168,14 @@ DELIVERY_PROFILE_ID=$(curl --silent --fail \
 echo "$DELIVERY_PROFILE_ID"
 ```
 
-Start Cadence in a second BEAM. Configure the compatibility mission provider with
-the environment, Service Profile, and Delivery Profile references, map one source
-endpoint to `SC-001`, and create the active downlink link assignment. In
-**Ops → Contacts**, search a future window, reserve an opportunity, and observe
-Contact, pass, and delivery state independently. The Scheduled Contact should
-appear only after confirmation, and telemetry should arrive through the
-mission's ordinary TCP/TM ingress path while the contact is active.
+Start Cadence in a second BEAM. Configure a Mission Provider with the environment
+and synced inventory, create a provider-managed Transport from the exact Service
+and Delivery Profile versions, map one source endpoint to `SC-001`, and create an
+enabled inbound Routing Rule for that Transport. In **Ops → Contacts**, search a
+future window, reserve an opportunity, and observe Contact, pass, and delivery
+state independently. The Scheduled Contact should appear only after confirmation
+and descriptor validation, and telemetry should arrive through the mission's
+ordinary TCP/TM ingress path while the contact is active.
 
 See [Ground Network Simulator](ground-network-simulator.md) for API and scenario
 details.

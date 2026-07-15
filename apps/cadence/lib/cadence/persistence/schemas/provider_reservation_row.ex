@@ -14,6 +14,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
   schema "provider_reservations" do
     field(:organization_id, :string)
     field(:mission_id, :string)
+    field(:provider_id, :string)
+    field(:provider_version, :integer)
+    field(:transport_id, :string)
+    field(:transport_version, :integer)
+    field(:service_profile_ref, :map, default: %{})
+    field(:delivery_profile_ref, :map, default: %{})
     field(:provider_profile_id, :string)
     field(:provider_profile_version, :integer)
     field(:scheduled_contact_id, :string)
@@ -22,6 +28,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:idempotency_key, :string)
     field(:lifecycle_state, :string)
     field(:provider_status, :string)
+    field(:pass_phase, :string)
+    field(:delivery_state, :string)
+    field(:delivery_descriptor_document, :map, default: %{})
     field(:spacecraft_id, :string)
     field(:provider_spacecraft_ref, :string)
     field(:source_endpoint_refs, {:array, :string}, default: [])
@@ -41,6 +50,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
   @required_fields [
     :provider_reservation_id,
     :mission_id,
+    :provider_id,
+    :provider_version,
+    :transport_id,
+    :transport_version,
+    :service_profile_ref,
+    :delivery_profile_ref,
     :provider_profile_id,
     :provider_profile_version,
     :scheduled_contact_id,
@@ -56,6 +71,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     :request_document,
     :response_document,
     :last_error_document,
+    :delivery_descriptor_document,
+    :pass_phase,
+    :delivery_state,
     :attempt_count,
     :metadata
   ]
@@ -67,6 +85,8 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:provider_profile_version, greater_than: 0)
+    |> validate_number(:provider_version, greater_than: 0)
+    |> validate_number(:transport_version, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
     |> validate_length(:idempotency_key, max: 255)
     |> validate_time_range()
@@ -76,6 +96,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     )
     |> unique_constraint([:mission_id, :provider_profile_id, :idempotency_key],
       name: :provider_reservations_idempotency_idx
+    )
+    |> unique_constraint([:mission_id, :provider_id, :idempotency_key],
+      name: :provider_reservations_provider_idempotency_idx
     )
     |> unique_constraint([:mission_id, :provider_contact_ref],
       name: :provider_reservations_provider_ref_idx
@@ -89,6 +112,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :provider_contact_ref,
       :lifecycle_state,
       :provider_status,
+      :pass_phase,
+      :delivery_state,
+      :delivery_descriptor_document,
       :response_document,
       :last_error_document,
       :attempt_count,
@@ -108,6 +134,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       provider_reservation_id: row.provider_reservation_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,
+      provider_id: row.provider_id,
+      provider_version: row.provider_version,
+      transport_id: row.transport_id,
+      transport_version: row.transport_version,
+      service_profile_ref: JsonDocument.unwrap_value(row.service_profile_ref),
+      delivery_profile_ref: JsonDocument.unwrap_value(row.delivery_profile_ref),
       provider_profile_id: row.provider_profile_id,
       provider_profile_version: row.provider_profile_version,
       scheduled_contact_id: row.scheduled_contact_id,
@@ -116,6 +148,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       idempotency_key: row.idempotency_key,
       lifecycle_state: row.lifecycle_state,
       provider_status: row.provider_status,
+      pass_phase: row.pass_phase,
+      delivery_state: row.delivery_state,
+      delivery_descriptor_document: JsonDocument.unwrap_value(row.delivery_descriptor_document),
       spacecraft_id: row.spacecraft_id,
       provider_spacecraft_ref: row.provider_spacecraft_ref,
       source_endpoint_refs: row.source_endpoint_refs,
@@ -138,6 +173,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       provider_reservation_id: reservation.provider_reservation_id,
       organization_id: reservation.organization_id,
       mission_id: reservation.mission_id,
+      provider_id: reservation.provider_id,
+      provider_version: reservation.provider_version,
+      transport_id: reservation.transport_id,
+      transport_version: reservation.transport_version,
+      service_profile_ref: JsonDocument.wrap_value(reservation.service_profile_ref),
+      delivery_profile_ref: JsonDocument.wrap_value(reservation.delivery_profile_ref),
       provider_profile_id: reservation.provider_profile_id,
       provider_profile_version: reservation.provider_profile_version,
       scheduled_contact_id: reservation.scheduled_contact_id,
@@ -146,6 +187,10 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       idempotency_key: reservation.idempotency_key,
       lifecycle_state: Atom.to_string(reservation.lifecycle_state),
       provider_status: reservation.provider_status,
+      pass_phase: Atom.to_string(reservation.pass_phase),
+      delivery_state: Atom.to_string(reservation.delivery_state),
+      delivery_descriptor_document:
+        JsonDocument.wrap_value(reservation.delivery_descriptor_document),
       spacecraft_id: reservation.spacecraft_id,
       provider_spacecraft_ref: reservation.provider_spacecraft_ref,
       source_endpoint_refs: reservation.source_endpoint_refs,
@@ -166,6 +211,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :provider_reservation_id,
       :organization_id,
       :mission_id,
+      :provider_id,
+      :provider_version,
+      :transport_id,
+      :transport_version,
+      :service_profile_ref,
+      :delivery_profile_ref,
       :provider_profile_id,
       :provider_profile_version,
       :scheduled_contact_id,
@@ -174,6 +225,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :idempotency_key,
       :lifecycle_state,
       :provider_status,
+      :pass_phase,
+      :delivery_state,
+      :delivery_descriptor_document,
       :spacecraft_id,
       :provider_spacecraft_ref,
       :source_endpoint_refs,

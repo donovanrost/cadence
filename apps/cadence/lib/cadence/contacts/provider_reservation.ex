@@ -27,6 +27,12 @@ defmodule Cadence.Contacts.ProviderReservation do
           provider_reservation_id: binary(),
           organization_id: binary() | nil,
           mission_id: binary(),
+          provider_id: binary(),
+          provider_version: pos_integer(),
+          transport_id: binary(),
+          transport_version: pos_integer(),
+          service_profile_ref: map(),
+          delivery_profile_ref: map(),
           provider_profile_id: binary(),
           provider_profile_version: pos_integer(),
           scheduled_contact_id: binary(),
@@ -35,6 +41,9 @@ defmodule Cadence.Contacts.ProviderReservation do
           idempotency_key: binary(),
           lifecycle_state: lifecycle_state(),
           provider_status: binary() | nil,
+          pass_phase: atom(),
+          delivery_state: atom(),
+          delivery_descriptor_document: map(),
           spacecraft_id: binary(),
           provider_spacecraft_ref: binary(),
           source_endpoint_refs: [binary()],
@@ -51,10 +60,20 @@ defmodule Cadence.Contacts.ProviderReservation do
           updated_at: DateTime.t() | nil
         }
 
+  # The aggregate intentionally mirrors every durable reservation binding and
+  # observation so callers cannot mistake runtime evidence for control-plane
+  # identity or collapse provider, pass, and delivery lifecycle state.
+  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :provider_reservation_id,
     :organization_id,
     :mission_id,
+    :provider_id,
+    :provider_version,
+    :transport_id,
+    :transport_version,
+    :service_profile_ref,
+    :delivery_profile_ref,
     :provider_profile_id,
     :provider_profile_version,
     :scheduled_contact_id,
@@ -63,6 +82,8 @@ defmodule Cadence.Contacts.ProviderReservation do
     :idempotency_key,
     :lifecycle_state,
     :provider_status,
+    :pass_phase,
+    :delivery_state,
     :spacecraft_id,
     :provider_spacecraft_ref,
     :starts_at,
@@ -74,6 +95,7 @@ defmodule Cadence.Contacts.ProviderReservation do
     path_template_ids: [],
     request_document: %{},
     response_document: %{},
+    delivery_descriptor_document: %{},
     last_error_document: %{},
     attempt_count: 0,
     metadata: %{}
@@ -86,6 +108,12 @@ defmodule Cadence.Contacts.ProviderReservation do
         get(attrs, :provider_reservation_id, Ids.new("provider_reservation")),
       organization_id: get(attrs, :organization_id),
       mission_id: fetch!(attrs, :mission_id),
+      provider_id: fetch!(attrs, :provider_id),
+      provider_version: fetch!(attrs, :provider_version),
+      transport_id: fetch!(attrs, :transport_id),
+      transport_version: fetch!(attrs, :transport_version),
+      service_profile_ref: fetch!(attrs, :service_profile_ref),
+      delivery_profile_ref: fetch!(attrs, :delivery_profile_ref),
       provider_profile_id: fetch!(attrs, :provider_profile_id),
       provider_profile_version: get(attrs, :provider_profile_version, 1),
       scheduled_contact_id: get(attrs, :scheduled_contact_id, Ids.new("scheduled_contact")),
@@ -97,6 +125,14 @@ defmodule Cadence.Contacts.ProviderReservation do
         |> get(:lifecycle_state, :requesting)
         |> KnownAtom.provider_reservation_lifecycle_state!(),
       provider_status: get(attrs, :provider_status),
+      pass_phase:
+        attrs
+        |> get(:pass_phase, :scheduled)
+        |> KnownAtom.provider_pass_phase!(),
+      delivery_state:
+        attrs
+        |> get(:delivery_state, :pending)
+        |> KnownAtom.provider_delivery_state!(),
       spacecraft_id: fetch!(attrs, :spacecraft_id),
       provider_spacecraft_ref: fetch!(attrs, :provider_spacecraft_ref),
       source_endpoint_refs: get(attrs, :source_endpoint_refs, []),
@@ -105,6 +141,8 @@ defmodule Cadence.Contacts.ProviderReservation do
       ends_at: fetch!(attrs, :ends_at),
       request_document: attrs |> get(:request_document, %{}) |> JsonDocument.encode(),
       response_document: attrs |> get(:response_document, %{}) |> JsonDocument.encode(),
+      delivery_descriptor_document:
+        attrs |> get(:delivery_descriptor_document, %{}) |> JsonDocument.encode(),
       last_error_document: attrs |> get(:last_error_document, %{}) |> JsonDocument.encode(),
       attempt_count: get(attrs, :attempt_count, 0),
       last_reconciled_at: get(attrs, :last_reconciled_at),

@@ -16,6 +16,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   @direction_capabilities ["inbound", "outbound", "bidirectional"]
   @framing_modes ["raw", "fixed_size", "line_delimited"]
   @reconnect_policies ["none", "always", "on_disconnect"]
+  @ingress_protocol_families ["tm", "tm_transfer_frame", "space_packet", "cop1_clcw"]
   @config_atom_keys %{
     "direction" => :direction,
     "direction_capability" => :direction_capability,
@@ -29,6 +30,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "framing_family" => :framing_family,
     "framing_mode" => :framing_mode,
     "host" => :host,
+    "ingress_metadata" => :ingress_metadata,
+    "ingress_protocol_family" => :ingress_protocol_family,
     "mode" => :mode,
     "policy" => :policy,
     "port" => :port,
@@ -81,7 +84,10 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
            ),
          {:ok, reconnect_policy} <-
            reconnect_policy(value(config, "reconnect_policy", reconnect_value(config)), mode),
-         {:ok, tls_enabled} <- boolean(value(config, "tls_enabled", tls_value(config))) do
+         {:ok, tls_enabled} <- boolean(value(config, "tls_enabled", tls_value(config))),
+         {:ok, ingress_protocol_family} <-
+           ingress_protocol_family(value(config, "ingress_protocol_family")),
+         {:ok, ingress_metadata} <- ingress_metadata(value(config, "ingress_metadata", %{})) do
       {:ok,
        %{
          "adapter" => "tcp_socket",
@@ -93,7 +99,9 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
          "tls" => %{"enabled" => tls_enabled},
          "reconnect" => reconnect_configuration(mode, reconnect_policy)
        }
-       |> maybe_put_fixed_message_bytes(frame_size)}
+       |> maybe_put_fixed_message_bytes(frame_size)
+       |> maybe_put_ingress_protocol_family(ingress_protocol_family)
+       |> maybe_put_ingress_metadata(ingress_metadata)}
     end
   end
 
@@ -149,7 +157,9 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "framing_mode" => "fixed_size",
         "frame_size" => frame_bytes,
         "reconnect_policy" => "on_disconnect",
-        "tls_enabled" => false
+        "tls_enabled" => false,
+        "ingress_protocol_family" => "tm",
+        "ingress_metadata" => %{"frame_size" => frame_bytes, "ocf_length" => 0}
       })
     else
       _other ->
@@ -258,6 +268,17 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   defp boolean(false), do: {:ok, false}
   defp boolean(_value), do: {:error, "TLS setting is invalid."}
 
+  defp ingress_protocol_family(nil), do: {:ok, nil}
+
+  defp ingress_protocol_family(value) when value in @ingress_protocol_families,
+    do: {:ok, value}
+
+  defp ingress_protocol_family(_value),
+    do: {:error, "Ingress protocol family is invalid."}
+
+  defp ingress_metadata(value) when is_map(value), do: {:ok, value}
+  defp ingress_metadata(_value), do: {:error, "Ingress metadata is invalid."}
+
   defp reconnect_configuration("connect", policy), do: %{"policy" => policy}
   defp reconnect_configuration("listen", _policy), do: %{"policy" => "on_disconnect"}
 
@@ -265,6 +286,19 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   defp maybe_put_fixed_message_bytes(configuration, frame_size) do
     Map.put(configuration, "fixed_message_bytes", frame_size)
+  end
+
+  defp maybe_put_ingress_protocol_family(configuration, nil), do: configuration
+
+  defp maybe_put_ingress_protocol_family(configuration, protocol_family) do
+    Map.put(configuration, "ingress_protocol_family", protocol_family)
+  end
+
+  defp maybe_put_ingress_metadata(configuration, metadata) when metadata == %{},
+    do: configuration
+
+  defp maybe_put_ingress_metadata(configuration, metadata) do
+    Map.put(configuration, "ingress_metadata", metadata)
   end
 
   defp compact(map), do: Map.reject(map, fn {_key, value} -> is_nil(value) end)

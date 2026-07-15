@@ -1707,11 +1707,11 @@ defmodule Cadence do
   def reserve_provider_contact(
         organization_id,
         mission_id,
-        provider_profile_id,
+        provider_id,
         attrs,
         opts \\ []
       ) do
-    ProviderBooking.reserve(organization_id, mission_id, provider_profile_id, attrs, opts)
+    ProviderBooking.reserve(organization_id, mission_id, provider_id, attrs, opts)
   end
 
   @spec cancel_provider_reservation(binary(), binary(), binary(), keyword()) ::

@@ -102,7 +102,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
           LiveDeps.reserve(
             scope.organization_id,
             mission.mission_id,
-            route.provider_profile_id,
+            route.provider_id,
             attrs
           )
         end)
@@ -508,7 +508,13 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       "opportunity" => Map.drop(opportunity, ["booking_token"])
     }
 
-    Map.put(opportunity, "booking_token", OpportunityToken.sign(payload))
+    opportunity
+    |> Map.put("provider_display_name", route.provider_display_name)
+    |> Map.put("service_display_name", route.service_display_name)
+    |> Map.put("delivery_display_name", route.delivery_display_name)
+    |> Map.put("delivery_operator_summary", route.delivery_operator_summary)
+    |> Map.put("transport_display_name", route.transport_display_name)
+    |> Map.put("booking_token", OpportunityToken.sign(payload))
   end
 
   defp validate_token_scope(socket, payload) do
@@ -539,8 +545,13 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   defp token_route(route) do
     %{
+      "provider_id" => route.provider_id,
+      "provider_version" => route.provider_version,
+      "transport_id" => route.transport_id,
+      "transport_version" => route.transport_version,
       "provider_profile_id" => route.provider_profile_id,
       "provider_profile_version" => route.provider_profile_version,
+      "routing_rule_id" => route.routing_rule_id,
       "path_template_id" => route.path_template_id,
       "path_template_version" => route.path_template_version,
       "source_endpoint_id" => route.source_endpoint_id,
@@ -559,8 +570,6 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       "id",
       "ground_station_ref",
       "antenna_or_service_pool_ref",
-      "service_profile_ref",
-      "delivery_profile_ref",
       "starts_at",
       "ends_at"
     ])
@@ -568,7 +577,18 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     |> Map.put("provider_reservation_id", "provider_reservation_#{stable_suffix}")
     |> Map.put("scheduled_contact_id", "scheduled_contact_#{stable_suffix}")
     |> Map.put("idempotency_key", "cadence:contact:#{stable_suffix}")
+    |> Map.put("provider_version", route.provider_version)
+    |> Map.put("transport_id", route.transport_id)
+    |> Map.put("transport_version", route.transport_version)
+    |> Map.put("service_profile_ref", route.service_profile_ref)
+    |> Map.put("delivery_profile_ref", route.delivery_profile_ref)
+    |> Map.put("provider_profile_id", route.provider_profile_id)
     |> Map.put("provider_profile_version", route.provider_profile_version)
+    |> Map.put("routing_rule_id", route.routing_rule_id)
+    |> Map.put("transport_display_name", route.transport_display_name)
+    |> Map.put("service_display_name", route.service_display_name)
+    |> Map.put("delivery_display_name", route.delivery_display_name)
+    |> Map.put("delivery_operator_summary", route.delivery_operator_summary)
     |> Map.put("cadence_spacecraft_id", route.spacecraft_id)
     |> Map.put("provider_spacecraft_ref", route.provider_spacecraft_ref)
     |> Map.put("source_endpoint_refs", [route.source_endpoint_id])
@@ -630,7 +650,8 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   defp route_options(routes) do
     Enum.map(routes, fn route ->
-      {"#{route.provider_display_name} / #{route.route_display_name}", route.route_key}
+      {"#{route.provider_display_name} / #{route.delivery_operator_summary} / #{route.route_display_name}",
+       route.route_key}
     end)
   end
 

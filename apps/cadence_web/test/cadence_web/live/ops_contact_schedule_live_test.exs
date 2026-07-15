@@ -8,7 +8,10 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Contacts.{LinkAssignment, PathTemplate, ProviderBooking, ProviderProfile}
+  alias Cadence.Comms.{RoutingRule, Transport}
+  alias Cadence.Contacts.ProviderBooking
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.OpsContactScheduleLive.OpportunityToken
@@ -79,11 +82,11 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
         {:ok, %{route: setup.route, opportunities: [opportunity]}}
       end,
-      reserve: fn organization_id, mission_id, provider_profile_id, attrs ->
+      reserve: fn organization_id, mission_id, provider_id, attrs ->
         ProviderBooking.reserve(
           organization_id,
           mission_id,
-          provider_profile_id,
+          provider_id,
           attrs,
           client: FakeProviderClient,
           on_reserve: fn _request -> send(test_pid, :provider_mutation) end
@@ -110,6 +113,17 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert has_element?(view, "#provider-reservations article")
     assert has_element?(view, "[id^=provider-reservation-provider_reservation_]")
 
+    [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
+
+    assert has_element?(
+             view,
+             "#reservation-provider-#{reservation.provider_reservation_id}"
+           )
+
+    assert has_element?(view, "#reservation-service-#{reservation.provider_reservation_id}")
+    assert has_element?(view, "#reservation-delivery-#{reservation.provider_reservation_id}")
+    assert has_element?(view, "#reservation-transport-#{reservation.provider_reservation_id}")
+
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
     render_async(view)
 
@@ -131,11 +145,11 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
         {:ok, %{route: setup.route, opportunities: [opportunity]}}
       end,
-      reserve: fn organization_id, mission_id, provider_profile_id, attrs ->
+      reserve: fn organization_id, mission_id, provider_id, attrs ->
         ProviderBooking.reserve(
           organization_id,
           mission_id,
-          provider_profile_id,
+          provider_id,
           attrs,
           client: FakeProviderClient,
           reserve_response: {:ok, provider_response(attrs, "pending")}
@@ -155,7 +169,21 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     render_async(view)
 
     assert has_element?(view, "#provider-reservations article", "pending")
-    assert has_element?(view, "#provider-reservations article", "Not materialized")
+    [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
+
+    assert has_element?(
+             view,
+             "#reservation-contact-status-#{reservation.provider_reservation_id}",
+             "pending"
+           )
+
+    assert has_element?(view, "#reservation-pass-phase-#{reservation.provider_reservation_id}")
+
+    assert has_element?(
+             view,
+             "#reservation-delivery-status-#{reservation.provider_reservation_id}"
+           )
+
     assert Cadence.list_scheduled_contacts(org.organization_id, mission.mission_id) == []
   end
 
@@ -168,21 +196,39 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
         {:ok, %{route: setup.route, opportunities: [opportunity]}}
       end,
-      reserve: fn organization_id, mission_id, provider_profile_id, attrs ->
+      reserve: fn organization_id, mission_id, provider_id, attrs ->
         ProviderBooking.reserve(
           organization_id,
           mission_id,
-          provider_profile_id,
+          provider_id,
           attrs,
           client: FakeProviderClient
         )
       end,
       cancel: fn organization_id, mission_id, provider_reservation_id ->
+        {:ok, reservation} =
+          Cadence.fetch_provider_reservation(
+            organization_id,
+            mission_id,
+            provider_reservation_id
+          )
+
+        attrs = %{
+          "idempotency_key" => reservation.idempotency_key,
+          "opportunity_ref" => reservation.provider_opportunity_ref,
+          "provider_spacecraft_ref" => reservation.provider_spacecraft_ref,
+          "service_profile_ref" => reservation.service_profile_ref,
+          "delivery_profile_ref" => reservation.delivery_profile_ref,
+          "starts_at" => DateTime.to_iso8601(reservation.starts_at),
+          "ends_at" => DateTime.to_iso8601(reservation.ends_at)
+        }
+
         ProviderBooking.cancel(
           organization_id,
           mission_id,
           provider_reservation_id,
-          client: FakeProviderClient
+          client: FakeProviderClient,
+          cancel_response: {:ok, provider_response(attrs, "canceled")}
         )
       end,
       refresh_interval_ms: 60_000
@@ -292,45 +338,36 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     assert {:ok, endpoint} = Cadence.persist_source_endpoint(org.organization_id, endpoint)
 
-    provider =
-      ProviderProfile.new(%{
-        provider_profile_id: "provider-#{suffix}",
+    provider = persist_provider!(org.organization_id, mission.mission_id, suffix)
+
+    transport =
+      Transport.new(%{
+        transport_id: "transport-#{suffix}",
         mission_id: mission.mission_id,
-        adapter_key: :tcp_socket,
-        configuration: valid_provider_configuration(),
-        metadata: %{"display_name" => "Simulated Svalbard"}
+        display_name: "Simulator telemetry ingress",
+        origin: :provider_managed,
+        mission_provider_id: provider.provider_id,
+        mission_provider_version: provider.version,
+        service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+        delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
       })
 
-    assert {:ok, provider} = Cadence.persist_provider_profile(org.organization_id, provider)
+    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
 
-    path =
-      PathTemplate.new(%{
-        path_template_id: "path-#{suffix}",
-        mission_id: mission.mission_id,
-        path_id: "asteria-downlink",
-        direction: :downlink,
-        selection_role: :selected,
-        provider_profile_refs: [
-          %{"provider_profile_id" => provider.provider_profile_id, "version" => provider.version}
-        ],
-        metadata: %{"display_name" => "Primary telemetry downlink"}
-      })
-
-    assert {:ok, path} = Cadence.persist_path_template(org.organization_id, path)
-
-    assignment =
-      LinkAssignment.new(%{
+    rule =
+      RoutingRule.new(%{
+        routing_rule_id: "routing-rule-#{suffix}",
         mission_id: mission.mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
-        source_endpoint_ref: endpoint.source_endpoint_id,
-        path_template_id: path.path_template_id,
-        path_template_version: path.version,
-        direction: :downlink,
-        selection_role: :selected,
-        provider_profile_refs: path.provider_profile_refs
+        display_name: "Primary telemetry downlink",
+        purpose_label: "Telemetry",
+        direction: :inbound,
+        transport_id: transport.transport_id,
+        transport_version: transport.version,
+        role: :primary
       })
 
-    assert {:ok, _assignment} = Cadence.persist_link_assignment(org.organization_id, assignment)
+    assert {:ok, rule} = Cadence.create_routing_rule(org.organization_id, rule)
 
     assert {:ok, %{routes: [route]}} =
              Cadence.list_ready_downlink_routes(
@@ -339,7 +376,14 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
                spacecraft.spacecraft_id
              )
 
-    %{spacecraft: spacecraft, endpoint: endpoint, provider: provider, path: path, route: route}
+    %{
+      spacecraft: spacecraft,
+      endpoint: endpoint,
+      provider: provider,
+      transport: transport,
+      rule: rule,
+      route: route
+    }
   end
 
   defp opportunity_window(setup) do
@@ -358,8 +402,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       "spacecraft_ref" => setup.route.provider_spacecraft_ref,
       "ground_station_ref" => "station-svalbard",
       "antenna_or_service_pool_ref" => "svalbard-antenna-1",
-      "service_profile_ref" => setup.route.service_profile_ref,
-      "delivery_profile_ref" => setup.route.delivery_profile_ref,
+      "service_profile_ref" => setup.route.service_profile_ref["id"],
+      "delivery_profile_ref" => setup.route.delivery_profile_ref["id"],
       "starts_at" => DateTime.to_iso8601(starts_at),
       "ends_at" => starts_at |> DateTime.add(600) |> DateTime.to_iso8601(),
       "expires_at" => starts_at |> DateTime.add(-30) |> DateTime.to_iso8601(),
@@ -378,6 +422,13 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       "provider_contact_ref" => "external-contact",
       "status" => status,
       "provider_status" => status,
+      "pass_phase" => "scheduled",
+      "delivery_state" => "pending",
+      "client_reference" => attrs["idempotency_key"],
+      "opportunity_ref" => attrs["opportunity_ref"],
+      "spacecraft_ref" => attrs["provider_spacecraft_ref"],
+      "service_profile_ref" => attrs["service_profile_ref"]["id"],
+      "delivery_profile_ref" => attrs["delivery_profile_ref"]["id"],
       "starts_at" => attrs["starts_at"],
       "ends_at" => attrs["ends_at"],
       "provider_evidence" => %{}
@@ -394,21 +445,62 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     )
   end
 
-  defp valid_provider_configuration do
+  defp persist_provider!(organization_id, mission_id, suffix) do
+    now = ~U[2026-07-14 12:00:00.000000Z]
+
+    provider =
+      MissionProvider.new(%{
+        provider_id: "provider-#{suffix}",
+        mission_id: mission_id,
+        display_name: "Simulated Svalbard",
+        provider_type: :simulator,
+        base_url: "http://simulator.test",
+        credential_ref: "config://simulator",
+        environment_ref: "run-alpha",
+        last_validated_at: now,
+        last_synced_at: now,
+        metadata: %{"control_plane" => %{"status" => "healthy"}},
+        inventory_sync_document: provider_inventory()
+      })
+
+    {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
+    provider
+  end
+
+  defp provider_inventory do
     %{
-      "adapter" => "tcp_socket",
-      "mode" => "listen",
-      "direction" => "downlink",
-      "host" => "0.0.0.0",
-      "port" => 4_100,
-      "fixed_message_bytes" => 64,
-      "framing" => %{"mode" => "fixed_size", "fixed_message_bytes" => 64},
-      "scheduling" => %{
-        "client" => "simulator_http",
-        "base_url" => "http://simulator.test",
-        "environment_ref" => "run-alpha",
-        "service_profile_ref" => "service-realtime-ttc-downlink",
-        "delivery_profile_ref" => "delivery-cadence-primary"
+      "service_profiles" => %{
+        "items" => [
+          %{
+            "id" => "service-downlink",
+            "version" => 3,
+            "display_name" => "Realtime TT&C downlink",
+            "direction" => "downlink",
+            "state" => "active"
+          }
+        ]
+      },
+      "delivery_profiles" => %{
+        "items" => [
+          %{
+            "id" => "delivery-cadence",
+            "version" => 7,
+            "display_name" => "Cadence primary ingress",
+            "direction" => "downlink",
+            "delivery_kind" => "realtime_stream",
+            "supported_service_profile_refs" => ["service-downlink"],
+            "state" => "ready",
+            "operator_summary" => "Streaming to Cadence",
+            "diagnostics" => %{
+              "protocol" => "tcp",
+              "mode" => "provider_connects",
+              "host" => "127.0.0.1",
+              "port" => 5100,
+              "framing_family" => "ccsds_tm",
+              "frame_bytes" => 1115
+            }
+          }
+        ]
       }
     }
   end

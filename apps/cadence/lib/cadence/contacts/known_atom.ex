@@ -72,6 +72,24 @@ defmodule Cadence.Contacts.KnownAtom do
     "failed" => :failed
   }
 
+  @provider_pass_phases %{
+    "scheduled" => :scheduled,
+    "prepass" => :prepass,
+    "pass" => :pass,
+    "postpass" => :postpass,
+    "closed" => :closed
+  }
+
+  @provider_delivery_states %{
+    "pending" => :pending,
+    "ready" => :ready,
+    "connected" => :connected,
+    "flowing" => :flowing,
+    "degraded" => :degraded,
+    "failed" => :failed,
+    "ended" => :ended
+  }
+
   @spec direction!(atom() | binary()) :: :uplink | :downlink
   def direction!(value), do: normalize_known_atom!(value, @directions, :direction)
 
@@ -124,6 +142,18 @@ defmodule Cadence.Contacts.KnownAtom do
           | :failed
   def provider_reservation_lifecycle_state!(value) do
     normalize_known_atom!(value, @provider_reservation_lifecycle_states, :lifecycle_state)
+  end
+
+  @spec provider_pass_phase!(atom() | binary()) ::
+          :scheduled | :prepass | :pass | :postpass | :closed
+  def provider_pass_phase!(value) do
+    normalize_known_atom!(value, @provider_pass_phases, :pass_phase)
+  end
+
+  @spec provider_delivery_state!(atom() | binary()) ::
+          :pending | :ready | :connected | :flowing | :degraded | :failed | :ended
+  def provider_delivery_state!(value) do
+    normalize_known_atom!(value, @provider_delivery_states, :delivery_state)
   end
 
   @spec provider_adapter_key!(atom() | binary()) :: atom()

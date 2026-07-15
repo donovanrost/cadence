@@ -189,6 +189,12 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert persisted.configuration["host"] == "127.0.0.1"
       assert persisted.configuration["port"] == 5100
       assert persisted.configuration["fixed_message_bytes"] == 1115
+      assert persisted.configuration["ingress_protocol_family"] == "tm"
+
+      assert persisted.configuration["ingress_metadata"] == %{
+               "frame_size" => 1115,
+               "ocf_length" => 0
+             }
 
       assert get_in(persisted.provider_configuration_snapshot, ["provider", "display_name"]) ==
                "Simulator"
@@ -208,6 +214,7 @@ defmodule Cadence.Comms.TransportStoreTest do
 
       assert runtime_profile.configuration["host"] == "127.0.0.1"
       assert runtime_profile.configuration["direction"] == "downlink"
+      assert runtime_profile.configuration["ingress_protocol_family"] == "tm"
       assert runtime_profile.metadata["transport_origin"] == "provider_managed"
       assert runtime_profile.metadata["mission_provider_id"] == provider.provider_id
 

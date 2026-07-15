@@ -1,7 +1,10 @@
 defmodule Cadence.Contacts.ProviderSchedulingTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Contacts.{LinkAssignment, PathTemplate, ProviderProfile, ProviderScheduling}
+  alias Cadence.Comms.{RoutingRule, Transport}
+  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.TestSupport.FakeProviderClient
@@ -13,53 +16,23 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
     persist_mission_scope(organization_id, mission_id)
 
     spacecraft = persist_spacecraft(organization_id, mission_id, suffix, "primary")
-
-    endpoint =
-      persist_endpoint(
-        organization_id,
-        mission_id,
-        spacecraft.spacecraft_id,
-        suffix,
-        "primary",
-        "SIM-001"
-      )
-
-    provider = persist_provider(organization_id, mission_id, suffix, "ready", valid_config())
-
-    path_template =
-      persist_path(
-        organization_id,
-        mission_id,
-        endpoint.source_endpoint_id,
-        provider,
-        suffix,
-        "ready"
-      )
-
-    _assignment =
-      persist_assignment(
-        organization_id,
-        mission_id,
-        spacecraft,
-        endpoint,
-        path_template,
-        provider,
-        suffix,
-        "ready"
-      )
+    _mapping = persist_mapping(organization_id, mission_id, spacecraft, suffix, "SIM-001")
+    provider = persist_provider!(organization_id, mission_id, suffix)
+    transport = persist_provider_transport!(organization_id, mission_id, provider, suffix)
+    rule = persist_rule!(organization_id, mission_id, spacecraft, transport, suffix)
 
     %{
       organization_id: organization_id,
       mission_id: mission_id,
       spacecraft: spacecraft,
-      endpoint: endpoint,
       provider: provider,
-      path_template: path_template,
+      transport: transport,
+      rule: rule,
       suffix: suffix
     }
   end
 
-  test "returns a provider-ready route and validates opportunity search", context do
+  test "resolves exact Routing Rule, Transport, Provider, and profile versions", context do
     assert {:ok, %{routes: [route], findings: []}} =
              ProviderScheduling.list_ready_downlink_routes(
                context.organization_id,
@@ -68,25 +41,17 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
              )
 
     assert route.provider_spacecraft_ref == "SIM-001"
-    assert route.provider_profile_id == context.provider.provider_profile_id
-    assert route.path_template_version == context.path_template.version
+    assert route.routing_rule_id == context.rule.routing_rule_id
+    assert route.transport_id == context.transport.transport_id
+    assert route.transport_version == context.transport.version
+    assert route.provider_id == context.provider.provider_id
+    assert route.provider_version == context.provider.version
+    assert route.service_profile_ref == %{"id" => "service-downlink", "version" => 3}
+    assert route.delivery_profile_ref == %{"id" => "delivery-cadence", "version" => 7}
 
     starts_at = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
     ends_at = DateTime.add(starts_at, 3_600)
-
-    opportunity = %{
-      "id" => "opportunity-alpha",
-      "spacecraft_ref" => "SIM-001",
-      "ground_station_ref" => "station-alpha",
-      "antenna_or_service_pool_ref" => "antenna-alpha",
-      "service_profile_ref" => "service-realtime-ttc-downlink",
-      "starts_at" => starts_at |> DateTime.add(300) |> DateTime.to_iso8601(),
-      "ends_at" => starts_at |> DateTime.add(900) |> DateTime.to_iso8601(),
-      "expires_at" => starts_at |> DateTime.add(60) |> DateTime.to_iso8601(),
-      "availability" => "available",
-      "synthetic" => true,
-      "extensions" => %{}
-    }
+    opportunity = opportunity(route, starts_at)
 
     assert {:ok, %{route: searched_route, opportunities: [result]}} =
              ProviderScheduling.search_opportunities(
@@ -101,79 +66,111 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                client: FakeProviderClient,
                on_search: fn params ->
                  assert params["spacecraft_refs"] == ["SIM-001"]
-                 assert params["service_profile_ref"] == "service-realtime-ttc-downlink"
-                 refute Map.has_key?(params, "spacecraft_ids")
+                 assert params["service_profile_ref"] == "service-downlink"
+                 refute Map.has_key?(params, "transport_id")
                  refute Map.has_key?(params, "run_id")
                end,
                search_response: {:ok, %{"data" => [opportunity]}}
              )
 
     assert searched_route.route_key == route.route_key
-    assert result["id"] == "opportunity-alpha"
     assert result["route_key"] == route.route_key
+    assert result["delivery_profile_ref"] == "delivery-cadence"
   end
 
-  test "reports missing source endpoint and provider spacecraft reference separately", context do
-    spacecraft_without_endpoint =
-      persist_spacecraft(
-        context.organization_id,
-        context.mission_id,
-        context.suffix,
-        "no-endpoint"
-      )
+  test "a newer Provider version does not rewrite the route's exact binding", context do
+    assert {:ok, newer_provider} =
+             GroundNetworks.version_provider(
+               context.organization_id,
+               context.mission_id,
+               context.provider.provider_id,
+               %{display_name: "Simulator staging"}
+             )
+
+    assert newer_provider.version == context.provider.version + 1
+
+    assert {:ok, %{routes: [route]}} =
+             ProviderScheduling.list_ready_downlink_routes(
+               context.organization_id,
+               context.mission_id,
+               context.spacecraft.spacecraft_id
+             )
+
+    assert route.provider_version == context.provider.version
+    assert route.provider_display_name == context.provider.display_name
+  end
+
+  test "reports spacecraft mapping and Routing Rule readiness separately", context do
+    unmapped =
+      persist_spacecraft(context.organization_id, context.mission_id, context.suffix, "unmapped")
 
     assert {:ok, %{routes: [], findings: [%{code: :missing_source_endpoint}]}} =
              ProviderScheduling.list_ready_downlink_routes(
                context.organization_id,
                context.mission_id,
-               spacecraft_without_endpoint.spacecraft_id
+               unmapped.spacecraft_id
              )
 
-    spacecraft_without_ref =
-      persist_spacecraft(
+    unrouted =
+      persist_spacecraft(context.organization_id, context.mission_id, context.suffix, "unrouted")
+
+    _mapping =
+      persist_mapping(
         context.organization_id,
         context.mission_id,
+        unrouted,
         context.suffix,
-        "no-ref"
+        "SIM-UNROUTED"
       )
 
-    _endpoint =
-      persist_endpoint(
-        context.organization_id,
-        context.mission_id,
-        spacecraft_without_ref.spacecraft_id,
-        context.suffix,
-        "no-ref",
-        nil
-      )
-
-    assert {:ok, %{routes: [], findings: findings}} =
+    assert {:ok, %{routes: [], findings: [%{code: :missing_downlink_route}]}} =
              ProviderScheduling.list_ready_downlink_routes(
                context.organization_id,
                context.mission_id,
-               spacecraft_without_ref.spacecraft_id
+               unrouted.spacecraft_id
              )
-
-    assert Enum.map(findings, & &1.code) == [:missing_provider_spacecraft_reference]
   end
 
-  test "reports missing downlink path", context do
+  test "direct Transports remain local-only and do not gain provider opportunity search",
+       context do
     spacecraft =
-      persist_spacecraft(
+      persist_spacecraft(context.organization_id, context.mission_id, context.suffix, "direct")
+
+    _mapping =
+      persist_mapping(
         context.organization_id,
         context.mission_id,
+        spacecraft,
         context.suffix,
-        "no-path"
+        "SIM-DIRECT"
       )
 
-    _endpoint =
-      persist_endpoint(
+    {:ok, transport} =
+      Cadence.persist_transport(
+        context.organization_id,
+        Transport.new(%{
+          mission_id: context.mission_id,
+          display_name: "Local lab TCP",
+          origin: :direct,
+          configuration: %{
+            "mode" => "listen",
+            "direction_capability" => "inbound",
+            "host" => "0.0.0.0",
+            "port" => 5200,
+            "framing_mode" => "fixed_size",
+            "frame_size" => 1115,
+            "tls_enabled" => false
+          }
+        })
+      )
+
+    _rule =
+      persist_rule!(
         context.organization_id,
         context.mission_id,
-        spacecraft.spacecraft_id,
-        context.suffix,
-        "no-path",
-        "SIM-NO-PATH"
+        spacecraft,
+        transport,
+        "#{context.suffix}-direct"
       )
 
     assert {:ok, %{routes: [], findings: findings}} =
@@ -183,104 +180,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                spacecraft.spacecraft_id
              )
 
-    assert Enum.map(findings, & &1.code) == [:missing_downlink_route]
-  end
-
-  test "reports scheduling API, environment, and profile reference blockers", context do
-    variants = [
-      {"no-client", Map.delete(valid_config(), "scheduling"), :missing_scheduling_client},
-      {"no-environment", put_in(valid_config(), ["scheduling", "environment_ref"], nil),
-       :missing_provider_environment},
-      {"no-service-profile", put_in(valid_config(), ["scheduling", "service_profile_ref"], nil),
-       :missing_provider_profile_reference},
-      {"no-delivery-profile", put_in(valid_config(), ["scheduling", "delivery_profile_ref"], nil),
-       :missing_provider_profile_reference}
-    ]
-
-    Enum.each(variants, fn {name, configuration, expected_code} ->
-      spacecraft =
-        persist_spacecraft(
-          context.organization_id,
-          context.mission_id,
-          context.suffix,
-          name
-        )
-
-      endpoint =
-        persist_endpoint(
-          context.organization_id,
-          context.mission_id,
-          spacecraft.spacecraft_id,
-          context.suffix,
-          name,
-          "SIM-#{name}"
-        )
-
-      provider =
-        persist_provider(
-          context.organization_id,
-          context.mission_id,
-          context.suffix,
-          name,
-          configuration
-        )
-
-      path =
-        persist_path(
-          context.organization_id,
-          context.mission_id,
-          endpoint.source_endpoint_id,
-          provider,
-          context.suffix,
-          name
-        )
-
-      _assignment =
-        persist_assignment(
-          context.organization_id,
-          context.mission_id,
-          spacecraft,
-          endpoint,
-          path,
-          provider,
-          context.suffix,
-          name
-        )
-
-      assert {:ok, %{routes: [], findings: findings}} =
-               ProviderScheduling.list_ready_downlink_routes(
-                 context.organization_id,
-                 context.mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert Enum.any?(findings, &(&1.code == expected_code))
-    end)
-  end
-
-  test "route keys cannot cross organization or mission scope", context do
-    assert {:ok, %{routes: [route]}} =
-             ProviderScheduling.list_ready_downlink_routes(
-               context.organization_id,
-               context.mission_id,
-               context.spacecraft.spacecraft_id
-             )
-
-    assert {:error, :spacecraft_not_found} =
-             ProviderScheduling.resolve_ready_downlink_route(
-               "another-organization",
-               context.mission_id,
-               context.spacecraft.spacecraft_id,
-               route.route_key
-             )
-
-    assert {:error, :spacecraft_not_found} =
-             ProviderScheduling.resolve_ready_downlink_route(
-               context.organization_id,
-               "another-mission",
-               context.spacecraft.spacecraft_id,
-               route.route_key
-             )
+    assert Enum.any?(findings, &(&1.code == :direct_transport_not_provider_schedulable))
   end
 
   test "rejects invalid windows and mismatched provider opportunities", context do
@@ -309,21 +209,9 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                client: FakeProviderClient
              )
 
-    mismatched = %{
-      "id" => "opportunity-wrong-spacecraft",
-      "spacecraft_ref" => "ANOTHER-SPACECRAFT",
-      "ground_station_ref" => "station-alpha",
-      "antenna_or_service_pool_ref" => "antenna-alpha",
-      "service_profile_ref" => "service-realtime-ttc-downlink",
-      "starts_at" => starts_at |> DateTime.add(60) |> DateTime.to_iso8601(),
-      "ends_at" => starts_at |> DateTime.add(120) |> DateTime.to_iso8601(),
-      "expires_at" => starts_at |> DateTime.add(30) |> DateTime.to_iso8601(),
-      "availability" => "available",
-      "synthetic" => true,
-      "extensions" => %{}
-    }
+    mismatched = opportunity(route, starts_at) |> Map.put("spacecraft_ref", "OTHER")
 
-    assert {:error, {:invalid_provider_opportunity, "opportunity-wrong-spacecraft"}} =
+    assert {:error, {:invalid_provider_opportunity, "opportunity-alpha"}} =
              ProviderScheduling.search_opportunities(
                context.organization_id,
                context.mission_id,
@@ -331,6 +219,23 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                window,
                client: FakeProviderClient,
                search_response: {:ok, %{"data" => [mismatched]}}
+             )
+  end
+
+  test "route keys cannot cross organization or mission scope", context do
+    assert {:ok, %{routes: [route]}} =
+             ProviderScheduling.list_ready_downlink_routes(
+               context.organization_id,
+               context.mission_id,
+               context.spacecraft.spacecraft_id
+             )
+
+    assert {:error, :spacecraft_not_found} =
+             ProviderScheduling.resolve_ready_downlink_route(
+               "another-organization",
+               context.mission_id,
+               context.spacecraft.spacecraft_id,
+               route.route_key
              )
   end
 
@@ -346,97 +251,127 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
     spacecraft
   end
 
-  defp persist_endpoint(organization_id, mission_id, spacecraft_id, suffix, name, source_ref) do
+  defp persist_mapping(organization_id, mission_id, spacecraft, suffix, source_ref) do
     endpoint =
       SourceEndpoint.new(%{
-        source_endpoint_id: "source-#{suffix}-#{name}",
+        source_endpoint_id: "provider-mapping-#{suffix}-#{spacecraft.spacecraft_id}",
         mission_id: mission_id,
-        spacecraft_id: spacecraft_id,
+        spacecraft_id: spacecraft.spacecraft_id,
         source_ref: source_ref,
-        display_name: "Source #{name}"
+        display_name: "#{spacecraft.display_name} provider identity"
       })
 
     {:ok, endpoint} = Cadence.persist_source_endpoint(organization_id, endpoint)
     endpoint
   end
 
-  defp persist_provider(organization_id, mission_id, suffix, name, configuration) do
+  defp persist_provider!(organization_id, mission_id, suffix) do
+    now = ~U[2026-07-14 12:00:00.000000Z]
+
     provider =
-      ProviderProfile.new(%{
-        provider_profile_id: "provider-#{suffix}-#{name}",
+      MissionProvider.new(%{
+        provider_id: "provider-#{suffix}",
         mission_id: mission_id,
-        adapter_key: :tcp_socket,
-        configuration: configuration,
-        metadata: %{"display_name" => "Provider #{name}"}
+        display_name: "Ground Network Simulator",
+        provider_type: :simulator,
+        base_url: "http://simulator.test",
+        credential_ref: "config://simulator",
+        environment_ref: "run-alpha",
+        last_validated_at: now,
+        last_synced_at: now,
+        metadata: %{"control_plane" => %{"status" => "healthy"}},
+        inventory_sync_document: provider_inventory()
       })
 
-    {:ok, provider} = Cadence.persist_provider_profile(organization_id, provider)
+    {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
     provider
   end
 
-  defp persist_path(organization_id, mission_id, source_endpoint_id, provider, suffix, name) do
-    path =
-      PathTemplate.new(%{
-        path_template_id: "path-#{suffix}-#{name}",
+  defp persist_provider_transport!(organization_id, mission_id, provider, suffix) do
+    transport =
+      Transport.new(%{
+        transport_id: "transport-#{suffix}",
         mission_id: mission_id,
-        path_id: "downlink-#{suffix}-#{name}",
-        direction: :downlink,
-        selection_role: :selected,
-        source_endpoint_ref: source_endpoint_id,
-        provider_profile_refs: [
-          %{"provider_profile_id" => provider.provider_profile_id, "version" => provider.version}
-        ],
-        metadata: %{"display_name" => "Downlink #{name}"}
+        display_name: "Simulator telemetry ingress",
+        origin: :provider_managed,
+        mission_provider_id: provider.provider_id,
+        mission_provider_version: provider.version,
+        service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+        delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
       })
 
-    {:ok, path} = Cadence.persist_path_template(organization_id, path)
-    path
+    {:ok, transport} = Cadence.persist_transport(organization_id, transport)
+    transport
   end
 
-  defp persist_assignment(
-         organization_id,
-         mission_id,
-         spacecraft,
-         endpoint,
-         path,
-         provider,
-         suffix,
-         name
-       ) do
-    assignment =
-      LinkAssignment.new(%{
-        link_assignment_id: "assignment-#{suffix}-#{name}",
+  defp persist_rule!(organization_id, mission_id, spacecraft, transport, suffix) do
+    rule =
+      RoutingRule.new(%{
+        routing_rule_id: "routing-rule-#{suffix}",
         mission_id: mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
-        source_endpoint_ref: endpoint.source_endpoint_id,
-        path_template_id: path.path_template_id,
-        path_template_version: path.version,
-        direction: :downlink,
-        selection_role: :selected,
-        provider_profile_refs: [
-          %{"provider_profile_id" => provider.provider_profile_id, "version" => provider.version}
-        ]
+        display_name: "Primary telemetry downlink",
+        purpose_label: "Telemetry",
+        direction: :inbound,
+        transport_id: transport.transport_id,
+        transport_version: transport.version,
+        role: :primary
       })
 
-    {:ok, assignment} = Cadence.persist_link_assignment(organization_id, assignment)
-    assignment
+    {:ok, rule} = Cadence.create_routing_rule(organization_id, rule)
+    rule
   end
 
-  defp valid_config do
+  defp opportunity(route, starts_at) do
     %{
-      "adapter" => "tcp_socket",
-      "mode" => "listen",
-      "direction" => "downlink",
-      "host" => "0.0.0.0",
-      "port" => 4_100,
-      "fixed_message_bytes" => 64,
-      "framing" => %{"mode" => "fixed_size", "fixed_message_bytes" => 64},
-      "scheduling" => %{
-        "client" => "simulator_http",
-        "base_url" => "http://simulator.test",
-        "environment_ref" => "run-alpha",
-        "service_profile_ref" => "service-realtime-ttc-downlink",
-        "delivery_profile_ref" => "delivery-cadence-primary"
+      "id" => "opportunity-alpha",
+      "spacecraft_ref" => route.provider_spacecraft_ref,
+      "ground_station_ref" => "station-alpha",
+      "antenna_or_service_pool_ref" => "antenna-alpha",
+      "service_profile_ref" => route.service_profile_ref["id"],
+      "starts_at" => starts_at |> DateTime.add(300) |> DateTime.to_iso8601(),
+      "ends_at" => starts_at |> DateTime.add(900) |> DateTime.to_iso8601(),
+      "expires_at" => starts_at |> DateTime.add(60) |> DateTime.to_iso8601(),
+      "availability" => "available",
+      "synthetic" => true,
+      "extensions" => %{}
+    }
+  end
+
+  defp provider_inventory do
+    %{
+      "service_profiles" => %{
+        "items" => [
+          %{
+            "id" => "service-downlink",
+            "version" => 3,
+            "display_name" => "Realtime TT&C downlink",
+            "direction" => "downlink",
+            "state" => "active"
+          }
+        ]
+      },
+      "delivery_profiles" => %{
+        "items" => [
+          %{
+            "id" => "delivery-cadence",
+            "version" => 7,
+            "display_name" => "Cadence primary ingress",
+            "direction" => "downlink",
+            "delivery_kind" => "realtime_stream",
+            "supported_service_profile_refs" => ["service-downlink"],
+            "state" => "ready",
+            "operator_summary" => "Streaming to Cadence",
+            "diagnostics" => %{
+              "protocol" => "tcp",
+              "mode" => "provider_connects",
+              "host" => "127.0.0.1",
+              "port" => 5100,
+              "framing_family" => "ccsds_tm",
+              "frame_bytes" => 1115
+            }
+          }
+        ]
       }
     }
   end
