@@ -2,7 +2,7 @@ defmodule CadenceWeb.CommsTransportListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Comms.TransportKinds.TCPSocket
+  alias Cadence.Comms.TransportKind
   alias CadenceWeb.ListParams
 
   # Search/sort/paginate happen in memory: TransportStore dedupes latest
@@ -130,14 +130,30 @@ defmodule CadenceWeb.CommsTransportListLive do
                 {transport.display_name}
               </.link>
             </:col>
-            <:col :let={transport} label="Kind" mono class="uppercase text-primary/80">
-              {human_atom(transport.transport_kind)}
+            <:col :let={transport} label="Origin">
+              <span id={"transport-origin-#{transport.transport_id}"} class="font-mono text-xs uppercase">
+                {origin_label(transport.origin)}
+              </span>
             </:col>
-            <:col :let={transport} label="Capability" mono class="uppercase text-base-content/70">
-              {human_atom(transport.direction_capability)}
+            <:col :let={transport} label="Provider">
+              <span id={"transport-provider-#{transport.transport_id}"}>
+                {provider_label(transport)}
+              </span>
             </:col>
-            <:col :let={transport} label="Endpoint" mono class="text-base-content/70">
-              {transport_summary(transport).endpoint}
+            <:col :let={transport} label="Delivery">
+              <div id={"transport-operator-summary-#{transport.transport_id}"}>
+                {operator_summary(transport)}
+              </div>
+              <div class="mt-1 font-mono text-xs text-base-content/50">
+                {transport_summary(transport).endpoint}
+              </div>
+            </:col>
+            <:col :let={transport} label="Readiness">
+              <.status_badge
+                status={readiness_status(transport)}
+                label={readiness_label(transport)}
+                id={"transport-readiness-#{transport.transport_id}"}
+              />
             </:col>
             <:col :let={transport} label="Version" mono class="text-base-content/70">
               v{transport.version}
@@ -158,11 +174,43 @@ defmodule CadenceWeb.CommsTransportListLive do
     """
   end
 
-  defp transport_summary(%{transport_kind: :tcp_socket, configuration: configuration}) do
-    TCPSocket.display_summary(configuration)
+  defp transport_summary(transport) do
+    {:ok, entry} = TransportKind.fetch(transport.transport_kind)
+    entry.module.display_summary(transport.configuration)
   end
 
   defp human_atom(value) when is_atom(value) do
     value |> Atom.to_string() |> String.replace("_", " ") |> String.upcase()
   end
+
+  defp origin_label(:provider_managed), do: "Provider managed"
+  defp origin_label(:direct), do: "Direct"
+
+  defp provider_label(%{origin: :provider_managed} = transport) do
+    get_in(transport.provider_configuration_snapshot, ["provider", "display_name"]) ||
+      transport.mission_provider_id
+  end
+
+  defp provider_label(_transport), do: "Cadence"
+
+  defp operator_summary(%{origin: :provider_managed} = transport) do
+    get_in(transport.provider_configuration_snapshot, ["delivery_profile", "operator_summary"]) ||
+      "Provider-managed delivery"
+  end
+
+  defp operator_summary(transport), do: "Direct #{human_atom(transport.transport_kind)}"
+
+  defp readiness_status(%{origin: :provider_managed} = transport) do
+    if get_in(transport.provider_configuration_snapshot, ["delivery_profile", "state"]) == "ready",
+      do: :ready,
+      else: :attention
+  end
+
+  defp readiness_status(_transport), do: :info
+
+  defp readiness_label(%{origin: :provider_managed} = transport) do
+    if readiness_status(transport) == :ready, do: "Ready", else: "Profile drift"
+  end
+
+  defp readiness_label(_transport), do: "Configured"
 end

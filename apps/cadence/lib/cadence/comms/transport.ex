@@ -12,6 +12,7 @@ defmodule Cadence.Comms.Transport do
   @type transport_kind :: :tcp_socket
   @type direction_capability :: :inbound | :outbound | :bidirectional
   @type adapter_key :: :tcp_socket
+  @type origin :: :direct | :provider_managed
 
   @type t :: %__MODULE__{
           transport_id: binary(),
@@ -20,10 +21,16 @@ defmodule Cadence.Comms.Transport do
           version: pos_integer(),
           lifecycle_state: lifecycle_state(),
           display_name: binary(),
+          origin: origin(),
           transport_kind: transport_kind(),
           direction_capability: direction_capability(),
           adapter_key: adapter_key(),
           configuration: map(),
+          mission_provider_id: binary() | nil,
+          mission_provider_version: pos_integer() | nil,
+          service_profile_ref: map() | nil,
+          delivery_profile_ref: map() | nil,
+          provider_configuration_snapshot: map(),
           materialized_provider_profile_id: binary() | nil,
           metadata: map()
         }
@@ -35,17 +42,24 @@ defmodule Cadence.Comms.Transport do
     :version,
     :lifecycle_state,
     :display_name,
+    :origin,
     :transport_kind,
     :direction_capability,
     :adapter_key,
+    :mission_provider_id,
+    :mission_provider_version,
+    :service_profile_ref,
+    :delivery_profile_ref,
     :materialized_provider_profile_id,
     configuration: %{},
+    provider_configuration_snapshot: %{},
     metadata: %{}
   ]
 
   @transport_kinds [:tcp_socket]
   @direction_capabilities [:inbound, :outbound, :bidirectional]
   @adapter_keys [:tcp_socket]
+  @origins [:direct, :provider_managed]
   @lifecycle_states [:active, :archived]
 
   @spec transport_kinds() :: [transport_kind()]
@@ -72,6 +86,10 @@ defmodule Cadence.Comms.Transport do
         |> Map.get(:lifecycle_state, Map.get(attrs, "lifecycle_state", :active))
         |> normalize_atom(@lifecycle_states, :lifecycle_state),
       display_name: Map.fetch!(attrs, :display_name),
+      origin:
+        attrs
+        |> Map.get(:origin, Map.get(attrs, "origin", :direct))
+        |> normalize_atom(@origins, :origin),
       transport_kind: kind,
       direction_capability:
         attrs
@@ -82,6 +100,20 @@ defmodule Cadence.Comms.Transport do
         |> Map.get(:adapter_key, Map.get(attrs, "adapter_key", default_adapter_key(kind)))
         |> normalize_atom(@adapter_keys, :adapter_key),
       configuration: Map.get(attrs, :configuration, Map.get(attrs, "configuration", %{})),
+      mission_provider_id:
+        Map.get(attrs, :mission_provider_id, Map.get(attrs, "mission_provider_id")),
+      mission_provider_version:
+        Map.get(attrs, :mission_provider_version, Map.get(attrs, "mission_provider_version")),
+      service_profile_ref:
+        Map.get(attrs, :service_profile_ref, Map.get(attrs, "service_profile_ref")),
+      delivery_profile_ref:
+        Map.get(attrs, :delivery_profile_ref, Map.get(attrs, "delivery_profile_ref")),
+      provider_configuration_snapshot:
+        Map.get(
+          attrs,
+          :provider_configuration_snapshot,
+          Map.get(attrs, "provider_configuration_snapshot", %{})
+        ),
       materialized_provider_profile_id:
         Map.get(
           attrs,

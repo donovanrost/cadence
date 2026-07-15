@@ -16,6 +16,55 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   @direction_capabilities ["inbound", "outbound", "bidirectional"]
   @framing_modes ["raw", "fixed_size", "line_delimited"]
   @reconnect_policies ["none", "always", "on_disconnect"]
+  @config_atom_keys %{
+    "direction" => :direction,
+    "direction_capability" => :direction_capability,
+    "delivery_kind" => :delivery_kind,
+    "diagnostics" => :diagnostics,
+    "enabled" => :enabled,
+    "frame_bytes" => :frame_bytes,
+    "fixed_message_bytes" => :fixed_message_bytes,
+    "frame_size" => :frame_size,
+    "framing" => :framing,
+    "framing_family" => :framing_family,
+    "framing_mode" => :framing_mode,
+    "host" => :host,
+    "mode" => :mode,
+    "policy" => :policy,
+    "port" => :port,
+    "protocol" => :protocol,
+    "reconnect" => :reconnect,
+    "reconnect_policy" => :reconnect_policy,
+    "state" => :state,
+    "tls" => :tls,
+    "tls_enabled" => :tls_enabled
+  }
+
+  @impl true
+  def form_metadata do
+    %{
+      form_value: "tcp_socket",
+      label: "TCP socket",
+      configurable_sections: [:endpoint, :framing, :reliability],
+      modes: [{"TCP server (listen)", "listen"}, {"TCP client (connect)", "connect"}],
+      directions: [
+        {"Inbound", "inbound"},
+        {"Outbound", "outbound"},
+        {"Bidirectional", "bidirectional"}
+      ],
+      framing_modes: [
+        {"Raw bytes", "raw"},
+        {"Fixed-size frames", "fixed_size"},
+        {"Line-delimited", "line_delimited"}
+      ],
+      reconnect_policies: [
+        {"Always reconnect", "always"},
+        {"Reconnect after disconnect", "on_disconnect"},
+        {"Do not reconnect", "none"}
+      ],
+      tls_options: [{"Disabled", "false"}, {"Enabled", "true"}]
+    }
+  end
 
   @impl true
   def normalize_config(config) when is_map(config) do
@@ -76,6 +125,44 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     }
   end
 
+  @doc "Derives read-only TCP setup from a synchronized provider Delivery Profile."
+  @spec from_delivery_profile(map()) :: {:ok, map()} | {:error, binary()}
+  def from_delivery_profile(profile) when is_map(profile) do
+    diagnostics = value(profile, "diagnostics", %{})
+
+    with "ready" <- value(profile, "state"),
+         "downlink" <- value(profile, "direction"),
+         "realtime_stream" <- value(profile, "delivery_kind"),
+         "tcp" <- value(diagnostics, "protocol"),
+         "provider_connects" <- value(diagnostics, "mode"),
+         host when is_binary(host) and host != "" <- value(diagnostics, "host"),
+         port when is_integer(port) and port > 0 and port <= 65_535 <-
+           value(diagnostics, "port"),
+         "ccsds_tm" <- value(diagnostics, "framing_family"),
+         frame_bytes when is_integer(frame_bytes) and frame_bytes > 0 <-
+           value(diagnostics, "frame_bytes") do
+      normalize_config(%{
+        "mode" => "listen",
+        "direction_capability" => "inbound",
+        "host" => host,
+        "port" => port,
+        "framing_mode" => "fixed_size",
+        "frame_size" => frame_bytes,
+        "reconnect_policy" => "on_disconnect",
+        "tls_enabled" => false
+      })
+    else
+      _other ->
+        {:error,
+         "Delivery profile is not a ready provider-connects TCP downlink with fixed-size CCSDS TM framing."}
+    end
+  end
+
+  def from_delivery_profile(_profile),
+    do:
+      {:error,
+       "Delivery profile is not a ready provider-connects TCP downlink with fixed-size CCSDS TM framing."}
+
   @impl true
   def materialize_provider_profile(%Transport{transport_kind: :tcp_socket} = transport) do
     with {:ok, config} <- normalize_config(transport.configuration) do
@@ -92,7 +179,12 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
          metadata: %{
            "display_name" => transport.display_name,
            "materialized_from_transport_id" => transport.transport_id,
-           "materialized_from_transport_version" => transport.version
+           "materialized_from_transport_version" => transport.version,
+           "transport_origin" => Atom.to_string(transport.origin),
+           "mission_provider_id" => transport.mission_provider_id,
+           "mission_provider_version" => transport.mission_provider_version,
+           "service_profile_ref" => transport.service_profile_ref,
+           "delivery_profile_ref" => transport.delivery_profile_ref
          }
        })}
     end
@@ -103,7 +195,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   defp provider_direction("bidirectional"), do: "bidirectional"
 
   defp value(config, key, default \\ nil) do
-    Map.get(config, key, Map.get(config, String.to_atom(key), default))
+    atom_key = Map.fetch!(@config_atom_keys, key)
+    Map.get(config, key, Map.get(config, atom_key, default))
   end
 
   defp framing_value(config), do: config |> value("framing", %{}) |> value("mode", "raw")

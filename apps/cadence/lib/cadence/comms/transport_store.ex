@@ -7,9 +7,11 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.Transport
+  alias Cadence.Comms.{Transport, TransportKind}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Contacts, as: ContactsService
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.{MissionProvider, Validation}
   alias Cadence.Missions
   alias Cadence.Persistence.Schemas.CommsTransportRow
   alias Cadence.Repo
@@ -136,17 +138,63 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  defp normalize_transport(%Transport{transport_kind: :tcp_socket} = transport) do
-    with {:ok, configuration} <- TCPSocket.normalize_config(transport.configuration) do
+  defp normalize_transport(%Transport{lifecycle_state: :archived} = transport),
+    do: {:ok, transport}
+
+  defp normalize_transport(%Transport{origin: :direct} = transport) do
+    with {:ok, entry} <- TransportKind.fetch(transport.transport_kind),
+         {:ok, configuration} <- entry.module.normalize_config(transport.configuration) do
       {:ok,
        %Transport{
          transport
          | configuration: configuration,
+           adapter_key: entry.adapter_key,
            direction_capability:
              configuration
              |> Map.fetch!("direction_capability")
-             |> String.to_existing_atom()
+             |> direction_capability(),
+           mission_provider_id: nil,
+           mission_provider_version: nil,
+           service_profile_ref: nil,
+           delivery_profile_ref: nil,
+           provider_configuration_snapshot: %{}
        }}
+    end
+  end
+
+  defp normalize_transport(%Transport{origin: :provider_managed} = transport) do
+    with {:ok, provider_id, provider_version} <- provider_reference(transport),
+         {:ok, %MissionProvider{} = provider} <-
+           GroundNetworks.fetch_provider(
+             transport.organization_id,
+             transport.mission_id,
+             provider_id
+           ),
+         true <- provider.version == provider_version,
+         :ok <- require_validated_provider(provider),
+         {:ok, service_profile} <-
+           find_profile(provider, "service_profiles", transport.service_profile_ref),
+         {:ok, delivery_profile} <-
+           find_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
+         :ok <- require_profile_compatibility(service_profile, delivery_profile),
+         {:ok, configuration} <- TCPSocket.from_delivery_profile(delivery_profile) do
+      {:ok,
+       %Transport{
+         transport
+         | transport_kind: :tcp_socket,
+           adapter_key: :tcp_socket,
+           direction_capability: :inbound,
+           configuration: configuration,
+           mission_provider_id: provider.provider_id,
+           mission_provider_version: provider.version,
+           service_profile_ref: exact_profile_ref(service_profile),
+           delivery_profile_ref: exact_profile_ref(delivery_profile),
+           provider_configuration_snapshot:
+             provider_snapshot(provider, service_profile, delivery_profile, configuration)
+       }}
+    else
+      false -> {:error, :mission_provider_version_not_current}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -155,8 +203,9 @@ defmodule Cadence.Comms.TransportStore do
     {:ok, transport}
   end
 
-  defp materialize_provider_profile(%Transport{transport_kind: :tcp_socket} = transport) do
-    with {:ok, provider_profile} <- TCPSocket.materialize_provider_profile(transport),
+  defp materialize_provider_profile(%Transport{} = transport) do
+    with {:ok, entry} <- TransportKind.fetch(transport.transport_kind),
+         {:ok, provider_profile} <- entry.module.materialize_provider_profile(transport),
          {:ok, provider_profile} <-
            ContactsService.persist_provider_profile(transport.organization_id, provider_profile) do
       {:ok,
@@ -186,15 +235,120 @@ defmodule Cadence.Comms.TransportStore do
        | version: transport.version + 1,
          lifecycle_state: :active,
          display_name: Map.get(attrs, :display_name, transport.display_name),
+         origin: Map.get(attrs, :origin, transport.origin),
          transport_kind: Map.get(attrs, :transport_kind, transport.transport_kind),
          direction_capability:
            Map.get(attrs, :direction_capability, transport.direction_capability),
          adapter_key: Map.get(attrs, :adapter_key, transport.adapter_key),
          configuration: Map.get(attrs, :configuration, transport.configuration),
+         mission_provider_id: Map.get(attrs, :mission_provider_id, transport.mission_provider_id),
+         mission_provider_version:
+           Map.get(attrs, :mission_provider_version, transport.mission_provider_version),
+         service_profile_ref: Map.get(attrs, :service_profile_ref, transport.service_profile_ref),
+         delivery_profile_ref:
+           Map.get(attrs, :delivery_profile_ref, transport.delivery_profile_ref),
+         provider_configuration_snapshot: %{},
          materialized_provider_profile_id: nil,
          metadata: Map.merge(transport.metadata, Map.get(attrs, :metadata, %{}))
      }}
   end
+
+  defp provider_reference(%Transport{
+         mission_provider_id: provider_id,
+         mission_provider_version: provider_version
+       })
+       when is_binary(provider_id) and provider_id != "" and is_integer(provider_version) and
+              provider_version > 0,
+       do: {:ok, provider_id, provider_version}
+
+  defp provider_reference(_transport), do: {:error, :mission_provider_reference_required}
+
+  defp require_validated_provider(%MissionProvider{} = provider) do
+    cond do
+      provider.lifecycle_state != :active ->
+        {:error, :mission_provider_not_active}
+
+      not match?(%DateTime{}, provider.last_validated_at) ->
+        {:error, :mission_provider_not_validated}
+
+      get_in(provider.metadata, ["control_plane", "status"]) != "healthy" ->
+        {:error, :mission_provider_not_validated}
+
+      not match?(%DateTime{}, provider.last_synced_at) ->
+        {:error, :mission_provider_profiles_not_synced}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp find_profile(provider, document_key, reference) do
+    with {:ok, id, version} <- profile_reference(reference),
+         items when is_list(items) <-
+           get_in(provider.inventory_sync_document, [document_key, "items"]),
+         profile when is_map(profile) <-
+           Enum.find(items, &(&1["id"] == id and &1["version"] == version)) do
+      {:ok, profile}
+    else
+      _other -> {:error, {:provider_profile_not_found, document_key}}
+    end
+  end
+
+  defp profile_reference(reference) when is_map(reference) do
+    id = Map.get(reference, "id", Map.get(reference, :id))
+    version = Map.get(reference, "version", Map.get(reference, :version))
+
+    if is_binary(id) and id != "" and is_integer(version) and version > 0,
+      do: {:ok, id, version},
+      else: {:error, :invalid_provider_profile_reference}
+  end
+
+  defp profile_reference(_reference), do: {:error, :invalid_provider_profile_reference}
+
+  defp require_profile_compatibility(service_profile, delivery_profile) do
+    service_id = service_profile["id"]
+    supported_services = delivery_profile["supported_service_profile_refs"] || []
+
+    cond do
+      service_profile["state"] != "active" ->
+        {:error, :provider_service_profile_not_active}
+
+      delivery_profile["state"] != "ready" ->
+        {:error, :provider_delivery_profile_not_ready}
+
+      service_profile["direction"] != "downlink" or
+          delivery_profile["direction"] != "downlink" ->
+        {:error, :provider_profile_direction_not_supported}
+
+      service_id not in supported_services ->
+        {:error, :provider_profiles_not_compatible}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp provider_snapshot(provider, service_profile, delivery_profile, configuration) do
+    Validation.sanitize(%{
+      "provider" => %{
+        "id" => provider.provider_id,
+        "version" => provider.version,
+        "display_name" => provider.display_name,
+        "provider_type" => Atom.to_string(provider.provider_type),
+        "environment_ref" => provider.environment_ref
+      },
+      "service_profile" => service_profile,
+      "delivery_profile" => delivery_profile,
+      "derived_configuration" => configuration
+    })
+  end
+
+  defp exact_profile_ref(profile),
+    do: %{"id" => profile["id"], "version" => profile["version"]}
+
+  defp direction_capability("inbound"), do: :inbound
+  defp direction_capability("outbound"), do: :outbound
+  defp direction_capability("bidirectional"), do: :bidirectional
 
   defp put_organization_scope(%Transport{} = transport, organization_id)
        when is_binary(organization_id) and organization_id != "" do

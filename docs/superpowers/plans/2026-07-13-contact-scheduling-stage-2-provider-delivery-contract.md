@@ -22,9 +22,13 @@ through `/admin/v1`, provisions a Delivery Profile, schedules through
 simulator `/v1` routes have been removed. Task 6 adds versioned, mission-scoped
 Provider persistence; opaque runtime credential resolution; validation and
 bounded inventory/profile synchronization; and the authenticated Mission
-Provider list, create, and detail journey. Tasks 1-6 are complete; Task 7,
-Transport origin and progressive configuration, is next. The runtime scheduling
-bridge to Provider Profile remains intentionally temporary until Task 8.
+Provider list, create, and detail journey. Task 7 adds explicit direct and
+provider-managed Transport origins, an allow-listed Transport Kind registry,
+exact Provider and profile version snapshots, provider-derived TCP runtime
+materialization, and the progressive Transport journey. Tasks 1-7 are complete;
+Task 8, binding scheduling to Provider and Transport versions, is next. The
+runtime scheduling bridge to Provider Profile remains intentionally temporary
+until that checkpoint.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

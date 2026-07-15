@@ -41,12 +41,13 @@ defmodule CadenceWeb.Components.Forms do
   """
   attr :number, :string, required: true
   attr :title, :string, required: true
+  attr :id, :string, default: nil
   attr :class, :string, default: nil
   slot :inner_block, required: true
 
   def form_section(assigns) do
     ~H"""
-    <section class={["space-y-4", @class]}>
+    <section id={@id} class={["space-y-4", @class]}>
       <div class="flex items-center gap-3">
         <span class="hud-label text-primary/70">{@number}</span>
         <h2 class="hud-label">{@title}</h2>

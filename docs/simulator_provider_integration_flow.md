@@ -5,8 +5,8 @@ or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
 > This walkthrough describes the implemented Simulator Provider Contract v1 and
-> normalized Cadence Provider Client and persisted Mission Provider setup.
-> Provider-managed Transport persistence is the next checkpoint in the
+> normalized Cadence Provider Client, persisted Mission Provider setup, and
+> provider-managed Transport persistence. Scheduling version binding is next in the
 > [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
 
 ## 1. Start the simulator
@@ -46,12 +46,23 @@ Provision the Cadence TCP destination once through
 run's `provider_environment_ref`, when a compatible Delivery Profile does not
 already exist. Sync again after provisioning.
 
-The Task 6 provider UI deliberately contains no TCP mode, host, port, framing,
-reconnect, TLS, or raw-token fields. Task 7 selects provider-managed Delivery
-Profiles from the progressive Transport form. The existing Provider Profile
-remains only as the temporary scheduling runtime bridge until Task 8.
+The Provider UI deliberately contains no TCP mode, host, port, framing,
+reconnect, TLS, or raw-token fields. Those concerns belong to the Delivery
+Profile and Transport.
 
-## 4. Configure spacecraft mappings and routes
+## 4. Create the provider-managed Transport
+
+Open **Comms → Transports → New Transport** and choose **Ground Station
+Provider** as the origin. Select the validated Mission Provider, a compatible
+active Service Profile, and a ready Delivery Profile. Cadence persists the exact
+Provider and profile versions, derives the actual TCP configuration, and shows
+host, port, framing, and reliability as read-only fields. Raw profile evidence
+is available only under administrator diagnostics.
+
+Direct TCP remains available from the same form. Choosing **Direct** keeps the
+TCP endpoint, framing, reconnect, and TLS controls user-configurable.
+
+## 5. Configure spacecraft mappings and routes
 
 Create Cadence spacecraft/source endpoints whose provider references match the
 simulator spacecraft inventory. Create an active downlink link assignment that
@@ -62,7 +73,7 @@ Cadence owns its spacecraft identity and byte-interpretation catalog. The
 simulator owns its provider spacecraft inventory and telemetry generator
 definitions.
 
-## 5. Schedule and execute contacts
+## 6. Schedule and execute contacts
 
 In the authenticated mission UI, open **Ops → Contacts**. Select a ready
 spacecraft route, choose a bounded UTC search window, search the provider, and
