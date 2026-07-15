@@ -56,7 +56,7 @@ defmodule CadenceSimulator.Provider.Capabilities do
         "contact_modification" => false,
         "contact_cancellation" => true,
         "inventory_discovery" => true,
-        "delivery_profile_provisioning" => false
+        "delivery_profile_provisioning" => true
       },
       "reservation" => %{
         "confirmation" => behavior["confirmation"],

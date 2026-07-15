@@ -1,0 +1,19 @@
+{
+  "contact_ref": "contact-123",
+  "outcome": "completed",
+  "planned_acquisition_at": "2026-07-13T12:10:00Z",
+  "planned_loss_at": "2026-07-13T12:20:00Z",
+  "actual_acquisition_at": "2026-07-13T12:10:01Z",
+  "actual_loss_at": "2026-07-13T12:20:00Z",
+  "delivered_duration_seconds": 599,
+  "bytes_delivered": 1024,
+  "packets_delivered": 10,
+  "frames_delivered": 10,
+  "objects_delivered": 0,
+  "observations": {"loss": 0, "duplication": 0, "corruption": 0, "disconnects": 0},
+  "provider_failure_reason": null,
+  "delivery_failure_reason": null,
+  "delivery_profile_ref": "delivery-cadence-primary",
+  "delivery_endpoint_ref": "delivery-cadence-primary",
+  "extensions": {}
+}

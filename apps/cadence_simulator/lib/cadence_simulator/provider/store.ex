@@ -1,6 +1,6 @@
 defmodule CadenceSimulator.Provider.Store do
   @moduledoc """
-  Durable store for provider scenarios, run snapshots, reservations, and events.
+  Durable store for provider scenarios, run snapshots, provider resources, and events.
 
   The store intentionally uses DETS so the simulator remains an external peer
   and does not acquire a runtime dependency on Cadence's database.
@@ -10,24 +10,27 @@ defmodule CadenceSimulator.Provider.Store do
 
   @table :cadence_simulator_provider_store
 
-  @type resource_kind :: :scenario | :run | :reservation
+  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :opportunity, :contact]
+
+  @type resource_kind ::
+          :scenario | :run | :reservation | :delivery_profile | :opportunity | :contact
 
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @spec put(resource_kind(), map()) :: {:ok, map()}
-  def put(kind, %{"id" => id} = resource) when kind in [:scenario, :run, :reservation] do
+  def put(kind, %{"id" => id} = resource) when kind in @resource_kinds do
     GenServer.call(__MODULE__, {:put, kind, id, resource})
   end
 
   @spec fetch(resource_kind(), binary()) :: {:ok, map()} | {:error, :not_found}
-  def fetch(kind, id) when kind in [:scenario, :run, :reservation] and is_binary(id) do
+  def fetch(kind, id) when kind in @resource_kinds and is_binary(id) do
     GenServer.call(__MODULE__, {:fetch, kind, id})
   end
 
   @spec list(resource_kind()) :: [map()]
-  def list(kind) when kind in [:scenario, :run, :reservation] do
+  def list(kind) when kind in @resource_kinds do
     GenServer.call(__MODULE__, {:list, kind})
   end
 
@@ -43,6 +46,16 @@ defmodule CadenceSimulator.Provider.Store do
   def events(cursor \\ 0, limit \\ 100)
       when is_integer(cursor) and cursor >= 0 and is_integer(limit) and limit > 0 do
     GenServer.call(__MODULE__, {:events, cursor, min(limit, 500)})
+  end
+
+  @spec events_for_run(binary(), non_neg_integer(), pos_integer()) :: %{
+          data: [map()],
+          next_cursor: non_neg_integer()
+        }
+  def events_for_run(run_id, cursor \\ 0, limit \\ 100)
+      when is_binary(run_id) and is_integer(cursor) and cursor >= 0 and is_integer(limit) and
+             limit > 0 do
+    GenServer.call(__MODULE__, {:events_for_run, run_id, cursor, min(limit, 500)})
   end
 
   @doc false
@@ -130,6 +143,23 @@ defmodule CadenceSimulator.Provider.Store do
     {:reply, %{data: data, next_cursor: next_cursor}, state}
   end
 
+  def handle_call({:events_for_run, run_id, cursor, limit}, _from, state) do
+    candidates = events_after(state.table, cursor)
+
+    data =
+      candidates
+      |> Enum.filter(&(&1["run_id"] == run_id))
+      |> Enum.take(limit)
+
+    next_cursor =
+      case List.last(data) do
+        nil -> candidates |> List.last() |> event_sequence_or(cursor)
+        event -> event["sequence"]
+      end
+
+    {:reply, %{data: data, next_cursor: next_cursor}, state}
+  end
+
   def handle_call(:clear, _from, state) do
     :ok = :dets.delete_all_objects(state.table)
     :ok = :dets.sync(state.table)
@@ -147,4 +177,19 @@ defmodule CadenceSimulator.Provider.Store do
       [] -> 1
     end
   end
+
+  defp events_after(table, cursor) do
+    :dets.foldl(
+      fn
+        {{:event, sequence}, event}, acc when sequence > cursor -> [event | acc]
+        _other, acc -> acc
+      end,
+      [],
+      table
+    )
+    |> Enum.sort_by(&Map.fetch!(&1, "sequence"))
+  end
+
+  defp event_sequence_or(nil, fallback), do: fallback
+  defp event_sequence_or(event, _fallback), do: event["sequence"]
 end

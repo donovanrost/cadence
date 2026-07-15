@@ -6,7 +6,14 @@ defmodule CadenceSimulator.Provider do
   exposing internal structs or atoms.
   """
 
-  alias CadenceSimulator.Provider.{Capabilities, DeliveryProfiles, Ids, ServiceProfiles, Store}
+  alias CadenceSimulator.Provider.{
+    Capabilities,
+    Contract,
+    DeliveryProfiles,
+    Ids,
+    ServiceProfiles,
+    Store
+  }
 
   @terminal_run_states ["completed", "failed"]
   @terminal_reservation_states ["rejected", "canceled", "completed", "failed", "terminated_early"]
@@ -563,12 +570,18 @@ defmodule CadenceSimulator.Provider do
       |> Map.new()
 
     Store.append_event(%{
+      "schema_version" => Contract.version(),
       "type" => type,
+      "resource_type" => event_resource_type(type),
       "run_id" => resource["run_id"] || resource["id"],
       "resource_id" => resource["id"],
+      "request_id" => nil,
       "data" => data
     })
   end
+
+  defp event_resource_type("run." <> _rest), do: "run"
+  defp event_resource_type(_type), do: "reservation"
 
   defp now_iso8601, do: DateTime.utc_now() |> DateTime.to_iso8601()
 end

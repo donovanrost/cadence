@@ -65,6 +65,13 @@ defmodule CadenceSimulator.Provider.ContractTest do
           "capabilities.json",
           "service_profile.json",
           "delivery_profile.json",
+          "opportunity_page.json",
+          "contact_pending.json",
+          "contact_confirmed.json",
+          "contact_active.json",
+          "contact_completed.json",
+          "contact_result.json",
+          "event_page.json",
           "error.json"
         ] do
       document = @fixture_dir |> Path.join(filename) |> File.read!() |> Jason.decode!()
@@ -85,6 +92,36 @@ defmodule CadenceSimulator.Provider.ContractTest do
     assert Capabilities.for_run(run) == capabilities
     assert {:ok, [^service_profile]} = ServiceProfiles.normalize([service_profile])
     assert {:ok, [^delivery_profile]} = DeliveryProfiles.normalize([delivery_profile])
+  end
+
+  test "Contact fixtures keep the three lifecycle dimensions explicit" do
+    required_keys = [
+      "id",
+      "client_reference",
+      "opportunity_ref",
+      "spacecraft_ref",
+      "ground_station_ref",
+      "service_profile_ref",
+      "delivery_profile_ref",
+      "starts_at",
+      "ends_at",
+      "status",
+      "pass_phase",
+      "delivery",
+      "tags",
+      "extensions"
+    ]
+
+    for filename <- [
+          "contact_pending.json",
+          "contact_confirmed.json",
+          "contact_active.json",
+          "contact_completed.json"
+        ] do
+      contact = fixture(filename)
+      assert Enum.all?(required_keys, &Map.has_key?(contact, &1))
+      assert is_binary(contact["delivery"]["status"])
+    end
   end
 
   test "production authentication validation requires both API credentials" do

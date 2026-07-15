@@ -1,0 +1,17 @@
+{
+  "id": "contact-123",
+  "client_reference": "cadence-reservation-123",
+  "opportunity_ref": "opportunity-123",
+  "spacecraft_ref": "SC-001",
+  "ground_station_ref": "station-svalbard",
+  "service_profile_ref": "service-realtime-ttc-downlink",
+  "delivery_profile_ref": "delivery-cadence-primary",
+  "starts_at": "2026-07-13T12:10:00Z",
+  "ends_at": "2026-07-13T12:20:00Z",
+  "status": "active",
+  "pass_phase": "pass",
+  "delivery": {"status": "flowing", "endpoint_ref": "delivery-cadence-primary"},
+  "status_reason": null,
+  "tags": {},
+  "extensions": {"synthetic": true}
+}

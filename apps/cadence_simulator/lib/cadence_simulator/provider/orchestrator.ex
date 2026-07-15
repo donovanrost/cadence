@@ -1,6 +1,6 @@
 defmodule CadenceSimulator.Provider.Orchestrator do
   @moduledoc """
-  Advances provider reservation lifecycles and owns active telemetry workers.
+  Advances legacy reservations and Provider Contract v1 Contact lifecycles.
 
   Reconciliation is deliberately idempotent so restart recovery and manual
   test clocks exercise the same path as the periodic runtime tick.
@@ -9,6 +9,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   use GenServer
 
   alias CadenceSimulator.Provider
+  alias CadenceSimulator.Provider.{ContactLifecycle, ContactResults, Contacts}
   alias CadenceSimulator.Providers.DatabaseDynamics
 
   @tick_ms 100
@@ -37,7 +38,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   @impl true
   def handle_call({:reconcile, now}, _from, state) do
-    {:reply, :ok, reconcile_reservations(state, now)}
+    {:reply, :ok, reconcile_all(state, now)}
   end
 
   def handle_call(:active_stream_count, _from, state) do
@@ -47,20 +48,31 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   @impl true
   def handle_info(:tick, state) do
     schedule_tick(state.tick_ms)
-    {:noreply, reconcile_reservations(state, DateTime.utc_now())}
+    {:noreply, reconcile_all(state, DateTime.utc_now())}
   end
 
   def handle_info({:DOWN, reference, :process, pid, reason}, state) do
     case Enum.find(state.streams, fn {_id, stream} ->
            stream.pid == pid and stream.reference == reference
          end) do
-      {reservation_id, _stream} ->
-        maybe_fail_active_reservation(reservation_id, reason)
-        {:noreply, %{state | streams: Map.delete(state.streams, reservation_id)}}
+      {resource_id, %{resource_type: :contact}} ->
+        maybe_fail_contact_delivery(resource_id, reason)
+        {:noreply, %{state | streams: Map.delete(state.streams, resource_id)}}
+
+      {resource_id, _stream} ->
+        maybe_fail_active_reservation(resource_id, reason)
+        {:noreply, %{state | streams: Map.delete(state.streams, resource_id)}}
 
       nil ->
         {:noreply, state}
     end
+  end
+
+  defp reconcile_all(state, now) do
+    state
+    |> reconcile_reservations(now)
+    |> reconcile_contacts(now)
+    |> stop_orphaned_streams()
   end
 
   defp reconcile_reservations(state, now) do
@@ -68,8 +80,249 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     |> Enum.reduce(state, fn reservation, acc ->
       reconcile_reservation_for_run(acc, reservation, now)
     end)
-    |> stop_orphaned_streams()
   end
+
+  defp reconcile_contacts(state, now) do
+    Contacts.list_internal()
+    |> Enum.reduce(state, fn contact, acc -> reconcile_contact_for_run(acc, contact, now) end)
+  end
+
+  defp reconcile_contact_for_run(state, contact, now) do
+    with false <- Contacts.terminal_status?(contact["status"]),
+         {:ok, %{"state" => "completed"}} <- Provider.fetch_run(contact["run_id"]) do
+      {state, stats} = stop_stream_with_stats(state, contact["id"])
+      ended_at = DateTime.to_iso8601(now)
+
+      changes = %{
+        "status" => "canceled",
+        "status_reason" => "simulation_run_stopped",
+        "pass_phase" => "closed",
+        "actual_loss_at" => ended_at,
+        "delivery" => end_delivery(contact["delivery"]),
+        "result" =>
+          ContactResults.build(
+            Map.merge(contact, %{"actual_loss_at" => ended_at}),
+            stats,
+            "canceled"
+          )
+      }
+
+      {:ok, _updated} = ContactLifecycle.update(contact, changes)
+      state
+    else
+      _other -> reconcile_contact(state, contact, now)
+    end
+  end
+
+  defp reconcile_contact(state, %{"status" => "pending"} = contact, _now) do
+    {:ok, _updated} = ContactLifecycle.update(contact, %{"status" => "confirmed"})
+    state
+  end
+
+  defp reconcile_contact(state, %{"status" => "confirmed"} = contact, now) do
+    case confirmed_contact_context(contact, now) do
+      {:ok, run, starts_at, current} ->
+        reconcile_confirmed_contact(state, contact, run, starts_at, current)
+
+      :wait ->
+        state
+    end
+  end
+
+  defp reconcile_contact(state, %{"status" => "active"} = contact, now) do
+    case active_contact_context(contact, now) do
+      {:ok, run, starts_at, ends_at, current} ->
+        reconcile_active_contact(state, contact, run, starts_at, ends_at, current)
+
+      :wait ->
+        state
+    end
+  end
+
+  defp reconcile_contact(state, contact, _now) do
+    if Contacts.terminal_status?(contact["status"]),
+      do: stop_stream(state, contact["id"]),
+      else: state
+  end
+
+  defp confirmed_contact_context(contact, now) do
+    with {:ok, run} <- Provider.fetch_run(contact["run_id"]),
+         true <- run["state"] == "running",
+         {:ok, starts_at} <- parse_time(contact["starts_at"]) do
+      {:ok, run, starts_at, effective_now(run, now)}
+    else
+      _other -> :wait
+    end
+  end
+
+  defp reconcile_confirmed_contact(state, contact, run, starts_at, current) do
+    prepass_at = DateTime.add(starts_at, -@acquisition_lead_seconds)
+
+    cond do
+      contact["pass_phase"] == "scheduled" and DateTime.compare(current, prepass_at) != :lt ->
+        delivery = acquisition_delivery(run, contact)
+
+        {:ok, _updated} =
+          ContactLifecycle.update(contact, %{"pass_phase" => "prepass", "delivery" => delivery})
+
+        state
+
+      contact["pass_phase"] == "prepass" and DateTime.compare(current, starts_at) != :lt ->
+        activate_contact(state, contact, run, current)
+
+      true ->
+        state
+    end
+  end
+
+  defp acquisition_delivery(run, contact) do
+    if fault?(run, contact, "acquisition_failure_rate", :acquisition) do
+      contact["delivery"]
+      |> Map.put("status", "failed")
+      |> Map.put("reason", "simulated_acquisition_failure")
+    else
+      Map.put(contact["delivery"], "status", "ready")
+    end
+  end
+
+  defp active_contact_context(contact, now) do
+    with {:ok, run} <- Provider.fetch_run(contact["run_id"]),
+         {:ok, starts_at} <- parse_time(contact["starts_at"]),
+         {:ok, ends_at} <- parse_time(contact["ends_at"]) do
+      {:ok, run, starts_at, ends_at, effective_now(run, now)}
+    else
+      _other -> :wait
+    end
+  end
+
+  defp reconcile_active_contact(state, contact, run, starts_at, ends_at, current) do
+    midpoint = DateTime.add(starts_at, div(DateTime.diff(ends_at, starts_at), 2))
+    postpass_at = DateTime.add(ends_at, -1)
+
+    cond do
+      run["state"] != "running" ->
+        state
+
+      DateTime.compare(current, ends_at) != :lt ->
+        complete_contact(state, contact, current)
+
+      postpass?(contact, current, postpass_at) ->
+        {:ok, _updated} = ContactLifecycle.update(contact, %{"pass_phase" => "postpass"})
+        state
+
+      delivery_connecting?(contact) ->
+        delivery = Map.put(contact["delivery"], "status", "flowing")
+        {:ok, _updated} = ContactLifecycle.update(contact, %{"delivery" => delivery})
+        state
+
+      early_termination?(run, contact, current, midpoint) ->
+        fail_active_delivery(state, contact)
+
+      true ->
+        state
+    end
+  end
+
+  defp postpass?(contact, current, postpass_at) do
+    contact["pass_phase"] == "pass" and DateTime.compare(current, postpass_at) != :lt
+  end
+
+  defp delivery_connecting?(contact) do
+    get_in(contact, ["delivery", "status"]) in ["connected", "ready"]
+  end
+
+  defp early_termination?(run, contact, current, midpoint) do
+    DateTime.compare(current, midpoint) != :lt and
+      get_in(contact, ["delivery", "status"]) not in ["failed", "ended"] and
+      fault?(run, contact, "early_termination_rate", :early_termination)
+  end
+
+  defp fail_active_delivery(state, contact) do
+    {state, _stats} = stop_stream_with_stats(state, contact["id"])
+
+    delivery =
+      contact["delivery"]
+      |> Map.put("status", "failed")
+      |> Map.put("reason", "simulated_link_termination")
+
+    {:ok, _updated} = ContactLifecycle.update(contact, %{"delivery" => delivery})
+    state
+  end
+
+  defp activate_contact(state, contact, run, current) do
+    base_changes = %{
+      "status" => "active",
+      "pass_phase" => "pass",
+      "actual_acquisition_at" => DateTime.to_iso8601(current)
+    }
+
+    if get_in(contact, ["delivery", "status"]) == "failed" do
+      {:ok, _updated} = ContactLifecycle.update(contact, base_changes)
+      state
+    else
+      case start_contact_stream(state, contact, run) do
+        {:ok, state} ->
+          delivery = Map.put(contact["delivery"], "status", "connected")
+
+          {:ok, _updated} =
+            ContactLifecycle.update(contact, Map.put(base_changes, "delivery", delivery))
+
+          state
+
+        {:error, reason} ->
+          delivery =
+            contact["delivery"]
+            |> Map.put("status", "failed")
+            |> Map.put("reason", "data_plane_start_failed:#{inspect(reason)}")
+
+          {:ok, _updated} =
+            ContactLifecycle.update(contact, Map.put(base_changes, "delivery", delivery))
+
+          state
+      end
+    end
+  end
+
+  defp complete_contact(state, contact, current) do
+    {state, stats} = stop_stream_with_stats(state, contact["id"])
+    ended_at = DateTime.to_iso8601(current)
+    contact_with_loss = Map.put(contact, "actual_loss_at", ended_at)
+
+    changes = %{
+      "status" => "completed",
+      "pass_phase" => "closed",
+      "actual_loss_at" => ended_at,
+      "delivery" => end_delivery(contact["delivery"]),
+      "result" => ContactResults.build(contact_with_loss, stats, "completed")
+    }
+
+    {:ok, _updated} = ContactLifecycle.update(contact, changes)
+    state
+  end
+
+  defp start_contact_stream(state, contact, run) do
+    case Map.get(state.streams, contact["id"]) do
+      %{pid: pid} when is_pid(pid) ->
+        {:ok, state}
+
+      nil ->
+        profile = contact["delivery_profile_snapshot"]
+        target = profile["target"] || %{}
+        framing = profile["framing"] || %{}
+
+        data_plane = %{
+          "host" => target["host"],
+          "port" => target["port"],
+          "tm_frame_size" => framing["frame_bytes"],
+          "target_id" => contact["spacecraft_ref"]
+        }
+
+        maybe_start_stream(state, contact, run, data_plane, :contact)
+    end
+  end
+
+  defp end_delivery(%{"status" => "failed"} = delivery), do: delivery
+  defp end_delivery(delivery), do: Map.put(delivery, "status", "ended")
 
   defp reconcile_reservation_for_run(state, reservation, now) do
     with false <- Provider.terminal_reservation_status?(reservation["status"]),
@@ -187,19 +440,25 @@ defmodule CadenceSimulator.Provider.Orchestrator do
         {:ok, state}
 
       nil ->
-        maybe_start_stream(state, reservation, run, reservation["data_plane"] || %{})
+        maybe_start_stream(
+          state,
+          reservation,
+          run,
+          reservation["data_plane"] || %{},
+          :reservation
+        )
     end
   end
 
-  defp maybe_start_stream(state, _reservation, _run, %{} = data_plane)
+  defp maybe_start_stream(state, _reservation, _run, %{} = data_plane, _resource_type)
        when map_size(data_plane) == 0,
        do: {:ok, state}
 
-  defp maybe_start_stream(state, reservation, run, data_plane) do
+  defp maybe_start_stream(state, reservation, run, data_plane, resource_type) do
     with {:ok, opts} <- stream_options(data_plane, reservation, run),
          {:ok, pid} <- CadenceSimulator.start_simulator(opts) do
       reference = Process.monitor(pid)
-      stream = %{pid: pid, reference: reference}
+      stream = %{pid: pid, reference: reference, resource_type: resource_type}
       {:ok, %{state | streams: Map.put(state.streams, reservation["id"], stream)}}
     end
   end
@@ -216,7 +475,12 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
       {:ok,
        [
-         target_id: Map.get(data_plane, "target_id", reservation["spacecraft_id"]),
+         target_id:
+           Map.get(
+             data_plane,
+             "target_id",
+             reservation["spacecraft_id"] || reservation["spacecraft_ref"]
+           ),
          definitions_path: definitions_path,
          provider: DatabaseDynamics,
          provider_opts: [noise_amplitude: Map.get(telemetry_profile, "noise_amplitude", 1.0)],
@@ -245,21 +509,33 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp stop_stream(state, reservation_id) do
+    {state, _stats} = stop_stream_with_stats(state, reservation_id)
+    state
+  end
+
+  defp stop_stream_with_stats(state, reservation_id) do
     case Map.pop(state.streams, reservation_id) do
       {nil, _streams} ->
-        state
+        {state, %{}}
 
       {%{pid: pid, reference: reference}, streams} ->
+        stats = if Process.alive?(pid), do: CadenceSimulator.simulator_stats(pid), else: %{}
         Process.demonitor(reference, [:flush])
         if Process.alive?(pid), do: CadenceSimulator.stop_simulator(pid)
-        %{state | streams: streams}
+        {%{state | streams: streams}, stats}
     end
   end
 
   defp stop_orphaned_streams(state) do
-    active_ids =
+    active_reservation_ids =
       Provider.list_reservations(%{"status" => "active"})
-      |> MapSet.new(& &1["id"])
+      |> Enum.map(& &1["id"])
+
+    active_contact_ids =
+      Contacts.list_internal(%{"status" => "active"})
+      |> Enum.map(& &1["id"])
+
+    active_ids = MapSet.new(active_reservation_ids ++ active_contact_ids)
 
     Enum.reduce(Map.keys(state.streams), state, fn reservation_id, acc ->
       if MapSet.member?(active_ids, reservation_id),
@@ -278,6 +554,21 @@ defmodule CadenceSimulator.Provider.Orchestrator do
       )
     else
       _other -> :ok
+    end
+  end
+
+  defp maybe_fail_contact_delivery(contact_id, reason) do
+    case Contacts.fetch_internal(contact_id) do
+      {:ok, %{"status" => "active"} = contact} ->
+        delivery =
+          contact["delivery"]
+          |> Map.put("status", "failed")
+          |> Map.put("reason", "telemetry_stream_stopped:#{inspect(reason)}")
+
+        ContactLifecycle.update(contact, %{"delivery" => delivery})
+
+      _other ->
+        :ok
     end
   end
 

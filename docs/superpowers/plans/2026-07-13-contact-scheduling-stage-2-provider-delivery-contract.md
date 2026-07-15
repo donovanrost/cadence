@@ -2,13 +2,17 @@
 
 **Status:** in progress
 
-**Progress (2026-07-13):** The additive simulator contract foundation is
-implemented: versioned envelopes and fixtures, separate `/admin/v1` and
-`/provider/v1` authentication, provider environment resolution, capabilities,
-inventory, Service Profile discovery, and Delivery Profile discovery. Legacy
-`/v1` remains covered until the Cadence adapter and Contact contract migrate.
-Delivery Profile provisioning and the Contact/delivery lifecycle begin in the
-next checkpoint.
+**Progress (2026-07-14):** Simulator Provider Contract v1 now includes
+environment-scoped, idempotent Delivery Profile provisioning; paginated
+opportunity search through Service Profiles; profile-backed Contact creation,
+lookup, cancellation, and recovery; independent Contact status, pass phase, and
+delivery state; bounded Contact Results; and versioned environment-scoped
+events. A profile-backed Contact now has an executable proof that opens the
+provisioned TCP destination, streams CCSDS telemetry, and records delivery
+counters. Contract fixtures cover opportunity, lifecycle, result, and event
+documents. Legacy `/v1` remains covered while the next checkpoint implements
+the normalized Cadence Provider Client and migrates its simulator adapter to
+`/provider/v1`.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

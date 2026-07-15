@@ -875,7 +875,7 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
 
   test "enriches operational observable frames with source-health interval evidence" do
     parent = self()
-    observed_at = ~U[2026-06-21 20:30:00Z]
+    observed_at = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
     source_health_event_id = "source-health-operational-observables-1"
     operational_event_id = "operational_event:source_health_event:#{source_health_event_id}"
 
@@ -884,7 +884,8 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
         source_health_event_id: source_health_event_id,
         source_health: :degraded,
         reason: :source_probe_failed,
-        observed_at: observed_at
+        observed_at: observed_at,
+        last_seen_at: observed_at
       })
 
     source_health_interval = %EffectiveInterval{
