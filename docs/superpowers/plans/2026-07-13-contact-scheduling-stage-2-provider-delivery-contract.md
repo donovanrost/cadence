@@ -19,9 +19,12 @@ payloads now use profile and correlation references instead of `run_id` or raw
 endpoint fields. The separate-app boundary proof creates the environment
 through `/admin/v1`, provisions a Delivery Profile, schedules through
 `/provider/v1`, and still receives ordinary CCSDS telemetry over TCP. Legacy
-simulator `/v1` routes have been removed. Tasks 1-5 are complete; Task 6,
-persisted Mission Provider setup, is next. The existing Provider Profile bridge
-is intentionally temporary until that checkpoint.
+simulator `/v1` routes have been removed. Task 6 adds versioned, mission-scoped
+Provider persistence; opaque runtime credential resolution; validation and
+bounded inventory/profile synchronization; and the authenticated Mission
+Provider list, create, and detail journey. Tasks 1-6 are complete; Task 7,
+Transport origin and progressive configuration, is next. The runtime scheduling
+bridge to Provider Profile remains intentionally temporary until Task 8.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

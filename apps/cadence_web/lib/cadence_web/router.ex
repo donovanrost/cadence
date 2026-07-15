@@ -230,20 +230,16 @@ defmodule CadenceWeb.Router do
            :index
 
       live "/missions/:mission_id/comms/providers",
-           CommsProviderProfileListLive,
+           CommsProviderListLive,
            :index
 
       live "/missions/:mission_id/comms/providers/new",
-           CommsProviderProfileNewLive,
+           CommsProviderNewLive,
            :new
 
-      live "/missions/:mission_id/comms/providers/:provider_profile_id",
-           CommsProviderProfileShowLive,
+      live "/missions/:mission_id/comms/providers/:provider_id",
+           CommsProviderShowLive,
            :show
-
-      live "/missions/:mission_id/comms/providers/:provider_profile_id/new-version",
-           CommsProviderProfileNewLive,
-           :version
     end
 
     live_session :ops,

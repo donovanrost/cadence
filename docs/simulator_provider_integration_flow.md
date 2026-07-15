@@ -5,8 +5,8 @@ or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
 > This walkthrough describes the implemented Simulator Provider Contract v1 and
-> normalized Cadence Provider Client. Mission Provider and provider-managed
-> Transport persistence remain the next checkpoints in the
+> normalized Cadence Provider Client and persisted Mission Provider setup.
+> Provider-managed Transport persistence is the next checkpoint in the
 > [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
 
 ## 1. Start the simulator
@@ -29,35 +29,27 @@ administration is simulator surface area, not Cadence surface area.
 
 ## 2. Start Cadence
 
-Start Cadence independently on its normal web/API port. No simulator environment
-variables are required by Cadence.
+Start Cadence independently on its normal web/API port. Configure only the
+provider credential backend that resolves the reference entered below; Cadence
+does not consume the simulator's scenario or administration configuration.
 
 ## 3. Configure the mission provider
 
+Open **Comms → Providers → New Provider**. Select `Ground Network Simulator`,
+then enter the simulator provider API URL, an opaque credential reference, and
+the run's `provider_environment_ref`. Use **Validate** to check access and
+**Sync Inventory** to load the simulator's spacecraft, station, Service Profile,
+and Delivery Profile summaries.
+
 Provision the Cadence TCP destination once through
 `POST /provider/v1/delivery-profiles`, using the provider credential and the
-run's `provider_environment_ref`. Save the returned Delivery Profile reference.
+run's `provider_environment_ref`, when a compatible Delivery Profile does not
+already exist. Sync again after provisioning.
 
-There is not yet a supported UI path for this new setup. The automated boundary
-test persists the compatibility Provider Profile directly. Stage 2 Task 6
-replaces the old provider form with the normal Mission Provider setup journey.
-For checkpoint development, the persisted bridge contains:
-
-Configure:
-
-- TCP mode `listen`, direction `downlink`, and the port on which Cadence accepts
-  telemetry;
-- fixed-size framing when the simulator sends TM frames;
-- External Scheduling `Enabled`;
-- Provider Integration `Cadence Ground Network Simulator`;
-- the simulator API URL and provider credential;
-- the active provider environment reference;
-- Service Profile `service-realtime-ttc-downlink`;
-- the provisioned Delivery Profile reference.
-
-The nested scheduling configuration selects the provider control-plane adapter.
-The existing TCP configuration remains the temporary runtime bridge; Contact
-requests themselves contain no host, port, framing, or `run_id` fields.
+The Task 6 provider UI deliberately contains no TCP mode, host, port, framing,
+reconnect, TLS, or raw-token fields. Task 7 selects provider-managed Delivery
+Profiles from the progressive Transport form. The existing Provider Profile
+remains only as the temporary scheduling runtime bridge until Task 8.
 
 ## 4. Configure spacecraft mappings and routes
 
