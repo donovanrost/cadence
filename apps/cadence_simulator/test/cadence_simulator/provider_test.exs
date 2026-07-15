@@ -2,10 +2,8 @@ defmodule CadenceSimulator.ProviderTest do
   use CadenceSimulator.Case, async: false
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{Orchestrator, Router, Store}
+  alias CadenceSimulator.Provider.{Orchestrator, Store}
   alias CadenceSimulator.SendBuffer
-  alias Plug.Conn
-  alias Plug.Test
 
   setup do
     :ok = Store.clear()
@@ -113,41 +111,6 @@ defmodule CadenceSimulator.ProviderTest do
 
     :ok = Orchestrator.reconcile(DateTime.add(now, 16))
     assert {:ok, %{"status" => "completed"}} = Provider.fetch_reservation(reservation["id"])
-  end
-
-  test "HTTP contract returns structured resources, cursors, and errors" do
-    create_conn =
-      :post
-      |> Test.conn("/v1/scenarios", Jason.encode!(%{"name" => "HTTP constellation"}))
-      |> Conn.put_req_header("content-type", "application/json")
-      |> Router.call([])
-
-    assert create_conn.status == 201
-    %{"data" => scenario} = Jason.decode!(create_conn.resp_body)
-
-    run_conn =
-      :post
-      |> Test.conn("/v1/scenarios/#{scenario["id"]}/runs", Jason.encode!(%{"speed" => 10}))
-      |> Conn.put_req_header("content-type", "application/json")
-      |> Router.call([])
-
-    assert run_conn.status == 201
-
-    assert %{"data" => %{"state" => "running", "speed" => 10.0}} =
-             Jason.decode!(run_conn.resp_body)
-
-    events_conn = Test.conn(:get, "/v1/events?cursor=0") |> Router.call([])
-    assert events_conn.status == 200
-    assert %{"data" => [_ | _], "next_cursor" => cursor} = Jason.decode!(events_conn.resp_body)
-    assert cursor > 0
-
-    missing_conn = Test.conn(:get, "/v1/runs/missing") |> Router.call([])
-    assert missing_conn.status == 404
-
-    assert %{"error" => %{"code" => "not_found", "correlation_id" => correlation_id}} =
-             Jason.decode!(missing_conn.resp_body)
-
-    assert is_binary(correlation_id)
   end
 
   test "packet loss is applied in the real network send buffer" do

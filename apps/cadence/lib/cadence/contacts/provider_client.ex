@@ -1,38 +1,54 @@
 defmodule Cadence.Contacts.ProviderClient do
   @moduledoc """
-  Control-plane boundary for external ground-station scheduling providers.
+  Provider-neutral control-plane boundary for external ground networks.
 
-  This is deliberately separate from `Cadence.ProviderAdapters.Adapter`, which
-  owns path-local byte I/O only after a contact has been realized.
-
-  The optional `events/3` callback is a provisional Stage 2 seam for adapters
-  that support durable event cursors or webhooks. Stage 1 convergence uses
-  `describe_contact/3` against durable reservation rows instead.
+  This remains separate from `Cadence.ProviderAdapters.Adapter`, which owns
+  path-local byte I/O only after a Contact has been realized.
   """
 
-  alias Cadence.Contacts.ProviderProfile
+  alias Cadence.GroundNetworks.{
+    DeliveryProfile,
+    Opportunity,
+    ProviderCapabilities,
+    ProviderContact,
+    ProviderContext,
+    ProviderError,
+    ServiceProfile
+  }
 
-  @typedoc """
-  Provider-neutral reservation shape returned by adapters.
+  @type provider_result(value) :: {:ok, value} | {:error, ProviderError.t() | term()}
+  @type opportunity_page :: %{
+          data: [Opportunity.t()],
+          next_cursor: binary() | nil,
+          truncated: boolean()
+        }
 
-  `status` is one of Cadence's canonical lifecycle strings. The adapter keeps
-  its native value in `provider_status` and the bounded original payload in
-  `provider_evidence`.
-  """
-  @type reservation_result :: %{required(binary()) => term()}
+  @callback validate_connection(ProviderContext.t(), keyword()) :: provider_result(map())
+  @callback capabilities(ProviderContext.t(), keyword()) ::
+              provider_result(ProviderCapabilities.t())
+  @callback list_spacecraft(ProviderContext.t(), map(), keyword()) :: provider_result([map()])
+  @callback list_ground_stations(ProviderContext.t(), map(), keyword()) ::
+              provider_result([map()])
+  @callback list_service_profiles(ProviderContext.t(), map(), keyword()) ::
+              provider_result([ServiceProfile.t()])
+  @callback list_delivery_profiles(ProviderContext.t(), map(), keyword()) ::
+              provider_result([DeliveryProfile.t()])
+  @callback provision_delivery_profile(ProviderContext.t(), map(), keyword()) ::
+              provider_result(DeliveryProfile.t())
+  @callback search_opportunities(ProviderContext.t(), map(), keyword()) ::
+              provider_result(opportunity_page())
+  @callback reserve_contact(ProviderContext.t(), map(), keyword()) ::
+              provider_result(ProviderContact.t())
+  @callback describe_contact(ProviderContext.t(), binary(), keyword()) ::
+              provider_result(ProviderContact.t())
+  @callback cancel_contact(ProviderContext.t(), binary(), keyword()) ::
+              provider_result(ProviderContact.t())
+  @callback find_contact_by_client_reference(ProviderContext.t(), binary(), keyword()) ::
+              provider_result(ProviderContact.t())
+  @callback events(ProviderContext.t(), binary() | non_neg_integer() | nil, keyword()) ::
+              provider_result(map())
 
-  @callback search_opportunities(ProviderProfile.t(), map(), keyword()) ::
-              {:ok, map()} | {:error, term()}
-  @callback reserve_contact(ProviderProfile.t(), map(), keyword()) ::
-              {:ok, reservation_result()} | {:error, term()}
-  @callback describe_contact(ProviderProfile.t(), binary(), keyword()) ::
-              {:ok, reservation_result()} | {:error, term()}
-  @callback cancel_contact(ProviderProfile.t(), binary(), keyword()) ::
-              {:ok, reservation_result()} | {:error, term()}
-  @callback find_contact_by_idempotency_key(ProviderProfile.t(), binary(), keyword()) ::
-              {:ok, reservation_result()} | {:error, term()}
-  @callback events(ProviderProfile.t(), non_neg_integer(), keyword()) ::
-              {:ok, map()} | {:error, term()}
-
-  @optional_callbacks find_contact_by_idempotency_key: 3, events: 3
+  @optional_callbacks provision_delivery_profile: 3,
+                      find_contact_by_client_reference: 3,
+                      events: 3
 end

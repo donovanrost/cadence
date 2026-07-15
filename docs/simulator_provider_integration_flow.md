@@ -4,20 +4,18 @@ The ground-network simulator is an external provider peer. It does not bootstrap
 or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
-> This walkthrough describes the implemented Stage 1 API. The accepted
-> [Simulator Provider Contract v1](superpowers/specs/2026-07-13-simulator-provider-contract-v1.md)
-> and
-> [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md)
-> replace the shared `/v1` surface with `/admin/v1` and `/provider/v1`, then
-> provision the TCP destination as a Delivery Profile instead of sending it in
-> each reservation.
+> This walkthrough describes the implemented Simulator Provider Contract v1 and
+> normalized Cadence Provider Client. Mission Provider and provider-managed
+> Transport persistence remain the next checkpoints in the
+> [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
 
 ## 1. Start the simulator
 
 ```bash
 export CADENCE_SIMULATOR_HTTP_ENABLED=true
 export CADENCE_SIMULATOR_PORT=4101
-export CADENCE_SIMULATOR_API_TOKEN=local-simulator-token
+export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
+export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
 export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.dets"
 export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
 
@@ -25,9 +23,9 @@ cd apps/cadence_simulator
 mix run --no-halt
 ```
 
-Create a scenario and start a run through the simulator's `/v1/scenarios` and
-`/v1/scenarios/:id/runs` endpoints. Scenario/run administration is simulator
-surface area, not Cadence surface area.
+Create a scenario and start a run through `/admin/v1/scenarios` and
+`/admin/v1/scenarios/:id/runs` with the administrator credential. Scenario/run
+administration is simulator surface area, not Cadence surface area.
 
 ## 2. Start Cadence
 
@@ -36,7 +34,14 @@ variables are required by Cadence.
 
 ## 3. Configure the mission provider
 
-In the authenticated mission UI, open **Comms → Providers → New Provider**.
+Provision the Cadence TCP destination once through
+`POST /provider/v1/delivery-profiles`, using the provider credential and the
+run's `provider_environment_ref`. Save the returned Delivery Profile reference.
+
+There is not yet a supported UI path for this new setup. The automated boundary
+test persists the compatibility Provider Profile directly. Stage 2 Task 6
+replaces the old provider form with the normal Mission Provider setup journey.
+For checkpoint development, the persisted bridge contains:
 
 Configure:
 
@@ -45,13 +50,14 @@ Configure:
 - fixed-size framing when the simulator sends TM frames;
 - External Scheduling `Enabled`;
 - Provider Integration `Cadence Ground Network Simulator`;
-- the simulator API URL and token;
-- the host the simulator can use to reach Cadence's telemetry listener;
-- the active provider run ID.
+- the simulator API URL and provider credential;
+- the active provider environment reference;
+- Service Profile `service-realtime-ttc-downlink`;
+- the provisioned Delivery Profile reference.
 
-This creates one ordinary mission-owned `ProviderProfile`. The nested scheduling
-configuration selects the provider control-plane adapter, while the existing TCP
-configuration controls contact-time byte ingress.
+The nested scheduling configuration selects the provider control-plane adapter.
+The existing TCP configuration remains the temporary runtime bridge; Contact
+requests themselves contain no host, port, framing, or `run_id` fields.
 
 ## 4. Configure spacecraft mappings and routes
 
@@ -97,11 +103,13 @@ small scenario and run:
 
 ```bash
 export SIMULATOR_URL=http://127.0.0.1:4101
-export SIMULATOR_TOKEN=local-simulator-token
+export SIMULATOR_ADMIN_TOKEN=local-simulator-admin-token
+export SIMULATOR_PROVIDER_TOKEN=local-simulator-provider-token
+export CADENCE_INGRESS_PORT=4100
 
 SCENARIO_ID=$(curl --silent --fail \
-  --request POST "$SIMULATOR_URL/v1/scenarios" \
-  --header "Authorization: Bearer $SIMULATOR_TOKEN" \
+  --request POST "$SIMULATOR_URL/admin/v1/scenarios" \
+  --header "Authorization: Bearer $SIMULATOR_ADMIN_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{
     "name": "Cadence manual scheduling smoke",
@@ -119,21 +127,46 @@ SCENARIO_ID=$(curl --silent --fail \
   }' | jq --raw-output '.data.id')
 
 RUN_ID=$(curl --silent --fail \
-  --request POST "$SIMULATOR_URL/v1/scenarios/$SCENARIO_ID/runs" \
-  --header "Authorization: Bearer $SIMULATOR_TOKEN" \
+  --request POST "$SIMULATOR_URL/admin/v1/scenarios/$SCENARIO_ID/runs" \
+  --header "Authorization: Bearer $SIMULATOR_ADMIN_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{"seed": 2026, "speed": 1.0}' | jq --raw-output '.data.id')
 
 echo "$RUN_ID"
+
+DELIVERY_PROFILE_ID=$(curl --silent --fail \
+  --request POST "$SIMULATOR_URL/provider/v1/delivery-profiles" \
+  --header "Authorization: Bearer $SIMULATOR_PROVIDER_TOKEN" \
+  --header "X-Simulator-Environment-Ref: $RUN_ID" \
+  --header "Content-Type: application/json" \
+  --data "{
+    \"display_name\": \"Cadence primary telemetry ingress\",
+    \"client_reference\": \"mission-primary-downlink\",
+    \"direction\": \"downlink\",
+    \"delivery_kind\": \"realtime_stream\",
+    \"target\": {
+      \"protocol\": \"tcp\",
+      \"mode\": \"provider_connects\",
+      \"host\": \"127.0.0.1\",
+      \"port\": $CADENCE_INGRESS_PORT
+    },
+    \"framing\": {
+      \"family\": \"ccsds_tm\",
+      \"mode\": \"fixed_size\",
+      \"frame_bytes\": 1115
+    }
+  }" | jq --raw-output '.data.id')
+
+echo "$DELIVERY_PROFILE_ID"
 ```
 
-Start Cadence in a second BEAM. Configure the mission provider with that run ID,
-map one source endpoint to `SC-001`, and create the active downlink link
-assignment. In **Ops → Contacts**, search a future window, reserve an
-opportunity, and observe the provider state move from pending to confirmed and
-then active/completed. The Scheduled Contact should appear only after
-confirmation, and telemetry should arrive through the mission's ordinary TCP/TM
-ingress path while the contact is active.
+Start Cadence in a second BEAM. Configure the compatibility mission provider with
+the environment, Service Profile, and Delivery Profile references, map one source
+endpoint to `SC-001`, and create the active downlink link assignment. In
+**Ops → Contacts**, search a future window, reserve an opportunity, and observe
+Contact, pass, and delivery state independently. The Scheduled Contact should
+appear only after confirmation, and telemetry should arrive through the
+mission's ordinary TCP/TM ingress path while the contact is active.
 
 See [Ground Network Simulator](ground-network-simulator.md) for API and scenario
 details.

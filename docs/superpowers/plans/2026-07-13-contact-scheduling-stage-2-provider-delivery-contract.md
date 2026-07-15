@@ -10,9 +10,18 @@ delivery state; bounded Contact Results; and versioned environment-scoped
 events. A profile-backed Contact now has an executable proof that opens the
 provisioned TCP destination, streams CCSDS telemetry, and records delivery
 counters. Contract fixtures cover opportunity, lifecycle, result, and event
-documents. Legacy `/v1` remains covered while the next checkpoint implements
-the normalized Cadence Provider Client and migrates its simulator adapter to
-`/provider/v1`.
+documents. Cadence now has validated provider-neutral context, capability,
+profile, opportunity, Contact, delivery-descriptor, and error types. Its Req
+adapter uses `/provider/v1`, opaque credential references, capability-selected
+idempotency, normalized pagination, and structured error classification.
+Scheduling, booking, reconciliation, the fake client, and Ops reservation
+payloads now use profile and correlation references instead of `run_id` or raw
+endpoint fields. The separate-app boundary proof creates the environment
+through `/admin/v1`, provisions a Delivery Profile, schedules through
+`/provider/v1`, and still receives ordinary CCSDS telemetry over TCP. Legacy
+simulator `/v1` routes have been removed. Tasks 1-5 are complete; Task 6,
+persisted Mission Provider setup, is next. The existing Provider Profile bridge
+is intentionally temporary until that checkpoint.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

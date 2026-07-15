@@ -2,6 +2,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderProfile, ProviderReservations}
+  alias Cadence.GroundNetworks.ProviderError
   alias Cadence.TestSupport.FakeProviderClient
 
   setup do
@@ -48,7 +49,16 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     attrs = booking_attrs(context)
     test_pid = self()
 
-    on_reserve = fn _provider_attrs ->
+    on_reserve = fn provider_attrs ->
+      assert provider_attrs == %{
+               "client_reference" => attrs["idempotency_key"],
+               "delivery_profile_ref" => attrs["delivery_profile_ref"],
+               "opportunity_ref" => attrs["opportunity_ref"],
+               "service_profile_ref" => attrs["service_profile_ref"],
+               "spacecraft_ref" => attrs["provider_spacecraft_ref"],
+               "tags" => %{"cadence_mission_ref" => context.mission_id}
+             }
+
       assert {:ok, attempt} =
                ProviderReservations.fetch_by_idempotency_key(
                  context.organization_id,
@@ -125,7 +135,11 @@ defmodule Cadence.Contacts.ProviderBookingTest do
 
     assert {:error, {:provider_reservation_not_confirmed, rejected}} =
              reserve(context, attrs,
-               reserve_response: {:error, {:provider_rejected, 409, %{"code" => "conflict"}}}
+               reserve_response:
+                 {:error,
+                  ProviderError.from_response(409, %{
+                    "error" => %{"code" => "no_capacity", "detail" => "antenna unavailable"}
+                  })}
              )
 
     assert rejected.lifecycle_state == :rejected
@@ -137,7 +151,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     attrs = booking_attrs(context)
     test_pid = self()
     on_reserve = fn _attrs -> send(test_pid, :provider_mutation) end
-    timeout = {:provider_request_uncertain, %{"reason" => "timeout"}}
+    timeout = ProviderError.ambiguous(%{"reason" => "timeout"})
 
     assert {:error, {:provider_reservation_not_confirmed, unknown}} =
              reserve(context, attrs,
@@ -208,7 +222,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
                booking.provider_reservation.provider_reservation_id,
                client: FakeProviderClient,
                cancel_response:
-                 {:error, {:provider_request_uncertain, %{"reason" => "connection_closed"}}}
+                 {:error, ProviderError.ambiguous(%{"reason" => "connection_closed"})}
              )
 
     assert unknown.lifecycle_state == :unknown
@@ -241,12 +255,13 @@ defmodule Cadence.Contacts.ProviderBookingTest do
       "provider_reservation_id" => "provider-reservation-#{context.suffix}",
       "scheduled_contact_id" => "scheduled-contact-#{context.suffix}",
       "idempotency_key" => "idempotency-#{context.suffix}",
-      "run_id" => "run-alpha",
-      "opportunity_id" => "opportunity-#{context.suffix}",
+      "opportunity_ref" => "opportunity-#{context.suffix}",
       "cadence_spacecraft_id" => "spacecraft-#{context.suffix}",
       "provider_spacecraft_ref" => "SC-#{context.suffix}",
-      "ground_station_id" => "station-svalbard",
-      "antenna_id" => "station-svalbard-antenna-1",
+      "ground_station_ref" => "station-svalbard",
+      "antenna_or_service_pool_ref" => "station-svalbard-antenna-1",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "delivery_profile_ref" => "delivery-cadence-primary",
       "starts_at" => DateTime.to_iso8601(starts_at),
       "ends_at" => DateTime.to_iso8601(ends_at),
       "source_endpoint_refs" => ["source-endpoint-#{context.suffix}"],
@@ -268,7 +283,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
       "provider_status" => if(status == "confirmed", do: "scheduled", else: status),
       "starts_at" => attrs["starts_at"],
       "ends_at" => attrs["ends_at"],
-      "provider_evidence" => %{"ground_station_id" => attrs["ground_station_id"]}
+      "provider_evidence" => %{"ground_station_ref" => attrs["ground_station_ref"]}
     }
   end
 end

@@ -6,13 +6,8 @@ if config_env() != :test do
     |> String.downcase()
     |> then(&(&1 in ["1", "true", "yes", "on"]))
 
-  legacy_api_token = System.get_env("CADENCE_SIMULATOR_API_TOKEN")
-
-  admin_api_token =
-    System.get_env("CADENCE_SIMULATOR_ADMIN_API_TOKEN") || legacy_api_token
-
-  provider_api_token =
-    System.get_env("CADENCE_SIMULATOR_PROVIDER_API_TOKEN") || legacy_api_token
+  admin_api_token = System.get_env("CADENCE_SIMULATOR_ADMIN_API_TOKEN")
+  provider_api_token = System.get_env("CADENCE_SIMULATOR_PROVIDER_API_TOKEN")
 
   config :cadence_simulator,
     provider_http: [
@@ -31,6 +26,5 @@ if config_env() != :test do
       definitions_path: System.get_env("CADENCE_SIMULATOR_DEFINITIONS_PATH")
     ],
     provider_admin_api_token: admin_api_token,
-    provider_api_token: provider_api_token,
-    legacy_provider_api_token: legacy_api_token || provider_api_token
+    provider_api_token: provider_api_token
 end

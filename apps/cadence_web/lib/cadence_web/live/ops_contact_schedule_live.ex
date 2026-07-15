@@ -544,7 +544,9 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       "path_template_id" => route.path_template_id,
       "path_template_version" => route.path_template_version,
       "source_endpoint_id" => route.source_endpoint_id,
-      "provider_spacecraft_ref" => route.provider_spacecraft_ref
+      "provider_spacecraft_ref" => route.provider_spacecraft_ref,
+      "service_profile_ref" => route.service_profile_ref,
+      "delivery_profile_ref" => route.delivery_profile_ref
     }
   end
 
@@ -554,15 +556,15 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
     opportunity
     |> Map.take([
-      "opportunity_id",
       "id",
-      "run_id",
-      "ground_station_id",
-      "antenna_id",
+      "ground_station_ref",
+      "antenna_or_service_pool_ref",
+      "service_profile_ref",
+      "delivery_profile_ref",
       "starts_at",
       "ends_at"
     ])
-    |> Map.put("opportunity_id", opportunity["id"])
+    |> Map.put("opportunity_ref", opportunity["id"])
     |> Map.put("provider_reservation_id", "provider_reservation_#{stable_suffix}")
     |> Map.put("scheduled_contact_id", "scheduled_contact_#{stable_suffix}")
     |> Map.put("idempotency_key", "cadence:contact:#{stable_suffix}")

@@ -76,11 +76,16 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
 
     opportunity = %{
       "id" => "opportunity-alpha",
-      "spacecraft_id" => "SIM-001",
-      "ground_station_id" => "station-alpha",
-      "antenna_id" => "antenna-alpha",
+      "spacecraft_ref" => "SIM-001",
+      "ground_station_ref" => "station-alpha",
+      "antenna_or_service_pool_ref" => "antenna-alpha",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
       "starts_at" => starts_at |> DateTime.add(300) |> DateTime.to_iso8601(),
-      "ends_at" => starts_at |> DateTime.add(900) |> DateTime.to_iso8601()
+      "ends_at" => starts_at |> DateTime.add(900) |> DateTime.to_iso8601(),
+      "expires_at" => starts_at |> DateTime.add(60) |> DateTime.to_iso8601(),
+      "availability" => "available",
+      "synthetic" => true,
+      "extensions" => %{}
     }
 
     assert {:ok, %{route: searched_route, opportunities: [result]}} =
@@ -94,6 +99,12 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                  "ends_at" => DateTime.to_iso8601(ends_at)
                },
                client: FakeProviderClient,
+               on_search: fn params ->
+                 assert params["spacecraft_refs"] == ["SIM-001"]
+                 assert params["service_profile_ref"] == "service-realtime-ttc-downlink"
+                 refute Map.has_key?(params, "spacecraft_ids")
+                 refute Map.has_key?(params, "run_id")
+               end,
                search_response: {:ok, %{"data" => [opportunity]}}
              )
 
@@ -175,16 +186,15 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
     assert Enum.map(findings, & &1.code) == [:missing_downlink_route]
   end
 
-  test "reports scheduling client, run scope, and data-plane blockers", context do
+  test "reports scheduling API, environment, and profile reference blockers", context do
     variants = [
       {"no-client", Map.delete(valid_config(), "scheduling"), :missing_scheduling_client},
-      {"no-run", put_in(valid_config(), ["scheduling", "run_id"], nil),
-       :missing_provider_run_scope},
-      {"no-delivery", put_in(valid_config(), ["scheduling", "delivery_host"], nil),
-       :missing_data_plane_configuration},
-      {"bad-port", Map.put(valid_config(), "port", 0), :missing_data_plane_configuration},
-      {"bad-framing", put_in(valid_config(), ["framing", "mode"], "raw"),
-       :missing_data_plane_configuration}
+      {"no-environment", put_in(valid_config(), ["scheduling", "environment_ref"], nil),
+       :missing_provider_environment},
+      {"no-service-profile", put_in(valid_config(), ["scheduling", "service_profile_ref"], nil),
+       :missing_provider_profile_reference},
+      {"no-delivery-profile", put_in(valid_config(), ["scheduling", "delivery_profile_ref"], nil),
+       :missing_provider_profile_reference}
     ]
 
     Enum.each(variants, fn {name, configuration, expected_code} ->
@@ -301,9 +311,16 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
 
     mismatched = %{
       "id" => "opportunity-wrong-spacecraft",
-      "spacecraft_id" => "ANOTHER-SPACECRAFT",
+      "spacecraft_ref" => "ANOTHER-SPACECRAFT",
+      "ground_station_ref" => "station-alpha",
+      "antenna_or_service_pool_ref" => "antenna-alpha",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
       "starts_at" => starts_at |> DateTime.add(60) |> DateTime.to_iso8601(),
-      "ends_at" => starts_at |> DateTime.add(120) |> DateTime.to_iso8601()
+      "ends_at" => starts_at |> DateTime.add(120) |> DateTime.to_iso8601(),
+      "expires_at" => starts_at |> DateTime.add(30) |> DateTime.to_iso8601(),
+      "availability" => "available",
+      "synthetic" => true,
+      "extensions" => %{}
     }
 
     assert {:error, {:invalid_provider_opportunity, "opportunity-wrong-spacecraft"}} =
@@ -417,8 +434,9 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
       "scheduling" => %{
         "client" => "simulator_http",
         "base_url" => "http://simulator.test",
-        "delivery_host" => "cadence.test",
-        "run_id" => "run-alpha"
+        "environment_ref" => "run-alpha",
+        "service_profile_ref" => "service-realtime-ttc-downlink",
+        "delivery_profile_ref" => "delivery-cadence-primary"
       }
     }
   end

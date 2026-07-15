@@ -17,20 +17,17 @@ defmodule Cadence.Contacts.ProviderBooking do
     ScheduledContact
   }
 
+  alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
 
   @provider_request_fields [
-    "opportunity_id",
-    "run_id",
-    "spacecraft_id",
-    "ground_station_id",
-    "antenna_id",
-    "starts_at",
-    "ends_at",
-    "mission_profile_ref",
-    "dataflow_profile_ref",
-    "data_plane"
+    "opportunity_ref",
+    "spacecraft_ref",
+    "service_profile_ref",
+    "delivery_profile_ref",
+    "client_reference",
+    "tags"
   ]
 
   @type booking_result :: %{
@@ -48,8 +45,9 @@ defmodule Cadence.Contacts.ProviderBooking do
              provider_profile_id,
              Keyword.get(opts, :provider_profile_version)
            ),
-         {:ok, client} <- resolve_client(provider_profile, opts) do
-      client.search_opportunities(provider_profile, params, opts)
+         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, client} <- resolve_client(context, opts) do
+      client.search_opportunities(context, params, call_opts)
     end
   end
 
@@ -66,13 +64,14 @@ defmodule Cadence.Contacts.ProviderBooking do
              Map.get(attrs, "provider_profile_version") ||
                Map.get(attrs, :provider_profile_version)
            ),
-         {:ok, client} <- resolve_client(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, client} <- resolve_client(context, opts),
          {:ok, attempt} <- build_attempt(organization_id, mission_id, provider_profile, attrs),
          {:ok, reservation, outcome} <-
            ProviderReservations.create_attempt_with_outcome(organization_id, attempt) do
       case outcome do
         :existing -> booking_result(reservation)
-        :created -> submit_reservation(reservation, provider_profile, client, attrs, opts)
+        :created -> submit_reservation(reservation, context, client, attrs, call_opts)
       end
     end
   end
@@ -102,9 +101,10 @@ defmodule Cadence.Contacts.ProviderBooking do
              reservation.provider_profile_id,
              reservation.provider_profile_version
            ),
-         {:ok, client} <- resolve_client(provider_profile, opts),
+         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, client} <- resolve_client(context, opts),
          {:ok, provider_control_ref} <- require_provider_control_ref(reservation) do
-      case client.cancel_contact(provider_profile, provider_control_ref, opts) do
+      case client.cancel_contact(context, provider_control_ref, call_opts) do
         {:ok, response} ->
           complete_cancellation(reservation, response)
 
@@ -115,7 +115,8 @@ defmodule Cadence.Contacts.ProviderBooking do
   end
 
   defp complete_cancellation(reservation, response) do
-    with :ok <- validate_reservation_result(response),
+    with {:ok, response} <- reservation_result(response),
+         :ok <- validate_reservation_result(response),
          {:ok, updated} <-
            ProviderReservations.apply_provider_status(
              reservation.organization_id,
@@ -129,21 +130,30 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp submit_reservation(reservation, provider_profile, client, attrs, opts) do
-    provider_attrs =
-      attrs
-      |> stringify_keys()
-      |> Map.put("spacecraft_id", reservation.provider_spacecraft_ref)
-      |> Map.put("starts_at", DateTime.to_iso8601(reservation.starts_at))
-      |> Map.put("ends_at", DateTime.to_iso8601(reservation.ends_at))
-      |> Map.put("mission_profile_ref", reservation.mission_id)
-      |> Map.take(@provider_request_fields)
+  defp submit_reservation(reservation, context, client, attrs, opts) do
+    string_attrs = stringify_keys(attrs)
 
-    call_opts = Keyword.put(opts, :idempotency_key, reservation.idempotency_key)
+    provider_attrs = %{
+      "opportunity_ref" => reservation.provider_opportunity_ref,
+      "spacecraft_ref" => reservation.provider_spacecraft_ref,
+      "service_profile_ref" => string_attrs["service_profile_ref"],
+      "delivery_profile_ref" => string_attrs["delivery_profile_ref"],
+      "client_reference" => reservation.idempotency_key,
+      "tags" => %{"cadence_mission_ref" => reservation.mission_id}
+    }
 
-    case client.reserve_contact(provider_profile, provider_attrs, call_opts) do
+    call_opts =
+      opts
+      |> Keyword.put(:idempotency_key, reservation.idempotency_key)
+      |> Keyword.put(:contact_window, %{
+        starts_at: reservation.starts_at,
+        ends_at: reservation.ends_at
+      })
+
+    case client.reserve_contact(context, provider_attrs, call_opts) do
       {:ok, response} ->
-        with :ok <- validate_reservation_result(response),
+        with {:ok, response} <- reservation_result(response),
+             :ok <- validate_reservation_result(response),
              :ok <- validate_response_matches_attempt(response, reservation),
              {:ok, updated} <-
                ProviderReservations.apply_provider_status(
@@ -168,9 +178,11 @@ defmodule Cadence.Contacts.ProviderBooking do
     with {:ok, starts_at} <- parse_time(string_attrs["starts_at"], :starts_at),
          {:ok, ends_at} <- parse_time(string_attrs["ends_at"], :ends_at),
          :ok <- validate_interval(starts_at, ends_at),
-         {:ok, opportunity_id} <- required_binary(string_attrs, "opportunity_id"),
+         {:ok, opportunity_ref} <- required_binary(string_attrs, "opportunity_ref"),
          {:ok, provider_spacecraft_ref} <- provider_spacecraft_ref(string_attrs),
          {:ok, spacecraft_id} <- canonical_spacecraft_id(string_attrs),
+         {:ok, service_profile_ref} <- required_binary(string_attrs, "service_profile_ref"),
+         {:ok, delivery_profile_ref} <- required_binary(string_attrs, "delivery_profile_ref"),
          {:ok, source_endpoint_refs} <- required_binary_list(string_attrs, "source_endpoint_refs"),
          {:ok, path_template_ids} <- required_binary_list(string_attrs, "path_template_ids") do
       scheduled_contact_id =
@@ -184,8 +196,14 @@ defmodule Cadence.Contacts.ProviderBooking do
 
       request_document = %{
         "provider_request" =>
-          string_attrs
-          |> Map.put("spacecraft_id", provider_spacecraft_ref)
+          %{
+            "opportunity_ref" => opportunity_ref,
+            "spacecraft_ref" => provider_spacecraft_ref,
+            "service_profile_ref" => service_profile_ref,
+            "delivery_profile_ref" => delivery_profile_ref,
+            "client_reference" => idempotency_key,
+            "tags" => %{"cadence_mission_ref" => mission_id}
+          }
           |> Map.take(@provider_request_fields),
         "routing" => %{
           "source_endpoint_refs" => source_endpoint_refs,
@@ -201,7 +219,7 @@ defmodule Cadence.Contacts.ProviderBooking do
          provider_profile_id: profile.provider_profile_id,
          provider_profile_version: profile.version,
          scheduled_contact_id: scheduled_contact_id,
-         provider_opportunity_ref: opportunity_id,
+         provider_opportunity_ref: opportunity_ref,
          idempotency_key: idempotency_key,
          lifecycle_state: :requesting,
          spacecraft_id: spacecraft_id,
@@ -212,8 +230,10 @@ defmodule Cadence.Contacts.ProviderBooking do
          ends_at: ends_at,
          request_document: request_document,
          metadata: %{
-           "ground_station_id" => string_attrs["ground_station_id"],
-           "antenna_id" => string_attrs["antenna_id"]
+           "ground_station_ref" => string_attrs["ground_station_ref"],
+           "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
+           "service_profile_ref" => service_profile_ref,
+           "delivery_profile_ref" => delivery_profile_ref
          }
        })}
     end
@@ -238,7 +258,7 @@ defmodule Cadence.Contacts.ProviderBooking do
   defp persist_saga_error(reservation, reason, lifecycle_state) do
     error_document = %{
       "lifecycle_state" => Atom.to_string(lifecycle_state),
-      "reason" => JsonDocument.encode(reason),
+      "reason" => encode_error(reason),
       "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
@@ -256,8 +276,11 @@ defmodule Cadence.Contacts.ProviderBooking do
     end
   end
 
-  defp error_lifecycle({:provider_rejected, _status, _body}), do: :rejected
-  defp error_lifecycle({:provider_unavailable, _reason}), do: :failed
+  defp error_lifecycle(%ProviderError{category: category})
+       when category in [:conflict, :no_capacity, :invalid_request],
+       do: :rejected
+
+  defp error_lifecycle(%ProviderError{category: :provider_unavailable}), do: :failed
   defp error_lifecycle(_reason), do: :unknown
 
   defp validate_reservation_result(response) when is_map(response) do
@@ -273,9 +296,6 @@ defmodule Cadence.Contacts.ProviderBooking do
       {:error, reason} -> {:error, reason}
     end
   end
-
-  defp validate_reservation_result(_response),
-    do: {:error, {:malformed_provider_response, :reservation}}
 
   defp validate_response_matches_attempt(response, reservation) do
     with {:ok, response_starts_at} <- parse_time(response["starts_at"], :starts_at),
@@ -307,12 +327,27 @@ defmodule Cadence.Contacts.ProviderBooking do
   defp fetch_provider_profile(_organization_id, _mission_id, _provider_profile_id, version),
     do: {:error, {:invalid_provider_profile_version, version}}
 
-  defp resolve_client(provider_profile, opts) do
+  defp resolve_client(context, opts) do
     case Keyword.fetch(opts, :client) do
       {:ok, client} -> {:ok, client}
-      :error -> Registry.fetch(provider_profile)
+      :error -> Registry.fetch(context)
     end
   end
+
+  defp provider_context(provider_profile, opts) do
+    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
+      {:ok, context, ProviderContext.with_legacy_credential(provider_profile, context, opts)}
+    end
+  end
+
+  defp reservation_result(%ProviderContact{} = contact),
+    do: {:ok, ProviderContact.to_reservation_result(contact)}
+
+  defp reservation_result(response) when is_map(response), do: {:ok, response}
+  defp reservation_result(_response), do: {:error, {:malformed_provider_response, :contact}}
+
+  defp encode_error(%ProviderError{} = error), do: ProviderError.to_map(error)
+  defp encode_error(reason), do: JsonDocument.encode(reason)
 
   defp parse_time(%DateTime{} = value, _field), do: {:ok, value}
 

@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
     ProviderReservations
   }
 
+  alias Cadence.GroundNetworks.ProviderError
   alias Cadence.TestSupport.FakeProviderClient
 
   setup do
@@ -148,7 +149,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
     assert {:ok, %{processed: 1, converged: 0, errors: 1}} =
              reconcile(context,
-               describe_response: {:error, {:provider_unavailable, %{"reason" => "offline"}}}
+               describe_response: {:error, ProviderError.unavailable(%{"reason" => "offline"})}
              )
 
     assert {:ok, errored} =
@@ -262,11 +263,13 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
       "provider_reservation_id" => "provider-reservation-#{context.suffix}",
       "scheduled_contact_id" => "scheduled-contact-#{context.suffix}",
       "idempotency_key" => "idempotency-#{context.suffix}",
-      "opportunity_id" => "opportunity-#{context.suffix}",
+      "opportunity_ref" => "opportunity-#{context.suffix}",
       "cadence_spacecraft_id" => "spacecraft-#{context.suffix}",
       "provider_spacecraft_ref" => "SC-#{context.suffix}",
-      "ground_station_id" => "station-alpha",
-      "antenna_id" => "antenna-alpha",
+      "ground_station_ref" => "station-alpha",
+      "antenna_or_service_pool_ref" => "antenna-alpha",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "delivery_profile_ref" => "delivery-cadence-primary",
       "starts_at" => DateTime.to_iso8601(starts_at),
       "ends_at" => starts_at |> DateTime.add(600) |> DateTime.to_iso8601(),
       "source_endpoint_refs" => ["source-#{context.suffix}"],

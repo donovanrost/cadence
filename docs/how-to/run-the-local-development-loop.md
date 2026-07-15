@@ -73,7 +73,8 @@ From a second shell, start the external provider simulator:
 cd apps/cadence_simulator
 export CADENCE_SIMULATOR_HTTP_ENABLED=true
 export CADENCE_SIMULATOR_PORT=4101
-export CADENCE_SIMULATOR_API_TOKEN=local-simulator-token
+export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
+export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
 mix run --no-halt
 ```
 

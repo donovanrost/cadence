@@ -14,6 +14,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ProviderScheduling
   }
 
+  alias Cadence.Contacts.ProviderClients.SimulatorHTTP
+  alias Cadence.GroundNetworks.{ProviderContact, ProviderContext}
+
   alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -27,6 +30,16 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
   setup do
     :ok = Store.clear()
+    previous_admin_token = Application.get_env(:cadence_simulator, :provider_admin_api_token)
+    previous_provider_token = Application.get_env(:cadence_simulator, :provider_api_token)
+    Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
+    Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
+
+    on_exit(fn ->
+      restore_config(:provider_admin_api_token, previous_admin_token)
+      restore_config(:provider_api_token, previous_provider_token)
+    end)
+
     http_port = free_port()
     telemetry_port = free_port()
 
@@ -42,7 +55,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   test "provider HTTP scheduling realizes a contact and streams normal Cadence telemetry",
        context do
     scenario =
-      post!(context.base_url <> "/v1/scenarios", %{
+      admin_post!(context.base_url <> "/admin/v1/scenarios", %{
         "name" => "Cadence scheduling boundary proof",
         "spacecraft_count" => 3,
         "spacecraft_prefix" => "SC",
@@ -59,12 +72,21 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
       })
 
     run =
-      post!(context.base_url <> "/v1/scenarios/#{scenario["id"]}/runs", %{
+      admin_post!(context.base_url <> "/admin/v1/scenarios/#{scenario["id"]}/runs", %{
         "seed" => 2_026,
         "speed" => 1.0
       })
 
-    setup = persist_cadence_setup(context, run)
+    provider_context = provider_context(context.base_url, run)
+
+    assert {:ok, delivery_profile} =
+             SimulatorHTTP.provision_delivery_profile(
+               provider_context,
+               delivery_profile_request(context.telemetry_port),
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    setup = persist_cadence_setup(context, run, delivery_profile.id)
     search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
     search_ends_at = DateTime.add(search_starts_at, 180)
 
@@ -116,11 +138,12 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
 
-    assert %{"data" => %{"status" => "scheduled"}} =
-             Req.get!(
-               context.base_url <>
-                 "/v1/contact-reservations/#{booking.provider_reservation.response_document["id"]}"
-             ).body
+    assert {:ok, %ProviderContact{status: :confirmed, pass_phase: :scheduled}} =
+             SimulatorHTTP.describe_contact(
+               provider_context,
+               booking.provider_reservation.response_document["id"],
+               credential_resolver: &resolve_provider_credential/1
+             )
 
     {:ok, opportunity_starts_at, _offset} = DateTime.from_iso8601(opportunity["starts_at"])
     {:ok, opportunity_ends_at, _offset} = DateTime.from_iso8601(opportunity["ends_at"])
@@ -213,7 +236,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              2
   end
 
-  defp persist_cadence_setup(context, run) do
+  defp persist_cadence_setup(context, run, delivery_profile_ref) do
     suffix = System.unique_integer([:positive])
     organization_id = "org-simulator-scheduling-#{suffix}"
     mission_id = "mission-simulator-scheduling-#{suffix}"
@@ -260,8 +283,10 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
           "scheduling" => %{
             "client" => "simulator_http",
             "base_url" => context.base_url,
-            "delivery_host" => "127.0.0.1",
-            "run_id" => run["id"]
+            "api_token" => "provider-secret",
+            "environment_ref" => run["provider_environment_ref"],
+            "service_profile_ref" => "service-realtime-ttc-downlink",
+            "delivery_profile_ref" => delivery_profile_ref
           }
         },
         metadata: %{"display_name" => "External simulator"}
@@ -378,14 +403,54 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     |> Map.put("path_template_refs", [
       %{"path_template_id" => setup.path.path_template_id, "version" => setup.path.version}
     ])
-    |> Map.put("opportunity_id", opportunity["id"])
+    |> Map.put("opportunity_ref", opportunity["id"])
   end
 
-  defp post!(url, body) do
-    response = Req.post!(url, json: body)
+  defp admin_post!(url, body) do
+    response = Req.post!(url, json: body, auth: {:bearer, "admin-secret"})
     assert response.status in 200..299
     response.body["data"]
   end
+
+  defp provider_context(base_url, run) do
+    {:ok, context} =
+      ProviderContext.new(%{
+        provider_ref: "simulator",
+        mission_id: "mission-boundary-proof",
+        client_key: "simulator_http",
+        base_url: base_url,
+        credential_ref: "env://SIMULATOR_PROVIDER_TOKEN",
+        environment_ref: run["provider_environment_ref"]
+      })
+
+    context
+  end
+
+  defp delivery_profile_request(port) do
+    %{
+      "display_name" => "Cadence boundary proof telemetry ingress",
+      "client_reference" => "cadence-boundary-proof-downlink",
+      "direction" => "downlink",
+      "delivery_kind" => "realtime_stream",
+      "target" => %{
+        "protocol" => "tcp",
+        "mode" => "provider_connects",
+        "host" => "127.0.0.1",
+        "port" => port
+      },
+      "framing" => %{
+        "family" => "ccsds_tm",
+        "mode" => "fixed_size",
+        "frame_bytes" => 1_115
+      }
+    }
+  end
+
+  defp resolve_provider_credential("env://SIMULATOR_PROVIDER_TOKEN"),
+    do: {:ok, "provider-secret"}
+
+  defp restore_config(key, nil), do: Application.delete_env(:cadence_simulator, key)
+  defp restore_config(key, value), do: Application.put_env(:cadence_simulator, key, value)
 
   defp free_port do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])

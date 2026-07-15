@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   alias Cadence.Contacts
   alias Cadence.Contacts.{LinkAssignment, ProviderBooking, ProviderClients.Registry}
+  alias Cadence.GroundNetworks.{Opportunity, ProviderContext}
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
@@ -27,6 +28,8 @@ defmodule Cadence.Contacts.ProviderScheduling do
           path_template_version: pos_integer(),
           provider_profile_id: binary(),
           provider_profile_version: pos_integer(),
+          service_profile_ref: binary(),
+          delivery_profile_ref: binary(),
           provider_display_name: binary(),
           route_display_name: binary(),
           client: module()
@@ -99,10 +102,13 @@ defmodule Cadence.Contacts.ProviderScheduling do
              mission_id,
              route.provider_profile_id,
              %{
-               "spacecraft_ids" => [route.provider_spacecraft_ref],
+               "spacecraft_refs" => [route.provider_spacecraft_ref],
+               "ground_station_refs" => [],
+               "service_profile_ref" => route.service_profile_ref,
                "starts_at" => DateTime.to_iso8601(starts_at),
                "ends_at" => DateTime.to_iso8601(ends_at),
-               "limit" => result_limit
+               "page_size" => result_limit,
+               "cursor" => nil
              },
              Keyword.put(opts, :provider_profile_version, route.provider_profile_version)
            ),
@@ -113,7 +119,9 @@ defmodule Cadence.Contacts.ProviderScheduling do
          route: route,
          opportunities:
            Enum.map(opportunities, fn opportunity ->
-             Map.put(opportunity, "route_key", route.route_key)
+             opportunity
+             |> Map.put("route_key", route.route_key)
+             |> Map.put("delivery_profile_ref", route.delivery_profile_ref)
            end)
        }}
     else
@@ -253,20 +261,13 @@ defmodule Cadence.Contacts.ProviderScheduling do
   end
 
   defp provider_readiness(provider_profile) do
-    configuration = provider_profile.configuration
-    scheduling = Map.get(configuration, "scheduling", %{})
-    framing = Map.get(configuration, "framing", %{})
-
-    frame_size =
-      Map.get(framing, "fixed_message_bytes") || Map.get(configuration, "fixed_message_bytes")
+    scheduling = Map.get(provider_profile.configuration, "scheduling", %{})
 
     with :ok <- validate_active_provider(provider_profile),
          :ok <- validate_scheduling_api(scheduling),
-         :ok <- validate_run_scope(scheduling),
-         :ok <- validate_delivery_host(scheduling),
-         :ok <- validate_provider_mode(configuration),
-         :ok <- validate_provider_port(configuration),
-         :ok <- validate_provider_framing(framing, frame_size) do
+         :ok <- validate_environment_scope(scheduling),
+         :ok <- validate_profile_reference(scheduling, "service_profile_ref"),
+         :ok <- validate_profile_reference(scheduling, "delivery_profile_ref") do
       fetch_scheduling_client(provider_profile)
     end
   end
@@ -287,55 +288,31 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
-  defp validate_run_scope(scheduling) do
-    if blank?(scheduling["run_id"]) do
-      {:error, :missing_provider_run_scope, "Provider environment or run ID is required."}
+  defp validate_environment_scope(scheduling) do
+    if blank?(scheduling["environment_ref"] || scheduling["run_id"]) do
+      {:error, :missing_provider_environment, "Provider environment reference is required."}
     else
       :ok
     end
   end
 
-  defp validate_delivery_host(scheduling) do
-    if blank?(scheduling["delivery_host"]) do
-      {:error, :missing_data_plane_configuration, "Telemetry delivery host is required."}
+  defp validate_profile_reference(scheduling, key) do
+    if blank?(scheduling[key]) do
+      {:error, :missing_provider_profile_reference, "Provider #{key} is required."}
     else
       :ok
-    end
-  end
-
-  defp validate_provider_mode(configuration) do
-    if configuration["mode"] == "listen" and configuration["direction"] == "downlink" do
-      :ok
-    else
-      {:error, :missing_data_plane_configuration,
-       "Stage 1 requires a listening downlink provider."}
-    end
-  end
-
-  defp validate_provider_port(configuration) do
-    if valid_port?(configuration["port"]) do
-      :ok
-    else
-      {:error, :missing_data_plane_configuration, "A valid telemetry listener port is required."}
-    end
-  end
-
-  defp validate_provider_framing(framing, frame_size) do
-    if framing["mode"] == "fixed_size" and is_integer(frame_size) and frame_size > 0 do
-      :ok
-    else
-      {:error, :missing_data_plane_configuration,
-       "Fixed-size telemetry framing is required for scheduled downlink."}
     end
   end
 
   defp fetch_scheduling_client(provider_profile) do
-    case Registry.fetch(provider_profile) do
-      {:ok, client} ->
-        {:ok, client}
+    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
+      case Registry.fetch(context) do
+        {:ok, client} ->
+          {:ok, client}
 
-      {:error, _reason} ->
-        {:error, :unknown_scheduling_client, "Provider scheduling client is not supported."}
+        {:error, _reason} ->
+          {:error, :unknown_scheduling_client, "Provider scheduling client is not supported."}
+      end
     end
   end
 
@@ -363,6 +340,10 @@ defmodule Cadence.Contacts.ProviderScheduling do
       path_template_version: template.version,
       provider_profile_id: provider_profile.provider_profile_id,
       provider_profile_version: provider_profile.version,
+      service_profile_ref:
+        get_in(provider_profile.configuration, ["scheduling", "service_profile_ref"]),
+      delivery_profile_ref:
+        get_in(provider_profile.configuration, ["scheduling", "delivery_profile_ref"]),
       provider_display_name:
         display_name(provider_profile.metadata, provider_profile.provider_profile_id),
       route_display_name: display_name(template.metadata, template.path_id),
@@ -409,7 +390,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
   end
 
   defp validate_opportunities(response, route, starts_at, ends_at, result_limit) do
-    opportunities = Map.get(response, "data", Map.get(response, :data))
+    opportunities = Map.get(response, :data, Map.get(response, "data"))
 
     if is_list(opportunities) do
       validate_opportunity_list(opportunities, route, starts_at, ends_at, result_limit)
@@ -442,24 +423,29 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
-  defp validate_opportunity(opportunity, route, window_starts_at, window_ends_at)
-       when is_map(opportunity) do
-    with id when is_binary(id) and id != "" <- opportunity["id"],
-         true <- opportunity["spacecraft_id"] == route.provider_spacecraft_ref,
-         {:ok, starts_at} <- parse_time(opportunity, :starts_at),
-         {:ok, ends_at} <- parse_time(opportunity, :ends_at),
-         true <- DateTime.before?(starts_at, ends_at),
+  defp validate_opportunity(%Opportunity{} = opportunity, route, window_starts_at, window_ends_at) do
+    with true <- opportunity.spacecraft_ref == route.provider_spacecraft_ref,
+         true <- opportunity.service_profile_ref == route.service_profile_ref,
+         starts_at = opportunity.starts_at,
+         ends_at = opportunity.ends_at,
          true <- DateTime.compare(starts_at, window_starts_at) in [:eq, :gt],
          true <- DateTime.compare(ends_at, window_ends_at) in [:eq, :lt] do
       {:ok,
        opportunity
-       |> Map.put("id", id)
-       |> Map.put("starts_at", DateTime.to_iso8601(starts_at))
-       |> Map.put("ends_at", DateTime.to_iso8601(ends_at))}
+       |> Opportunity.to_map()}
     else
-      false -> {:error, {:invalid_provider_opportunity, opportunity["id"]}}
-      nil -> {:error, {:invalid_provider_opportunity, :missing_id}}
-      {:error, reason} -> {:error, reason}
+      false -> {:error, {:invalid_provider_opportunity, opportunity.id}}
+    end
+  end
+
+  defp validate_opportunity(opportunity, route, window_starts_at, window_ends_at)
+       when is_map(opportunity) do
+    case Opportunity.from_external(opportunity) do
+      {:ok, normalized} ->
+        validate_opportunity(normalized, route, window_starts_at, window_ends_at)
+
+      {:error, _reason} ->
+        {:error, {:invalid_provider_opportunity, opportunity["id"] || :shape}}
     end
   end
 
@@ -492,5 +478,4 @@ defmodule Cadence.Contacts.ProviderScheduling do
     do: Map.get(metadata, "display_name", Map.get(metadata, :display_name, fallback))
 
   defp blank?(value), do: not (is_binary(value) and String.trim(value) != "")
-  defp valid_port?(port), do: is_integer(port) and port >= 1 and port <= 65_535
 end

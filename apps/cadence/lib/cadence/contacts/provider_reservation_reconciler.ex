@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   use GenServer
 
   alias Cadence.Contacts.{ProviderClients.Registry, ProviderReservations}
+  alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
   alias Cadence.Organizations
   alias Cadence.Persistence.JsonDocument
 
@@ -102,8 +103,10 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
              reservation.provider_profile_id,
              reservation.provider_profile_version
            ),
-         {:ok, client} <- resolve_client(provider_profile, opts),
-         {:ok, response} <- fetch_provider_state(client, provider_profile, reservation, opts),
+         {:ok, context, call_opts} <- provider_context(provider_profile, opts),
+         {:ok, client} <- resolve_client(context, opts),
+         {:ok, response} <- fetch_provider_state(client, context, reservation, call_opts),
+         {:ok, response} <- reservation_result(response),
          {:ok, updated} <-
            ProviderReservations.apply_provider_status(
              reservation.organization_id,
@@ -117,22 +120,22 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
     end
   end
 
-  defp fetch_provider_state(client, provider_profile, reservation, opts) do
+  defp fetch_provider_state(client, context, reservation, opts) do
     call_opts = provider_call_opts(opts)
 
     case reservation.response_document["id"] || reservation.provider_contact_ref do
       provider_contact_ref when is_binary(provider_contact_ref) and provider_contact_ref != "" ->
-        client.describe_contact(provider_profile, provider_contact_ref, call_opts)
+        client.describe_contact(context, provider_contact_ref, call_opts)
 
       _other ->
-        if function_exported?(client, :find_contact_by_idempotency_key, 3) do
-          client.find_contact_by_idempotency_key(
-            provider_profile,
+        if function_exported?(client, :find_contact_by_client_reference, 3) do
+          client.find_contact_by_client_reference(
+            context,
             reservation.idempotency_key,
             call_opts
           )
         else
-          {:error, :provider_idempotency_recovery_unsupported}
+          {:error, :provider_client_reference_recovery_unsupported}
         end
     end
   end
@@ -140,7 +143,7 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   defp record_reconciliation_error(reservation, reason) do
     error_document = %{
       "lifecycle_state" => Atom.to_string(reservation.lifecycle_state),
-      "reason" => JsonDocument.encode(reason),
+      "reason" => encode_error(reason),
       "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "source" => "provider_reservation_reconciler"
     }
@@ -156,12 +159,27 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
     end
   end
 
-  defp resolve_client(provider_profile, opts) do
+  defp resolve_client(context, opts) do
     case Keyword.fetch(opts, :client) do
       {:ok, client} -> {:ok, client}
-      :error -> Registry.fetch(provider_profile)
+      :error -> Registry.fetch(context)
     end
   end
+
+  defp provider_context(provider_profile, opts) do
+    with {:ok, context} <- ProviderContext.from_provider_profile(provider_profile) do
+      {:ok, context, ProviderContext.with_legacy_credential(provider_profile, context, opts)}
+    end
+  end
+
+  defp reservation_result(%ProviderContact{} = contact),
+    do: {:ok, ProviderContact.to_reservation_result(contact)}
+
+  defp reservation_result(response) when is_map(response), do: {:ok, response}
+  defp reservation_result(_response), do: {:error, {:malformed_provider_response, :contact}}
+
+  defp encode_error(%ProviderError{} = error), do: ProviderError.to_map(error)
+  defp encode_error(reason), do: JsonDocument.encode(reason)
 
   defp provider_call_opts(opts) do
     Keyword.drop(opts, [

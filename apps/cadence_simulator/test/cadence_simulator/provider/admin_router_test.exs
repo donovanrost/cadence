@@ -7,8 +7,7 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
 
   @config_keys [
     :provider_admin_api_token,
-    :provider_api_token,
-    :legacy_provider_api_token
+    :provider_api_token
   ]
 
   setup do
@@ -17,7 +16,6 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
 
     Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
     Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
-    Application.put_env(:cadence_simulator, :legacy_provider_api_token, "legacy-secret")
 
     on_exit(fn -> restore_config(previous) end)
     :ok
@@ -67,9 +65,9 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
            } = Jason.decode!(conn.resp_body)
   end
 
-  test "legacy Stage 1 routes remain available only through the legacy credential" do
-    assert request(:get, "/v1/scenarios", nil, "admin-secret").status == 401
-    assert request(:get, "/v1/scenarios", nil, "legacy-secret").status == 200
+  test "legacy Stage 1 routes are not exposed" do
+    assert request(:get, "/v1/scenarios", nil, "admin-secret").status == 404
+    assert request(:get, "/v1/contact-opportunities/search", nil, "provider-secret").status == 404
   end
 
   defp request(method, path, body, token) do

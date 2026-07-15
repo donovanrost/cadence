@@ -355,12 +355,17 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     opportunity = %{
       "id" => "opportunity-alpha",
-      "run_id" => "run-alpha",
-      "spacecraft_id" => setup.route.provider_spacecraft_ref,
-      "ground_station_id" => "station-svalbard",
-      "antenna_id" => "svalbard-antenna-1",
+      "spacecraft_ref" => setup.route.provider_spacecraft_ref,
+      "ground_station_ref" => "station-svalbard",
+      "antenna_or_service_pool_ref" => "svalbard-antenna-1",
+      "service_profile_ref" => setup.route.service_profile_ref,
+      "delivery_profile_ref" => setup.route.delivery_profile_ref,
       "starts_at" => DateTime.to_iso8601(starts_at),
       "ends_at" => starts_at |> DateTime.add(600) |> DateTime.to_iso8601(),
+      "expires_at" => starts_at |> DateTime.add(-30) |> DateTime.to_iso8601(),
+      "availability" => "available",
+      "synthetic" => true,
+      "extensions" => %{},
       "route_key" => setup.route.route_key
     }
 
@@ -401,8 +406,9 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       "scheduling" => %{
         "client" => "simulator_http",
         "base_url" => "http://simulator.test",
-        "delivery_host" => "cadence.test",
-        "run_id" => "run-alpha"
+        "environment_ref" => "run-alpha",
+        "service_profile_ref" => "service-realtime-ttc-downlink",
+        "delivery_profile_ref" => "delivery-cadence-primary"
       }
     }
   end

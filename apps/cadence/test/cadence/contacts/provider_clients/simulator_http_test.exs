@@ -2,191 +2,391 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
-  alias Cadence.Contacts.ProviderProfile
 
-  test "search sends provider run scope and bearer authentication" do
-    profile = profile()
+  alias Cadence.GroundNetworks.{
+    DeliveryProfile,
+    Opportunity,
+    ProviderCapabilities,
+    ProviderContact,
+    ProviderContext,
+    ProviderError
+  }
+
+  test "search uses Provider Contract v1 and normalizes its page" do
+    params = %{
+      "spacecraft_refs" => ["SC-001"],
+      "ground_station_refs" => [],
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "starts_at" => "2026-07-13T12:00:00Z",
+      "ends_at" => "2026-07-13T13:00:00Z",
+      "page_size" => 25
+    }
 
     req_request = fn opts ->
       send(self(), {:request, opts})
-      {:ok, %Req.Response{status: 200, body: %{"data" => %{"data" => []}}}}
-    end
 
-    assert {:ok, %{"data" => []}} =
-             SimulatorHTTP.search_opportunities(
-               profile,
-               %{"starts_at" => "2026-07-12T00:00:00Z", "ends_at" => "2026-07-12T01:00:00Z"},
-               req_request: req_request
-             )
-
-    assert_received {:request, opts}
-    assert opts[:method] == :post
-    assert opts[:url] == "http://simulator.test/v1/contact-opportunities/search"
-    assert opts[:json]["run_id"] == "run-alpha"
-    assert {"authorization", "Bearer secret"} in opts[:headers]
-  end
-
-  test "reservation sends an idempotency key and returns structured provider errors" do
-    profile = profile()
-    reservation = provider_reservation("scheduled")
-
-    success = fn opts ->
-      send(self(), {:request, opts})
-      {:ok, %Req.Response{status: 201, body: %{"data" => reservation}}}
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{
+           "data" => [opportunity_document()],
+           "meta" => %{"next_cursor" => "opportunity-123", "truncated" => true}
+         }
+       }}
     end
 
     assert {:ok,
             %{
-              "id" => "reservation-alpha",
-              "provider_contact_ref" => "provider-contact-alpha",
-              "status" => "confirmed",
-              "provider_status" => "scheduled"
+              data: [%Opportunity{id: "opportunity-123", spacecraft_ref: "SC-001"}],
+              next_cursor: "opportunity-123",
+              truncated: true
             }} =
-             SimulatorHTTP.reserve_contact(profile, %{"spacecraft_id" => "SC-001"},
-               idempotency_key: "cadence-alpha",
-               req_request: success
-             )
+             SimulatorHTTP.search_opportunities(context(), params, call_opts(req_request))
 
     assert_received {:request, opts}
-    assert {"idempotency-key", "cadence-alpha"} in opts[:headers]
-
-    assert opts[:json]["data_plane"] == %{
-             "host" => "cadence.test",
-             "port" => 4100
-           }
-
-    failure = fn _opts ->
-      {:ok,
-       %Req.Response{
-         status: 409,
-         body: %{"error" => %{"code" => "conflict", "detail" => "antenna unavailable"}}
-       }}
-    end
-
-    assert {:error,
-            {:provider_rejected, 409,
-             %{
-               "error" => %{"code" => "conflict", "detail" => "antenna unavailable"}
-             }}} =
-             SimulatorHTTP.cancel_contact(profile, "reservation-alpha", req_request: failure)
+    assert opts[:method] == :post
+    assert opts[:url] == "http://simulator.test/provider/v1/opportunities/search"
+    assert opts[:json] == params
+    refute Map.has_key?(opts[:json], "run_id")
+    assert {"authorization", "Bearer provider-secret"} in opts[:headers]
+    assert {"x-simulator-environment-ref", "environment-alpha"} in opts[:headers]
   end
 
-  test "normalizes provider lifecycle states and validates required evidence" do
-    expected = %{
-      "pending" => "pending",
-      "scheduled" => "confirmed",
-      "acquiring" => "confirmed",
-      "active" => "active",
-      "completed" => "completed",
-      "rejected" => "rejected",
-      "canceled" => "canceled",
-      "failed" => "failed",
-      "terminated_early" => "failed"
-    }
+  test "native reservation sends correlation headers and parses independent lifecycles" do
+    attrs = contact_request()
 
-    Enum.each(expected, fn {provider_status, canonical_status} ->
-      assert {:ok, %{"status" => ^canonical_status, "provider_status" => ^provider_status}} =
-               SimulatorHTTP.normalize_reservation(provider_reservation(provider_status))
-    end)
-
-    assert {:error, {:unsupported_provider_status, "invented"}} =
-             SimulatorHTTP.normalize_reservation(provider_reservation("invented"))
-
-    assert {:error, {:malformed_provider_response, :ends_at}} =
-             SimulatorHTTP.normalize_reservation(
-               Map.put(provider_reservation("scheduled"), "ends_at", "invalid")
-             )
-  end
-
-  test "classifies rate limits, unavailable endpoints, and ambiguous request failures" do
-    rate_limited = fn _opts ->
-      {:ok, %Req.Response{status: 429, body: %{"error" => %{"code" => "rate_limited"}}}}
-    end
-
-    assert {:error, {:provider_rejected, 429, _evidence}} =
-             SimulatorHTTP.describe_contact(profile(), "reservation-alpha",
-               req_request: rate_limited
-             )
-
-    unavailable = fn _opts -> {:error, %Req.TransportError{reason: :econnrefused}} end
-
-    assert {:error, {:provider_unavailable, _reason}} =
-             SimulatorHTTP.describe_contact(profile(), "reservation-alpha",
-               req_request: unavailable
-             )
-
-    uncertain = fn _opts -> {:error, %Req.TransportError{reason: :timeout}} end
-
-    assert {:error, {:provider_request_uncertain, _reason}} =
-             SimulatorHTTP.describe_contact(profile(), "reservation-alpha",
-               req_request: uncertain
-             )
-  end
-
-  test "recovers a reservation by idempotency key" do
     req_request = fn opts ->
       send(self(), {:request, opts})
-
-      {:ok,
-       %Req.Response{
-         status: 200,
-         body: %{"data" => [provider_reservation("scheduled")]}
-       }}
+      {:ok, %Req.Response{status: 201, body: %{"data" => contact_document()}}}
     end
 
-    assert {:ok, %{"id" => "reservation-alpha", "status" => "confirmed"}} =
-             SimulatorHTTP.find_contact_by_idempotency_key(
-               profile(),
-               "cadence-alpha",
+    assert {:ok,
+            %ProviderContact{
+              id: "contact-123",
+              status: :confirmed,
+              pass_phase: :prepass,
+              delivery: %{status: :ready, protocol: "tcp"}
+            }} =
+             SimulatorHTTP.reserve_contact(context(), attrs,
+               idempotency_key: "booking-123",
+               request_id: "request-123",
+               credential_resolver: &resolve_credential/1,
                req_request: req_request
              )
 
     assert_received {:request, opts}
-    assert opts[:params] == %{"idempotency_key" => "cadence-alpha"}
+    assert opts[:url] == "http://simulator.test/provider/v1/contacts"
+    assert opts[:json] == attrs
+    assert {"idempotency-key", "booking-123"} in opts[:headers]
+    assert {"x-request-id", "request-123"} in opts[:headers]
+    refute Map.has_key?(opts[:json], "data_plane")
+    refute Map.has_key?(opts[:json], "host")
+    refute Map.has_key?(opts[:json], "port")
   end
 
-  test "event polling preserves the provider cursor envelope" do
+  test "client-reference idempotency omits the native header" do
+    req_request = fn opts ->
+      send(self(), {:request, opts})
+      {:ok, %Req.Response{status: 201, body: %{"data" => contact_document()}}}
+    end
+
+    assert {:ok, %ProviderContact{}} =
+             SimulatorHTTP.reserve_contact(
+               context(idempotency: :client_reference),
+               contact_request(),
+               call_opts(req_request) ++ [idempotency_key: "must-not-be-sent"]
+             )
+
+    assert_received {:request, opts}
+    refute Enum.any?(opts[:headers], fn {name, _value} -> name == "idempotency-key" end)
+  end
+
+  test "optional operations are capability gated before an HTTP request" do
+    req_request = fn _opts -> flunk("unsupported operation reached HTTP") end
+    capabilities = capabilities(idempotency: :native)
+
+    context = %{
+      context()
+      | capabilities: %{
+          capabilities
+          | operations: Map.put(capabilities.operations, :delivery_profile_provisioning, false),
+            events: Map.put(capabilities.events, :polling, false),
+            reservation: Map.put(capabilities.reservation, :recovery, :none)
+        }
+    }
+
+    assert {:error, %ProviderError{category: :unsupported_capability}} =
+             SimulatorHTTP.provision_delivery_profile(context, %{}, req_request: req_request)
+
+    assert {:error, %ProviderError{category: :unsupported_capability}} =
+             SimulatorHTTP.find_contact_by_client_reference(context, "booking-123",
+               req_request: req_request
+             )
+
+    assert {:error, %ProviderError{category: :unsupported_capability}} =
+             SimulatorHTTP.events(context, nil, req_request: req_request)
+  end
+
+  test "profile provisioning and client-reference recovery return normalized resources" do
+    req_request = fn opts ->
+      send(self(), {:request, opts})
+
+      body =
+        case {opts[:method], opts[:url]} do
+          {:post, "http://simulator.test/provider/v1/delivery-profiles"} ->
+            %{"data" => delivery_profile_document()}
+
+          {:get, "http://simulator.test/provider/v1/contacts"} ->
+            %{"data" => [contact_document()]}
+        end
+
+      {:ok, %Req.Response{status: 200, body: body}}
+    end
+
+    assert {:ok, %DeliveryProfile{id: "delivery-cadence-primary", state: :ready}} =
+             SimulatorHTTP.provision_delivery_profile(
+               context(),
+               %{"client_reference" => "primary"},
+               call_opts(req_request)
+             )
+
+    assert {:ok, %ProviderContact{id: "contact-123"}} =
+             SimulatorHTTP.find_contact_by_client_reference(
+               context(),
+               "cadence-reservation-123",
+               call_opts(req_request)
+             )
+
+    assert_received {:request, provision_opts}
+    assert provision_opts[:json] == %{"client_reference" => "primary"}
+    assert_received {:request, recovery_opts}
+    assert recovery_opts[:params] == %{"client_reference" => "cadence-reservation-123"}
+  end
+
+  test "events preserve the provider cursor envelope" do
+    event = %{
+      "id" => "event-123",
+      "schema_version" => "1.0",
+      "sequence" => 123,
+      "occurred_at" => "2026-07-13T12:10:00Z",
+      "type" => "contact.status_changed",
+      "resource_type" => "contact",
+      "resource_id" => "contact-123",
+      "request_id" => "request-123",
+      "data" => %{"from" => "pending", "to" => "confirmed"}
+    }
+
     req_request = fn opts ->
       send(self(), {:request, opts})
 
       {:ok,
        %Req.Response{
          status: 200,
-         body: %{"data" => [%{"id" => "event-2"}], "next_cursor" => 2}
+         body: %{
+           "data" => [event],
+           "meta" => %{"next_cursor" => "123", "truncated" => false}
+         }
        }}
     end
 
-    assert {:ok, %{"data" => [%{"id" => "event-2"}], "next_cursor" => 2}} =
-             SimulatorHTTP.events(profile(), 1, req_request: req_request)
+    assert {:ok, %{data: [^event], next_cursor: "123", truncated: false}} =
+             SimulatorHTTP.events(context(), "122", call_opts(req_request))
 
     assert_received {:request, opts}
-    assert opts[:params] == %{cursor: 1}
+    assert opts[:params] == %{"cursor" => "122"}
   end
 
-  defp profile do
-    ProviderProfile.new(%{
-      mission_id: "mission-alpha",
-      adapter_key: :tcp_socket,
-      configuration: %{
-        "port" => 4100,
-        "scheduling" => %{
-          "client" => "simulator_http",
-          "base_url" => "http://simulator.test",
-          "api_token" => "secret",
-          "delivery_host" => "cadence.test",
-          "run_id" => "run-alpha"
-        }
-      }
-    })
+  test "structured failures distinguish provider rejection, unavailable, and ambiguous outcomes" do
+    rejected = fn _opts ->
+      {:ok,
+       %Req.Response{
+         status: 409,
+         body: %{
+           "error" => %{
+             "code" => "no_capacity",
+             "detail" => "antenna unavailable",
+             "api_token" => "must-not-leak"
+           }
+         }
+       }}
+    end
+
+    assert {:error,
+            %ProviderError{
+              category: :no_capacity,
+              detail: "antenna unavailable",
+              evidence: %{
+                "error" => %{"api_token" => "[REDACTED]"}
+              }
+            }} =
+             SimulatorHTTP.describe_contact(context(), "contact-123", call_opts(rejected))
+
+    unavailable = fn _opts -> {:error, %Req.TransportError{reason: :econnrefused}} end
+
+    assert {:error, %ProviderError{category: :provider_unavailable, retryable: true}} =
+             SimulatorHTTP.describe_contact(context(), "contact-123", call_opts(unavailable))
+
+    uncertain = fn _opts -> {:error, %Req.TransportError{reason: :timeout}} end
+
+    assert {:error, %ProviderError{category: :ambiguous_outcome, retryable: false}} =
+             SimulatorHTTP.describe_contact(context(), "contact-123", call_opts(uncertain))
   end
 
-  defp provider_reservation(status) do
+  test "missing environment or credential resolver fails without issuing HTTP" do
+    req_request = fn _opts -> flunk("invalid context reached HTTP") end
+
+    assert {:error, %ProviderError{category: :invalid_request}} =
+             SimulatorHTTP.validate_connection(
+               %{context() | environment_ref: nil},
+               call_opts(req_request)
+             )
+
+    assert {:error, %ProviderError{detail: "credential resolver is required"}} =
+             SimulatorHTTP.validate_connection(context(), req_request: req_request)
+  end
+
+  defp context(overrides \\ []) do
+    idempotency = Keyword.get(overrides, :idempotency, :native)
+
+    {:ok, context} =
+      ProviderContext.new(%{
+        provider_ref: "simulator-alpha",
+        organization_id: "organization-alpha",
+        mission_id: "mission-alpha",
+        client_key: "simulator_http",
+        base_url: "http://simulator.test",
+        credential_ref: "env://SIMULATOR_PROVIDER_TOKEN",
+        environment_ref: "environment-alpha",
+        capabilities: capabilities(idempotency: idempotency)
+      })
+
+    context
+  end
+
+  defp capabilities(overrides) do
+    idempotency = Keyword.fetch!(overrides, :idempotency)
+
+    document =
+      put_in(capabilities_document(), ["reservation", "idempotency"], to_string(idempotency))
+
+    {:ok, capabilities} = ProviderCapabilities.from_external(document)
+    capabilities
+  end
+
+  defp capabilities_document do
     %{
-      "id" => "reservation-alpha",
-      "provider_contact_ref" => "provider-contact-alpha",
-      "status" => status,
-      "starts_at" => "2026-07-12T00:00:00Z",
-      "ends_at" => "2026-07-12T01:00:00Z"
+      "contract_version" => "1.0",
+      "provider" => %{"type" => "simulator", "display_name" => "Simulator"},
+      "operations" => %{
+        "opportunity_search" => true,
+        "contact_reservation" => true,
+        "contact_modification" => false,
+        "contact_cancellation" => true,
+        "inventory_discovery" => true,
+        "delivery_profile_provisioning" => true
+      },
+      "reservation" => %{
+        "confirmation" => "asynchronous",
+        "idempotency" => "native",
+        "recovery" => "client_reference"
+      },
+      "events" => %{
+        "polling" => true,
+        "webhooks" => false,
+        "delivery_semantics" => "at_least_once"
+      },
+      "search" => %{
+        "spacecraft_batch_limit" => 100,
+        "station_batch_limit" => 30,
+        "page_size_limit" => 100
+      },
+      "delivery" => %{
+        "kinds" => ["realtime_stream"],
+        "protocols" => ["tcp"],
+        "directions" => ["downlink"]
+      }
+    }
+  end
+
+  defp call_opts(req_request),
+    do: [credential_resolver: &resolve_credential/1, req_request: req_request]
+
+  defp resolve_credential("env://SIMULATOR_PROVIDER_TOKEN"), do: {:ok, "provider-secret"}
+
+  defp contact_request do
+    %{
+      "opportunity_ref" => "opportunity-123",
+      "spacecraft_ref" => "SC-001",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "delivery_profile_ref" => "delivery-cadence-primary",
+      "client_reference" => "cadence-reservation-123",
+      "tags" => %{"cadence_mission_ref" => "mission-alpha"}
+    }
+  end
+
+  defp opportunity_document do
+    %{
+      "id" => "opportunity-123",
+      "spacecraft_ref" => "SC-001",
+      "ground_station_ref" => "station-svalbard",
+      "antenna_or_service_pool_ref" => "station-svalbard-antenna-1",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "starts_at" => "2026-07-13T12:10:00Z",
+      "ends_at" => "2026-07-13T12:20:00Z",
+      "expires_at" => "2026-07-13T12:09:00Z",
+      "availability" => "available",
+      "synthetic" => true,
+      "extensions" => %{"model" => "deterministic_pass_v1"}
+    }
+  end
+
+  defp contact_document do
+    %{
+      "id" => "contact-123",
+      "client_reference" => "cadence-reservation-123",
+      "opportunity_ref" => "opportunity-123",
+      "spacecraft_ref" => "SC-001",
+      "ground_station_ref" => "station-svalbard",
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "delivery_profile_ref" => "delivery-cadence-primary",
+      "starts_at" => "2026-07-13T12:10:00Z",
+      "ends_at" => "2026-07-13T12:20:00Z",
+      "status" => "confirmed",
+      "pass_phase" => "prepass",
+      "delivery" => %{
+        "status" => "ready",
+        "direction" => "downlink",
+        "delivery_kind" => "realtime_stream",
+        "mode" => "provider_connects",
+        "protocol" => "tcp",
+        "endpoint_ref" => "delivery-cadence-primary",
+        "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115},
+        "allowed_source_refs" => ["SC-001"],
+        "activation_window" => %{
+          "starts_at" => "2026-07-13T12:09:30Z",
+          "ends_at" => "2026-07-13T12:20:30Z"
+        },
+        "credential_ref" => nil,
+        "diagnostics" => %{"endpoint_health" => "healthy"}
+      },
+      "status_reason" => nil,
+      "tags" => %{},
+      "extensions" => %{"synthetic" => true}
+    }
+  end
+
+  defp delivery_profile_document do
+    %{
+      "id" => "delivery-cadence-primary",
+      "version" => 1,
+      "display_name" => "Cadence primary telemetry ingress",
+      "direction" => "downlink",
+      "delivery_kind" => "realtime_stream",
+      "supported_service_profile_refs" => ["service-realtime-ttc-downlink"],
+      "state" => "ready",
+      "operator_summary" => "Streaming to Cadence",
+      "diagnostics" => %{"protocol" => "tcp"},
+      "extensions" => %{}
     }
   end
 end
