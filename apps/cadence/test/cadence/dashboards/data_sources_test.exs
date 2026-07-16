@@ -464,7 +464,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
 
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
-    assert {:ok, :unchanged, unavailable_status} =
+    assert {:ok, unavailable_event, unavailable_status} =
              DataSources.probe_data_source(
                "questdb-connection-failed",
                %{observed_at: ~U[2026-06-21 22:22:00Z]},
@@ -473,6 +473,9 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                questdb_exec_fun: questdb_probe_exec_fun(self(), :connection_error),
                invalidate_runtime_cache?: false
              )
+
+    assert unavailable_event.source_health == :unavailable
+    assert unavailable_event.reason == :source_connection_failed
 
     assert_receive {:questdb_probe_sql, "SELECT 1"}
     refute_receive {:questdb_probe_sql, _schema_sql}
