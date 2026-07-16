@@ -68,7 +68,22 @@ configuration data is never accepted from Contact changes. Task 8 focused
 coverage passes with 31 tests, including boundary equality, missing inputs,
 concurrency, stale and superseded approval, revoked grants, post-realization
 changes, rollback, and exactly-once schedule revision. Root `mix precommit`
-passes. Task 9, Ops journeys and end-to-end recovery proofs, is next.
+passes. Task 9 adds an authenticated Ops Contact detail route in the existing
+`:ops` LiveView session, stable row navigation, four-layer truth and lifecycle
+views, streamed change and audit timelines with explicit domain IDs,
+organization-admin decisions, acknowledgment/contingency work, configuration
+remediation, and admin-only provider diagnostics. The separate-app proof now
+starts from an organization Provider Account and exact mission grant, crosses
+simulator HTTP for opportunity, reservation, events, changes, and recovery,
+crosses the ordinary TCP/CCSDS path for telemetry, and exercises credential
+rotation, inbox/processor restart, bounded timing acceptance, stale
+counteroffers, effective cancellation, endpoint/framing drift, and ambiguous
+modification recovery without replay. Those proofs found and fixed active-grant
+success-shape handling during schedule revision application and preservation of
+the fail-closed reservation returned by reconciliation. Task 9 focused coverage
+passes with 26 LiveView tests, 8 separate-app integration tests, and 3
+consolidated core boundary tests. Task 10 documentation, migration audit, and
+final gates are next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and

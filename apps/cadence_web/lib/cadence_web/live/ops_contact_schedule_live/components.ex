@@ -56,6 +56,8 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
   attr :id, :string, required: true
   attr :row, :map, required: true
   attr :busy?, :boolean, default: false
+  attr :mission_id, :string, required: true
+  attr :admin?, :boolean, default: false
 
   def reservation_row(assigns) do
     reservation = assigns.row.reservation
@@ -91,6 +93,14 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
           Cancel
         </button>
       </div>
+
+      <.link
+        id={"open-reservation-#{@reservation.provider_reservation_id}"}
+        navigate={~p"/missions/#{@mission_id}/ops/contacts/#{@reservation.provider_reservation_id}"}
+        class="mt-3 inline-flex items-center gap-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-primary hover:underline"
+      >
+        Open contact record <.icon name="hero-arrow-right" class="h-3 w-3" />
+      </.link>
 
       <div class="mt-3 grid grid-cols-3 gap-px border border-base-300/60 bg-base-300/60 text-xs">
         <.observation_cell
@@ -151,6 +161,7 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
       </div>
 
       <details
+        :if={@admin?}
         id={"reservation-diagnostics-#{@reservation.provider_reservation_id}"}
         class="mt-3 border-t border-base-300/60 pt-3"
       >

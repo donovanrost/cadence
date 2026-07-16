@@ -3,18 +3,35 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
   import Ecto.Query
 
+  alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Auth.Scope
   alias Cadence.Comms.{RoutingRule, Transport}
 
   alias Cadence.Contacts.{
     ProviderBooking,
+    ProviderChangeApprovals,
+    ProviderReservationChanges,
     ProviderReservationReconciler,
-    ProviderScheduling
+    ProviderScheduling,
+    ScheduledContactRevisions
   }
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProvider, ProviderContact}
+
+  alias Cadence.GroundNetworks.{
+    MissionProvider,
+    ProviderAccountGrants,
+    ProviderAccounts,
+    ProviderAudit,
+    ProviderContact,
+    ProviderCredentials,
+    ProviderEventInbox,
+    ProviderEventPoller,
+    ProviderEventProcessor,
+    ProviderError
+  }
 
   alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -100,7 +117,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                  "spacecraft_id" => setup.spacecraft.spacecraft_id,
                  "starts_at" => DateTime.to_iso8601(search_starts_at),
                  "ends_at" => DateTime.to_iso8601(search_ends_at)
-               }
+               },
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert route.provider_spacecraft_ref == "SC-001"
@@ -112,7 +130,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                setup.organization_id,
                setup.mission_id,
                setup.provider.provider_id,
-               booking_attrs
+               booking_attrs,
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert booking.provider_reservation.lifecycle_state == :pending
@@ -121,12 +140,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     :ok = Orchestrator.reconcile(DateTime.utc_now())
 
-    assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
-             ProviderReservationReconciler.reconcile_due(
-               setup.organization_id,
-               mission_id: setup.mission_id,
-               backoff_ms: 0
-             )
+    assert_event_page_survives_processor_restart(setup)
 
     assert {:ok, scheduled_contact} =
              Cadence.fetch_scheduled_contact(
@@ -206,6 +220,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                setup.organization_id,
                mission_id: setup.mission_id,
                backoff_ms: 0,
+               credential_resolver: &resolve_provider_credential/1,
                now: DateTime.add(DateTime.utc_now(), 1, :second)
              )
 
@@ -219,6 +234,16 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert completed_reservation.lifecycle_state == :completed
     assert completed_reservation.pass_phase == :closed
     assert completed_reservation.delivery_state == :ended
+
+    audit_actions =
+      setup.organization_id
+      |> ProviderAudit.list_entries(
+        provider_reservation_id: completed_reservation.provider_reservation_id,
+        limit: 100
+      )
+      |> Enum.map(& &1.action)
+
+    assert "provider_event.processed" in audit_actions
 
     assert {:ok, _scheduler_summary} =
              Cadence.Contacts.reconcile(setup.mission_id, DateTime.add(opportunity_ends_at, 1))
@@ -275,7 +300,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                  "spacecraft_id" => setup.spacecraft.spacecraft_id,
                  "starts_at" => DateTime.to_iso8601(search_starts_at),
                  "ends_at" => DateTime.to_iso8601(DateTime.add(search_starts_at, 180))
-               }
+               },
+               credential_resolver: &resolve_provider_credential/1
              )
 
     attrs = booking_attrs(setup, opportunity, "response-loss")
@@ -285,7 +311,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                setup.organization_id,
                setup.mission_id,
                setup.provider.provider_id,
-               attrs
+               attrs,
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert ambiguous_reservation.lifecycle_state == :unknown
@@ -308,6 +335,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                setup.organization_id,
                mission_id: setup.mission_id,
                backoff_ms: 0,
+               credential_resolver: &resolve_provider_credential/1,
                now: DateTime.add(DateTime.utc_now(), 1, :second)
              )
 
@@ -328,6 +356,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                setup.organization_id,
                mission_id: setup.mission_id,
                backoff_ms: 0,
+               credential_resolver: &resolve_provider_credential/1,
                now: DateTime.add(DateTime.utc_now(), 2, :second)
              )
 
@@ -349,21 +378,437 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)
   end
 
-  defp persist_provider_setup(context, run) do
+  test "credential rotation is observed between calls without recreating mission setup",
+       context do
+    %{setup: setup} = prepare_confirmed_contact(context)
+    {:ok, secret_state} = Agent.start_link(fn -> %{token: "provider-secret", version: "one"} end)
+    test_pid = self()
+
+    backend = fn _descriptor, _opts ->
+      secret = Agent.get(secret_state, & &1)
+      send(test_pid, {:resolved_backend_version, secret.version})
+
+      {:ok,
+       %{
+         material: %{bearer_token: secret.token},
+         backend_version: secret.version
+       }}
+    end
+
+    assert {:ok, first_provider} =
+             GroundNetworks.validate_provider(
+               setup.organization_id,
+               setup.mission_id,
+               setup.provider.provider_id,
+               secret_backend: backend
+             )
+
+    assert_receive {:resolved_backend_version, "one"}
+
+    assert {:ok, rotated} =
+             ProviderCredentials.rotate(
+               setup.organization_id,
+               setup.provider_account.provider_account_id,
+               setup.provider_credential.provider_credential_ref,
+               manage_backend?: false
+             )
+
+    Agent.update(secret_state, &%{&1 | version: "two"})
+
+    assert {:ok, second_provider} =
+             GroundNetworks.validate_provider(
+               setup.organization_id,
+               setup.mission_id,
+               setup.provider.provider_id,
+               secret_backend: backend
+             )
+
+    assert_receive {:resolved_backend_version, "two"}
+    assert rotated.registry_version == setup.provider_credential.registry_version + 1
+    assert first_provider.provider_id == second_provider.provider_id
+    assert first_provider.version == second_provider.version
+
+    assert {:ok, same_transport} =
+             Cadence.fetch_transport_version(
+               setup.organization_id,
+               setup.mission_id,
+               setup.transport.transport_id,
+               setup.transport.version
+             )
+
+    assert same_transport.transport_id == setup.transport.transport_id
+  end
+
+  test "policy-approved provider timing shift appends exactly one execution revision", context do
+    policy = %{
+      "mode" => "bounded_automatic",
+      "maximum_later_start_shift_seconds" => 30,
+      "maximum_later_end_shift_seconds" => 30
+    }
+
+    %{setup: setup, run: run, reservation: reservation} =
+      prepare_confirmed_contact(context, policy: policy)
+
+    admin_contact_change!(context.base_url, run, reservation.provider_contact_ref, %{
+      "type" => "timing_shift",
+      "start_shift_seconds" => 30,
+      "end_shift_seconds" => 30,
+      "effective" => false,
+      "reason" => "network_optimization"
+    })
+
+    assert {:ok, reconciled} = reconcile_reservation(reservation)
+    assert reconciled.provider_revision == reservation.provider_revision + 1
+
+    change =
+      setup
+      |> reservation_changes(reservation)
+      |> Enum.find(&(&1.classification == :policy_accept))
+
+    assert change
+    assert change.classification == :policy_accept
+    assert change.lifecycle_state == :policy_accepted
+
+    assert [initial, accepted] =
+             ScheduledContactRevisions.list(
+               setup.organization_id,
+               reservation.scheduled_contact_id
+             )
+
+    assert initial.revision == 1
+    assert accepted.revision == 2
+
+    assert {:ok, replayed} = reconcile_reservation(reconciled)
+    assert replayed.provider_revision == reconciled.provider_revision
+
+    assert [_initial, _accepted] =
+             ScheduledContactRevisions.list(
+               setup.organization_id,
+               reservation.scheduled_contact_id
+             )
+  end
+
+  test "a material counteroffer waits for approval and a superseded proposal stays stale",
+       context do
+    %{setup: setup, run: run, reservation: reservation} = prepare_confirmed_contact(context)
+    first_start = shift_iso8601(reservation.starts_at, 10)
+    first_end = shift_iso8601(reservation.ends_at, 10)
+
+    admin_contact_change!(context.base_url, run, reservation.provider_contact_ref, %{
+      "type" => "counteroffer",
+      "starts_at" => first_start,
+      "ends_at" => first_end,
+      "expires_at" => shift_iso8601(DateTime.utc_now(), 3_600),
+      "reason" => "provider_capacity_rebalance"
+    })
+
+    assert {:ok, first_reconciled} = reconcile_reservation(reservation)
+
+    first_change =
+      setup
+      |> reservation_changes(reservation)
+      |> Enum.find(&(&1.lifecycle_state == :pending_approval))
+
+    assert first_change
+    assert first_change.lifecycle_state == :pending_approval
+
+    admin_contact_change!(context.base_url, run, reservation.provider_contact_ref, %{
+      "type" => "counteroffer",
+      "starts_at" => shift_iso8601(reservation.starts_at, 20),
+      "ends_at" => shift_iso8601(reservation.ends_at, 20),
+      "expires_at" => shift_iso8601(DateTime.utc_now(), 3_600),
+      "reason" => "provider_capacity_rebalance_updated"
+    })
+
+    assert {:ok, _second_reconciled} = reconcile_reservation(first_reconciled)
+
+    assert [superseded, pending] =
+             setup
+             |> reservation_changes(reservation)
+             |> Enum.filter(&(&1.lifecycle_state in [:superseded, :pending_approval]))
+
+    assert superseded.lifecycle_state == :superseded
+    assert pending.lifecycle_state == :pending_approval
+
+    assert {:error, {:provider_change_not_decidable, "superseded"}} =
+             ProviderChangeApprovals.approve(
+               admin_scope(setup),
+               superseded.provider_reservation_change_id,
+               superseded.proposal_hash,
+               "The provider replaced this proposal"
+             )
+
+    assert [revision] =
+             ScheduledContactRevisions.list(
+               setup.organization_id,
+               reservation.scheduled_contact_id
+             )
+
+    assert revision.revision == 1
+  end
+
+  test "provider-effective cancellation becomes an acknowledged contingency fact", context do
+    %{setup: setup, run: run, reservation: reservation} = prepare_confirmed_contact(context)
+
+    admin_contact_change!(context.base_url, run, reservation.provider_contact_ref, %{
+      "type" => "cancellation",
+      "reason" => "provider_station_outage"
+    })
+
+    assert {:ok, canceled} = reconcile_reservation(reservation)
+    assert canceled.lifecycle_state == :canceled
+
+    change =
+      setup
+      |> reservation_changes(reservation)
+      |> Enum.find(&(&1.lifecycle_state == :acknowledgment_required))
+
+    assert change
+    assert change.lifecycle_state == :acknowledgment_required
+    assert change.already_effective
+    refute change.actionable
+
+    assert {:ok, acknowledged} =
+             ProviderChangeApprovals.acknowledge(
+               admin_scope(setup),
+               change.provider_reservation_change_id,
+               change.proposal_hash,
+               "Flight has opened the station-outage contingency"
+             )
+
+    assert acknowledged.lifecycle_state == :acknowledged
+
+    assert {:ok, scheduled} =
+             Cadence.fetch_scheduled_contact(
+               setup.organization_id,
+               setup.mission_id,
+               reservation.scheduled_contact_id
+             )
+
+    assert scheduled.lifecycle_state == :canceled
+  end
+
+  test "provider endpoint and framing drift fails closed as configuration remediation", context do
+    %{setup: setup, run: run, reservation: reservation} = prepare_confirmed_contact(context)
+
+    admin_contact_change!(context.base_url, run, reservation.provider_contact_ref, %{
+      "type" => "delivery_configuration_mismatch",
+      "endpoint_ref" => "delivery-profile-unapproved",
+      "frame_bytes" => 1_024,
+      "reason" => "provider_configuration_drift"
+    })
+
+    assert {:error, failed, reason} = reconcile_reservation(reservation)
+    assert failed.lifecycle_state == :failed
+    assert reason == :delivery_descriptor_conflicts_with_transport
+
+    change =
+      setup
+      |> reservation_changes(reservation)
+      |> Enum.find(&(&1.classification == :configuration_failure))
+
+    assert change
+    assert change.classification == :configuration_failure
+    assert change.lifecycle_state == :configuration_failure
+    refute change.actionable
+
+    assert [revision] =
+             ScheduledContactRevisions.list(
+               setup.organization_id,
+               reservation.scheduled_contact_id
+             )
+
+    assert revision.revision == 1
+  end
+
+  test "a lost modification response recovers by authoritative describe without replay",
+       context do
+    %{setup: setup, reservation: reservation} =
+      prepare_confirmed_contact(context,
+        policy: %{
+          "mode" => "bounded_automatic",
+          "maximum_later_start_shift_seconds" => 30,
+          "maximum_later_end_shift_seconds" => 30
+        },
+        fault_profile: %{"contact_modification_response_loss_after_commit_count" => 1}
+      )
+
+    assert {:ok, provider_contact} =
+             SimulatorHTTP.describe_contact(
+               setup.provider_context,
+               reservation.provider_contact_ref,
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    modification = %{
+      "client_reference" => "cadence-modification-#{setup.suffix}",
+      "expected_revision" => provider_contact.provider_revision,
+      "starts_at" => shift_iso8601(provider_contact.starts_at, 15),
+      "ends_at" => shift_iso8601(provider_contact.ends_at, 15),
+      "reason" => "operator_requested"
+    }
+
+    assert {:error, %ProviderError{category: :ambiguous_outcome}} =
+             SimulatorHTTP.modify_contact(
+               setup.provider_context,
+               reservation.provider_contact_ref,
+               modification,
+               idempotency_key: "modification-loss-#{setup.suffix}",
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert {:ok, described} =
+             SimulatorHTTP.describe_contact(
+               setup.provider_context,
+               reservation.provider_contact_ref,
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert described.provider_revision == provider_contact.provider_revision + 1
+    assert {:ok, reconciled} = reconcile_reservation(reservation)
+    assert reconciled.provider_revision == described.provider_revision
+
+    assert {:ok, internal} =
+             CadenceSimulator.Provider.Contacts.fetch_internal(reservation.provider_contact_ref)
+
+    assert length(internal["modification_history"]) == 1
+  end
+
+  defp prepare_confirmed_contact(context, opts \\ []) do
+    scenario =
+      admin_post!(context.base_url <> "/admin/v1/scenarios", %{
+        "name" => "Stage 3 provider boundary #{System.unique_integer([:positive])}",
+        "spacecraft_count" => 1,
+        "spacecraft_prefix" => "SC",
+        "fault_profile" => Keyword.get(opts, :fault_profile, %{}),
+        "pass_model" => %{
+          "cadence_seconds" => 30,
+          "duration_seconds" => 15,
+          "jitter_seconds" => 0
+        }
+      })
+
+    run =
+      admin_post!(context.base_url <> "/admin/v1/scenarios/#{scenario["id"]}/runs", %{
+        "seed" => 3_000 + System.unique_integer([:positive]),
+        "speed" => 1.0
+      })
+
+    setup =
+      context
+      |> persist_provider_setup(run, policy: Keyword.get(opts, :policy, %{}))
+      |> provision_provider_transport(context.telemetry_port)
+      |> persist_spacecraft_routing()
+
+    starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
+
+    assert {:ok, %{opportunities: [opportunity | _rest]}} =
+             ProviderScheduling.search_opportunities(
+               setup.organization_id,
+               setup.mission_id,
+               setup.route.route_key,
+               %{
+                 "spacecraft_id" => setup.spacecraft.spacecraft_id,
+                 "starts_at" => DateTime.to_iso8601(starts_at),
+                 "ends_at" => DateTime.to_iso8601(DateTime.add(starts_at, 180))
+               },
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert {:ok, booking} =
+             ProviderBooking.reserve(
+               setup.organization_id,
+               setup.mission_id,
+               setup.provider.provider_id,
+               booking_attrs(setup, opportunity, "stage-three-#{setup.suffix}"),
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    :ok = Orchestrator.reconcile(DateTime.utc_now())
+    assert {:ok, reservation} = reconcile_reservation(booking.provider_reservation)
+
+    assert {:ok, scheduled_contact} =
+             Cadence.fetch_scheduled_contact(
+               setup.organization_id,
+               setup.mission_id,
+               reservation.scheduled_contact_id
+             )
+
+    %{
+      setup: setup,
+      scenario: scenario,
+      run: run,
+      reservation: reservation,
+      scheduled_contact: scheduled_contact
+    }
+  end
+
+  defp persist_provider_setup(context, run, opts \\ []) do
     suffix = System.unique_integer([:positive])
     organization_id = "org-simulator-scheduling-#{suffix}"
     mission_id = "mission-simulator-scheduling-#{suffix}"
-    persist_mission_scope(organization_id, mission_id)
+    %{organization: organization} = persist_mission_scope(organization_id, mission_id)
+
+    provider_account_id = "provider-account-#{suffix}"
+    provider_credential_ref = "provider-credential-#{suffix}"
+
+    assert {:ok, provider_credential} =
+             ProviderCredentials.create(
+               organization_id,
+               provider_account_id,
+               %{
+                 provider_credential_ref: provider_credential_ref,
+                 backend_type: :external,
+                 backend_key: "simulator/#{suffix}/control-plane"
+               },
+               manage_backend?: false
+             )
+
+    assert {:ok, provider_account, provider_account_version} =
+             ProviderAccounts.create_for_system(
+               organization_id,
+               %{
+                 provider_account_id: provider_account_id,
+                 display_name: "Ground Station Simulator",
+                 provider_type: :simulator,
+                 client_key: :simulator_http,
+                 base_url: context.base_url,
+                 environment_ref: run["provider_environment_ref"],
+                 credential_ref: provider_credential_ref,
+                 event_ingestion_mode: :polling,
+                 guardrails: %{}
+               },
+               %{"kind" => "system", "id" => "simulator-integration-test"},
+               validate_credential?: false
+             )
+
+    assert {:ok, provider_account_grant} =
+             ProviderAccountGrants.grant_for_system(
+               organization_id,
+               mission_id,
+               provider_account_id,
+               %{
+                 provider_account_grant_id: "provider-account-grant-#{suffix}",
+                 restrictions: %{},
+                 grant_reason: "Separate-application provider proof"
+               },
+               %{"kind" => "system", "id" => "simulator-integration-test"}
+             )
 
     provider =
       MissionProvider.new(%{
         provider_id: "provider-#{suffix}",
         mission_id: mission_id,
         display_name: "External simulator",
+        provider_account_id: provider_account.provider_account_id,
+        provider_account_version: provider_account_version.version,
+        provider_account_grant_id: provider_account_grant.provider_account_grant_id,
+        provider_account_grant_version: provider_account_grant.version,
         provider_type: :simulator,
         base_url: context.base_url,
-        credential_ref: "config://simulator-integration",
-        environment_ref: run["provider_environment_ref"]
+        credential_ref: provider_credential_ref,
+        environment_ref: run["provider_environment_ref"],
+        delivery_policy_document: Keyword.get(opts, :policy, %{})
       })
 
     assert {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
@@ -372,7 +817,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              GroundNetworks.validate_provider(
                organization_id,
                mission_id,
-               provider.provider_id
+               provider.provider_id,
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert get_in(validated_provider.metadata, ["control_plane", "status"]) == "healthy"
@@ -382,7 +828,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              GroundNetworks.sync_provider(
                organization_id,
                mission_id,
-               provider.provider_id
+               provider.provider_id,
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert get_in(synced_provider.metadata, ["sync", "status"]) == "healthy"
@@ -401,6 +848,11 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
       suffix: suffix,
       organization_id: organization_id,
       mission_id: mission_id,
+      organization: organization,
+      provider_account: provider_account,
+      provider_account_version: provider_account_version,
+      provider_account_grant: provider_account_grant,
+      provider_credential: provider_credential,
       provider: synced_provider,
       provider_context: provider_context,
       service_profile: service_profile
@@ -419,7 +871,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              GroundNetworks.sync_provider(
                setup.organization_id,
                setup.mission_id,
-               setup.provider.provider_id
+               setup.provider.provider_id,
+               credential_resolver: &resolve_provider_credential/1
              )
 
     assert Enum.any?(
@@ -637,6 +1090,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
        safety_poll_interval_ms: 60_000,
        backoff_ms: 0,
        mission_id: setup.mission_id,
+       credential_resolver: &resolve_provider_credential/1,
        now: DateTime.add(DateTime.utc_now(), 10, :second)}
 
     start_supervised!(child)
@@ -667,6 +1121,89 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     response.body["data"]
   end
 
+  defp admin_contact_change!(base_url, run, provider_contact_ref, body) do
+    admin_post!(
+      base_url <> "/admin/v1/runs/#{run["id"]}/contacts/#{provider_contact_ref}/changes",
+      body
+    )
+  end
+
+  defp reconcile_reservation(reservation) do
+    ProviderReservationReconciler.reconcile_reservation(
+      reservation,
+      credential_resolver: &resolve_provider_credential/1
+    )
+  end
+
+  defp reservation_changes(setup, reservation) do
+    ProviderReservationChanges.list_for_reservation(
+      setup.organization_id,
+      reservation.provider_reservation_id
+    )
+  end
+
+  defp admin_scope(setup) do
+    user =
+      User.new(%{
+        user_id: "stage-three-admin-#{setup.suffix}",
+        email: "stage-three-admin-#{setup.suffix}@example.test",
+        display_name: "Stage Three Admin"
+      })
+
+    membership =
+      OrganizationMembership.new(%{
+        organization_membership_id: "stage-three-membership-#{setup.suffix}",
+        user_id: user.user_id,
+        organization_id: setup.organization_id,
+        role: :organization_admin
+      })
+
+    Scope.new(%{
+      user: user,
+      organization: setup.organization,
+      organization_id: setup.organization_id,
+      organization_membership: membership
+    })
+  end
+
+  defp shift_iso8601(%DateTime{} = value, seconds) do
+    value |> DateTime.add(seconds) |> DateTime.to_iso8601()
+  end
+
+  defp assert_event_page_survives_processor_restart(setup) do
+    assert {:ok, poll_summary} =
+             ProviderEventPoller.poll_once(
+               accounts: [{setup.provider_account, setup.provider_account_version}],
+               client: SimulatorHTTP,
+               credential_resolver: &resolve_provider_credential/1,
+               lease_owner: "simulator-integration-poller-#{setup.suffix}"
+             )
+
+    assert poll_summary.polled == 1
+    assert poll_summary.events > 0
+
+    inbox_entries = ProviderEventInbox.list(setup.organization_id)
+    assert inbox_entries != []
+    assert Enum.any?(inbox_entries, &(&1.processing_state == :received))
+
+    name = {:global, {__MODULE__, :event_processor, setup.suffix}}
+
+    child =
+      {ProviderEventProcessor,
+       name: name,
+       process_interval_ms: 60_000,
+       credential_resolver: &resolve_provider_credential/1}
+
+    start_supervised!(child)
+    assert :ok = stop_supervised(ProviderEventProcessor)
+    start_supervised!(child)
+
+    assert {:ok, summary} = ProviderEventProcessor.process_now(name)
+    assert summary.processed > 0
+    assert summary.errors == 0
+    assert summary.quarantined == 0
+  end
+
   defp delivery_profile_request(port, suffix) do
     %{
       "display_name" => "Cadence boundary proof telemetry ingress",
@@ -687,7 +1224,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     }
   end
 
-  defp resolve_provider_credential("config://simulator-integration"),
+  defp resolve_provider_credential("provider-credential-" <> _suffix),
     do: {:ok, "provider-secret"}
 
   defp restore_config(key, nil), do: Application.delete_env(:cadence_simulator, key)

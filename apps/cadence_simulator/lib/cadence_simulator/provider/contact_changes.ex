@@ -6,7 +6,7 @@ defmodule CadenceSimulator.Provider.ContactChanges do
   @schedule_fields ["starts_at", "ends_at"]
   @resource_fields ["ground_station_ref", "antenna_or_service_pool_ref"]
   @snapshot_fields @schedule_fields ++
-                     @resource_fields ++ ["status", "status_reason", "extensions"]
+                     @resource_fields ++ ["status", "status_reason", "delivery", "extensions"]
   @max_shift_seconds 86_400
 
   @spec apply(map(), binary(), map(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -37,23 +37,26 @@ defmodule CadenceSimulator.Provider.ContactChanges do
       "capacity_reduction" -> capacity_reduction(attrs)
       "counteroffer" -> counteroffer(attrs)
       "cancellation" -> cancellation(attrs)
+      "delivery_configuration_mismatch" -> delivery_configuration_mismatch(attrs)
       _other -> {:error, {:invalid, "provider change type is invalid"}}
     end
   end
 
   defp timing_shift(attrs) do
-    allowed = ["type", "start_shift_seconds", "end_shift_seconds", "reason"]
+    allowed = ["type", "start_shift_seconds", "end_shift_seconds", "effective", "reason"]
 
     with :ok <- reject_unknown(attrs, allowed),
          {:ok, start_shift} <- bounded_shift(attrs["start_shift_seconds"] || 0),
          {:ok, end_shift} <- bounded_shift(attrs["end_shift_seconds"] || 0),
          true <- start_shift != 0 or end_shift != 0,
+         {:ok, effective?} <- optional_boolean(attrs["effective"], true),
          {:ok, reason} <- optional_reason(attrs["reason"]) do
       {:ok,
        %{
          type: :timing_shift,
          start_shift_seconds: start_shift,
          end_shift_seconds: end_shift,
+         effective?: effective?,
          reason: reason,
          request: attrs
        }}
@@ -164,12 +167,34 @@ defmodule CadenceSimulator.Provider.ContactChanges do
     end
   end
 
+  defp delivery_configuration_mismatch(attrs) do
+    allowed = ["type", "endpoint_ref", "frame_bytes", "reason"]
+
+    with :ok <- reject_unknown(attrs, allowed),
+         {:ok, endpoint_ref} <- optional_text(attrs["endpoint_ref"]),
+         {:ok, frame_bytes} <- optional_positive_integer(attrs["frame_bytes"]),
+         true <- not is_nil(endpoint_ref) or not is_nil(frame_bytes),
+         {:ok, reason} <- optional_reason(attrs["reason"]) do
+      {:ok,
+       %{
+         type: :delivery_configuration_mismatch,
+         endpoint_ref: endpoint_ref,
+         frame_bytes: frame_bytes,
+         reason: reason || "provider_delivery_configuration_changed",
+         request: attrs
+       }}
+    else
+      false -> {:error, {:invalid, "configuration mismatch requires endpoint or framing data"}}
+      error -> error
+    end
+  end
+
   defp build_changes(_run, contact, %{type: :timing_shift} = action, opts) do
     starts_at = shift_time(contact["starts_at"], action.start_shift_seconds)
     ends_at = shift_time(contact["ends_at"], action.end_shift_seconds)
 
     changes = %{"starts_at" => starts_at, "ends_at" => ends_at}
-    evidence = change_evidence(contact, changes, action, true, opts)
+    evidence = change_evidence(contact, changes, action, action.effective?, opts)
     {:ok, changes_with_evidence(contact, changes, evidence), evidence}
   end
 
@@ -233,6 +258,22 @@ defmodule CadenceSimulator.Provider.ContactChanges do
       "delivery" => delivery
     }
 
+    evidence = change_evidence(contact, changes, action, true, opts)
+    {:ok, changes_with_evidence(contact, changes, evidence), evidence}
+  end
+
+  defp build_changes(
+         _run,
+         contact,
+         %{type: :delivery_configuration_mismatch} = action,
+         opts
+       ) do
+    delivery =
+      contact["delivery"]
+      |> optional_change("endpoint_ref", action.endpoint_ref)
+      |> maybe_change_frame_bytes(action.frame_bytes)
+
+    changes = %{"delivery" => delivery}
     evidence = change_evidence(contact, changes, action, true, opts)
     {:ok, changes_with_evidence(contact, changes, evidence), evidence}
   end
@@ -467,6 +508,10 @@ defmodule CadenceSimulator.Provider.ContactChanges do
   defp optional_positive_integer(_value),
     do: {:error, {:invalid, "estimated_capacity_bytes must be positive"}}
 
+  defp optional_boolean(nil, default), do: {:ok, default}
+  defp optional_boolean(value, _default) when is_boolean(value), do: {:ok, value}
+  defp optional_boolean(_value, _default), do: {:error, {:invalid, "effective must be boolean"}}
+
   defp reject_unknown(attrs, allowed) do
     case Map.keys(attrs) -- allowed do
       [] -> :ok
@@ -484,6 +529,14 @@ defmodule CadenceSimulator.Provider.ContactChanges do
 
   defp maybe_put_counteroffer(extensions, nil), do: Map.delete(extensions, "counteroffer")
   defp maybe_put_counteroffer(extensions, value), do: Map.put(extensions, "counteroffer", value)
+
+  defp maybe_change_frame_bytes(delivery, nil), do: delivery
+
+  defp maybe_change_frame_bytes(delivery, frame_bytes) do
+    Map.update(delivery, "framing", %{"frame_bytes" => frame_bytes}, fn framing ->
+      Map.put(framing, "frame_bytes", frame_bytes)
+    end)
+  end
 
   defp now_iso8601(opts) do
     opts

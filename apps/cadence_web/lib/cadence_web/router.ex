@@ -278,6 +278,10 @@ defmodule CadenceWeb.Router do
            OpsContactScheduleLive,
            :index
 
+      live "/missions/:mission_id/ops/contacts/:provider_reservation_id",
+           OpsContactDetailLive,
+           :show
+
       live "/missions/:mission_id/ops/telemetry/explore",
            OpsTelemetryExploreLive,
            :show

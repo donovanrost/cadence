@@ -410,6 +410,8 @@ defmodule CadenceWeb.OpsContactScheduleLive do
               :for={{dom_id, row} <- @streams.provider_reservations}
               id={dom_id}
               row={row}
+              mission_id={@current_mission.mission_id}
+              admin?={organization_admin?(@current_scope)}
               busy?={MapSet.member?(
                 @reservation_busy,
                 row.reservation.provider_reservation_id
@@ -668,4 +670,9 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   defp search_error(_reason),
     do: "The provider search failed. Check provider readiness and try again."
+
+  defp organization_admin?(scope) do
+    MapSet.member?(scope.capabilities, :organization_admin) or
+      MapSet.member?(scope.capabilities, :platform_admin)
+  end
 end

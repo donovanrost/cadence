@@ -133,7 +133,11 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
            ) do
       {:ok, updated}
     else
-      {:error, reason} -> record_reconciliation_error(reservation, reason)
+      {:error, {:provider_configuration_failure, failed_reservation, reason}} ->
+        {:error, failed_reservation, reason}
+
+      {:error, reason} ->
+        record_reconciliation_error(reservation, reason)
     end
   end
 

@@ -460,14 +460,17 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   defp require_active_grant(%ProviderReservationRow{provider_account_grant_id: nil}), do: :ok
 
   defp require_active_grant(reservation) do
-    ProviderAccountGrants.validate_binding(
-      reservation.organization_id,
-      reservation.mission_id,
-      reservation.provider_account_id,
-      reservation.provider_account_version,
-      reservation.provider_account_grant_id,
-      reservation.provider_account_grant_version
-    )
+    case ProviderAccountGrants.validate_binding(
+           reservation.organization_id,
+           reservation.mission_id,
+           reservation.provider_account_id,
+           reservation.provider_account_version,
+           reservation.provider_account_grant_id,
+           reservation.provider_account_grant_version
+         ) do
+      {:ok, _grant} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp require_pre_realization(%ScheduledContactRow{
