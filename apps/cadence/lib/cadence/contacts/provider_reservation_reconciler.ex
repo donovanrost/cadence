@@ -15,7 +15,6 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
     CredentialResolver,
     MissionProvider,
     ProviderContact,
-    ProviderContext,
     ProviderError
   }
 
@@ -176,7 +175,8 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   end
 
   defp provider_context(%MissionProvider{} = provider, opts) do
-    with {:ok, context} <- ProviderContext.from_mission_provider(provider) do
+    with {:ok, context} <-
+           GroundNetworks.context_from_provider(provider, require_active_grant?: false) do
       {:ok, context,
        Keyword.put_new(opts, :credential_resolver, CredentialResolver.resolver(opts))}
     end

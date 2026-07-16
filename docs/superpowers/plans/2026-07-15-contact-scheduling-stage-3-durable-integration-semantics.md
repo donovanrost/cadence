@@ -2,7 +2,7 @@
 
 **Status:** in progress
 
-**Progress (2026-07-15):** Tasks 1 through 3 are complete. Provider events now
+**Progress (2026-07-15):** Tasks 1 through 4 are complete. Provider events now
 normalize into bounded, sanitized `ProviderEvent` structs, Provider Contacts
 carry monotonic revisions, and the separate simulator exposes revision-aware,
 idempotent Contact modification with contract fixtures. Provider evidence is
@@ -17,8 +17,17 @@ environment and bounded, HTTPS-by-default Req adapters; the dashboard modules
 remain compatibility delegates. Organization/Provider Account-scoped
 credential records support stable references, ephemeral resolution, rotation,
 revocation, version-only audit evidence, and Stage 2 adapter compatibility.
-Root `mix precommit` passes with 3,053 tests passed and 93 browser-tagged tests
-excluded. Task 4, organization Provider Accounts and mission grants, is next.
+Organization-owned Provider Accounts now carry immutable effective
+configuration versions, explicit mission grants can only narrow account
+guardrails, and Mission Providers plus Provider Reservations snapshot exact
+account and grant versions. Grant revocation fails closed for new operations,
+preserves historical reads, and marks nonterminal reservations for operator
+review. The ownership migration creates one account and grant per Stage 2
+Mission Provider without inferring sharing, validates every backfilled
+reference, and has been exercised against populated pre-migration data. Root
+`mix precommit` passes with 3,060 tests passed and 93 browser-tagged tests
+excluded. Task 5, the organization Provider Account and updated mission setup
+journeys, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and

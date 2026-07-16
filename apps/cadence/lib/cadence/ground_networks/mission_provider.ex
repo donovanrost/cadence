@@ -18,6 +18,10 @@ defmodule Cadence.GroundNetworks.MissionProvider do
           version: pos_integer(),
           lifecycle_state: lifecycle_state(),
           display_name: binary(),
+          provider_account_id: binary() | nil,
+          provider_account_version: pos_integer() | nil,
+          provider_account_grant_id: binary() | nil,
+          provider_account_grant_version: pos_integer() | nil,
           provider_type: provider_type(),
           client_key: client_key(),
           base_url: binary(),
@@ -27,6 +31,14 @@ defmodule Cadence.GroundNetworks.MissionProvider do
           inventory_sync_document: map(),
           last_validated_at: DateTime.t() | nil,
           last_synced_at: DateTime.t() | nil,
+          delivery_policy_document: map(),
+          spacecraft_mappings_document: map(),
+          enabled_service_profile_refs: [map()],
+          enabled_delivery_profile_refs: [map()],
+          permitted_resource_refs: [binary()],
+          preferred_transport_refs: [map()],
+          scheduling_policy_document: map(),
+          fallback_policy_document: map(),
           metadata: map()
         }
 
@@ -37,6 +49,10 @@ defmodule Cadence.GroundNetworks.MissionProvider do
     :version,
     :lifecycle_state,
     :display_name,
+    :provider_account_id,
+    :provider_account_version,
+    :provider_account_grant_id,
+    :provider_account_grant_version,
     :provider_type,
     :client_key,
     :base_url,
@@ -44,6 +60,14 @@ defmodule Cadence.GroundNetworks.MissionProvider do
     :environment_ref,
     :last_validated_at,
     :last_synced_at,
+    delivery_policy_document: %{},
+    spacecraft_mappings_document: %{},
+    enabled_service_profile_refs: [],
+    enabled_delivery_profile_refs: [],
+    permitted_resource_refs: [],
+    preferred_transport_refs: [],
+    scheduling_policy_document: %{},
+    fallback_policy_document: %{},
     capabilities_document: %{},
     inventory_sync_document: %{},
     metadata: %{}
@@ -75,6 +99,10 @@ defmodule Cadence.GroundNetworks.MissionProvider do
         |> value(:lifecycle_state, :active)
         |> normalize_atom(@lifecycle_states, :lifecycle_state),
       display_name: required(attrs, :display_name),
+      provider_account_id: value(attrs, :provider_account_id),
+      provider_account_version: value(attrs, :provider_account_version),
+      provider_account_grant_id: value(attrs, :provider_account_grant_id),
+      provider_account_grant_version: value(attrs, :provider_account_grant_version),
       provider_type: provider_type,
       client_key:
         attrs
@@ -87,6 +115,14 @@ defmodule Cadence.GroundNetworks.MissionProvider do
       inventory_sync_document: value(attrs, :inventory_sync_document, %{}),
       last_validated_at: value(attrs, :last_validated_at),
       last_synced_at: value(attrs, :last_synced_at),
+      delivery_policy_document: value(attrs, :delivery_policy_document, %{}),
+      spacecraft_mappings_document: value(attrs, :spacecraft_mappings_document, %{}),
+      enabled_service_profile_refs: value(attrs, :enabled_service_profile_refs, []),
+      enabled_delivery_profile_refs: value(attrs, :enabled_delivery_profile_refs, []),
+      permitted_resource_refs: value(attrs, :permitted_resource_refs, []),
+      preferred_transport_refs: value(attrs, :preferred_transport_refs, []),
+      scheduling_policy_document: value(attrs, :scheduling_policy_document, %{}),
+      fallback_policy_document: value(attrs, :fallback_policy_document, %{}),
       metadata: value(attrs, :metadata, %{})
     }
   end

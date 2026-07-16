@@ -11,7 +11,15 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
   }
 
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProvider, ProviderError}
+
+  alias Cadence.GroundNetworks.{
+    MissionProvider,
+    ProviderAccountGrants,
+    ProviderAccounts,
+    ProviderCredentials,
+    ProviderError
+  }
+
   alias Cadence.TestSupport.FakeProviderClient
 
   setup do
@@ -89,6 +97,12 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
              )
 
     assert confirmed.lifecycle_state == :confirmed
+    assert confirmed.provider_account_id == context.provider.provider_account_id
+    assert confirmed.provider_account_version == context.provider.provider_account_version
+    assert confirmed.provider_account_grant_id == context.provider.provider_account_grant_id
+
+    assert confirmed.provider_account_grant_version ==
+             context.provider.provider_account_grant_version
 
     assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
              reconcile(context,
@@ -361,16 +375,65 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
   defp persist_provider!(organization_id, mission_id, suffix) do
     now = ~U[2026-07-14 12:00:00.000000Z]
+    account_id = "provider-account-#{suffix}"
+    credential_ref = "provider-credential-#{suffix}"
+
+    {:ok, _credential} =
+      ProviderCredentials.create(
+        organization_id,
+        account_id,
+        %{
+          provider_credential_ref: credential_ref,
+          backend_type: :external,
+          backend_key: "providers/#{suffix}/control-plane",
+          registered_at: now
+        },
+        manage_backend?: false,
+        now: now
+      )
+
+    actor = %{"kind" => "system", "id" => "provider-reconciler-test"}
+
+    {:ok, _account, account_version} =
+      ProviderAccounts.create_for_system(
+        organization_id,
+        %{
+          provider_account_id: account_id,
+          display_name: "Simulator Account",
+          provider_type: :simulator,
+          base_url: "http://simulator.test",
+          environment_ref: "run-alpha",
+          credential_ref: credential_ref
+        },
+        actor,
+        validate_credential?: false,
+        now: now
+      )
+
+    {:ok, grant} =
+      ProviderAccountGrants.grant_for_system(
+        organization_id,
+        mission_id,
+        account_id,
+        %{provider_account_grant_id: "provider-account-grant-#{suffix}"},
+        actor,
+        now: now
+      )
 
     provider =
       MissionProvider.new(%{
         provider_id: "provider-#{suffix}",
         mission_id: mission_id,
         display_name: "Simulator",
-        provider_type: :simulator,
-        base_url: "http://simulator.test",
-        credential_ref: "config://simulator",
-        environment_ref: "run-alpha",
+        provider_account_id: account_id,
+        provider_account_version: account_version.version,
+        provider_account_grant_id: grant.provider_account_grant_id,
+        provider_account_grant_version: grant.version,
+        provider_type: account_version.provider_type,
+        client_key: account_version.client_key,
+        base_url: account_version.base_url,
+        credential_ref: account_version.credential_ref,
+        environment_ref: account_version.environment_ref,
         last_validated_at: now,
         last_synced_at: now,
         metadata: %{"control_plane" => %{"status" => "healthy"}},

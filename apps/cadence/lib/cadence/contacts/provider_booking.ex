@@ -22,7 +22,6 @@ defmodule Cadence.Contacts.ProviderBooking do
     CredentialResolver,
     MissionProvider,
     ProviderContact,
-    ProviderContext,
     ProviderError
   }
 
@@ -247,6 +246,10 @@ defmodule Cadence.Contacts.ProviderBooking do
          mission_id: mission_id,
          provider_id: provider.provider_id,
          provider_version: provider.version,
+         provider_account_id: provider.provider_account_id,
+         provider_account_version: provider.provider_account_version,
+         provider_account_grant_id: provider.provider_account_grant_id,
+         provider_account_grant_version: provider.provider_account_grant_version,
          transport_id: transport_id,
          transport_version: transport_version,
          service_profile_ref: service_profile_ref,
@@ -369,7 +372,7 @@ defmodule Cadence.Contacts.ProviderBooking do
   end
 
   defp provider_context(%MissionProvider{} = provider, opts) do
-    with {:ok, context} <- ProviderContext.from_mission_provider(provider) do
+    with {:ok, context} <- GroundNetworks.context_from_provider(provider) do
       call_opts =
         opts
         |> Keyword.drop([:client, :provider_version])

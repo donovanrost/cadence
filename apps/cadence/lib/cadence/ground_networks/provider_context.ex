@@ -2,7 +2,7 @@ defmodule Cadence.GroundNetworks.ProviderContext do
   @moduledoc "Provider-neutral control-plane context for one mission provider binding."
 
   alias Cadence.Contacts.ProviderProfile
-  alias Cadence.GroundNetworks.{MissionProvider, ProviderCapabilities}
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountVersion, ProviderCapabilities}
 
   @type t :: %__MODULE__{
           provider_ref: binary(),
@@ -79,6 +79,30 @@ defmodule Cadence.GroundNetworks.ProviderContext do
       environment_ref: provider.environment_ref,
       capabilities: empty_to_nil(provider.capabilities_document),
       metadata: provider.metadata
+    })
+  end
+
+  @spec from_account_binding(MissionProvider.t(), ProviderAccountVersion.t()) ::
+          {:ok, t()} | {:error, term()}
+  def from_account_binding(
+        %MissionProvider{} = provider,
+        %ProviderAccountVersion{} = account_version
+      ) do
+    new(%{
+      provider_ref: provider.provider_id,
+      organization_id: provider.organization_id,
+      mission_id: provider.mission_id,
+      client_key: Atom.to_string(account_version.client_key),
+      base_url: account_version.base_url,
+      credential_ref: account_version.credential_ref,
+      environment_ref: account_version.environment_ref,
+      capabilities: empty_to_nil(provider.capabilities_document),
+      metadata:
+        Map.merge(provider.metadata, %{
+          "provider_account_id" => account_version.provider_account_id,
+          "provider_account_version" => account_version.version,
+          "region_ref" => account_version.region_ref
+        })
     })
   end
 

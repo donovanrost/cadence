@@ -16,6 +16,10 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:mission_id, :string)
     field(:provider_id, :string)
     field(:provider_version, :integer)
+    field(:provider_account_id, :string)
+    field(:provider_account_version, :integer)
+    field(:provider_account_grant_id, :string)
+    field(:provider_account_grant_version, :integer)
     field(:transport_id, :string)
     field(:transport_version, :integer)
     field(:service_profile_ref, :map, default: %{})
@@ -40,6 +44,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:request_document, :map, default: %{})
     field(:response_document, :map, default: %{})
     field(:last_error_document, :map, default: %{})
+    field(:operator_review_document, :map, default: %{})
     field(:attempt_count, :integer, default: 0)
     field(:last_reconciled_at, :utc_datetime_usec)
     field(:metadata, :map, default: %{})
@@ -71,6 +76,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     :request_document,
     :response_document,
     :last_error_document,
+    :operator_review_document,
     :delivery_descriptor_document,
     :pass_phase,
     :delivery_state,
@@ -86,6 +92,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     |> validate_required(@required_fields)
     |> validate_number(:provider_profile_version, greater_than: 0)
     |> validate_number(:provider_version, greater_than: 0)
+    |> validate_optional_positive(:provider_account_version)
+    |> validate_optional_positive(:provider_account_grant_version)
+    |> validate_binding_shape()
     |> validate_number(:transport_version, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
     |> validate_length(:idempotency_key, max: 255)
@@ -136,6 +145,10 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       mission_id: row.mission_id,
       provider_id: row.provider_id,
       provider_version: row.provider_version,
+      provider_account_id: row.provider_account_id,
+      provider_account_version: row.provider_account_version,
+      provider_account_grant_id: row.provider_account_grant_id,
+      provider_account_grant_version: row.provider_account_grant_version,
       transport_id: row.transport_id,
       transport_version: row.transport_version,
       service_profile_ref: JsonDocument.unwrap_value(row.service_profile_ref),
@@ -160,6 +173,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       request_document: JsonDocument.unwrap_value(row.request_document),
       response_document: JsonDocument.unwrap_value(row.response_document),
       last_error_document: JsonDocument.unwrap_value(row.last_error_document),
+      operator_review_document: JsonDocument.unwrap_value(row.operator_review_document),
       attempt_count: row.attempt_count,
       last_reconciled_at: row.last_reconciled_at,
       metadata: JsonDocument.unwrap_value(row.metadata),
@@ -175,6 +189,10 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       mission_id: reservation.mission_id,
       provider_id: reservation.provider_id,
       provider_version: reservation.provider_version,
+      provider_account_id: reservation.provider_account_id,
+      provider_account_version: reservation.provider_account_version,
+      provider_account_grant_id: reservation.provider_account_grant_id,
+      provider_account_grant_version: reservation.provider_account_grant_version,
       transport_id: reservation.transport_id,
       transport_version: reservation.transport_version,
       service_profile_ref: JsonDocument.wrap_value(reservation.service_profile_ref),
@@ -200,6 +218,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       request_document: JsonDocument.wrap_value(reservation.request_document),
       response_document: JsonDocument.wrap_value(reservation.response_document),
       last_error_document: JsonDocument.wrap_value(reservation.last_error_document),
+      operator_review_document: JsonDocument.wrap_value(reservation.operator_review_document),
       attempt_count: reservation.attempt_count,
       last_reconciled_at: reservation.last_reconciled_at,
       metadata: JsonDocument.wrap_value(reservation.metadata)
@@ -213,6 +232,10 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :mission_id,
       :provider_id,
       :provider_version,
+      :provider_account_id,
+      :provider_account_version,
+      :provider_account_grant_id,
+      :provider_account_grant_version,
       :transport_id,
       :transport_version,
       :service_profile_ref,
@@ -237,6 +260,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :request_document,
       :response_document,
       :last_error_document,
+      :operator_review_document,
       :attempt_count,
       :last_reconciled_at,
       :metadata
@@ -254,6 +278,32 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
 
       _other ->
         changeset
+    end
+  end
+
+  defp validate_optional_positive(changeset, field) do
+    case get_field(changeset, field) do
+      nil -> changeset
+      _value -> validate_number(changeset, field, greater_than: 0)
+    end
+  end
+
+  defp validate_binding_shape(changeset) do
+    values =
+      Enum.map(
+        [
+          :provider_account_id,
+          :provider_account_version,
+          :provider_account_grant_id,
+          :provider_account_grant_version
+        ],
+        &get_field(changeset, &1)
+      )
+
+    if Enum.all?(values, &is_nil/1) or Enum.all?(values, &(not is_nil(&1))) do
+      changeset
+    else
+      add_error(changeset, :provider_account_id, "requires a complete account and grant binding")
     end
   end
 end

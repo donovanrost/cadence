@@ -5,7 +5,7 @@ defmodule Cadence.GroundNetworks.MissionProviders do
 
   alias Ecto.Changeset
 
-  alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountGrants, ProviderAccounts}
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.Schemas.MissionProviderRow
@@ -195,6 +195,26 @@ defmodule Cadence.GroundNetworks.MissionProviders do
        environment_ref: value(attrs, :environment_ref, provider.environment_ref),
        capabilities_document: %{},
        inventory_sync_document: %{},
+       provider_account_id: provider.provider_account_id,
+       provider_account_version: provider.provider_account_version,
+       provider_account_grant_id: provider.provider_account_grant_id,
+       provider_account_grant_version: provider.provider_account_grant_version,
+       delivery_policy_document:
+         value(attrs, :delivery_policy_document, provider.delivery_policy_document),
+       spacecraft_mappings_document:
+         value(attrs, :spacecraft_mappings_document, provider.spacecraft_mappings_document),
+       enabled_service_profile_refs:
+         value(attrs, :enabled_service_profile_refs, provider.enabled_service_profile_refs),
+       enabled_delivery_profile_refs:
+         value(attrs, :enabled_delivery_profile_refs, provider.enabled_delivery_profile_refs),
+       permitted_resource_refs:
+         value(attrs, :permitted_resource_refs, provider.permitted_resource_refs),
+       preferred_transport_refs:
+         value(attrs, :preferred_transport_refs, provider.preferred_transport_refs),
+       scheduling_policy_document:
+         value(attrs, :scheduling_policy_document, provider.scheduling_policy_document),
+       fallback_policy_document:
+         value(attrs, :fallback_policy_document, provider.fallback_policy_document),
        metadata: Map.merge(provider.metadata, value(attrs, :metadata, %{}))
      })}
   rescue
@@ -206,10 +226,41 @@ defmodule Cadence.GroundNetworks.MissionProviders do
          true <- provider.client_key == MissionProvider.client_for(provider.provider_type),
          true <- is_map(provider.capabilities_document),
          true <- is_map(provider.inventory_sync_document),
-         true <- is_map(provider.metadata) do
+         true <- is_map(provider.metadata),
+         :ok <- validate_account_binding(provider) do
       :ok
     else
       false -> {:error, :invalid_mission_provider}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_account_binding(%MissionProvider{provider_account_id: nil}), do: :ok
+
+  defp validate_account_binding(%MissionProvider{} = provider) do
+    with {:ok, account_version} <-
+           ProviderAccounts.fetch_version(
+             provider.organization_id,
+             provider.provider_account_id,
+             provider.provider_account_version
+           ),
+         {:ok, _grant} <-
+           ProviderAccountGrants.validate_binding(
+             provider.organization_id,
+             provider.mission_id,
+             provider.provider_account_id,
+             provider.provider_account_version,
+             provider.provider_account_grant_id,
+             provider.provider_account_grant_version
+           ),
+         true <- account_version.provider_type == provider.provider_type,
+         true <- account_version.client_key == provider.client_key,
+         true <- account_version.base_url == provider.base_url,
+         true <- account_version.environment_ref == provider.environment_ref,
+         true <- account_version.credential_ref == provider.credential_ref do
+      :ok
+    else
+      false -> {:error, :mission_provider_account_configuration_mismatch}
       {:error, reason} -> {:error, reason}
     end
   end

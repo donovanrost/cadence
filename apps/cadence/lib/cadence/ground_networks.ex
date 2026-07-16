@@ -9,6 +9,8 @@ defmodule Cadence.GroundNetworks do
     DeliveryProfile,
     MissionProvider,
     MissionProviders,
+    ProviderAccountGrants,
+    ProviderAccounts,
     ProviderCapabilities,
     ProviderContext,
     ProviderError,
@@ -52,7 +54,17 @@ defmodule Cadence.GroundNetworks do
           {:ok, ProviderContext.t()} | {:error, term()}
   def provider_context(organization_id, mission_id, provider_id) do
     with {:ok, provider} <- fetch_provider(organization_id, mission_id, provider_id) do
-      context_from_provider(provider)
+      context_from_provider(provider, require_active_grant?: true)
+    end
+  end
+
+  @doc false
+  @spec context_from_provider(MissionProvider.t(), keyword()) ::
+          {:ok, ProviderContext.t()} | {:error, term()}
+  def context_from_provider(%MissionProvider{} = provider, opts \\ []) do
+    case provider.provider_account_id do
+      nil -> ProviderContext.from_mission_provider(provider)
+      _account_id -> context_from_account_binding(provider, opts)
     end
   end
 
@@ -137,8 +149,36 @@ defmodule Cadence.GroundNetworks do
     end
   end
 
-  defp context_from_provider(%MissionProvider{} = provider) do
-    ProviderContext.from_mission_provider(provider)
+  defp context_from_account_binding(provider, opts) do
+    with {:ok, account_version} <-
+           ProviderAccounts.fetch_version(
+             provider.organization_id,
+             provider.provider_account_id,
+             provider.provider_account_version
+           ),
+         {:ok, _grant} <- validate_context_grant(provider, opts) do
+      ProviderContext.from_account_binding(provider, account_version)
+    end
+  end
+
+  defp validate_context_grant(provider, opts) do
+    if Keyword.get(opts, :require_active_grant?, true) do
+      ProviderAccountGrants.validate_binding(
+        provider.organization_id,
+        provider.mission_id,
+        provider.provider_account_id,
+        provider.provider_account_version,
+        provider.provider_account_grant_id,
+        provider.provider_account_grant_version
+      )
+    else
+      ProviderAccountGrants.fetch_version(
+        provider.organization_id,
+        provider.provider_account_grant_id,
+        provider.mission_id,
+        provider.provider_account_grant_version
+      )
+    end
   end
 
   defp resolve_client(context, opts) do
