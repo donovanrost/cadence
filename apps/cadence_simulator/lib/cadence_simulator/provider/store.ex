@@ -58,6 +58,13 @@ defmodule CadenceSimulator.Provider.Store do
     GenServer.call(__MODULE__, {:events_for_run, run_id, cursor, min(limit, 500)})
   end
 
+  @doc "Atomically consumes one occurrence of a durable, run-scoped fault counter."
+  @spec consume_fault(binary(), binary(), non_neg_integer()) :: boolean()
+  def consume_fault(run_id, fault, limit)
+      when is_binary(run_id) and is_binary(fault) and is_integer(limit) and limit >= 0 do
+    GenServer.call(__MODULE__, {:consume_fault, run_id, fault, limit})
+  end
+
   @doc false
   def clear do
     GenServer.call(__MODULE__, :clear)
@@ -158,6 +165,24 @@ defmodule CadenceSimulator.Provider.Store do
       end
 
     {:reply, %{data: data, next_cursor: next_cursor}, state}
+  end
+
+  def handle_call({:consume_fault, run_id, fault, limit}, _from, state) do
+    key = {:fault_counter, run_id, fault}
+
+    consumed =
+      case :dets.lookup(state.table, key) do
+        [{^key, count}] -> count
+        [] -> 0
+      end
+
+    if consumed < limit do
+      :ok = :dets.insert(state.table, {key, consumed + 1})
+      :ok = :dets.sync(state.table)
+      {:reply, true, state}
+    else
+      {:reply, false, state}
+    end
   end
 
   def handle_call(:clear, _from, state) do

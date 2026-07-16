@@ -14,7 +14,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProvider, ProviderContact, ProviderContext}
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderContact}
 
   alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -82,23 +82,12 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
         "speed" => 1.0
       })
 
-    provider_context = provider_context(context.base_url, run)
+    setup =
+      context
+      |> persist_provider_setup(run)
+      |> provision_provider_transport(context.telemetry_port)
+      |> persist_spacecraft_routing(telemetry?: true)
 
-    assert {:ok, delivery_profile} =
-             SimulatorHTTP.provision_delivery_profile(
-               provider_context,
-               delivery_profile_request(context.telemetry_port),
-               credential_resolver: &resolve_provider_credential/1
-             )
-
-    assert {:ok, [service_profile | _rest]} =
-             SimulatorHTTP.list_service_profiles(
-               provider_context,
-               %{},
-               credential_resolver: &resolve_provider_credential/1
-             )
-
-    setup = persist_cadence_setup(context, run, service_profile, delivery_profile)
     search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
     search_ends_at = DateTime.add(search_starts_at, 180)
 
@@ -128,6 +117,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert booking.provider_reservation.lifecycle_state == :pending
     assert is_nil(booking.scheduled_contact)
+    assert_profile_only_provider_request(booking.provider_reservation, setup)
 
     :ok = Orchestrator.reconcile(DateTime.utc_now())
 
@@ -152,10 +142,27 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert {:ok, %ProviderContact{status: :confirmed, pass_phase: :scheduled}} =
              SimulatorHTTP.describe_contact(
-               provider_context,
+               setup.provider_context,
                booking.provider_reservation.response_document["id"],
                credential_resolver: &resolve_provider_credential/1
              )
+
+    assert {:ok, confirmed_reservation} =
+             Cadence.fetch_provider_reservation(
+               setup.organization_id,
+               setup.mission_id,
+               booking.provider_reservation.provider_reservation_id
+             )
+
+    assert confirmed_reservation.delivery_descriptor_document["protocol"] == "tcp"
+
+    assert confirmed_reservation.delivery_descriptor_document["endpoint_ref"] ==
+             setup.delivery_profile.id
+
+    assert confirmed_reservation.pass_phase == :scheduled
+    assert confirmed_reservation.delivery_state == :pending
+
+    assert_reconciler_restart_preserves_single_contact(setup, confirmed_reservation)
 
     {:ok, opportunity_starts_at, _offset} = DateTime.from_iso8601(opportunity["starts_at"])
     {:ok, opportunity_ends_at, _offset} = DateTime.from_iso8601(opportunity["ends_at"])
@@ -210,31 +217,113 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              )
 
     assert completed_reservation.lifecycle_state == :completed
+    assert completed_reservation.pass_phase == :closed
+    assert completed_reservation.delivery_state == :ended
 
     assert {:ok, _scheduler_summary} =
              Cadence.Contacts.reconcile(setup.mission_id, DateTime.add(opportunity_ends_at, 1))
 
-    second_opportunity = List.first(more_opportunities)
-    assert is_map(second_opportunity)
+    assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
 
-    assert {:ok, second_booking} =
+    assert length(Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)) ==
+             1
+
+    assert is_list(more_opportunities)
+  end
+
+  @tag timeout: 60_000
+  test "client-reference reconciliation recovers a response lost after commit without duplicates",
+       context do
+    scenario =
+      admin_post!(context.base_url <> "/admin/v1/scenarios", %{
+        "name" => "Cadence ambiguous response boundary proof",
+        "spacecraft_count" => 1,
+        "spacecraft_prefix" => "SC",
+        "provider_behavior" => %{
+          "confirmation" => "asynchronous",
+          "idempotency" => "client_reference",
+          "recovery" => "client_reference"
+        },
+        "fault_profile" => %{"contact_response_loss_after_commit_count" => 1},
+        "pass_model" => %{
+          "cadence_seconds" => 30,
+          "duration_seconds" => 15,
+          "jitter_seconds" => 0
+        }
+      })
+
+    run =
+      admin_post!(context.base_url <> "/admin/v1/scenarios/#{scenario["id"]}/runs", %{
+        "seed" => 2_027,
+        "speed" => 1.0
+      })
+
+    setup =
+      context
+      |> persist_provider_setup(run)
+      |> provision_provider_transport(context.telemetry_port)
+      |> persist_spacecraft_routing()
+
+    search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
+
+    assert {:ok, %{opportunities: [opportunity | _rest]}} =
+             ProviderScheduling.search_opportunities(
+               setup.organization_id,
+               setup.mission_id,
+               setup.route.route_key,
+               %{
+                 "spacecraft_id" => setup.spacecraft.spacecraft_id,
+                 "starts_at" => DateTime.to_iso8601(search_starts_at),
+                 "ends_at" => DateTime.to_iso8601(DateTime.add(search_starts_at, 180))
+               }
+             )
+
+    attrs = booking_attrs(setup, opportunity, "response-loss")
+
+    assert {:error, {:provider_reservation_not_confirmed, ambiguous_reservation}} =
              ProviderBooking.reserve(
                setup.organization_id,
                setup.mission_id,
                setup.provider.provider_id,
-               booking_attrs(setup, second_opportunity, "cancel")
+               attrs
              )
 
-    assert {:ok, canceled_booking} =
-             ProviderBooking.cancel(
+    assert ambiguous_reservation.lifecycle_state == :unknown
+    assert ambiguous_reservation.response_document == %{}
+
+    assert get_in(ambiguous_reservation.last_error_document, ["reason", "category"]) ==
+             "ambiguous_outcome"
+
+    assert_profile_only_provider_request(ambiguous_reservation, setup)
+
+    assert {:ok, %ProviderContact{id: provider_contact_id}} =
+             SimulatorHTTP.find_contact_by_client_reference(
+               setup.provider_context,
+               ambiguous_reservation.idempotency_key,
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
+             ProviderReservationReconciler.reconcile_due(
+               setup.organization_id,
+               mission_id: setup.mission_id,
+               backoff_ms: 0,
+               now: DateTime.add(DateTime.utc_now(), 1, :second)
+             )
+
+    assert {:ok, recovered_reservation} =
+             Cadence.fetch_provider_reservation(
                setup.organization_id,
                setup.mission_id,
-               second_booking.provider_reservation.provider_reservation_id
+               ambiguous_reservation.provider_reservation_id
              )
 
-    assert canceled_booking.provider_reservation.lifecycle_state == :canceled
+    assert recovered_reservation.provider_contact_ref == provider_contact_id
+    assert recovered_reservation.lifecycle_state in [:pending, :confirmed]
 
-    assert {:ok, %{processed: 0}} =
+    :ok = Orchestrator.reconcile(DateTime.utc_now())
+
+    assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
              ProviderReservationReconciler.reconcile_due(
                setup.organization_id,
                mission_id: setup.mission_id,
@@ -242,41 +331,29 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                now: DateTime.add(DateTime.utc_now(), 2, :second)
              )
 
-    assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
+    assert [scheduled_contact] =
+             Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)
 
-    assert length(Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)) ==
-             2
+    assert scheduled_contact.scheduled_contact_id == recovered_reservation.scheduled_contact_id
+
+    assert {:ok, %ProviderContact{id: ^provider_contact_id}} =
+             SimulatorHTTP.find_contact_by_client_reference(
+               setup.provider_context,
+               ambiguous_reservation.idempotency_key,
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert_reconciler_restart_preserves_single_contact(setup, recovered_reservation)
+
+    assert [_single_reservation] =
+             Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)
   end
 
-  defp persist_cadence_setup(context, run, service_profile, delivery_profile) do
+  defp persist_provider_setup(context, run) do
     suffix = System.unique_integer([:positive])
     organization_id = "org-simulator-scheduling-#{suffix}"
     mission_id = "mission-simulator-scheduling-#{suffix}"
     persist_mission_scope(organization_id, mission_id)
-
-    spacecraft =
-      Spacecraft.new(%{
-        spacecraft_id: "spacecraft-#{suffix}",
-        mission_id: mission_id,
-        display_name: "Boundary Proof Spacecraft"
-      })
-
-    assert {:ok, spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
-
-    endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "source-#{suffix}",
-        mission_id: mission_id,
-        spacecraft_id: spacecraft.spacecraft_id,
-        source_ref: "SC-001",
-        scid: 0,
-        display_name: "Simulator SC-001"
-      })
-
-    assert {:ok, endpoint} = Cadence.persist_source_endpoint(organization_id, endpoint)
-    persist_telemetry_binding!(organization_id, mission_id, suffix)
-
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     provider =
       MissionProvider.new(%{
@@ -286,77 +363,170 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
         provider_type: :simulator,
         base_url: context.base_url,
         credential_ref: "config://simulator-integration",
-        environment_ref: run["provider_environment_ref"],
-        last_validated_at: now,
-        last_synced_at: now,
-        metadata: %{"control_plane" => %{"status" => "healthy"}},
-        inventory_sync_document: %{
-          "service_profiles" => %{"items" => [service_profile.evidence]},
-          "delivery_profiles" => %{"items" => [delivery_profile.evidence]}
-        },
-        capabilities_document: %{}
+        environment_ref: run["provider_environment_ref"]
       })
 
     assert {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
 
+    assert {:ok, validated_provider} =
+             GroundNetworks.validate_provider(
+               organization_id,
+               mission_id,
+               provider.provider_id
+             )
+
+    assert get_in(validated_provider.metadata, ["control_plane", "status"]) == "healthy"
+    assert validated_provider.capabilities_document["operations"]["contact_reservation"]
+
+    assert {:ok, synced_provider} =
+             GroundNetworks.sync_provider(
+               organization_id,
+               mission_id,
+               provider.provider_id
+             )
+
+    assert get_in(synced_provider.metadata, ["sync", "status"]) == "healthy"
+
+    assert [service_profile | _rest] =
+             get_in(synced_provider.inventory_sync_document, ["service_profiles", "items"])
+
+    assert {:ok, provider_context} =
+             GroundNetworks.provider_context(
+               organization_id,
+               mission_id,
+               provider.provider_id
+             )
+
+    %{
+      suffix: suffix,
+      organization_id: organization_id,
+      mission_id: mission_id,
+      provider: synced_provider,
+      provider_context: provider_context,
+      service_profile: service_profile
+    }
+  end
+
+  defp provision_provider_transport(setup, telemetry_port) do
+    assert {:ok, delivery_profile} =
+             SimulatorHTTP.provision_delivery_profile(
+               setup.provider_context,
+               delivery_profile_request(telemetry_port, setup.suffix),
+               credential_resolver: &resolve_provider_credential/1
+             )
+
+    assert {:ok, synced_provider} =
+             GroundNetworks.sync_provider(
+               setup.organization_id,
+               setup.mission_id,
+               setup.provider.provider_id
+             )
+
+    assert Enum.any?(
+             get_in(synced_provider.inventory_sync_document, ["delivery_profiles", "items"]),
+             &(&1["id"] == delivery_profile.id and &1["version"] == delivery_profile.version)
+           )
+
     transport =
       Transport.new(%{
-        transport_id: "transport-#{suffix}",
-        mission_id: mission_id,
+        transport_id: "transport-#{setup.suffix}",
+        mission_id: setup.mission_id,
         display_name: "Simulator telemetry ingress",
         origin: :provider_managed,
-        mission_provider_id: provider.provider_id,
-        mission_provider_version: provider.version,
-        service_profile_ref: %{"id" => service_profile.id, "version" => service_profile.version},
+        mission_provider_id: synced_provider.provider_id,
+        mission_provider_version: synced_provider.version,
+        service_profile_ref: %{
+          "id" => setup.service_profile["id"],
+          "version" => setup.service_profile["version"]
+        },
         delivery_profile_ref: %{
           "id" => delivery_profile.id,
           "version" => delivery_profile.version
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, transport} = Cadence.persist_transport(setup.organization_id, transport)
+    assert transport.origin == :provider_managed
+    assert transport.configuration["port"] == telemetry_port
+
+    assert {:ok, provider_context} =
+             GroundNetworks.provider_context(
+               setup.organization_id,
+               setup.mission_id,
+               synced_provider.provider_id
+             )
+
+    Map.merge(setup, %{
+      provider: synced_provider,
+      provider_context: provider_context,
+      delivery_profile: delivery_profile,
+      transport: transport
+    })
+  end
+
+  defp persist_spacecraft_routing(setup, opts \\ []) do
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "spacecraft-#{setup.suffix}",
+        mission_id: setup.mission_id,
+        display_name: "Boundary Proof Spacecraft"
+      })
+
+    assert {:ok, spacecraft} = Cadence.persist_spacecraft(setup.organization_id, spacecraft)
+
+    endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "source-#{setup.suffix}",
+        mission_id: setup.mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        source_ref: "SC-001",
+        scid: 0,
+        display_name: "Simulator SC-001"
+      })
+
+    assert {:ok, endpoint} = Cadence.persist_source_endpoint(setup.organization_id, endpoint)
+
+    if Keyword.get(opts, :telemetry?, false) do
+      persist_telemetry_binding!(setup.organization_id, setup.mission_id, setup.suffix)
+    end
 
     rule =
       RoutingRule.new(%{
-        routing_rule_id: "routing-rule-#{suffix}",
-        mission_id: mission_id,
+        routing_rule_id: "routing-rule-#{setup.suffix}",
+        mission_id: setup.mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
         display_name: "Simulator telemetry downlink",
         purpose_label: "Telemetry",
         direction: :inbound,
-        transport_id: transport.transport_id,
-        transport_version: transport.version,
+        transport_id: setup.transport.transport_id,
+        transport_version: setup.transport.version,
         role: :primary
       })
 
-    assert {:ok, rule} = Cadence.create_routing_rule(organization_id, rule)
+    assert {:ok, rule} = Cadence.create_routing_rule(setup.organization_id, rule)
 
     assert {:ok, %{routes: [route], findings: []}} =
              ProviderScheduling.list_ready_downlink_routes(
-               organization_id,
-               mission_id,
+               setup.organization_id,
+               setup.mission_id,
                spacecraft.spacecraft_id
              )
 
     assert {:ok, path} =
              Cadence.fetch_path_template_version(
-               organization_id,
-               mission_id,
+               setup.organization_id,
+               setup.mission_id,
                route.path_template_id,
                route.path_template_version
              )
 
-    %{
-      organization_id: organization_id,
-      mission_id: mission_id,
+    Map.merge(setup, %{
       spacecraft: spacecraft,
       endpoint: endpoint,
-      provider: provider,
-      transport: transport,
       rule: rule,
       path: path,
       route: route
-    }
+    })
   end
 
   defp persist_telemetry_binding!(organization_id, mission_id, suffix) do
@@ -430,30 +600,77 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     |> Map.put("opportunity_ref", opportunity["id"])
   end
 
+  defp assert_profile_only_provider_request(reservation, setup) do
+    provider_request = reservation.request_document["provider_request"]
+
+    assert provider_request == %{
+             "client_reference" => reservation.idempotency_key,
+             "delivery_profile_ref" => setup.delivery_profile.id,
+             "opportunity_ref" => reservation.provider_opportunity_ref,
+             "service_profile_ref" => setup.service_profile["id"],
+             "spacecraft_ref" => "SC-001",
+             "tags" => %{"cadence_mission_ref" => setup.mission_id}
+           }
+
+    refute Enum.any?(
+             ~w(host port target framing endpoint data_plane tm_frame_size definitions_path),
+             &Map.has_key?(provider_request, &1)
+           )
+
+    assert get_in(reservation.request_document, ["bindings", "provider_ref"]) == %{
+             "id" => setup.provider.provider_id,
+             "version" => setup.provider.version
+           }
+
+    assert get_in(reservation.request_document, ["bindings", "transport_ref"]) == %{
+             "id" => setup.transport.transport_id,
+             "version" => setup.transport.version
+           }
+  end
+
+  defp assert_reconciler_restart_preserves_single_contact(setup, reservation) do
+    name = {:global, {__MODULE__, setup.suffix}}
+
+    child =
+      {ProviderReservationReconciler,
+       name: name,
+       safety_poll_interval_ms: 60_000,
+       backoff_ms: 0,
+       mission_id: setup.mission_id,
+       now: DateTime.add(DateTime.utc_now(), 10, :second)}
+
+    start_supervised!(child)
+
+    assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
+             ProviderReservationReconciler.reconcile_now(name)
+
+    assert :ok = stop_supervised(ProviderReservationReconciler)
+    start_supervised!(child)
+
+    assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
+             ProviderReservationReconciler.reconcile_now(name)
+
+    assert [scheduled_contact] =
+             Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)
+
+    assert scheduled_contact.scheduled_contact_id == reservation.scheduled_contact_id
+
+    assert [persisted_reservation] =
+             Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)
+
+    assert persisted_reservation.provider_contact_ref == reservation.provider_contact_ref
+  end
+
   defp admin_post!(url, body) do
     response = Req.post!(url, json: body, auth: {:bearer, "admin-secret"})
     assert response.status in 200..299
     response.body["data"]
   end
 
-  defp provider_context(base_url, run) do
-    {:ok, context} =
-      ProviderContext.new(%{
-        provider_ref: "simulator",
-        mission_id: "mission-boundary-proof",
-        client_key: "simulator_http",
-        base_url: base_url,
-        credential_ref: "env://SIMULATOR_PROVIDER_TOKEN",
-        environment_ref: run["provider_environment_ref"]
-      })
-
-    context
-  end
-
-  defp delivery_profile_request(port) do
+  defp delivery_profile_request(port, suffix) do
     %{
       "display_name" => "Cadence boundary proof telemetry ingress",
-      "client_reference" => "cadence-boundary-proof-downlink",
+      "client_reference" => "cadence-boundary-proof-downlink-#{suffix}",
       "direction" => "downlink",
       "delivery_kind" => "realtime_stream",
       "target" => %{
@@ -470,7 +687,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     }
   end
 
-  defp resolve_provider_credential("env://SIMULATOR_PROVIDER_TOKEN"),
+  defp resolve_provider_credential("config://simulator-integration"),
     do: {:ok, "provider-secret"}
 
   defp restore_config(key, nil), do: Application.delete_env(:cadence_simulator, key)

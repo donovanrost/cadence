@@ -97,14 +97,14 @@ defmodule CadenceSimulator.Provider.ApiRouter do
 
   post "/v1/contacts" do
     with_environment(conn, fn conn, run ->
-      respond(
-        conn,
+      result =
         Contacts.create(run, conn.body_params,
           idempotency_key: request_header(conn, "idempotency-key"),
           request_id: request_id(conn)
-        ),
-        status: 201
-      )
+        )
+
+      maybe_drop_contact_response_after_commit(run, result)
+      respond(conn, result, status: 201)
     end)
   end
 
@@ -195,6 +195,22 @@ defmodule CadenceSimulator.Provider.ApiRouter do
   end
 
   defp request_header(conn, name), do: Plug.Conn.get_req_header(conn, name) |> List.first()
+
+  defp maybe_drop_contact_response_after_commit(run, {:ok, _contact}) do
+    limit =
+      get_in(run, [
+        "scenario_snapshot",
+        "fault_profile",
+        "contact_response_loss_after_commit_count"
+      ]) ||
+        0
+
+    if Store.consume_fault(run["id"], "contact_response_loss_after_commit", limit) do
+      Process.exit(self(), :kill)
+    end
+  end
+
+  defp maybe_drop_contact_response_after_commit(_run, _result), do: :ok
 
   defp parse_integer(nil, default), do: default
 

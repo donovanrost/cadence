@@ -365,6 +365,10 @@ defmodule CadenceSimulator.Provider do
       "packet_loss_rate" => bounded_rate(profile, "packet_loss_rate"),
       "latency_ms" => integer(profile, "latency_ms", 0),
       "jitter_ms" => integer(profile, "jitter_ms", 0),
+      "contact_response_loss_after_commit_count" =>
+        profile
+        |> integer("contact_response_loss_after_commit_count", 0)
+        |> max(0),
       "provider_outage" => Map.get(profile, "provider_outage", false)
     }
   end

@@ -7,7 +7,9 @@ same integration boundary as a commercial provider.
 > This walkthrough describes the implemented Simulator Provider Contract v1 and
 > normalized Cadence Provider Client, persisted Mission Provider setup, and
 > provider-managed Transport persistence. Scheduling now binds exact Provider,
-> Transport, Service Profile, and Delivery Profile versions as described in the
+> Transport, Service Profile, and Delivery Profile versions. The separate-app
+> proof validates provider inventory over HTTP, streams normal CCSDS TM over TCP,
+> and recovers a lost post-commit response by client reference as described in the
 > [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
 
 ## 1. Start the simulator
