@@ -2,7 +2,7 @@
 
 **Status:** in progress
 
-**Progress (2026-07-15):** Tasks 1 and 2 are complete. Provider events now
+**Progress (2026-07-15):** Tasks 1 through 3 are complete. Provider events now
 normalize into bounded, sanitized `ProviderEvent` structs, Provider Contacts
 carry monotonic revisions, and the separate simulator exposes revision-aware,
 idempotent Contact modification with contract fixtures. Provider evidence is
@@ -11,9 +11,14 @@ deduplicated per organization and Provider Account, with credential-free
 external object references supported. The append-only provider audit ledger
 supports organization-only and optional mission scope, exact domain and
 causality references, bounded decision evidence, transaction composition via
-`Ecto.Multi`, and idempotent mission operational-event projections. Root `mix
-precommit` passes with 3,045 tests passed and 93 browser-tagged tests excluded.
-Task 3, shared secret resolution and provider credential lifecycle, is next.
+`Ecto.Multi`, and idempotent mission operational-event projections. Secret
+resolution now uses a shared capability-based backend contract with local-only
+environment and bounded, HTTPS-by-default Req adapters; the dashboard modules
+remain compatibility delegates. Organization/Provider Account-scoped
+credential records support stable references, ephemeral resolution, rotation,
+revocation, version-only audit evidence, and Stage 2 adapter compatibility.
+Root `mix precommit` passes with 3,053 tests passed and 93 browser-tagged tests
+excluded. Task 4, organization Provider Accounts and mission grants, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and

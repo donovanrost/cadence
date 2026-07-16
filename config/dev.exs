@@ -1,5 +1,7 @@
 import Config
 
+config :cadence, provider_local_credentials: [enabled: true]
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",
