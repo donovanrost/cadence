@@ -157,6 +157,7 @@ The customer-facing provider API is rooted at `/provider/v1`.
 | `POST` | `/provider/v1/contacts` | Request provider capacity |
 | `GET` | `/provider/v1/contacts` | Reconcile by client reference or bounded filters |
 | `GET` | `/provider/v1/contacts/:id` | Read authoritative provider state |
+| `PATCH` | `/provider/v1/contacts/:id` | Modify capability-declared schedule or resource fields |
 | `POST` | `/provider/v1/contacts/:id/cancel` | Request cancellation |
 | `GET` | `/provider/v1/contacts/:id/result` | Read delivered-contact summary when available |
 | `GET` | `/provider/v1/events` | Consume advisory provider events |
@@ -230,7 +231,7 @@ Minimum shape:
   "operations": {
     "opportunity_search": true,
     "contact_reservation": true,
-    "contact_modification": false,
+    "contact_modification": true,
     "contact_cancellation": true,
     "inventory_discovery": true,
     "delivery_profile_provisioning": true
@@ -449,10 +450,12 @@ Minimum contact response:
 ```json
 {
   "id": "contact-123",
+  "revision": 2,
   "client_reference": "cadence-reservation-123",
   "opportunity_ref": "opportunity-123",
   "spacecraft_ref": "SC-001",
   "ground_station_ref": "station-svalbard",
+  "antenna_or_service_pool_ref": "station-svalbard-antenna-1",
   "service_profile_ref": "service-realtime-ttc",
   "delivery_profile_ref": "delivery-cadence-primary",
   "starts_at": "2026-07-13T12:10:00Z",
@@ -468,6 +471,38 @@ Minimum contact response:
 
 The service and delivery profiles used for reservation are snapshotted. Later
 profile changes do not silently alter an existing contact.
+
+### Contact modification
+
+When `contact_modification` is declared, Cadence may send
+`PATCH /provider/v1/contacts/:id` before the Contact becomes active:
+
+```json
+{
+  "client_reference": "cadence-change-123",
+  "expected_revision": 2,
+  "starts_at": "2026-07-13T12:11:00Z",
+  "ends_at": "2026-07-13T12:21:00Z",
+  "antenna_or_service_pool_ref": "station-svalbard-antenna-2",
+  "reason": "operator_requested"
+}
+```
+
+The simulator accepts only schedule and ground-resource fields. Service,
+Delivery Profile, spacecraft, direction, protocol, endpoint, framing, and
+credential changes are rejected as setup changes. `expected_revision` provides
+optimistic concurrency. Every successful Contact change increments `revision`.
+
+Modification uses the environment's declared mutation idempotency behavior.
+Under native idempotency, `Idempotency-Key` is required and repeating the same
+key and payload returns the current Contact without creating another revision.
+A reused identity with a different payload or a stale expected revision returns
+`409`.
+
+Cadence normalizes every Contact response into an authoritative snapshot.
+Requested, provider-confirmed, and Cadence-accepted snapshots remain distinct;
+receiving a higher provider revision does not itself authorize an execution
+change.
 
 ### Contact lifecycle
 
@@ -567,7 +602,9 @@ Minimum event shape:
   "type": "contact.status_changed",
   "resource_type": "contact",
   "resource_id": "contact-123",
+  "resource_revision": 2,
   "request_id": "request-123",
+  "client_reference": "cadence-reservation-123",
   "data": {}
 }
 ```
@@ -576,6 +613,7 @@ Supported event families include:
 
 ```text
 contact.status_changed
+contact.modified
 contact.pass_phase_changed
 delivery.status_changed
 delivery.health_changed
@@ -585,9 +623,16 @@ provider.health_changed
 ```
 
 Events are at-least-once inputs and may be duplicated. Configured simulator
-behavior may delay or omit advisory delivery to test polling repair. Event
-processing in Cadence is idempotent, and a cursor advances only after the event
-and resulting state commit together.
+behavior may delay or omit advisory delivery to test polling repair. A Cadence
+polling cursor advances only after every event in the page is durably inserted,
+deduplicated, or quarantined in the same commit as the cursor. Domain processing
+may happen later and remains idempotent; its state transition and audit evidence
+commit together.
+
+Provider adapters normalize each event into a `ProviderEvent` before returning
+the page. Event types remain bounded strings rather than dynamically created
+atoms so a future provider-native event can be durably quarantined without
+expanding the VM atom table.
 
 Event objects always contain string-keyed JSON data. Any LiveView or UI that
 streams them must normalize them to a struct or configure the stream DOM ID;
@@ -752,4 +797,3 @@ CCSDS telemetry through the ordinary contact-time transport.
 - Administrators can inspect protocol and endpoint diagnostics without seeing
   secrets.
 - The separate-app TCP scheduling and telemetry proof remains green.
-

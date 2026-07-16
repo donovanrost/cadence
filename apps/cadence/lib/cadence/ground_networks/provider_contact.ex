@@ -23,10 +23,12 @@ defmodule Cadence.GroundNetworks.ProviderContact do
 
   @type t :: %__MODULE__{
           id: binary(),
+          provider_revision: pos_integer(),
           client_reference: binary(),
           opportunity_ref: binary(),
           spacecraft_ref: binary(),
           ground_station_ref: binary(),
+          antenna_or_service_pool_ref: binary() | nil,
           service_profile_ref: binary(),
           delivery_profile_ref: binary(),
           starts_at: DateTime.t(),
@@ -43,10 +45,12 @@ defmodule Cadence.GroundNetworks.ProviderContact do
 
   defstruct [
     :id,
+    :provider_revision,
     :client_reference,
     :opportunity_ref,
     :spacecraft_ref,
     :ground_station_ref,
+    :antenna_or_service_pool_ref,
     :service_profile_ref,
     :delivery_profile_ref,
     :starts_at,
@@ -66,10 +70,13 @@ defmodule Cadence.GroundNetworks.ProviderContact do
     contact = Validation.sanitize(contact)
 
     with {:ok, id} <- Validation.required_string(contact, "id"),
+         {:ok, provider_revision} <- Validation.positive_integer(contact, "revision"),
          {:ok, client_reference} <- Validation.required_string(contact, "client_reference"),
          {:ok, opportunity_ref} <- Validation.required_string(contact, "opportunity_ref"),
          {:ok, spacecraft_ref} <- Validation.required_string(contact, "spacecraft_ref"),
          {:ok, ground_station_ref} <- Validation.required_string(contact, "ground_station_ref"),
+         {:ok, antenna_or_service_pool_ref} <-
+           Validation.optional_string(contact, "antenna_or_service_pool_ref"),
          {:ok, service_profile_ref} <-
            Validation.required_string(contact, "service_profile_ref"),
          {:ok, delivery_profile_ref} <-
@@ -86,10 +93,12 @@ defmodule Cadence.GroundNetworks.ProviderContact do
       {:ok,
        %__MODULE__{
          id: id,
+         provider_revision: provider_revision,
          client_reference: client_reference,
          opportunity_ref: opportunity_ref,
          spacecraft_ref: spacecraft_ref,
          ground_station_ref: ground_station_ref,
+         antenna_or_service_pool_ref: antenna_or_service_pool_ref,
          service_profile_ref: service_profile_ref,
          delivery_profile_ref: delivery_profile_ref,
          starts_at: starts_at,
@@ -116,9 +125,12 @@ defmodule Cadence.GroundNetworks.ProviderContact do
     %{
       "id" => contact.id,
       "provider_contact_ref" => contact.id,
+      "provider_revision" => contact.provider_revision,
       "client_reference" => contact.client_reference,
       "opportunity_ref" => contact.opportunity_ref,
       "spacecraft_ref" => contact.spacecraft_ref,
+      "ground_station_ref" => contact.ground_station_ref,
+      "antenna_or_service_pool_ref" => contact.antenna_or_service_pool_ref,
       "service_profile_ref" => contact.service_profile_ref,
       "delivery_profile_ref" => contact.delivery_profile_ref,
       "status" => Atom.to_string(contact.status),

@@ -2,7 +2,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   use CadenceSimulator.Case, async: false
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{Orchestrator, Router, Store}
+  alias CadenceSimulator.Provider.{Contacts, Orchestrator, Router, Store}
   alias Plug.Conn
   alias Plug.Test
 
@@ -236,6 +236,113 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     assert request(:post, "/provider/v1/contacts", run, conflicting).status == 409
   end
 
+  test "Contact modification is revision aware and idempotent", context do
+    delivery_profile = provision_delivery(context)
+    opportunity = search_opportunity(context.run)
+
+    contact_request = %{
+      "opportunity_ref" => opportunity["id"],
+      "spacecraft_ref" => opportunity["spacecraft_ref"],
+      "service_profile_ref" => opportunity["service_profile_ref"],
+      "delivery_profile_ref" => delivery_profile["id"],
+      "client_reference" => "modifiable-contact",
+      "tags" => %{}
+    }
+
+    created =
+      request(:post, "/provider/v1/contacts", context.run, contact_request,
+        "idempotency-key": "modifiable-booking"
+      )
+
+    assert %{"data" => %{"id" => contact_id, "revision" => 1}} =
+             Jason.decode!(created.resp_body)
+
+    starts_at = shift_time(opportunity["starts_at"], 60)
+    ends_at = shift_time(opportunity["ends_at"], 60)
+
+    modification = %{
+      "client_reference" => "change-contact-1",
+      "expected_revision" => 1,
+      "starts_at" => starts_at,
+      "ends_at" => ends_at,
+      "reason" => "operator_requested"
+    }
+
+    modified =
+      request(:patch, "/provider/v1/contacts/#{contact_id}", context.run, modification,
+        "idempotency-key": "contact-change-1",
+        "x-request-id": "request-change-1"
+      )
+
+    assert modified.status == 200
+
+    assert %{
+             "data" => %{
+               "revision" => 2,
+               "starts_at" => ^starts_at,
+               "ends_at" => ^ends_at
+             }
+           } = Jason.decode!(modified.resp_body)
+
+    repeated =
+      request(:patch, "/provider/v1/contacts/#{contact_id}", context.run, modification,
+        "idempotency-key": "contact-change-1"
+      )
+
+    assert %{"data" => %{"revision" => repeated_revision}} = Jason.decode!(repeated.resp_body)
+    assert repeated_revision >= 2
+
+    assert {:ok, internal_contact} = Contacts.fetch_internal(contact_id)
+    assert internal_contact["revision"] == repeated_revision
+    assert length(internal_contact["modification_history"]) == 1
+
+    conflicting = Map.put(modification, "ends_at", shift_time(ends_at, 60))
+
+    assert request(
+             :patch,
+             "/provider/v1/contacts/#{contact_id}",
+             context.run,
+             conflicting,
+             "idempotency-key": "contact-change-1"
+           ).status == 409
+
+    stale = Map.put(modification, "client_reference", "change-contact-stale")
+
+    assert request(
+             :patch,
+             "/provider/v1/contacts/#{contact_id}",
+             context.run,
+             stale,
+             "idempotency-key": "contact-change-stale"
+           ).status == 409
+
+    configuration_change =
+      modification
+      |> Map.put("client_reference", "change-contact-protocol")
+      |> Map.put("expected_revision", 2)
+      |> Map.put("protocol", "udp")
+
+    assert request(
+             :patch,
+             "/provider/v1/contacts/#{contact_id}",
+             context.run,
+             configuration_change,
+             "idempotency-key": "contact-change-protocol"
+           ).status == 422
+
+    events = request(:get, "/provider/v1/events?cursor=0&limit=100", context.run)
+    %{"data" => event_data} = Jason.decode!(events.resp_body)
+
+    assert Enum.any?(event_data, fn event ->
+             event["type"] == "contact.modified" and event["resource_revision"] == 2 and
+               event["client_reference"] == "modifiable-contact" and
+               event["data"]["changed_fields"]["starts_at"] == %{
+                 "before" => opportunity["starts_at"],
+                 "after" => starts_at
+               }
+           end)
+  end
+
   test "a profile-backed Contact streams telemetry and records delivery counters", context do
     {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
@@ -388,5 +495,10 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
       {key, nil} -> Application.delete_env(:cadence_simulator, key)
       {key, value} -> Application.put_env(:cadence_simulator, key, value)
     end)
+  end
+
+  defp shift_time(value, seconds) do
+    {:ok, datetime, _offset} = DateTime.from_iso8601(value)
+    datetime |> DateTime.add(seconds) |> DateTime.to_iso8601()
   end
 end

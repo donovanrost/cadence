@@ -25,8 +25,17 @@ defmodule CadenceSimulator.Provider.Contacts do
     "service_profile_snapshot",
     "delivery_profile_snapshot",
     "idempotency_key",
+    "modification_history",
     "result"
   ]
+  @modification_fields [
+    "starts_at",
+    "ends_at",
+    "ground_station_ref",
+    "antenna_or_service_pool_ref"
+  ]
+  @modification_request_keys ["client_reference", "expected_revision", "reason"] ++
+                               @modification_fields
 
   @spec create(map(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def create(run, attrs, opts \\ []) when is_map(run) and is_map(attrs) do
@@ -122,6 +131,28 @@ defmodule CadenceSimulator.Provider.Contacts do
     end
   end
 
+  @spec modify(map(), binary(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def modify(run, id, attrs, opts \\ []) when is_map(run) and is_binary(id) and is_map(attrs) do
+    idempotency_key = Keyword.get(opts, :idempotency_key)
+
+    with {:ok, contact} <- fetch_internal(id),
+         true <- contact["run_id"] == run["id"],
+         :ok <- ensure_modifiable(contact),
+         {:ok, request} <- normalize_modification_request(contact, attrs),
+         :ok <- validate_idempotency_key(run, idempotency_key) do
+      modify_or_recover(
+        run,
+        contact,
+        request,
+        idempotency_key,
+        Keyword.get(opts, :request_id)
+      )
+    else
+      false -> {:error, :not_found}
+      error -> error
+    end
+  end
+
   @spec public(map()) :: map()
   def public(contact), do: Map.drop(contact, @internal_keys)
 
@@ -186,6 +217,7 @@ defmodule CadenceSimulator.Provider.Contacts do
       "antenna_or_service_pool_ref" => opportunity["antenna_or_service_pool_ref"],
       "service_profile_ref" => service_profile["id"],
       "delivery_profile_ref" => delivery_profile["id"],
+      "revision" => 1,
       "starts_at" => opportunity["starts_at"],
       "ends_at" => opportunity["ends_at"],
       "status" => if(rejected?, do: "rejected", else: "pending"),
@@ -198,6 +230,7 @@ defmodule CadenceSimulator.Provider.Contacts do
       "service_profile_snapshot" => service_profile,
       "delivery_profile_snapshot" => delivery_profile,
       "idempotency_key" => idempotency_key,
+      "modification_history" => [],
       "result" => nil,
       "created_at" => now,
       "updated_at" => now
@@ -294,6 +327,160 @@ defmodule CadenceSimulator.Provider.Contacts do
 
     if mode == "native" and not (is_binary(value) and value != ""),
       do: {:error, {:invalid, "Idempotency-Key header is required by this environment"}},
+      else: :ok
+  end
+
+  defp ensure_modifiable(%{"status" => status}) when status in ["pending", "confirmed"], do: :ok
+
+  defp ensure_modifiable(%{"status" => status}) do
+    if terminal_status?(status),
+      do: {:error, {:conflict, "contact is already terminal"}},
+      else: {:error, {:conflict, "contact can no longer be modified"}}
+  end
+
+  defp normalize_modification_request(contact, attrs) do
+    unknown_keys = Map.keys(attrs) -- @modification_request_keys
+
+    with true <- unknown_keys == [],
+         :ok <- require_text_fields(attrs, ["client_reference"]),
+         :ok <- validate_expected_revision(attrs["expected_revision"]),
+         :ok <-
+           validate_optional_text(attrs, ["ground_station_ref", "antenna_or_service_pool_ref"]),
+         :ok <- validate_optional_timestamp(attrs, "starts_at"),
+         :ok <- validate_optional_timestamp(attrs, "ends_at"),
+         :ok <- validate_optional_reason(attrs["reason"]),
+         changes = Map.take(attrs, @modification_fields),
+         true <- map_size(changes) > 0,
+         :ok <- validate_modified_window(contact, changes) do
+      {:ok, Map.take(attrs, @modification_request_keys)}
+    else
+      false when unknown_keys != [] ->
+        {:error,
+         {:invalid, "unsupported Contact modification field: #{List.first(unknown_keys)}"}}
+
+      false ->
+        {:error, {:invalid, "at least one Contact modification field is required"}}
+
+      error ->
+        error
+    end
+  end
+
+  defp validate_expected_revision(value) when is_integer(value) and value > 0, do: :ok
+
+  defp validate_expected_revision(_value),
+    do: {:error, {:invalid, "expected_revision is required"}}
+
+  defp validate_optional_text(attrs, keys) do
+    case Enum.find(keys, fn key ->
+           Map.has_key?(attrs, key) and not (is_binary(attrs[key]) and attrs[key] != "")
+         end) do
+      nil -> :ok
+      key -> {:error, {:invalid, "#{key} must be non-empty text"}}
+    end
+  end
+
+  defp validate_optional_timestamp(attrs, key) do
+    case Map.fetch(attrs, key) do
+      :error ->
+        :ok
+
+      {:ok, value} when is_binary(value) ->
+        case DateTime.from_iso8601(value) do
+          {:ok, _datetime, _offset} -> :ok
+          _error -> {:error, {:invalid, "#{key} must be an ISO 8601 timestamp"}}
+        end
+
+      {:ok, _value} ->
+        {:error, {:invalid, "#{key} must be an ISO 8601 timestamp"}}
+    end
+  end
+
+  defp validate_optional_reason(nil), do: :ok
+  defp validate_optional_reason(value) when is_binary(value) and value != "", do: :ok
+  defp validate_optional_reason(_value), do: {:error, {:invalid, "reason must be non-empty text"}}
+
+  defp validate_modified_window(contact, changes) do
+    with {:ok, starts_at, _offset} <-
+           DateTime.from_iso8601(Map.get(changes, "starts_at", contact["starts_at"])),
+         {:ok, ends_at, _offset} <-
+           DateTime.from_iso8601(Map.get(changes, "ends_at", contact["ends_at"])),
+         true <- DateTime.before?(starts_at, ends_at) do
+      :ok
+    else
+      _error -> {:error, {:invalid, "modified ends_at must be after starts_at"}}
+    end
+  end
+
+  defp modify_or_recover(run, contact, request, idempotency_key, request_id) do
+    case existing_modification(run, contact, request, idempotency_key) do
+      nil -> apply_modification(run, contact, request, idempotency_key, request_id)
+      existing -> recover_modification(contact, request, existing)
+    end
+  end
+
+  defp existing_modification(run, contact, request, idempotency_key) do
+    mode = get_in(run, ["scenario_snapshot", "provider_behavior", "idempotency"])
+
+    Enum.find(contact["modification_history"] || [], fn modification ->
+      case mode do
+        "native" -> modification["idempotency_key"] == idempotency_key
+        "client_reference" -> modification["client_reference"] == request["client_reference"]
+        "none" -> false
+      end
+    end)
+  end
+
+  defp recover_modification(contact, request, existing) do
+    if existing["request"] == request do
+      {:ok, public(contact)}
+    else
+      {:error, {:conflict, "idempotency identity already has a different modification request"}}
+    end
+  end
+
+  defp apply_modification(run, contact, request, idempotency_key, request_id) do
+    with true <- request["expected_revision"] == contact["revision"],
+         changes = Map.take(request, @modification_fields),
+         candidate = Map.merge(contact, changes),
+         :ok <- ensure_modified_capacity(run, candidate, contact["id"]) do
+      modification = %{
+        "client_reference" => request["client_reference"],
+        "idempotency_key" => idempotency_key,
+        "request" => request,
+        "from_revision" => contact["revision"],
+        "to_revision" => contact["revision"] + 1,
+        "applied_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+      }
+
+      history = (contact["modification_history"] || []) ++ [modification]
+
+      with {:ok, updated} <-
+             ContactLifecycle.update(
+               contact,
+               Map.put(changes, "modification_history", history),
+               request_id
+             ) do
+        {:ok, public(updated)}
+      end
+    else
+      false -> {:error, {:conflict, "expected_revision does not match current Contact revision"}}
+      error -> error
+    end
+  end
+
+  defp ensure_modified_capacity(run, candidate, contact_id) do
+    conflict? =
+      Store.list(:contact)
+      |> Enum.any?(fn other ->
+        other["id"] != contact_id and
+          other["run_id"] == run["id"] and
+          other["antenna_or_service_pool_ref"] == candidate["antenna_or_service_pool_ref"] and
+          not terminal_status?(other["status"]) and intervals_overlap?(other, candidate)
+      end)
+
+    if conflict?,
+      do: {:error, {:no_capacity, "modified antenna or service pool is already reserved"}},
       else: :ok
   end
 

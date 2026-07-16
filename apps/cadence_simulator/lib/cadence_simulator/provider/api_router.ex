@@ -124,6 +124,18 @@ defmodule CadenceSimulator.Provider.ApiRouter do
     end)
   end
 
+  patch "/v1/contacts/:id" do
+    with_environment(conn, fn conn, run ->
+      respond(
+        conn,
+        Contacts.modify(run, id, conn.body_params,
+          idempotency_key: request_header(conn, "idempotency-key"),
+          request_id: request_id(conn)
+        )
+      )
+    end)
+  end
+
   get "/v1/contacts/:id" do
     with_environment(conn, fn conn, run -> respond(conn, Contacts.fetch(run, id)) end)
   end

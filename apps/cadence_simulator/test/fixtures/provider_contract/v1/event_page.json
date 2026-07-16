@@ -7,7 +7,9 @@
     "type": "contact.status_changed",
     "resource_type": "contact",
     "resource_id": "contact-123",
+    "resource_revision": 2,
     "request_id": "request-123",
+    "client_reference": "cadence-reservation-123",
     "data": {"from": "pending", "to": "confirmed"}
   }],
   "meta": {"contract_version": "1.0", "request_id": "request-123", "next_cursor": "123", "truncated": false}

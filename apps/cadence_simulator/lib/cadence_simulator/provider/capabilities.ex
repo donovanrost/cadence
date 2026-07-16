@@ -53,7 +53,7 @@ defmodule CadenceSimulator.Provider.Capabilities do
       "operations" => %{
         "opportunity_search" => true,
         "contact_reservation" => true,
-        "contact_modification" => false,
+        "contact_modification" => true,
         "contact_cancellation" => true,
         "inventory_discovery" => true,
         "delivery_profile_provisioning" => true

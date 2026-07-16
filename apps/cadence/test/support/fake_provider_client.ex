@@ -18,7 +18,7 @@ defmodule Cadence.TestSupport.FakeProviderClient do
     "operations" => %{
       "opportunity_search" => true,
       "contact_reservation" => true,
-      "contact_modification" => false,
+      "contact_modification" => true,
       "contact_cancellation" => true,
       "inventory_discovery" => true,
       "delivery_profile_provisioning" => true
@@ -122,6 +122,36 @@ defmodule Cadence.TestSupport.FakeProviderClient do
   end
 
   @impl true
+  def modify_contact(_context, provider_contact_id, attrs, opts) do
+    run_observer(opts, :on_modify, %{provider_contact_id: provider_contact_id, attrs: attrs})
+
+    resolve_response(opts, :modify_response, fn ->
+      window = %{
+        starts_at: parse_time(attrs["starts_at"], default_window().starts_at),
+        ends_at: parse_time(attrs["ends_at"], default_window().ends_at)
+      }
+
+      contact_attrs = %{
+        "client_reference" => attrs["client_reference"],
+        "opportunity_ref" => "opportunity-alpha",
+        "spacecraft_ref" => "SC-001",
+        "service_profile_ref" => "service-realtime-ttc-downlink",
+        "delivery_profile_ref" => "delivery-cadence-primary"
+      }
+
+      {:ok,
+       contact(
+         contact_attrs,
+         opts
+         |> Keyword.put(:provider_contact_id, provider_contact_id)
+         |> Keyword.put(:provider_revision, attrs["expected_revision"] + 1)
+         |> Keyword.put(:contact_window, window),
+         :confirmed
+       )}
+    end)
+  end
+
+  @impl true
   def cancel_contact(_context, provider_contact_id, opts) do
     run_observer(opts, :on_cancel, provider_contact_id)
 
@@ -184,10 +214,12 @@ defmodule Cadence.TestSupport.FakeProviderClient do
 
     %ProviderContact{
       id: provider_contact_id,
+      provider_revision: Keyword.get(opts, :provider_revision, 1),
       client_reference: attrs["client_reference"],
       opportunity_ref: attrs["opportunity_ref"],
       spacecraft_ref: attrs["spacecraft_ref"],
       ground_station_ref: "station-alpha",
+      antenna_or_service_pool_ref: "station-alpha-antenna-1",
       service_profile_ref: attrs["service_profile_ref"],
       delivery_profile_ref: attrs["delivery_profile_ref"],
       starts_at: starts_at,
@@ -265,6 +297,13 @@ defmodule Cadence.TestSupport.FakeProviderClient do
   defp default_window do
     starts_at = DateTime.utc_now()
     %{starts_at: starts_at, ends_at: DateTime.add(starts_at, 600)}
+  end
+
+  defp parse_time(nil, default), do: default
+
+  defp parse_time(value, _default) when is_binary(value) do
+    {:ok, datetime, _offset} = DateTime.from_iso8601(value)
+    datetime
   end
 
   defp run_observer(opts, key, value) do

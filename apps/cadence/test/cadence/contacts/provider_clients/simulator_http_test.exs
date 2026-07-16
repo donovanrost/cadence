@@ -9,7 +9,8 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
     ProviderCapabilities,
     ProviderContact,
     ProviderContext,
-    ProviderError
+    ProviderError,
+    ProviderEvent
   }
 
   test "search uses Provider Contract v1 and normalizes its page" do
@@ -101,6 +102,40 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
     refute Enum.any?(opts[:headers], fn {name, _value} -> name == "idempotency-key" end)
   end
 
+  test "contact modification is capability gated, revision aware, and idempotent" do
+    attrs = %{
+      "client_reference" => "cadence-change-123",
+      "expected_revision" => 1,
+      "starts_at" => "2026-07-13T12:11:00Z",
+      "ends_at" => "2026-07-13T12:21:00Z",
+      "reason" => "operator_requested"
+    }
+
+    req_request = fn opts ->
+      send(self(), {:request, opts})
+
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{"data" => contact_document(revision: 2)}
+       }}
+    end
+
+    assert {:ok, %ProviderContact{provider_revision: 2}} =
+             SimulatorHTTP.modify_contact(
+               context(),
+               "contact-123",
+               attrs,
+               call_opts(req_request) ++ [idempotency_key: "change-123"]
+             )
+
+    assert_received {:request, opts}
+    assert opts[:method] == :patch
+    assert opts[:url] == "http://simulator.test/provider/v1/contacts/contact-123"
+    assert opts[:json] == attrs
+    assert {"idempotency-key", "change-123"} in opts[:headers]
+  end
+
   test "optional operations are capability gated before an HTTP request" do
     req_request = fn _opts -> flunk("unsupported operation reached HTTP") end
     capabilities = capabilities(idempotency: :native)
@@ -109,7 +144,10 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
       context()
       | capabilities: %{
           capabilities
-          | operations: Map.put(capabilities.operations, :delivery_profile_provisioning, false),
+          | operations:
+              capabilities.operations
+              |> Map.put(:delivery_profile_provisioning, false)
+              |> Map.put(:contact_modification, false),
             events: Map.put(capabilities.events, :polling, false),
             reservation: Map.put(capabilities.reservation, :recovery, :none)
         }
@@ -117,6 +155,9 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
 
     assert {:error, %ProviderError{category: :unsupported_capability}} =
              SimulatorHTTP.provision_delivery_profile(context, %{}, req_request: req_request)
+
+    assert {:error, %ProviderError{category: :unsupported_capability}} =
+             SimulatorHTTP.modify_contact(context, "contact-123", %{}, req_request: req_request)
 
     assert {:error, %ProviderError{category: :unsupported_capability}} =
              SimulatorHTTP.find_contact_by_client_reference(context, "booking-123",
@@ -172,7 +213,9 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
       "type" => "contact.status_changed",
       "resource_type" => "contact",
       "resource_id" => "contact-123",
+      "resource_revision" => 2,
       "request_id" => "request-123",
+      "client_reference" => "cadence-reservation-123",
       "data" => %{"from" => "pending", "to" => "confirmed"}
     }
 
@@ -189,7 +232,19 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
        }}
     end
 
-    assert {:ok, %{data: [^event], next_cursor: "123", truncated: false}} =
+    assert {:ok,
+            %{
+              data: [
+                %ProviderEvent{
+                  id: "event-123",
+                  sequence: 123,
+                  resource_revision: 2,
+                  type: "contact.status_changed"
+                }
+              ],
+              next_cursor: "123",
+              truncated: false
+            }} =
              SimulatorHTTP.events(context(), "122", call_opts(req_request))
 
     assert_received {:request, opts}
@@ -280,7 +335,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
       "operations" => %{
         "opportunity_search" => true,
         "contact_reservation" => true,
-        "contact_modification" => false,
+        "contact_modification" => true,
         "contact_cancellation" => true,
         "inventory_discovery" => true,
         "delivery_profile_provisioning" => true
@@ -340,13 +395,15 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
     }
   end
 
-  defp contact_document do
+  defp contact_document(opts \\ []) do
     %{
       "id" => "contact-123",
+      "revision" => Keyword.get(opts, :revision, 1),
       "client_reference" => "cadence-reservation-123",
       "opportunity_ref" => "opportunity-123",
       "spacecraft_ref" => "SC-001",
       "ground_station_ref" => "station-svalbard",
+      "antenna_or_service_pool_ref" => "station-svalbard-antenna-1",
       "service_profile_ref" => "service-realtime-ttc-downlink",
       "delivery_profile_ref" => "delivery-cadence-primary",
       "starts_at" => "2026-07-13T12:10:00Z",

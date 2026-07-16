@@ -13,6 +13,7 @@ defmodule Cadence.Contacts.ProviderClient do
     ProviderContact,
     ProviderContext,
     ProviderError,
+    ProviderEvent,
     ServiceProfile
   }
 
@@ -20,6 +21,11 @@ defmodule Cadence.Contacts.ProviderClient do
   @type opportunity_page :: %{
           data: [Opportunity.t()],
           next_cursor: binary() | nil,
+          truncated: boolean()
+        }
+  @type event_page :: %{
+          data: [ProviderEvent.t()],
+          next_cursor: binary() | non_neg_integer() | nil,
           truncated: boolean()
         }
 
@@ -41,14 +47,17 @@ defmodule Cadence.Contacts.ProviderClient do
               provider_result(ProviderContact.t())
   @callback describe_contact(ProviderContext.t(), binary(), keyword()) ::
               provider_result(ProviderContact.t())
+  @callback modify_contact(ProviderContext.t(), binary(), map(), keyword()) ::
+              provider_result(ProviderContact.t())
   @callback cancel_contact(ProviderContext.t(), binary(), keyword()) ::
               provider_result(ProviderContact.t())
   @callback find_contact_by_client_reference(ProviderContext.t(), binary(), keyword()) ::
               provider_result(ProviderContact.t())
   @callback events(ProviderContext.t(), binary() | non_neg_integer() | nil, keyword()) ::
-              provider_result(map())
+              provider_result(event_page())
 
   @optional_callbacks provision_delivery_profile: 3,
+                      modify_contact: 4,
                       find_contact_by_client_reference: 3,
                       events: 3
 end

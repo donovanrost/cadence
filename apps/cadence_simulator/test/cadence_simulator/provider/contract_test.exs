@@ -70,8 +70,11 @@ defmodule CadenceSimulator.Provider.ContractTest do
           "contact_confirmed.json",
           "contact_active.json",
           "contact_completed.json",
+          "contact_modified.json",
+          "contact_counteroffer.json",
           "contact_result.json",
           "event_page.json",
+          "event_identity_collision.json",
           "error.json"
         ] do
       document = @fixture_dir |> Path.join(filename) |> File.read!() |> Jason.decode!()
@@ -97,6 +100,7 @@ defmodule CadenceSimulator.Provider.ContractTest do
   test "Contact fixtures keep the three lifecycle dimensions explicit" do
     required_keys = [
       "id",
+      "revision",
       "client_reference",
       "opportunity_ref",
       "spacecraft_ref",
@@ -116,7 +120,9 @@ defmodule CadenceSimulator.Provider.ContractTest do
           "contact_pending.json",
           "contact_confirmed.json",
           "contact_active.json",
-          "contact_completed.json"
+          "contact_completed.json",
+          "contact_modified.json",
+          "contact_counteroffer.json"
         ] do
       contact = fixture(filename)
       assert Enum.all?(required_keys, &Map.has_key?(contact, &1))

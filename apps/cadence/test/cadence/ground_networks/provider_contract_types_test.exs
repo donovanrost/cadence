@@ -8,8 +8,11 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
     Opportunity,
     ProviderCapabilities,
     ProviderContact,
+    ProviderContactChange,
+    ProviderContactSnapshot,
     ProviderContext,
     ProviderError,
+    ProviderEvent,
     ServiceProfile,
     Validation
   }
@@ -88,6 +91,7 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
   test "contacts retain independent contact, pass, and delivery state" do
     assert {:ok,
             %ProviderContact{
+              provider_revision: 1,
               status: :confirmed,
               pass_phase: :prepass,
               delivery: %{status: :ready, direction: :downlink}
@@ -97,6 +101,7 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
     assert result["status"] == "confirmed"
     assert result["pass_phase"] == "prepass"
     assert result["delivery_state"] == "ready"
+    assert result["provider_revision"] == 1
 
     assert {:error, {:malformed_provider_response, "pass_phase"}} =
              contact_document()
@@ -107,6 +112,54 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
              contact_document()
              |> put_in(["delivery", "status"], "invented")
              |> ProviderContact.from_external()
+  end
+
+  test "provider events and contact changes normalize without creating event-type atoms" do
+    assert {:ok,
+            %ProviderEvent{
+              id: "event-123",
+              sequence: 123,
+              resource_revision: 2,
+              type: "vendor.future_event"
+            } = event} = ProviderEvent.from_external(provider_event_document())
+
+    assert event.data["api_token"] == "[REDACTED]"
+
+    assert {:error, {:malformed_provider_response, :provider_event_data_too_large}} =
+             provider_event_document()
+             |> put_in(["data", "oversized"], String.duplicate("x", 65_537))
+             |> ProviderEvent.from_external()
+
+    {:ok, before_contact} = ProviderContact.from_external(contact_document())
+
+    {:ok, after_contact} =
+      contact_document()
+      |> Map.put("revision", 2)
+      |> Map.put("starts_at", "2026-07-13T12:11:00Z")
+      |> Map.put("ends_at", "2026-07-13T12:21:00Z")
+      |> ProviderContact.from_external()
+
+    before = ProviderContactSnapshot.from_contact(before_contact)
+    after_snapshot = ProviderContactSnapshot.from_contact(after_contact)
+
+    assert {:ok,
+            %ProviderContactChange{
+              from_revision: 1,
+              to_revision: 2,
+              changed_fields: %{
+                "starts_at" => %{
+                  "before" => "2026-07-13T12:10:00Z",
+                  "after" => "2026-07-13T12:11:00Z"
+                },
+                "ends_at" => %{
+                  "before" => "2026-07-13T12:20:00Z",
+                  "after" => "2026-07-13T12:21:00Z"
+                }
+              }
+            }} = ProviderContactChange.between(before, after_snapshot)
+
+    assert {:error, :provider_contact_revision_not_advanced} =
+             ProviderContactChange.between(after_snapshot, before)
   end
 
   test "external evidence is string-keyed and recursively redacts credentials" do
@@ -144,7 +197,7 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
       "operations" => %{
         "opportunity_search" => true,
         "contact_reservation" => true,
-        "contact_modification" => false,
+        "contact_modification" => true,
         "contact_cancellation" => true,
         "inventory_discovery" => true,
         "delivery_profile_provisioning" => true
@@ -221,10 +274,12 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
   defp contact_document do
     %{
       "id" => "contact-123",
+      "revision" => 1,
       "client_reference" => "cadence-reservation-123",
       "opportunity_ref" => "opportunity-123",
       "spacecraft_ref" => "SC-001",
       "ground_station_ref" => "station-svalbard",
+      "antenna_or_service_pool_ref" => "station-svalbard-antenna-1",
       "service_profile_ref" => "service-realtime-ttc-downlink",
       "delivery_profile_ref" => "delivery-cadence-primary",
       "starts_at" => "2026-07-13T12:10:00Z",
@@ -250,6 +305,25 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
       "status_reason" => nil,
       "tags" => %{},
       "extensions" => %{}
+    }
+  end
+
+  defp provider_event_document do
+    %{
+      "id" => "event-123",
+      "schema_version" => "1.0",
+      "sequence" => 123,
+      "occurred_at" => "2026-07-13T12:10:00Z",
+      "type" => "vendor.future_event",
+      "resource_type" => "contact",
+      "resource_id" => "contact-123",
+      "resource_revision" => 2,
+      "request_id" => "request-123",
+      "client_reference" => "cadence-reservation-123",
+      "data" => %{
+        "provider_native_code" => "future-value",
+        "api_token" => "must-not-leak"
+      }
     }
   end
 end

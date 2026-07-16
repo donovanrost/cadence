@@ -10,6 +10,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
     ProviderContact,
     ProviderContext,
     ProviderError,
+    ProviderEvent,
     ServiceProfile,
     Validation
   }
@@ -114,6 +115,22 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
   end
 
   @impl true
+  def modify_contact(%ProviderContext{} = context, provider_contact_ref, attrs, opts \\ []) do
+    with {:ok, capabilities} <- effective_capabilities(context, opts),
+         :ok <- require_operation(capabilities, :contact_modification),
+         {:ok, request_opts} <- reservation_opts(capabilities, attrs, opts),
+         {:ok, data} <-
+           request_data(
+             context,
+             :patch,
+             "/provider/v1/contacts/#{provider_contact_ref}",
+             Keyword.put(request_opts, :json, attrs)
+           ) do
+      normalize(ProviderContact.from_external(data))
+    end
+  end
+
+  @impl true
   def cancel_contact(%ProviderContext{} = context, provider_contact_ref, opts \\ []) do
     with {:ok, data} <-
            request_data(
@@ -146,8 +163,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
          :ok <- require_polling(capabilities),
          {:ok, body} <-
            request_envelope(context, :get, "/provider/v1/events", put_params(opts, params)),
-         events when is_list(events) <- body["data"],
-         true <- Enum.all?(events, &valid_event?/1) do
+         {:ok, events} <- normalize_list(body["data"], ProviderEvent) do
       meta = Map.get(body, "meta", %{})
 
       {:ok,
@@ -333,15 +349,6 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
        })}
 
   defp exactly_one_contact(_contacts), do: {:error, ProviderError.malformed(:contact_list)}
-
-  defp valid_event?(event) when is_map(event) do
-    is_binary(event["id"]) and is_binary(event["schema_version"]) and
-      is_integer(event["sequence"]) and is_binary(event["type"]) and
-      is_binary(event["resource_type"]) and is_binary(event["resource_id"]) and
-      is_map(event["data"])
-  end
-
-  defp valid_event?(_event), do: false
 
   defp put_params(opts, params) when params == %{}, do: opts
   defp put_params(opts, params), do: Keyword.put(opts, :params, params)

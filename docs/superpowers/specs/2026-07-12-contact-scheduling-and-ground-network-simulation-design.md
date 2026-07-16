@@ -946,6 +946,11 @@ See the
 
 ### Stage 3: Durable integration semantics
 
+Status: accepted for implementation. See the
+[Stage 3 durable integration semantics design](2026-07-15-contact-scheduling-stage-3-durable-integration-semantics-design.md)
+and
+[implementation plan](../plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md).
+
 - durable event cursors or webhook ingestion where provider capabilities justify
   moving beyond status polling
 - production secret-store integration and organization-owned Provider Accounts
@@ -1010,28 +1015,35 @@ separate Cadence scheduling workflow, the provider boundary is incomplete.
 - One commercial provider completes the same workflow without changing Cadence
   scheduling semantics.
 
-## Open Questions
+## Resolved Stage 3 Questions
 
-The draft recommends defaults but leaves these decisions for review:
+1. **Provider account scope:** Provider Accounts are organization-owned and use
+   explicit, versioned mission grants.
+2. **Provider change policy:** Delivery policy and change tolerances are
+   mission-scoped. Organization guardrails define a maximum envelope, and a
+   future Contact Requirement may narrow but never widen mission policy.
+3. **Provider counteroffers:** Bounded substitutions may be accepted
+   automatically only through the exact snapshotted delivery-policy version.
+   Material actionable changes require explicit approval. Already-effective
+   provider facts require acknowledgment or contingency rather than a
+   misleading reject action.
 
-1. **Provider account scope:** Prefer organization-owned accounts with explicit
-   mission grants, while allowing the first implementation to remain
-   mission-scoped.
-2. **Approval defaults:** Which missions require approval before reservation,
-   and is approval policy organization-, mission-, or requirement-scoped?
-3. **Provider counteroffers:** Should a changed time/resource always require
-   approval, or can policy accept bounded substitutions automatically?
-4. **Clock acceleration:** The draft chooses wall-clock executable timestamps
+## Remaining Open Questions
+
+1. **Initial reservation and plan approval:** Stage 3 defines approval for
+   provider changes. Approval before initial reservation belongs with Contact
+   Requirements and Plans in Stage 4.
+2. **Clock acceleration:** The draft chooses wall-clock executable timestamps
    with model-time metadata. Is there a near-term need for Cadence-wide virtual
    time beyond replay?
-5. **Inventory authority:** Should provider spacecraft mappings be manually
+3. **Inventory authority:** Should provider spacecraft mappings be manually
    curated, imported, or reconciled continuously?
-6. **Data-plane credentials:** Which secret store and ephemeral credential model
+4. **Data-plane credentials:** Which secret store and ephemeral credential model
    should the first non-local provider use?
-7. **First commercial integration:** AWS Ground Station has accessible public APIs,
+5. **First commercial integration:** AWS Ground Station has accessible public APIs,
    but another provider may better exercise reservation and event semantics.
-8. **Simulator console:** Is an API-only simulator sufficient for the next
+6. **Simulator console:** Is an API-only simulator sufficient for the next
    planning stages, or is a minimal separate console now important for demos?
 
-The remaining questions do not block the implemented Stage 2 boundary. They
-inform durable integration, planning, and the first commercial provider proof.
+The remaining questions do not block the accepted Stage 3 boundary. They inform
+planning, runtime expansion, and the first commercial provider proof.

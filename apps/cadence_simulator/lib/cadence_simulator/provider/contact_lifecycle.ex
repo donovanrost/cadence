@@ -5,6 +5,8 @@ defmodule CadenceSimulator.Provider.ContactLifecycle do
 
   @spec create(map(), binary() | nil) :: {:ok, map()}
   def create(contact, request_id \\ nil) do
+    contact = Map.put_new(contact, "revision", 1)
+
     with {:ok, stored} <- Store.put(:contact, contact) do
       emit(stored, "contact.status_changed", request_id, %{
         "from" => nil,
@@ -28,18 +30,38 @@ defmodule CadenceSimulator.Provider.ContactLifecycle do
 
   @spec update(map(), map(), binary() | nil) :: {:ok, map()}
   def update(contact, changes, request_id \\ nil) when is_map(changes) do
-    updated =
-      contact
-      |> Map.merge(changes)
-      |> Map.put("updated_at", DateTime.utc_now() |> DateTime.to_iso8601())
+    if changed?(contact, changes) do
+      updated =
+        contact
+        |> Map.merge(changes)
+        |> Map.put("revision", Map.get(contact, "revision", 1) + 1)
+        |> Map.put("updated_at", DateTime.utc_now() |> DateTime.to_iso8601())
 
-    with {:ok, stored} <- Store.put(:contact, updated) do
-      emit_changes(contact, stored, request_id)
-      {:ok, stored}
+      with {:ok, stored} <- Store.put(:contact, updated) do
+        emit_changes(contact, stored, request_id)
+        {:ok, stored}
+      end
+    else
+      {:ok, contact}
     end
   end
 
   defp emit_changes(previous, current, request_id) do
+    modification_fields =
+      changed_fields(previous, current, [
+        "starts_at",
+        "ends_at",
+        "ground_station_ref",
+        "antenna_or_service_pool_ref"
+      ])
+
+    if modification_fields != %{} do
+      emit(current, "contact.modified", request_id, %{
+        "provider_revision" => current["revision"],
+        "changed_fields" => modification_fields
+      })
+    end
+
     if previous["status"] != current["status"] do
       emit(current, "contact.status_changed", request_id, %{
         "from" => previous["status"],
@@ -85,6 +107,8 @@ defmodule CadenceSimulator.Provider.ContactLifecycle do
       "type" => type,
       "resource_type" => resource_type(type),
       "resource_id" => contact["id"],
+      "resource_revision" => contact["revision"],
+      "client_reference" => contact["client_reference"],
       "run_id" => contact["run_id"],
       "request_id" => request_id,
       "data" => data
@@ -93,4 +117,21 @@ defmodule CadenceSimulator.Provider.ContactLifecycle do
 
   defp resource_type("delivery." <> _rest), do: "delivery"
   defp resource_type(_type), do: "contact"
+
+  defp changed?(contact, changes) do
+    Enum.any?(changes, fn {key, value} -> Map.get(contact, key) != value end)
+  end
+
+  defp changed_fields(previous, current, keys) do
+    Enum.reduce(keys, %{}, fn key, acc ->
+      before = previous[key]
+      after_value = current[key]
+
+      if before == after_value do
+        acc
+      else
+        Map.put(acc, key, %{"before" => before, "after" => after_value})
+      end
+    end)
+  end
 end
