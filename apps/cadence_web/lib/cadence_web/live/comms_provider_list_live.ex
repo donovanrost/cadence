@@ -73,8 +73,11 @@ defmodule CadenceWeb.CommsProviderListLive do
               label={control_plane_label(provider)}
             />
           </:col>
-          <:col :let={provider} label="Environment" mono>
-            {provider.environment_ref}
+          <:col :let={provider} label="Provider Account" mono>
+            {account_binding_label(provider)}
+          </:col>
+          <:col :let={provider} label="Mission Grant" mono>
+            {grant_binding_label(provider)}
           </:col>
           <:col :let={provider} label="Inventory Sync" mono>
             {timestamp_label(provider.last_synced_at)}
@@ -106,4 +109,14 @@ defmodule CadenceWeb.CommsProviderListLive do
 
   defp timestamp_label(%DateTime{} = timestamp),
     do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%MZ")
+
+  defp account_binding_label(%{provider_account_id: nil}), do: "Legacy setup"
+
+  defp account_binding_label(provider),
+    do: "#{provider.provider_account_id} · v#{provider.provider_account_version}"
+
+  defp grant_binding_label(%{provider_account_grant_id: nil}), do: "Not granted"
+
+  defp grant_binding_label(provider),
+    do: "#{provider.provider_account_grant_id} · v#{provider.provider_account_grant_version}"
 end

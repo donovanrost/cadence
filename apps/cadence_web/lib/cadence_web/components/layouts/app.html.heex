@@ -1,4 +1,8 @@
-<main class="p-6">
-  {@inner_content}
-</main>
-<.flash_stack flash={@flash} />
+<%= if assigns[:inner_block] do %>
+  {render_slot(@inner_block)}
+<% else %>
+  <main class="p-6">
+    {@inner_content}
+  </main>
+  <.flash_stack flash={@flash} />
+<% end %>

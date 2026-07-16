@@ -70,10 +70,16 @@ defmodule Cadence.GroundNetworks.ProviderAccountsTest do
     assert historical.region_ref == "local"
 
     assert {:ok, operational} =
-             ProviderAccounts.update_operational_state(@organization_id, @account_id, %{
-               event_ingestion_status: :healthy,
-               last_validated_at: @now
-             })
+             ProviderAccounts.update_operational_state(
+               @organization_id,
+               @account_id,
+               %{
+                 event_ingestion_status: :healthy,
+                 last_validated_at: @now
+               },
+               %{"kind" => "system", "id" => "provider-account-test"},
+               now: @now
+             )
 
     assert operational.active_version == 2
 

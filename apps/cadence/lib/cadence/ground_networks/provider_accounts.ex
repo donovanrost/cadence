@@ -156,9 +156,31 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
     end)
   end
 
-  @spec update_operational_state(binary(), binary(), map()) ::
+  @spec validate(Scope.t(), binary(), keyword()) ::
           {:ok, ProviderAccount.t()} | {:error, term()}
-  def update_operational_state(organization_id, provider_account_id, attrs) do
+  def validate(%Scope{} = current_scope, provider_account_id, opts \\ []) do
+    organization_id = current_scope.organization_id
+
+    with :ok <-
+           Policy.authorize(current_scope, :manage_provider_accounts, %{
+             organization_id: organization_id
+           }),
+         {:ok, _account, version} <- fetch_for_system(organization_id, provider_account_id),
+         :ok <- validate_credential(version, Keyword.put(opts, :validate_credential?, true)) do
+      update_operational_state(
+        organization_id,
+        provider_account_id,
+        %{credential_status: :active, last_validated_at: now(opts)},
+        actor_document(current_scope),
+        opts
+      )
+    end
+  end
+
+  @spec update_operational_state(binary(), binary(), map(), map(), keyword()) ::
+          {:ok, ProviderAccount.t()} | {:error, term()}
+  def update_operational_state(organization_id, provider_account_id, attrs, actor, opts \\ [])
+      when is_map(actor) do
     case account_row_query(organization_id, provider_account_id) |> Repo.one() do
       nil ->
         {:error, :provider_account_not_found}
@@ -175,12 +197,22 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
             metadata: Map.merge(account.metadata, Map.get(attrs, :metadata, %{}))
         }
 
-        row
-        |> ProviderAccountRow.changeset(updated)
-        |> Repo.update()
+        audit =
+          account_audit(
+            updated,
+            active_version!(updated),
+            "provider_account.operational_state_updated",
+            actor,
+            opts
+          )
+
+        Multi.new()
+        |> Multi.update(:account, ProviderAccountRow.changeset(row, updated))
+        |> ProviderAudit.put_entry(:audit_entry, audit)
+        |> Repo.transaction()
         |> case do
-          {:ok, persisted} -> {:ok, ProviderAccountRow.to_domain(persisted)}
-          {:error, reason} -> {:error, reason}
+          {:ok, %{account: persisted}} -> {:ok, ProviderAccountRow.to_domain(persisted)}
+          {:error, _operation, reason, _changes} -> {:error, reason}
         end
     end
   end
@@ -291,6 +323,13 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
 
   defp account_row(account), do: Repo.get!(ProviderAccountRow, account.provider_account_id)
 
+  defp active_version!(account) do
+    {:ok, version} =
+      fetch_version(account.organization_id, account.provider_account_id, account.active_version)
+
+    version
+  end
+
   defp account_row_query(organization_id, provider_account_id) do
     ProviderAccountRow
     |> where(
@@ -313,6 +352,9 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp now(opts),
+    do: opts |> Keyword.get(:now, DateTime.utc_now()) |> DateTime.truncate(:microsecond)
 
   defp merge_version_attrs(current, attrs) do
     Enum.reduce(Map.keys(current), current, fn key, merged ->

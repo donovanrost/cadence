@@ -112,6 +112,14 @@
                 label="Missions"
                 active={assigns[:nav_item] == :missions}
               />
+              <.nav_item
+                :if={provider_accounts_visible?(@current_scope)}
+                id="provider-accounts-nav-link"
+                navigate={~p"/provider-accounts"}
+                icon="hero-globe-alt"
+                label="Provider Accounts"
+                active={assigns[:nav_item] == :provider_accounts}
+              />
             </ul>
 
           <% _ -> %>

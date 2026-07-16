@@ -1,6 +1,7 @@
 defmodule Cadence.GroundNetworks do
   @moduledoc "Mission-scoped provider control-plane context."
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.ProviderClients.Registry
   alias Cadence.Ids
 
@@ -21,9 +22,10 @@ defmodule Cadence.GroundNetworks do
   @inventory_limit 500
   @profile_limit 100
 
-  @spec persist_provider(binary(), MissionProvider.t()) ::
+  @spec persist_provider(Scope.t() | binary(), MissionProvider.t()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  defdelegate persist_provider(organization_id, provider), to: MissionProviders
+  def persist_provider(scope_or_organization_id, provider),
+    do: MissionProviders.persist_provider(scope_or_organization_id, provider)
 
   @spec fetch_provider(binary(), binary(), binary()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
@@ -46,9 +48,10 @@ defmodule Cadence.GroundNetworks do
   defdelegate version_provider(organization_id, mission_id, provider_id, attrs),
     to: MissionProviders
 
-  @spec archive_provider(binary(), binary(), binary()) ::
+  @spec archive_provider(Scope.t() | binary(), binary(), binary()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  defdelegate archive_provider(organization_id, mission_id, provider_id), to: MissionProviders
+  def archive_provider(scope_or_organization_id, mission_id, provider_id),
+    do: MissionProviders.archive_provider(scope_or_organization_id, mission_id, provider_id)
 
   @spec provider_context(binary(), binary(), binary()) ::
           {:ok, ProviderContext.t()} | {:error, term()}
@@ -68,17 +71,33 @@ defmodule Cadence.GroundNetworks do
     end
   end
 
-  @spec validate_provider(binary(), binary(), binary(), keyword()) ::
+  @spec validate_provider(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  def validate_provider(organization_id, mission_id, provider_id, opts \\ []) do
+  def validate_provider(scope_or_organization_id, mission_id, provider_id, opts \\ [])
+
+  def validate_provider(%Scope{} = current_scope, mission_id, provider_id, opts) do
+    with :ok <- authorize_mission_write(current_scope, mission_id) do
+      validate_provider(current_scope.organization_id, mission_id, provider_id, opts)
+    end
+  end
+
+  def validate_provider(organization_id, mission_id, provider_id, opts) do
     with {:ok, provider} <- fetch_provider(organization_id, mission_id, provider_id) do
       do_validate_provider(provider, opts)
     end
   end
 
-  @spec sync_provider(binary(), binary(), binary(), keyword()) ::
+  @spec sync_provider(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  def sync_provider(organization_id, mission_id, provider_id, opts \\ []) do
+  def sync_provider(scope_or_organization_id, mission_id, provider_id, opts \\ [])
+
+  def sync_provider(%Scope{} = current_scope, mission_id, provider_id, opts) do
+    with :ok <- authorize_mission_write(current_scope, mission_id) do
+      sync_provider(current_scope.organization_id, mission_id, provider_id, opts)
+    end
+  end
+
+  def sync_provider(organization_id, mission_id, provider_id, opts) do
     with {:ok, provider} <- fetch_provider(organization_id, mission_id, provider_id) do
       do_sync_provider(provider, opts)
     end
@@ -147,6 +166,13 @@ defmodule Cadence.GroundNetworks do
     else
       {:error, reason} -> record_failure(provider, "sync", reason, synced_at)
     end
+  end
+
+  defp authorize_mission_write(current_scope, mission_id) do
+    Policy.authorize(current_scope, :manage_mission, %{
+      organization_id: current_scope.organization_id,
+      mission_id: mission_id
+    })
   end
 
   defp context_from_account_binding(provider, opts) do

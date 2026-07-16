@@ -3,7 +3,14 @@ defmodule CadenceWeb.CommsProviderShowLive do
   use CadenceWeb, :live_view
 
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.ProviderError
+
+  alias Cadence.GroundNetworks.{
+    DeliveryProfile,
+    ProviderAccountGrants,
+    ProviderAccounts,
+    ProviderError,
+    ServiceProfile
+  }
 
   @impl true
   def mount(%{"provider_id" => provider_id}, _session, socket) do
@@ -28,6 +35,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
          |> assign(:page_title, provider.display_name)
          |> assign(:nav_item, :comms_providers)
          |> assign(:provider, provider)
+         |> assign_provider_binding(provider)
          |> assign(:provider_action, nil)
          |> assign_profile_counts(provider)
          |> stream_provider_data(provider, versions)}
@@ -49,12 +57,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
      socket
      |> assign(:provider_action, :validate)
      |> start_async(:validate_provider, fn ->
-       GroundNetworks.validate_provider(
-         scope.organization_id,
-         mission.mission_id,
-         provider.provider_id,
-         opts
-       )
+       GroundNetworks.validate_provider(scope, mission.mission_id, provider.provider_id, opts)
      end)}
   end
 
@@ -68,12 +71,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
      socket
      |> assign(:provider_action, :sync)
      |> start_async(:sync_provider, fn ->
-       GroundNetworks.sync_provider(
-         scope.organization_id,
-         mission.mission_id,
-         provider.provider_id,
-         opts
-       )
+       GroundNetworks.sync_provider(scope, mission.mission_id, provider.provider_id, opts)
      end)}
   end
 
@@ -82,11 +80,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
   def handle_event("archive-provider", _params, socket) do
     %{current_scope: scope, current_mission: mission, provider: provider} = socket.assigns
 
-    case GroundNetworks.archive_provider(
-           scope.organization_id,
-           mission.mission_id,
-           provider.provider_id
-         ) do
+    case GroundNetworks.archive_provider(scope, mission.mission_id, provider.provider_id) do
       {:ok, _archived} ->
         {:noreply,
          socket
@@ -207,16 +201,16 @@ defmodule CadenceWeb.CommsProviderShowLive do
               Sync provider inventory to discover service profiles.
             </div>
             <.table :if={!@service_profiles_empty?} id="service-profiles-table" rows={@streams.service_profiles}>
-              <:col :let={profile} label="Service">{profile["display_name"]}</:col>
-              <:col :let={profile} label="Kind" mono>{profile["service_kind"]}</:col>
-              <:col :let={profile} label="Direction" mono>{profile["direction"]}</:col>
+              <:col :let={profile} label="Service">{profile.display_name}</:col>
+              <:col :let={profile} label="Kind" mono>{profile.service_kind}</:col>
+              <:col :let={profile} label="Direction" mono>{profile.direction}</:col>
               <:col :let={profile} label="Data Families" mono>
-                {Enum.join(profile["data_families"] || [], ", ")}
+                {Enum.join(profile.data_families, ", ")}
               </:col>
               <:col :let={profile} label="State">
                 <.status_badge
-                  status={profile_status(profile["state"])}
-                  label={profile["state"]}
+                  status={profile_status(profile.state)}
+                  label={humanize(profile.state)}
                 />
               </:col>
             </.table>
@@ -233,17 +227,17 @@ defmodule CadenceWeb.CommsProviderShowLive do
             </div>
             <.table :if={!@delivery_profiles_empty?} id="delivery-profiles-table" rows={@streams.delivery_profiles}>
               <:col :let={profile} label="Delivery">
-                <div>{profile["display_name"]}</div>
+                <div>{profile.display_name}</div>
                 <div class="mt-1 text-xs text-base-content/60">
-                  {profile["operator_summary"]}
+                  {profile.operator_summary}
                 </div>
               </:col>
-              <:col :let={profile} label="Kind" mono>{profile["delivery_kind"]}</:col>
-              <:col :let={profile} label="Direction" mono>{profile["direction"]}</:col>
+              <:col :let={profile} label="Kind" mono>{profile.delivery_kind}</:col>
+              <:col :let={profile} label="Direction" mono>{profile.direction}</:col>
               <:col :let={profile} label="Provider State">
                 <.status_badge
-                  status={profile_status(profile["state"])}
-                  label={profile["state"]}
+                  status={profile_status(profile.state)}
+                  label={humanize(profile.state)}
                 />
               </:col>
             </.table>
@@ -254,9 +248,34 @@ defmodule CadenceWeb.CommsProviderShowLive do
           <.card id="provider-configuration" title="Configuration">
             <div class="mt-3 divide-y divide-base-300">
               <.detail_row label="Provider type" value={humanize(@provider.provider_type)} />
-              <.detail_row label="Environment" value={@provider.environment_ref} mono />
-              <.detail_row label="Credential ref" value={@provider.credential_ref} mono />
+              <.detail_row
+                label="Provider Account"
+                value={binding_label(@provider.provider_account_id, @provider.provider_account_version)}
+                mono
+              />
+              <.detail_row
+                label="Mission Grant"
+                value={binding_label(@provider.provider_account_grant_id, @provider.provider_account_grant_version)}
+                mono
+              />
               <.detail_row label="Validated" value={timestamp_label(@provider.last_validated_at)} />
+            </div>
+          </.card>
+
+          <.card id="provider-delivery-policy" title="Delivery Change Policy">
+            <div class="mt-3 divide-y divide-base-300">
+              <.detail_row
+                label="Mode"
+                value={humanize(Map.get(@provider.delivery_policy_document, "mode", "approval_required"))}
+              />
+              <.detail_row
+                label="Deadline behavior"
+                value={humanize(Map.get(@provider.delivery_policy_document, "deadline_behavior", "retain_last_accepted"))}
+              />
+              <.detail_row
+                label="Permitted resources"
+                value={resource_summary(@provider.permitted_resource_refs)}
+              />
             </div>
           </.card>
 
@@ -301,9 +320,10 @@ defmodule CadenceWeb.CommsProviderShowLive do
         <summary class="cursor-pointer hud-label hover:text-primary">Admin Diagnostics</summary>
         <div class="mt-4 grid gap-4 lg:grid-cols-2">
           <div class="divide-y divide-base-300">
-            <.detail_row label="API base URL" value={@provider.base_url} mono />
-            <.detail_row label="Client adapter" value={Atom.to_string(@provider.client_key)} mono />
-            <.detail_row label="Credential reference" value={@provider.credential_ref} mono />
+            <.detail_row label="Account ID" value={@provider.provider_account_id || "Legacy setup"} mono />
+            <.detail_row label="Account version" value={version_label(@provider.provider_account_version)} mono />
+            <.detail_row label="Grant ID" value={@provider.provider_account_grant_id || "Not granted"} mono />
+            <.detail_row label="Grant version" value={version_label(@provider.provider_account_grant_version)} mono />
           </div>
           <pre id="provider-admin-diagnostics-json" class="max-h-80 overflow-auto border border-base-300 bg-base-100/50 p-3 font-mono text-xs text-base-content/70">{diagnostics_json(@provider)}</pre>
         </div>
@@ -330,6 +350,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
 
         socket
         |> assign(:provider, provider)
+        |> assign_provider_binding(provider)
         |> assign(:page_title, provider.display_name)
         |> assign_profile_counts(provider)
         |> stream_provider_data(provider, versions, reset: true)
@@ -361,12 +382,12 @@ defmodule CadenceWeb.CommsProviderShowLive do
 
   defp profile_items(provider, key) do
     case get_in(provider.inventory_sync_document, [key, "items"]) do
-      items when is_list(items) -> items
+      items when is_list(items) -> normalize_profiles(key, items)
       _other -> []
     end
   end
 
-  defp profile_dom_id(kind, profile), do: "#{kind}-profile-#{profile["id"]}"
+  defp profile_dom_id(kind, profile), do: "#{kind}-profile-#{profile.id}"
 
   defp provider_action_opts do
     Application.get_env(:cadence_web, :ground_network_provider_live_opts, [])
@@ -385,8 +406,8 @@ defmodule CadenceWeb.CommsProviderShowLive do
   defp timestamp_label(%DateTime{} = timestamp),
     do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%MZ")
 
-  defp profile_status(state) when state in ["active", "ready"], do: :ready
-  defp profile_status("degraded"), do: :attention
+  defp profile_status(state) when state in [:active, :ready], do: :ready
+  defp profile_status(:degraded), do: :attention
   defp profile_status(_state), do: :blocked
 
   defp capability_items(provider) do
@@ -402,8 +423,10 @@ defmodule CadenceWeb.CommsProviderShowLive do
         "sync" => provider.metadata["sync"],
         "capabilities" => provider.capabilities_document,
         "inventory_summary" => inventory_counts(provider.inventory_sync_document),
-        "service_profiles" => profile_items(provider, "service_profiles"),
-        "delivery_profiles" => profile_items(provider, "delivery_profiles")
+        "service_profiles" =>
+          provider |> profile_items("service_profiles") |> Enum.map(& &1.evidence),
+        "delivery_profiles" =>
+          provider |> profile_items("delivery_profiles") |> Enum.map(& &1.evidence)
       },
       pretty: true
     )
@@ -427,4 +450,56 @@ defmodule CadenceWeb.CommsProviderShowLive do
 
   defp action_error(%ProviderError{} = error), do: error.detail
   defp action_error(reason), do: "Provider operation failed: #{inspect(reason)}"
+
+  defp assign_provider_binding(socket, %{provider_account_id: nil}) do
+    socket
+    |> assign(:provider_account_version, nil)
+    |> assign(:provider_account_grant, nil)
+  end
+
+  defp assign_provider_binding(socket, provider) do
+    {:ok, account_version} =
+      ProviderAccounts.fetch_version(
+        provider.organization_id,
+        provider.provider_account_id,
+        provider.provider_account_version
+      )
+
+    {:ok, grant} =
+      ProviderAccountGrants.fetch_version(
+        provider.organization_id,
+        provider.provider_account_grant_id,
+        provider.mission_id,
+        provider.provider_account_grant_version
+      )
+
+    socket
+    |> assign(:provider_account_version, account_version)
+    |> assign(:provider_account_grant, grant)
+  end
+
+  defp normalize_profiles("service_profiles", items) do
+    Enum.flat_map(items, fn item ->
+      case ServiceProfile.from_external(item) do
+        {:ok, profile} -> [profile]
+        {:error, _reason} -> []
+      end
+    end)
+  end
+
+  defp normalize_profiles("delivery_profiles", items) do
+    Enum.flat_map(items, fn item ->
+      case DeliveryProfile.from_external(item) do
+        {:ok, profile} -> [profile]
+        {:error, _reason} -> []
+      end
+    end)
+  end
+
+  defp binding_label(nil, _version), do: "Legacy setup"
+  defp binding_label(id, version), do: "#{id} · v#{version}"
+  defp version_label(nil), do: "Not available"
+  defp version_label(version), do: "v#{version}"
+  defp resource_summary([]), do: "Inherited from grant"
+  defp resource_summary(resources), do: Enum.join(resources, ", ")
 end

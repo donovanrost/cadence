@@ -29,6 +29,7 @@ defmodule CadenceWeb.Components.Sidebar do
   treatment (primary tint, primary left border, glow inset) when
   `:active` is true.
   """
+  attr :id, :string, default: nil
   attr :navigate, :string, required: true
   attr :icon, :string, required: true, doc: "Heroicon class, e.g. \"hero-signal\""
   attr :label, :string, required: true
@@ -37,7 +38,7 @@ defmodule CadenceWeb.Components.Sidebar do
   def nav_item(assigns) do
     ~H"""
     <li>
-      <.link navigate={@navigate} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", item_classes(@active)]}>
+      <.link id={@id} navigate={@navigate} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", item_classes(@active)]}>
         <span class={[@icon, "h-4 w-4 opacity-80 flex-shrink-0"]}></span>
         <span class="sidebar-label">{@label}</span>
       </.link>

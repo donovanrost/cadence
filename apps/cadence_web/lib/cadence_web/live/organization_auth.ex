@@ -30,4 +30,21 @@ defmodule CadenceWeb.OrganizationAuth do
         {:halt, redirect(socket, to: "/sign-in")}
     end
   end
+
+  def on_mount(:require_organization_admin, _params, _session, socket) do
+    case socket.assigns[:current_scope] do
+      %Scope{capabilities: capabilities} ->
+        if MapSet.member?(capabilities, :organization_admin) or
+             MapSet.member?(capabilities, :platform_admin) do
+          {:cont, socket}
+        else
+          {:halt,
+           socket
+           |> redirect(to: "/")}
+        end
+
+      _other ->
+        {:halt, redirect(socket, to: "/sign-in")}
+    end
+  end
 end

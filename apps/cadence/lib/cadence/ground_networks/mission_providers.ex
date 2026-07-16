@@ -5,14 +5,21 @@ defmodule Cadence.GroundNetworks.MissionProviders do
 
   alias Ecto.Changeset
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountGrants, ProviderAccounts}
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.Schemas.MissionProviderRow
   alias Cadence.Repo
 
-  @spec persist_provider(binary(), MissionProvider.t()) ::
+  @spec persist_provider(Scope.t() | binary(), MissionProvider.t()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
+  def persist_provider(%Scope{} = current_scope, %MissionProvider{} = provider) do
+    with :ok <- authorize_mission_write(current_scope, provider.mission_id) do
+      persist_provider(current_scope.organization_id, provider)
+    end
+  end
+
   def persist_provider(organization_id, %MissionProvider{} = provider)
       when is_binary(organization_id) do
     with {:ok, scoped_provider} <- put_organization_scope(provider, organization_id),
@@ -105,8 +112,14 @@ defmodule Cadence.GroundNetworks.MissionProviders do
     end
   end
 
-  @spec archive_provider(binary(), binary(), binary()) ::
+  @spec archive_provider(Scope.t() | binary(), binary(), binary()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
+  def archive_provider(%Scope{} = current_scope, mission_id, provider_id) do
+    with :ok <- authorize_mission_write(current_scope, mission_id) do
+      archive_provider(current_scope.organization_id, mission_id, provider_id)
+    end
+  end
+
   def archive_provider(organization_id, mission_id, provider_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(provider_id) do
     with {:ok, %MissionProvider{} = provider} <-
@@ -244,7 +257,7 @@ defmodule Cadence.GroundNetworks.MissionProviders do
              provider.provider_account_id,
              provider.provider_account_version
            ),
-         {:ok, _grant} <-
+         {:ok, grant} <-
            ProviderAccountGrants.validate_binding(
              provider.organization_id,
              provider.mission_id,
@@ -257,11 +270,29 @@ defmodule Cadence.GroundNetworks.MissionProviders do
          true <- account_version.client_key == provider.client_key,
          true <- account_version.base_url == provider.base_url,
          true <- account_version.environment_ref == provider.environment_ref,
-         true <- account_version.credential_ref == provider.credential_ref do
+         true <- account_version.credential_ref == provider.credential_ref,
+         :ok <- validate_permitted_resources(provider, grant, account_version) do
       :ok
     else
       false -> {:error, :mission_provider_account_configuration_mismatch}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_permitted_resources(provider, grant, account_version) do
+    allowed =
+      Map.get(grant.restrictions, "allowed_stations") ||
+        Map.get(account_version.guardrails, "allowed_stations")
+
+    cond do
+      is_nil(allowed) ->
+        :ok
+
+      MapSet.subset?(MapSet.new(provider.permitted_resource_refs), MapSet.new(allowed)) ->
+        :ok
+
+      true ->
+        {:error, :mission_provider_widens_account_guardrails}
     end
   end
 
@@ -317,4 +348,11 @@ defmodule Cadence.GroundNetworks.MissionProviders do
 
   defp value(attrs, key, default),
     do: Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
+
+  defp authorize_mission_write(current_scope, mission_id) do
+    Policy.authorize(current_scope, :manage_mission, %{
+      organization_id: current_scope.organization_id,
+      mission_id: mission_id
+    })
+  end
 end

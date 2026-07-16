@@ -175,6 +175,37 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
     |> Enum.map(&ProviderAccountGrantRow.to_domain/1)
   end
 
+  @spec list(Scope.t(), binary(), keyword()) ::
+          {:ok, [ProviderAccountGrant.t()]} | {:error, term()}
+  def list(%Scope{} = current_scope, provider_account_id, opts \\ []) do
+    with :ok <-
+           Policy.authorize(current_scope, :read_organization, %{
+             organization_id: current_scope.organization_id
+           }) do
+      {:ok, list_for_account(current_scope.organization_id, provider_account_id, opts)}
+    end
+  end
+
+  @spec list_for_account(binary(), binary(), keyword()) :: [ProviderAccountGrant.t()]
+  def list_for_account(organization_id, provider_account_id, opts \\ []) do
+    active_only? = Keyword.get(opts, :active_only?, false)
+
+    ProviderAccountGrantRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and
+        row.provider_account_id == ^provider_account_id
+    )
+    |> order_by([row], asc: row.provider_account_grant_id, desc: row.version)
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.provider_account_grant_id, row) end)
+    |> Map.values()
+    |> then(fn rows ->
+      if active_only?, do: Enum.reject(rows, &(&1.lifecycle_state == "revoked")), else: rows
+    end)
+    |> Enum.map(&ProviderAccountGrantRow.to_domain/1)
+  end
+
   @spec validate_binding(binary(), binary(), binary(), pos_integer(), binary(), pos_integer()) ::
           {:ok, ProviderAccountGrant.t()} | {:error, term()}
   def validate_binding(

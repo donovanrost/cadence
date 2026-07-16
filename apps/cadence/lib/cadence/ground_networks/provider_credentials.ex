@@ -5,14 +5,24 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
 
   alias Ecto.Multi
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderAuditEntry, ProviderCredential}
   alias Cadence.Persistence.Schemas.ProviderCredentialRow
   alias Cadence.Repo
   alias Cadence.Secrets.{EnvBackend, ExternalBackend, ResolvedSecret, Resolver}
 
-  @spec create(binary(), binary(), map(), keyword()) ::
+  @spec create(Scope.t() | binary(), binary(), map(), keyword()) ::
           {:ok, ProviderCredential.t()} | {:error, term()}
-  def create(organization_id, provider_account_id, attrs, opts \\ [])
+  def create(scope_or_organization_id, provider_account_id, attrs, opts \\ [])
+
+  def create(%Scope{} = current_scope, provider_account_id, attrs, opts) do
+    with :ok <- authorize_account_write(current_scope) do
+      opts = Keyword.put_new(opts, :actor, actor_document(current_scope))
+      create(current_scope.organization_id, provider_account_id, attrs, opts)
+    end
+  end
+
+  def create(organization_id, provider_account_id, attrs, opts)
       when is_binary(organization_id) and is_binary(provider_account_id) and is_map(attrs) and
              is_list(opts) do
     attrs =
@@ -91,18 +101,48 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
     end
   end
 
-  @spec rotate(binary(), binary(), binary(), keyword()) ::
+  @spec rotate(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderCredential.t()} | {:error, term()}
-  def rotate(organization_id, provider_account_id, provider_credential_ref, opts \\ []) do
+  def rotate(scope_or_organization_id, provider_account_id, provider_credential_ref, opts \\ [])
+
+  def rotate(%Scope{} = current_scope, provider_account_id, provider_credential_ref, opts) do
+    with :ok <- authorize_account_write(current_scope) do
+      opts = Keyword.put_new(opts, :actor, actor_document(current_scope))
+
+      rotate(
+        current_scope.organization_id,
+        provider_account_id,
+        provider_credential_ref,
+        opts
+      )
+    end
+  end
+
+  def rotate(organization_id, provider_account_id, provider_credential_ref, opts) do
     case fetch(organization_id, provider_account_id, provider_credential_ref) do
       {:ok, credential} -> rotate_credential(credential, opts)
       {:error, reason} -> {:error, reason}
     end
   end
 
-  @spec revoke(binary(), binary(), binary(), keyword()) ::
+  @spec revoke(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderCredential.t()} | {:error, term()}
-  def revoke(organization_id, provider_account_id, provider_credential_ref, opts \\ []) do
+  def revoke(scope_or_organization_id, provider_account_id, provider_credential_ref, opts \\ [])
+
+  def revoke(%Scope{} = current_scope, provider_account_id, provider_credential_ref, opts) do
+    with :ok <- authorize_account_write(current_scope) do
+      opts = Keyword.put_new(opts, :actor, actor_document(current_scope))
+
+      revoke(
+        current_scope.organization_id,
+        provider_account_id,
+        provider_credential_ref,
+        opts
+      )
+    end
+  end
+
+  def revoke(organization_id, provider_account_id, provider_credential_ref, opts) do
     case fetch(organization_id, provider_account_id, provider_credential_ref) do
       {:ok, credential} -> revoke_credential(credential, opts)
       {:error, reason} -> {:error, reason}
@@ -293,4 +333,18 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   end
 
   defp redacted_reason(_reason), do: "backend_error"
+
+  defp authorize_account_write(current_scope) do
+    Policy.authorize(current_scope, :manage_provider_accounts, %{
+      organization_id: current_scope.organization_id
+    })
+  end
+
+  defp actor_document(%Scope{user: %{user_id: user_id}}),
+    do: %{"kind" => "user", "id" => user_id}
+
+  defp actor_document(%Scope{service_identity: %{service_identity_id: id}}),
+    do: %{"kind" => "service", "id" => id}
+
+  defp actor_document(_scope), do: %{"kind" => "system"}
 end

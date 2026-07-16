@@ -108,4 +108,44 @@ defmodule CadenceWeb.OrganizationAuthTest do
       assert socket.redirected == {:redirect, %{to: "/sign-in", status: 302}}
     end
   end
+
+  describe "on_mount :require_organization_admin" do
+    test "continues for an organization administrator" do
+      user = TestFixtures.persist_user!()
+      org = TestFixtures.persist_org!()
+      _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
+      token = TestFixtures.member_session_token!(user)
+
+      {:cont, socket} =
+        OrganizationAuth.on_mount(
+          :require_organization_scope,
+          %{},
+          %{"user_session_token" => token},
+          %Phoenix.LiveView.Socket{}
+        )
+
+      assert {:cont, _socket} =
+               OrganizationAuth.on_mount(:require_organization_admin, %{}, %{}, socket)
+    end
+
+    test "redirects an ordinary member to the organization home" do
+      user = TestFixtures.persist_user!()
+      org = TestFixtures.persist_org!()
+      _membership = TestFixtures.grant_membership!(user, org, role: :member)
+      token = TestFixtures.member_session_token!(user)
+
+      {:cont, socket} =
+        OrganizationAuth.on_mount(
+          :require_organization_scope,
+          %{},
+          %{"user_session_token" => token},
+          %Phoenix.LiveView.Socket{}
+        )
+
+      assert {:halt, socket} =
+               OrganizationAuth.on_mount(:require_organization_admin, %{}, %{}, socket)
+
+      assert socket.redirected == {:redirect, %{to: "/", status: 302}}
+    end
+  end
 end

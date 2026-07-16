@@ -68,6 +68,18 @@ defmodule CadenceWeb.Router do
       live "/missions/new", MissionNewLive, :new
     end
 
+    live_session :provider_accounts,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.OrganizationAuth, :require_organization_admin},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
+      layout: {CadenceWeb.Layouts, :sidebar} do
+      live "/provider-accounts", ProviderAccountListLive, :index
+      live "/provider-accounts/new", ProviderAccountNewLive, :new
+      live "/provider-accounts/:provider_account_id", ProviderAccountShowLive, :show
+    end
+
     live_session :mission,
       on_mount: [
         {CadenceWeb.OrganizationAuth, :require_organization_scope},

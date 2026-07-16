@@ -2,7 +2,7 @@
 
 **Status:** in progress
 
-**Progress (2026-07-15):** Tasks 1 through 4 are complete. Provider events now
+**Progress (2026-07-15):** Tasks 1 through 5 are complete. Provider events now
 normalize into bounded, sanitized `ProviderEvent` structs, Provider Contacts
 carry monotonic revisions, and the separate simulator exposes revision-aware,
 idempotent Contact modification with contract fixtures. Provider evidence is
@@ -24,10 +24,17 @@ account and grant versions. Grant revocation fails closed for new operations,
 preserves historical reads, and marks nonterminal reservations for operator
 review. The ownership migration creates one account and grant per Stage 2
 Mission Provider without inferring sharing, validates every backfilled
-reference, and has been exercised against populated pre-migration data. Root
-`mix precommit` passes with 3,060 tests passed and 93 browser-tagged tests
-excluded. Task 5, the organization Provider Account and updated mission setup
-journeys, is next.
+reference, and has been exercised against populated pre-migration data.
+Organization administrators now have authenticated Provider Account registry,
+create, detail, credential-lifecycle, grant, and audit journeys. Mission Comms
+setup selects only exact account grants, removes endpoint and credential
+material from mission forms, progressively renders delivery policy, and rejects
+guardrail widening. The new routes live in an organization-admin LiveView
+session within the authenticated browser scope, while mission setup remains in
+the authenticated Comms session. Focused LiveView coverage passes with 26
+tests, an authenticated endpoint smoke test renders the registry, and root
+`mix precommit` passes with 3,069 tests passed and 93 browser-tagged tests
+excluded. Task 6, durable provider event cursors, inbox, and workers, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and
