@@ -34,7 +34,17 @@ session within the authenticated browser scope, while mission setup remains in
 the authenticated Comms session. Focused LiveView coverage passes with 26
 tests, an authenticated endpoint smoke test renders the registry, and root
 `mix precommit` passes with 3,069 tests passed and 93 browser-tagged tests
-excluded. Task 6, durable provider event cursors, inbox, and workers, is next.
+excluded. Durable provider event ingestion now adds exact account-version
+cursors with database leases, a bounded poller and processor lane, immutable
+sanitized inbox evidence, atomic page/cursor commits, advisory-locked duplicate
+and collision handling, poison-event quarantine, authorized reprocessing, and
+authoritative reservation reconciliation without weakening the existing safety
+poller. Webhook authentication is capability-gated behind an explicit Provider
+Type authenticator and no simulator webhook route is exposed. Provider Account
+details report persisted cursor health, inbox backlog, quarantine count, and
+last-event time. Task 6 focused coverage passes with 27 core tests and 7
+Provider Account journey tests. Task 7, simulator and Provider Client
+modification semantics, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and

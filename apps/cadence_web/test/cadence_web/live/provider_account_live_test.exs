@@ -11,7 +11,9 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
   alias Cadence.GroundNetworks.{
     ProviderAccountGrants,
     ProviderAccounts,
-    ProviderCredentials
+    ProviderCredentials,
+    ProviderEventCursors,
+    ProviderEventInbox
   }
 
   alias CadenceWeb.TestFixtures
@@ -166,6 +168,36 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
              )
   end
 
+  test "shows durable cursor health, inbox backlog, and quarantine counts" do
+    {conn, _user, organization} = signed_in_organization_admin()
+    {account, version, _credential} = persist_account!(organization)
+    now = ~U[2026-07-15 20:30:00.000000Z]
+
+    {:ok, cursor} = ProviderEventCursors.ensure(version)
+
+    {:ok, cursor} =
+      ProviderEventCursors.claim(cursor.provider_event_cursor_id, "web-test", now: now)
+
+    assert {:ok, %{inserted: 2, quarantined: 1}} =
+             ProviderEventInbox.ingest_page(
+               cursor,
+               [
+                 provider_event("event-known", "contact.status_changed"),
+                 provider_event("event-unknown", "vendor.future_event")
+               ],
+               "cursor-web-one",
+               "web-test",
+               now: now
+             )
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
+
+    assert has_element?(view, "#provider-account-ingestion-health", "Healthy")
+    assert has_element?(view, "#provider-account-ingestion-backlog", "1")
+    assert has_element?(view, "#provider-account-ingestion-quarantined", "1")
+    assert has_element?(view, "#provider-account-ingestion-last-event", "2026-07-15 20:29Z")
+  end
+
   test "requires authentication", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/provider-accounts")
   end
@@ -227,4 +259,19 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
   defp secret_backend(_descriptor, _opts),
     do: {:ok, %{material: %{value: "ephemeral-test-secret"}, backend_version: "test-v1"}}
+
+  defp provider_event(id, type) do
+    %{
+      "id" => id,
+      "schema_version" => "1.0",
+      "sequence" => 1,
+      "occurred_at" => "2026-07-15T20:29:00.000000Z",
+      "type" => type,
+      "resource_type" => "contact",
+      "resource_id" => "provider-contact-web",
+      "resource_revision" => 1,
+      "client_reference" => "cadence-contact-web",
+      "data" => %{}
+    }
+  end
 end

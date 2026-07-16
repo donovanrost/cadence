@@ -29,7 +29,9 @@ defmodule Cadence.Application do
         command_dispatcher_children() ++
         command_verifier_scheduler_children() ++
         contact_scheduler_global_safety_children() ++
-        provider_reservation_reconciler_children() ++ background_job_children()
+        provider_reservation_reconciler_children() ++
+        provider_event_ingestion_children() ++
+        background_job_children()
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
 
@@ -83,6 +85,19 @@ defmodule Cadence.Application do
 
     if Keyword.get(config, :enabled, true) do
       [{Cadence.Contacts.ProviderReservationReconciler, Keyword.delete(config, :enabled)}]
+    else
+      []
+    end
+  end
+
+  defp provider_event_ingestion_children do
+    config = Application.get_env(:cadence, :provider_event_ingestion, [])
+
+    if Keyword.get(config, :enabled, true) do
+      [
+        {Cadence.GroundNetworks.ProviderEventIngestionSupervisor,
+         Keyword.delete(config, :enabled)}
+      ]
     else
       []
     end

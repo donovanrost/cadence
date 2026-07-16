@@ -179,6 +179,8 @@ defmodule Cadence.TestSupport.FakeProviderClient do
 
   @impl true
   def events(_context, cursor, opts) do
+    run_observer(opts, :on_events, cursor)
+
     resolve_response(opts, :events_response, fn ->
       {:ok, %{data: [], next_cursor: cursor, truncated: false}}
     end)

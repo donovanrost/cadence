@@ -7,7 +7,9 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     ProviderAccountGrants,
     ProviderAccounts,
     ProviderAudit,
-    ProviderCredentials
+    ProviderCredentials,
+    ProviderEventCursors,
+    ProviderEventInbox
   }
 
   @impl true
@@ -286,12 +288,21 @@ defmodule CadenceWeb.ProviderAccountShowLive do
             <.card id="provider-account-ingestion" title="Event Ingestion">
               <div class="mt-3 divide-y divide-base-300">
                 <.detail_row label="Mode" value={humanize(@account_version.event_ingestion_mode)} />
-                <.detail_row label="Cursor health" value="Not initialized" />
-                <.detail_row label="Inbox backlog" value="0" mono />
-                <.detail_row label="Quarantined" value="0" mono />
+                <div id="provider-account-ingestion-health">
+                  <.detail_row label="Cursor health" value={@ingestion_summary.health} />
+                </div>
+                <div id="provider-account-ingestion-backlog">
+                  <.detail_row label="Inbox backlog" value={to_string(@ingestion_summary.backlog)} mono />
+                </div>
+                <div id="provider-account-ingestion-quarantined">
+                  <.detail_row label="Quarantined" value={to_string(@ingestion_summary.quarantined)} mono />
+                </div>
+                <div id="provider-account-ingestion-last-event">
+                  <.detail_row label="Last provider event" value={timestamp_label(@ingestion_summary.last_event_at)} />
+                </div>
               </div>
               <p class="mt-3 text-xs text-base-content/50">
-                Cursor and inbox telemetry becomes active when the Stage 3 ingestion worker is enabled.
+                {@ingestion_summary.description}
               </p>
             </.card>
 
@@ -349,6 +360,14 @@ defmodule CadenceWeb.ProviderAccountShowLive do
           limit: 20
         )
 
+      cursors =
+        ProviderEventCursors.list(scope.organization_id,
+          provider_account_id: account.provider_account_id
+        )
+
+      inbox_counts =
+        ProviderEventInbox.counts(scope.organization_id, account.provider_account_id)
+
       {:ok,
        socket
        |> assign(:page_title, account.display_name)
@@ -356,6 +375,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
        |> assign(:provider_account, account)
        |> assign(:account_version, version)
        |> assign(:credential, credential)
+       |> assign(:ingestion_summary, ingestion_summary(cursors, inbox_counts))
        |> assign(:account_action, nil)
        |> assign(:active_grant_count, Enum.count(grants, &(&1.lifecycle_state == :active)))
        |> assign(:mission_names, mission_names)
@@ -370,6 +390,35 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     {:ok, socket} = load_account(socket, socket.assigns.provider_account.provider_account_id)
     socket
   end
+
+  defp ingestion_summary(cursors, counts) do
+    cursor = Enum.max_by(cursors, &cursor_sort_key/1, fn -> nil end)
+
+    %{
+      health: cursor_health(cursor),
+      backlog:
+        state_count(counts, "received") + state_count(counts, "processing") +
+          state_count(counts, "reprocessing"),
+      quarantined: state_count(counts, "quarantined"),
+      last_event_at: cursor && cursor.last_event_at,
+      description: cursor_description(cursor)
+    }
+  end
+
+  defp cursor_sort_key(cursor),
+    do: cursor.last_fetched_at || ~U[1970-01-01 00:00:00.000000Z]
+
+  defp cursor_health(nil), do: "Not initialized"
+  defp cursor_health(cursor), do: humanize(cursor.health)
+
+  defp cursor_description(nil),
+    do: "The durable cursor will initialize on the first polling cycle."
+
+  defp cursor_description(cursor) do
+    "#{cursor.channel_ref}/#{cursor.stream_ref} · last fetched #{timestamp_label(cursor.last_fetched_at)}"
+  end
+
+  defp state_count(counts, state), do: Map.get(counts, state, 0)
 
   defp default_grant_params do
     %{

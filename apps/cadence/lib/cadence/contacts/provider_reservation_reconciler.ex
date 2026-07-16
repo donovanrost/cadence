@@ -104,6 +104,15 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
   end
 
   defp reconcile_one(reservation, opts) do
+    reconcile_reservation(reservation, opts)
+  end
+
+  @doc "Runs authoritative reconciliation for one already-scoped durable reservation."
+  @spec reconcile_reservation(Cadence.Contacts.ProviderReservation.t(), keyword()) ::
+          {:ok, Cadence.Contacts.ProviderReservation.t()}
+          | {:error, Cadence.Contacts.ProviderReservation.t(), term()}
+          | {:error, term()}
+  def reconcile_reservation(reservation, opts \\ []) do
     with {:ok, provider} <-
            GroundNetworks.fetch_provider_version(
              reservation.organization_id,

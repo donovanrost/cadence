@@ -135,6 +135,41 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
+  @doc "Resolves one event only inside its exact Provider Account version boundary."
+  @spec resolve_provider_event(binary(), binary(), pos_integer(), binary() | nil, binary() | nil) ::
+          {:ok, ProviderReservation.t()}
+          | {:error, :provider_reservation_not_found | :provider_event_correlation_ambiguous}
+  def resolve_provider_event(
+        organization_id,
+        provider_account_id,
+        provider_account_version,
+        resource_id,
+        client_reference
+      ) do
+    correlation =
+      dynamic(false)
+      |> maybe_correlate(:provider_contact_ref, resource_id)
+      |> maybe_correlate(:idempotency_key, client_reference)
+
+    rows =
+      ProviderReservationRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and
+          row.provider_account_id == ^provider_account_id and
+          row.provider_account_version == ^provider_account_version
+      )
+      |> where(^correlation)
+      |> limit(2)
+      |> Repo.all()
+
+    case rows do
+      [row] -> {:ok, ProviderReservationRow.to_domain(row)}
+      [] -> {:error, :provider_reservation_not_found}
+      [_first, _second] -> {:error, :provider_event_correlation_ambiguous}
+    end
+  end
+
   @spec list_for_mission(binary(), binary()) :: [ProviderReservation.t()]
   def list_for_mission(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
@@ -417,6 +452,11 @@ defmodule Cadence.Contacts.ProviderReservations do
     Map.get(response, "provider_contact_ref", Map.get(response, :provider_contact_ref)) ||
       Map.get(response, "id", Map.get(response, :id)) || reservation.provider_contact_ref
   end
+
+  defp maybe_correlate(query, _field, value) when value in [nil, ""], do: query
+
+  defp maybe_correlate(query, field, value),
+    do: dynamic([row], ^query or field(row, ^field) == ^value)
 
   defp ensure_materializable(%ProviderReservation{lifecycle_state: state})
        when state in @materialized_states,

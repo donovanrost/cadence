@@ -7,7 +7,7 @@ defmodule Cadence.GroundNetworks.ProviderContext do
   @type t :: %__MODULE__{
           provider_ref: binary(),
           organization_id: binary() | nil,
-          mission_id: binary(),
+          mission_id: binary() | nil,
           client_key: binary() | nil,
           base_url: binary() | nil,
           credential_ref: binary() | nil,
@@ -104,6 +104,30 @@ defmodule Cadence.GroundNetworks.ProviderContext do
           "region_ref" => account_version.region_ref
         })
     })
+  end
+
+  @doc "Builds an organization-scoped context for an exact Provider Account version."
+  @spec from_account_version(ProviderAccountVersion.t()) :: {:ok, t()} | {:error, term()}
+  def from_account_version(%ProviderAccountVersion{} = account_version) do
+    with {:ok, capabilities} <-
+           normalize_capabilities(Map.get(account_version.provider_configuration, "capabilities")) do
+      {:ok,
+       %__MODULE__{
+         provider_ref: account_version.provider_account_id,
+         organization_id: account_version.organization_id,
+         mission_id: nil,
+         client_key: Atom.to_string(account_version.client_key),
+         base_url: account_version.base_url,
+         credential_ref: account_version.credential_ref,
+         environment_ref: account_version.environment_ref,
+         capabilities: capabilities,
+         metadata: %{
+           "provider_account_id" => account_version.provider_account_id,
+           "provider_account_version" => account_version.version,
+           "region_ref" => account_version.region_ref
+         }
+       }}
+    end
   end
 
   @doc "Adds a request-local resolver for pre-MissionProvider profiles that still contain a token."

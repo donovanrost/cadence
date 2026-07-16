@@ -156,6 +156,29 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
     end)
   end
 
+  @doc "Returns exact active account versions whose event mode includes polling."
+  @spec list_polling_accounts() :: [{ProviderAccount.t(), ProviderAccountVersion.t()}]
+  def list_polling_accounts do
+    ProviderAccountRow
+    |> join(:inner, [account], version in ProviderAccountVersionRow,
+      on:
+        version.organization_id == account.organization_id and
+          version.provider_account_id == account.provider_account_id and
+          version.version == account.active_version
+    )
+    |> where(
+      [account, version],
+      account.lifecycle_state == "active" and
+        version.event_ingestion_mode in ["polling", "hybrid"]
+    )
+    |> order_by([account], asc: account.organization_id, asc: account.provider_account_id)
+    |> select([account, version], {account, version})
+    |> Repo.all()
+    |> Enum.map(fn {account, version} ->
+      {ProviderAccountRow.to_domain(account), ProviderAccountVersionRow.to_domain(version)}
+    end)
+  end
+
   @spec validate(Scope.t(), binary(), keyword()) ::
           {:ok, ProviderAccount.t()} | {:error, term()}
   def validate(%Scope{} = current_scope, provider_account_id, opts \\ []) do
