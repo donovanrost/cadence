@@ -4,7 +4,7 @@ defmodule CadenceSimulator.Provider.AdminRouter do
   use Plug.Router
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{Auth, Contract}
+  alias CadenceSimulator.Provider.{Auth, ContactChanges, Contract}
 
   plug(:match)
   plug(:authenticate)
@@ -46,6 +46,23 @@ defmodule CadenceSimulator.Provider.AdminRouter do
     respond(conn, Provider.transition_run(id, "stop"))
   end
 
+  patch "/v1/runs/:id/fault-profile" do
+    respond(conn, Provider.configure_run_faults(id, conn.body_params))
+  end
+
+  post "/v1/runs/:id/contacts/:contact_id/changes" do
+    case Provider.fetch_run(id) do
+      {:ok, run} ->
+        respond(
+          conn,
+          ContactChanges.apply(run, contact_id, conn.body_params, request_id: request_id(conn))
+        )
+
+      error ->
+        respond(conn, error)
+    end
+  end
+
   match _ do
     Contract.error(conn, 404, "not_found", "resource not found")
   end
@@ -67,6 +84,13 @@ defmodule CadenceSimulator.Provider.AdminRouter do
   defp respond(conn, {:error, {:conflict, detail}}, _opts),
     do: Contract.error(conn, 409, "conflict", detail)
 
+  defp respond(conn, {:error, {:no_capacity, detail}}, _opts),
+    do: Contract.error(conn, 409, "no_capacity", detail)
+
   defp respond(conn, {:error, reason}, _opts),
     do: Contract.error(conn, 500, "provider_error", inspect(reason))
+
+  defp request_id(conn) do
+    Plug.Conn.get_req_header(conn, "x-request-id") |> List.first()
+  end
 end

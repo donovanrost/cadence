@@ -136,6 +136,31 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
     assert {"idempotency-key", "change-123"} in opts[:headers]
   end
 
+  test "client-reference modification recovery omits native idempotency material" do
+    attrs = %{
+      "client_reference" => "cadence-change-client-mode",
+      "expected_revision" => 1,
+      "starts_at" => "2026-07-13T12:11:00Z"
+    }
+
+    req_request = fn opts ->
+      send(self(), {:request, opts})
+      {:ok, %Req.Response{status: 200, body: %{"data" => contact_document(revision: 2)}}}
+    end
+
+    assert {:ok, %ProviderContact{provider_revision: 2}} =
+             SimulatorHTTP.modify_contact(
+               context(idempotency: :client_reference),
+               "contact-123",
+               attrs,
+               call_opts(req_request) ++ [idempotency_key: "not-a-provider-header"]
+             )
+
+    assert_received {:request, opts}
+    refute Enum.any?(opts[:headers], fn {name, _value} -> name == "idempotency-key" end)
+    assert opts[:json]["expected_revision"] == 1
+  end
+
   test "optional operations are capability gated before an HTTP request" do
     req_request = fn _opts -> flunk("unsupported operation reached HTTP") end
     capabilities = capabilities(idempotency: :native)

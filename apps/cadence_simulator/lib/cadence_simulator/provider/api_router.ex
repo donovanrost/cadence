@@ -13,6 +13,7 @@ defmodule CadenceSimulator.Provider.ApiRouter do
     Contract,
     DeliveryProfiles,
     Environment,
+    EventDelivery,
     Opportunities,
     ServiceProfiles
   }
@@ -103,7 +104,12 @@ defmodule CadenceSimulator.Provider.ApiRouter do
           request_id: request_id(conn)
         )
 
-      maybe_drop_contact_response_after_commit(run, result)
+      maybe_drop_contact_response_after_commit(
+        run,
+        result,
+        "contact_response_loss_after_commit_count"
+      )
+
       respond(conn, result, status: 201)
     end)
   end
@@ -126,13 +132,19 @@ defmodule CadenceSimulator.Provider.ApiRouter do
 
   patch "/v1/contacts/:id" do
     with_environment(conn, fn conn, run ->
-      respond(
-        conn,
+      result =
         Contacts.modify(run, id, conn.body_params,
           idempotency_key: request_header(conn, "idempotency-key"),
           request_id: request_id(conn)
         )
+
+      maybe_drop_contact_response_after_commit(
+        run,
+        result,
+        "contact_modification_response_loss_after_commit_count"
       )
+
+      respond(conn, result)
     end)
   end
 
@@ -144,7 +156,7 @@ defmodule CadenceSimulator.Provider.ApiRouter do
     with_environment(conn, fn conn, run ->
       cursor = parse_integer(conn.params["cursor"], 0)
       limit = parse_integer(conn.params["limit"], 100)
-      page = Store.events_for_run(run["id"], max(cursor, 0), max(limit, 1))
+      page = EventDelivery.page(run, max(cursor, 0), max(limit, 1))
       Contract.list(conn, page.data, next_cursor: Integer.to_string(page.next_cursor))
     end)
   end
@@ -208,21 +220,21 @@ defmodule CadenceSimulator.Provider.ApiRouter do
 
   defp request_header(conn, name), do: Plug.Conn.get_req_header(conn, name) |> List.first()
 
-  defp maybe_drop_contact_response_after_commit(run, {:ok, _contact}) do
+  defp maybe_drop_contact_response_after_commit(run, {:ok, _contact}, fault_key) do
     limit =
       get_in(run, [
         "scenario_snapshot",
         "fault_profile",
-        "contact_response_loss_after_commit_count"
+        fault_key
       ]) ||
         0
 
-    if Store.consume_fault(run["id"], "contact_response_loss_after_commit", limit) do
+    if Store.consume_fault(run["id"], fault_key, limit) do
       Process.exit(self(), :kill)
     end
   end
 
-  defp maybe_drop_contact_response_after_commit(_run, _result), do: :ok
+  defp maybe_drop_contact_response_after_commit(_run, _result, _fault_key), do: :ok
 
   defp parse_integer(nil, default), do: default
 

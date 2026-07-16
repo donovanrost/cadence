@@ -10,6 +10,7 @@ defmodule CadenceSimulator.Provider do
     Capabilities,
     Contract,
     DeliveryProfiles,
+    FaultProfile,
     Ids,
     ServiceProfiles,
     Store
@@ -43,7 +44,9 @@ defmodule CadenceSimulator.Provider do
              Map.get(attrs, "service_profiles", ServiceProfiles.default())
            ),
          {:ok, delivery_profiles} <-
-           DeliveryProfiles.normalize(Map.get(attrs, "delivery_profiles", [])) do
+           DeliveryProfiles.normalize(Map.get(attrs, "delivery_profiles", [])),
+         {:ok, fault_profile} <-
+           FaultProfile.normalize(Map.get(attrs, "fault_profile", %{})) do
       scenario = %{
         "id" => Map.get(attrs, "id", Ids.new("scenario")),
         "name" => Map.get(attrs, "name", "Constellation rehearsal"),
@@ -60,7 +63,7 @@ defmodule CadenceSimulator.Provider do
           "jitter_seconds" => nested_integer(attrs, "pass_model", "jitter_seconds", 120)
         },
         "telemetry_profile" => Map.get(attrs, "telemetry_profile", %{"rate_hz" => 1.0}),
-        "fault_profile" => normalize_fault_profile(Map.get(attrs, "fault_profile", %{})),
+        "fault_profile" => fault_profile,
         "created_at" => now,
         "updated_at" => now
       }
@@ -126,6 +129,20 @@ defmodule CadenceSimulator.Provider do
 
   @spec list_runs() :: [map()]
   def list_runs, do: Store.list(:run)
+
+  @spec configure_run_faults(binary(), map()) :: {:ok, map()} | {:error, term()}
+  def configure_run_faults(run_id, attrs) when is_binary(run_id) and is_map(attrs) do
+    with {:ok, run} <- Store.fetch(:run, run_id),
+         current = get_in(run, ["scenario_snapshot", "fault_profile"]) || FaultProfile.defaults(),
+         {:ok, fault_profile} <- FaultProfile.merge(current, attrs) do
+      updated =
+        run
+        |> put_in(["scenario_snapshot", "fault_profile"], fault_profile)
+        |> timestamp_update()
+
+      Store.put(:run, updated)
+    end
+  end
 
   @spec ground_stations(binary()) :: {:ok, [map()]} | {:error, :not_found}
   def ground_stations(run_id) do
@@ -356,26 +373,6 @@ defmodule CadenceSimulator.Provider do
   end
 
   defp normalize_stations(_stations), do: {:error, {:invalid, "ground_stations"}}
-
-  defp normalize_fault_profile(profile) do
-    %{
-      "scheduling_rejection_rate" => bounded_rate(profile, "scheduling_rejection_rate"),
-      "acquisition_failure_rate" => bounded_rate(profile, "acquisition_failure_rate"),
-      "early_termination_rate" => bounded_rate(profile, "early_termination_rate"),
-      "packet_loss_rate" => bounded_rate(profile, "packet_loss_rate"),
-      "latency_ms" => integer(profile, "latency_ms", 0),
-      "jitter_ms" => integer(profile, "jitter_ms", 0),
-      "contact_response_loss_after_commit_count" =>
-        profile
-        |> integer("contact_response_loss_after_commit_count", 0)
-        |> max(0),
-      "provider_outage" => Map.get(profile, "provider_outage", false)
-    }
-  end
-
-  defp bounded_rate(profile, key) do
-    profile |> number(key, 0.0) |> max(0.0) |> min(1.0)
-  end
 
   defp initial_reservation_status(run, attrs) do
     fault_profile = run["scenario_snapshot"]["fault_profile"]

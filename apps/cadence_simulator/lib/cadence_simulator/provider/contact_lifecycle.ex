@@ -55,11 +55,18 @@ defmodule CadenceSimulator.Provider.ContactLifecycle do
         "antenna_or_service_pool_ref"
       ])
 
-    if modification_fields != %{} do
-      emit(current, "contact.modified", request_id, %{
+    provider_change =
+      if previous["extensions"] != current["extensions"],
+        do: get_in(current, ["extensions", "provider_change"])
+
+    if modification_fields != %{} or not is_nil(provider_change) do
+      data = %{
         "provider_revision" => current["revision"],
-        "changed_fields" => modification_fields
-      })
+        "changed_fields" => modification_fields,
+        "provider_change" => provider_change
+      }
+
+      emit(current, "contact.modified", request_id, data)
     end
 
     if previous["status"] != current["status"] do

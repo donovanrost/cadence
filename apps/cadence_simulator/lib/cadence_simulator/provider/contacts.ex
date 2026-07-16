@@ -225,7 +225,10 @@ defmodule CadenceSimulator.Provider.Contacts do
       "delivery" => delivery,
       "status_reason" => if(rejected?, do: "simulated_scheduling_rejection", else: nil),
       "tags" => request["tags"],
-      "extensions" => %{"synthetic" => true},
+      "extensions" => %{
+        "synthetic" => true,
+        "estimated_capacity" => estimated_capacity(run, opportunity, delivery_profile)
+      },
       "configuration_snapshot" => request,
       "service_profile_snapshot" => service_profile,
       "delivery_profile_snapshot" => delivery_profile,
@@ -563,6 +566,22 @@ defmodule CadenceSimulator.Provider.Contacts do
     case DateTime.from_iso8601(value) do
       {:ok, datetime, _offset} -> datetime |> DateTime.add(seconds) |> DateTime.to_iso8601()
       _error -> value
+    end
+  end
+
+  defp estimated_capacity(run, opportunity, delivery_profile) do
+    with {:ok, starts_at, _offset} <- DateTime.from_iso8601(opportunity["starts_at"]),
+         {:ok, ends_at, _offset} <- DateTime.from_iso8601(opportunity["ends_at"]) do
+      duration_seconds = max(DateTime.diff(ends_at, starts_at), 0)
+      rate_hz = get_in(run, ["scenario_snapshot", "telemetry_profile", "rate_hz"]) || 1.0
+      frame_bytes = get_in(delivery_profile, ["framing", "frame_bytes"]) || 1115
+
+      %{
+        "unit" => "bytes",
+        "value" => trunc(duration_seconds * rate_hz * frame_bytes)
+      }
+    else
+      _error -> %{"unit" => "bytes", "value" => 0}
     end
   end
 end

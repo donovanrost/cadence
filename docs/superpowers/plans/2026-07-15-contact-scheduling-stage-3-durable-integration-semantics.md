@@ -43,8 +43,18 @@ poller. Webhook authentication is capability-gated behind an explicit Provider
 Type authenticator and no simulator webhook route is exposed. Provider Account
 details report persisted cursor health, inbox backlog, quarantine count, and
 last-event time. Task 6 focused coverage passes with 27 core tests and 7
-Provider Account journey tests. Task 7, simulator and Provider Client
-modification semantics, is next.
+Provider Account journey tests. The separate simulator now supports bounded
+provider-initiated timing, antenna, station, capacity, counteroffer, and
+cancellation changes with immutable provider-side history, monotonic revisions,
+capacity checks, and correlated advisory events. Its authenticated admin API
+can change run-scoped fault controls and initiate Contact changes. The polling
+feed can deterministically omit, duplicate, delay, reorder, or identity-collide
+events, and modification responses can be lost after commit and recovered by
+the environment's idempotency contract. Cadence's Req client and request-local
+fake both satisfy the complete Provider Client behavior. Task 7 focused
+coverage passes with 17 simulator contract tests and 12 Cadence client tests.
+Task 8, policy classification, reservation changes, approvals, and Scheduled
+Contact revisions, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and
