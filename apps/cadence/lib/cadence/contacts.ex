@@ -17,6 +17,7 @@ defmodule Cadence.Contacts do
     ProviderProfile,
     RealizedContact,
     ScheduledContact,
+    ScheduledContactRevisions,
     Scheduler,
     TransportBinding,
     TransportProfile
@@ -854,6 +855,9 @@ defmodule Cadence.Contacts do
         row
         |> ScheduledContactRow.to_domain()
         |> persist_contact_operational_event(repo)
+      end)
+      |> Multi.run(:scheduled_contact_revision, fn repo, %{scheduled_contact: row} ->
+        ScheduledContactRevisions.ensure_initial(repo, ScheduledContactRow.to_domain(row))
       end)
       |> Repo.transaction()
       |> case do

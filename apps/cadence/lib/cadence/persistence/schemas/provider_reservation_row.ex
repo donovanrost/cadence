@@ -29,6 +29,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:scheduled_contact_id, :string)
     field(:provider_opportunity_ref, :string)
     field(:provider_contact_ref, :string)
+    field(:provider_revision, :integer, default: 1)
     field(:idempotency_key, :string)
     field(:lifecycle_state, :string)
     field(:provider_status, :string)
@@ -43,6 +44,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:ends_at, :utc_datetime_usec)
     field(:request_document, :map, default: %{})
     field(:response_document, :map, default: %{})
+    field(:requested_snapshot_document, :map, default: %{})
+    field(:provider_confirmed_snapshot_document, :map, default: %{})
+    field(:cadence_accepted_snapshot_document, :map, default: %{})
     field(:last_error_document, :map, default: %{})
     field(:operator_review_document, :map, default: %{})
     field(:attempt_count, :integer, default: 0)
@@ -65,6 +69,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     :provider_profile_version,
     :scheduled_contact_id,
     :provider_opportunity_ref,
+    :provider_revision,
     :idempotency_key,
     :lifecycle_state,
     :spacecraft_id,
@@ -75,6 +80,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     :ends_at,
     :request_document,
     :response_document,
+    :requested_snapshot_document,
+    :provider_confirmed_snapshot_document,
+    :cadence_accepted_snapshot_document,
     :last_error_document,
     :operator_review_document,
     :delivery_descriptor_document,
@@ -92,6 +100,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     |> validate_required(@required_fields)
     |> validate_number(:provider_profile_version, greater_than: 0)
     |> validate_number(:provider_version, greater_than: 0)
+    |> validate_number(:provider_revision, greater_than: 0)
     |> validate_optional_positive(:provider_account_version)
     |> validate_optional_positive(:provider_account_grant_version)
     |> validate_binding_shape()
@@ -119,18 +128,30 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     row
     |> cast(attrs, [
       :provider_contact_ref,
+      :provider_revision,
       :lifecycle_state,
       :provider_status,
       :pass_phase,
       :delivery_state,
       :delivery_descriptor_document,
       :response_document,
+      :provider_confirmed_snapshot_document,
+      :cadence_accepted_snapshot_document,
       :last_error_document,
       :attempt_count,
       :last_reconciled_at,
       :metadata
     ])
-    |> validate_required([:lifecycle_state, :response_document, :last_error_document, :metadata])
+    |> validate_required([
+      :lifecycle_state,
+      :provider_revision,
+      :response_document,
+      :provider_confirmed_snapshot_document,
+      :cadence_accepted_snapshot_document,
+      :last_error_document,
+      :metadata
+    ])
+    |> validate_number(:provider_revision, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
     |> unique_constraint([:mission_id, :provider_contact_ref],
       name: :provider_reservations_provider_ref_idx
@@ -158,6 +179,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       scheduled_contact_id: row.scheduled_contact_id,
       provider_opportunity_ref: row.provider_opportunity_ref,
       provider_contact_ref: row.provider_contact_ref,
+      provider_revision: row.provider_revision,
       idempotency_key: row.idempotency_key,
       lifecycle_state: row.lifecycle_state,
       provider_status: row.provider_status,
@@ -172,6 +194,11 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       ends_at: row.ends_at,
       request_document: JsonDocument.unwrap_value(row.request_document),
       response_document: JsonDocument.unwrap_value(row.response_document),
+      requested_snapshot_document: JsonDocument.unwrap_value(row.requested_snapshot_document),
+      provider_confirmed_snapshot_document:
+        JsonDocument.unwrap_value(row.provider_confirmed_snapshot_document),
+      cadence_accepted_snapshot_document:
+        JsonDocument.unwrap_value(row.cadence_accepted_snapshot_document),
       last_error_document: JsonDocument.unwrap_value(row.last_error_document),
       operator_review_document: JsonDocument.unwrap_value(row.operator_review_document),
       attempt_count: row.attempt_count,
@@ -202,6 +229,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       scheduled_contact_id: reservation.scheduled_contact_id,
       provider_opportunity_ref: reservation.provider_opportunity_ref,
       provider_contact_ref: reservation.provider_contact_ref,
+      provider_revision: reservation.provider_revision,
       idempotency_key: reservation.idempotency_key,
       lifecycle_state: Atom.to_string(reservation.lifecycle_state),
       provider_status: reservation.provider_status,
@@ -217,6 +245,12 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       ends_at: reservation.ends_at,
       request_document: JsonDocument.wrap_value(reservation.request_document),
       response_document: JsonDocument.wrap_value(reservation.response_document),
+      requested_snapshot_document:
+        JsonDocument.wrap_value(reservation.requested_snapshot_document),
+      provider_confirmed_snapshot_document:
+        JsonDocument.wrap_value(reservation.provider_confirmed_snapshot_document),
+      cadence_accepted_snapshot_document:
+        JsonDocument.wrap_value(reservation.cadence_accepted_snapshot_document),
       last_error_document: JsonDocument.wrap_value(reservation.last_error_document),
       operator_review_document: JsonDocument.wrap_value(reservation.operator_review_document),
       attempt_count: reservation.attempt_count,
@@ -245,6 +279,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :scheduled_contact_id,
       :provider_opportunity_ref,
       :provider_contact_ref,
+      :provider_revision,
       :idempotency_key,
       :lifecycle_state,
       :provider_status,
@@ -259,6 +294,9 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :ends_at,
       :request_document,
       :response_document,
+      :requested_snapshot_document,
+      :provider_confirmed_snapshot_document,
+      :cadence_accepted_snapshot_document,
       :last_error_document,
       :operator_review_document,
       :attempt_count,

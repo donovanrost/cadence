@@ -692,6 +692,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
       starts_at: iso8601(scheduled_contact.starts_at),
       ends_at: iso8601(scheduled_contact.ends_at),
       provider_contact_ref: scheduled_contact.provider_contact_ref,
+      current_revision: scheduled_contact.current_revision,
       lifecycle_state: Atom.to_string(scheduled_contact.lifecycle_state),
       realized_contact_id: scheduled_contact.realized_contact_id,
       metadata: scheduled_contact.metadata

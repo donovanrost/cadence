@@ -25,6 +25,12 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  def authorize(%Scope{} = current_scope, :approve_provider_changes, %{
+        organization_id: organization_id
+      }) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
   def authorize(
         %Scope{} = current_scope,
         :manage_service_identities,

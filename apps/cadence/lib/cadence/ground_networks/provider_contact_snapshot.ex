@@ -19,7 +19,8 @@ defmodule Cadence.GroundNetworks.ProviderContactSnapshot do
           pass_phase: atom(),
           delivery_state: atom(),
           delivery_descriptor_document: map(),
-          status_reason: binary() | nil
+          status_reason: binary() | nil,
+          extensions_document: map()
         }
 
   defstruct [
@@ -38,7 +39,8 @@ defmodule Cadence.GroundNetworks.ProviderContactSnapshot do
     :pass_phase,
     :delivery_state,
     :delivery_descriptor_document,
-    :status_reason
+    :status_reason,
+    extensions_document: %{}
   ]
 
   @spec from_contact(ProviderContact.t()) :: t()
@@ -59,7 +61,8 @@ defmodule Cadence.GroundNetworks.ProviderContactSnapshot do
       pass_phase: contact.pass_phase,
       delivery_state: contact.delivery.status,
       delivery_descriptor_document: DeliveryDescriptor.to_map(contact.delivery),
-      status_reason: contact.status_reason
+      status_reason: contact.status_reason,
+      extensions_document: contact.extensions
     }
   end
 
@@ -81,7 +84,8 @@ defmodule Cadence.GroundNetworks.ProviderContactSnapshot do
       "pass_phase" => Atom.to_string(snapshot.pass_phase),
       "delivery_state" => Atom.to_string(snapshot.delivery_state),
       "delivery_descriptor" => snapshot.delivery_descriptor_document,
-      "status_reason" => snapshot.status_reason
+      "status_reason" => snapshot.status_reason,
+      "extensions" => snapshot.extensions_document
     }
   end
 end

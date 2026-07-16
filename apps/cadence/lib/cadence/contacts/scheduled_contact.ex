@@ -21,6 +21,7 @@ defmodule Cadence.Contacts.ScheduledContact do
           starts_at: DateTime.t(),
           ends_at: DateTime.t() | nil,
           provider_contact_ref: binary() | nil,
+          current_revision: pos_integer(),
           lifecycle_state: lifecycle_state(),
           realized_contact_id: binary() | nil,
           metadata: map()
@@ -33,6 +34,7 @@ defmodule Cadence.Contacts.ScheduledContact do
     :starts_at,
     :ends_at,
     :provider_contact_ref,
+    :current_revision,
     :realized_contact_id,
     source_endpoint_refs: [],
     contact_intents: [],
@@ -79,6 +81,7 @@ defmodule Cadence.Contacts.ScheduledContact do
       ends_at: Map.get(attrs, :ends_at, Map.get(attrs, "ends_at")),
       provider_contact_ref:
         Map.get(attrs, :provider_contact_ref, Map.get(attrs, "provider_contact_ref")),
+      current_revision: Map.get(attrs, :current_revision, Map.get(attrs, "current_revision", 1)),
       lifecycle_state:
         Map.get(attrs, :lifecycle_state, Map.get(attrs, "lifecycle_state", :scheduled))
         |> normalize_lifecycle_state(),

@@ -17,7 +17,8 @@ defmodule Cadence.GroundNetworks.ProviderContactChange do
     :pass_phase,
     :delivery_state,
     :delivery_descriptor_document,
-    :status_reason
+    :status_reason,
+    :extensions_document
   ]
 
   @type t :: %__MODULE__{

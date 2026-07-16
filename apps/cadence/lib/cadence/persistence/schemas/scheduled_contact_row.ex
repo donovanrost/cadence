@@ -24,6 +24,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
     field(:starts_at, :utc_datetime_usec)
     field(:ends_at, :utc_datetime_usec)
     field(:provider_contact_ref, :string)
+    field(:current_revision, :integer, default: 1)
     field(:lifecycle_state, :string)
     field(:realized_contact_id, :string)
     field(:metadata, :map, default: %{})
@@ -38,6 +39,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
     :path_documents,
     :starts_at,
     :lifecycle_state,
+    :current_revision,
     :metadata
   ]
 
@@ -47,6 +49,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
     |> cast(domain_attrs(scheduled_contact), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> validate_number(:current_revision, greater_than: 0)
     |> unique_constraint([:mission_id, :scheduled_contact_id],
       name: :scheduled_contacts_scope_idx
     )
@@ -81,6 +84,14 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
     })
   end
 
+  @spec revision_changeset(struct(), map()) :: Ecto.Changeset.t()
+  def revision_changeset(%__MODULE__{} = row, attrs) when is_map(attrs) do
+    row
+    |> cast(attrs, [:starts_at, :ends_at, :provider_contact_ref, :current_revision, :metadata])
+    |> validate_required([:starts_at, :current_revision, :metadata])
+    |> validate_number(:current_revision, greater_than: 0)
+  end
+
   @spec to_domain(struct()) :: ScheduledContact.t()
   def to_domain(%__MODULE__{} = row) do
     ScheduledContact.new(%{
@@ -96,6 +107,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       starts_at: row.starts_at,
       ends_at: row.ends_at,
       provider_contact_ref: row.provider_contact_ref,
+      current_revision: row.current_revision,
       lifecycle_state: row.lifecycle_state,
       realized_contact_id: row.realized_contact_id,
       metadata: JsonDocument.unwrap_value(row.metadata)
@@ -117,6 +129,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       starts_at: scheduled_contact.starts_at,
       ends_at: scheduled_contact.ends_at,
       provider_contact_ref: scheduled_contact.provider_contact_ref,
+      current_revision: scheduled_contact.current_revision,
       lifecycle_state: Atom.to_string(scheduled_contact.lifecycle_state),
       realized_contact_id: scheduled_contact.realized_contact_id,
       metadata: JsonDocument.wrap_value(scheduled_contact.metadata)
@@ -137,6 +150,7 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       :starts_at,
       :ends_at,
       :provider_contact_ref,
+      :current_revision,
       :lifecycle_state,
       :realized_contact_id,
       :metadata

@@ -13,7 +13,14 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.Contacts
-  alias Cadence.Contacts.{KnownAtom, ProviderReservation, ScheduledContact}
+
+  alias Cadence.Contacts.{
+    KnownAtom,
+    ProviderReservation,
+    ProviderReservationChanges,
+    ScheduledContact
+  }
+
   alias Cadence.GroundNetworks.Validation
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
@@ -208,16 +215,22 @@ defmodule Cadence.Contacts.ProviderReservations do
       when is_map(response) do
     with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id),
          :ok <- validate_document(response, :response_document),
+         {:ok, reservation, initial_response?} <- observe_provider_revision(reservation, response),
          {:ok, lifecycle_state} <- normalized_lifecycle_state(response, reservation),
-         {:ok, observations} <- provider_observations(response, reservation) do
+         {:ok, observations} <- provider_observations(response, reservation),
+         snapshot = ProviderReservationChanges.snapshot(response, reservation) do
       transition(reservation, lifecycle_state, %{
         provider_contact_ref: provider_contact_ref(response, reservation),
+        provider_revision: snapshot["provider_revision"],
         provider_status: provider_status(response),
         pass_phase: Atom.to_string(observations.pass_phase),
         delivery_state: Atom.to_string(observations.delivery_state),
         delivery_descriptor_document:
           JsonDocument.wrap_value(observations.delivery_descriptor_document),
         response_document: JsonDocument.wrap_value(response),
+        provider_confirmed_snapshot_document: JsonDocument.wrap_value(snapshot),
+        cadence_accepted_snapshot_document:
+          accepted_snapshot(reservation, snapshot, initial_response?),
         last_error_document: JsonDocument.wrap_value(%{}),
         attempt_count: reservation.attempt_count + 1,
         last_reconciled_at: DateTime.utc_now()
@@ -339,6 +352,25 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp prepare_reservation(organization_id, attrs) when is_map(attrs) do
     {:ok, attrs |> Map.put(:organization_id, organization_id) |> ProviderReservation.new()}
   end
+
+  defp observe_provider_revision(reservation, response) do
+    snapshot = ProviderReservationChanges.snapshot(response, reservation)
+
+    if snapshot["provider_revision"] > reservation.provider_revision do
+      case ProviderReservationChanges.observe(reservation, response) do
+        {:ok, _change, updated} -> {:ok, updated, false}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:ok, reservation, reservation.response_document == %{}}
+    end
+  end
+
+  defp accepted_snapshot(_reservation, snapshot, true),
+    do: JsonDocument.wrap_value(snapshot)
+
+  defp accepted_snapshot(reservation, _snapshot, false),
+    do: JsonDocument.wrap_value(reservation.cadence_accepted_snapshot_document)
 
   defp resolve_insert_conflict(organization_id, reservation, changeset) do
     case fetch_by_idempotency_key(
@@ -562,6 +594,21 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp validate_documents(reservation) do
     with :ok <- validate_document(reservation.request_document, :request_document),
          :ok <- validate_document(reservation.response_document, :response_document),
+         :ok <-
+           validate_document(
+             reservation.requested_snapshot_document,
+             :requested_snapshot_document
+           ),
+         :ok <-
+           validate_document(
+             reservation.provider_confirmed_snapshot_document,
+             :provider_confirmed_snapshot_document
+           ),
+         :ok <-
+           validate_document(
+             reservation.cadence_accepted_snapshot_document,
+             :cadence_accepted_snapshot_document
+           ),
          :ok <- validate_document(reservation.last_error_document, :last_error_document),
          :ok <-
            validate_document(

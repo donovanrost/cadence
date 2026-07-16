@@ -140,6 +140,7 @@ defmodule Cadence.GroundNetworks.ProviderContact do
       "delivery_descriptor" => DeliveryDescriptor.to_map(contact.delivery),
       "starts_at" => DateTime.to_iso8601(contact.starts_at),
       "ends_at" => DateTime.to_iso8601(contact.ends_at),
+      "extensions" => contact.extensions,
       "provider_evidence" => contact.evidence
     }
   end

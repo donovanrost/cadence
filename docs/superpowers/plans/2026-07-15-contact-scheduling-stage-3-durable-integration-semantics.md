@@ -53,8 +53,22 @@ events, and modification responses can be lost after commit and recovered by
 the environment's idempotency contract. Cadence's Req client and request-local
 fake both satisfy the complete Provider Client behavior. Task 7 focused
 coverage passes with 17 simulator contract tests and 12 Cadence client tests.
-Task 8, policy classification, reservation changes, approvals, and Scheduled
-Contact revisions, is next.
+Mission delivery policy now classifies provider revisions as observation,
+bounded policy acceptance, approval, acknowledgment, or configuration failure
+before any execution mutation. Provider Reservations preserve requested,
+provider-confirmed, and Cadence-accepted snapshots independently. Every
+material provider revision has an idempotent change identity and proposal hash;
+later revisions supersede pending work. Organization-admin approvals require an
+authenticated user, current hash, reason, exact policy, active grant, and
+pre-realization schedule. Policy and human acceptance share one lock-and-recheck
+transaction that appends exactly one immutable Scheduled Contact revision,
+updates the stable projection, records accepted truth, and appends provider
+audit evidence. Already-effective facts become acknowledgment work, while
+configuration data is never accepted from Contact changes. Task 8 focused
+coverage passes with 31 tests, including boundary equality, missing inputs,
+concurrency, stale and superseded approval, revoked grants, post-realization
+changes, rollback, and exactly-once schedule revision. Root `mix precommit`
+passes. Task 9, Ops journeys and end-to-end recovery proofs, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and

@@ -42,6 +42,7 @@ defmodule Cadence.Contacts.ProviderReservation do
           scheduled_contact_id: binary(),
           provider_opportunity_ref: binary(),
           provider_contact_ref: binary() | nil,
+          provider_revision: pos_integer(),
           idempotency_key: binary(),
           lifecycle_state: lifecycle_state(),
           provider_status: binary() | nil,
@@ -56,6 +57,9 @@ defmodule Cadence.Contacts.ProviderReservation do
           ends_at: DateTime.t(),
           request_document: map(),
           response_document: map(),
+          requested_snapshot_document: map(),
+          provider_confirmed_snapshot_document: map(),
+          cadence_accepted_snapshot_document: map(),
           last_error_document: map(),
           operator_review_document: map(),
           attempt_count: non_neg_integer(),
@@ -88,6 +92,7 @@ defmodule Cadence.Contacts.ProviderReservation do
     :scheduled_contact_id,
     :provider_opportunity_ref,
     :provider_contact_ref,
+    :provider_revision,
     :idempotency_key,
     :lifecycle_state,
     :provider_status,
@@ -104,6 +109,9 @@ defmodule Cadence.Contacts.ProviderReservation do
     path_template_ids: [],
     request_document: %{},
     response_document: %{},
+    requested_snapshot_document: %{},
+    provider_confirmed_snapshot_document: %{},
+    cadence_accepted_snapshot_document: %{},
     delivery_descriptor_document: %{},
     last_error_document: %{},
     operator_review_document: %{},
@@ -113,6 +121,11 @@ defmodule Cadence.Contacts.ProviderReservation do
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
+    request_document = attrs |> get(:request_document, %{}) |> JsonDocument.encode()
+
+    requested_snapshot =
+      get(attrs, :requested_snapshot_document, requested_snapshot(request_document))
+
     %__MODULE__{
       provider_reservation_id:
         get(attrs, :provider_reservation_id, Ids.new("provider_reservation")),
@@ -133,6 +146,7 @@ defmodule Cadence.Contacts.ProviderReservation do
       scheduled_contact_id: get(attrs, :scheduled_contact_id, Ids.new("scheduled_contact")),
       provider_opportunity_ref: fetch!(attrs, :provider_opportunity_ref),
       provider_contact_ref: get(attrs, :provider_contact_ref),
+      provider_revision: get(attrs, :provider_revision, 1),
       idempotency_key: fetch!(attrs, :idempotency_key),
       lifecycle_state:
         attrs
@@ -153,8 +167,17 @@ defmodule Cadence.Contacts.ProviderReservation do
       path_template_ids: get(attrs, :path_template_ids, []),
       starts_at: fetch!(attrs, :starts_at),
       ends_at: fetch!(attrs, :ends_at),
-      request_document: attrs |> get(:request_document, %{}) |> JsonDocument.encode(),
+      request_document: request_document,
       response_document: attrs |> get(:response_document, %{}) |> JsonDocument.encode(),
+      requested_snapshot_document: JsonDocument.encode(requested_snapshot),
+      provider_confirmed_snapshot_document:
+        attrs
+        |> get(:provider_confirmed_snapshot_document, requested_snapshot)
+        |> JsonDocument.encode(),
+      cadence_accepted_snapshot_document:
+        attrs
+        |> get(:cadence_accepted_snapshot_document, requested_snapshot)
+        |> JsonDocument.encode(),
       delivery_descriptor_document:
         attrs |> get(:delivery_descriptor_document, %{}) |> JsonDocument.encode(),
       last_error_document: attrs |> get(:last_error_document, %{}) |> JsonDocument.encode(),
@@ -178,4 +201,10 @@ defmodule Cadence.Contacts.ProviderReservation do
       value -> value
     end
   end
+
+  defp requested_snapshot(%{"provider_request" => provider_request})
+       when is_map(provider_request),
+       do: provider_request
+
+  defp requested_snapshot(request_document), do: request_document
 end

@@ -580,6 +580,7 @@ defmodule CadenceWeb.ControlPlaneParams do
          starts_at: starts_at,
          ends_at: ends_at,
          provider_contact_ref: string_value(params, "provider_contact_ref"),
+         current_revision: 1,
          metadata: map_value(params, "metadata")
        })}
     end
