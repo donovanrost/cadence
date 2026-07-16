@@ -226,9 +226,26 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   end
 
   defp secret_opts(credential, opts) do
+    opts = maybe_allow_local_env_backend(credential, opts)
+
     if Resolver.configured?(opts),
       do: opts,
       else: Keyword.put(opts, :secret_backend, backend_module(credential.backend_type))
+  end
+
+  defp maybe_allow_local_env_backend(%ProviderCredential{backend_type: :env}, opts) do
+    if local_credentials_enabled?(opts),
+      do: Keyword.put_new(opts, :allow_env_secret_backend?, true),
+      else: opts
+  end
+
+  defp maybe_allow_local_env_backend(%ProviderCredential{}, opts), do: opts
+
+  defp local_credentials_enabled?(opts) do
+    Keyword.get(opts, :allow_local_provider_credentials?, false) ||
+      :cadence
+      |> Application.get_env(:provider_local_credentials, [])
+      |> Keyword.get(:enabled, false)
   end
 
   defp backend_module(:env), do: EnvBackend

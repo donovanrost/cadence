@@ -35,57 +35,67 @@ defmodule Cadence.GroundNetworks.DeliveryPolicyEvaluator do
     categories = categories(changed_fields, before, current)
     impact = impact(before, current)
 
-    cond do
-      configuration_changed?(changed_fields, before, current) ->
-        result(:configuration_failure, policy, changed_fields, categories, impact, [
-          "provider_contact_configuration_mismatch"
-        ])
+    {decision, reasons} =
+      preliminary_decision(policy, before, current, changed_fields, categories, opts) ||
+        tolerance_decision(policy, before, current, changed_fields)
 
-      changed_fields == [] ->
-        result(:observation, policy, changed_fields, categories, impact, ["no_material_change"])
+    result(decision, policy, changed_fields, categories, impact, reasons)
+  end
 
-      already_effective_fact?(current, categories, opts) ->
-        result(:acknowledgment_required, policy, changed_fields, categories, impact, [
-          "provider_change_already_effective"
-        ])
+  defp preliminary_decision(policy, before, current, changed_fields, categories, opts) do
+    [
+      decision_if(
+        configuration_changed?(changed_fields, before, current),
+        :configuration_failure,
+        "provider_contact_configuration_mismatch"
+      ),
+      decision_if(changed_fields == [], :observation, "no_material_change"),
+      decision_if(
+        already_effective_fact?(current, categories, opts),
+        :acknowledgment_required,
+        "provider_change_already_effective"
+      ),
+      decision_if(
+        observation_only?(changed_fields),
+        :observation,
+        "provider_operational_observation"
+      ),
+      decision_if(
+        counteroffer?(current),
+        :approval_required,
+        "provider_counteroffer_requires_approval"
+      ),
+      decision_if(
+        policy.mode == :approval_required,
+        :approval_required,
+        "delivery_policy_requires_approval"
+      ),
+      decision_if(
+        not policy.allow_automatic_execution_revision,
+        :approval_required,
+        "automatic_execution_revision_disabled"
+      ),
+      decision_if(
+        category_requires_approval?(policy, categories),
+        :approval_required,
+        "change_category_always_requires_approval"
+      )
+    ]
+    |> Enum.find(& &1)
+  end
 
-      Enum.all?(changed_fields, &(&1 in @observation_fields)) ->
-        result(:observation, policy, changed_fields, categories, impact, [
-          "provider_operational_observation"
-        ])
-
-      counteroffer?(current) ->
-        result(:approval_required, policy, changed_fields, categories, impact, [
-          "provider_counteroffer_requires_approval"
-        ])
-
-      policy.mode == :approval_required ->
-        result(:approval_required, policy, changed_fields, categories, impact, [
-          "delivery_policy_requires_approval"
-        ])
-
-      not policy.allow_automatic_execution_revision ->
-        result(:approval_required, policy, changed_fields, categories, impact, [
-          "automatic_execution_revision_disabled"
-        ])
-
-      category_requires_approval?(policy, categories) ->
-        result(:approval_required, policy, changed_fields, categories, impact, [
-          "change_category_always_requires_approval"
-        ])
-
-      true ->
-        case tolerance_violations(policy, before, current, changed_fields) do
-          [] ->
-            result(:policy_accept, policy, changed_fields, categories, impact, [
-              "change_within_delivery_policy"
-            ])
-
-          violations ->
-            result(:approval_required, policy, changed_fields, categories, impact, violations)
-        end
+  defp tolerance_decision(policy, before, current, changed_fields) do
+    case tolerance_violations(policy, before, current, changed_fields) do
+      [] -> {:policy_accept, ["change_within_delivery_policy"]}
+      violations -> {:approval_required, violations}
     end
   end
+
+  defp decision_if(true, decision, reason), do: {decision, [reason]}
+  defp decision_if(false, _decision, _reason), do: nil
+
+  defp observation_only?(changed_fields),
+    do: Enum.all?(changed_fields, &(&1 in @observation_fields))
 
   defp result(decision, policy, changed_fields, categories, impact, reasons) do
     %{

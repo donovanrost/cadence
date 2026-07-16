@@ -50,7 +50,8 @@ The current canonical operations are:
 - Service and Delivery Profile discovery;
 - optional Delivery Profile provisioning;
 - opportunity search;
-- Contact reservation, description, and cancellation;
+- Contact reservation, description, capability-declared modification, and
+  cancellation;
 - optional recovery by client reference;
 - optional provider event polling.
 
@@ -80,15 +81,17 @@ return raw access tokens, passwords, private keys, or ephemeral delivery
 credentials.
 
 Capabilities are executable behavior, not display metadata. Reject unsupported
-operations before sending a provider request. Normalize retry hints and ambiguous
-outcomes so booking and reconciliation policy remains outside the LiveView and
-outside vendor-specific code.
+operations before sending a provider request. Normalize retry hints, provider
+revisions, change evidence, event identities, and ambiguous outcomes so booking,
+delivery-policy evaluation, and reconciliation remain outside the LiveView and
+outside vendor-specific code. Provider event pages must contain normalized
+`ProviderEvent` structs, not raw string-keyed wire maps.
 
 ## 4. Preserve mutation and recovery semantics
 
-Cadence persists its Provider Reservation, exact Provider/Transport/profile
-versions, request evidence, and internal idempotency key before calling the
-Provider Client.
+Cadence persists its Provider Reservation, exact Provider Account/grant,
+Mission Provider/Transport/profile/policy versions, request evidence, and
+internal idempotency key before calling the Provider Client.
 
 The client must follow the provider's declared behavior:
 
@@ -101,32 +104,55 @@ Contact requests contain only provider resource and correlation references.
 Endpoint addresses, framing, generator configuration, and raw credentials are
 setup data and must not be copied into every reservation request.
 
+For modifications, send the exact expected provider revision and a stable
+change identity according to the provider's declared idempotency mechanism.
+Normalize every response as an authoritative snapshot. Do not update the
+Scheduled Contact in the adapter: the shared delivery-policy evaluator decides
+whether a proposal is observed, accepted by bounded policy, approval-pending,
+acknowledgment-required, or a non-approvable configuration failure.
+
 ## 5. Register the provider type explicitly
 
 Add the client to
 [`Cadence.Contacts.ProviderClients.Registry`](../../apps/cadence/lib/cadence/contacts/provider_clients/registry.ex).
-Then extend the allow-listed provider types and `client_for/1` mapping in
-[`Cadence.GroundNetworks.MissionProvider`](../../apps/cadence/lib/cadence/ground_networks/mission_provider.ex).
+Then extend the allow-listed provider types and `client_for/1` mapping used by
+the Provider Account and Mission Provider boundaries.
 
 Do not convert user-supplied provider or client names to atoms. Form values must
 resolve through the explicit allow lists.
 
-A Mission Provider stores:
+A versioned Provider Account is organization-owned and stores:
 
 - provider type and client selection;
-- API base URL and provider environment/account reference;
-- an opaque `config://...` or `env://...` credential reference;
-- validated capabilities and bounded synchronized inventory;
-- validation, sync, and health evidence.
+- API base URL, region, and provider environment/account reference;
+- a stable credential-registry reference whose backend locator is owned by the
+  credential registry;
+- event ingestion mode/configuration, request policy, and organization
+  guardrails;
+- account validation, capability, and health evidence.
 
-The secret itself belongs to the runtime credential backend, not the database or
-LiveView form.
+The secret itself belongs to the configured backend, not the database or
+LiveView form. Production integrations use `Cadence.Secrets.ExternalBackend`
+or another reviewed `Cadence.Secrets.Backend`; HTTP integrations use `Req` and
+HTTPS by default. The environment backend is local-only and must be explicitly
+enabled. Never pass raw material into provider evidence, audit, errors, or
+diagnostics. Rotation keeps the stable credential reference; revocation fails
+new operations closed while preserving history.
+
+Organization administrators grant an exact Provider Account version to a
+mission. Grant restrictions can only narrow account guardrails. A Mission
+Provider then binds that exact account/grant pair and owns mission spacecraft
+mappings, permitted resources, enabled service/delivery profiles, preferred
+Transports, bounded inventory sync, validated capabilities, and the versioned
+mission delivery policy. It does not own or copy the endpoint, environment, or
+credential reference.
 
 ## 6. Map provider delivery into a Transport
 
 Provider-managed Transports select exact Mission Provider, Service Profile, and
-Delivery Profile versions. Their protocol configuration is derived and read-only
-in the product UI.
+Delivery Profile versions. Their protocol configuration is derived and
+read-only in the product UI. Reservations also snapshot the upstream Provider
+Account, mission grant, and delivery-policy version.
 
 If the provider's Delivery Profile maps to an existing Transport Kind, extend
 that kind's derivation only when the canonical provider evidence is sufficient
@@ -193,13 +219,16 @@ using its ordered enqueue APIs. Runtime startup remains path-local under
 
 ## 9. Keep the product journeys shared
 
-The integration must use the existing authenticated mission journeys:
+The integration must use the existing authenticated journeys:
 
-- **Comms → Providers** for control-plane setup, validation, and sync;
+- organization **Provider Accounts** for shared control-plane endpoint,
+  environment, credential lifecycle, ingestion health, and mission grants;
+- **Comms → Providers** for a granted mission binding, mappings, delivery
+  policy, validation, and sync;
 - **Comms → Transports** for direct or provider-managed delivery setup;
 - **Comms → Routing** for exact Transport selection;
 - **Ops → Contacts** for readiness, opportunity search, reservation,
-  reconciliation, and cancellation.
+  reconciliation, changes, approval/acknowledgment, and cancellation.
 
 Do not create a provider-specific scheduling page. Provider differences appear
 as capabilities, profile summaries, validation findings, and administrator
@@ -213,6 +242,12 @@ At minimum, add:
   and evidence-sanitization tests;
 - native-idempotency or client-reference recovery tests matching the provider's
   real guarantees;
+- event normalization, duplicate, out-of-order, cursor-restart, identity
+  collision, poison-event quarantine/reprocess, and missing-event safety-poll
+  tests when polling is supported;
+- modification revision conflict, post-commit ambiguity, provider-initiated
+  change, bounded policy, approval, acknowledgment, configuration mismatch, and
+  exactly-once Scheduled Contact revision tests when changes are supported;
 - Transport Kind normalization, derivation, and progressive-form tests when the
   data plane changes;
 - runtime framing, reconnect, handoff, and snapshot tests for a new adapter;
@@ -228,14 +263,20 @@ documentation.
 Exercise the integration as an operator would:
 
 1. start the external provider or simulator independently;
-2. create a Mission Provider with an opaque credential reference;
-3. validate and synchronize capabilities, inventory, and profiles;
-4. create a provider-managed Transport from exact compatible profile versions;
-5. map spacecraft and create an enabled Routing Rule;
-6. search and reserve in **Ops → Contacts**;
-7. confirm Contact, pass, and delivery observations independently;
-8. verify bytes enter the normal runtime and telemetry pipeline;
-9. restart reconciliation and prove no duplicate Contact or Scheduled Contact.
+2. create an organization Provider Account with a stable secret reference and
+   validate it;
+3. grant the exact account version to the mission;
+4. create a Mission Provider from that grant, configure delivery policy, and
+   synchronize capabilities, inventory, and profiles;
+5. create a provider-managed Transport from exact compatible profile versions;
+6. map spacecraft and create an enabled Routing Rule;
+7. search and reserve in **Ops → Contacts**;
+8. confirm Contact, pass, delivery, and Cadence observations independently;
+9. ingest advisory events, describe authoritative state, and exercise one
+   approval or acknowledgment path;
+10. verify bytes enter the normal runtime and telemetry pipeline;
+11. restart ingestion/reconciliation and prove no duplicate provider mutation,
+    domain decision, Scheduled Contact, or Scheduled Contact revision.
 
 Run focused tests from the owning application, then run `mix precommit` from the
 umbrella root.
@@ -245,8 +286,18 @@ umbrella root.
 - Provider Client behavior implemented and explicitly registered
 - provider type and client mapping allow-listed
 - external evidence normalized and sanitized
-- credentials stored only as opaque references
+- Provider Account owns endpoint, environment, stable credential reference,
+  request policy, event ingestion, and organization guardrails
+- mission access uses an exact, narrowing Provider Account grant
+- Mission Provider owns mission mappings and delivery policy, not shared
+  endpoint/environment/credential setup
+- production credentials resolve through a reviewed backend; raw material is
+  never persisted, rendered, logged, audited, or returned as evidence
 - declared idempotency and recovery semantics covered
+- durable event cursor/inbox behavior and quarantine recovery covered when
+  events are supported
+- provider changes use revision/idempotency semantics and the shared
+  approval-versus-acknowledgment policy boundary
 - Contact requests contain references, not endpoint setup
 - provider-managed Transport derives exact, read-only protocol configuration
 - new Transport Kind added only for a genuinely new wire contract

@@ -217,8 +217,9 @@ defmodule Cadence.Contacts.ProviderReservations do
          :ok <- validate_document(response, :response_document),
          {:ok, reservation, initial_response?} <- observe_provider_revision(reservation, response),
          {:ok, lifecycle_state} <- normalized_lifecycle_state(response, reservation),
-         {:ok, observations} <- provider_observations(response, reservation),
-         snapshot = ProviderReservationChanges.snapshot(response, reservation) do
+         {:ok, observations} <- provider_observations(response, reservation) do
+      snapshot = ProviderReservationChanges.snapshot(response, reservation)
+
       transition(reservation, lifecycle_state, %{
         provider_contact_ref: provider_contact_ref(response, reservation),
         provider_revision: snapshot["provider_revision"],

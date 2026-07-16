@@ -1,14 +1,16 @@
 # Simulator Provider Contract v1
 
-- Status: accepted for Stage 2 implementation
+- Status: implemented through Stage 3
 - Created: 2026-07-13
 - Scope: Define the external HTTP contract presented by the Cadence Ground
   Network Simulator and the normalized semantics consumed by Cadence provider
   adapters.
 - Parent design:
   [Contact Scheduling and External Ground Network Simulation](2026-07-12-contact-scheduling-and-ground-network-simulation-design.md)
-- Implementation plan:
+- Implementation plans:
   [Stage 2 Provider and Delivery Contract](../plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md)
+  and
+  [Stage 3 Durable Integration Semantics](../plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md)
 
 ## Summary
 
@@ -134,6 +136,8 @@ Initial resources are:
 | `POST` | `/admin/v1/runs/:id/pause` | Pause lifecycle advancement |
 | `POST` | `/admin/v1/runs/:id/resume` | Resume lifecycle advancement |
 | `POST` | `/admin/v1/runs/:id/stop` | Stop a run |
+| `PATCH` | `/admin/v1/runs/:id/fault-profile` | Change bounded run-scoped provider and event faults |
+| `POST` | `/admin/v1/runs/:id/contacts/:contact_id/changes` | Initiate a provider-side Contact change |
 
 Creating a run returns a `provider_environment_ref`. Cadence stores that
 reference as simulator-specific Provider Account configuration. It is not part
@@ -176,10 +180,19 @@ for `/admin/v1` and `/provider/v1`.
 Every request accepts `X-Request-ID`. The simulator returns it in response
 metadata and includes it in provider events caused by that request.
 
-Cadence stores credential references, not raw credentials, in durable provider
-configuration. The local adapter may resolve an environment-backed credential
-reference for development. Secrets are never returned in API evidence,
-delivery descriptors, diagnostics, events, or logs.
+Cadence stores a stable credential-registry reference, not raw credentials, on
+the organization-owned Provider Account. The account also owns base URL,
+environment selection, event configuration, request policy, and organization
+guardrails. Exact versioned grants authorize missions; Mission Providers own
+mission mappings and delivery policy but do not copy account endpoint,
+environment, or credential fields.
+
+The local adapter may resolve an environment-backed credential only when local
+credentials are explicitly enabled. Production accounts use a reviewed secret
+backend. Secrets are never returned in API evidence, delivery descriptors,
+diagnostics, events, logs, or provider audit entries. Credential rotation keeps
+the stable registry reference, while revocation blocks new provider operations
+without deleting historical Contacts or evidence.
 
 ## Envelopes
 
@@ -504,6 +517,15 @@ Requested, provider-confirmed, and Cadence-accepted snapshots remain distinct;
 receiving a higher provider revision does not itself authorize an execution
 change.
 
+Cadence evaluates each higher revision with the exact snapshotted mission
+delivery-policy version. A bounded match may be accepted automatically. A future
+material proposal requires a current authorized approval or rejection with a
+reason. A provider fact already in effect requires acknowledgment and
+contingency, because rejection cannot reverse provider reality. Protocol,
+endpoint, framing, credential, spacecraft, direction, Service Profile, or
+Delivery Profile drift is a non-approvable configuration failure. Every
+accepted execution change appends exactly one Scheduled Contact revision.
+
 ### Contact lifecycle
 
 Normalized contact status is:
@@ -638,6 +660,17 @@ Event objects always contain string-keyed JSON data. Any LiveView or UI that
 streams them must normalize them to a struct or configure the stream DOM ID;
 wire maps are not UI models.
 
+Cadence owns one durable inbox and cursor per exact Provider Account version,
+environment, channel, and stream. A database lease makes workers restart-safe.
+The polling cursor advances in the same transaction that durably inserts,
+deduplicates, or quarantines the whole page. Duplicate ID and identical hash
+converges; duplicate ID and different hash creates immutable collision evidence
+and quarantine. Unknown or poison events are quarantined without blocking later
+pages. An organization-authorized reprocess request is itself audited and
+converges through provider revision and change identity. Events remain advisory:
+authoritative describe and the ordinary safety poller repair missing, delayed,
+or reordered delivery.
+
 ## Errors
 
 Error responses use:
@@ -697,10 +730,20 @@ rate limiting
 request latency and provider outage
 response loss before or after mutation commit
 event duplication, delay, and omission
+event reordering and identity collision
 cancellation cutoff and ambiguity
 contact phase support
 delivery readiness, degradation, partial delivery, and failure
 ```
+
+The run-scoped fault profile exposes scheduling rejection, acquisition failure,
+early termination, packet loss, response loss after Contact create or modify,
+provider outage, network latency/jitter, and bounded event omission,
+duplication, delayed polls, reordering, and identity collision. Administrator
+Contact-change controls cover timing shift, antenna or station substitution,
+capacity reduction, expiring counteroffer, cancellation, and deliberate
+delivery endpoint/framing mismatch. Cadence never calls these administrator
+controls.
 
 Named built-in profiles describe behaviors rather than vendors:
 
@@ -719,6 +762,8 @@ vendor wire contract.
   profile.
 - Provider environment selection is authorized by the provider credential.
 - Returned evidence is bounded and sanitized before Cadence persists it.
+- Provider evidence is integrity-hashed and provider audit entries are
+  append-only; inbox processing state remains a separate mutable queue record.
 - Raw delivery credentials never appear in provider evidence.
 - Diagnostics may include endpoint addresses, ports, regions, profile IDs,
   protocol, framing, encryption mode, and health, but never secret material.
@@ -750,7 +795,8 @@ two applications and their tests change in one bounded implementation stage.
 
 - General runtime plugin loading
 - AWS or Leaf wire-protocol emulation
-- A full organization-wide Provider Account product in this contract
+- Provider Account CRUD wire endpoints on the simulator (accounts are Cadence
+  integration configuration, not simulator resources)
 - High-rate data delivery through JSON or the event feed
 - Uplink and bidirectional execution in the first v1 implementation
 - UDP, MQTT, and object-delivery runtime implementations before the
@@ -771,6 +817,11 @@ The simulator provider contract suite must cover:
 - contact and pass-phase transitions;
 - independent delivery transitions;
 - event duplication and polling repair;
+- durable cursor restart, ordering, omission, delay, identity collision,
+  quarantine, and authorized reprocessing;
+- provider and operator Contact modification revision/idempotency behavior;
+- bounded automatic acceptance, material approval, already-effective
+  acknowledgment, configuration failure, and exactly-once schedule revision;
 - cancellation cutoff and uncertainty;
 - result evidence;
 - restart recovery from durable simulator state;
@@ -793,6 +844,12 @@ CCSDS telemetry through the ordinary contact-time transport.
 - Provider idempotency support is a declared capability rather than an assumed
   universal feature.
 - Polling can repair missing or duplicated advisory events.
+- Cursor advancement, inbox durability, quarantine, and audit evidence survive
+  restart and converge idempotently.
+- Provider Account, exact mission grant, Mission Provider, delivery policy,
+  Transport, and profile versions are snapshotted for reservation decisions.
+- Future material proposals use approval; already-effective facts use
+  acknowledgment; configuration/security drift is never approvable.
 - Ordinary Cadence users see provider service and delivery summaries.
 - Administrators can inspect protocol and endpoint diagnostics without seeing
   secrets.

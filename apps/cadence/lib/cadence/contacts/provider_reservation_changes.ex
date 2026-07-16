@@ -176,44 +176,94 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
     %{
       "provider_contact_ref" =>
-        response["provider_contact_ref"] || response["id"] ||
-          previous["provider_contact_ref"] || reservation.provider_contact_ref,
+        first_truthy([
+          response["provider_contact_ref"],
+          response["id"],
+          previous["provider_contact_ref"],
+          reservation.provider_contact_ref
+        ]),
       "provider_revision" =>
-        response["provider_revision"] || response["revision"] || reservation.provider_revision,
+        first_truthy([
+          response["provider_revision"],
+          response["revision"],
+          reservation.provider_revision
+        ]),
       "client_reference" =>
-        response["client_reference"] || previous["client_reference"] ||
-          reservation.idempotency_key,
+        snapshot_value(response, previous, "client_reference", reservation.idempotency_key),
       "opportunity_ref" =>
-        response["opportunity_ref"] || previous["opportunity_ref"] ||
-          reservation.provider_opportunity_ref,
+        snapshot_value(
+          response,
+          previous,
+          "opportunity_ref",
+          reservation.provider_opportunity_ref
+        ),
       "spacecraft_ref" =>
-        response["spacecraft_ref"] || previous["spacecraft_ref"] ||
-          reservation.provider_spacecraft_ref,
+        snapshot_value(
+          response,
+          previous,
+          "spacecraft_ref",
+          reservation.provider_spacecraft_ref
+        ),
       "ground_station_ref" => present(response, previous, "ground_station_ref"),
       "antenna_or_service_pool_ref" => present(response, previous, "antenna_or_service_pool_ref"),
       "service_profile_ref" =>
-        response["service_profile_ref"] || previous["service_profile_ref"] ||
-          reservation.service_profile_ref["id"],
+        snapshot_value(
+          response,
+          previous,
+          "service_profile_ref",
+          reservation.service_profile_ref["id"]
+        ),
       "delivery_profile_ref" =>
-        response["delivery_profile_ref"] || previous["delivery_profile_ref"] ||
-          reservation.delivery_profile_ref["id"],
+        snapshot_value(
+          response,
+          previous,
+          "delivery_profile_ref",
+          reservation.delivery_profile_ref["id"]
+        ),
       "starts_at" =>
-        response["starts_at"] || previous["starts_at"] ||
-          DateTime.to_iso8601(reservation.starts_at),
+        snapshot_value(
+          response,
+          previous,
+          "starts_at",
+          DateTime.to_iso8601(reservation.starts_at)
+        ),
       "ends_at" =>
-        response["ends_at"] || previous["ends_at"] || DateTime.to_iso8601(reservation.ends_at),
+        snapshot_value(
+          response,
+          previous,
+          "ends_at",
+          DateTime.to_iso8601(reservation.ends_at)
+        ),
       "status" =>
-        response["status"] || previous["status"] || Atom.to_string(reservation.lifecycle_state),
+        snapshot_value(
+          response,
+          previous,
+          "status",
+          Atom.to_string(reservation.lifecycle_state)
+        ),
       "pass_phase" =>
-        response["pass_phase"] || previous["pass_phase"] || Atom.to_string(reservation.pass_phase),
+        snapshot_value(
+          response,
+          previous,
+          "pass_phase",
+          Atom.to_string(reservation.pass_phase)
+        ),
       "delivery_state" =>
-        response["delivery_state"] || previous["delivery_state"] ||
-          Atom.to_string(reservation.delivery_state),
+        snapshot_value(
+          response,
+          previous,
+          "delivery_state",
+          Atom.to_string(reservation.delivery_state)
+        ),
       "delivery_descriptor" =>
-        response["delivery_descriptor"] || previous["delivery_descriptor"] ||
-          reservation.delivery_descriptor_document,
+        snapshot_value(
+          response,
+          previous,
+          "delivery_descriptor",
+          reservation.delivery_descriptor_document
+        ),
       "status_reason" => present(response, previous, "status_reason"),
-      "extensions" => response["extensions"] || previous["extensions"] || %{}
+      "extensions" => snapshot_value(response, previous, "extensions", %{})
     }
     |> Map.take(@snapshot_fields)
     |> JsonDocument.encode()
@@ -309,26 +359,9 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
             |> ProviderReservationChangeRow.changeset()
             |> Repo.insert!()
 
-          transition_attrs = %{
-            provider_revision: change.provider_revision,
-            provider_confirmed_snapshot_document:
-              JsonDocument.wrap_value(change.after_snapshot_document)
-          }
-
-          transition_attrs =
-            if change.lifecycle_state in [:observed, :acknowledgment_required] do
-              Map.put(
-                transition_attrs,
-                :cadence_accepted_snapshot_document,
-                JsonDocument.wrap_value(change.after_snapshot_document)
-              )
-            else
-              transition_attrs
-            end
-
           updated =
             row
-            |> ProviderReservationRow.transition_changeset(transition_attrs)
+            |> ProviderReservationRow.transition_changeset(reservation_transition_attrs(change))
             |> Repo.update!()
 
           {persisted, updated}
@@ -360,6 +393,24 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   end
 
   defp maybe_apply_policy(change, reservation, _opts), do: {:ok, change, reservation}
+
+  defp reservation_transition_attrs(change) do
+    attrs = %{
+      provider_revision: change.provider_revision,
+      provider_confirmed_snapshot_document:
+        JsonDocument.wrap_value(change.after_snapshot_document)
+    }
+
+    if change.lifecycle_state in [:observed, :acknowledgment_required] do
+      Map.put(
+        attrs,
+        :cadence_accepted_snapshot_document,
+        JsonDocument.wrap_value(change.after_snapshot_document)
+      )
+    else
+      attrs
+    end
+  end
 
   defp lock_change(organization_id, change_id) do
     ProviderReservationChangeRow
@@ -669,6 +720,12 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   defp present(response, previous, key) do
     if Map.has_key?(response, key), do: response[key], else: previous[key]
   end
+
+  defp snapshot_value(response, previous, key, fallback) do
+    first_truthy([response[key], previous[key], fallback])
+  end
+
+  defp first_truthy(values), do: Enum.find(values, & &1)
 
   defp datetime(value, field) do
     case DateTime.from_iso8601(value || "") do

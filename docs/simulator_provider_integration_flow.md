@@ -4,13 +4,13 @@ The ground-network simulator is an external provider peer. It does not bootstrap
 or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
-> This walkthrough describes the implemented Simulator Provider Contract v1 and
-> normalized Cadence Provider Client, persisted Mission Provider setup, and
-> provider-managed Transport persistence. Scheduling now binds exact Provider,
-> Transport, Service Profile, and Delivery Profile versions. The separate-app
-> proof validates provider inventory over HTTP, streams normal CCSDS TM over TCP,
-> and recovers a lost post-commit response by client reference as described in the
-> [Stage 2 implementation plan](superpowers/plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
+> This walkthrough describes the implemented Stage 3 flow: organization-owned
+> Provider Account and credentials, exact mission grant, mission delivery
+> policy, durable provider events and changes, provider-managed Transport, and
+> normal TCP/CCSDS delivery. The separate-app proof crosses those same HTTP and
+> TCP boundaries and exercises restart, fault, approval, acknowledgment,
+> configuration-failure, and ambiguous-outcome recovery as described in the
+> [Stage 3 implementation plan](superpowers/plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md).
 
 ## 1. Start the simulator
 
@@ -34,15 +34,42 @@ administration is simulator surface area, not Cadence surface area.
 
 Start Cadence independently on its normal web/API port. Configure only the
 provider credential backend that resolves the reference entered below; Cadence
-does not consume the simulator's scenario or administration configuration.
+does not consume the simulator's scenario or administration configuration. For
+the local environment backend, export the provider token into the Cadence
+process. Production Provider Accounts use the configured external secret
+manager instead.
 
-## 3. Configure the mission provider
+## 3. Register and grant the Provider Account
 
-Open **Comms → Providers → New Provider**. Select `Ground Network Simulator`,
-then enter the simulator provider API URL, an opaque credential reference, and
-the run's `provider_environment_ref`. Use **Validate** to check access and
-**Sync Inventory** to load the simulator's spacecraft, station, Service Profile,
-and Delivery Profile summaries.
+As an organization administrator, open **Provider Accounts → Register Account**.
+Select `Ground Network Simulator` and enter:
+
+- base URL `http://127.0.0.1:4101`;
+- region `local` and the run's `provider_environment_ref` as the environment;
+- event ingestion mode `Polling`;
+- **Local environment** secret backend with
+  `SIMULATOR_PROVIDER_TOKEN` as its backend key;
+- the organization-wide service, direction, station, delivery-kind, and quota
+  guardrails appropriate for the demo.
+
+Cadence stores only a stable registry reference and the environment-variable
+name. The local backend is enabled by `config/dev.exs`; production must use an
+approved external secret manager over HTTPS. On the new account detail, select
+**Validate**, then grant the exact account version to the mission. Mission grant
+restrictions can narrow but never widen the account guardrails.
+
+## 4. Configure the Mission Provider
+
+Open **Comms → Providers → New Provider**. Select the exact account grant. The
+form shows account/environment/credential status as inherited, read-only setup;
+it does not ask the mission to copy those fields. Configure permitted resources
+and the mission delivery policy, then create and validate the Mission Provider.
+Use **Sync Inventory** to load the simulator's spacecraft, station, Service
+Profile, and Delivery Profile summaries.
+
+Use **Require approval** for the safest default. Use **Bounded automatic** only
+after defining explicit shift, retained-duration, and approved-station
+tolerances. The mission policy cannot widen organization or grant guardrails.
 
 Provision the Cadence TCP destination once through
 `POST /provider/v1/delivery-profiles`, using the provider credential and the
@@ -53,7 +80,7 @@ The Provider UI deliberately contains no TCP mode, host, port, framing,
 reconnect, TLS, or raw-token fields. Those concerns belong to the Delivery
 Profile and Transport.
 
-## 4. Create the provider-managed Transport
+## 5. Create the provider-managed Transport
 
 Open **Comms → Transports → New Transport** and choose **Ground Station
 Provider** as the origin. Select the validated Mission Provider, a compatible
@@ -65,7 +92,7 @@ is available only under administrator diagnostics.
 Direct TCP remains available from the same form. Choosing **Direct** keeps the
 TCP endpoint, framing, reconnect, and TLS controls user-configurable.
 
-## 5. Configure spacecraft mappings and routes
+## 6. Configure spacecraft mappings and routes
 
 Create Cadence spacecraft/source endpoints whose provider references match the
 simulator spacecraft inventory. Create an enabled inbound Routing Rule that
@@ -77,7 +104,7 @@ Cadence owns its spacecraft identity and byte-interpretation catalog. The
 simulator owns its provider spacecraft inventory and telemetry generator
 definitions.
 
-## 6. Schedule and execute contacts
+## 7. Schedule, execute, and review contacts
 
 In the authenticated mission UI, open **Ops → Contacts**. Select a ready
 spacecraft route, choose a bounded UTC search window, search the provider, and
@@ -86,18 +113,21 @@ reserve one opportunity.
 Cadence then:
 
 1. resolves the spacecraft mapping, Routing Rule, exact provider-managed
-   Transport, Mission Provider, Service Profile, and Delivery Profile;
+   Transport, Provider Account, mission grant, Mission Provider, delivery
+   policy, Service Profile, and Delivery Profile;
 2. persists those exact bindings, a mission-owned `ProviderReservation`
    attempt, and its idempotency key before mutating the provider;
 3. reserves the selected opportunity without holding a database transaction
    across HTTP;
 4. durably polls uncertain or nonterminal reservations until the provider state
    converges;
-5. validates the returned delivery descriptor against approved Transport setup
+5. stores provider events before advancing the exact account cursor and uses
+   them as advisory triggers for authoritative Contact describe;
+6. validates the returned delivery descriptor against approved Transport setup
    and materializes exactly one canonical `ScheduledContact` when provider
    capacity is confirmed;
-6. realizes the contact through the existing scheduler;
-7. receives telemetry through the normal TCP provider and TM ingress runtime.
+7. realizes the contact through the existing scheduler;
+8. receives telemetry through the normal TCP provider and TM ingress runtime.
 
 The page displays Provider, Service, Delivery, Transport, Contact status, pass
 phase, and delivery status. A conflicting descriptor remains visible as a
@@ -105,6 +135,23 @@ durable provider/configuration failure and is never connected. Cancellation
 also crosses the provider boundary and is reconciled from the durable
 reservation record. No global simulator process, in-memory event cursor, or
 simulator administration client runs inside Cadence.
+
+Select a Contact row to open its detail page. The page separates requested,
+provider-confirmed, Cadence-accepted, and actual truth and shows Contact, pass,
+delivery, and Cadence lifecycle independently. A future material proposal needs
+a current organization-admin approval or rejection with a reason. A provider
+fact that is already effective needs acknowledgment and contingency work rather
+than a misleading reject action. Endpoint, framing, credential, spacecraft,
+direction, or profile drift is never approvable; it blocks execution until an
+administrator remediates versioned setup.
+
+The Provider Account detail reports durable cursor health, inbox backlog,
+quarantine count, last-event time, grants, credential state, and recent audit
+activity. Restarts resume from the persisted cursor and expired leases recover
+automatically. After correcting a poison payload or adapter/configuration defect,
+an organization-authorized recovery can requeue the exact quarantined inbox row
+through `Cadence.GroundNetworks.ProviderEventInbox.reprocess/3`. The retry and
+its convergent domain decision are append-only audit evidence.
 
 ## Manual two-BEAM smoke test
 
@@ -190,8 +237,8 @@ echo "$DELIVERY_PROFILE_ID"
 
 Start Cadence as the second BEAM from the repository root in terminal C. The
 credential reference configured in Cadence below resolves the provider token
-from this process environment; the token is never persisted in the Mission
-Provider record:
+from this process environment; the token is never persisted in the Provider
+Account, Mission Provider, reservation, diagnostics, event, or audit record:
 
 ```bash
 export SIMULATOR_PROVIDER_TOKEN=local-simulator-provider-token
@@ -200,20 +247,24 @@ mix phx.server
 
 In the authenticated mission UI:
 
-1. Open **Comms → Providers → New Provider** and select **Ground Network
-   Simulator**. Set the base URL to `http://127.0.0.1:4101`, the credential
-   reference to `env://SIMULATOR_PROVIDER_TOKEN`, and the provider environment
-   to the printed `$RUN_ID`.
-2. On the Provider detail page, select **Validate**, then **Sync Inventory**.
+1. As an organization administrator, open **Provider Accounts → Register
+   Account** and select **Ground Network Simulator**. Set the base URL to
+   `http://127.0.0.1:4101`, the environment to the printed `$RUN_ID`, event mode
+   to **Polling**, and secret backend to **Local environment** with backend key
+   `SIMULATOR_PROVIDER_TOKEN`. Validate the account.
+2. On the Provider Account detail, grant the account to the mission.
+3. Open **Comms → Providers → New Provider**, select the exact grant, configure
+   the mission delivery policy, and create the Mission Provider. Select
+   **Validate**, then **Sync Inventory**.
    The synchronized inventory must include the Delivery Profile printed above.
-3. Open **Comms → Transports → New Transport**, choose **Ground Station
+4. Open **Comms → Transports → New Transport**, choose **Ground Station
    Provider**, and select the exact Provider, active Service Profile, and ready
    Delivery Profile. Verify that the derived TCP host, port, and CCSDS framing
    are read-only.
-4. Create or select the Cadence spacecraft, map its source endpoint to provider
+5. Create or select the Cadence spacecraft, map its source endpoint to provider
    spacecraft `SC-001`, and create an enabled inbound Routing Rule selecting the
    new Transport.
-5. Open **Ops → Contacts**, choose the ready route, search a future UTC window,
+6. Open **Ops → Contacts**, choose the ready route, search a future UTC window,
    and reserve an opportunity.
 
 The reservation request contains opportunity, spacecraft, Service Profile,
@@ -223,6 +274,15 @@ pass phase, and delivery status advance independently, while telemetry arrives
 through the ordinary TCP/TM ingress path. Exact references and the sanitized
 immutable descriptor are available in administrator diagnostics; secrets are
 not.
+
+To exercise failure handling without changing Cadence, use the simulator admin
+API. `PATCH /admin/v1/runs/:id/fault-profile` can configure provider outage,
+rejection/acquisition/early-termination rates, post-commit response loss,
+network loss/latency/jitter, and bounded event omission, duplication, delay,
+reordering, or identity collision. `POST
+/admin/v1/runs/:id/contacts/:contact_id/changes` can initiate timing, antenna,
+station, capacity, counteroffer, cancellation, or delivery-configuration drift.
+Cadence never calls either endpoint.
 
 See [Ground Network Simulator](ground-network-simulator.md) for API and scenario
 details.

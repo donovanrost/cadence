@@ -1,6 +1,6 @@
 # Stage 3 Durable Integration Semantics Implementation Plan
 
-**Status:** in progress
+**Status:** complete
 
 **Progress (2026-07-15):** Tasks 1 through 5 are complete. Provider events now
 normalize into bounded, sanitized `ProviderEvent` structs, Provider Contacts
@@ -82,8 +82,25 @@ modification recovery without replay. Those proofs found and fixed active-grant
 success-shape handling during schedule revision application and preservation of
 the fail-closed reservation returned by reconciliation. Task 9 focused coverage
 passes with 26 LiveView tests, 8 separate-app integration tests, and 3
-consolidated core boundary tests. Task 10 documentation, migration audit, and
-final gates are next.
+consolidated core boundary tests. Task 10 updates the simulator operator flow,
+provider-adapter guide, provider contract, and parent design to the implemented
+Provider Account/grant/policy/event/change/audit ownership model. Registered
+environment credentials now honor the explicitly enabled local-provider policy,
+while production remains external-backend-first. The checked-in migration audit
+creates a clean database and a populated Stage 2 fixture database with multiple
+historical Provider versions, then proves exact account, grant, delivery-policy,
+reservation-truth, and Scheduled Contact revision backfills before dropping both
+databases. Final-gate cleanup preserves unscoped legacy Scheduled Contact
+persistence without fabricating organization-scoped revision evidence and
+prevents Req from automatically retrying provider writes after ambiguous commit;
+read requests retain safe transient retries. Final focused coverage passes with
+142 core tests, 33 LiveView tests (excluding `:browser` and `:browser_smoke`), and
+35 simulator/provider/integration/scale tests. The migration audit passes both
+paths. Root `mix precommit` passes with 1,417 Cadence, 11 CCSDS, 101 simulator,
+and 1,619 web tests: 3,148 passed total, with 93 web tests tagged `:browser` or
+`:browser_smoke` explicitly excluded. In-app browser automation was unavailable
+because the browser sandbox policy metadata could not initialize, so no manual
+browser verification is claimed.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and
@@ -821,6 +838,12 @@ Audit migrations using both a clean database and a Stage 2-shaped fixture
 database. Prove every historical Mission Provider, Provider Reservation, and
 Scheduled Contact resolves through exact backfilled account, grant, policy, and
 schedule revision references.
+
+The reproducible audit is:
+
+```bash
+./scripts/audit-stage-3-provider-migrations.sh
+```
 
 Run all focused suites from their owning applications, then run from the
 umbrella root:

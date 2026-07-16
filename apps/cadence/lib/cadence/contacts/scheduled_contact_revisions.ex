@@ -8,8 +8,14 @@ defmodule Cadence.Contacts.ScheduledContactRevisions do
   alias Cadence.Repo
 
   @spec ensure_initial(Ecto.Repo.t(), ScheduledContact.t()) ::
-          {:ok, ScheduledContactRevision.t()} | {:error, term()}
-  def ensure_initial(repo \\ Repo, %ScheduledContact{} = contact) do
+          {:ok, ScheduledContactRevision.t() | nil} | {:error, term()}
+  def ensure_initial(repo \\ Repo, contact)
+
+  def ensure_initial(_repo, %ScheduledContact{organization_id: organization_id})
+      when organization_id in [nil, ""],
+      do: {:ok, nil}
+
+  def ensure_initial(repo, %ScheduledContact{} = contact) do
     revision =
       ScheduledContactRevision.new(%{
         organization_id: contact.organization_id,

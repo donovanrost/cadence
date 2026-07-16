@@ -124,18 +124,35 @@ design:
   API with separate administrator and provider namespaces and credentials.
 - Cadence has a provider-client behaviour, normalized simulator HTTP client,
   durable booking saga, and supervised status reconciler.
-- Versioned Mission Providers own provider control-plane setup, opaque credential
-  references, validated capabilities, and bounded synchronized inventory.
+- Organization-owned, versioned Provider Accounts own provider identity,
+  endpoint, environment, stable credential reference, event ingestion, request
+  policy, guardrails, and health. Credentials resolve through capability-based
+  local or external secret backends and raw material never becomes provider
+  evidence.
+- Exact versioned mission grants authorize account use. Mission Providers bind
+  that account/grant pair and own mission spacecraft mappings, resource/profile
+  selections, bounded synchronized inventory, validated capabilities, and
+  delivery policy without copying endpoint, environment, or credential fields.
 - Versioned Transports distinguish direct and provider-managed origin. A
   provider-managed Transport binds exact Provider, Service Profile, and Delivery
   Profile versions and derives read-only runtime protocol configuration.
 - Provider Reservation is first-class, mission-scoped integration state with
-  durable idempotency, exact Routing Rule/Transport/Provider/profile versions,
+  durable idempotency, exact account/grant/Provider/policy/Transport/profile
+  versions, separate requested/provider-confirmed/Cadence-accepted truth,
   immutable delivery-descriptor evidence, ambiguous-outcome recovery, and
   idempotent Scheduled Contact materialization.
+- Durable account-level event cursors and inbox processing survive restart,
+  quarantine poison/colliding events, and use authoritative describe plus the
+  existing safety poller to repair advisory event delivery.
+- Provider revisions are classified by exact mission delivery policy. Bounded
+  changes can be accepted automatically, future material proposals require
+  approval, already-effective facts require acknowledgment, and configuration
+  drift fails closed. Accepted changes append immutable Scheduled Contact
+  revisions and every decision appends secret-free audit evidence.
 - **Ops → Contacts** provides readiness, provider opportunity search,
-  reservation, cancellation, and separate Contact, pass, delivery, and Cadence
-  lifecycle state inside the authenticated mission Ops surface.
+  reservation, cancellation, change review, and separate Contact, pass,
+  delivery, and Cadence lifecycle state inside the authenticated mission Ops
+  surface.
 - The existing contact scheduler realizes canonical scheduled contacts into
   path-local runtime.
 - The end-to-end boundary proof reserves over simulator HTTP and receives
@@ -145,11 +162,11 @@ design:
 - CCSDS framing, segmentation, reassembly, and COP-1 primitives live in the
   shared `cadence_ccsds` application.
 
-This completes Stages 1 and 2, not the full contact-planning product. Contact
-Requirements, versioned Contact Plans, organization-owned Provider Accounts,
-durable event cursors or webhooks, provider-fleet reconciliation, and automated
-multi-spacecraft planning remain target state. The internal Provider Profile
-continues only as runtime compatibility evidence and is not product identity.
+This completes Stages 1 through 3, not the full contact-planning product.
+Contact Requirements, versioned Contact Plans, provider-fleet reconciliation,
+authenticated commercial webhooks, and automated multi-spacecraft planning
+remain target state. The internal Provider Profile continues only as runtime
+compatibility evidence and is not product identity.
 
 ## Stage 1 Decisions
 
@@ -188,8 +205,8 @@ The repo-grounded task sequence is defined in the
 | Term | Meaning | Current implementation relationship |
 | --- | --- | --- |
 | Provider Type | One integration implementation and capability family, such as simulator HTTP, AWS Ground Station, or KSAT. | `ProviderClient` implementation and registry entry. |
-| Provider Account | Organization-owned credentials, endpoint, commercial account, and connection policy. | Target state; current setup remains mission-scoped with opaque credential references. |
-| Mission Provider | A mission's enabled provider control plane, including API/environment references, validated capabilities, and synchronized inventory. | Versioned `Cadence.GroundNetworks.MissionProvider`; primary Provider product object. |
+| Provider Account | Organization-owned identity, endpoint, environment, stable credential reference, ingestion/request policy, guardrails, and health. | Versioned `Cadence.GroundNetworks.ProviderAccount`; organization-admin product object with explicit mission grants. |
+| Mission Provider | A mission's exact granted Provider Account binding, spacecraft/resource mappings, enabled profiles, and delivery policy. | Versioned `Cadence.GroundNetworks.MissionProvider`; mission-scoped Provider setup without shared endpoint/environment/credential ownership. |
 | Transport | Durable capability for moving bytes. It may be provider-backed but does not itself mean a contact is booked. | Versioned `Cadence.Comms.Transport` with explicit `direct` or `provider_managed` origin. |
 | Contact Requirement | A statement of needed service, constraints, priority, and acceptable delivery outcomes. | New target-state concept. |
 | Opportunity | A time-limited provider proposal for specific resources and service. | Returned by provider opportunity search; not canonical mission state. |
@@ -244,13 +261,18 @@ A Provider Account logically contains:
 - health and credential-validation status
 - provider-specific configuration that does not belong to one mission
 
-The ideal ownership is organization scope with explicit mission grants. The
-first implementation may remain mission-scoped, but APIs should not assume that
-credentials can never be shared across missions.
+Ownership is organization scope with explicit, versioned mission grants. Grant
+restrictions may narrow but never widen account guardrails. Every provider
+reservation snapshots the exact account and grant versions before provider
+mutation.
 
 Raw credentials must not be stored in ordinary provider configuration maps,
 rendered in LiveView assigns, returned by read APIs, or written to logs. Provider
-configuration should store secret references.
+configuration stores stable secret references. Production material resolves
+ephemerally through a reviewed backend; local environment resolution is
+explicitly enabled only in local/test configuration. Rotation does not recreate
+Mission Providers or Transports, and revocation blocks new operations while
+preserving history.
 
 ### Mission Provider
 
@@ -946,16 +968,24 @@ See the
 
 ### Stage 3: Durable integration semantics
 
-Status: accepted for implementation. See the
+Status: implemented. See the
 [Stage 3 durable integration semantics design](2026-07-15-contact-scheduling-stage-3-durable-integration-semantics-design.md)
 and
 [implementation plan](../plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md).
 
-- durable event cursors or webhook ingestion where provider capabilities justify
-  moving beyond status polling
-- production secret-store integration and organization-owned Provider Accounts
-- reservation modification and provider-initiated change handling
-- complete audit evidence
+- organization-owned Provider Accounts, exact narrowing mission grants, stable
+  credential registry, and HTTPS-by-default external secret backend
+- durable leased polling cursors, inbox, duplicate/collision handling,
+  quarantine/reprocessing, and retained safety polling; authenticated webhooks
+  remain capability-gated for a commercial provider
+- mission delivery policy, reservation modification, provider-initiated changes,
+  approval versus acknowledgment, and append-only Scheduled Contact revisions
+- complete bounded, sanitized provider evidence and append-only audit evidence
+
+The separate-app proof exercises the full account/grant/policy chain, durable
+event recovery, provider changes and faults, credential rotation, ambiguous
+mutation recovery, and ordinary TCP/CCSDS telemetry without Cadence calling the
+simulator administration API.
 
 ### Stage 4: Requirements and planning
 

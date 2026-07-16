@@ -27,10 +27,10 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ProviderAudit,
     ProviderContact,
     ProviderCredentials,
+    ProviderError,
     ProviderEventInbox,
     ProviderEventPoller,
-    ProviderEventProcessor,
-    ProviderError
+    ProviderEventProcessor
   }
 
   alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}

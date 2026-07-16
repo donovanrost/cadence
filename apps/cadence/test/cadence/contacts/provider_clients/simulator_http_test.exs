@@ -131,6 +131,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
 
     assert_received {:request, opts}
     assert opts[:method] == :patch
+    assert opts[:retry] == false
     assert opts[:url] == "http://simulator.test/provider/v1/contacts/contact-123"
     assert opts[:json] == attrs
     assert {"idempotency-key", "change-123"} in opts[:headers]
@@ -273,6 +274,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
              SimulatorHTTP.events(context(), "122", call_opts(req_request))
 
     assert_received {:request, opts}
+    assert opts[:retry] == :safe_transient
     assert opts[:params] == %{"cursor" => "122"}
   end
 

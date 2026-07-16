@@ -262,7 +262,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
         url: String.trim_trailing(base_url, "/") <> path,
         headers: request_headers(environment_ref, credential, opts),
         receive_timeout: Keyword.get(opts, :receive_timeout, @default_receive_timeout),
-        retry: :safe_transient
+        retry: retry_policy(method)
       ]
 
       request_opts =
@@ -320,6 +320,9 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
 
   defp require_context(_value, field),
     do: {:error, ProviderError.invalid("provider context is missing #{field}")}
+
+  defp retry_policy(:get), do: :safe_transient
+  defp retry_policy(_write), do: false
 
   defp normalize({:ok, value}), do: {:ok, value}
   defp normalize({:error, reason}), do: {:error, ProviderError.malformed(reason)}

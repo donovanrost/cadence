@@ -128,6 +128,17 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
   end
 
   test "enforces Provider Account scope and local-only environment policy" do
+    previous_local_credentials = Application.get_env(:cadence, :provider_local_credentials)
+    Application.put_env(:cadence, :provider_local_credentials, enabled: false)
+
+    on_exit(fn ->
+      restore_application_env(
+        :cadence,
+        :provider_local_credentials,
+        previous_local_credentials
+      )
+    end)
+
     assert {:ok, credential} =
              ProviderCredentials.create(
                @organization_id,
@@ -169,12 +180,13 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
                now: @now
              )
 
+    Application.put_env(:cadence, :provider_local_credentials, enabled: true)
+
     assert {:ok, resolved} =
              ProviderCredentials.resolve(
                @organization_id,
                @account_id,
                credential.provider_credential_ref,
-               allow_env_secret_backend?: true,
                env_reader: fn "CADENCE_PROVIDER_ACCOUNT_TOKEN" -> "local-provider-secret" end,
                now: @now
              )
@@ -188,7 +200,6 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
                @account_id,
                credential.provider_credential_ref,
                manage_backend?: true,
-               allow_env_secret_backend?: true,
                now: @now
              )
   end
@@ -228,4 +239,10 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
       now: @now
     ]
   end
+
+  defp restore_application_env(application, key, nil),
+    do: Application.delete_env(application, key)
+
+  defp restore_application_env(application, key, value),
+    do: Application.put_env(application, key, value)
 end

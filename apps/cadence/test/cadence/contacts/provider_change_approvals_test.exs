@@ -19,11 +19,11 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
   }
 
   alias Cadence.Persistence.Schemas.{
-    ProviderReservationChangeRow,
-    ProviderReservationRow,
     ProviderAccountGrantRow,
     ProviderAccountRow,
     ProviderAccountVersionRow,
+    ProviderReservationChangeRow,
+    ProviderReservationRow,
     ScheduledContactRow
   }
 
