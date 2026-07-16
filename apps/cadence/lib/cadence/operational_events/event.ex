@@ -93,7 +93,8 @@ defmodule Cadence.OperationalEvents.Event do
     :transport_action_request,
     :transport_timer_event,
     :scheduled_contact,
-    :realized_contact
+    :realized_contact,
+    :provider_audit_entry
   ]
 
   @type category ::
@@ -156,6 +157,7 @@ defmodule Cadence.OperationalEvents.Event do
           | :transport_timer_event
           | :scheduled_contact
           | :realized_contact
+          | :provider_audit_entry
 
   @type actor :: %{
           optional(:kind) => actor_kind(),

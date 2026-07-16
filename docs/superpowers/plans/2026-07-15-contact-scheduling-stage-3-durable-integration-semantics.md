@@ -2,18 +2,18 @@
 
 **Status:** in progress
 
-**Progress (2026-07-15):** Task 1 is complete. Provider events now normalize
-into bounded, sanitized `ProviderEvent` structs without atomizing external event
-types. Provider Contacts carry monotonic provider revisions and produce
-normalized authoritative snapshots and deterministic changes. The Provider
-Client and Simulator HTTP adapter expose capability-gated, revision-aware,
-idempotent Contact modification. The separate simulator implements `PATCH
-/provider/v1/contacts/:id`, rejects setup-owned fields, preserves durable
-modification history, and emits revision-bearing `contact.modified` events.
-Contract fixtures cover modified Contacts, counteroffers, and event identity
-collisions. Root `mix precommit` passes with 3,036 tests passed and 93
-browser-tagged tests excluded. Task 2, provider evidence and the append-only
-audit ledger, is next.
+**Progress (2026-07-15):** Tasks 1 and 2 are complete. Provider events now
+normalize into bounded, sanitized `ProviderEvent` structs, Provider Contacts
+carry monotonic revisions, and the separate simulator exposes revision-aware,
+idempotent Contact modification with contract fixtures. Provider evidence is
+now recursively sanitized, deterministically content-addressed, bounded, and
+deduplicated per organization and Provider Account, with credential-free
+external object references supported. The append-only provider audit ledger
+supports organization-only and optional mission scope, exact domain and
+causality references, bounded decision evidence, transaction composition via
+`Ecto.Multi`, and idempotent mission operational-event projections. Root `mix
+precommit` passes with 3,045 tests passed and 93 browser-tagged tests excluded.
+Task 3, shared secret resolution and provider credential lifecycle, is next.
 
 **Goal:** Promote Stage 2 mission Provider setup into an organization-owned,
 secret-safe integration model; ingest provider events durably; classify and
