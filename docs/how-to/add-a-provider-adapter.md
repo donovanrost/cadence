@@ -1,221 +1,256 @@
 ---
-title: Add a Provider Adapter
-tags: [how-to, developer, runtime, provider, ingress]
+title: Add a Ground Network Provider Integration
+tags: [how-to, developer, provider, transport, ingress]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-15
 ---
 
-# Add a Provider Adapter
+# Add a Ground Network Provider Integration
 
-This guide describes how to add a new path-local provider adapter to Cadence.
+Cadence deliberately has no general plugin loader. Provider integrations are
+first-party modules selected through explicit, allow-listed registries. This
+keeps provider evidence, credential handling, and runtime configuration inside
+reviewed application code while commercial integrations teach us what a future
+packaging model actually needs.
 
-Use this guide when you need to integrate a new external transport boundary,
-such as a WebSocket session, a vendor SDK, or another socket-based link.
+A provider integration can touch three independent layers:
 
-The provider boundary is intentionally narrow:
+| Layer | Responsibility | Main behavior |
+| --- | --- | --- |
+| Provider Client | Vendor control plane: capabilities, inventory, profiles, opportunities, Contacts, and recovery | `Cadence.Contacts.ProviderClient` |
+| Transport Kind | Durable mission setup and derivation of approved byte-moving configuration | `Cadence.Comms.TransportKind` |
+| Runtime adapter | Path-local data-plane I/O after a Contact is realized | `Cadence.ProviderAdapters.Adapter` |
 
-- providers own transport I/O
-- providers do not own mission semantics
-- providers hand canonical ingress units to the ordered ingress executor
+Do not collapse these layers. A REST reservation API does not imply that
+telemetry travels over HTTP, and a TCP runtime does not make an internal runtime
+Provider Profile the provider control-plane identity.
 
-For the broader rationale, see the
-[Developer Architecture Guide](../developer-architecture-guide.md).
+## 1. Decide which layers are new
 
-## 1. Start from the adapter behavior
+Most commercial integrations need a new Provider Client. They may reuse the
+existing provider-connects TCP Transport Kind and TCP runtime adapter if the
+provider supplies a compatible Delivery Profile.
 
-All provider adapters implement
-[`Cadence.ProviderAdapters.Adapter`](../../apps/cadence/lib/cadence/provider_adapters/adapter.ex).
+Add a new Transport Kind and runtime adapter only when the provider introduces a
+new data-plane contract such as UDP datagrams, object delivery, SLE, or a cloud
+stream. Provider-specific names should not create duplicate runtime adapters for
+the same wire behavior.
 
-The behavior is intentionally small:
+## 2. Implement the Provider Client
 
-- `child_spec/1`
-- `snapshot/1`
-- `deliver_uplink/2`
+Implement
+[`Cadence.Contacts.ProviderClient`](../../apps/cadence/lib/cadence/contacts/provider_client.ex)
+under `apps/cadence/lib/cadence/contacts/provider_clients/`.
 
-That means your adapter runtime is a path-local worker with:
+The current canonical operations are:
 
-- a runtime child spec
-- a runtime snapshot shape for diagnostics and API visibility
-- an uplink delivery entrypoint when the path supports uplink
+- connection validation and capability discovery;
+- spacecraft and ground-station inventory;
+- Service and Delivery Profile discovery;
+- optional Delivery Profile provisioning;
+- opportunity search;
+- Contact reservation, description, and cancellation;
+- optional recovery by client reference;
+- optional provider event polling.
 
-## 2. Put the module in the provider adapter namespace
+The simulator reference implementation is
+[`Cadence.Contacts.ProviderClients.SimulatorHTTP`](../../apps/cadence/lib/cadence/contacts/provider_clients/simulator_http.ex).
+It uses `Req`; new HTTP clients must also use the existing `Req` dependency.
 
-Create the adapter under:
+Provider Clients receive a `Cadence.GroundNetworks.ProviderContext`. They do not
+read LiveView assigns, simulator run state, or Transport runtime processes.
 
-- `apps/cadence/lib/cadence/provider_adapters/`
+## 3. Normalize and sanitize at the boundary
 
-The existing reference implementation is:
+Translate vendor payloads into the canonical types under
+`Cadence.GroundNetworks`:
 
-- [`Cadence.ProviderAdapters.TCPSocket`](../../apps/cadence/lib/cadence/provider_adapters/tcp_socket.ex)
+- `ProviderCapabilities`
+- `ServiceProfile`
+- `DeliveryProfile`
+- `Opportunity`
+- `ProviderContact`
+- `DeliveryDescriptor`
+- `ProviderError`
 
-Use that module as the model for:
+Keep provider-native fields in bounded, sanitized evidence. Do not add a vendor
+field to the canonical model without a cross-provider use case. Never persist or
+return raw access tokens, passwords, private keys, or ephemeral delivery
+credentials.
 
-- process ownership
-- socket/session lifecycle
-- runtime snapshot structure
-- executor handoff
+Capabilities are executable behavior, not display metadata. Reject unsupported
+operations before sending a provider request. Normalize retry hints and ambiguous
+outcomes so booking and reconciliation policy remains outside the LiveView and
+outside vendor-specific code.
 
-Do not copy its transport specifics blindly. Reuse its shape, not its TCP-only
-details.
+## 4. Preserve mutation and recovery semantics
 
-## 3. Keep the provider boundary narrow
+Cadence persists its Provider Reservation, exact Provider/Transport/profile
+versions, request evidence, and internal idempotency key before calling the
+Provider Client.
 
-A provider adapter should own:
+The client must follow the provider's declared behavior:
 
-- connect/listen/accept/session lifecycle
-- provider-specific framing into canonical ingress message units
-- provider-local metadata
-- uplink byte delivery when applicable
-- health and error reporting in `snapshot/1`
+- use a native idempotency header only when the provider guarantees it;
+- use a unique client reference or tag when that is the recovery mechanism;
+- preserve an ambiguous outcome when the request may have committed and no safe
+  retry exists.
 
-A provider adapter should not own:
+Contact requests contain only provider resource and correlation references.
+Endpoint addresses, framing, generator configuration, and raw credentials are
+setup data and must not be copied into every reservation request.
 
-- source-endpoint semantic interpretation
-- telemetry decode or extraction
-- dispatch evaluation
-- archive or Postgres persistence
-- UI-facing read models
+## 5. Register the provider type explicitly
 
-The practical rule is:
+Add the client to
+[`Cadence.Contacts.ProviderClients.Registry`](../../apps/cadence/lib/cadence/contacts/provider_clients/registry.ex).
+Then extend the allow-listed provider types and `client_for/1` mapping in
+[`Cadence.GroundNetworks.MissionProvider`](../../apps/cadence/lib/cadence/ground_networks/mission_provider.ex).
 
-> adapt external I/O into canonical Cadence ingress or transport events, then
-> hand off
+Do not convert user-supplied provider or client names to atoms. Form values must
+resolve through the explicit allow lists.
 
-## 4. Hand off to the ordered ingress executor
+A Mission Provider stores:
 
-Providers should enqueue into
-[`Cadence.Runtime.ProviderIngressExecutor`](../../apps/cadence/lib/cadence/runtime/provider_ingress_executor.ex),
-not call the whole ingress boundary directly.
+- provider type and client selection;
+- API base URL and provider environment/account reference;
+- an opaque `config://...` or `env://...` credential reference;
+- validated capabilities and bounded synchronized inventory;
+- validation, sync, and health evidence.
 
-The public handoff API is:
+The secret itself belongs to the runtime credential backend, not the database or
+LiveView form.
 
-- `enqueue_telemetry/2`
-- `enqueue_many_telemetry/2`
-- `enqueue_transport_event/4`
-- `enqueue_many_transport_events/4`
+## 6. Map provider delivery into a Transport
 
-Prefer the batch forms when your transport naturally yields more than one
-message at a time.
+Provider-managed Transports select exact Mission Provider, Service Profile, and
+Delivery Profile versions. Their protocol configuration is derived and read-only
+in the product UI.
 
-That preserves the intended split:
+If the provider's Delivery Profile maps to an existing Transport Kind, extend
+that kind's derivation only when the canonical provider evidence is sufficient
+to validate the mapping. A Contact response may report an immutable delivery
+descriptor, but it must never rewrite a versioned Transport. Cadence validates
+the descriptor against approved setup and records a durable configuration
+failure when it conflicts.
 
-- provider: transport adaptation
-- executor: ordered mission-facing runtime work
-- projector: async persistence
+Direct Transports remain user-configured local setup. Materializing runtime
+compatibility evidence for a direct Transport must not grant external
+opportunity search.
 
-## 5. Register the adapter
+## 7. Add a Transport Kind when the wire contract is new
 
-Add the new adapter key to:
+Transport Kind modules implement
+[`Cadence.Comms.TransportKind`](../../apps/cadence/lib/cadence/comms/transport_kind.ex)
+and live under `apps/cadence/lib/cadence/comms/transport_kinds/`.
 
-- [`Cadence.ProviderAdapters.Registry`](../../apps/cadence/lib/cadence/provider_adapters/registry.ex)
+They own:
 
-That registry is what lets path runtime startup resolve `adapter_key` values
-from provider bindings into actual modules.
+- configuration normalization and validation;
+- progressive-form metadata;
+- operator-safe display summaries;
+- temporary runtime Provider Profile materialization for the current execution
+  engine.
 
-If you skip this step, realized contact startup will fail with an unknown
-provider adapter error.
+Provider-managed derivation also needs an explicit, validated conversion from a
+synchronized Delivery Profile and dispatch from `Cadence.Comms.TransportStore`.
+The TCP reference is `Cadence.Comms.TransportKinds.TCPSocket.from_delivery_profile/1`.
 
-## 6. Make sure path runtime startup can use it
+Update the explicit registry and type allow lists in `Cadence.Comms.Transport`
+and `Cadence.Comms.TransportKind`. Provider-managed fields must render read-only;
+direct-origin fields may render as inputs when operators genuinely own them.
 
-Provider runtimes are started by
-[`Cadence.Runtime.PathCoordinator`](../../apps/cadence/lib/cadence/runtime/path_coordinator.ex).
+The internal `Cadence.Contacts.ProviderProfile` is execution evidence only. Do
+not add it to the Provider product form or use it as scheduling control-plane
+identity.
 
-The startup flow is:
+## 8. Add a runtime adapter when byte I/O is new
 
-1. start a path-local persistence projector
-2. start a path-local ingress executor
-3. resolve the adapter module from the registry
-4. start the provider runtime with path-local names and binding config
+Runtime adapters implement
+[`Cadence.ProviderAdapters.Adapter`](../../apps/cadence/lib/cadence/provider_adapters/adapter.ex)
+under `apps/cadence/lib/cadence/provider_adapters/` and are registered in
+[`Cadence.ProviderAdapters.Registry`](../../apps/cadence/lib/cadence/provider_adapters/registry.ex).
 
-That means your adapter should accept path-local startup opts similar to the
-existing TCP adapter:
+The reference implementation is
+[`Cadence.ProviderAdapters.TCPSocket`](../../apps/cadence/lib/cadence/provider_adapters/tcp_socket.ex).
 
-- mission id
-- realized contact id
-- path id
-- provider binding id
-- source endpoint ref when applicable
-- direction
-- provider configuration
-- ingress executor name
+A runtime adapter owns:
 
-If your adapter has extra configuration, keep it inside the provider binding
-configuration map instead of inventing a new side channel.
+- connect, listen, accept, and session lifecycle;
+- transport framing into canonical ingress units;
+- provider-local connection metadata;
+- uplink byte delivery when applicable;
+- operational state returned by `snapshot/1`.
 
-## 7. Wire mission-owned configuration, not ad hoc runtime config
+It does not own spacecraft interpretation, telemetry extraction, dispatch,
+archive persistence, opportunity search, or Contact booking.
 
-Provider runtime startup comes from mission-owned provider profiles and
-realized-contact path bindings.
+Runtime adapters hand received units to
+[`Cadence.Runtime.ProviderIngressExecutor`](../../apps/cadence/lib/cadence/runtime/provider_ingress_executor.ex)
+using its ordered enqueue APIs. Runtime startup remains path-local under
+`Cadence.Runtime.PathCoordinator`.
 
-The relevant domain types are under:
+## 9. Keep the product journeys shared
 
-- `apps/cadence/lib/cadence/contacts/provider_profile.ex`
-- `apps/cadence/lib/cadence/contacts/path.ex`
+The integration must use the existing authenticated mission journeys:
 
-Use the provider profile configuration map as the source of transport-specific
-options. Do not hard-code environment-specific behavior inside the adapter.
+- **Comms → Providers** for control-plane setup, validation, and sync;
+- **Comms → Transports** for direct or provider-managed delivery setup;
+- **Comms → Routing** for exact Transport selection;
+- **Ops → Contacts** for readiness, opportunity search, reservation,
+  reconciliation, and cancellation.
 
-## 8. Design a useful runtime snapshot
+Do not create a provider-specific scheduling page. Provider differences appear
+as capabilities, profile summaries, validation findings, and administrator
+diagnostics.
 
-`snapshot/1` is the operational debugging surface for a provider runtime.
-
-At minimum, expose:
-
-- connection state
-- local host/port or peer/session identity
-- ingress counts and byte counts
-- recent error state
-- whether reads are paused or backpressured
-- ingress executor snapshot
-- ingress persistence projector snapshot when relevant
-
-The TCP adapter is the current model for a production-useful snapshot.
-
-## 9. Add tests at the runtime seam
+## 10. Test each seam
 
 At minimum, add:
 
-- unit tests for transport framing or session logic
-- runtime tests that start the adapter in a path-local context
-- snapshot assertions for the fields operators will inspect
-- failure-path tests for disconnects, reconnects, and ingress handoff
+- Provider Client normalization, authentication, capability, pagination, error,
+  and evidence-sanitization tests;
+- native-idempotency or client-reference recovery tests matching the provider's
+  real guarantees;
+- Transport Kind normalization, derivation, and progressive-form tests when the
+  data plane changes;
+- runtime framing, reconnect, handoff, and snapshot tests for a new adapter;
+- a separate-application boundary proof that reserves over the provider control
+  plane and moves high-rate data over the ordinary runtime path.
 
-The current reference file is:
+Commercial clients should pass the same canonical behavior suite as the
+simulator plus provider-specific contract tests based on verified vendor
+documentation.
 
-- [`tcp_socket_provider_test.exs`](../../apps/cadence/test/cadence/runtime/tcp_socket_provider_test.exs)
+## 11. Validate with the normal workflow
 
-## 10. Validate with the normal dev loop
+Exercise the integration as an operator would:
 
-After wiring the adapter:
+1. start the external provider or simulator independently;
+2. create a Mission Provider with an opaque credential reference;
+3. validate and synchronize capabilities, inventory, and profiles;
+4. create a provider-managed Transport from exact compatible profile versions;
+5. map spacecraft and create an enabled Routing Rule;
+6. search and reserve in **Ops → Contacts**;
+7. confirm Contact, pass, and delivery observations independently;
+8. verify bytes enter the normal runtime and telemetry pipeline;
+9. restart reconciliation and prove no duplicate Contact or Scheduled Contact.
 
-1. configure a mission provider profile that uses the new adapter
-2. run the external-provider development flow
-3. verify the path runtime snapshot shows your provider runtime
-4. confirm ingress reaches the executor and projector as expected
-
-Start with:
-
-```bash
-# Cadence shell
-iex --sname cadence -S mix phx.server
-mix cadence.profile demo_spacecraft --snapshot
-```
-
-```bash
-# Simulator shell
-# In another shell, start the external provider simulator.
-cd apps/cadence_simulator
-CADENCE_SIMULATOR_HTTP_ENABLED=true mix run --no-halt
-```
+Run focused tests from the owning application, then run `mix precommit` from the
+umbrella root.
 
 ## Checklist
 
-- module added under `provider_adapters/`
-- behavior implemented
-- registry updated
-- configuration comes from provider bindings
-- adapter hands off to `ProviderIngressExecutor`
-- `snapshot/1` is operationally useful
-- tests cover connect/listen/session and handoff paths
-- external-provider local workflow still works
+- Provider Client behavior implemented and explicitly registered
+- provider type and client mapping allow-listed
+- external evidence normalized and sanitized
+- credentials stored only as opaque references
+- declared idempotency and recovery semantics covered
+- Contact requests contain references, not endpoint setup
+- provider-managed Transport derives exact, read-only protocol configuration
+- new Transport Kind added only for a genuinely new wire contract
+- runtime adapter remains path-local and hands off to the ordered executor
+- shared Comms and Ops journeys remain intact
+- separate control-plane and data-plane proof passes
+- `mix precommit` passes

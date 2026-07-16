@@ -33,8 +33,10 @@ separately; and exposes the complete chain in Ops Contacts. Task 9 rewrites the
 separate-app proof through real admin and provider HTTP boundaries, normal TCP/TM
 ingress, durable reconciler restart, and client-reference recovery after a
 response is lost following provider commit. Tasks 1-9 are complete; Task 10,
-documentation and final gates, is next. The runtime Provider Profile remains
-execution evidence, not control-plane identity.
+documentation and final gates, now aligns the operator, adapter, and architecture
+guides with the implemented boundary and records the final verification. Stage 2
+is complete. The runtime Provider Profile remains execution evidence, not
+control-plane identity.
 
 **Goal:** Replace the Stage 1 TCP-shaped provider setup with an explicit mission
 Provider control plane and provider-managed Transport. The simulator exposes

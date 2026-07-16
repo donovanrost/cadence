@@ -108,8 +108,26 @@ simulator administration client runs inside Cadence.
 
 ## Manual two-BEAM smoke test
 
-Keep the simulator BEAM from step 1 running. In another terminal, create a
-small scenario and run:
+From the repository root, start the simulator in terminal A. The provider HTTP
+surface is disabled by default, so set the complete runtime configuration before
+starting the BEAM:
+
+```bash
+export CADENCE_SIMULATOR_HTTP_ENABLED=true
+export CADENCE_SIMULATOR_PORT=4101
+export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
+export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
+export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.dets"
+export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+
+cd apps/cadence_simulator
+mix run --no-halt
+```
+
+Keep terminal A running. In terminal B, create a small scenario, immutable run,
+and provider-owned Delivery Profile. The administrator token is used only for
+scenario/run operations. The provider token and environment header are used
+only for the customer-facing provider API:
 
 ```bash
 export SIMULATOR_URL=http://127.0.0.1:4101
@@ -170,14 +188,41 @@ DELIVERY_PROFILE_ID=$(curl --silent --fail \
 echo "$DELIVERY_PROFILE_ID"
 ```
 
-Start Cadence in a second BEAM. Configure a Mission Provider with the environment
-and synced inventory, create a provider-managed Transport from the exact Service
-and Delivery Profile versions, map one source endpoint to `SC-001`, and create an
-enabled inbound Routing Rule for that Transport. In **Ops → Contacts**, search a
-future window, reserve an opportunity, and observe Contact, pass, and delivery
-state independently. The Scheduled Contact should appear only after confirmation
-and descriptor validation, and telemetry should arrive through the mission's
-ordinary TCP/TM ingress path while the contact is active.
+Start Cadence as the second BEAM from the repository root in terminal C. The
+credential reference configured in Cadence below resolves the provider token
+from this process environment; the token is never persisted in the Mission
+Provider record:
+
+```bash
+export SIMULATOR_PROVIDER_TOKEN=local-simulator-provider-token
+mix phx.server
+```
+
+In the authenticated mission UI:
+
+1. Open **Comms → Providers → New Provider** and select **Ground Network
+   Simulator**. Set the base URL to `http://127.0.0.1:4101`, the credential
+   reference to `env://SIMULATOR_PROVIDER_TOKEN`, and the provider environment
+   to the printed `$RUN_ID`.
+2. On the Provider detail page, select **Validate**, then **Sync Inventory**.
+   The synchronized inventory must include the Delivery Profile printed above.
+3. Open **Comms → Transports → New Transport**, choose **Ground Station
+   Provider**, and select the exact Provider, active Service Profile, and ready
+   Delivery Profile. Verify that the derived TCP host, port, and CCSDS framing
+   are read-only.
+4. Create or select the Cadence spacecraft, map its source endpoint to provider
+   spacecraft `SC-001`, and create an enabled inbound Routing Rule selecting the
+   new Transport.
+5. Open **Ops → Contacts**, choose the ready route, search a future UTC window,
+   and reserve an opportunity.
+
+The reservation request contains opportunity, spacecraft, Service Profile,
+Delivery Profile, client-reference, and tag fields only. The Scheduled Contact
+appears after provider confirmation and descriptor validation. Contact status,
+pass phase, and delivery status advance independently, while telemetry arrives
+through the ordinary TCP/TM ingress path. Exact references and the sanitized
+immutable descriptor are available in administrator diagnostics; secrets are
+not.
 
 See [Ground Network Simulator](ground-network-simulator.md) for API and scenario
 details.

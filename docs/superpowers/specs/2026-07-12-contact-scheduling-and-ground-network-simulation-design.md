@@ -1,6 +1,6 @@
 # Design: Contact Scheduling and External Ground Network Simulation
 
-- Status: accepted; Stage 1 implemented and Stage 2 planned
+- Status: accepted; Stages 1 and 2 implemented
 - Created: 2026-07-12
 - Scope: Define the idealized end state for provider-neutral contact scheduling
   in Cadence and for an independent ground-network simulator that exercises the
@@ -98,7 +98,7 @@ needs. Runtime code upload and an all-purpose plugin framework are out of scope.
 - Allocate simulator telemetry workers only for active contacts.
 - Support realistic provider and network failure modes.
 - Keep CCSDS implementation shared without coupling the simulator to Cadence.
-- Make adding a commercial provider an adapter project rather than a Cadence
+- Make adding a commercial provider an integration project rather than a Cadence
   scheduling rewrite.
 
 ## Non-Goals
@@ -121,33 +121,35 @@ The repository now provides the first operator-visible vertical slice of this
 design:
 
 - `cadence_simulator` can run independently and expose a provider-style HTTP
-  API for scenarios, runs, opportunities, reservations, and ordered events.
+  API with separate administrator and provider namespaces and credentials.
 - Cadence has a provider-client behaviour, normalized simulator HTTP client,
   durable booking saga, and supervised status reconciler.
-- Mission provider configuration can select the simulator scheduling client.
+- Versioned Mission Providers own provider control-plane setup, opaque credential
+  references, validated capabilities, and bounded synchronized inventory.
+- Versioned Transports distinguish direct and provider-managed origin. A
+  provider-managed Transport binds exact Provider, Service Profile, and Delivery
+  Profile versions and derives read-only runtime protocol configuration.
 - Provider Reservation is first-class, mission-scoped integration state with
-  durable idempotency, provider evidence, exact route versions, ambiguous-outcome
-  recovery, and idempotent Scheduled Contact materialization.
+  durable idempotency, exact Routing Rule/Transport/Provider/profile versions,
+  immutable delivery-descriptor evidence, ambiguous-outcome recovery, and
+  idempotent Scheduled Contact materialization.
 - **Ops → Contacts** provides readiness, provider opportunity search,
-  reservation, cancellation, and separate provider/Cadence lifecycle state
-  inside the authenticated mission Ops surface.
+  reservation, cancellation, and separate Contact, pass, delivery, and Cadence
+  lifecycle state inside the authenticated mission Ops surface.
 - The existing contact scheduler realizes canonical scheduled contacts into
   path-local runtime.
 - The end-to-end boundary proof reserves over simulator HTTP and receives
-  decoded telemetry through Cadence's normal TCP/TM ingress pipeline.
+  decoded telemetry through Cadence's normal TCP/TM ingress pipeline. A second
+  proof loses the HTTP response after provider commit and recovers the Contact
+  by client reference without replaying the mutation.
 - CCSDS framing, segmentation, reassembly, and COP-1 primitives live in the
   shared `cadence_ccsds` application.
 
-This completes Stage 1, not the full contact-planning product. Contact
-Requirements, versioned Contact Plans, provider accounts and secret references,
+This completes Stages 1 and 2, not the full contact-planning product. Contact
+Requirements, versioned Contact Plans, organization-owned Provider Accounts,
 durable event cursors or webhooks, provider-fleet reconciliation, and automated
-multi-spacecraft planning remain target state.
-
-The accepted Stage 2 contract separates simulator administration from the
-customer/provider API, replaces per-reservation TCP fields with Service and
-Delivery Profile references, distinguishes contact and delivery lifecycles, and
-introduces provider-managed Transport origin. The current runtime and manual
-instructions remain Stage 1 until that implementation plan is executed.
+multi-spacecraft planning remain target state. The internal Provider Profile
+continues only as runtime compatibility evidence and is not product identity.
 
 ## Stage 1 Decisions
 
@@ -186,13 +188,13 @@ The repo-grounded task sequence is defined in the
 | Term | Meaning | Current implementation relationship |
 | --- | --- | --- |
 | Provider Type | One integration implementation and capability family, such as simulator HTTP, AWS Ground Station, or KSAT. | `ProviderClient` implementation and registry entry. |
-| Provider Account | Organization-owned credentials, endpoint, commercial account, and connection policy. | Not yet separated; some values currently live in `ProviderProfile.configuration`. |
-| Mission Provider | A mission's enabled use of a Provider Account, including spacecraft mapping, allowed services, and scheduling policy. | Closest to the existing mission-scoped `ProviderProfile`. |
-| Transport | Durable capability for moving bytes. It may be provider-backed but does not itself mean a contact is booked. | Product model defined by the comms design; currently materialized through provider/path configuration. |
+| Provider Account | Organization-owned credentials, endpoint, commercial account, and connection policy. | Target state; current setup remains mission-scoped with opaque credential references. |
+| Mission Provider | A mission's enabled provider control plane, including API/environment references, validated capabilities, and synchronized inventory. | Versioned `Cadence.GroundNetworks.MissionProvider`; primary Provider product object. |
+| Transport | Durable capability for moving bytes. It may be provider-backed but does not itself mean a contact is booked. | Versioned `Cadence.Comms.Transport` with explicit `direct` or `provider_managed` origin. |
 | Contact Requirement | A statement of needed service, constraints, priority, and acceptable delivery outcomes. | New target-state concept. |
 | Opportunity | A time-limited provider proposal for specific resources and service. | Returned by provider opportunity search; not canonical mission state. |
 | Contact Plan | A versioned selection of opportunities intended to satisfy one or more requirements. | New target-state concept. |
-| Provider Reservation | Cadence's durable mirror of a provider-side booking and its reconciliation state. | First-class mission-owned persistence with durable idempotency and status reconciliation. |
+| Provider Reservation | Cadence's durable mirror of a provider-side booking and its reconciliation state. | First-class mission-owned persistence with exact setup versions, immutable descriptor evidence, and separate Contact/pass/delivery observations. |
 | Scheduled Contact | Cadence's canonical time-bounded execution intent after capacity is committed or explicitly planned for a non-reserving transport. | Existing `ScheduledContact`. |
 | Realized Contact | Runtime realization containing active paths, links, bindings, and observations. | Existing `RealizedContact`. |
 | Contact Result | Planned-versus-delivered summary including timing, volume, failures, and provider evidence. | New projection over contact and runtime records. |
@@ -206,9 +208,9 @@ primary scheduling workflow.
 
 ### Provider Type and capabilities
 
-A Provider Type identifies an adapter and publishes capabilities. Capabilities
-must be explicit because providers differ without requiring separate Cadence
-workflows.
+A Provider Type identifies a control-plane client and publishes capabilities.
+Capabilities must be explicit because providers differ without requiring
+separate Cadence workflows.
 
 Initial capability vocabulary should include:
 
@@ -342,12 +344,16 @@ exist only as metadata on a scheduled contact.
 It records:
 
 - Cadence reservation ID
-- provider account and mission provider
+- exact Mission Provider and Transport versions
+- exact Service and Delivery Profile references
+- exact Routing Rule, path, and source-endpoint references
 - provider reservation and opportunity references
 - idempotency key
 - request and normalized response evidence
 - requested and provider-confirmed resources and times
-- provider status and Cadence reconciliation status
+- provider Contact status, pass phase, delivery status, and Cadence
+  reconciliation status
+- sanitized immutable delivery descriptor
 - linked plan, requirement, and scheduled contact
 - last provider event and durable cursor evidence
 - ambiguous-outcome and compensation state
@@ -363,8 +369,9 @@ requesting -> pending -> confirmed -> active -> completed
 ```
 
 `unknown` means Cadence cannot determine whether a timed-out request succeeded.
-It triggers describe/reconcile using the same idempotency key. It must not cause
-an immediate duplicate reservation.
+Reconciliation describes a known provider Contact or uses client-reference
+lookup when the provider declares that recovery capability. It must not replay a
+mutation merely because Cadence generated an internal idempotency key.
 
 ### Scheduled Contact
 
@@ -411,7 +418,7 @@ The Contact Result compares intent with delivery:
 
 ## Provider Contract
 
-Cadence defines a provider-neutral application contract. Provider adapters
+Cadence defines a provider-neutral application contract. Provider Clients
 translate vendor APIs into this contract; commercial providers are not expected
 to implement Cadence's HTTP API.
 
@@ -448,8 +455,8 @@ for reconciliation when no safe provider retry exists.
 
 ### Error contract
 
-Adapters normalize provider errors into categories while preserving sanitized
-provider evidence:
+Provider Clients normalize provider errors into categories while preserving
+sanitized provider evidence:
 
 - invalid request
 - authentication or authorization failure
@@ -469,8 +476,8 @@ LiveViews or callers.
 ### Versioning
 
 The canonical contract is versioned independently from vendor API versions.
-Adapters declare the canonical versions and capabilities they implement.
-Provider-native API version changes are contained inside the adapter unless
+Provider Clients declare the canonical versions and capabilities they implement.
+Provider-native API version changes are contained inside the client unless
 they change a canonical capability.
 
 ## Contact Scheduling Workflow
@@ -565,9 +572,11 @@ descriptor should represent:
 - authentication or ephemeral credential reference
 - provider binding metadata
 
-Cadence materializes the descriptor into path-local provider and transport
-bindings. The data-plane runtime remains under the Realized Contact and its
-paths, consistent with ADR-006.
+Cadence validates the descriptor against the exact approved Transport and
+profile versions, persists a sanitized immutable document, and records a durable
+provider-configuration failure when it conflicts. A Contact response never
+rewrites the versioned Transport. The data-plane runtime remains under the
+Realized Contact and its paths, consistent with ADR-006.
 
 The simulator's initial data plane is provider-connects TCP downlink with fixed
 CCSDS TM frames. The target model also leaves room for UDP, bidirectional TCP,
@@ -704,6 +713,7 @@ spacecraft, reservation, and time-window scope.
 Initial categories:
 
 - provider API outage and latency
+- response loss before or after a provider mutation commits
 - authentication failure
 - rate limiting
 - scheduling rejection
@@ -725,9 +735,11 @@ exist only as unexplained dropped data.
 
 ### Cadence setup surface
 
-Provider setup belongs in authenticated mission management under Comms or
-Transports. It includes account selection, spacecraft mapping, services,
-delivery configuration, and readiness checks.
+Provider and Transport setup live in the authenticated mission `:comms` surface.
+**Comms → Providers** owns control-plane identity, validation, and inventory
+sync. **Comms → Transports** owns direct or provider-managed delivery setup, and
+**Comms → Routing** selects exact Transport versions. Provider-managed protocol
+fields are derived and read-only.
 
 Credentials and organization-level provider-account administration may later
 move to organization settings. Mission pages should show references and health,
@@ -735,8 +747,9 @@ not reveal secrets.
 
 ### Cadence operations surface
 
-Contact scheduling belongs under mission operations, not the durable comms
-setup pages. The end-state surface includes:
+Contact scheduling lives at `/missions/:mission_id/ops/contacts` in the
+authenticated mission `:ops` surface, not the durable comms setup pages. The
+end-state surface expands the current workflow with:
 
 - Requirements
 - Planning horizon and provider filters
@@ -850,7 +863,7 @@ Cadence should own a reusable conformance suite for every Provider Client:
 - cancellation and modification semantics
 - sanitization of provider evidence
 
-The simulator client is the first implementation. Commercial adapters must pass
+The simulator client is the first implementation. Commercial clients must pass
 the same canonical suite plus provider-specific tests.
 
 ### Simulator tests
@@ -866,7 +879,9 @@ the same canonical suite plus provider-specific tests.
 
 ### End-to-end tests
 
-The critical acceptance test runs separate simulator and Cadence applications:
+The critical acceptance test preserves separate simulator and Cadence
+application boundaries. The test processes may share a BEAM, but workflow
+operations cross HTTP and high-rate telemetry crosses TCP:
 
 1. Create a simulator scenario and run.
 2. Configure a Cadence mission provider through normal APIs or UI.
@@ -876,23 +891,23 @@ The critical acceptance test runs separate simulator and Cadence applications:
 6. Receive framed telemetry through the normal provider runtime.
 7. Decommutate and persist mission telemetry.
 8. Complete or fault the provider contact.
-9. Reconcile the canonical Contact Result.
+9. Reconcile Contact, pass, and delivery completion.
 
-No direct database sharing, in-process simulator calls, or simulator-specific
-Cadence injection helpers are permitted in this proof.
+No direct database sharing, simulator administration calls from Cadence, or
+simulator-specific telemetry injection helpers are permitted in this proof.
 
 ## Delivery Stages
 
 ### Stage 0: Boundary foundation
 
-Status: substantially present.
+Status: implemented.
 
 - independent simulator application and configuration
 - shared CCSDS leaf application
 - provider-style simulator API
 - provider-client behaviour and simulator client
 - initial booking and event reconciliation seams
-- mission provider scheduling configuration
+- versioned Mission Provider control-plane configuration
 
 ### Stage 1: One contact, end to end
 
@@ -912,7 +927,7 @@ TCP telemetry boundary without direct simulator injection.
 
 ### Stage 2: Provider and delivery contract
 
-Status: planned.
+Status: implemented.
 
 - separate simulator administration and provider APIs
 - mission Provider control-plane setup
@@ -922,6 +937,9 @@ Status: planned.
 - distinct contact, pass, and delivery lifecycles
 - native-idempotency and client-reference recovery behavior
 - preserve the separate-app TCP/TM proof
+
+The boundary proof also covers a response lost after provider commit, durable
+reconciler restart, and exactly-once Scheduled Contact materialization.
 
 See the
 [Stage 2 implementation plan](../plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md).
@@ -954,7 +972,7 @@ See the
 
 ### Stage 6: Commercial provider proof
 
-- implement one real provider adapter
+- implement one real provider integration
 - run the same conformance and end-to-end workflow
 - identify actual extension points from vendor differences
 - decide whether adapter packaging needs to evolve into a formal plugin model
@@ -1010,9 +1028,10 @@ The draft recommends defaults but leaves these decisions for review:
    curated, imported, or reconciled continuously?
 6. **Data-plane credentials:** Which secret store and ephemeral credential model
    should the first non-local provider use?
-7. **First commercial adapter:** AWS Ground Station has accessible public APIs,
+7. **First commercial integration:** AWS Ground Station has accessible public APIs,
    but another provider may better exercise reservation and event semantics.
-8. **Simulator console:** Is an API-only simulator sufficient through Stage 2,
-    or is a minimal separate console important for demos earlier?
+8. **Simulator console:** Is an API-only simulator sufficient for the next
+   planning stages, or is a minimal separate console now important for demos?
 
-The remaining questions do not block Stage 1.
+The remaining questions do not block the implemented Stage 2 boundary. They
+inform durable integration, planning, and the first commercial provider proof.
