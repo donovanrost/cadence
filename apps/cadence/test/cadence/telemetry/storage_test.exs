@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.StorageTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Dashboards.{
     DataBinding,

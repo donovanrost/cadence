@@ -1,5 +1,5 @@
 defmodule Cadence.Reads.MissionEventsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.{
     BindingRule,

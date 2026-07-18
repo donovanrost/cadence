@@ -1,5 +1,5 @@
 defmodule Cadence.CatalogTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Database}

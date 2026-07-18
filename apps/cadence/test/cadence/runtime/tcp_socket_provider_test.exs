@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.TCPSocketProviderTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   import Ecto.Query
 

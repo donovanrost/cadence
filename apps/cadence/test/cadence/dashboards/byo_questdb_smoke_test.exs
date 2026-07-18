@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.BYOQuestDBSmokeTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Dashboards.{BYOQuestDBSmoke, DataSources, SourceCredentials}
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}

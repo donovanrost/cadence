@@ -1,5 +1,5 @@
 defmodule Cadence.GroundNetworks.ProviderEventPollerTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.GroundNetworks.{
     ProviderAccounts,

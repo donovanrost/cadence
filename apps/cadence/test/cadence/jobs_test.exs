@@ -1,5 +1,5 @@
 defmodule Cadence.JobsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Jobs.Job
   alias Cadence.Persistence.Schemas.BackgroundJobRow

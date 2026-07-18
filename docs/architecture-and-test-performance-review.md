@@ -101,6 +101,20 @@ the Phase 1 timing exit conditions. Structural decomposition remains active:
 the compiled replay scenario and several other source-family test bodies still
 need to be split into smaller scenario and assertion units.
 
+The first Phase 2 ownership slice now separates 64 database-only files on
+`Cadence.DataCase` from 34 process-owning files on `Cadence.RuntimeCase`.
+`DataCase` owns only a private SQL sandbox transaction; it no longer stops
+missions, resets runtime stores, shares its sandbox globally, or sleeps during
+teardown. Sandbox startup re-establishes manual mode and verifies both the
+connection and Ecto query cache, retrying only when a restarted Repo has not
+finished its ownership handoff.
+
+Two complete core-suite runs with different seeds passed all 1,522 tests in
+27.2 and 29.2 seconds, below the Phase 2 timing target. Runtime ownership is
+still transitional: `RuntimeCase` retains compatibility-wide mission cleanup
+until its callers start and track mission processes explicitly, and dedicated
+`UnitCase` and `ConfigCase` templates remain to be introduced.
+
 ## Measured baseline
 
 ### Repository size

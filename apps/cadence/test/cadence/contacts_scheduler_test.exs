@@ -1,5 +1,5 @@
 defmodule Cadence.ContactsSchedulerTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}

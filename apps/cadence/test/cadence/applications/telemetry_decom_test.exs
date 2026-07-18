@@ -1,5 +1,5 @@
 defmodule Cadence.Applications.TelemetryDecomTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.ApplicationBinding

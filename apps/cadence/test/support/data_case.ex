@@ -3,12 +3,12 @@ defmodule Cadence.DataCase do
 
   use ExUnit.CaseTemplate
 
+  alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Telemetry.CurrentValueStore
-  alias Cadence.Telemetry.CurrentValueStore.ETS
+  alias Cadence.Persistence.Schemas.MissionRow
 
   @repo_ready_attempts 200
   @repo_ready_sleep_ms 50
@@ -26,30 +26,22 @@ defmodule Cadence.DataCase do
   end
 
   setup tags do
-    ensure_cadence_started!()
-
-    unless tags[:async] do
-      Cadence.Runtime.stop_all_missions()
-    end
-
-    pid = start_owner_with_retry!(sandbox_owner_options(tags))
+    pid = start_sandbox_owner!(tags)
 
     on_exit(fn ->
-      unless tags[:async] do
-        Cadence.Runtime.stop_all_missions()
-      end
-
-      if telemetry_current_value_store_module() == ETS do
-        CurrentValueStore.reset()
-      end
-
-      Sandbox.stop_owner(pid)
-      Process.sleep(25)
-      ensure_cadence_started!()
+      stop_sandbox_owner(pid)
     end)
 
     :ok
   end
+
+  def start_sandbox_owner!(tags, opts \\ []) do
+    ensure_cadence_started!()
+    shared? = Keyword.get(opts, :shared?, false)
+    start_owner_with_retry!(sandbox_owner_options(tags, shared?))
+  end
+
+  def stop_sandbox_owner(pid), do: Sandbox.stop_owner(pid)
 
   defp start_owner_with_retry!(opts, attempts \\ 20)
 
@@ -59,13 +51,43 @@ defmodule Cadence.DataCase do
 
   defp start_owner_with_retry!(opts, attempts) do
     ensure_cadence_started!()
-    Sandbox.start_owner!(Cadence.Repo, opts)
+    Sandbox.mode(Cadence.Repo, :manual)
+
+    Cadence.Repo
+    |> Sandbox.start_owner!(opts)
+    |> verify_owner_ready!(opts, attempts)
   rescue
     MatchError ->
       retry_start_owner(opts, attempts)
   catch
     :exit, _reason ->
       retry_start_owner(opts, attempts)
+  end
+
+  defp verify_owner_ready!(pid, opts, attempts) do
+    SQL.query!(Cadence.Repo, "SELECT 1", [])
+    Cadence.Repo.exists?(MissionRow)
+    pid
+  rescue
+    _error in [
+      ArgumentError,
+      DBConnection.ConnectionError,
+      DBConnection.OwnershipError,
+      RuntimeError
+    ] ->
+      stop_owner_if_alive(pid)
+      retry_start_owner(opts, attempts)
+  catch
+    :exit, _reason ->
+      stop_owner_if_alive(pid)
+      retry_start_owner(opts, attempts)
+  end
+
+  defp stop_owner_if_alive(pid) do
+    if Process.alive?(pid), do: Sandbox.stop_owner(pid)
+    :ok
+  catch
+    :exit, _reason -> :ok
   end
 
   def persist_mission_scope(organization_id, mission_id, opts \\ []) do
@@ -149,7 +171,7 @@ defmodule Cadence.DataCase do
 
   defp retryable_repo_exit?(_reason), do: false
 
-  defp telemetry_current_value_store_module do
+  def telemetry_current_value_store_module do
     Application.get_env(:cadence, :telemetry_current_value_store, [])
     |> Keyword.get(:module)
   end
@@ -160,7 +182,7 @@ defmodule Cadence.DataCase do
     start_owner_with_retry!(opts, attempts - 1)
   end
 
-  defp ensure_cadence_started! do
+  def ensure_cadence_started! do
     case Application.ensure_all_started(:cadence) do
       {:ok, _started_apps} ->
         wait_for_repo_ready!()
@@ -187,9 +209,7 @@ defmodule Cadence.DataCase do
     end
   end
 
-  defp sandbox_owner_options(tags) do
-    shared? = not tags[:async]
-
+  defp sandbox_owner_options(tags, shared?) do
     [shared: shared?]
     |> maybe_put_ownership_timeout(
       tags[:sandbox_ownership_timeout] || default_ownership_timeout(shared?)

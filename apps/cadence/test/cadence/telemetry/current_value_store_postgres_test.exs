@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.Schemas.{PacketRecordRow, RawEvidenceRow}

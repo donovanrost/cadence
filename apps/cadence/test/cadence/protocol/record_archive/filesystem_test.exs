@@ -1,5 +1,5 @@
 defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   import Ecto.Query
 

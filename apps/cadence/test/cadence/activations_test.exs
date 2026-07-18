@@ -1,5 +1,5 @@
 defmodule Cadence.ActivationsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Runtime
