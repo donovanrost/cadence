@@ -44,6 +44,14 @@ defmodule Cadence.Missions do
     end
   end
 
+  @spec organization_id_for_mission(binary()) :: binary() | nil
+  def organization_id_for_mission(mission_id) when is_binary(mission_id) do
+    MissionRow
+    |> where([mission_row], mission_row.mission_id == ^mission_id)
+    |> select([mission_row], mission_row.organization_id)
+    |> Repo.one()
+  end
+
   @spec list_missions(binary()) :: [Mission.t()]
   def list_missions(organization_id) when is_binary(organization_id) do
     MissionRow

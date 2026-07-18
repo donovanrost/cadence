@@ -8,10 +8,8 @@ defmodule Cadence.Persistence.OrganizationScope do
   """
 
   import Ecto.Changeset
-  import Ecto.Query
 
-  alias Cadence.Missions.MissionRow
-  alias Cadence.Repo
+  alias Cadence.Missions
 
   @spec put_organization_id(Ecto.Changeset.t()) :: Ecto.Changeset.t()
   def put_organization_id(%Ecto.Changeset{} = changeset) do
@@ -38,10 +36,5 @@ defmodule Cadence.Persistence.OrganizationScope do
   defp organization_id(changeset), do: get_field(changeset, :organization_id)
   defp mission_id(changeset), do: get_field(changeset, :mission_id)
 
-  defp fetch_organization_id(mission_id) do
-    MissionRow
-    |> where([mission], mission.mission_id == ^mission_id)
-    |> select([mission], mission.organization_id)
-    |> Repo.one()
-  end
+  defp fetch_organization_id(mission_id), do: Missions.organization_id_for_mission(mission_id)
 end

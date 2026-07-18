@@ -93,7 +93,9 @@ The live debt is recorded in
 xref edge, not permission for new code. The check fails when an edge is added,
 when a removed edge is left in the baseline, or when the baseline review date
 expires. Removing an edge and its baseline entry in the same change makes the
-policy ratchet toward the target.
+policy ratchet toward the target. The moved-row cross-context exception
+baseline is currently empty; callers reach those rows through their owning
+context APIs.
 
 Full pair-by-pair enforcement of the matrix is staged until current
 cross-context edges are assigned to an owning workflow. That later baseline

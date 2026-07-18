@@ -755,10 +755,11 @@ telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
 from 205 to 187. New edges fail, removed edges must be deleted from the
 baseline in the same change, and the baseline has an explicit owner and
 review-by date. Context-owned row modules are also protected from new callers
-outside their bounded context. The one current exception,
-`Persistence.OrganizationScope -> Missions.MissionRow`, is explicit debt in
-the same ratchet. The public root facade still exists for external callers and
-remains a later decomposition target.
+outside their bounded context. The initial
+`Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
+by exposing mission ownership through the `Missions` context, leaving the
+cross-context row baseline at zero. The public root facade still exists for
+external callers and remains a later decomposition target.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates
