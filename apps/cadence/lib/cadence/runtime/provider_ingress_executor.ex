@@ -417,7 +417,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     call_opts = Keyword.drop(opts, [:mission_id, :realized_contact_id, :path_id])
 
     case run_ingress(fn ->
-           Cadence.handle_path_transport_event(
+           RuntimeBoundary.handle_path_transport_event(
              mission_id,
              realized_contact_id,
              path_id,

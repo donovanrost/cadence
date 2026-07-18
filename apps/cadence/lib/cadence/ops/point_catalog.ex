@@ -9,6 +9,7 @@ defmodule Cadence.Ops.PointCatalog do
   compiled field still references a catalog point.
   """
 
+  alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.ApplicationDispatch.CapabilityInstance
   alias Cadence.Catalog
@@ -26,7 +27,7 @@ defmodule Cadence.Ops.PointCatalog do
   @spec list_points(binary(), binary()) :: [point_info()]
   def list_points(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    case Cadence.fetch_active_binding_set(organization_id, mission_id) do
+    case Activations.fetch_active_binding_set(organization_id, mission_id) do
       {:ok, %BindingSet{} = binding_set} ->
         catalog_points = catalog_points_by_id(organization_id, mission_id)
 

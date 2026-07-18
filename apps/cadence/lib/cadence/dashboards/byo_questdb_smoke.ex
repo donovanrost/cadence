@@ -19,7 +19,9 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
   }
 
   alias Cadence.Dashboards.SourceCredentials.EnvMaterialResolver
+  alias Cadence.Missions
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
   alias Cadence.Telemetry.Sample
@@ -248,7 +250,7 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
   end
 
   defp ensure_organization(context) do
-    Cadence.persist_organization(%Organization{
+    Organizations.persist_organization(%Organization{
       organization_id: context.organization_id,
       slug: context.organization_id,
       display_name: "QuestDB BYO smoke organization"
@@ -256,7 +258,7 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
   end
 
   defp ensure_mission(context) do
-    Cadence.persist_mission(%Mission{
+    Missions.persist_mission(%Mission{
       mission_id: context.mission_id,
       organization_id: context.organization_id,
       slug: context.mission_id,

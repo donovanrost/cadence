@@ -22,6 +22,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     SourceResult
   }
 
+  alias Cadence.Commanding
   alias Cadence.Comms.TransportStore
   alias Cadence.Contacts
   alias Cadence.Limits.Event
@@ -31,6 +32,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
+  alias Cadence.Telemetry.RuntimeHealth
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
   @connection_observable_ids [
@@ -7160,7 +7162,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       command_release_attempt_ids when is_list(command_release_attempt_ids) ->
         command_release_attempt_ids
         |> Enum.flat_map(fn command_release_attempt_id ->
-          Cadence.list_command_verifier_instances(organization_id, mission_id,
+          Commanding.list_command_verifier_instances(organization_id, mission_id,
             command_release_attempt_id: command_release_attempt_id
           )
         end)
@@ -7348,7 +7350,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp default_runtime_metric_snapshots(_organization_id, _mission_id, _opts) do
-    Cadence.runtime_health_snapshot()
+    RuntimeHealth.snapshot()
     |> Map.get(:metrics, %{})
     |> Map.get(:ingress_processing_latency_ms, [])
   end
@@ -7468,7 +7470,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp default_command_queue_entries(organization_id, mission_id, _opts) do
-    Cadence.list_command_queue_entries(organization_id, mission_id, lifecycle_state: :pending)
+    Commanding.list_command_queue_entries(organization_id, mission_id, lifecycle_state: :pending)
   end
 
   defp default_command_queue_revision(organization_id, mission_id, opts) do

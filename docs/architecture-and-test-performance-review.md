@@ -737,11 +737,15 @@ diagnostic reports 31 production files, 21 test files, and 35 test functions
 over their respective limits.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
-and ratchets two dependency boundaries. The checked-in baseline records 8
-internal callers of the root `Cadence` facade and 205 direct dependencies from
-non-persistence code to `Cadence.Persistence.Schemas.*`. New edges fail, removed
-edges must be deleted from the baseline in the same change, and the baseline
-has an explicit owner and review-by date.
+and ratchets two dependency boundaries. The initial graph contained 8 internal
+callers of the root `Cadence` facade and 205 direct dependencies from
+non-persistence code to `Cadence.Persistence.Schemas.*`. The first production
+cleanup routed all eight internal callers through their owning contexts, so the
+current baseline contains zero root-facade edges and 205 schema edges. New
+edges fail, removed edges must be deleted from the baseline in the same change,
+and the baseline has an explicit owner and review-by date. The public root
+facade still exists for external callers and remains a later decomposition
+target.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates

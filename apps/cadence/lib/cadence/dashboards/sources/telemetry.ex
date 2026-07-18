@@ -7,6 +7,8 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   planner execute IO; callers pass a `PlannedSourceRequest` here after planning.
   """
 
+  alias Cadence.Contacts
+
   alias Cadence.Dashboards.{
     DataContext,
     DataLinks,
@@ -27,6 +29,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     TelemetryRevisionSummary
   }
 
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.{Sample, SelectionPolicy}
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow, RestClient}
@@ -2608,14 +2611,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   defp fetch_scheduled_contact(organization_id, mission_id, contact_id, opts) do
     fetch_scheduled_contact =
-      Keyword.get(opts, :fetch_scheduled_contact, &Cadence.fetch_scheduled_contact/3)
+      Keyword.get(opts, :fetch_scheduled_contact, &Contacts.fetch_scheduled_contact/3)
 
     fetch_scheduled_contact.(organization_id, mission_id, contact_id)
   end
 
   defp fetch_realized_contact(organization_id, mission_id, contact_id, opts) do
     fetch_realized_contact =
-      Keyword.get(opts, :fetch_realized_contact, &Cadence.fetch_realized_contact/3)
+      Keyword.get(opts, :fetch_realized_contact, &Contacts.fetch_realized_contact/3)
 
     fetch_realized_contact.(organization_id, mission_id, contact_id)
   end
@@ -2642,18 +2645,23 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp default_decimated_history(organization_id, mission_id, point_id, opts) do
-    case Cadence.decimated_telemetry_history_result(organization_id, mission_id, point_id, opts) do
+    case TelemetryReads.decimated_sample_history_result(
+           organization_id,
+           mission_id,
+           point_id,
+           opts
+         ) do
       {:ok, result} -> result
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp default_history(nil, mission_id, point_id, opts) do
-    Cadence.telemetry_history_result(mission_id, point_id, opts)
+    TelemetryReads.sample_history_result(mission_id, point_id, opts)
   end
 
   defp default_history(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_history_result(organization_id, mission_id, point_id, opts)
+    TelemetryReads.sample_history_result(organization_id, mission_id, point_id, opts)
   end
 
   defp default_watermark(nil, _mission_id, _point_id, _opts) do
@@ -2661,15 +2669,15 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp default_watermark(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_watermark(organization_id, mission_id, point_id, opts)
+    TelemetryReads.sample_watermark(organization_id, mission_id, point_id, opts)
   end
 
   defp default_latest(nil, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_value(mission_id, point_id, opts)
+    TelemetryReads.latest_value(mission_id, point_id, opts)
   end
 
   defp default_latest(organization_id, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_value(organization_id, mission_id, point_id, opts)
+    TelemetryReads.latest_value(organization_id, mission_id, point_id, opts)
   end
 
   defp warning(%PlannedSourceRequest{} = request, code, severity, message, details) do

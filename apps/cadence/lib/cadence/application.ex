@@ -5,6 +5,7 @@ defmodule Cadence.Application do
 
   use Application
 
+  alias Cadence.Auth
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
   alias Cadence.IngressArchive
   alias Cadence.Protocol.RecordArchive
@@ -61,7 +62,7 @@ defmodule Cadence.Application do
   defp bootstrap_after_start do
     maybe_bootstrap_dashboard_data_sources()
 
-    Cadence.ensure_bootstrap_admin()
+    Auth.ensure_bootstrap_admin()
   end
 
   defp observability_children do

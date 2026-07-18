@@ -23,6 +23,8 @@ defmodule Cadence.Dashboards.Sources.Limits do
   }
 
   alias Cadence.Limits.{DefinitionInterval, Evaluator, Event}
+  alias Cadence.Reads.Limits, as: LimitReads
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Sample
 
   @supported_products [:latest_state, :event_history, :definition_intervals, :analysis_buckets]
@@ -2507,43 +2509,43 @@ defmodule Cadence.Dashboards.Sources.Limits do
   end
 
   defp default_latest(nil, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_limit_state(mission_id, point_id, opts)
+    LimitReads.latest_state(mission_id, point_id, opts)
   end
 
   defp default_latest(organization_id, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_limit_state(organization_id, mission_id, point_id, opts)
+    LimitReads.latest_state(organization_id, mission_id, point_id, opts)
   end
 
   defp default_history(nil, mission_id, point_id, opts) do
-    Cadence.telemetry_limit_event_history(mission_id, point_id, opts)
+    LimitReads.event_history(mission_id, point_id, opts)
   end
 
   defp default_history(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_limit_event_history(organization_id, mission_id, point_id, opts)
+    LimitReads.event_history(organization_id, mission_id, point_id, opts)
   end
 
   defp default_intervals(nil, mission_id, point_id, opts) do
-    Cadence.telemetry_limit_definition_intervals(mission_id, point_id, opts)
+    LimitReads.definition_intervals(mission_id, point_id, opts)
   end
 
   defp default_intervals(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_limit_definition_intervals(organization_id, mission_id, point_id, opts)
+    LimitReads.definition_intervals(organization_id, mission_id, point_id, opts)
   end
 
   defp default_latest_sample(nil, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_value(mission_id, point_id, opts)
+    TelemetryReads.latest_value(mission_id, point_id, opts)
   end
 
   defp default_latest_sample(organization_id, mission_id, point_id, opts) do
-    Cadence.latest_telemetry_value(organization_id, mission_id, point_id, opts)
+    TelemetryReads.latest_value(organization_id, mission_id, point_id, opts)
   end
 
   defp default_sample_history(nil, mission_id, point_id, opts) do
-    Cadence.telemetry_history(mission_id, point_id, opts)
+    TelemetryReads.sample_history(mission_id, point_id, opts)
   end
 
   defp default_sample_history(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_history(organization_id, mission_id, point_id, opts)
+    TelemetryReads.sample_history(organization_id, mission_id, point_id, opts)
   end
 
   defp default_watermark(nil, _mission_id, _point_id, _opts) do
@@ -2551,7 +2553,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
   end
 
   defp default_watermark(organization_id, mission_id, point_id, opts) do
-    Cadence.telemetry_limit_watermark(organization_id, mission_id, point_id, opts)
+    LimitReads.watermark_result(organization_id, mission_id, point_id, opts)
   end
 
   defp warning(%PlannedSourceRequest{} = request, code, severity, message, details) do

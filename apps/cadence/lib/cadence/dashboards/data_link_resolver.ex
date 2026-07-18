@@ -8,7 +8,16 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, Transport, TransportStore}
+  alias Cadence.Comms.{
+    GroundStation,
+    GroundStationStore,
+    RoutingRule,
+    RoutingRuleStore,
+    Transport,
+    TransportStore
+  }
+
+  alias Cadence.Contacts
   alias Cadence.Contacts.{LinkAssignment, RealizedContact, ScheduledContact}
 
   alias Cadence.Dashboards.{
@@ -970,7 +979,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_link(%DataLink{} = link, organization_id, mission_id) do
-    case Cadence.fetch_link_assignment(organization_id, mission_id, link.target_id) do
+    case Contacts.fetch_link_assignment(organization_id, mission_id, link.target_id) do
       {:ok, %LinkAssignment{} = assignment} ->
         routing_rule = routing_rule_for_link_assignment(organization_id, mission_id, assignment)
         resource = link_assignment_resource(assignment, routing_rule)
@@ -3452,7 +3461,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          mission_id,
          %LinkAssignment{} = assignment
        ) do
-    Cadence.list_routing_rules(organization_id, mission_id)
+    RoutingRuleStore.list_routing_rules(organization_id, mission_id)
     |> Enum.find(&routing_rule_materialized_link?(&1, assignment.link_assignment_id))
   end
 

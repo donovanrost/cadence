@@ -211,11 +211,3 @@ persistence_schema|lib/cadence/telemetry/storage/observation_identity_states.ex|
 persistence_schema|lib/cadence/telemetry/storage/observation_identity_states.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/storage/questdb/observation_reader.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/storage/writers/postgres_read_model.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-root_facade|lib/cadence/application.ex|lib/cadence.ex
-root_facade|lib/cadence/dashboards/byo_questdb_smoke.ex|lib/cadence.ex
-root_facade|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence.ex
-root_facade|lib/cadence/dashboards/sources/limits.ex|lib/cadence.ex
-root_facade|lib/cadence/dashboards/sources/operational_observables.ex|lib/cadence.ex
-root_facade|lib/cadence/dashboards/sources/telemetry.ex|lib/cadence.ex
-root_facade|lib/cadence/ops/point_catalog.ex|lib/cadence.ex
-root_facade|lib/cadence/runtime/provider_ingress_executor.ex|lib/cadence.ex
