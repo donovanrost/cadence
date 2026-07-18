@@ -722,6 +722,14 @@ Size thresholds are not a substitute for design review. They create an early
 conversation before another 6,000-line function or 8,000-line multi-family
 module becomes normal.
 
+`mix cadence.architecture.check` now implements these source-size diagnostics
+in warning mode. It scans production, default-test, test-support, and opt-in
+browser source; reports files and individual `test` blocks over the thresholds;
+and emits a compact summary from `mix precommit`. `--strict` is available once
+the current pressure has been reduced or explicitly baselined. The initial
+diagnostic reports 31 production files, 21 test files, and 35 test functions
+over their respective limits.
+
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates
 the pattern but should be broadened beyond polling-related rules.
@@ -830,6 +838,9 @@ find apps -type f \( -name '*.ex' -o -name '*.exs' -o -name '*.heex' \) \
 # Compile dependency shape
 mix xref graph --format stats --label compile-connected --include-siblings
 mix xref graph --format cycles --label compile-connected --include-siblings
+
+# Architecture source-size pressure
+mix cadence.architecture.check
 
 # Test-module compile and require cost
 cd apps/cadence_web
