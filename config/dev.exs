@@ -2,6 +2,12 @@ import Config
 
 config :cadence, provider_local_credentials: [enabled: true]
 
+config :cadence_web,
+  dashboard_engine_source_execution: [
+    source_execution_max_concurrency: 4,
+    source_execution_timeout_ms: 15_000
+  ]
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",

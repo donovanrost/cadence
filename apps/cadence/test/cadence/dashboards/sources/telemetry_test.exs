@@ -158,6 +158,35 @@ defmodule Cadence.Dashboards.Sources.TelemetryTest do
     assert opts[:order] == :asc
   end
 
+  test "bounds live telemetry history to the configured moving window" do
+    now = ~U[2026-06-17 12:05:00Z]
+    parent = self()
+
+    history_fun = fn organization_id, mission_id, point_id, opts ->
+      send(parent, {:live_history, organization_id, mission_id, point_id, opts})
+      []
+    end
+
+    Telemetry.resolve(
+      source_request(
+        time_context: %{
+          mode: :live,
+          axis: :generation_time,
+          window_seconds: 60
+        },
+        sampling: %{mode: :raw_series, max_raw_points: 250}
+      ),
+      history_fun: history_fun,
+      now: now
+    )
+
+    assert_receive {:live_history, "org-1", "mission-1", "HK.counter", opts}
+    assert opts[:from_observed_at] == ~U[2026-06-17 12:04:00Z]
+    assert opts[:to_observed_at] == now
+    refute Keyword.has_key?(opts, :from_receipt_time)
+    refute Keyword.has_key?(opts, :to_receipt_time)
+  end
+
   test "marks bounded receipt-time history partial when one requested observable is empty" do
     from_time = ~U[2026-06-17 12:00:00Z]
     to_time = ~U[2026-06-17 12:05:00Z]

@@ -70,11 +70,14 @@ defmodule Cadence.Jobs.Dispatcher do
     end
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
     state =
       state
       |> unmonitor_worker(ref)
-      |> dispatch_available_jobs(:worker_available)
+
+    emit(:worker_finished, state, %{count: 1}, %{outcome: worker_outcome(reason)})
+
+    state = dispatch_available_jobs(state, :worker_available)
 
     {:noreply, state}
   end
@@ -141,8 +144,9 @@ defmodule Cadence.Jobs.Dispatcher do
 
   defp monitor_started_worker(state, job, pid) do
     ref = Process.monitor(pid)
+    state = put_in(state.worker_refs[ref], job.job_id)
     emit(:worker_started, state, %{count: 1}, %{job_id: job.job_id})
-    put_in(state.worker_refs[ref], job.job_id)
+    state
   end
 
   defp unmonitor_worker(state, ref) do
@@ -172,6 +176,11 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   defp clear_safety_timer(state), do: %{state | safety_timer: nil}
+
+  defp worker_outcome(:normal), do: :ok
+  defp worker_outcome(:shutdown), do: :ok
+  defp worker_outcome({:shutdown, _reason}), do: :ok
+  defp worker_outcome(_reason), do: :error
 
   defp emit(event, state, measurements, metadata) when is_atom(event) do
     :telemetry.execute(

@@ -33,6 +33,44 @@ parse_headers = fn encoded_headers ->
   end)
 end
 
+metrics_endpoint =
+  case System.get_env("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") do
+    endpoint when is_binary(endpoint) and endpoint != "" ->
+      endpoint
+
+    _unset_or_empty ->
+      case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
+        endpoint when is_binary(endpoint) and endpoint != "" ->
+          String.trim_trailing(endpoint, "/") <> "/v1/metrics"
+
+        _unset_or_empty ->
+          nil
+      end
+  end
+
+if config_env() != :test and is_binary(metrics_endpoint) do
+  headers =
+    System.get_env("OTEL_EXPORTER_OTLP_METRICS_HEADERS") ||
+      System.get_env("OTEL_EXPORTER_OTLP_HEADERS") ||
+      ""
+
+  config :cadence, :otel_metrics,
+    enabled: true,
+    endpoint: metrics_endpoint,
+    headers: parse_headers.(headers),
+    export_interval_ms:
+      parse_positive_integer.("CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS", 10_000),
+    sample_interval_ms:
+      parse_positive_integer.("CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS", 10_000),
+    mission_health_interval_ms:
+      parse_positive_integer.("CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS", 15_000),
+    freshness_grace_seconds:
+      parse_positive_integer.("CADENCE_TELEMETRY_FRESHNESS_GRACE_SECONDS", 30),
+    max_queue: parse_positive_integer.("CADENCE_OTEL_METRICS_MAX_QUEUE", 10_000),
+    max_series: parse_positive_integer.("CADENCE_OTEL_METRICS_MAX_SERIES", 5_000),
+    timeout_ms: parse_positive_integer.("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT", 5_000)
+end
+
 logs_endpoint =
   case System.get_env("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") do
     endpoint when is_binary(endpoint) and endpoint != "" ->
@@ -96,6 +134,15 @@ if bootstrap_admin_enabled? do
     session_ttl_seconds:
       System.get_env("CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS", "86400")
       |> String.to_integer()
+end
+
+case System.get_env("CADENCE_TELEMETRY_CURRENT_VALUE_STORE", "ets") |> String.downcase() do
+  "postgres" ->
+    config :cadence, :telemetry_current_value_store,
+      module: Cadence.Telemetry.CurrentValueStore.Postgres
+
+  _other ->
+    :ok
 end
 
 case System.get_env("CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES") do

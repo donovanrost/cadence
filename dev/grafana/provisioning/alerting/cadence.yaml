@@ -1,0 +1,268 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: cadence-service
+    folder: Cadence
+    interval: 1m
+    rules:
+      - uid: cadence-http-errors
+        title: Cadence HTTP error ratio is high
+        condition: C
+        for: 10m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: Cadence has served more than 2 percent failed HTTP requests for 10 minutes.
+          runbook_url: /docs/how-to/cadence-observability-runbooks.md#http-error-ratio
+        labels:
+          severity: page
+          service: cadence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: greptimedb-prometheus
+            model:
+              editorMode: code
+              expr: 'sum(rate(http_server_request_duration_seconds_count{error_type!=""}[5m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])), 1)'
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [], type: gt}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0.02], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              refId: C
+              type: threshold
+
+  - orgId: 1
+    name: cadence-mission-health
+    folder: Cadence
+    interval: 30s
+    rules:
+      - uid: cadence-expected-telemetry-missing
+        title: Expected Cadence telemetry is stale
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: A mission with an active live downlink contact has not produced current telemetry within the freshness objective.
+          runbook_url: /docs/how-to/cadence-observability-runbooks.md#expected-telemetry-is-stale
+        labels:
+          severity: page
+          service: cadence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: greptimedb-prometheus
+            model:
+              editorMode: code
+              expr: 'sum by (cadence_mission_id) (increase(cadence_telemetry_availability_interval_total{outcome="missed"}[2m]))'
+              instant: true
+              intervalMs: 1000
+              legendFormat: '{{cadence_mission_id}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              refId: C
+              type: threshold
+
+      - uid: cadence-command-deadline-missed
+        title: Cadence command deadline missed
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: A queued command crossed its expiry deadline before release.
+          runbook_url: /docs/how-to/cadence-observability-runbooks.md#command-deadline-missed
+        labels:
+          severity: page
+          service: cadence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: greptimedb-prometheus
+            model:
+              editorMode: code
+              expr: 'sum(increase(cadence_commanding_deadline_result_total{outcome="missed"}[5m]))'
+              instant: true
+              intervalMs: 1000
+              legendFormat: missed
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              refId: C
+              type: threshold
+
+  - orgId: 1
+    name: cadence-capacity
+    folder: Cadence
+    interval: 1m
+    rules:
+      - uid: cadence-ingress-backpressure
+        title: Cadence ingress is backpressured
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: Provider ingress has remained backpressured for five minutes.
+          runbook_url: /docs/how-to/cadence-observability-runbooks.md#ingress-backpressure
+        labels:
+          severity: page
+          service: cadence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: greptimedb-prometheus
+            model:
+              editorMode: code
+              expr: 'max(cadence_telemetry_ingress_backpressure)'
+              instant: true
+              intervalMs: 1000
+              legendFormat: backpressure
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              refId: C
+              type: threshold
+
+      - uid: cadence-otel-export-failures
+        title: Cadence observability export is failing
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: Cadence is dropping or failing to export logs or metric data points.
+          runbook_url: /docs/how-to/cadence-observability-runbooks.md#observability-export-failures
+        labels:
+          severity: ticket
+          service: cadence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: greptimedb-prometheus
+            model:
+              editorMode: code
+              expr: 'sum(rate(otel_sdk_exporter_log_exported_total{error_type!=""}[5m])) + sum(rate(otel_sdk_exporter_metric_data_point_exported_total{error_type!=""}[5m]))'
+              instant: true
+              intervalMs: 1000
+              legendFormat: failures
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              refId: C
+              type: threshold

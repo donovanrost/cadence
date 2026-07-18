@@ -29,6 +29,7 @@ defmodule Cadence.Application do
         dashboard_source_circuit_breaker_children() ++
         dashboard_source_probe_scheduler_children() ++
         [Cadence.Runtime.Supervisor] ++
+        mission_health_observability_children() ++
         command_dispatcher_children() ++
         command_verifier_scheduler_children() ++
         contact_scheduler_global_safety_children() ++
@@ -64,7 +65,16 @@ defmodule Cadence.Application do
   end
 
   defp observability_children do
-    [Cadence.Observability.log_exporter_child_spec()]
+    [
+      Cadence.Observability.log_exporter_child_spec(),
+      Cadence.Observability.metrics_reporter_child_spec(),
+      Cadence.Observability.metrics_sampler_child_spec()
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp mission_health_observability_children do
+    [Cadence.Observability.mission_health_sampler_child_spec()]
     |> Enum.reject(&is_nil/1)
   end
 

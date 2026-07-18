@@ -216,7 +216,9 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
         attributes: persistence_span_attributes(batch, links)
       },
       fn ->
+        started_at = System.monotonic_time()
         result = do_persist_batch(batch)
+        emit_persist_result(result, batch, elapsed_us(started_at))
         _ = mark_persistence_result(result, batch)
         result
       end
@@ -484,6 +486,24 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     }
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
     |> Map.new()
+  end
+
+  defp emit_persist_result(result, %ProcessedIngressBatch{} = batch, duration_us) do
+    metadata =
+      case result do
+        :ok -> %{outcome: :ok}
+        {:error, reason} -> %{outcome: :error, error_type: Observability.error_class(reason)}
+      end
+
+    :telemetry.execute(
+      @event_prefix ++ [:persist_result],
+      %{
+        batch_size: ProcessedIngressBatch.size(batch),
+        duration_us: duration_us,
+        queue_wait_ms: ProcessedIngressBatch.queue_wait_ms(batch)
+      },
+      metadata
+    )
   end
 
   defp mark_persistence_result(:ok, %ProcessedIngressBatch{} = batch) do

@@ -330,6 +330,16 @@ const TelemetryChart = {
         })
       }
     })
+
+    const pointTimestamps = this.seriesList.flatMap((series) =>
+      series.points.map(([timestampMs]) => timestampMs)
+    )
+
+    this.el.dataset.chartPointCount = `${pointTimestamps.length}`
+    this.el.dataset.chartLatestTimestampMs =
+      pointTimestamps.length > 0
+        ? `${pointTimestamps.reduce((latest, timestampMs) => Math.max(latest, timestampMs), 0)}`
+        : ""
   },
 
   plotData() {

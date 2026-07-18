@@ -181,7 +181,47 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesSourceWatermarkMarkersTest d
     assert cursor_marker.label == "Watermark complete through / binding-flight / questdb-flight"
   end
 
-  defp source_watermark do
+  test "frame_markers hides fresh watermark cursors in live mode" do
+    assert [] =
+             :live
+             |> cursor_placement_frames(:fresh)
+             |> TimeSeriesSourceWatermarkMarkers.frame_markers()
+  end
+
+  test "frame_markers keeps stale watermark cursors in live mode" do
+    assert [%{marker_type: "source_watermark_cursor", freshness_state: "stale"}] =
+             :live
+             |> cursor_placement_frames(:stale)
+             |> TimeSeriesSourceWatermarkMarkers.frame_markers()
+  end
+
+  test "frame_markers keeps fresh watermark cursors in archive mode" do
+    assert [%{marker_type: "source_watermark_cursor", freshness_state: "fresh"}] =
+             :archive
+             |> cursor_placement_frames(:fresh)
+             |> TimeSeriesSourceWatermarkMarkers.frame_markers()
+  end
+
+  defp cursor_placement_frames(time_mode, freshness_state) do
+    %PlacementFrames{
+      primary: [
+        %Frame{
+          source: :telemetry,
+          shape: :wide,
+          meta: %{
+            source_request_id: "req-watermark",
+            source_request_context: %{
+              time_mode: time_mode,
+              time_axis: :generation_time
+            },
+            source_watermarks: [source_watermark(freshness_state)]
+          }
+        }
+      ]
+    }
+  end
+
+  defp source_watermark(freshness_state \\ :retention_gap) do
     %{
       request_id: "req-watermark",
       logical_source: :telemetry,
@@ -189,7 +229,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesSourceWatermarkMarkersTest d
       source_binding_id: "binding-flight",
       realm: :flight,
       dataset: "samples",
-      freshness_state: :retention_gap,
+      freshness_state: freshness_state,
       retention_starts_at: ~U[2026-06-17 10:00:00Z],
       complete_through: ~U[2026-06-17 10:04:30Z],
       latest_receipt_time: ~U[2026-06-17 10:04:45Z],

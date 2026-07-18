@@ -270,59 +270,64 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesSourceWatermarkMarkers do
   defp retention_gap_marker(_watermark, _requested_start, _request_context), do: nil
 
   defp source_watermark_cursor_marker(watermark, request_context) when is_map(watermark) do
-    case source_watermark_cursor(watermark) do
-      {cursor_kind, %DateTime{} = cursor_time} ->
-        request_id = context_value(watermark, :request_id)
-        data_source_id = context_value(watermark, :data_source_id)
-        source_binding_id = context_value(watermark, :source_binding_id)
-        logical_source = context_value(watermark, :logical_source)
-        realm = context_value(watermark, :realm)
+    with false <- nominal_live_watermark?(watermark, request_context),
+         {cursor_kind, %DateTime{} = cursor_time} <- source_watermark_cursor(watermark) do
+      request_id = context_value(watermark, :request_id)
+      data_source_id = context_value(watermark, :data_source_id)
+      source_binding_id = context_value(watermark, :source_binding_id)
+      logical_source = context_value(watermark, :logical_source)
+      realm = context_value(watermark, :realm)
 
-        %{
-          marker_type: "source_watermark_cursor",
-          marker_id:
-            source_watermark_cursor_marker_id(
-              request_id,
-              data_source_id,
-              cursor_kind,
-              cursor_time
-            ),
-          timestamp_ms: DateTime.to_unix(cursor_time, :millisecond),
-          target: "source_watermark",
-          target_id: request_id || data_source_id || source_binding_id,
-          source_request_id: request_id,
-          logical_source: marker_value_text(logical_source),
-          source_binding_id: source_binding_id,
-          data_source_id: data_source_id,
-          dataset: context_value(watermark, :dataset),
-          realm: marker_value_text(realm),
-          time_mode: marker_value_text(Map.get(request_context, :time_mode)),
-          time_axis: marker_value_text(Map.get(request_context, :time_axis)),
-          replay_run_id: Map.get(request_context, :replay_run_id),
-          requested_realm: marker_value_text(Map.get(request_context, :requested_realm)),
-          requested_data_view: marker_value_text(Map.get(request_context, :requested_data_view)),
-          requested_data_source_id: Map.get(request_context, :requested_data_source_id),
-          requested_source_binding_id: Map.get(request_context, :requested_source_binding_id),
-          requested_dataset: Map.get(request_context, :requested_dataset),
-          requested_validity_state:
-            marker_value_text(Map.get(request_context, :requested_validity_state)),
-          cursor_kind: marker_value_text(cursor_kind),
-          confidence: marker_value_text(context_value(watermark, :confidence)),
-          freshness_state: marker_value_text(context_value(watermark, :freshness_state)),
-          complete_through_ms: timestamp_ms(context_datetime(watermark, :complete_through)),
-          latest_receipt_time_ms: timestamp_ms(context_datetime(watermark, :latest_receipt_time)),
-          source_watermark_event_id: context_value(watermark, :source_watermark_event_id),
-          label:
-            source_watermark_cursor_marker_label(cursor_kind, data_source_id, source_binding_id)
-        }
-        |> drop_nil_values()
-
-      nil ->
+      %{
+        marker_type: "source_watermark_cursor",
+        marker_id:
+          source_watermark_cursor_marker_id(
+            request_id,
+            data_source_id,
+            cursor_kind,
+            cursor_time
+          ),
+        timestamp_ms: DateTime.to_unix(cursor_time, :millisecond),
+        target: "source_watermark",
+        target_id: request_id || data_source_id || source_binding_id,
+        source_request_id: request_id,
+        logical_source: marker_value_text(logical_source),
+        source_binding_id: source_binding_id,
+        data_source_id: data_source_id,
+        dataset: context_value(watermark, :dataset),
+        realm: marker_value_text(realm),
+        time_mode: marker_value_text(Map.get(request_context, :time_mode)),
+        time_axis: marker_value_text(Map.get(request_context, :time_axis)),
+        replay_run_id: Map.get(request_context, :replay_run_id),
+        requested_realm: marker_value_text(Map.get(request_context, :requested_realm)),
+        requested_data_view: marker_value_text(Map.get(request_context, :requested_data_view)),
+        requested_data_source_id: Map.get(request_context, :requested_data_source_id),
+        requested_source_binding_id: Map.get(request_context, :requested_source_binding_id),
+        requested_dataset: Map.get(request_context, :requested_dataset),
+        requested_validity_state:
+          marker_value_text(Map.get(request_context, :requested_validity_state)),
+        cursor_kind: marker_value_text(cursor_kind),
+        confidence: marker_value_text(context_value(watermark, :confidence)),
+        freshness_state: marker_value_text(context_value(watermark, :freshness_state)),
+        complete_through_ms: timestamp_ms(context_datetime(watermark, :complete_through)),
+        latest_receipt_time_ms: timestamp_ms(context_datetime(watermark, :latest_receipt_time)),
+        source_watermark_event_id: context_value(watermark, :source_watermark_event_id),
+        label:
+          source_watermark_cursor_marker_label(cursor_kind, data_source_id, source_binding_id)
+      }
+      |> drop_nil_values()
+    else
+      _suppressed_or_missing_cursor ->
         nil
     end
   end
 
   defp source_watermark_cursor_marker(_watermark, _request_context), do: nil
+
+  defp nominal_live_watermark?(watermark, request_context) do
+    context_atom(request_context, :time_mode) == :live and
+      context_atom(watermark, :freshness_state) == :fresh
+  end
 
   defp source_watermark_cursor(watermark) when is_map(watermark) do
     cond do

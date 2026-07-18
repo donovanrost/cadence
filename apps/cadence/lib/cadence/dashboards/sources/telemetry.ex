@@ -1418,8 +1418,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   defp bounded_history_time_opts(%PlannedSourceRequest{} = request) do
     requested_axis = time_axis(request)
     effective_axis = effective_bounded_history_time_axis(request, [])
-    from_time = first_context_value(request.time_context, [:from, :start, :start_time])
-    to_time = first_context_value(request.time_context, [:to, :end, :end_time])
+    {from_time, to_time} = bounded_history_time_range(request, [])
 
     bounded_history_time_opts_for_axis(
       request,
@@ -1434,8 +1433,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   defp bounded_history_time_opts(%PlannedSourceRequest{} = request, source_opts) do
     requested_axis = time_axis(request)
     effective_axis = effective_bounded_history_time_axis(request, source_opts)
-    from_time = first_context_value(request.time_context, [:from, :start, :start_time])
-    to_time = first_context_value(request.time_context, [:to, :end, :end_time])
+    {from_time, to_time} = bounded_history_time_range(request, source_opts)
 
     bounded_history_time_opts_for_axis(
       request,
@@ -1445,6 +1443,39 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       to_time,
       source_opts
     )
+  end
+
+  defp bounded_history_time_range(%PlannedSourceRequest{} = request, source_opts) do
+    from_time = first_context_value(request.time_context, [:from, :start, :start_time])
+    to_time = first_context_value(request.time_context, [:to, :end, :end_time])
+
+    case {from_time, to_time, live_time_context?(request.time_context),
+          live_window_seconds(request.time_context)} do
+      {nil, nil, true, window_seconds} when is_integer(window_seconds) ->
+        to_time = live_window_now(source_opts)
+        {DateTime.add(to_time, -window_seconds, :second), to_time}
+
+      _explicit_or_unbounded ->
+        {from_time, to_time}
+    end
+  end
+
+  defp live_time_context?(time_context) do
+    first_context_value(time_context, [:mode]) in [:live, "live"]
+  end
+
+  defp live_window_seconds(time_context) do
+    case first_context_value(time_context, [:window_seconds]) do
+      window_seconds when is_integer(window_seconds) and window_seconds > 0 -> window_seconds
+      _invalid_or_missing -> nil
+    end
+  end
+
+  defp live_window_now(source_opts) do
+    case Keyword.get(source_opts, :now) do
+      %DateTime{} = now -> DateTime.truncate(now, :microsecond)
+      _missing -> DateTime.utc_now()
+    end
   end
 
   defp effective_bounded_history_time_axis(%PlannedSourceRequest{} = request, source_opts) do

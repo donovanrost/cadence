@@ -39,22 +39,100 @@ Export OTLP from the BEAM to the collector:
 OTEL_SERVICE_NAME=cadence \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=development \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres \
 mix phx.server
 ```
 
-Cadence uses OTLP/HTTP and appends the standard `/v1/traces` and `/v1/logs`
+Cadence uses OTLP/HTTP and appends the standard `/v1/traces`, `/v1/metrics`, and `/v1/logs`
 signal paths to the configured endpoint. When `OTEL_EXPORTER_OTLP_ENDPOINT` is
 absent or empty, network exporting is disabled and Cadence runs without an
 exporter.
+
+## Exercise the full contact and telemetry path
+
+After starting the observability stack and applying migrations, run the SRE
+demo from the umbrella root:
+
+```
+mix ecto.migrate
+
+OTEL_SERVICE_NAME=cadence-sre-demo \
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=development \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS=1000 \
+CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS=1000 \
+CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS=1000 \
+mix run --no-start dev/sre_observability_demo.exs
+```
+
+The script persists a uniquely named organization, mission, spacecraft, source
+endpoint, packet binding, native live dashboard, and scheduled telemetry
+contact. The normal contact scheduler realizes the contact, opens a real TCP
+downlink adapter on an ephemeral port, and connects the Cadence simulator at
+2 Hz. The resulting TM frames travel through CCSDS extraction, ingress
+archives, current-value projection, and telemetry persistence.
+
+The standalone demo uses the Postgres compatibility ingress archive, protocol
+record archive, and current-value backend. This keeps the shared live
+projection's packet/evidence provenance intact while allowing the simulator
+process and Phoenix process to see the same point values. Start Phoenix with
+`CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres` as shown above; the default ETS
+backend is node-local and is appropriate only when ingestion and dashboard
+reads happen in the same BEAM node.
+
+Leave the command running while using the
+[Cadence / SRE Overview](http://localhost:3000/d/cadence-sre-overview/cadence-sre-overview)
+dashboard. Select `cadence-sre-demo` as the service and the mission ID printed by
+the script. The script also prints the authenticated Cadence dashboard URL,
+which contains live five-minute trends and current-value tiles for the APID 42
+uptime and battery-voltage points. Press Ctrl-C twice to stop it.
+
+Optional controls:
+
+- `CADENCE_SRE_DEMO_RATE_HZ` (default `2.0`)
+- `CADENCE_SRE_DEMO_CONTACT_SECONDS` (default `3600`)
+- `CADENCE_SRE_DEMO_LOG_LEVEL` (default `info`)
+- `CADENCE_SRE_DEMO_RUN_ID` (defaults to a unique integer; set it only when
+  deliberately reusing the same persisted demo objects)
 
 - Bandit spans cover the complete HTTP request lifecycle.
 - Phoenix adds route and LiveView spans.
 - Ecto adds query spans without recording SQL statements.
 - A bounded Logger handler sends batched OTLP protobuf records to the collector.
+- A bounded metrics reporter aggregates `:telemetry` events and periodic runtime
+  samples, then sends OTLP protobuf metrics to the collector.
 
 Operational instrumentation lives under `Cadence.Observability` and
 `CadenceWeb.Observability`. `Cadence.Telemetry` remains reserved for spacecraft
 telemetry.
+
+### Metrics
+
+The central metric contract is `Cadence.Observability.Metrics.Catalog`. It
+includes HTTP and database golden signals, BEAM saturation, telemetry ingress
+and persistence, commanding, contact scheduling, provider polling, background
+jobs, and the observability exporters themselves.
+
+Domain object IDs are intentionally excluded from metric dimensions. Mission ID
+is permitted only on the bounded mission-health series. Command, contact,
+provider binding, path, source endpoint, evidence, request, and trace IDs remain
+available in logs and traces.
+
+Mission health is state-aware. `cadence.telemetry.expected` becomes `1` only
+while an active live realized contact includes `telemetry_downlink`. Availability
+misses are recorded only in that state; silence outside an expected contact is
+nominal.
+
+Optional metrics tuning:
+
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` (complete metrics URL)
+- `CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS` (default `10000`)
+- `CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS` (default `10000`)
+- `CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS` (default `15000`)
+- `CADENCE_TELEMETRY_FRESHNESS_GRACE_SECONDS` (default `30`)
+- `CADENCE_OTEL_METRICS_MAX_QUEUE` (default `10000`)
+- `CADENCE_OTEL_METRICS_MAX_SERIES` (default `5000`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` (default `5000`)
 
 ### Provider telemetry ingress traces
 
@@ -124,6 +202,15 @@ one per drilldown app:
 - **Loki** — backs the **Logs Drilldown** app (Drilldown → Logs).
 - **Tempo** — backs the **Traces Drilldown** app (Drilldown → Traces),
   including its RED metrics (served by Tempo's `local-blocks` processor).
+
+Grafana also provisions:
+
+- **Cadence / SRE Overview** at
+  <http://localhost:3000/d/cadence-sre-overview/cadence-sre-overview>.
+- Alert rules for HTTP errors, expected-contact telemetry misses, command
+  deadline misses, ingress backpressure, and OTLP export failures.
+- Operator response guidance in
+  [`cadence-observability-runbooks.md`](cadence-observability-runbooks.md).
 
 ## Direct GreptimeDB access
 

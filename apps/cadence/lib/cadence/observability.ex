@@ -7,6 +7,7 @@ defmodule Cadence.Observability do
   """
 
   alias Cadence.Observability.LogExporter
+  alias Cadence.Observability.Metrics.{MissionHealthSampler, Reporter, RuntimeSampler}
   alias OpenTelemetry.{Ctx, Span}
 
   require Logger
@@ -25,6 +26,45 @@ defmodule Cadence.Observability do
 
     if Keyword.get(config, :enabled, false) and is_binary(config[:endpoint]) do
       Supervisor.child_spec({LogExporter, Keyword.delete(config, :enabled)}, id: LogExporter)
+    end
+  end
+
+  @spec metrics_reporter_child_spec() :: Supervisor.child_spec() | nil
+  def metrics_reporter_child_spec do
+    config = Application.get_env(:cadence, :otel_metrics, [])
+
+    if Keyword.get(config, :enabled, false) and is_binary(config[:endpoint]) do
+      Supervisor.child_spec({Reporter, Keyword.delete(config, :enabled)}, id: Reporter)
+    end
+  end
+
+  @spec metrics_sampler_child_spec() :: Supervisor.child_spec() | nil
+  def metrics_sampler_child_spec do
+    metrics_config = Application.get_env(:cadence, :otel_metrics, [])
+
+    if Keyword.get(metrics_config, :enabled, false) do
+      log_config = Application.get_env(:cadence, :otel_logs, [])
+
+      Supervisor.child_spec(
+        {RuntimeSampler,
+         interval_ms: Keyword.get(metrics_config, :sample_interval_ms, 10_000),
+         log_max_queue: Keyword.get(log_config, :max_queue, 5_000)},
+        id: RuntimeSampler
+      )
+    end
+  end
+
+  @spec mission_health_sampler_child_spec() :: Supervisor.child_spec() | nil
+  def mission_health_sampler_child_spec do
+    metrics_config = Application.get_env(:cadence, :otel_metrics, [])
+
+    if Keyword.get(metrics_config, :enabled, false) do
+      Supervisor.child_spec(
+        {MissionHealthSampler,
+         interval_ms: Keyword.get(metrics_config, :mission_health_interval_ms, 15_000),
+         freshness_grace_seconds: Keyword.get(metrics_config, :freshness_grace_seconds, 30)},
+        id: MissionHealthSampler
+      )
     end
   end
 

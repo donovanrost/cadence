@@ -791,6 +791,39 @@ async function submitSignIn(client, { loginUrl, email, password }) {
   assert.equal(authResult.result.value, true, "Browser sign-in did not establish an authenticated session")
 }
 
+async function selectOrganization(client, organizationId) {
+  if (!organizationId) return
+
+  const loaded = client.once("Page.loadEventFired")
+  const result = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const organizationId = ${JSON.stringify(organizationId)}
+        const input = Array.from(
+          document.querySelectorAll("form[action='/session/organization'] input[name='organization_id']")
+        ).find((candidate) => candidate.value === organizationId)
+        const form = input?.closest("form")
+
+        if (!form) {
+          return { ok: false, reason: "organization switch form not found" }
+        }
+
+        form.submit()
+        return { ok: true }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(
+    result.result.value?.ok,
+    true,
+    result.result.value?.reason || "organization switch failed"
+  )
+  await loaded
+  await waitForDocumentBody(client)
+}
+
 async function waitForDocumentBody(client) {
   const startedAt = Date.now()
 
@@ -31891,7 +31924,112 @@ async function runComparisonReviewResolvedAuditInspection(client, profile) {
   return {audit, hidden, recovered}
 }
 
+async function runLiveTelemetryStreamInspection(client, profile) {
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+
+  const readChartState = async () => {
+    const result = await client.send("Runtime.evaluate", {
+      expression: `
+        (() => ({
+          liveSocketConnected: Boolean(window.liveSocket?.isConnected?.()),
+          page: (() => {
+            const page = document.querySelector("#ops-dashboard-show-page")
+            return {
+              runtimeRefreshStatus: page?.dataset.runtimeRefreshStatus || "",
+              runtimeRefreshReason: page?.dataset.runtimeRefreshReason || "",
+              engineLiveAppendEligible: page?.dataset.engineLiveAppendEligible || "",
+              dashboardTimeMode: page?.dataset.dashboardTimeMode || ""
+            }
+          })(),
+          charts: Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).map((chart) => ({
+            id: chart.id || "",
+            placementId: chart.dataset.placementId || "",
+            widgetId: chart.dataset.widgetId || "",
+            timeMode: chart.dataset.timeMode || "",
+            dataSourceId: chart.dataset.dataSourceId || "",
+            sourceBindingId: chart.dataset.sourceBindingId || "",
+            backfillBytes: (chart.dataset.backfill || "").length,
+            pointCount: Number(chart.dataset.chartPointCount || 0),
+            latestTimestampMs: Number(chart.dataset.chartLatestTimestampMs || 0),
+            liveWindowEndMs: Number(chart.dataset.liveWindowEndMs || 0),
+            rendered: Boolean(chart.querySelector(".uplot"))
+          }))
+        }))()
+      `,
+      returnByValue: true,
+    })
+
+    return result.result.value
+  }
+
+  const initial = await readChartState()
+  console.log(JSON.stringify({liveTelemetryStreamInitial: initial}))
+
+  assert.equal(initial.liveSocketConnected, true, "LiveSocket should be connected")
+  assert.equal(initial.charts.length > 0, true, "at least one telemetry chart should render")
+  assert.equal(
+    initial.charts.every((chart) => chart.rendered && chart.pointCount > 0),
+    true,
+    "each telemetry chart should render with initial points"
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, 4_000))
+
+  const current = await readChartState()
+  const initialByPlacement = new Map(
+    initial.charts.map((chart) => [chart.placementId, chart])
+  )
+
+  assert.equal(current.liveSocketConnected, true, "LiveSocket should remain connected")
+  assert.deepEqual(
+    current.charts.map((chart) => chart.placementId).sort(),
+    initial.charts.map((chart) => chart.placementId).sort(),
+    "the same telemetry charts should remain mounted"
+  )
+
+  current.charts.forEach((chart) => {
+    const before = initialByPlacement.get(chart.placementId)
+
+    assert.ok(before, `missing initial chart state for ${chart.placementId}`)
+    assert.equal(
+      chart.pointCount > before.pointCount,
+      true,
+      `${chart.placementId} should receive streamed telemetry points`
+    )
+    assert.equal(
+      chart.latestTimestampMs > before.latestTimestampMs,
+      true,
+      `${chart.placementId} should advance its latest telemetry timestamp`
+    )
+    assert.equal(
+      chart.liveWindowEndMs > before.liveWindowEndMs,
+      true,
+      `${chart.placementId} should advance its live window`
+    )
+  })
+
+  return {
+    initial,
+    current,
+    deltas: current.charts.map((chart) => {
+      const before = initialByPlacement.get(chart.placementId)
+
+      return {
+        placementId: chart.placementId,
+        points: chart.pointCount - before.pointCount,
+        latestTimestampMs: chart.latestTimestampMs - before.latestTimestampMs,
+        liveWindowEndMs: chart.liveWindowEndMs - before.liveWindowEndMs,
+      }
+    }),
+  }
+}
+
 const INTERACTION_SCENARIOS = {
+  "live-telemetry-stream": {
+    resultKey: "liveTelemetryStream",
+    run: runLiveTelemetryStreamInspection,
+  },
   "completed-workflow": {
     resultKey: "completedWorkflow",
     run: runCompletedWorkflowInspection,
@@ -32289,6 +32427,7 @@ try {
 
   if (credentials) {
     await submitSignIn(client, credentials)
+    await selectOrganization(client, argValue("--organization-id"))
   }
 
   const scenarioResult = await withTimeout(

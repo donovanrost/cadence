@@ -407,6 +407,9 @@ function chartWithPlot(limitMarkers = []) {
   chart.seriesList = primarySeries.concat(compareSeries)
   chart.rebuildPlotData()
 
+  assert.equal(chart.el.dataset.chartPointCount, "2")
+  assert.equal(chart.el.dataset.chartLatestTimestampMs, "10")
+
   assert.deepEqual(
     plain(chart.pointDataLinkPayload(chart.seriesPointMeta[1][0], 10)),
     {
