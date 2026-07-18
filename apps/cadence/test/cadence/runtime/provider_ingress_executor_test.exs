@@ -1,7 +1,42 @@
 defmodule Cadence.Runtime.ProviderIngressExecutorTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.Ingress.RawEvidence
+  alias Cadence.Observability.AsyncContext
   alias Cadence.Runtime.{IngressPersistenceProjector, ProviderIngressExecutor}
+  alias OpenTelemetry.{Span, Tracer}
+
+  test "captures producer context on queued telemetry work" do
+    name = :"provider_ingress_executor_test_#{System.unique_integer([:positive])}"
+    pid = start_executor!(name)
+
+    :sys.replace_state(pid, &%{&1 | processing?: true})
+
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: "mission-ingress-executor",
+        source_endpoint_ref: "source-endpoint-ingress-executor",
+        raw: <<1, 2, 3>>
+      })
+
+    assert :ok = ProviderIngressExecutor.enqueue_telemetry(name, raw_evidence)
+
+    assert eventually(fn ->
+             {:ok, snapshot} = ProviderIngressExecutor.snapshot(name)
+             snapshot.queue_depth == 1
+           end)
+
+    state = :sys.get_state(pid)
+
+    assert [
+             {:telemetry, ^raw_evidence, %AsyncContext{} = async_context}
+           ] = :queue.to_list(state.queue)
+
+    parent_span_context = Tracer.current_span_ctx(async_context.parent_context)
+
+    assert Span.is_valid(parent_span_context)
+    assert AsyncContext.queue_wait_ms(async_context) >= 0
+  end
 
   test "notify_when_below replies immediately when executor queue is below threshold" do
     name = :"provider_ingress_executor_test_#{System.unique_integer([:positive])}"

@@ -12,13 +12,16 @@ defmodule Cadence.Application do
 
   @impl true
   def start(_type, _args) do
+    Cadence.Observability.setup_repo_tracing()
+
     children =
-      [
-        Cadence.Repo,
-        {Phoenix.PubSub, name: Cadence.PubSub},
-        Cadence.Telemetry.Profiler,
-        RuntimeHealth
-      ] ++
+      observability_children() ++
+        [
+          Cadence.Repo,
+          {Phoenix.PubSub, name: Cadence.PubSub},
+          Cadence.Telemetry.Profiler,
+          RuntimeHealth
+        ] ++
         ingress_archive_children() ++
         protocol_record_archive_children() ++
         telemetry_backend_children() ++
@@ -58,6 +61,11 @@ defmodule Cadence.Application do
     maybe_bootstrap_dashboard_data_sources()
 
     Cadence.ensure_bootstrap_admin()
+  end
+
+  defp observability_children do
+    [Cadence.Observability.log_exporter_child_spec()]
+    |> Enum.reject(&is_nil/1)
   end
 
   defp maybe_bootstrap_dashboard_data_sources do

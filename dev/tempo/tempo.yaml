@@ -1,0 +1,48 @@
+# Tempo (monolithic, local storage) for local development.
+#
+# Tempo exists in this stack solely so Grafana's Traces Drilldown app works —
+# it only accepts Tempo datasources (TraceQL). GreptimeDB stays the system of
+# record for traces; the collector dual-writes to both.
+#
+# The local-blocks metrics-generator processor is what serves the TraceQL
+# metrics queries (RED graphs) that Traces Drilldown issues.
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+metrics_generator:
+  processor:
+    local_blocks:
+      filter_server_spans: false
+      flush_to_storage: true
+  storage:
+    path: /var/tempo/generator/wal
+  traces_storage:
+    path: /var/tempo/generator/traces
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [local-blocks]
+
+usage_report:
+  reporting_enabled: false

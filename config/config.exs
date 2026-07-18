@@ -3,6 +3,23 @@ import Config
 config :phoenix, :json_library, Jason
 config :swoosh, :api_client, false
 
+config :opentelemetry, traces_exporter: :none
+
+config :logger, :default_formatter,
+  metadata: [
+    :request_id,
+    :otel_trace_id,
+    :otel_span_id,
+    :cadence_event,
+    :mission_id,
+    :spacecraft_id,
+    :source_endpoint_id,
+    :realized_contact_id,
+    :path_id,
+    :provider_binding_id,
+    :error_class
+  ]
+
 config :cadence,
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,

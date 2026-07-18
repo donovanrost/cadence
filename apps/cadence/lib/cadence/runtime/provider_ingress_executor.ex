@@ -12,6 +12,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   require Logger
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Observability
+  alias Cadence.Observability.AsyncContext
   alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime, as: RuntimeBoundary
   alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
@@ -27,7 +29,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   @event_prefix [:cadence, :runtime, :provider_ingress_executor]
 
   @type executor_item ::
-          {:telemetry, RawEvidence.t()}
+          {:telemetry, RawEvidence.t(), AsyncContext.t()}
           | {:transport_event, binary(), term(), keyword()}
 
   @type state :: %{
@@ -75,13 +77,19 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   @spec enqueue_telemetry(GenServer.server(), RawEvidence.t()) :: :ok | {:error, term()}
   def enqueue_telemetry(executor, %RawEvidence{} = raw_evidence) do
-    enqueue(executor, {:telemetry, raw_evidence})
+    trace_enqueue([raw_evidence], fn async_context ->
+      enqueue(executor, {:telemetry, raw_evidence, async_context})
+    end)
   end
 
   @spec enqueue_many_telemetry(GenServer.server(), [RawEvidence.t()]) :: :ok | {:error, term()}
+  def enqueue_many_telemetry(_executor, []), do: :ok
+
   def enqueue_many_telemetry(executor, raw_evidences) when is_list(raw_evidences) do
-    items = Enum.map(raw_evidences, &{:telemetry, &1})
-    enqueue_many(executor, items)
+    trace_enqueue(raw_evidences, fn async_context ->
+      items = Enum.map(raw_evidences, &{:telemetry, &1, async_context})
+      enqueue_many(executor, items)
+    end)
   end
 
   @spec enqueue_transport_event(GenServer.server(), binary(), term(), keyword()) ::
@@ -352,10 +360,16 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           |> Map.put(:queue, rest)
           |> Map.put(:queue_depth, state.queue_depth - 1)
 
-        case execute_item(item) do
-          {:ok, {:telemetry, processing_result}} ->
+        case execute_item(item, base_state) do
+          {:ok, {:telemetry, processing_result, span_context}} ->
             next_state = apply_execution_result(base_state, {:ok, :telemetry})
-            drain_batch(next_state, remaining - 1, [processing_result | current_batch], batches)
+
+            drain_batch(
+              next_state,
+              remaining - 1,
+              [{processing_result, span_context} | current_batch],
+              batches
+            )
 
           {:ok, :transport_event} ->
             next_state = apply_execution_result(base_state, {:ok, :transport_event})
@@ -378,15 +392,25 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     end
   end
 
-  defp execute_item({:telemetry, %RawEvidence{} = raw_evidence}) do
-    case run_ingress(fn -> process_telemetry_item(raw_evidence) end) do
-      {:ok, {:ok, processing_result}} -> {:ok, {:telemetry, processing_result}}
-      {:ok, {:error, reason}} -> {:error, :telemetry, inspect(reason)}
-      {:crash, reason} -> {:error, :telemetry, reason}
-    end
+  defp execute_item(
+         {:telemetry, %RawEvidence{} = raw_evidence, %AsyncContext{} = async_context},
+         state
+       ) do
+    attributes =
+      raw_evidence
+      |> ingress_attributes()
+      |> Map.merge(executor_attributes(state))
+      |> Map.put("cadence.queue.wait.duration_ms", AsyncContext.queue_wait_ms(async_context))
+
+    Observability.with_span(
+      async_context.parent_context,
+      "cadence.telemetry.ingress.process",
+      %{kind: :consumer, attributes: attributes},
+      fn -> process_telemetry_in_span(raw_evidence) end
+    )
   end
 
-  defp execute_item({:transport_event, transport_binding_id, event, opts}) do
+  defp execute_item({:transport_event, transport_binding_id, event, opts}, _state) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
     path_id = Keyword.fetch!(opts, :path_id)
@@ -405,6 +429,29 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       {:ok, {:ok, _outputs}} -> {:ok, :transport_event}
       {:ok, {:error, reason}} -> {:error, :transport_event, inspect(reason)}
       {:crash, reason} -> {:error, :transport_event, reason}
+    end
+  end
+
+  defp process_telemetry_in_span(%RawEvidence{} = raw_evidence) do
+    case run_ingress(fn -> process_telemetry_item(raw_evidence) end) do
+      {:ok, {:ok, processing_result}} ->
+        result_attributes = processing_result_attributes(processing_result)
+        _ = Observability.set_attributes(result_attributes)
+        _ = Observability.add_event("cadence.telemetry.ingress.processed", result_attributes)
+        _ = maybe_record_anomaly_event(result_attributes)
+        _ = Observability.mark_ok()
+
+        {:ok, {:telemetry, processing_result, Observability.current_span_context()}}
+
+      {:ok, {:error, reason}} ->
+        _ = record_processing_failure(raw_evidence, reason, "processing_failed")
+        _ = Observability.mark_error("telemetry ingress processing failed")
+        {:error, :telemetry, inspect(reason)}
+
+      {:crash, reason} ->
+        _ = record_processing_failure(raw_evidence, reason, "processing_crashed")
+        _ = Observability.mark_error("telemetry ingress processing crashed")
+        {:error, :telemetry, reason}
     end
   end
 
@@ -428,6 +475,15 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     }
   end
 
+  defp apply_execution_result(state, {:error, :telemetry, reason}) do
+    %{
+      state
+      | failed_count: state.failed_count + 1,
+        last_completed_at: DateTime.utc_now(),
+        last_error: reason
+    }
+  end
+
   defp apply_execution_result(state, {:error, kind, reason}) do
     Logger.warning(
       "Provider ingress executor failed for #{state.provider_binding_id} (#{kind}): #{reason}"
@@ -447,7 +503,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
       resolve_result =
         TelemetryProfiler.with_stage(:resolve, fn ->
-          SourceEndpoints.resolve_raw_evidence(raw_evidence)
+          resolve_raw_evidence_in_span(raw_evidence)
         end)
 
       resolve_us = elapsed_us(ingress_started_at)
@@ -471,6 +527,13 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           {:error, reason}
       end
     end)
+  end
+
+  defp resolve_raw_evidence_in_span(%RawEvidence{} = raw_evidence) do
+    trace_stage(
+      "cadence.telemetry.ingress.resolve",
+      fn -> SourceEndpoints.resolve_raw_evidence(raw_evidence) end
+    )
   end
 
   defp process_schedulable_queue_state(schedulable_state) do
@@ -604,9 +667,16 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       :runtime_boundary,
       fn ->
         TelemetryProfiler.with_stage(:runtime, fn ->
-          RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence)
+          process_telemetry_runtime_in_span(resolved_raw_evidence)
         end)
       end
+    )
+  end
+
+  defp process_telemetry_runtime_in_span(%RawEvidence{} = resolved_raw_evidence) do
+    trace_stage(
+      "cadence.telemetry.ingress.runtime",
+      fn -> RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence) end
     )
   end
 
@@ -624,6 +694,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
              resolved_raw_evidence,
              telemetry_samples
            ) do
+      _ =
+        Observability.set_attributes(%{
+          "cadence.telemetry.sample.count" => length(telemetry_samples)
+        })
+
       end_to_end_us = elapsed_us(ingress_started_at)
       processing_result = put_ingress_latency_metric(processing_result, end_to_end_us, false)
 
@@ -657,7 +732,10 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       mission_id,
       :telemetry_sample_extraction,
       fn ->
-        Cadence.Persistence.telemetry_samples(processing_result.outputs)
+        trace_stage(
+          "cadence.telemetry.ingress.extract_samples",
+          fn -> Cadence.Persistence.telemetry_samples(processing_result.outputs) end
+        )
       end
     )
   end
@@ -679,9 +757,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       resolved_raw_evidence.mission_id,
       :current_value_record,
       fn ->
-        resolved_raw_evidence
-        |> enriched_current_samples(telemetry_samples)
-        |> record_enriched_current_values()
+        trace_stage("cadence.telemetry.ingress.record_current_values", fn ->
+          resolved_raw_evidence
+          |> enriched_current_samples(telemetry_samples)
+          |> record_enriched_current_values()
+        end)
       end
     )
   end
@@ -738,12 +818,16 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp build_persistence_batch(state, current_batch) do
+    entries = Enum.reverse(current_batch)
+
     ProcessedIngressBatch.new(%{
       mission_id: state.mission_id,
       realized_contact_id: state.realized_contact_id,
       path_id: state.path_id,
       provider_binding_id: state.provider_binding_id,
-      processing_results: Enum.reverse(current_batch)
+      enqueued_at: System.monotonic_time(),
+      processing_results: Enum.map(entries, &elem(&1, 0)),
+      trace_contexts: Enum.map(entries, &elem(&1, 1))
     })
   end
 
@@ -914,6 +998,136 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp maybe_demonitor_persistence_projector(state), do: state
+
+  defp trace_enqueue([%RawEvidence{} = first_evidence | _rest] = raw_evidences, fun)
+       when is_function(fun, 1) do
+    attributes =
+      first_evidence
+      |> ingress_attributes()
+      |> Map.put("cadence.ingress.item.count", length(raw_evidences))
+
+    Observability.with_span(
+      "cadence.telemetry.ingress.enqueue",
+      %{kind: :producer, attributes: attributes},
+      fn ->
+        result = fun.(AsyncContext.capture())
+        _ = record_enqueue_event(result, length(raw_evidences))
+        _ = mark_trace_result(result, "telemetry ingress enqueue failed")
+        result
+      end
+    )
+  end
+
+  defp trace_stage(name, fun) when is_binary(name) and is_function(fun, 0) do
+    Observability.with_span(name, %{}, fn ->
+      result = fun.()
+      _ = mark_trace_result(result, "#{name} failed")
+      result
+    end)
+  end
+
+  defp mark_trace_result(:ok, _error_message), do: Observability.mark_ok()
+  defp mark_trace_result({:ok, _value}, _error_message), do: Observability.mark_ok()
+
+  defp mark_trace_result({:error, _reason}, error_message),
+    do: Observability.mark_error(error_message)
+
+  defp mark_trace_result(_other, _error_message), do: Observability.mark_ok()
+
+  defp record_enqueue_event(:ok, item_count) do
+    Observability.add_event("cadence.telemetry.ingress.accepted", %{
+      "cadence.ingress.item.count" => item_count
+    })
+  end
+
+  defp record_enqueue_event({:error, reason}, item_count) do
+    error_class = Observability.error_class(reason)
+
+    _ =
+      Observability.add_event("cadence.telemetry.ingress.rejected", %{
+        "cadence.error.class" => error_class,
+        "cadence.ingress.item.count" => item_count
+      })
+
+    Observability.log(
+      :warning,
+      "cadence.telemetry.ingress.rejected",
+      "Telemetry ingress enqueue was rejected",
+      error_class: error_class
+    )
+  end
+
+  defp record_enqueue_event(_result, _item_count), do: :ok
+
+  defp maybe_record_anomaly_event(%{"cadence.telemetry.anomaly.count" => count})
+       when is_integer(count) and count > 0 do
+    Observability.add_event("cadence.telemetry.ingress.anomalies_detected", %{
+      "cadence.telemetry.anomaly.count" => count
+    })
+  end
+
+  defp maybe_record_anomaly_event(_attributes), do: :ok
+
+  defp record_processing_failure(%RawEvidence{} = raw_evidence, reason, outcome) do
+    error_class = Observability.error_class(reason)
+
+    _ =
+      Observability.add_event("cadence.telemetry.ingress.failed", %{
+        "cadence.error.class" => error_class,
+        "cadence.failure.outcome" => outcome
+      })
+
+    Observability.log(
+      :warning,
+      "cadence.telemetry.ingress.failed",
+      "Telemetry ingress processing failed",
+      [error_class: error_class] ++ ingress_log_metadata(raw_evidence)
+    )
+  end
+
+  defp ingress_log_metadata(%RawEvidence{} = raw_evidence) do
+    [
+      mission_id: raw_evidence.mission_id,
+      spacecraft_id: raw_evidence.spacecraft_id,
+      source_endpoint_id: raw_evidence.source_endpoint_ref
+    ]
+  end
+
+  defp ingress_attributes(%RawEvidence{} = raw_evidence) do
+    %{
+      "cadence.ingress.evidence.id" => raw_evidence.evidence_id,
+      "cadence.ingress.raw.size" => byte_size(raw_evidence.raw || <<>>),
+      "cadence.mission.id" => raw_evidence.mission_id,
+      "cadence.spacecraft.id" => raw_evidence.spacecraft_id,
+      "cadence.source_endpoint.id" => raw_evidence.source_endpoint_ref,
+      "cadence.telemetry.direction" => to_string(raw_evidence.direction),
+      "cadence.telemetry.protocol_family" => to_string(raw_evidence.protocol_family)
+    }
+    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
+    |> Map.new()
+  end
+
+  defp executor_attributes(state) do
+    %{
+      "cadence.contact.id" => state.realized_contact_id,
+      "cadence.path.id" => state.path_id,
+      "cadence.provider.binding.id" => state.provider_binding_id
+    }
+  end
+
+  defp processing_result_attributes(processing_result) when is_map(processing_result) do
+    %{
+      "cadence.telemetry.anomaly.count" =>
+        processing_result |> Map.get(:protocol_anomalies, []) |> length(),
+      "cadence.telemetry.dispatch.count" =>
+        processing_result |> Map.get(:dispatch_decisions, []) |> length(),
+      "cadence.telemetry.output.count" => processing_result |> Map.get(:outputs, []) |> length(),
+      "cadence.telemetry.packet.count" =>
+        processing_result |> Map.get(:packet_records, []) |> length(),
+      "cadence.telemetry.transfer_frame.count" =>
+        processing_result |> Map.get(:transfer_frame_records, []) |> length()
+    }
+  end
 
   defp emit(event, state, measurements, metadata) do
     :telemetry.execute(

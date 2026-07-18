@@ -11,6 +11,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   require Logger
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Observability
   alias Cadence.Persistence
   alias Cadence.Runtime.ProcessedIngressBatch
   alias Cadence.Telemetry.CurrentValueStore
@@ -199,11 +200,35 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     {:noreply, remove_capacity_waiter_by_monitor(state, monitor_ref)}
   end
 
-  defp persist_batch(%ProcessedIngressBatch{
+  defp persist_batch(
+         %ProcessedIngressBatch{
+           processing_results: processing_results
+         } = batch
+       )
+       when is_list(processing_results) and processing_results != [] do
+    links = Observability.links(batch.trace_contexts)
+
+    Observability.with_root_span(
+      "cadence.telemetry.ingress.persist_batch",
+      %{
+        kind: :consumer,
+        links: links,
+        attributes: persistence_span_attributes(batch, links)
+      },
+      fn ->
+        result = do_persist_batch(batch)
+        _ = mark_persistence_result(result, batch)
+        result
+      end
+    )
+  end
+
+  defp persist_batch(%ProcessedIngressBatch{}), do: {:error, :empty_batch}
+
+  defp do_persist_batch(%ProcessedIngressBatch{
          mission_id: mission_id,
          processing_results: processing_results
-       })
-       when is_list(processing_results) and processing_results != [] do
+       }) do
     persistence_started_at = System.monotonic_time()
 
     result =
@@ -231,8 +256,6 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     end
   end
 
-  defp persist_batch(%ProcessedIngressBatch{}), do: {:error, :empty_batch}
-
   defp first_raw_evidence([%{raw_evidence: %RawEvidence{} = raw_evidence} | _rest]),
     do: raw_evidence
 
@@ -255,10 +278,6 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
         |> continue_processing_queue()
 
       {:error, reason} ->
-        Logger.warning(
-          "Ingress persistence projector failed for #{state.provider_binding_id}: #{inspect(reason)}"
-        )
-
         next_state = %{
           state
           | queue: :queue.in_r(batch, rest),
@@ -397,12 +416,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           state,
           rest,
           ProcessedIngressBatch.size(batch),
-          [batch.processing_results]
+          [batch]
         )
     end
   end
 
-  defp do_dequeue_persist_batch(state, queue, size, processing_result_lists) do
+  defp do_dequeue_persist_batch(state, queue, size, batches) do
     case :queue.peek(queue) do
       {:value, %ProcessedIngressBatch{} = batch} ->
         batch_size = ProcessedIngressBatch.size(batch)
@@ -414,22 +433,22 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
             state,
             rest,
             size + batch_size,
-            [batch.processing_results | processing_result_lists]
+            [batch | batches]
           )
         else
-          build_persist_batch(state, queue, size, processing_result_lists)
+          build_persist_batch(state, queue, size, batches)
         end
 
       _other ->
-        build_persist_batch(state, queue, size, processing_result_lists)
+        build_persist_batch(state, queue, size, batches)
     end
   end
 
-  defp build_persist_batch(state, queue, size, processing_result_lists) do
+  defp build_persist_batch(state, queue, size, reversed_batches) do
+    batches = Enum.reverse(reversed_batches)
+
     processing_results =
-      processing_result_lists
-      |> Enum.reverse()
-      |> Enum.flat_map(& &1)
+      Enum.flat_map(batches, & &1.processing_results)
 
     {:ok,
      ProcessedIngressBatch.new(%{
@@ -437,8 +456,73 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        realized_contact_id: state.realized_contact_id,
        path_id: state.path_id,
        provider_binding_id: state.provider_binding_id,
-       processing_results: processing_results
+       processing_results: processing_results,
+       trace_contexts: Enum.flat_map(batches, & &1.trace_contexts),
+       enqueued_at: oldest_enqueued_at(batches)
      }), queue, size}
+  end
+
+  defp oldest_enqueued_at(batches) do
+    batches
+    |> Enum.map(& &1.enqueued_at)
+    |> Enum.filter(&is_integer/1)
+    |> case do
+      [] -> nil
+      enqueued_at_values -> Enum.min(enqueued_at_values)
+    end
+  end
+
+  defp persistence_span_attributes(%ProcessedIngressBatch{} = batch, links) do
+    %{
+      "cadence.contact.id" => batch.realized_contact_id,
+      "cadence.ingress.batch.size" => ProcessedIngressBatch.size(batch),
+      "cadence.mission.id" => batch.mission_id,
+      "cadence.path.id" => batch.path_id,
+      "cadence.provider.binding.id" => batch.provider_binding_id,
+      "cadence.queue.wait.duration_ms" => ProcessedIngressBatch.queue_wait_ms(batch),
+      "cadence.trace.link.count" => length(links)
+    }
+    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
+    |> Map.new()
+  end
+
+  defp mark_persistence_result(:ok, %ProcessedIngressBatch{} = batch) do
+    _ =
+      Observability.add_event("cadence.telemetry.ingress.batch_persisted", %{
+        "cadence.ingress.batch.size" => ProcessedIngressBatch.size(batch)
+      })
+
+    Observability.mark_ok()
+  end
+
+  defp mark_persistence_result({:error, reason}, %ProcessedIngressBatch{} = batch) do
+    error_class = Observability.error_class(reason)
+
+    _ =
+      Observability.add_event("cadence.telemetry.ingress.persistence_failed", %{
+        "cadence.error.class" => error_class,
+        "cadence.ingress.batch.size" => ProcessedIngressBatch.size(batch)
+      })
+
+    _ =
+      Observability.log(
+        :warning,
+        "cadence.telemetry.ingress.persistence_failed",
+        "Telemetry ingress persistence failed",
+        persistence_log_metadata(batch, error_class)
+      )
+
+    Observability.mark_error("telemetry ingress persistence failed")
+  end
+
+  defp persistence_log_metadata(%ProcessedIngressBatch{} = batch, error_class) do
+    [
+      mission_id: batch.mission_id,
+      realized_contact_id: batch.realized_contact_id,
+      path_id: batch.path_id,
+      provider_binding_id: batch.provider_binding_id,
+      error_class: error_class
+    ]
   end
 
   defp emit(event, state, measurements, metadata) do

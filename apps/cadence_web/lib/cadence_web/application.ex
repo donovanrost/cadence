@@ -5,6 +5,8 @@ defmodule CadenceWeb.Application do
 
   @impl true
   def start(_type, _args) do
+    CadenceWeb.Observability.setup_web_tracing()
+
     children = [
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
       CadenceWeb.Endpoint

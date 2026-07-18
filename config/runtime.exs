@@ -1,5 +1,82 @@
 import Config
 
+case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
+  endpoint when is_binary(endpoint) and endpoint != "" ->
+    config :opentelemetry,
+      span_processor: :batch,
+      traces_exporter: :otlp
+
+    config :opentelemetry_exporter,
+      otlp_protocol: :http_protobuf,
+      otlp_endpoint: endpoint
+
+  _unset_or_empty ->
+    :ok
+end
+
+parse_positive_integer = fn name, default ->
+  case Integer.parse(System.get_env(name, "")) do
+    {value, ""} when value > 0 -> value
+    _unset_or_invalid -> default
+  end
+end
+
+parse_headers = fn encoded_headers ->
+  encoded_headers
+  |> to_string()
+  |> String.split(",", trim: true)
+  |> Enum.flat_map(fn encoded_header ->
+    case String.split(encoded_header, "=", parts: 2) do
+      [key, value] when key != "" -> [{URI.decode(key), URI.decode(value)}]
+      _invalid -> []
+    end
+  end)
+end
+
+logs_endpoint =
+  case System.get_env("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") do
+    endpoint when is_binary(endpoint) and endpoint != "" ->
+      endpoint
+
+    _unset_or_empty ->
+      case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
+        endpoint when is_binary(endpoint) and endpoint != "" ->
+          String.trim_trailing(endpoint, "/") <> "/v1/logs"
+
+        _unset_or_empty ->
+          nil
+      end
+  end
+
+if config_env() != :test and is_binary(logs_endpoint) do
+  log_level =
+    case System.get_env("CADENCE_OTEL_LOG_LEVEL", "info") |> String.downcase() do
+      "debug" -> :debug
+      "notice" -> :notice
+      "warning" -> :warning
+      "error" -> :error
+      "critical" -> :critical
+      "alert" -> :alert
+      "emergency" -> :emergency
+      _info_or_invalid -> :info
+    end
+
+  headers =
+    System.get_env("OTEL_EXPORTER_OTLP_LOGS_HEADERS") ||
+      System.get_env("OTEL_EXPORTER_OTLP_HEADERS") ||
+      ""
+
+  config :cadence, :otel_logs,
+    enabled: true,
+    endpoint: logs_endpoint,
+    headers: parse_headers.(headers),
+    level: log_level,
+    batch_size: parse_positive_integer.("CADENCE_OTEL_LOG_BATCH_SIZE", 100),
+    flush_interval_ms: parse_positive_integer.("CADENCE_OTEL_LOG_FLUSH_INTERVAL_MS", 1_000),
+    max_queue: parse_positive_integer.("CADENCE_OTEL_LOG_MAX_QUEUE", 5_000),
+    timeout_ms: parse_positive_integer.("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT", 5_000)
+end
+
 bootstrap_admin_enabled? =
   System.get_env("CADENCE_BOOTSTRAP_ADMIN_ENABLED", "false")
   |> String.downcase()
