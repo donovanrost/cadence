@@ -71,7 +71,7 @@ defmodule CadenceUmbrella.MixProject do
       "browser_smoke",
       "--only",
       "browser_smoke",
-      "test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+      "browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
       | args
     ])
   end
@@ -82,7 +82,7 @@ defmodule CadenceUmbrella.MixProject do
       "browser",
       "--include",
       "browser_smoke",
-      "test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+      "browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
       | args
     ])
   end

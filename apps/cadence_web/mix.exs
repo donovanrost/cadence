@@ -74,10 +74,10 @@ defmodule CadenceWeb.MixProject do
         "phx.digest"
       ],
       "test.browser": [
-        "test --include browser_smoke --only browser_smoke test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+        "test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
       ],
       "test.browser.full": [
-        "test --include browser --include browser_smoke test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+        "test --include browser --include browser_smoke browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
       ]
     ]
   end

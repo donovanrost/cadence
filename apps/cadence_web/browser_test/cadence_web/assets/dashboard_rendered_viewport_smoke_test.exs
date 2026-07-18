@@ -1,3 +1,5 @@
+# This opt-in matrix lives outside the default test path so normal test runs do not
+# pay its substantial compilation cost. Use the browser Mix aliases to run it.
 defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   use CadenceWeb.ConnCase, async: false
 
