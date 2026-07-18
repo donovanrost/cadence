@@ -86,7 +86,11 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
        %{
          data: opportunities,
          next_cursor: meta["next_cursor"],
-         truncated: Map.get(meta, "truncated", false)
+         truncated: Map.get(meta, "truncated", false),
+         provider_evidence:
+           meta
+           |> Map.get("provider_evidence", %{})
+           |> Validation.sanitize()
        }}
     end
   end

@@ -62,6 +62,13 @@ It uses `Req`; new HTTP clients must also use the existing `Req` dependency.
 Provider Clients receive a `Cadence.GroundNetworks.ProviderContext`. They do not
 read LiveView assigns, simulator run state, or Transport runtime processes.
 
+Opportunity pages must retain bounded provider-level evidence independently of
+the opportunity list. Put facts such as ephemeris reference/version, orbit-data
+validity, and provider validation status in `provider_evidence`. This is
+required even when `data` is empty. A provider that cannot evaluate the horizon
+because orbit data is missing, expired, or still processing must normalize to a
+provider-not-ready error, not successful empty availability.
+
 ## 3. Normalize and sanitize at the boundary
 
 Translate vendor payloads into the canonical types under
@@ -227,8 +234,11 @@ The integration must use the existing authenticated journeys:
   policy, validation, and sync;
 - **Comms → Transports** for direct or provider-managed delivery setup;
 - **Comms → Routing** for exact Transport selection;
-- **Ops → Contacts** for readiness, opportunity search, reservation,
-  reconciliation, changes, approval/acknowledgment, and cancellation.
+- **Ops → Requirements** for versioned operational intent, multi-provider
+  search evidence, opportunity comparison, exact Plan review, approval, and
+  restart-safe execution;
+- **Ops → Contacts** for direct ad hoc reservation and all realized/reserved
+  Contact reconciliation, changes, approval/acknowledgment, and cancellation.
 
 Do not create a provider-specific scheduling page. Provider differences appear
 as capabilities, profile summaries, validation findings, and administrator
@@ -240,6 +250,8 @@ At minimum, add:
 
 - Provider Client normalization, authentication, capability, pagination, error,
   and evidence-sanitization tests;
+- provider-level readiness evidence on both non-empty and empty search pages,
+  plus an explicit not-ready proof for missing/expired orbital data;
 - native-idempotency or client-reference recovery tests matching the provider's
   real guarantees;
 - event normalization, duplicate, out-of-order, cursor-restart, identity
@@ -270,13 +282,17 @@ Exercise the integration as an operator would:
    synchronize capabilities, inventory, and profiles;
 5. create a provider-managed Transport from exact compatible profile versions;
 6. map spacecraft and create an enabled Routing Rule;
-7. search and reserve in **Ops → Contacts**;
-8. confirm Contact, pass, delivery, and Cadence observations independently;
-9. ingest advisory events, describe authoritative state, and exercise one
+7. create a Requirement in **Ops → Requirements**, search every eligible route,
+   select an opportunity, and create a Plan;
+8. submit, approve, and execute the exact Plan version, or separately prove the
+   direct ad hoc path in **Ops → Contacts**;
+9. confirm Contact, pass, delivery, and Cadence observations independently;
+10. ingest advisory events, describe authoritative state, and exercise one
    approval or acknowledgment path;
-10. verify bytes enter the normal runtime and telemetry pipeline;
-11. restart ingestion/reconciliation and prove no duplicate provider mutation,
-    domain decision, Scheduled Contact, or Scheduled Contact revision.
+11. verify bytes enter the normal runtime and telemetry pipeline;
+12. restart planning execution/ingestion/reconciliation and prove no duplicate
+    provider mutation, domain decision, Scheduled Contact, or Scheduled Contact
+    revision.
 
 Run focused tests from the owning application, then run `mix precommit` from the
 umbrella root.
@@ -286,6 +302,8 @@ umbrella root.
 - Provider Client behavior implemented and explicitly registered
 - provider type and client mapping allow-listed
 - external evidence normalized and sanitized
+- provider-owned orbit/readiness evidence survives empty searches and
+  not-ready errors without making Cadence an orbital propagator
 - Provider Account owns endpoint, environment, stable credential reference,
   request policy, event ingestion, and organization guardrails
 - mission access uses an exact, narrowing Provider Account grant

@@ -22,19 +22,22 @@ defmodule CadenceSimulator.Provider.Contract do
       metadata(conn)
       |> Map.put("next_cursor", Keyword.get(opts, :next_cursor))
       |> Map.put("truncated", Keyword.get(opts, :truncated, false))
+      |> maybe_put("provider_evidence", Keyword.get(opts, :provider_evidence))
 
     json(conn, 200, %{"data" => sanitize(data), "meta" => meta})
   end
 
   @spec error(Plug.Conn.t(), Plug.Conn.status(), binary(), binary(), keyword()) :: Plug.Conn.t()
   def error(conn, status, code, detail, opts \\ []) do
-    error = %{
-      "code" => code,
-      "detail" => detail,
-      "retryable" => Keyword.get(opts, :retryable, false),
-      "retry_after_seconds" => Keyword.get(opts, :retry_after_seconds),
-      "provider_request_ref" => Keyword.get(opts, :provider_request_ref)
-    }
+    error =
+      %{
+        "code" => code,
+        "detail" => detail,
+        "retryable" => Keyword.get(opts, :retryable, false),
+        "retry_after_seconds" => Keyword.get(opts, :retry_after_seconds),
+        "provider_request_ref" => Keyword.get(opts, :provider_request_ref)
+      }
+      |> maybe_put("evidence", Keyword.get(opts, :evidence))
 
     json(conn, status, %{"error" => error, "meta" => metadata(conn)})
   end
@@ -71,6 +74,9 @@ defmodule CadenceSimulator.Provider.Contract do
     not String.ends_with?(normalized, "_ref") and
       Enum.any?(@sensitive_fragments, &String.contains?(normalized, &1))
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, sanitize(value))
 
   defp json(conn, status, body) do
     conn

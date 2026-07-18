@@ -3,7 +3,7 @@ title: How-To Guides
 tags: [how-to, developer, operations, tooling]
 status: active
 created: 2026-04-03
-updated: 2026-06-10
+updated: 2026-07-16
 ---
 
 # How-To Guides
@@ -36,6 +36,7 @@ out. Use these guides when you need to accomplish a specific task.
 
 ## Provider Integration
 
+- [Plan Contacts from Requirements](plan-contacts-from-requirements.md)
 - [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 
 The integration guide follows the same provider configuration and contact

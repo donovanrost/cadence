@@ -12,7 +12,15 @@ defmodule Cadence.Contacts.ProviderScheduling do
   alias Cadence.Contacts
   alias Cadence.Contacts.{LinkAssignment, ProviderBooking, ProviderClients.Registry}
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProvider, Opportunity, ProviderContext}
+
+  alias Cadence.GroundNetworks.{
+    MissionProvider,
+    Opportunity,
+    ProviderAccountGrants,
+    ProviderContext,
+    Validation
+  }
+
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
@@ -37,10 +45,15 @@ defmodule Cadence.Contacts.ProviderScheduling do
           transport_display_name: binary(),
           provider_id: binary(),
           provider_version: pos_integer(),
+          provider_account_id: binary() | nil,
+          provider_account_version: pos_integer() | nil,
+          provider_account_grant_id: binary() | nil,
+          provider_account_grant_version: pos_integer() | nil,
           provider_profile_id: binary(),
           provider_profile_version: pos_integer(),
           service_profile_ref: profile_ref(),
           delivery_profile_ref: profile_ref(),
+          delivery_policy_document: map(),
           provider_display_name: binary(),
           service_display_name: binary(),
           delivery_display_name: binary(),
@@ -129,6 +142,10 @@ defmodule Cadence.Contacts.ProviderScheduling do
       {:ok,
        %{
          route: route,
+         provider_evidence:
+           response
+           |> Map.get(:provider_evidence, Map.get(response, "provider_evidence", %{}))
+           |> Validation.sanitize(),
          opportunities:
            Enum.map(opportunities, fn opportunity ->
              opportunity
@@ -185,6 +202,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
          :ok <- externally_schedulable_transport(transport),
          {:ok, provider} <- exact_provider(transport),
          :ok <- provider_ready(provider),
+         :ok <- provider_grant_ready(provider),
          {:ok, service_profile} <-
            exact_profile(provider, "service_profiles", transport.service_profile_ref),
          {:ok, delivery_profile} <-
@@ -346,6 +364,22 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
+  defp provider_grant_ready(%MissionProvider{provider_account_grant_id: nil}), do: :ok
+
+  defp provider_grant_ready(%MissionProvider{} = provider) do
+    case ProviderAccountGrants.validate_binding(
+           provider.organization_id,
+           provider.mission_id,
+           provider.provider_account_id,
+           provider.provider_account_version,
+           provider.provider_account_grant_id,
+           provider.provider_account_grant_version
+         ) do
+      {:ok, _grant} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp exact_profile(provider, collection, reference) do
     with {:ok, id, version} <- profile_reference(reference),
          items when is_list(items) <-
@@ -460,10 +494,15 @@ defmodule Cadence.Contacts.ProviderScheduling do
       transport_display_name: transport.display_name,
       provider_id: provider.provider_id,
       provider_version: provider.version,
+      provider_account_id: provider.provider_account_id,
+      provider_account_version: provider.provider_account_version,
+      provider_account_grant_id: provider.provider_account_grant_id,
+      provider_account_grant_version: provider.provider_account_grant_version,
       provider_profile_id: runtime_profile.provider_profile_id,
       provider_profile_version: runtime_profile.version,
       service_profile_ref: exact_profile_ref(service_profile),
       delivery_profile_ref: exact_profile_ref(delivery_profile),
+      delivery_policy_document: provider.delivery_policy_document,
       provider_display_name: provider.display_name,
       service_display_name: service_profile["display_name"] || service_profile["id"],
       delivery_display_name: delivery_profile["display_name"] || delivery_profile["id"],

@@ -3,7 +3,8 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
-  alias CadenceSimulator.Provider.{Contacts, Router, Store}
+  alias CadenceSimulator.Provider
+  alias CadenceSimulator.Provider.{Contacts, FleetScenarios, Router, Store}
   alias CadenceSimulator.TestProviderFixtures
 
   @config_keys [:provider_admin_api_token, :provider_api_token]
@@ -62,6 +63,192 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
     refute inspect(change_response.body) =~ "provider-secret"
   end
 
+  test "opportunity search exposes provider-owned orbit readiness and fails explicitly when expired",
+       context do
+    {:ok, current_scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 1,
+        "pass_model" => %{
+          "cadence_seconds" => 30,
+          "duration_seconds" => 15,
+          "jitter_seconds" => 0
+        },
+        "orbit_readiness" => %{
+          "status" => "current",
+          "ephemeris_ref" => "synthetic-oem-current",
+          "version" => 4
+        }
+      })
+
+    {:ok, current_run} = Provider.create_run(current_scenario["id"], %{"seed" => 2_026})
+    current_context = provider_context(context.base_url, current_run["id"])
+    starts_at = DateTime.utc_now() |> DateTime.add(30, :second) |> DateTime.truncate(:second)
+
+    params = %{
+      "spacecraft_refs" => ["SC-001"],
+      "ground_station_refs" => [],
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => starts_at |> DateTime.add(180, :second) |> DateTime.to_iso8601(),
+      "page_size" => 10,
+      "cursor" => nil
+    }
+
+    assert {:ok, current_page} =
+             SimulatorHTTP.search_opportunities(current_context, params,
+               credential_resolver: &resolve_credential/1
+             )
+
+    assert get_in(current_page, [:provider_evidence, "orbit_readiness", "status"]) ==
+             "current"
+
+    assert get_in(current_page, [
+             :provider_evidence,
+             "orbit_readiness",
+             "ephemeris_ref"
+           ]) == "synthetic-oem-current"
+
+    assert Enum.all?(current_page.data, fn opportunity ->
+             opportunity.extensions["orbit_readiness"]["version"] == 4
+           end)
+
+    {:ok, expired_scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 1,
+        "orbit_readiness" => %{
+          "status" => "expired",
+          "ephemeris_ref" => "synthetic-oem-expired"
+        }
+      })
+
+    {:ok, expired_run} = Provider.create_run(expired_scenario["id"], %{"seed" => 2_027})
+    expired_context = provider_context(context.base_url, expired_run["id"])
+
+    assert {:error, %ProviderError{category: :provider_not_ready} = error} =
+             SimulatorHTTP.search_opportunities(expired_context, params,
+               credential_resolver: &resolve_credential/1
+             )
+
+    assert get_in(error.evidence, ["error", "evidence", "orbit_readiness", "status"]) ==
+             "expired"
+
+    assert get_in(error.evidence, [
+             "error",
+             "evidence",
+             "orbit_readiness",
+             "ephemeris_ref"
+           ]) == "synthetic-oem-expired"
+  end
+
+  test "fleet route profiles expose bounded latency, rate limits, shared pools, and empty success",
+       context do
+    {:ok, scenario} =
+      FleetScenarios.stage_five(spacecraft_count: 300)
+      |> Provider.create_scenario()
+
+    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 2_030})
+    provider_context = provider_context(context.base_url, run["id"])
+    starts_at = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.truncate(:second)
+
+    params = %{
+      "spacecraft_refs" => ["SC-001", "SC-002"],
+      "ground_station_refs" => ["station-svalbard"],
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => starts_at |> DateTime.add(3_600, :second) |> DateTime.to_iso8601(),
+      "page_size" => 50,
+      "cursor" => nil
+    }
+
+    started_at = System.monotonic_time(:millisecond)
+
+    assert {:error,
+            %ProviderError{
+              category: :rate_limited,
+              retryable: true,
+              retry_after_seconds: 1
+            } = rate_limit_error} =
+             SimulatorHTTP.search_opportunities(provider_context, params,
+               credential_resolver: &resolve_credential/1
+             )
+
+    assert System.monotonic_time(:millisecond) - started_at >= 10
+
+    assert get_in(rate_limit_error.evidence, [
+             "error",
+             "evidence",
+             "route_profile_ref"
+           ]) == "route-svalbard-shared"
+
+    assert {:ok, page} =
+             SimulatorHTTP.search_opportunities(provider_context, params,
+               credential_resolver: &resolve_credential/1
+             )
+
+    assert page.data != []
+
+    assert Enum.all?(page.data, fn opportunity ->
+             opportunity.antenna_or_service_pool_ref == "pool-svalbard-realtime" and
+               opportunity.extensions["route_profile_ref"] == "route-svalbard-shared" and
+               DateTime.before?(opportunity.expires_at, opportunity.starts_at)
+           end)
+
+    empty_params = Map.put(params, "spacecraft_refs", ["SC-DOES-NOT-EXIST"])
+
+    assert {:ok, %{data: [], truncated: false}} =
+             SimulatorHTTP.search_opportunities(provider_context, empty_params,
+               credential_resolver: &resolve_credential/1
+             )
+  end
+
+  test "missing and processing orbit states remain distinct provider-not-ready evidence",
+       context do
+    starts_at = DateTime.utc_now() |> DateTime.add(60, :second) |> DateTime.truncate(:second)
+
+    params = %{
+      "spacecraft_refs" => ["SC-001"],
+      "ground_station_refs" => [],
+      "service_profile_ref" => "service-realtime-ttc-downlink",
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => starts_at |> DateTime.add(600, :second) |> DateTime.to_iso8601(),
+      "page_size" => 10,
+      "cursor" => nil
+    }
+
+    for {status, ephemeris_ref} <- [
+          {"missing", nil},
+          {"processing", "synthetic-oem-processing"}
+        ] do
+      {:ok, scenario} =
+        Provider.create_scenario(%{
+          "spacecraft_count" => 1,
+          "orbit_readiness" => %{
+            "status" => status,
+            "ephemeris_ref" => ephemeris_ref || "ignored-when-missing"
+          }
+        })
+
+      {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 2_031})
+
+      assert {:error, %ProviderError{category: :provider_not_ready} = error} =
+               SimulatorHTTP.search_opportunities(
+                 provider_context(context.base_url, run["id"]),
+                 params,
+                 credential_resolver: &resolve_credential/1
+               )
+
+      assert get_in(error.evidence, ["error", "evidence", "orbit_readiness", "status"]) ==
+               status
+
+      assert get_in(error.evidence, [
+               "error",
+               "evidence",
+               "orbit_readiness",
+               "ephemeris_ref"
+             ]) == ephemeris_ref
+    end
+  end
+
   @tag timeout: 30_000
   test "a modification response lost after commit recovers idempotently", context do
     fixture =
@@ -73,9 +260,18 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
 
     provider_context = provider_context(context.base_url, fixture.run["id"])
 
+    assert_eventually(fn ->
+      case Contacts.fetch_internal(fixture.contact["id"]) do
+        {:ok, %{"status" => "confirmed"}} -> true
+        _other -> false
+      end
+    end)
+
+    {:ok, current_contact} = Contacts.fetch_internal(fixture.contact["id"])
+
     attrs = %{
       "client_reference" => "lost-modification-response",
-      "expected_revision" => 1,
+      "expected_revision" => current_contact["revision"],
       "starts_at" => shift_time(fixture.contact["starts_at"], 90),
       "ends_at" => shift_time(fixture.contact["ends_at"], 90),
       "reason" => "operator_requested"
@@ -89,15 +285,16 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
 
     assert {:error, %ProviderError{category: :ambiguous_outcome}} = first
 
-    assert {:ok, %ProviderContact{provider_revision: 2} = recovered} =
+    assert {:ok, %ProviderContact{provider_revision: provider_revision} = recovered} =
              SimulatorHTTP.modify_contact(provider_context, fixture.contact["id"], attrs,
                idempotency_key: "lost-modification-key",
                credential_resolver: &resolve_credential/1
              )
 
+    assert provider_revision == current_contact["revision"] + 1
     assert recovered.starts_at |> DateTime.to_iso8601() == attrs["starts_at"]
     assert {:ok, internal} = Contacts.fetch_internal(fixture.contact["id"])
-    assert internal["revision"] == 2
+    assert internal["revision"] == provider_revision
     assert length(internal["modification_history"]) == 1
   end
 
@@ -129,4 +326,17 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
     :ok = :gen_tcp.close(socket)
     port
   end
+
+  defp assert_eventually(fun, attempts \\ 100)
+
+  defp assert_eventually(fun, attempts) when attempts > 0 do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(10)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_eventually(fun, 0), do: assert(fun.())
 end

@@ -4,13 +4,15 @@ The ground-network simulator is an external provider peer. It does not bootstrap
 or administer Cadence. The supported development flow deliberately exercises the
 same integration boundary as a commercial provider.
 
-> This walkthrough describes the implemented Stage 3 flow: organization-owned
+> This walkthrough describes the implemented Stage 5 flow: organization-owned
 > Provider Account and credentials, exact mission grant, mission delivery
-> policy, durable provider events and changes, provider-managed Transport, and
-> normal TCP/CCSDS delivery. The separate-app proof crosses those same HTTP and
-> TCP boundaries and exercises restart, fault, approval, acknowledgment,
-> configuration-failure, and ambiguous-outcome recovery as described in the
-> [Stage 3 implementation plan](superpowers/plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md).
+> policy, provider-managed Transport, provider-owned orbit readiness, Contact
+> Requirements, recurring templates, fleet policy/runs, versioned Plans, guarded
+> automation, durable provider events and changes, and normal TCP/CCSDS
+> delivery. The separate-app proof crosses those same HTTP and TCP boundaries
+> and exercises scale, restart, fault, approval, repair, configuration-failure,
+> and ambiguous-outcome recovery as described in the
+> [Stage 5 implementation plan](superpowers/plans/2026-07-16-contact-scheduling-stage-5-fleet-planning-and-automation.md).
 
 ## 1. Start the simulator
 
@@ -101,33 +103,46 @@ runtime path and internal Provider Profile needed by the current execution
 engine; neither is the provider control-plane identity.
 
 Cadence owns its spacecraft identity and byte-interpretation catalog. The
-simulator owns its provider spacecraft inventory and telemetry generator
-definitions.
+simulator owns its provider spacecraft inventory, synthetic ephemeris/readiness,
+visibility generation, and telemetry generator definitions. Cadence records
+the provider's orbit-readiness evidence but does not call the simulator admin
+API or propagate an orbit.
 
-## 7. Schedule, execute, and review contacts
+## 7. Plan, approve, execute, and review contacts
 
-In the authenticated mission UI, open **Ops → Contacts**. Select a ready
-spacecraft route, choose a bounded UTC search window, search the provider, and
-reserve one opportunity.
+In the authenticated mission UI, open **Ops → Requirements** and select **Plan a
+contact**. Describe the spacecraft, intent, bounded UTC horizon, and success
+measure. Search the exact current Requirement version, inspect provider-level
+results, select one or more eligible windows, and create a draft Contact Plan.
+Submit the exact Plan version for approval. An organization administrator
+reviews its immutable hash, policy, route bindings, expiry, warnings, and
+unsatisfied outcomes before approving. Execute only the approved version.
 
 Cadence then:
 
-1. resolves the spacecraft mapping, Routing Rule, exact provider-managed
+1. versions mission intent without selecting provider capacity;
+2. resolves the spacecraft mapping, Routing Rule, exact provider-managed
    Transport, Provider Account, mission grant, Mission Provider, delivery
    policy, Service Profile, and Delivery Profile;
-2. persists those exact bindings, a mission-owned `ProviderReservation`
+3. asks every eligible provider route for authoritative windows and persists
+   successful empty results, provider failures, and orbit-not-ready evidence as
+   distinct outcomes;
+4. snapshots and evaluates opportunities, then freezes one exact Plan version;
+5. creates one durable execution item per approved selection and persists those
+   exact bindings, a mission-owned `ProviderReservation`
    attempt, and its idempotency key before mutating the provider;
-3. reserves the selected opportunity without holding a database transaction
+6. reserves the selected opportunity without holding a database transaction
    across HTTP;
-4. durably polls uncertain or nonterminal reservations until the provider state
-   converges;
-5. stores provider events before advancing the exact account cursor and uses
+7. durably polls uncertain or nonterminal reservations until the provider state
+   converges, then projects the linked execution item without repeating the
+   provider mutation;
+8. stores provider events before advancing the exact account cursor and uses
    them as advisory triggers for authoritative Contact describe;
-6. validates the returned delivery descriptor against approved Transport setup
+9. validates the returned delivery descriptor against approved Transport setup
    and materializes exactly one canonical `ScheduledContact` when provider
    capacity is confirmed;
-7. realizes the contact through the existing scheduler;
-8. receives telemetry through the normal TCP provider and TM ingress runtime.
+10. realizes the contact through the existing scheduler;
+11. receives telemetry through the normal TCP provider and TM ingress runtime.
 
 The page displays Provider, Service, Delivery, Transport, Contact status, pass
 phase, and delivery status. A conflicting descriptor remains visible as a
@@ -135,6 +150,23 @@ durable provider/configuration failure and is never connected. Cancellation
 also crosses the provider boundary and is reconciled from the durable
 reservation record. No global simulator process, in-memory event cursor, or
 simulator administration client runs inside Cadence.
+
+**Ops → Contacts** still supports direct ad hoc search and reservation. That
+path deliberately leaves Requirement, Plan, and opportunity-snapshot references
+null; Cadence does not invent hidden planning records.
+
+For mission-scale work, open **Ops → Planning**. An organization administrator
+approves the exact Fleet Planning Policy and may activate recurring Requirement
+Templates. A mission member starts a bounded horizon run. Cadence materializes
+occurrences idempotently, composes ordinary Stage 4 provider searches with
+policy-bounded concurrency, records one deterministic decision per snapshot,
+and creates an ordinary candidate Contact Plan.
+
+Automation is optional. An administrator may issue a short-lived, exact-policy
+Automation Grant to a named mission service identity. The service may perform
+only the contiguous plan/submit/approve/execute actions allowed by that grant.
+Partial execution creates a repair run that locks successful and uncertain
+provider commitments and searches only unmet work.
 
 Select a Contact row to open its detail page. The page separates requested,
 provider-confirmed, Cadence-accepted, and actual truth and shows Contact, pass,
@@ -190,6 +222,13 @@ SCENARIO_ID=$(curl --silent --fail \
     "name": "Cadence manual scheduling smoke",
     "spacecraft_count": 3,
     "spacecraft_prefix": "SC",
+    "orbit_readiness": {
+      "status": "current",
+      "source_kind": "synthetic",
+      "ephemeris_ref": "manual-smoke-oem-v1",
+      "version": 1,
+      "validity_seconds": 604800
+    },
     "pass_model": {
       "cadence_seconds": 60,
       "duration_seconds": 30,
@@ -264,8 +303,15 @@ In the authenticated mission UI:
 5. Create or select the Cadence spacecraft, map its source endpoint to provider
    spacecraft `SC-001`, and create an enabled inbound Routing Rule selecting the
    new Transport.
-6. Open **Ops → Contacts**, choose the ready route, search a future UTC window,
-   and reserve an opportunity.
+6. Open **Ops → Requirements**, select **Plan a contact**, create a downlink
+   Requirement for `SC-001`, and search its current version. Confirm the
+   simulator route reports current synthetic orbit evidence rather than a
+   Cadence-generated pass.
+7. Select an eligible opportunity and create a draft Plan. Submit the exact
+   version, approve it as an organization administrator with a reason, and
+   execute it.
+8. Open the linked Contact under **Ops → Contacts** to follow provider, pass,
+   delivery, and Cadence state.
 
 The reservation request contains opportunity, spacecraft, Service Profile,
 Delivery Profile, client-reference, and tag fields only. The Scheduled Contact

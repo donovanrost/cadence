@@ -989,21 +989,35 @@ simulator administration API.
 
 ### Stage 4: Requirements and planning
 
+Status: implemented. See the
+[Stage 4 Requirements and Planning design](2026-07-16-contact-scheduling-stage-4-requirements-and-planning-design.md)
+and
+[implementation plan](../plans/2026-07-16-contact-scheduling-stage-4-requirements-and-planning.md).
+
 - Contact Requirement model and workflow
 - versioned Contact Plans
 - multi-provider search
 - opportunity comparison and explanation
 - approval workflow
 - unsatisfied-requirement reporting
+- provider-owned orbit-readiness evidence without Cadence-owned propagation
+- restart-safe execution through the Stage 3 reservation boundary
 
 ### Stage 5: Fleet scheduling and automation
 
-- batched several-hundred-spacecraft planning
-- policy scoring and hard constraints
-- bounded parallel reservation sagas
-- partial replanning
-- quotas, budgets, and redundancy policy
-- scale and chaos qualification
+Status: implemented. See the
+[Stage 5 Fleet Planning and Automation design](2026-07-16-contact-scheduling-stage-5-fleet-planning-and-automation-design.md)
+and
+[implementation plan](../plans/2026-07-16-contact-scheduling-stage-5-fleet-planning-and-automation.md).
+
+- recurring Requirement Templates with idempotent bounded materialization
+- exact versioned Fleet Planning Policy and administrator approval
+- durable, restart-safe Fleet Planning Runs over exact Stage 4 searches
+- deterministic hard constraints, bounded scoring, and decision explanations
+- ordinary candidate Contact Plans with manual or exact-grant automation
+- locked-commitment repair after partial or uncertain execution
+- authenticated mission planning workspace
+- 300-spacecraft external-simulator scale and chaos qualification
 
 ### Stage 6: Commercial provider proof
 

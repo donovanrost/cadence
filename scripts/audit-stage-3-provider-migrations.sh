@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CADENCE_APP_DIR="$ROOT_DIR/apps/cadence"
 STAGE_2_VERSION=20260714020000
+STAGE_3_VERSION=20260715050000
+STAGE_4_VERSION=20260716040000
 RUN_SUFFIX="${USER:-user}_$$"
 CLEAN_PARTITION="_stage3_clean_${RUN_SUFFIX}"
 UPGRADE_PARTITION="_stage3_upgrade_${RUN_SUFFIX}"
@@ -59,8 +61,95 @@ BEGIN
      OR to_regclass('public.provider_account_grants') IS NULL
      OR to_regclass('public.provider_event_inbox') IS NULL
      OR to_regclass('public.provider_reservation_changes') IS NULL
-     OR to_regclass('public.scheduled_contact_revisions') IS NULL THEN
-    RAISE EXCEPTION 'clean Stage 3 migration did not create the complete provider schema';
+     OR to_regclass('public.scheduled_contact_revisions') IS NULL
+     OR to_regclass('public.contact_requirements') IS NULL
+     OR to_regclass('public.contact_requirement_versions') IS NULL
+     OR to_regclass('public.contact_planning_runs') IS NULL
+     OR to_regclass('public.contact_planning_searches') IS NULL
+     OR to_regclass('public.contact_opportunity_snapshots') IS NULL
+     OR to_regclass('public.contact_plans') IS NULL
+     OR to_regclass('public.contact_plan_versions') IS NULL
+     OR to_regclass('public.contact_plan_approvals') IS NULL
+     OR to_regclass('public.contact_plan_execution_items') IS NULL
+     OR to_regclass('public.contact_requirement_templates') IS NULL
+     OR to_regclass('public.contact_requirement_template_versions') IS NULL
+     OR to_regclass('public.contact_requirement_occurrences') IS NULL
+     OR to_regclass('public.fleet_planning_policies') IS NULL
+     OR to_regclass('public.fleet_planning_policy_versions') IS NULL
+     OR to_regclass('public.fleet_planning_policy_approvals') IS NULL
+     OR to_regclass('public.fleet_planning_runs') IS NULL
+     OR to_regclass('public.fleet_planning_run_requirement_refs') IS NULL
+     OR to_regclass('public.fleet_planning_decisions') IS NULL
+     OR to_regclass('public.automation_grants') IS NULL
+     OR to_regclass('public.fleet_automation_actions') IS NULL THEN
+    RAISE EXCEPTION 'clean migration did not create the complete Stage 3 through Stage 5 schema';
+  END IF;
+
+  IF (
+    SELECT count(*)
+    FROM pg_constraint
+    WHERE conname IN (
+      'contact_requirements_current_version_fk',
+      'contact_planning_runs_requirement_version_fk',
+      'contact_opportunity_snapshots_requirement_version_fk',
+      'contact_plans_current_version_fk',
+      'contact_plans_approved_version_fk',
+      'contact_plan_execution_items_plan_version_fk',
+      'contact_plan_execution_items_snapshot_fk',
+      'contact_plan_execution_items_reservation_fk',
+      'provider_reservations_contact_requirement_fk',
+      'provider_reservations_contact_plan_fk',
+      'provider_reservations_opportunity_snapshot_fk'
+    ) AND contype = 'f' AND convalidated
+  ) <> 11 THEN
+    RAISE EXCEPTION 'clean Stage 4 migration did not create every validated exact reference';
+  END IF;
+
+  IF (
+    SELECT count(*)
+    FROM pg_constraint
+    WHERE conname IN (
+      'contact_requirement_templates_mission_fk',
+      'contact_requirement_template_versions_template_fk',
+      'contact_requirement_template_versions_spacecraft_fk',
+      'contact_requirement_templates_current_version_fk',
+      'contact_requirement_occurrences_template_version_fk',
+      'contact_requirement_occurrences_requirement_version_fk',
+      'fleet_planning_policies_mission_fk',
+      'fleet_planning_policy_versions_policy_fk',
+      'fleet_planning_policies_current_version_fk',
+      'fleet_planning_policies_active_version_fk',
+      'fleet_planning_policy_approvals_version_fk',
+      'fleet_planning_runs_policy_version_fk',
+      'fleet_planning_runs_source_run_fk',
+      'fleet_planning_runs_source_plan_fk',
+      'fleet_planning_runs_candidate_plan_fk',
+      'fleet_planning_run_requirement_refs_run_fk',
+      'fleet_planning_run_requirement_refs_requirement_fk',
+      'fleet_planning_run_requirement_refs_planning_run_fk',
+      'fleet_planning_decisions_run_fk',
+      'fleet_planning_decisions_snapshot_fk',
+      'automation_grants_mission_fk',
+      'automation_grants_service_identity_fk',
+      'automation_grants_policy_version_fk',
+      'contact_plan_approvals_automation_grant_fk',
+      'fleet_automation_actions_grant_fk',
+      'fleet_automation_actions_run_fk',
+      'fleet_automation_actions_plan_fk'
+    ) AND contype = 'f' AND convalidated
+  ) <> 27 THEN
+    RAISE EXCEPTION 'clean Stage 5 migration did not create every validated exact reference';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'contact_plan_versions'
+      AND column_name = 'locked_snapshot_ids'
+      AND is_nullable = 'NO'
+  ) THEN
+    RAISE EXCEPTION 'clean Stage 5 migration is missing locked Plan commitments';
   END IF;
 END
 $stage3_clean$;
@@ -190,7 +279,7 @@ INSERT INTO provider_reservations (
   );
 SQL
 
-mix_for_partition "$UPGRADE_PARTITION" ecto.migrate --quiet
+mix_for_partition "$UPGRADE_PARTITION" ecto.migrate --to "$STAGE_3_VERSION" --quiet
 
 run_sql "$UPGRADE_PARTITION" <<'SQL'
 DO $stage3_upgrade$
@@ -328,4 +417,146 @@ END
 $stage3_upgrade$;
 SQL
 
-printf 'Stage 3 provider migration audit passed (clean database and populated Stage 2 upgrade).\n'
+mix_for_partition "$UPGRADE_PARTITION" ecto.migrate --to "$STAGE_4_VERSION" --quiet
+
+run_sql "$UPGRADE_PARTITION" <<'SQL'
+BEGIN;
+SET CONSTRAINTS ALL DEFERRED;
+
+INSERT INTO mission_spacecraft (
+  spacecraft_id, organization_id, mission_id, display_name, metadata,
+  inserted_at
+) VALUES (
+  'spacecraft-stage4-upgrade', 'org-stage3-upgrade', 'mission-stage3-upgrade',
+  'Stage 4 Upgrade Spacecraft', '{"fixture":"stage4"}',
+  '2026-07-16 00:00:00'
+);
+
+INSERT INTO contact_requirements (
+  contact_requirement_id, organization_id, mission_id, current_version,
+  lifecycle_state, created_by, lifecycle_changed_by, lifecycle_changed_at,
+  lifecycle_reason, inserted_at, updated_at
+) VALUES (
+  'requirement-stage4-upgrade', 'org-stage3-upgrade', 'mission-stage3-upgrade',
+  1, 'active', 'stage4-migration', 'stage4-migration',
+  '2026-07-16 00:00:00', '', '2026-07-16 00:00:00',
+  '2026-07-16 00:00:00'
+);
+
+INSERT INTO contact_requirement_versions (
+  contact_requirement_version_id, contact_requirement_id, organization_id,
+  mission_id, version, spacecraft_id, service_direction, contact_intent,
+  earliest_start, latest_end, success_measure, minimum_duration_seconds,
+  preferred_duration_seconds, minimum_data_volume_bytes, contact_count,
+  minimum_separation_seconds, priority, provider_constraints_document,
+  station_constraints_document, policy_constraints_document,
+  approval_policy_document, rationale, metadata, content_sha256, created_by,
+  created_at
+) VALUES (
+  'requirement-stage4-upgrade-v1', 'requirement-stage4-upgrade',
+  'org-stage3-upgrade', 'mission-stage3-upgrade', 1,
+  'spacecraft-stage4-upgrade', 'downlink', 'stage4_upgrade_contact',
+  '2026-07-18 00:00:00', '2026-07-18 01:00:00', 'minimum_duration',
+  300, 600, NULL, 1, 0, 'high', '{"allowed":[],"excluded":[]}',
+  '{"allowed":[],"excluded":[]}', '{}', '{"mode":"manual"}',
+  'Retained Stage 4 Requirement', '{"fixture":"stage4"}',
+  'stage4-requirement-content-hash', 'stage4-migration',
+  '2026-07-16 00:00:00'
+);
+
+INSERT INTO contact_plans (
+  contact_plan_id, organization_id, mission_id, current_version,
+  lifecycle_state, created_by, lifecycle_changed_by, lifecycle_changed_at,
+  lifecycle_reason, approved_version, approved_at, approved_by, inserted_at,
+  updated_at
+) VALUES (
+  'plan-stage4-upgrade', 'org-stage3-upgrade', 'mission-stage3-upgrade', 1,
+  'draft', 'stage4-migration', 'stage4-migration', '2026-07-16 00:00:00',
+  '', NULL, NULL, NULL, '2026-07-16 00:00:00', '2026-07-16 00:00:00'
+);
+
+INSERT INTO contact_plan_versions (
+  contact_plan_version_id, contact_plan_id, organization_id, mission_id,
+  version, requirement_refs_document, planning_run_refs_document,
+  selected_snapshot_ids, rejected_snapshot_ids, coverage_document,
+  conflict_document, unsatisfied_document, policy_snapshot_document, rationale,
+  content_sha256, created_by, created_at
+) VALUES (
+  'plan-stage4-upgrade-v1', 'plan-stage4-upgrade', 'org-stage3-upgrade',
+  'mission-stage3-upgrade', 1,
+  '{"requirements":[{"id":"requirement-stage4-upgrade","version":1}]}',
+  '{"runs":[]}', ARRAY[]::varchar[], ARRAY[]::varchar[],
+  '{"satisfied":false}', '{"clear":true}', '{"requirements":[]}', '{}',
+  'Retained Stage 4 Plan', 'stage4-plan-content-hash', 'stage4-migration',
+  '2026-07-16 00:00:00'
+);
+
+COMMIT;
+SQL
+
+mix_for_partition "$UPGRADE_PARTITION" ecto.migrate --quiet
+
+run_sql "$UPGRADE_PARTITION" <<'SQL'
+DO $stage5_upgrade$
+BEGIN
+  IF (SELECT count(*) FROM provider_reservations) <> 3
+     OR (SELECT count(*) FROM scheduled_contacts) <> 3
+     OR (SELECT count(*) FROM contact_requirements) <> 1
+     OR (SELECT count(*) FROM contact_requirement_versions) <> 1
+     OR (SELECT count(*) FROM contact_plans) <> 1
+     OR (SELECT count(*) FROM contact_plan_versions) <> 1 THEN
+    RAISE EXCEPTION 'populated Stage 3 and Stage 4 records changed during Stage 5 upgrade';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM provider_reservations
+    WHERE contact_requirement_id IS NOT NULL
+       OR contact_requirement_version IS NOT NULL
+       OR contact_plan_id IS NOT NULL
+       OR contact_plan_version IS NOT NULL
+       OR contact_opportunity_snapshot_id IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'existing direct reservations acquired synthetic planning references';
+  END IF;
+
+  IF to_regclass('public.contact_requirement_templates') IS NULL
+     OR to_regclass('public.contact_requirement_occurrences') IS NULL
+     OR to_regclass('public.fleet_planning_policies') IS NULL
+     OR to_regclass('public.fleet_planning_runs') IS NULL
+     OR to_regclass('public.fleet_planning_decisions') IS NULL
+     OR to_regclass('public.automation_grants') IS NULL
+     OR to_regclass('public.fleet_automation_actions') IS NULL THEN
+    RAISE EXCEPTION 'populated Stage 4 upgrade did not create the complete Stage 5 schema';
+  END IF;
+
+  IF (SELECT locked_snapshot_ids FROM contact_plan_versions
+      WHERE contact_plan_id = 'plan-stage4-upgrade') <> ARRAY[]::varchar[] THEN
+    RAISE EXCEPTION 'historical Stage 4 Plan acquired synthetic locked commitments';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM fleet_planning_runs)
+     OR EXISTS (SELECT 1 FROM fleet_planning_run_requirement_refs)
+     OR EXISTS (SELECT 1 FROM fleet_planning_decisions)
+     OR EXISTS (SELECT 1 FROM fleet_automation_actions) THEN
+    RAISE EXCEPTION 'historical Stage 4 records acquired synthetic Stage 5 fleet references';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM contact_requirements
+    WHERE contact_requirement_id = 'requirement-stage4-upgrade'
+      AND current_version = 1
+      AND lifecycle_state = 'active'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM contact_plans
+    WHERE contact_plan_id = 'plan-stage4-upgrade'
+      AND current_version = 1
+      AND lifecycle_state = 'draft'
+  ) THEN
+    RAISE EXCEPTION 'historical Stage 4 Requirement or Plan content was not retained';
+  END IF;
+END
+$stage5_upgrade$;
+SQL
+
+printf 'Stage 3 provider, Stage 4 planning, and Stage 5 fleet migration audit passed (clean database and populated Stage 4 upgrade).\n'

@@ -1,6 +1,6 @@
 # Simulator Provider Contract v1
 
-- Status: implemented through Stage 3
+- Status: implemented through Stage 5
 - Created: 2026-07-13
 - Scope: Define the external HTTP contract presented by the Cadence Ground
   Network Simulator and the normalized semantics consumed by Cadence provider
@@ -11,6 +11,10 @@
   [Stage 2 Provider and Delivery Contract](../plans/2026-07-13-contact-scheduling-stage-2-provider-delivery-contract.md)
   and
   [Stage 3 Durable Integration Semantics](../plans/2026-07-15-contact-scheduling-stage-3-durable-integration-semantics.md)
+  and
+  [Stage 4 Requirements and Planning](../plans/2026-07-16-contact-scheduling-stage-4-requirements-and-planning.md)
+  and
+  [Stage 5 Fleet Planning and Automation](../plans/2026-07-16-contact-scheduling-stage-5-fleet-planning-and-automation.md)
 
 ## Summary
 
@@ -218,6 +222,26 @@ List responses additionally include bounded pagination metadata:
     "request_id": "request-123",
     "next_cursor": null,
     "truncated": false
+  }
+}
+```
+
+Opportunity pages may additionally include provider-level evidence that remains
+meaningful when `data` is empty:
+
+```json
+{
+  "meta": {
+    "provider_evidence": {
+      "orbit_readiness": {
+        "status": "current",
+        "source_kind": "synthetic",
+        "ephemeris_ref": "synthetic-ephemeris-v1",
+        "version": 1,
+        "epoch": "2026-07-13T12:00:00Z",
+        "valid_until": "2026-07-20T12:00:00Z"
+      }
+    }
   }
 }
 ```
@@ -433,6 +457,13 @@ extensions
 
 Opportunity IDs are stable within an immutable run. An opportunity is still a
 proposal: successful search never guarantees successful reservation.
+
+The provider, not Cadence, owns ephemeris, station geometry, propagation, and
+visibility generation. Current readiness is repeated under each opportunity's
+`extensions.orbit_readiness` and retained at page level for empty availability.
+Missing, expired, or processing orbit state returns `422 orbit_not_ready` with
+bounded readiness evidence. Cadence must distinguish that result from a
+successful search containing zero opportunities.
 
 ## Contacts
 

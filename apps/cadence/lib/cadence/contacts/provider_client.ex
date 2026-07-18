@@ -21,7 +21,8 @@ defmodule Cadence.Contacts.ProviderClient do
   @type opportunity_page :: %{
           data: [Opportunity.t()],
           next_cursor: binary() | nil,
-          truncated: boolean()
+          truncated: boolean(),
+          provider_evidence: map()
         }
   @type event_page :: %{
           data: [ProviderEvent.t()],

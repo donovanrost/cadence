@@ -20,6 +20,11 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     field(:provider_account_version, :integer)
     field(:provider_account_grant_id, :string)
     field(:provider_account_grant_version, :integer)
+    field(:contact_requirement_id, :string)
+    field(:contact_requirement_version, :integer)
+    field(:contact_plan_id, :string)
+    field(:contact_plan_version, :integer)
+    field(:contact_opportunity_snapshot_id, :string)
     field(:transport_id, :string)
     field(:transport_version, :integer)
     field(:service_profile_ref, :map, default: %{})
@@ -104,6 +109,7 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     |> validate_optional_positive(:provider_account_version)
     |> validate_optional_positive(:provider_account_grant_version)
     |> validate_binding_shape()
+    |> validate_plan_binding_shape()
     |> validate_number(:transport_version, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
     |> validate_length(:idempotency_key, max: 255)
@@ -120,6 +126,15 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
     )
     |> unique_constraint([:mission_id, :provider_contact_ref],
       name: :provider_reservations_provider_ref_idx
+    )
+    |> foreign_key_constraint(:contact_requirement_version,
+      name: :provider_reservations_contact_requirement_fk
+    )
+    |> foreign_key_constraint(:contact_plan_version,
+      name: :provider_reservations_contact_plan_fk
+    )
+    |> foreign_key_constraint(:contact_opportunity_snapshot_id,
+      name: :provider_reservations_opportunity_snapshot_fk
     )
   end
 
@@ -170,6 +185,11 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       provider_account_version: row.provider_account_version,
       provider_account_grant_id: row.provider_account_grant_id,
       provider_account_grant_version: row.provider_account_grant_version,
+      contact_requirement_id: row.contact_requirement_id,
+      contact_requirement_version: row.contact_requirement_version,
+      contact_plan_id: row.contact_plan_id,
+      contact_plan_version: row.contact_plan_version,
+      contact_opportunity_snapshot_id: row.contact_opportunity_snapshot_id,
       transport_id: row.transport_id,
       transport_version: row.transport_version,
       service_profile_ref: JsonDocument.unwrap_value(row.service_profile_ref),
@@ -220,6 +240,11 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       provider_account_version: reservation.provider_account_version,
       provider_account_grant_id: reservation.provider_account_grant_id,
       provider_account_grant_version: reservation.provider_account_grant_version,
+      contact_requirement_id: reservation.contact_requirement_id,
+      contact_requirement_version: reservation.contact_requirement_version,
+      contact_plan_id: reservation.contact_plan_id,
+      contact_plan_version: reservation.contact_plan_version,
+      contact_opportunity_snapshot_id: reservation.contact_opportunity_snapshot_id,
       transport_id: reservation.transport_id,
       transport_version: reservation.transport_version,
       service_profile_ref: JsonDocument.wrap_value(reservation.service_profile_ref),
@@ -270,6 +295,11 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       :provider_account_version,
       :provider_account_grant_id,
       :provider_account_grant_version,
+      :contact_requirement_id,
+      :contact_requirement_version,
+      :contact_plan_id,
+      :contact_plan_version,
+      :contact_opportunity_snapshot_id,
       :transport_id,
       :transport_version,
       :service_profile_ref,
@@ -342,6 +372,26 @@ defmodule Cadence.Persistence.Schemas.ProviderReservationRow do
       changeset
     else
       add_error(changeset, :provider_account_id, "requires a complete account and grant binding")
+    end
+  end
+
+  defp validate_plan_binding_shape(changeset) do
+    values =
+      Enum.map(
+        [
+          :contact_requirement_id,
+          :contact_requirement_version,
+          :contact_plan_id,
+          :contact_plan_version,
+          :contact_opportunity_snapshot_id
+        ],
+        &get_field(changeset, &1)
+      )
+
+    if Enum.all?(values, &is_nil/1) or Enum.all?(values, &(not is_nil(&1))) do
+      changeset
+    else
+      add_error(changeset, :contact_plan_id, "requires a complete Contact Plan binding")
     end
   end
 end

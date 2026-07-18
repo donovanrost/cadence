@@ -87,7 +87,17 @@ defmodule CadenceSimulator.Provider.ApiRouter do
         {:ok, page} ->
           Contract.list(conn, page.data,
             next_cursor: page.next_cursor,
-            truncated: page.truncated
+            truncated: page.truncated,
+            provider_evidence: page.provider_evidence
+          )
+
+        {:error, {:orbit_not_ready, readiness}} ->
+          Contract.error(
+            conn,
+            422,
+            "orbit_not_ready",
+            "provider orbit data is not ready for opportunity generation",
+            evidence: %{"orbit_readiness" => readiness}
           )
 
         error ->
@@ -209,6 +219,18 @@ defmodule CadenceSimulator.Provider.ApiRouter do
 
   defp respond(conn, {:error, {:no_capacity, detail}}, _opts),
     do: Contract.error(conn, 409, "no_capacity", detail)
+
+  defp respond(conn, {:error, {:rate_limited, evidence}}, _opts) do
+    Contract.error(
+      conn,
+      429,
+      "rate_limited",
+      "simulated provider route rate limit",
+      retryable: true,
+      retry_after_seconds: evidence["retry_after_seconds"],
+      evidence: evidence
+    )
+  end
 
   defp respond(conn, {:error, reason}, _opts),
     do: Contract.error(conn, 500, "provider_error", inspect(reason))

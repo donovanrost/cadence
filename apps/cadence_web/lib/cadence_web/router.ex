@@ -274,6 +274,42 @@ defmodule CadenceWeb.Router do
            OpsDataSourcesLive,
            :index
 
+      live "/missions/:mission_id/ops/planning",
+           OpsFleetPlanningLive,
+           :index
+
+      live "/missions/:mission_id/ops/planning/new",
+           OpsFleetPlanningNewLive,
+           :new
+
+      live "/missions/:mission_id/ops/planning/policy",
+           OpsFleetPlanningPolicyLive,
+           :show
+
+      live "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id",
+           OpsFleetPlanningRunLive,
+           :show
+
+      live "/missions/:mission_id/ops/requirement-templates",
+           OpsContactRequirementTemplateLive,
+           :index
+
+      live "/missions/:mission_id/ops/requirements",
+           OpsContactRequirementListLive,
+           :index
+
+      live "/missions/:mission_id/ops/requirements/new",
+           OpsContactRequirementNewLive,
+           :new
+
+      live "/missions/:mission_id/ops/requirements/:contact_requirement_id",
+           OpsContactRequirementShowLive,
+           :show
+
+      live "/missions/:mission_id/ops/plans/:contact_plan_id",
+           OpsContactPlanShowLive,
+           :show
+
       live "/missions/:mission_id/ops/contacts",
            OpsContactScheduleLive,
            :index

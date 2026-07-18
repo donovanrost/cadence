@@ -28,7 +28,21 @@ defmodule Cadence do
   alias Cadence.Catalog.Telemetry.Compiler, as: TelemetryCatalogCompiler
   alias Cadence.Catalog.Telemetry.Compiler.Result, as: TelemetryCompilerResult
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
+
   alias Cadence.Commanding
+  alias Cadence.ContactPlanning.AutomationGrants
+  alias Cadence.ContactPlanning.ContactPlanApprovals
+  alias Cadence.ContactPlanning.ContactPlanExecutions
+  alias Cadence.ContactPlanning.ContactPlans
+  alias Cadence.ContactPlanning.ContactRequirements
+  alias Cadence.ContactPlanning.ContactRequirementTemplates
+  alias Cadence.ContactPlanning.FleetAutomation
+  alias Cadence.ContactPlanning.FleetAutomationActions
+  alias Cadence.ContactPlanning.FleetPlanner
+  alias Cadence.ContactPlanning.FleetPlanningPolicies
+  alias Cadence.ContactPlanning.FleetPlanningRuns
+  alias Cadence.ContactPlanning.FleetRepairs
+  alias Cadence.ContactPlanning.Planner, as: ContactPlanner
   alias Cadence.Dashboards
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
 
@@ -1735,6 +1749,706 @@ defmodule Cadence do
           {:ok, map()} | {:error, term()}
   def search_contact_opportunities(organization_id, mission_id, route_key, window, opts \\ []) do
     ProviderScheduling.search_opportunities(organization_id, mission_id, route_key, window, opts)
+  end
+
+  @spec create_contact_requirement(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def create_contact_requirement(current_scope, mission_id, attrs, opts \\ []) do
+    ContactRequirements.create(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec version_contact_requirement(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          keyword()
+        ) :: {:ok, struct(), struct()} | {:error, term()}
+  def version_contact_requirement(
+        current_scope,
+        mission_id,
+        requirement_id,
+        expected_version,
+        attrs,
+        opts \\ []
+      ) do
+    ContactRequirements.version(
+      current_scope,
+      mission_id,
+      requirement_id,
+      expected_version,
+      attrs,
+      opts
+    )
+  end
+
+  @spec fetch_contact_requirement(binary(), binary(), binary()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def fetch_contact_requirement(organization_id, mission_id, requirement_id) do
+    ContactRequirements.fetch(organization_id, mission_id, requirement_id)
+  end
+
+  @spec list_contact_requirements(binary(), binary(), keyword()) :: [{struct(), struct()}]
+  def list_contact_requirements(organization_id, mission_id, opts \\ []) do
+    ContactRequirements.list(organization_id, mission_id, opts)
+  end
+
+  @spec create_contact_requirement_template(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def create_contact_requirement_template(current_scope, mission_id, attrs, opts \\ []) do
+    ContactRequirementTemplates.create(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec version_contact_requirement_template(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          keyword()
+        ) :: {:ok, struct(), struct()} | {:error, term()}
+  def version_contact_requirement_template(
+        current_scope,
+        mission_id,
+        template_id,
+        expected_version,
+        attrs,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.version(
+      current_scope,
+      mission_id,
+      template_id,
+      expected_version,
+      attrs,
+      opts
+    )
+  end
+
+  @spec fetch_contact_requirement_template(binary(), binary(), binary()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def fetch_contact_requirement_template(organization_id, mission_id, template_id) do
+    ContactRequirementTemplates.fetch(organization_id, mission_id, template_id)
+  end
+
+  @spec list_contact_requirement_templates(binary(), binary(), keyword()) ::
+          [{struct(), struct()}]
+  def list_contact_requirement_templates(organization_id, mission_id, opts \\ []) do
+    ContactRequirementTemplates.list(organization_id, mission_id, opts)
+  end
+
+  @spec activate_contact_requirement_template(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def activate_contact_requirement_template(
+        current_scope,
+        mission_id,
+        template_id,
+        expected_version,
+        reason,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.activate(
+      current_scope,
+      mission_id,
+      template_id,
+      expected_version,
+      reason,
+      opts
+    )
+  end
+
+  @spec pause_contact_requirement_template(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def pause_contact_requirement_template(
+        current_scope,
+        mission_id,
+        template_id,
+        expected_version,
+        reason,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.pause(
+      current_scope,
+      mission_id,
+      template_id,
+      expected_version,
+      reason,
+      opts
+    )
+  end
+
+  @spec close_contact_requirement_template(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def close_contact_requirement_template(
+        current_scope,
+        mission_id,
+        template_id,
+        expected_version,
+        reason,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.close(
+      current_scope,
+      mission_id,
+      template_id,
+      expected_version,
+      reason,
+      opts
+    )
+  end
+
+  @spec materialize_contact_requirement_template(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          DateTime.t(),
+          DateTime.t(),
+          keyword()
+        ) :: {:ok, [map()]} | {:error, term()}
+  def materialize_contact_requirement_template(
+        current_scope,
+        mission_id,
+        template_id,
+        from,
+        until,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.materialize(
+      current_scope,
+      mission_id,
+      template_id,
+      from,
+      until,
+      opts
+    )
+  end
+
+  @spec materialize_active_contact_requirement_templates(
+          CurrentScope.t(),
+          binary(),
+          DateTime.t(),
+          DateTime.t(),
+          keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def materialize_active_contact_requirement_templates(
+        current_scope,
+        mission_id,
+        from,
+        until,
+        opts \\ []
+      ) do
+    ContactRequirementTemplates.materialize_active(
+      current_scope,
+      mission_id,
+      from,
+      until,
+      opts
+    )
+  end
+
+  @spec create_fleet_planning_policy(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def create_fleet_planning_policy(current_scope, mission_id, attrs, opts \\ []) do
+    FleetPlanningPolicies.create(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec version_fleet_planning_policy(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          keyword()
+        ) :: {:ok, struct(), struct()} | {:error, term()}
+  def version_fleet_planning_policy(
+        current_scope,
+        mission_id,
+        policy_id,
+        expected_version,
+        attrs,
+        opts \\ []
+      ) do
+    FleetPlanningPolicies.version(
+      current_scope,
+      mission_id,
+      policy_id,
+      expected_version,
+      attrs,
+      opts
+    )
+  end
+
+  @spec fetch_fleet_planning_policy(binary(), binary()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def fetch_fleet_planning_policy(organization_id, mission_id) do
+    FleetPlanningPolicies.fetch(organization_id, mission_id)
+  end
+
+  @spec fetch_active_fleet_planning_policy(binary(), binary()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def fetch_active_fleet_planning_policy(organization_id, mission_id) do
+    FleetPlanningPolicies.fetch_active(organization_id, mission_id)
+  end
+
+  @spec fetch_fleet_planning_policy_version(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer()
+        ) :: {:ok, struct()} | {:error, term()}
+  def fetch_fleet_planning_policy_version(
+        organization_id,
+        mission_id,
+        policy_id,
+        version
+      ) do
+    FleetPlanningPolicies.fetch_version(
+      organization_id,
+      mission_id,
+      policy_id,
+      version
+    )
+  end
+
+  @spec approve_fleet_planning_policy(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct(), struct(), struct()} | {:error, term()}
+  def approve_fleet_planning_policy(
+        current_scope,
+        mission_id,
+        policy_id,
+        expected_version,
+        expected_hash,
+        reason,
+        opts \\ []
+      ) do
+    FleetPlanningPolicies.approve(
+      current_scope,
+      mission_id,
+      policy_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+  end
+
+  @spec reject_fleet_planning_policy(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct(), struct(), struct()} | {:error, term()}
+  def reject_fleet_planning_policy(
+        current_scope,
+        mission_id,
+        policy_id,
+        expected_version,
+        expected_hash,
+        reason,
+        opts \\ []
+      ) do
+    FleetPlanningPolicies.reject(
+      current_scope,
+      mission_id,
+      policy_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+  end
+
+  @spec retire_fleet_planning_policy(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def retire_fleet_planning_policy(
+        current_scope,
+        mission_id,
+        policy_id,
+        expected_version,
+        reason,
+        opts \\ []
+      ) do
+    FleetPlanningPolicies.retire(
+      current_scope,
+      mission_id,
+      policy_id,
+      expected_version,
+      reason,
+      opts
+    )
+  end
+
+  @spec create_fleet_planning_run(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), [struct()]} | {:error, term()}
+  def create_fleet_planning_run(current_scope, mission_id, attrs, opts \\ []) do
+    FleetPlanningRuns.create(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec fetch_fleet_planning_run(binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, term()}
+  def fetch_fleet_planning_run(organization_id, mission_id, run_id) do
+    FleetPlanningRuns.fetch(organization_id, mission_id, run_id)
+  end
+
+  @spec list_fleet_planning_runs(binary(), binary(), keyword()) :: [struct()]
+  def list_fleet_planning_runs(organization_id, mission_id, opts \\ []) do
+    FleetPlanningRuns.list(organization_id, mission_id, opts)
+  end
+
+  @spec list_fleet_planning_run_requirement_refs(binary(), binary(), binary()) :: [struct()]
+  def list_fleet_planning_run_requirement_refs(organization_id, mission_id, run_id) do
+    FleetPlanningRuns.list_requirement_refs(organization_id, mission_id, run_id)
+  end
+
+  @spec list_fleet_planning_decisions(binary(), binary(), binary()) :: [struct()]
+  def list_fleet_planning_decisions(organization_id, mission_id, run_id) do
+    FleetPlanningRuns.list_decisions(organization_id, mission_id, run_id)
+  end
+
+  @spec start_fleet_planning_run(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), [struct()]} | {:error, term()}
+  def start_fleet_planning_run(current_scope, mission_id, attrs, opts \\ []) do
+    FleetPlanner.start(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec run_fleet_planning(CurrentScope.t(), binary(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def run_fleet_planning(current_scope, mission_id, run_id, opts \\ []) do
+    FleetPlanner.run(current_scope, mission_id, run_id, opts)
+  end
+
+  @spec plan_fleet_contacts(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def plan_fleet_contacts(current_scope, mission_id, attrs, opts \\ []) do
+    FleetPlanner.plan(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec repair_fleet_contacts(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def repair_fleet_contacts(
+        current_scope,
+        mission_id,
+        source_run_id,
+        source_plan_id,
+        source_plan_version,
+        attrs,
+        opts \\ []
+      ) do
+    FleetRepairs.repair(
+      current_scope,
+      mission_id,
+      source_run_id,
+      source_plan_id,
+      source_plan_version,
+      attrs,
+      opts
+    )
+  end
+
+  @spec issue_automation_grant(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct()} | {:error, term()}
+  def issue_automation_grant(current_scope, mission_id, attrs, opts \\ []) do
+    AutomationGrants.issue(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec revoke_automation_grant(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def revoke_automation_grant(
+        current_scope,
+        mission_id,
+        grant_id,
+        expected_hash,
+        reason,
+        opts \\ []
+      ) do
+    AutomationGrants.revoke(
+      current_scope,
+      mission_id,
+      grant_id,
+      expected_hash,
+      reason,
+      opts
+    )
+  end
+
+  @spec list_automation_grants(binary(), binary(), keyword()) :: [struct()]
+  def list_automation_grants(organization_id, mission_id, opts \\ []) do
+    AutomationGrants.list(organization_id, mission_id, opts)
+  end
+
+  @spec automate_fleet_plan(CurrentScope.t(), binary(), map(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def automate_fleet_plan(current_scope, mission_id, attrs, grant_id, opts \\ []) do
+    FleetAutomation.plan(current_scope, mission_id, attrs, grant_id, opts)
+  end
+
+  @spec automate_fleet_repair(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          binary(),
+          keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def automate_fleet_repair(
+        current_scope,
+        mission_id,
+        source_run_id,
+        source_plan_id,
+        source_plan_version,
+        attrs,
+        grant_id,
+        opts \\ []
+      ) do
+    FleetAutomation.repair(
+      current_scope,
+      mission_id,
+      source_run_id,
+      source_plan_id,
+      source_plan_version,
+      attrs,
+      grant_id,
+      opts
+    )
+  end
+
+  @spec resume_fleet_automation(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def resume_fleet_automation(current_scope, mission_id, run_id, grant_id, opts \\ []) do
+    FleetAutomation.run(current_scope, mission_id, run_id, grant_id, opts)
+  end
+
+  @spec list_fleet_automation_actions(binary(), binary(), binary()) :: [struct()]
+  def list_fleet_automation_actions(organization_id, mission_id, run_id) do
+    FleetAutomationActions.list(organization_id, mission_id, run_id)
+  end
+
+  @spec plan_contact_requirement(CurrentScope.t(), binary(), binary(), pos_integer(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def plan_contact_requirement(
+        current_scope,
+        mission_id,
+        requirement_id,
+        requirement_version,
+        opts \\ []
+      ) do
+    ContactPlanner.run(
+      current_scope,
+      mission_id,
+      requirement_id,
+      requirement_version,
+      opts
+    )
+  end
+
+  @spec create_contact_plan(CurrentScope.t(), binary(), map(), keyword()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def create_contact_plan(current_scope, mission_id, attrs, opts \\ []) do
+    ContactPlans.create(current_scope, mission_id, attrs, opts)
+  end
+
+  @spec version_contact_plan(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          map(),
+          keyword()
+        ) :: {:ok, struct(), struct()} | {:error, term()}
+  def version_contact_plan(
+        current_scope,
+        mission_id,
+        contact_plan_id,
+        expected_version,
+        attrs,
+        opts \\ []
+      ) do
+    ContactPlans.version(
+      current_scope,
+      mission_id,
+      contact_plan_id,
+      expected_version,
+      attrs,
+      opts
+    )
+  end
+
+  @spec submit_contact_plan(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct()} | {:error, term()}
+  def submit_contact_plan(
+        current_scope,
+        mission_id,
+        contact_plan_id,
+        expected_version,
+        reason,
+        opts \\ []
+      ) do
+    ContactPlans.submit(
+      current_scope,
+      mission_id,
+      contact_plan_id,
+      expected_version,
+      reason,
+      opts
+    )
+  end
+
+  @spec fetch_contact_plan(binary(), binary(), binary()) ::
+          {:ok, struct(), struct()} | {:error, term()}
+  def fetch_contact_plan(organization_id, mission_id, contact_plan_id) do
+    ContactPlans.fetch(organization_id, mission_id, contact_plan_id)
+  end
+
+  @spec list_contact_plans(binary(), binary(), keyword()) :: [{struct(), struct()}]
+  def list_contact_plans(organization_id, mission_id, opts \\ []) do
+    ContactPlans.list(organization_id, mission_id, opts)
+  end
+
+  @spec list_contact_plan_approvals(binary(), binary(), binary()) :: [struct()]
+  def list_contact_plan_approvals(organization_id, mission_id, contact_plan_id) do
+    ContactPlanApprovals.list(organization_id, mission_id, contact_plan_id)
+  end
+
+  @spec approve_contact_plan(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct(), struct(), struct()} | {:error, term()}
+  def approve_contact_plan(
+        current_scope,
+        mission_id,
+        contact_plan_id,
+        expected_version,
+        expected_hash,
+        reason,
+        opts \\ []
+      ) do
+    ContactPlanApprovals.approve(
+      current_scope,
+      mission_id,
+      contact_plan_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+  end
+
+  @spec reject_contact_plan(
+          CurrentScope.t(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          binary(),
+          keyword()
+        ) :: {:ok, struct(), struct(), struct()} | {:error, term()}
+  def reject_contact_plan(
+        current_scope,
+        mission_id,
+        contact_plan_id,
+        expected_version,
+        expected_hash,
+        reason,
+        opts \\ []
+      ) do
+    ContactPlanApprovals.reject(
+      current_scope,
+      mission_id,
+      contact_plan_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+  end
+
+  @spec execute_contact_plan(CurrentScope.t(), binary(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def execute_contact_plan(current_scope, mission_id, contact_plan_id, opts \\ []) do
+    ContactPlanExecutions.execute(current_scope, mission_id, contact_plan_id, opts)
+  end
+
+  @spec list_contact_plan_execution_items(binary(), binary(), binary(), pos_integer()) :: [
+          struct()
+        ]
+  def list_contact_plan_execution_items(
+        organization_id,
+        mission_id,
+        contact_plan_id,
+        contact_plan_version
+      ) do
+    ContactPlanExecutions.list(
+      organization_id,
+      mission_id,
+      contact_plan_id,
+      contact_plan_version
+    )
   end
 
   @spec list_contact_actions(binary(), keyword()) :: [ContactAction.t()]

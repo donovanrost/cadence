@@ -56,7 +56,7 @@ defmodule Cadence.Auth.Scope do
       actor_kind: :service,
       organization_id: Map.fetch!(attrs, :organization_id),
       organization: Map.fetch!(attrs, :organization),
-      mission_id: mission && mission.mission_id,
+      mission_id: (mission && mission.mission_id) || service_identity.mission_id,
       mission: mission,
       service_identity: service_identity,
       capabilities:

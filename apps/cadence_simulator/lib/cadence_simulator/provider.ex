@@ -12,6 +12,8 @@ defmodule CadenceSimulator.Provider do
     DeliveryProfiles,
     FaultProfile,
     Ids,
+    OrbitReadiness,
+    RouteProfiles,
     ServiceProfiles,
     Store
   }
@@ -45,6 +47,14 @@ defmodule CadenceSimulator.Provider do
            ),
          {:ok, delivery_profiles} <-
            DeliveryProfiles.normalize(Map.get(attrs, "delivery_profiles", [])),
+         {:ok, orbit_readiness} <-
+           OrbitReadiness.normalize(Map.get(attrs, "orbit_readiness", %{})),
+         {:ok, route_profiles} <-
+           RouteProfiles.normalize(
+             Map.get(attrs, "route_profiles", []),
+             stations,
+             service_profiles
+           ),
          {:ok, fault_profile} <-
            FaultProfile.normalize(Map.get(attrs, "fault_profile", %{})) do
       scenario = %{
@@ -57,6 +67,8 @@ defmodule CadenceSimulator.Provider do
         "provider_behavior" => behavior,
         "service_profiles" => service_profiles,
         "delivery_profiles" => delivery_profiles,
+        "orbit_readiness" => orbit_readiness,
+        "route_profiles" => route_profiles,
         "pass_model" => %{
           "cadence_seconds" => nested_integer(attrs, "pass_model", "cadence_seconds", 5_400),
           "duration_seconds" => nested_integer(attrs, "pass_model", "duration_seconds", 600),

@@ -11,6 +11,7 @@ defmodule Cadence.GroundNetworks.ProviderError do
     "not_found" => :not_found,
     "conflict" => :conflict,
     "no_capacity" => :no_capacity,
+    "orbit_not_ready" => :provider_not_ready,
     "rate_limited" => :rate_limited,
     "provider_unavailable" => :provider_unavailable,
     "known_timeout" => :known_timeout,

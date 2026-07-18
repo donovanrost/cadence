@@ -8,6 +8,16 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   alias Cadence.Auth.Scope
   alias Cadence.Comms.{RoutingRule, Transport}
 
+  alias Cadence.ContactPlanning.{
+    ContactPlanApprovals,
+    ContactPlanExecutions,
+    ContactPlans,
+    ContactRequirements,
+    FleetPlanner,
+    FleetPlanningPolicies,
+    Planner
+  }
+
   alias Cadence.Contacts.{
     ProviderBooking,
     ProviderChangeApprovals,
@@ -33,11 +43,12 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ProviderEventProcessor
   }
 
+  alias Cadence.GroundNetworks.Opportunity
   alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
-  alias CadenceSimulator.Provider.{Orchestrator, Router, Store}
+  alias CadenceSimulator.Provider.{FleetScenarios, Orchestrator, Router, Store}
 
   @definitions Path.expand(
                  "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
@@ -108,34 +119,105 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
     search_ends_at = DateTime.add(search_starts_at, 180)
 
-    assert {:ok, %{opportunities: [opportunity | more_opportunities], route: route}} =
-             ProviderScheduling.search_opportunities(
-               setup.organization_id,
+    scope = admin_scope(setup)
+
+    assert {:ok, requirement, requirement_version} =
+             ContactRequirements.create(
+               scope,
                setup.mission_id,
-               setup.route.route_key,
-               %{
-                 "spacecraft_id" => setup.spacecraft.spacecraft_id,
-                 "starts_at" => DateTime.to_iso8601(search_starts_at),
-                 "ends_at" => DateTime.to_iso8601(search_ends_at)
-               },
-               credential_resolver: &resolve_provider_credential/1
+               stage_four_requirement_attrs(
+                 setup.spacecraft.spacecraft_id,
+                 search_starts_at,
+                 search_ends_at
+               )
              )
 
-    assert route.provider_spacecraft_ref == "SC-001"
+    assert {:ok, planning} =
+             Planner.run(
+               scope,
+               setup.mission_id,
+               requirement.contact_requirement_id,
+               requirement_version.version,
+               provider_opts: [credential_resolver: &resolve_provider_credential/1]
+             )
 
-    booking_attrs = booking_attrs(setup, opportunity, "primary")
+    assert planning.run.lifecycle_state == :completed
+    assert [snapshot | more_snapshots] = planning.snapshots
+    opportunity = snapshot.normalized_opportunity_document
+    assert snapshot.route_binding_document["provider_spacecraft_ref"] == "SC-001"
 
-    assert {:ok, booking} =
-             ProviderBooking.reserve(
+    assert get_in(snapshot.provider_evidence_document, [
+             "extensions",
+             "orbit_readiness",
+             "status"
+           ]) == "current"
+
+    assert {:ok, plan, plan_version} =
+             ContactPlans.create(scope, setup.mission_id, %{
+               planning_run_ids: [planning.run.contact_planning_run_id],
+               selected_snapshot_ids: [snapshot.contact_opportunity_snapshot_id],
+               rationale: "Reserve the first provider-authoritative downlink window"
+             })
+
+    assert {:ok, pending_plan} =
+             ContactPlans.submit(
+               scope,
+               setup.mission_id,
+               plan.contact_plan_id,
+               plan_version.version,
+               "Ready for exact provider commitment"
+             )
+
+    assert pending_plan.lifecycle_state == :pending_approval
+
+    assert {:ok, approved_plan, ^plan_version, approval} =
+             ContactPlanApprovals.approve(
+               scope,
+               setup.mission_id,
+               plan.contact_plan_id,
+               plan_version.version,
+               plan_version.content_sha256,
+               "Approved for the simulator boundary proof"
+             )
+
+    assert approved_plan.lifecycle_state == :approved
+    assert approval.actor_kind == :user
+    assert approval.actor_id == scope.user.user_id
+
+    assert {:ok, execution} =
+             ContactPlanExecutions.execute(
+               scope,
+               setup.mission_id,
+               plan.contact_plan_id,
+               provider_opts: [credential_resolver: &resolve_provider_credential/1]
+             )
+
+    assert execution.plan.lifecycle_state == :executing
+    assert [execution_item] = execution.items
+    assert execution_item.lifecycle_state == :uncertain
+    assert is_binary(execution_item.provider_reservation_id)
+
+    assert {:ok, initial_reservation} =
+             Cadence.fetch_provider_reservation(
                setup.organization_id,
                setup.mission_id,
-               setup.provider.provider_id,
-               booking_attrs,
-               credential_resolver: &resolve_provider_credential/1
+               execution_item.provider_reservation_id
              )
+
+    booking = %{provider_reservation: initial_reservation, scheduled_contact: nil}
 
     assert booking.provider_reservation.lifecycle_state == :pending
     assert is_nil(booking.scheduled_contact)
+
+    assert booking.provider_reservation.contact_requirement_id ==
+             requirement.contact_requirement_id
+
+    assert booking.provider_reservation.contact_plan_id == plan.contact_plan_id
+    assert booking.provider_reservation.contact_plan_version == plan_version.version
+
+    assert booking.provider_reservation.contact_opportunity_snapshot_id ==
+             snapshot.contact_opportunity_snapshot_id
+
     assert_profile_only_provider_request(booking.provider_reservation, setup)
 
     :ok = Orchestrator.reconcile(DateTime.utc_now())
@@ -175,6 +257,19 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert confirmed_reservation.pass_phase == :scheduled
     assert confirmed_reservation.delivery_state == :pending
+
+    assert {:ok, converged_execution} =
+             ContactPlanExecutions.execute(
+               scope,
+               setup.mission_id,
+               plan.contact_plan_id,
+               provider_opts: [credential_resolver: &resolve_provider_credential/1]
+             )
+
+    assert converged_execution.plan.lifecycle_state == :reserved
+    assert [converged_item] = converged_execution.items
+    assert converged_item.lifecycle_state == :reserved
+    assert converged_item.provider_reservation_id == execution_item.provider_reservation_id
 
     assert_reconciler_restart_preserves_single_contact(setup, confirmed_reservation)
 
@@ -253,7 +348,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert length(Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)) ==
              1
 
-    assert is_list(more_opportunities)
+    assert is_list(more_snapshots)
   end
 
   @tag timeout: 60_000
@@ -674,6 +769,157 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert length(internal["modification_history"]) == 1
   end
 
+  @tag timeout: 180_000
+  test "fleet planner searches 300 spacecraft through the external provider boundary",
+       context do
+    scenario =
+      admin_post!(
+        context.base_url <> "/admin/v1/scenarios",
+        FleetScenarios.stage_five(spacecraft_count: 300)
+      )
+
+    run =
+      admin_post!(context.base_url <> "/admin/v1/scenarios/#{scenario["id"]}/runs", %{
+        "seed" => 2_040,
+        "speed" => 1.0
+      })
+
+    setup =
+      context
+      |> persist_provider_setup(run)
+      |> provision_provider_transport(context.telemetry_port)
+
+    scope = admin_scope(setup)
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    horizon_start = DateTime.add(now, 600, :second)
+    horizon_end = DateTime.add(now, 1_800, :second)
+
+    assert {:ok, policy, policy_version} =
+             FleetPlanningPolicies.create(
+               scope,
+               setup.mission_id,
+               fleet_policy_attrs()
+             )
+
+    assert {:ok, _active_policy, ^policy_version, _approval} =
+             FleetPlanningPolicies.approve(
+               scope,
+               setup.mission_id,
+               policy.fleet_planning_policy_id,
+               policy_version.version,
+               policy_version.content_sha256,
+               "Qualify deterministic 300-spacecraft fleet planning",
+               now: now
+             )
+
+    for index <- 1..300 do
+      spacecraft_id = fleet_spacecraft_id(index)
+
+      assert {:ok, _spacecraft} =
+               Cadence.persist_spacecraft(
+                 setup.organization_id,
+                 Spacecraft.new(%{
+                   spacecraft_id: spacecraft_id,
+                   mission_id: setup.mission_id,
+                   display_name: "Fleet spacecraft #{index}"
+                 })
+               )
+
+      assert {:ok, _requirement, _version} =
+               ContactRequirements.create(
+                 scope,
+                 setup.mission_id,
+                 stage_five_requirement_attrs(
+                   spacecraft_id,
+                   horizon_start,
+                   horizon_end,
+                   index
+                 ),
+                 now: now
+               )
+    end
+
+    {:ok, concurrency} = Agent.start_link(fn -> %{active: 0, maximum: 0} end)
+
+    list_routes = fn _organization_id, _mission_id, spacecraft_id ->
+      {:ok, %{routes: [fleet_route(setup, spacecraft_id)], findings: []}}
+    end
+
+    search_opportunities = fn _organization_id, _mission_id, _route_key, window, _opts ->
+      Agent.update(concurrency, fn state ->
+        active = state.active + 1
+        %{active: active, maximum: max(state.maximum, active)}
+      end)
+
+      try do
+        Process.sleep(5)
+        provider_spacecraft_ref = provider_spacecraft_ref(window["spacecraft_id"])
+
+        case SimulatorHTTP.search_opportunities(
+               setup.provider_context,
+               %{
+                 "spacecraft_refs" => [provider_spacecraft_ref],
+                 "ground_station_refs" => [],
+                 "service_profile_ref" => setup.service_profile["id"],
+                 "starts_at" => window["starts_at"],
+                 "ends_at" => window["ends_at"],
+                 "page_size" => 10,
+                 "cursor" => nil
+               },
+               credential_resolver: &resolve_provider_credential/1
+             ) do
+          {:ok, page} ->
+            {:ok,
+             %{
+               opportunities: Enum.map(page.data, &Opportunity.to_map/1),
+               provider_evidence: page.provider_evidence
+             }}
+
+          error ->
+            error
+        end
+      after
+        Agent.update(concurrency, &Map.update!(&1, :active, fn active -> active - 1 end))
+      end
+    end
+
+    assert {:ok, result} =
+             FleetPlanner.plan(
+               scope,
+               setup.mission_id,
+               %{
+                 horizon_start: now,
+                 horizon_end: horizon_end,
+                 trigger_kind: :manual
+               },
+               now: now,
+               materialize_templates: false,
+               list_routes: list_routes,
+               search_opportunities: search_opportunities
+             )
+
+    concurrency_summary = Agent.get(concurrency, & &1)
+    Agent.stop(concurrency)
+
+    assert concurrency_summary.maximum > 1
+    assert concurrency_summary.maximum <= 16
+    assert result.run.lifecycle_state in [:completed, :partial]
+    assert result.run.phase == :finished
+    assert length(result.requirement_refs) == 300
+    assert Enum.all?(result.requirement_refs, &(&1.input_state == :searched))
+    assert result.decisions != []
+    assert result.plan.lifecycle_state == :draft
+    assert result.plan_version.selected_snapshot_ids != []
+    assert result.run.candidate_contact_plan_id == result.plan.contact_plan_id
+
+    assert get_in(result.run.progress_document, ["requirements_total"]) == 300
+
+    assert Enum.all?(result.decisions, fn decision ->
+             decision.disposition in [:selected, :displaced, :ineligible, :locked] and
+               is_map(decision.explanation_document)
+           end)
+  end
+
   defp prepare_confirmed_contact(context, opts \\ []) do
     scenario =
       admin_post!(context.base_url <> "/admin/v1/scenarios", %{
@@ -1052,6 +1298,138 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ])
     |> Map.put("opportunity_ref", opportunity["id"])
   end
+
+  defp stage_four_requirement_attrs(spacecraft_id, earliest_start, latest_end) do
+    %{
+      spacecraft_id: spacecraft_id,
+      service_direction: :downlink,
+      contact_intent: "payload_downlink",
+      earliest_start: earliest_start,
+      latest_end: latest_end,
+      success_measure: :contact_count,
+      minimum_duration_seconds: 5,
+      preferred_duration_seconds: 15,
+      minimum_data_volume_bytes: nil,
+      contact_count: 1,
+      minimum_separation_seconds: 0,
+      priority: :high,
+      provider_constraints_document: %{"allowed" => [], "excluded" => []},
+      station_constraints_document: %{"allowed" => [], "excluded" => []},
+      policy_constraints_document: %{},
+      approval_policy_document: %{"mode" => "manual"},
+      rationale: "Downlink telemetry through the external simulator provider",
+      metadata: %{}
+    }
+  end
+
+  defp stage_five_requirement_attrs(spacecraft_id, earliest_start, latest_end, index) do
+    %{
+      spacecraft_id: spacecraft_id,
+      service_direction: :downlink,
+      contact_intent: "fleet_payload_downlink",
+      earliest_start: earliest_start,
+      latest_end: latest_end,
+      success_measure: :contact_count,
+      minimum_duration_seconds: 300,
+      preferred_duration_seconds: 600,
+      minimum_data_volume_bytes: nil,
+      contact_count: 1,
+      minimum_separation_seconds: 0,
+      priority: if(rem(index, 25) == 0, do: :critical, else: :routine),
+      provider_constraints_document: %{"allowed" => [], "excluded" => []},
+      station_constraints_document: %{"allowed" => [], "excluded" => []},
+      policy_constraints_document: %{},
+      approval_policy_document: %{"mode" => "manual"},
+      rationale: "Stage 5 300-spacecraft qualification",
+      metadata: %{"fleet_index" => index}
+    }
+  end
+
+  defp fleet_policy_attrs do
+    %{
+      horizon_document: %{
+        "max_horizon_seconds" => 86_400,
+        "requirement_concurrency" => 16,
+        "provider_search_concurrency" => 8,
+        "reuse_freshness_seconds" => 300
+      },
+      scoring_document: %{
+        "priority_weight" => 2_000,
+        "deadline_weight" => 1_000,
+        "scarcity_weight" => 800,
+        "local_improvement_limit" => 100,
+        "local_improvement_width" => 2
+      },
+      resource_policy_document: %{
+        "default_exclusive_capacity" => 1,
+        "capacities" => %{}
+      },
+      budget_quota_document: %{
+        "max_contacts" => 300,
+        "max_estimated_cost_micros" => nil,
+        "currency" => nil,
+        "per_provider" => %{},
+        "critical_contact_reserve" => 0,
+        "critical_cost_reserve_micros" => 0
+      },
+      redundancy_document: %{
+        "distinct_provider_required" => false,
+        "distinct_station_required" => false,
+        "distinct_service_pool_required" => false
+      },
+      automation_repair_document: %{
+        "mode" => "advisory",
+        "execution_concurrency" => 8,
+        "max_repair_attempts" => 3,
+        "repair_horizon_seconds" => 43_200,
+        "automatic_submission" => false
+      }
+    }
+  end
+
+  defp fleet_route(setup, spacecraft_id) do
+    provider_spacecraft_ref = provider_spacecraft_ref(spacecraft_id)
+
+    %{
+      route_key: "fleet-route:#{provider_spacecraft_ref}",
+      spacecraft_id: spacecraft_id,
+      provider_spacecraft_ref: provider_spacecraft_ref,
+      source_endpoint_id: "fleet-source:#{provider_spacecraft_ref}",
+      routing_rule_id: "fleet-routing:#{provider_spacecraft_ref}",
+      link_assignment_id: "fleet-link:#{provider_spacecraft_ref}",
+      path_template_id: "fleet-path:#{provider_spacecraft_ref}",
+      path_template_version: 1,
+      transport_id: setup.transport.transport_id,
+      transport_version: setup.transport.version,
+      provider_id: setup.provider.provider_id,
+      provider_version: setup.provider.version,
+      provider_account_id: setup.provider_account.provider_account_id,
+      provider_account_version: setup.provider_account_version.version,
+      provider_account_grant_id: setup.provider_account_grant.provider_account_grant_id,
+      provider_account_grant_version: setup.provider_account_grant.version,
+      provider_profile_id: setup.transport.materialized_provider_profile_id,
+      provider_profile_version: 1,
+      service_profile_ref: %{
+        "id" => setup.service_profile["id"],
+        "version" => setup.service_profile["version"]
+      },
+      delivery_profile_ref: %{
+        "id" => setup.delivery_profile.id,
+        "version" => setup.delivery_profile.version
+      },
+      delivery_policy_document: %{"mode" => "approval_required", "version" => 1},
+      provider_display_name: setup.provider.display_name,
+      service_display_name: setup.service_profile["display_name"],
+      delivery_display_name: setup.delivery_profile.display_name,
+      route_display_name: "Fleet route #{provider_spacecraft_ref}",
+      client: SimulatorHTTP
+    }
+  end
+
+  defp fleet_spacecraft_id(index),
+    do: "fleet-spacecraft-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}"
+
+  defp provider_spacecraft_ref("fleet-spacecraft-" <> suffix), do: "SC-" <> suffix
 
   defp assert_profile_only_provider_request(reservation, setup) do
     provider_request = reservation.request_document["provider_request"]
