@@ -54,6 +54,47 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects limits jobs and notifications rows through their owning contexts" do
+    graph = %{
+      "lib/cadence/accounts.ex" => %{
+        "lib/cadence/notifications/notification_row.ex" => "export"
+      },
+      "lib/cadence/dashboards/source.ex" => %{
+        "lib/cadence/limits/governed_limit_definition_row.ex" => "export"
+      },
+      "lib/cadence/jobs.ex" => %{
+        "lib/cadence/jobs/background_job_row.ex" => "export"
+      },
+      "lib/cadence/limits/definition_lifecycle.ex" => %{
+        "lib/cadence/limits/governed_limit_definition_row.ex" => "export"
+      },
+      "lib/cadence/notifications.ex" => %{
+        "lib/cadence/notifications/notification_row.ex" => "export"
+      },
+      "lib/cadence/telemetry/storage.ex" => %{
+        "lib/cadence/jobs/background_job_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/accounts.ex",
+               sink: "lib/cadence/notifications/notification_row.ex"
+             },
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/source.ex",
+               sink: "lib/cadence/limits/governed_limit_definition_row.ex"
+             },
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/telemetry/storage.ex",
+               sink: "lib/cadence/jobs/background_job_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "compares current edges with the checked-in debt baseline" do
     findings =
       DependencyBoundary.findings(%{

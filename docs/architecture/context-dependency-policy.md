@@ -88,6 +88,11 @@ The current ratchet enforces three high-confidence rules from this policy:
 3. once a row moves under its owning context, callers outside that bounded
    context may not depend on the row directly.
 
+The moved-row guard currently covers Identity and tenancy, Catalog and
+activation, Comms configuration, Limits, Jobs, and Notifications ownership
+paths. Extend the executable ownership map in the same change whenever another
+context receives row modules.
+
 The live debt is recorded in
 [`dependency-baseline.txt`](dependency-baseline.txt). Each entry is an existing
 xref edge, not permission for new code. The check fails when an edge is added,

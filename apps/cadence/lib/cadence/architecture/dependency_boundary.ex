@@ -38,6 +38,9 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/source_endpoints.ex",
     "lib/cadence/source_endpoints/"
   ]
+  @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]
+  @jobs_context ["lib/cadence/jobs.ex", "lib/cadence/jobs/"]
+  @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
   @context_owned_schemas [
     {[
        "lib/cadence/accounts/",
@@ -48,7 +51,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
      ], @identity_context},
     {["lib/cadence/activations/", "lib/cadence/catalog/", "lib/cadence/governance/"],
      @catalog_context},
-    {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context}
+    {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context},
+    {["lib/cadence/limits/"], @limits_context},
+    {["lib/cadence/jobs/"], @jobs_context},
+    {["lib/cadence/notifications/"], @notifications_context}
   ]
 
   @type finding :: %{
