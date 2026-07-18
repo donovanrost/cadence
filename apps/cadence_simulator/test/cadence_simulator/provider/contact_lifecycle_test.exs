@@ -2,7 +2,7 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
   use CadenceSimulator.Case, async: false
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{ContactChanges, Contacts, EventDelivery, Store}
+  alias CadenceSimulator.Provider.{ContactChanges, Contacts, EventDelivery, Orchestrator, Store}
   alias CadenceSimulator.TestProviderFixtures
 
   setup do
@@ -42,6 +42,23 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
     assert event["request_id"] == "provider-change-request"
     assert event["data"]["provider_change"]["type"] == "timing_shift"
     assert event["data"]["changed_fields"]["starts_at"]["before"] == contact["starts_at"]
+  end
+
+  test "paused runs do not advance pending Contacts until resumed" do
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
+
+    :ok = Orchestrator.reconcile()
+
+    assert {:ok, paused_contact} = Contacts.fetch_internal(context.contact["id"])
+    assert paused_contact["status"] == "pending"
+    assert paused_contact["revision"] == 1
+
+    assert {:ok, %{"state" => "running"}} = Provider.transition_run(context.run["id"], "resume")
+    :ok = Orchestrator.reconcile()
+
+    assert {:ok, resumed_contact} = Contacts.fetch_internal(context.contact["id"])
+    assert resumed_contact["status"] == "confirmed"
+    assert resumed_contact["revision"] == 2
   end
 
   test "event delay and omission advance only according to declared provider behavior" do

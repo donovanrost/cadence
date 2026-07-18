@@ -115,7 +115,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp reconcile_contact(state, %{"status" => "pending"} = contact, _now) do
-    {:ok, _updated} = ContactLifecycle.update(contact, %{"status" => "confirmed"})
+    with {:ok, %{"state" => "running"}} <- Provider.fetch_run(contact["run_id"]) do
+      {:ok, _updated} = ContactLifecycle.update(contact, %{"status" => "confirmed"})
+    end
+
     state
   end
 

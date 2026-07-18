@@ -194,6 +194,9 @@ defmodule CadenceSimulator.ProviderScaleTest do
                request_id: "stage-five-exclusive-pool-conflict"
              )
 
+    assert {:ok, %{"state" => "paused"}} = Provider.transition_run(run["id"], "pause")
+    :ok = Orchestrator.reconcile()
+
     before_restart = Store.events_for_run(run["id"], 0, 500)
     assert before_restart.data != []
     previous_store = Process.whereis(Store)

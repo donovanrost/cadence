@@ -239,6 +239,9 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   end
 
   test "Contact modification is revision aware and idempotent", context do
+    {:ok, paused_run} = Provider.transition_run(context.run["id"], "pause")
+    context = %{context | run: paused_run}
+
     delivery_profile = provision_delivery(context)
     opportunity = search_opportunity(context.run)
 
