@@ -1,11 +1,10 @@
 defmodule Cadence.NotificationsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Accounts.User
+  alias Cadence.Accounts.{User, UserRow}
   alias Cadence.Ids
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
-  alias Cadence.Persistence.Schemas.UserRow
   alias Cadence.Repo
 
   setup do

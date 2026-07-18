@@ -3,18 +3,20 @@ defmodule CadenceWeb.TestFixtures do
 
   import ExUnit.Assertions
 
-  alias Cadence.Accounts.{OrganizationMembership, Password, User}
+  alias Cadence.Accounts.{
+    OrganizationMembership,
+    OrganizationMembershipRow,
+    Password,
+    User,
+    UserLocalCredentialRow,
+    UserRow
+  }
+
   alias Cadence.Dashboards.{Document, Placement, PlacementEditor}
   alias Cadence.Ids
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.{Spacecraft, SpacecraftType}
-
-  alias Cadence.Persistence.Schemas.{
-    OrganizationMembershipRow,
-    UserLocalCredentialRow,
-    UserRow
-  }
 
   alias Cadence.Repo
 

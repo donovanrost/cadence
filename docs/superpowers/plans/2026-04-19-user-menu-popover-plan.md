@@ -127,7 +127,7 @@ The helpers `persist_user!`, `Cadence.persist_organization!`, and `grant_members
       })
 
     {:ok, _row} =
-      Cadence.Repo.insert(Cadence.Persistence.Schemas.UserRow.changeset(user))
+      Cadence.Repo.insert(Cadence.Accounts.UserRow.changeset(user))
 
     user
   end
@@ -143,7 +143,7 @@ The helpers `persist_user!`, `Cadence.persist_organization!`, and `grant_members
 
     {:ok, _row} =
       Cadence.Repo.insert(
-        Cadence.Persistence.Schemas.OrganizationMembershipRow.changeset(membership)
+        Cadence.Accounts.OrganizationMembershipRow.changeset(membership)
       )
 
     membership
@@ -170,19 +170,15 @@ Expected: compilation passes (test module parses), but tests **fail** with `** (
 
 - [ ] **Step 3: Implement `list_user_memberships/1`**
 
-Open `apps/cadence/lib/cadence/accounts.ex`. Add the new alias to the existing `Cadence.Persistence.Schemas` alias block so `OrganizationRow` is available:
+Open `apps/cadence/lib/cadence/accounts.ex`. Confirm the context-owned row aliases are available:
 
-Look at the `alias Cadence.Persistence.Schemas.{...}` block at the top of the file (around line 17). Confirm it includes `OrganizationMembershipRow` (it does) and add `OrganizationRow`:
+Look at the aliases at the top of the file. `OrganizationMembershipRow` now
+lives under `Cadence.Accounts`, while `OrganizationRow` lives under
+`Cadence.Organizations`:
 
 ```elixir
-  alias Cadence.Persistence.Schemas.{
-    OrganizationInvitationRow,
-    OrganizationMembershipRow,
-    OrganizationRow,
-    UserLocalCredentialRow,
-    UserRow,
-    UserSessionTokenRow
-  }
+  alias Cadence.Accounts.OrganizationMembershipRow
+  alias Cadence.Organizations.OrganizationRow
 ```
 
 Then add the public function immediately after `preferred_organization_membership/2` (ends around line 250). The `active_membership_query/1` private helper already exists around line 905; reuse it by joining on `OrganizationRow`:

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.UserLocalCredentialRow do
+defmodule Cadence.Accounts.UserLocalCredentialRow do
   @moduledoc false
 
   use Ecto.Schema

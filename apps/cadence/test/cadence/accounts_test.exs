@@ -2,10 +2,18 @@ defmodule Cadence.AccountsTest do
   use Cadence.ConfigCase, async: false
 
   alias Cadence.Accounts
-  alias Cadence.Accounts.{OrganizationMembership, Password, User}
+
+  alias Cadence.Accounts.{
+    OrganizationMembership,
+    OrganizationMembershipRow,
+    Password,
+    User,
+    UserLocalCredentialRow,
+    UserRow
+  }
+
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.{OrganizationMembershipRow, UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
   @bootstrap_admin_email "bootstrap-admin@example.com"

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.OrganizationInvitationRow do
+defmodule Cadence.Accounts.OrganizationInvitationRow do
   @moduledoc false
 
   use Ecto.Schema

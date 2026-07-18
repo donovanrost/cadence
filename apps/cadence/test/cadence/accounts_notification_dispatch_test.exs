@@ -2,17 +2,18 @@ defmodule Cadence.AccountsNotificationDispatchTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Accounts
-  alias Cadence.Accounts.{Password, User}
-  alias Cadence.Ids
-  alias Cadence.Notifications
-  alias Cadence.Organizations.Organization
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Accounts.{
     OrganizationInvitationRow,
+    Password,
+    User,
     UserLocalCredentialRow,
     UserRow
   }
 
+  alias Cadence.Ids
+  alias Cadence.Notifications
+  alias Cadence.Organizations.Organization
   alias Cadence.Repo
 
   setup do

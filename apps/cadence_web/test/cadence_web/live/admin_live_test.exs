@@ -10,12 +10,11 @@ defmodule CadenceWeb.AdminLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Accounts.{Password, User}
+  alias Cadence.Accounts.{Password, User, UserLocalCredentialRow, UserRow}
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 

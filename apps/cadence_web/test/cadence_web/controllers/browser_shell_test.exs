@@ -3,10 +3,9 @@ defmodule CadenceWeb.BrowserShellTest do
 
   @moduletag :config
 
-  alias Cadence.Accounts.{Password, User}
+  alias Cadence.Accounts.{Password, User, UserLocalCredentialRow, UserRow}
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
   @bootstrap_admin_email "bootstrap-admin@example.com"

@@ -10,20 +10,22 @@ defmodule Cadence.Accounts do
 
   alias Ecto.Changeset
 
-  alias Cadence.Accounts.{OrganizationInvitation, OrganizationMembership, Password, User}
-  alias Cadence.Ids
-  alias Cadence.Notifications.Notification
-  alias Cadence.Organizations
-  alias Cadence.Organizations.OrganizationRow
-
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Accounts.{
+    OrganizationInvitation,
     OrganizationInvitationRow,
+    OrganizationMembership,
     OrganizationMembershipRow,
+    Password,
+    User,
     UserLocalCredentialRow,
     UserRow,
     UserSessionTokenRow
   }
 
+  alias Cadence.Ids
+  alias Cadence.Notifications.Notification
+  alias Cadence.Organizations
+  alias Cadence.Organizations.OrganizationRow
   alias Cadence.Repo
 
   @bootstrap_provider_key "bootstrap_env"

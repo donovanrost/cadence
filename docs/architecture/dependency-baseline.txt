@@ -6,11 +6,6 @@
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
 
-persistence_schema|lib/cadence/accounts.ex|lib/cadence/persistence/schemas/organization_invitation_row.ex
-persistence_schema|lib/cadence/accounts.ex|lib/cadence/persistence/schemas/organization_membership_row.ex
-persistence_schema|lib/cadence/accounts.ex|lib/cadence/persistence/schemas/user_local_credential_row.ex
-persistence_schema|lib/cadence/accounts.ex|lib/cadence/persistence/schemas/user_row.ex
-persistence_schema|lib/cadence/accounts.ex|lib/cadence/persistence/schemas/user_session_token_row.ex
 persistence_schema|lib/cadence/activations.ex|lib/cadence/persistence/schemas/active_binding_set_row.ex
 persistence_schema|lib/cadence/activations.ex|lib/cadence/persistence/schemas/binding_set_activation_row.ex
 persistence_schema|lib/cadence/applications/application_binding_store.ex|lib/cadence/persistence/schemas/application_binding_row.ex

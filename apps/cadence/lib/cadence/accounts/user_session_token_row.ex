@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.UserSessionTokenRow do
+defmodule Cadence.Accounts.UserSessionTokenRow do
   @moduledoc false
 
   use Ecto.Schema
