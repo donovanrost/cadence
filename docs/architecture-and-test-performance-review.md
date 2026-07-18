@@ -81,6 +81,12 @@ The codebase does not need a broad rewrite. It needs dependency direction,
 smaller compilation units, explicit runtime ownership, and automated
 architecture constraints.
 
+The target ownership and allowed dependency directions are now published in the
+[context dependency policy](architecture/context-dependency-policy.md). The
+policy keeps the ten domain contexts inside `:cadence`, treats the root facade
+and horizontal persistence namespaces as transitional, and defines the
+platform services that may remain shared leaves.
+
 ## Implementation progress
 
 The first Phase 1 performance slices landed on 2026-07-18:
@@ -729,6 +735,13 @@ and emits a compact summary from `mix precommit`. `--strict` is available once
 the current pressure has been reduced or explicitly baselined. The initial
 diagnostic reports 31 production files, 21 test files, and 35 test functions
 over their respective limits.
+
+The same task now consumes a fresh core `mix xref graph --format json` result
+and ratchets two dependency boundaries. The checked-in baseline records 8
+internal callers of the root `Cadence` facade and 205 direct dependencies from
+non-persistence code to `Cadence.Persistence.Schemas.*`. New edges fail, removed
+edges must be deleted from the baseline in the same change, and the baseline
+has an explicit owner and review-by date.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates
