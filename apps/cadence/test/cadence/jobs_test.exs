@@ -1,8 +1,7 @@
 defmodule Cadence.JobsTest do
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Jobs.Job
-  alias Cadence.Persistence.Schemas.BackgroundJobRow
+  alias Cadence.Jobs.{BackgroundJobRow, Job}
 
   @dispatcher_event_prefix [:cadence, :jobs, :dispatcher]
   @dispatcher_events [

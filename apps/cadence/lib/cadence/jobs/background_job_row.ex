@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.BackgroundJobRow do
+defmodule Cadence.Jobs.BackgroundJobRow do
   @moduledoc false
 
   use Ecto.Schema

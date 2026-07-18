@@ -46,13 +46,13 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   }
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Jobs.BackgroundJobRow
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.{EffectiveInterval, Event}
 
   alias Cadence.Persistence.Schemas.{
-    BackgroundJobRow,
     CommandQueueEntryRow,
     CommandRequestRow,
     DashboardLifecycleEventRow,

@@ -11,8 +11,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementRecoveryL
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Dashboards.Document
-
-  alias Cadence.Persistence.Schemas.BackgroundJobRow
+  alias Cadence.Jobs.BackgroundJobRow
   alias Cadence.Repo
   alias Cadence.Telemetry.Storage
   alias CadenceWeb.TestFixtures

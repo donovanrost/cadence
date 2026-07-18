@@ -11,10 +11,8 @@ defmodule Cadence.Jobs do
   alias Cadence.Dashboards.ManagedQuestDBProvisioningJobs
   alias Cadence.Dashboards.TSDBBackendLifecycleJobs
   alias Cadence.DerivedTelemetry
-  alias Cadence.Jobs.Dispatcher
-  alias Cadence.Jobs.Job
+  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
   alias Cadence.Limits
-  alias Cadence.Persistence.Schemas.BackgroundJobRow
   alias Cadence.Projections.DerivedTelemetryLatestValues
   alias Cadence.Projections.MissionEvents
   alias Cadence.Projections.TelemetryLatestLimitStates
