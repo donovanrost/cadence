@@ -45,7 +45,11 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
   end
 
   test "paused runs do not advance pending Contacts until resumed" do
-    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
+    context =
+      TestProviderFixtures.create_contact!(%{},
+        run_state: "paused",
+        search_starts_at: DateTime.add(DateTime.utc_now(), 3_600)
+      )
 
     :ok = Orchestrator.reconcile()
 
