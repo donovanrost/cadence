@@ -1,5 +1,5 @@
 defmodule Cadence.ArchitectureRuntimeGuardTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   @moduledoc false
 

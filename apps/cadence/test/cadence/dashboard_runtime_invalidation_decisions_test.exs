@@ -1,5 +1,5 @@
 defmodule Cadence.DashboardRuntimeInvalidationDecisionsTest do
-  use ExUnit.Case, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.Event

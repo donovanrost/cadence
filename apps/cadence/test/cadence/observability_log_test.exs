@@ -1,5 +1,5 @@
 defmodule Cadence.ObservabilityLogTest do
-  use ExUnit.Case, async: false
+  use Cadence.UnitCase, async: false
 
   import ExUnit.CaptureLog
 

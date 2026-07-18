@@ -1,5 +1,5 @@
 defmodule Cadence.Catalog.BroadcastsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Catalog.{Artifact, Events}
 

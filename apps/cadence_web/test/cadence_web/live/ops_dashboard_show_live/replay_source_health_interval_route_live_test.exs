@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   import Phoenix.LiveViewTest
 
   alias Phoenix.LiveViewTest.ClientProxy

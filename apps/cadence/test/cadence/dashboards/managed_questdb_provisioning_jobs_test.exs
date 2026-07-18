@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Dashboards.{DataSources, ManagedQuestDBProvisioningJobs, TSDBDeploymentStatus}
 

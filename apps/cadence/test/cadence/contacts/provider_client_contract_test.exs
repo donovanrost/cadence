@@ -1,5 +1,5 @@
 defmodule Cadence.Contacts.ProviderClientContractTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Contacts.ProviderClient
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP

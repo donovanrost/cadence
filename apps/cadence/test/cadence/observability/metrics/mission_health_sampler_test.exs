@@ -1,5 +1,5 @@
 defmodule Cadence.Observability.Metrics.MissionHealthSamplerTest do
-  use ExUnit.Case, async: false
+  use Cadence.UnitCase, async: false
 
   alias Cadence.Commanding.CommandQueueEntry
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}

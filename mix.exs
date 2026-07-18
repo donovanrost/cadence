@@ -17,6 +17,9 @@ defmodule CadenceUmbrella.MixProject do
     [
       preferred_envs: [
         precommit: :test,
+        "test.fast": :test,
+        "test.runtime": :test,
+        "test.integration": :test,
         "test.browser": :test,
         "test.browser.full": :test
       ]
@@ -33,6 +36,9 @@ defmodule CadenceUmbrella.MixProject do
     [
       setup: ["deps.get"],
       test: [&run_child_tests/1],
+      "test.fast": [&run_fast_tests/1],
+      "test.runtime": [&run_runtime_tests/1],
+      "test.integration": [&run_integration_tests/1],
       "test.browser": [&run_browser_tests/1],
       "test.browser.full": [&run_full_browser_tests/1],
       precommit: [
@@ -42,6 +48,31 @@ defmodule CadenceUmbrella.MixProject do
         "test"
       ]
     ]
+  end
+
+  defp run_fast_tests(args) do
+    run_child_tests([
+      "--exclude",
+      "runtime",
+      "--exclude",
+      "config",
+      "--exclude",
+      "integration"
+      | args
+    ])
+  end
+
+  defp run_runtime_tests(args) do
+    run_child_mix_command(:cadence, ["db.setup.test"])
+    run_child_test_command(:cadence, cadence_test_args(["--only", "runtime" | args]))
+  end
+
+  defp run_integration_tests(args) do
+    run_child_mix_command(:cadence, ["db.setup.test"])
+
+    run_child_test_command(:cadence, cadence_test_args(["--only", "integration" | args]))
+    run_child_test_command(:cadence_simulator, ["--only", "integration" | args])
+    run_child_test_command(:cadence_web, ["--only", "integration" | args])
   end
 
   defp run_child_tests(args) do

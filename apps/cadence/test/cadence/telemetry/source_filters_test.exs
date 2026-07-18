@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.SourceFiltersTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Telemetry.{Sample, SourceFilters}
 

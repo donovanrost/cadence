@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,

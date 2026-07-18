@@ -1,6 +1,8 @@
 defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayIntegrationTest do
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :integration
+
   alias Cadence.Dashboards.{
     DataBinding,
     DataSource,

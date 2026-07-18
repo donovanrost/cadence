@@ -1,6 +1,8 @@
 defmodule CadenceWeb.UserMenuIntegrationTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :integration
+
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,

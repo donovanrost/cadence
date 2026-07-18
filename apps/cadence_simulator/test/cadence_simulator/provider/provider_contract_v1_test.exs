@@ -1,6 +1,8 @@
 defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   use CadenceSimulator.Case, async: false
 
+  @moduletag :config
+
   alias CadenceSimulator.Provider
   alias CadenceSimulator.Provider.{Contacts, Orchestrator, Router, Store}
   alias Plug.Conn

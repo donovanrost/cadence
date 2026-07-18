@@ -1,5 +1,5 @@
 defmodule Cadence.Catalog.EventsTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Catalog.Events
   alias Cadence.Catalog.ImportRun

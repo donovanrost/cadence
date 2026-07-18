@@ -1,5 +1,5 @@
 defmodule Cadence.Observability.OtlpMetricsTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Observability.OtlpMetrics
 

@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.ComparisonReviewQueue
   alias Cadence.Dashboards.LifecycleEvent

@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.DataSourcesTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.ApplicationDispatch.{
     BindingRule,

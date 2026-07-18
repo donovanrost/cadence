@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.HistoryStoreETSTest do
-  use ExUnit.Case, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Telemetry.HistoryStore.ETS
   alias Cadence.Telemetry.Sample

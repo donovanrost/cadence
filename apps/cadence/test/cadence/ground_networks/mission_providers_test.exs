@@ -1,5 +1,5 @@
 defmodule Cadence.GroundNetworks.MissionProvidersTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.{CredentialResolver, MissionProvider, ProviderError}

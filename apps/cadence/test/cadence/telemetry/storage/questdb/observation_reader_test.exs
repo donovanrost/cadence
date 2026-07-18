@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReaderTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
 

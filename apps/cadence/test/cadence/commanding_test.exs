@@ -1,5 +1,5 @@
 defmodule Cadence.CommandingTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.ConfigCase, async: false
 
   import Ecto.Query
 

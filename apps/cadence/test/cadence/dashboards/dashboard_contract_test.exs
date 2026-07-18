@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.DashboardContractTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards
 

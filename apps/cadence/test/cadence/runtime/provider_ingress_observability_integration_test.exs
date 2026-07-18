@@ -1,6 +1,8 @@
 defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :integration
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
 

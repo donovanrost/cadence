@@ -1,6 +1,10 @@
 defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
   use CadenceSimulator.Case, async: false
 
+  @moduletag :integration
+
+  @moduletag :config
+
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.GroundNetworks.{ProviderContact, ProviderContext, ProviderError}
   alias CadenceSimulator.Provider

@@ -1,5 +1,5 @@
 defmodule Cadence.Observability.LogExporterTest do
-  use ExUnit.Case, async: false
+  use Cadence.UnitCase, async: false
 
   alias Cadence.Observability
   alias Cadence.Observability.LogExporter

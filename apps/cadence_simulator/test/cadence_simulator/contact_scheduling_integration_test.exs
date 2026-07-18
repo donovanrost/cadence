@@ -1,5 +1,7 @@
 defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.ConfigCase, async: false
+
+  @moduletag :integration
 
   import Ecto.Query
 

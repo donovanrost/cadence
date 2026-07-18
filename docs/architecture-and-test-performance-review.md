@@ -101,19 +101,35 @@ the Phase 1 timing exit conditions. Structural decomposition remains active:
 the compiled replay scenario and several other source-family test bodies still
 need to be split into smaller scenario and assertion units.
 
-The first Phase 2 ownership slice now separates 64 database-only files on
-`Cadence.DataCase` from 34 process-owning files on `Cadence.RuntimeCase`.
-`DataCase` owns only a private SQL sandbox transaction; it no longer stops
-missions, resets runtime stores, shares its sandbox globally, or sleeps during
-teardown. Sandbox startup re-establishes manual mode and verifies both the
-connection and Ecto query cache, retrying only when a restarted Repo has not
-finished its ownership handoff.
+The Phase 2 ownership work now classifies every core test file by its strongest
+resource owner: 91 files use `Cadence.UnitCase`, 57 use `Cadence.DataCase`, 24
+use `Cadence.RuntimeCase`, and 22 use `Cadence.ConfigCase`. `UnitCase` adds no
+per-test application or database setup. `DataCase` owns only a private SQL
+sandbox transaction; it no longer stops missions, resets runtime stores, shares
+its sandbox globally, or sleeps during teardown. Sandbox startup re-establishes
+manual mode and verifies both the connection and Ecto query cache, retrying
+only when a restarted Repo has not finished its ownership handoff.
 
 Two complete core-suite runs with different seeds passed all 1,522 tests in
 27.2 and 29.2 seconds, below the Phase 2 timing target. Runtime ownership is
 still transitional: `RuntimeCase` retains compatibility-wide mission cleanup
-until its callers start and track mission processes explicitly, and dedicated
-`UnitCase` and `ConfigCase` templates remain to be introduced.
+until its callers start and track mission processes explicitly, `ConfigCase`
+currently reuses that conservative runtime setup, and the core test helper
+still boots `:cadence` before ExUnit selects cases.
+
+Global configuration ownership is now visible outside the core cases as well.
+The 45 web test files that mutate application configuration carry the
+`:config` tag while retaining their required `CadenceWeb.ConnCase` setup. Six
+complete-workflow files across core, simulator, and web carry the
+`:integration` tag.
+
+The root aliases now expose the intended ownership lanes. On this checkout,
+`mix test.fast` passed 1,129 core, 11 CCSDS, 80 simulator, and 1,492 web tests
+in 62.85 seconds of wall time; `mix test.runtime` passed 183 runtime-tagged
+core tests in 20.74 seconds of wall time; and `mix test.integration` passed 7
+core, 15 simulator, and 3 web tests in 33.75 seconds of wall time. The
+authoritative `mix precommit` gate continues to run every default test rather
+than composing the selective lanes.
 
 ## Measured baseline
 

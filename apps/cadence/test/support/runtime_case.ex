@@ -8,6 +8,8 @@ defmodule Cadence.RuntimeCase do
 
   using do
     quote do
+      @moduletag :runtime
+
       alias Cadence.Repo
 
       import Ecto
@@ -18,6 +20,10 @@ defmodule Cadence.RuntimeCase do
   end
 
   setup tags do
+    setup_owned_runtime(tags)
+  end
+
+  def setup_owned_runtime(tags) do
     Cadence.DataCase.ensure_cadence_started!()
     Cadence.Runtime.stop_all_missions()
 

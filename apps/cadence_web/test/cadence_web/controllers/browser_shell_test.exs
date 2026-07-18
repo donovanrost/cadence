@@ -1,6 +1,8 @@
 defmodule CadenceWeb.BrowserShellTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   alias Cadence.Accounts.{Password, User}
   alias Cadence.Ids
   alias Cadence.Organizations.Organization

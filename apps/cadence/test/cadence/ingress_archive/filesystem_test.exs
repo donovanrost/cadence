@@ -1,5 +1,5 @@
 defmodule Cadence.IngressArchive.FileSystemTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive

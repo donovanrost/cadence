@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.TransportRuntimeTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Runtime.{PartitionKey, TransportRuntime}
 

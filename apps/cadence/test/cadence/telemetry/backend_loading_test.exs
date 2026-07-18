@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.BackendLoadingTest do
-  use ExUnit.Case, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore

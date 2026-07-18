@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.EngineTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards
 

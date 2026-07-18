@@ -1,5 +1,5 @@
 defmodule Cadence.Protocol.TMFramePipelineTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation

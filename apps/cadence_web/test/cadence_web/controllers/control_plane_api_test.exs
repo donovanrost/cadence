@@ -1,6 +1,8 @@
 defmodule CadenceWeb.ControlPlaneApiTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation

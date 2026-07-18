@@ -1,5 +1,5 @@
 defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.GroundNetworks.{CredentialResolver, ProviderAudit, ProviderCredentials}
 

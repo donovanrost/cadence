@@ -1,5 +1,5 @@
 defmodule Cadence.IdsTest do
-  use ExUnit.Case, async: false
+  use Cadence.UnitCase, async: false
 
   test "generates unique ids with a stable per-boot prefix" do
     first_id = Cadence.Ids.new("packet")

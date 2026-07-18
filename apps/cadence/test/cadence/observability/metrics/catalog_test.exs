@@ -1,5 +1,5 @@
 defmodule Cadence.Observability.Metrics.CatalogTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Observability.Metrics.Catalog
 

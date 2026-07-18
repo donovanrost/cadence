@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveDepsTest do
   use ExUnit.Case, async: true
 
+  @moduletag :config
+
   alias CadenceWeb.OpsDashboardShowLive.LiveDeps
   alias Phoenix.LiveView.Socket
 

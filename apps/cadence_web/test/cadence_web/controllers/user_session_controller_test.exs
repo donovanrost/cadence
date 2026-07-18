@@ -1,6 +1,8 @@
 defmodule CadenceWeb.UserSessionControllerTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   alias CadenceWeb.TestFixtures
 
   describe "POST /sign-in" do

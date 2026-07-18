@@ -16,6 +16,8 @@ defmodule Cadence.DataCase do
 
   using do
     quote do
+      @moduletag :data
+
       alias Cadence.Repo
 
       import Ecto

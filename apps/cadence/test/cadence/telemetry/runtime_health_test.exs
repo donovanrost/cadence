@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.RuntimeHealthTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.Event

@@ -1,5 +1,5 @@
 defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.Artifact

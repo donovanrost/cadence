@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   import Phoenix.LiveViewTest
 
   alias Cadence.Dashboards.{Document, RenderItem}

@@ -1,6 +1,8 @@
 defmodule CadenceSimulator.Provider.AdminRouterTest do
   use CadenceSimulator.Case, async: false
 
+  @moduletag :config
+
   alias CadenceSimulator.Provider.{Router, Store}
   alias Plug.Conn
   alias Plug.Test

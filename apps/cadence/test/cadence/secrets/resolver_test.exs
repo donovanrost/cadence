@@ -1,5 +1,5 @@
 defmodule Cadence.Secrets.ResolverTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Secrets.{EnvBackend, MaterialPolicy, Resolver}
 

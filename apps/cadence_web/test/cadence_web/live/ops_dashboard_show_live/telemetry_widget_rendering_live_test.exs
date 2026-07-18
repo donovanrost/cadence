@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   import Phoenix.LiveViewTest
 
   alias Phoenix.LiveViewTest.ClientProxy

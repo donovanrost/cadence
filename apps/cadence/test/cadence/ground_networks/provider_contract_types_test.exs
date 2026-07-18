@@ -1,5 +1,5 @@
 defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Contacts.ProviderProfile
 

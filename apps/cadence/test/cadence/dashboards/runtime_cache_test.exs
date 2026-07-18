@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.RuntimeCacheTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards
 

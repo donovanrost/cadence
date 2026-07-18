@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContextLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :config
+
   import Phoenix.LiveViewTest
 
   alias Phoenix.LiveViewTest.ClientProxy

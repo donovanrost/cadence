@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Telemetry.Storage.BackfillLifecycleEvent
   alias Cadence.Telemetry.Storage.BackfillLifecycleGroup

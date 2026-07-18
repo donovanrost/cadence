@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.LatestProjectionOrderTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Telemetry.LatestProjectionOrder
 

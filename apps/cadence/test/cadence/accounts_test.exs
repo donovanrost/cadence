@@ -1,5 +1,5 @@
 defmodule Cadence.AccountsTest do
-  use Cadence.DataCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Accounts
   alias Cadence.Accounts.{OrganizationMembership, Password, User}

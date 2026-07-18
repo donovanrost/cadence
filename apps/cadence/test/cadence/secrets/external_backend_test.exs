@@ -1,5 +1,5 @@
 defmodule Cadence.Secrets.ExternalBackendTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Secrets.{ExternalBackend, Resolver}
 

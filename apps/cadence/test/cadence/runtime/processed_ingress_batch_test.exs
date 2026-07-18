@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.ProcessedIngressBatchTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Observability
   alias Cadence.Runtime.ProcessedIngressBatch

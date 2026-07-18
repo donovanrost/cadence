@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveRefreshTest do
   use ExUnit.Case, async: true
 
+  @moduletag :config
+
   import Phoenix.Component, only: [assign: 3]
 
   alias CadenceWeb.OpsDashboardShowLive.LiveRefresh

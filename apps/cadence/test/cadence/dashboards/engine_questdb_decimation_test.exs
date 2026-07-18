@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.EngineQuestDBDecimationTest do
-  use ExUnit.Case, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,

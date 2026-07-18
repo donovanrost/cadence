@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.ExtractorTest do
-  use ExUnit.Case, async: true
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Telemetry.{Extractor, PacketDefinition}
 

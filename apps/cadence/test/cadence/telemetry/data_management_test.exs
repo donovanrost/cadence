@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.DataManagementTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Persistence.Schemas.BackgroundJobRow
   alias Cadence.Repo

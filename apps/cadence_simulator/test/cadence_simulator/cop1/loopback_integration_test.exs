@@ -1,6 +1,8 @@
 defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
   use CadenceSimulator.DataCase, async: false
 
+  @moduletag :integration
+
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.CommandRequest
@@ -131,6 +133,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
     assert_eventually(fn ->
       snapshot = LoopbackPeer.snapshot(loopback_peer)
+
       snapshot.tc_frame_count == 1 and snapshot.clcw_count == 1 and
         is_integer(snapshot.last_tc_frame_seq)
     end)

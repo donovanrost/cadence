@@ -1,5 +1,5 @@
 defmodule Cadence.Observability.Metrics.ReporterTest do
-  use ExUnit.Case, async: false
+  use Cadence.UnitCase, async: false
 
   alias Cadence.Observability.Metrics.{Definition, Reporter}
 

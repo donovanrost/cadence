@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Cadence.Dashboards.ManagedQuestdbProvisionTest do
-  use ExUnit.Case, async: false
+  use Cadence.ConfigCase, async: false
 
   alias Cadence.Dashboards.DataSource
   alias Mix.Tasks.Cadence.Dashboards.ManagedQuestdbProvision
