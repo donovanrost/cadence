@@ -1,11 +1,12 @@
 # owner: Cadence core architecture
 # review-by: 2026-10-18
-# rationale: Ratchet root facade and shared persistence schema debt while contexts assume ownership
+# rationale: Ratchet root facade, shared persistence schema, and cross-context row debt
 #
 # Each entry is an existing dependency, not permission for new code. Remove an entry
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
 
+context_schema|lib/cadence/persistence/organization_scope.ex|lib/cadence/missions/mission_row.ex
 persistence_schema|lib/cadence/activations.ex|lib/cadence/persistence/schemas/active_binding_set_row.ex
 persistence_schema|lib/cadence/activations.ex|lib/cadence/persistence/schemas/binding_set_activation_row.ex
 persistence_schema|lib/cadence/applications/application_binding_store.ex|lib/cadence/persistence/schemas/application_binding_row.ex

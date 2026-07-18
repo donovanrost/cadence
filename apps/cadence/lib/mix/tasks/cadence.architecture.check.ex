@@ -110,6 +110,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
       "Architecture dependency baseline: " <>
         "#{Map.get(counts, :root_facade, 0)} root-facade edges, " <>
         "#{Map.get(counts, :persistence_schema, 0)} schema edges, " <>
+        "#{Map.get(counts, :context_schema, 0)} cross-context row edges, " <>
         "#{length(result.new)} new, #{length(result.resolved)} resolved; " <>
         "owner #{result.owner}, review by #{result.review_by}."
     )

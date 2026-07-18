@@ -80,11 +80,13 @@ Run the policy check from the umbrella root:
 mix cadence.architecture.check
 ```
 
-The current ratchet enforces two high-confidence rules from this policy:
+The current ratchet enforces three high-confidence rules from this policy:
 
 1. no new internal production module may call the root `Cadence` facade; and
 2. no new production module outside the persistence implementation may depend
-   directly on `Cadence.Persistence.Schemas.*`.
+   directly on `Cadence.Persistence.Schemas.*`; and
+3. once a row moves under its owning context, callers outside that bounded
+   context may not depend on the row directly.
 
 The live debt is recorded in
 [`dependency-baseline.txt`](dependency-baseline.txt). Each entry is an existing

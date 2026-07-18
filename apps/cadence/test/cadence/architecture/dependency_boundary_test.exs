@@ -3,21 +3,44 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
 
   alias Cadence.Architecture.DependencyBoundary
 
-  test "finds internal root-facade and non-persistence schema dependencies" do
+  test "finds root-facade, horizontal schema, and cross-context row dependencies" do
     graph = %{
+      "lib/cadence/accounts.ex" => %{
+        "lib/cadence/organizations/organization_row.ex" => "export"
+      },
+      "lib/cadence/catalog/importer.ex" => %{
+        "lib/cadence/catalog/artifact_row.ex" => "export"
+      },
       "lib/cadence/dashboards/source.ex" => %{
         "lib/cadence.ex" => "runtime",
+        "lib/cadence/accounts/user_row.ex" => "export",
         "lib/cadence/persistence/schemas/dashboard_row.ex" => "export"
       },
       "lib/cadence/persistence.ex" => %{
         "lib/cadence/persistence/schemas/dashboard_row.ex" => "runtime"
       },
+      "lib/cadence/persistence/organization_scope.ex" => %{
+        "lib/cadence/missions/mission_row.ex" => "export"
+      },
       "lib/cadence/persistence/store.ex" => %{
         "lib/cadence/persistence/schemas/dashboard_row.ex" => "runtime"
+      },
+      "lib/cadence/source_endpoints.ex" => %{
+        "lib/cadence/comms/transport_row.ex" => "export"
       }
     }
 
     assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/source.ex",
+               sink: "lib/cadence/accounts/user_row.ex"
+             },
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/persistence/organization_scope.ex",
+               sink: "lib/cadence/missions/mission_row.ex"
+             },
              %{
                kind: :persistence_schema,
                source: "lib/cadence/dashboards/source.ex",

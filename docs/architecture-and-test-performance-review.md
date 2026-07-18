@@ -740,7 +740,7 @@ diagnostic reports 31 production files, 21 test files, and 35 test functions
 over their respective limits.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
-and ratchets two dependency boundaries. The initial graph contained 8 internal
+and ratchets three dependency boundaries. The initial graph contained 8 internal
 callers of the root `Cadence` facade and 205 direct dependencies from
 non-persistence code to `Cadence.Persistence.Schemas.*`. The first production
 cleanup routed all eight internal callers through their owning contexts, so the
@@ -754,7 +754,10 @@ and the artifact, database, import-run, revision, command-snapshot, and
 telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
 from 205 to 187. New edges fail, removed edges must be deleted from the
 baseline in the same change, and the baseline has an explicit owner and
-review-by date. The public root facade still exists for external callers and
+review-by date. Context-owned row modules are also protected from new callers
+outside their bounded context. The one current exception,
+`Persistence.OrganizationScope -> Missions.MissionRow`, is explicit debt in
+the same ratchet. The public root facade still exists for external callers and
 remains a later decomposition target.
 
 When a dependency exception is introduced, update the context map or decision

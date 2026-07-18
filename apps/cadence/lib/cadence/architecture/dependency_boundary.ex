@@ -1,6 +1,7 @@
 defmodule Cadence.Architecture.DependencyBoundary do
   @moduledoc """
-  Ratchets transitional root-facade and persistence-schema dependencies.
+  Ratchets transitional root-facade, persistence-schema, and cross-context
+  schema dependencies.
 
   The checked-in baseline is debt, not permission for new code. A change fails
   when it adds an unlisted dependency, leaves a resolved dependency in the
@@ -10,9 +11,48 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @root_facade "lib/cadence.ex"
   @schema_prefix "lib/cadence/persistence/schemas/"
   @persistence_context ["lib/cadence/persistence.ex", "lib/cadence/persistence/"]
+  @identity_context [
+    "lib/cadence/accounts.ex",
+    "lib/cadence/accounts/",
+    "lib/cadence/auth.ex",
+    "lib/cadence/auth/",
+    "lib/cadence/missions.ex",
+    "lib/cadence/missions/",
+    "lib/cadence/organizations.ex",
+    "lib/cadence/organizations/",
+    "lib/cadence/spacecraft_store.ex",
+    "lib/cadence/spacecraft_store/",
+    "lib/cadence/spacecraft_type_store.ex",
+    "lib/cadence/spacecraft_type_store/"
+  ]
+  @catalog_context [
+    "lib/cadence/activations.ex",
+    "lib/cadence/activations/",
+    "lib/cadence/catalog.ex",
+    "lib/cadence/catalog/",
+    "lib/cadence/governance.ex",
+    "lib/cadence/governance/"
+  ]
+  @comms_context [
+    "lib/cadence/comms/",
+    "lib/cadence/source_endpoints.ex",
+    "lib/cadence/source_endpoints/"
+  ]
+  @context_owned_schemas [
+    {[
+       "lib/cadence/accounts/",
+       "lib/cadence/missions/",
+       "lib/cadence/organizations/",
+       "lib/cadence/spacecraft_store/",
+       "lib/cadence/spacecraft_type_store/"
+     ], @identity_context},
+    {["lib/cadence/activations/", "lib/cadence/catalog/", "lib/cadence/governance/"],
+     @catalog_context},
+    {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context}
+  ]
 
   @type finding :: %{
-          required(:kind) => :root_facade | :persistence_schema,
+          required(:kind) => :context_schema | :root_facade | :persistence_schema,
           required(:source) => String.t(),
           required(:sink) => String.t(),
           required(:label) => String.t(),
@@ -79,6 +119,9 @@ defmodule Cadence.Architecture.DependencyBoundary do
       not persistence_context?(source) and String.starts_with?(sink, @schema_prefix) ->
         [finding(:persistence_schema, source, sink, label)]
 
+      cross_context_schema?(source, sink) ->
+        [finding(:context_schema, source, sink, label)]
+
       true ->
         []
     end
@@ -99,8 +142,21 @@ defmodule Cadence.Architecture.DependencyBoundary do
   end
 
   defp persistence_context?(source) do
-    Enum.any?(@persistence_context, fn path ->
-      source == path or String.starts_with?(source, path)
+    path_in_context?(source, @persistence_context)
+  end
+
+  defp cross_context_schema?(source, sink) do
+    case Enum.find(@context_owned_schemas, fn {schema_paths, _context_paths} ->
+           String.ends_with?(sink, "_row.ex") and path_in_context?(sink, schema_paths)
+         end) do
+      {_schema_paths, context_paths} -> not path_in_context?(source, context_paths)
+      nil -> false
+    end
+  end
+
+  defp path_in_context?(path, context_paths) do
+    Enum.any?(context_paths, fn context_path ->
+      path == context_path or String.starts_with?(path, context_path)
     end)
   end
 
