@@ -1,6 +1,8 @@
 defmodule Cadence.Reads.MissionEventsTest do
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Activations.BindingSetActivationRow
+
   alias Cadence.ApplicationDispatch.{
     BindingRule,
     BindingSet,
@@ -14,7 +16,7 @@ defmodule Cadence.Reads.MissionEventsTest do
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Persistence.Schemas.{BindingSetActivationRow, MissionEventRow}
+  alias Cadence.Persistence.Schemas.MissionEventRow
   alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
   alias Cadence.Runtime

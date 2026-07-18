@@ -8,12 +8,16 @@ defmodule Cadence.Activations do
   alias Ecto.Changeset
   alias Ecto.Multi
 
-  alias Cadence.Activations.BindingSetActivation
+  alias Cadence.Activations.{
+    ActiveBindingSetRow,
+    BindingSetActivation,
+    BindingSetActivationRow
+  }
+
   alias Cadence.Governance
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Persistence.Schemas.{ActiveBindingSetRow, BindingSetActivationRow}
   alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
 
