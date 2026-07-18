@@ -117,10 +117,8 @@ persistence_schema|lib/cadence/ingress_archive/filesystem.ex|lib/cadence/persist
 persistence_schema|lib/cadence/ingress_archive/postgres.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_latest_limit_state_row.ex
-persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_limit_evaluation_run_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_limit_event_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/limits/definition_lifecycle.ex|lib/cadence/persistence/schemas/active_limit_definition_row.ex
 persistence_schema|lib/cadence/limits/definition_lifecycle.ex|lib/cadence/persistence/schemas/limit_definition_lifecycle_event_row.ex
 persistence_schema|lib/cadence/operational_events.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/projections/derived_telemetry_latest_values.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_rebuild_run_row.ex

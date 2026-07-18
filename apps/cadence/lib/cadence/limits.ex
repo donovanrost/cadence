@@ -17,7 +17,8 @@ defmodule Cadence.Limits do
     Evaluator,
     Event,
     GovernedLimitDefinitionRow,
-    Run
+    Run,
+    TelemetryLimitEvaluationRunRow
   }
 
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
@@ -26,7 +27,6 @@ defmodule Cadence.Limits do
   alias Cadence.Persistence.Schemas.{
     DerivedTelemetrySampleRow,
     TelemetryLatestLimitStateRow,
-    TelemetryLimitEvaluationRunRow,
     TelemetryLimitEventRow,
     TelemetrySampleRow
   }

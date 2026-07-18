@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.TelemetryLimitEvaluationRunRow do
+defmodule Cadence.Limits.TelemetryLimitEvaluationRunRow do
   @moduledoc false
 
   use Ecto.Schema

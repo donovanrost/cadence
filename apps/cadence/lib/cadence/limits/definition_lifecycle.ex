@@ -11,6 +11,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
   alias Cadence.Limits.{
     ActiveDefinition,
+    ActiveLimitDefinitionRow,
     Definition,
     DefinitionLifecycleEvent,
     GovernedLimitDefinitionRow
@@ -19,10 +20,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.{
-    ActiveLimitDefinitionRow,
-    LimitDefinitionLifecycleEventRow
-  }
+  alias Cadence.Persistence.Schemas.LimitDefinitionLifecycleEventRow
 
   alias Cadence.Repo
 
