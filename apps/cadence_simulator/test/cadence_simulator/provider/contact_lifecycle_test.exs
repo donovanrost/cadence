@@ -11,7 +11,7 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
   end
 
   test "provider changes append immutable history and emit revision-correlated events" do
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     contact = context.contact
 
     assert {:ok, changed} =
@@ -45,7 +45,7 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
   end
 
   test "event delay and omission advance only according to declared provider behavior" do
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
 
     {:ok, run} =
       Provider.configure_run_faults(context.run["id"], %{
@@ -82,7 +82,7 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
 
   defp fault_page(field) do
     :ok = Store.clear()
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     {:ok, run} = Provider.configure_run_faults(context.run["id"], %{field => 1})
     EventDelivery.page(run, 0, 100)
   end

@@ -22,7 +22,12 @@ defmodule CadenceSimulator.TestProviderFixtures do
       )
 
     {:ok, scenario} = Provider.create_scenario(scenario_attrs)
-    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 42})
+
+    {:ok, run} =
+      Provider.create_run(scenario["id"], %{
+        "seed" => 42,
+        "state" => Keyword.get(opts, :run_state, "running")
+      })
 
     {:ok, delivery_profile} =
       DeliveryProfiles.provision(run, %{

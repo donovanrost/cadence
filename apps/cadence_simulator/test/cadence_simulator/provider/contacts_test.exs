@@ -10,7 +10,7 @@ defmodule CadenceSimulator.Provider.ContactsTest do
   end
 
   test "provider timing and equivalent antenna changes are bounded and revisioned" do
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     contact = context.contact
 
     assert {:ok, shifted} =
@@ -49,7 +49,7 @@ defmodule CadenceSimulator.Provider.ContactsTest do
   end
 
   test "station substitution is outside the equivalent pool and respects committed capacity" do
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     contact = context.contact
 
     assert {:ok, substituted} =
@@ -84,7 +84,7 @@ defmodule CadenceSimulator.Provider.ContactsTest do
   end
 
   test "duration and estimated capacity reductions preserve authoritative evidence" do
-    context = TestProviderFixtures.create_contact!()
+    context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     contact = context.contact
     reduced_end = shift_time(contact["ends_at"], -60)
     current_capacity = get_in(contact, ["extensions", "estimated_capacity", "value"])
@@ -112,7 +112,7 @@ defmodule CadenceSimulator.Provider.ContactsTest do
   end
 
   test "counteroffers remain distinguishable from provider-initiated cancellation facts" do
-    counteroffer_context = TestProviderFixtures.create_contact!()
+    counteroffer_context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
     contact = counteroffer_context.contact
 
     assert {:ok, counteroffer} =
@@ -130,7 +130,7 @@ defmodule CadenceSimulator.Provider.ContactsTest do
     assert get_in(counteroffer, ["extensions", "counteroffer", "reason"]) ==
              "resource_substitution"
 
-    cancellation_context = TestProviderFixtures.create_contact!()
+    cancellation_context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
 
     assert {:ok, canceled} =
              ContactChanges.apply(
