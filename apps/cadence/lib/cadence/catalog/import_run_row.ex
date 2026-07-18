@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
+defmodule Cadence.Catalog.ImportRunRow do
   @moduledoc false
 
   use Ecto.Schema

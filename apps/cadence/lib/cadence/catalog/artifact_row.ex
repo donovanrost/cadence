@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CatalogArtifactRow do
+defmodule Cadence.Catalog.ArtifactRow do
   @moduledoc false
 
   use Ecto.Schema

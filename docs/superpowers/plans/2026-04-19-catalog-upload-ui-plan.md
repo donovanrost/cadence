@@ -409,9 +409,9 @@ Modify `insert_run/1` (around lines 393-399) so the success branch broadcasts `:
 
 ```elixir
   defp insert_run(%ImportRun{} = run) do
-    case Repo.insert(CatalogImportRunRow.changeset(run)) do
-      {:ok, %CatalogImportRunRow{} = row} ->
-        domain_run = CatalogImportRunRow.to_domain(row)
+    case Repo.insert(ImportRunRow.changeset(run)) do
+      {:ok, %ImportRunRow{} = row} ->
+        domain_run = ImportRunRow.to_domain(row)
         Events.broadcast_started(domain_run)
         {:ok, domain_run}
 
@@ -428,14 +428,14 @@ Modify `update_run/1` (around lines 401-418) so each `{:ok, run}` branch broadca
 
 ```elixir
   defp update_run(%ImportRun{} = run) do
-    case Repo.get(CatalogImportRunRow, run.import_run_id) do
+    case Repo.get(ImportRunRow, run.import_run_id) do
       nil ->
         {:error, :catalog_import_run_not_found}
 
-      %CatalogImportRunRow{} = row ->
-        case Repo.update(CatalogImportRunRow.changeset(row, run)) do
-          {:ok, %CatalogImportRunRow{} = updated_row} ->
-            domain_run = CatalogImportRunRow.to_domain(updated_row)
+      %ImportRunRow{} = row ->
+        case Repo.update(ImportRunRow.changeset(row, run)) do
+          {:ok, %ImportRunRow{} = updated_row} ->
+            domain_run = ImportRunRow.to_domain(updated_row)
             broadcast_for_status(domain_run)
             {:ok, domain_run}
 
@@ -761,14 +761,14 @@ In `apps/cadence/lib/cadence/catalog.ex`, add this public function after `list_i
           %{optional(binary()) => ImportRun.t()}
   def latest_import_run_by_artifact(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CatalogImportRunRow
+    ImportRunRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> order_by([row], desc: row.started_at, desc: row.import_run_id)
     |> Repo.all()
-    |> Enum.map(&CatalogImportRunRow.to_domain/1)
+    |> Enum.map(&ImportRunRow.to_domain/1)
     |> Enum.reduce(%{}, fn %ImportRun{artifact_id: artifact_id} = run, acc ->
       Map.put_new(acc, artifact_id, run)
     end)

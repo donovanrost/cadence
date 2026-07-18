@@ -11,12 +11,6 @@ persistence_schema|lib/cadence/activations.ex|lib/cadence/persistence/schemas/bi
 persistence_schema|lib/cadence/applications/application_binding_store.ex|lib/cadence/persistence/schemas/application_binding_row.ex
 persistence_schema|lib/cadence/applications/telemetry_decom.ex|lib/cadence/persistence/schemas/application_binding_row.ex
 persistence_schema|lib/cadence/auth.ex|lib/cadence/persistence/schemas/service_identity_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_artifact_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_command_snapshot_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_database_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_import_run_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_revision_row.ex
-persistence_schema|lib/cadence/catalog.ex|lib/cadence/persistence/schemas/catalog_telemetry_snapshot_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_approval_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_queue_entry_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_release_attempt_row.ex

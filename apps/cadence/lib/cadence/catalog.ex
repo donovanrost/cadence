@@ -8,7 +8,22 @@ defmodule Cadence.Catalog do
 
   alias Ecto.Changeset
 
-  alias Cadence.Catalog.{Artifact, Database, Events, ImportResult, ImportRun, Registry, Revision}
+  alias Cadence.Catalog.{
+    Artifact,
+    ArtifactRow,
+    CommandSnapshotRow,
+    Database,
+    DatabaseRow,
+    Events,
+    ImportResult,
+    ImportRun,
+    ImportRunRow,
+    Registry,
+    Revision,
+    RevisionRow,
+    TelemetrySnapshotRow
+  }
+
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
@@ -18,15 +33,6 @@ defmodule Cadence.Catalog do
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-
-  alias Cadence.Persistence.Schemas.{
-    CatalogArtifactRow,
-    CatalogCommandSnapshotRow,
-    CatalogDatabaseRow,
-    CatalogImportRunRow,
-    CatalogRevisionRow,
-    CatalogTelemetrySnapshotRow
-  }
 
   alias Cadence.Repo
 
@@ -45,9 +51,9 @@ defmodule Cadence.Catalog do
       |> Database.new()
 
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, %CatalogDatabaseRow{} = row} <-
-           Repo.insert(CatalogDatabaseRow.changeset(database)) do
-      {:ok, CatalogDatabaseRow.to_domain(row)}
+         {:ok, %DatabaseRow{} = row} <-
+           Repo.insert(DatabaseRow.changeset(database)) do
+      {:ok, DatabaseRow.to_domain(row)}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
@@ -75,10 +81,10 @@ defmodule Cadence.Catalog do
              created_by: existing.created_by,
              metadata: Map.get(attrs, :metadata, existing.metadata)
            }),
-         %CatalogDatabaseRow{} = row <- Repo.get(CatalogDatabaseRow, catalog_database_id),
-         {:ok, %CatalogDatabaseRow{} = updated_row} <-
-           Repo.update(CatalogDatabaseRow.changeset(row, updated)) do
-      {:ok, CatalogDatabaseRow.to_domain(updated_row)}
+         %DatabaseRow{} = row <- Repo.get(DatabaseRow, catalog_database_id),
+         {:ok, %DatabaseRow{} = updated_row} <-
+           Repo.update(DatabaseRow.changeset(row, updated)) do
+      {:ok, DatabaseRow.to_domain(updated_row)}
     else
       nil -> {:error, :catalog_database_not_found}
       {:error, %Changeset{} = changeset} -> {:error, changeset}
@@ -91,13 +97,13 @@ defmodule Cadence.Catalog do
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_database_id) do
     case Repo.get_by(
-           CatalogDatabaseRow,
+           DatabaseRow,
            organization_id: organization_id,
            mission_id: mission_id,
            catalog_database_id: catalog_database_id
          ) do
       nil -> {:error, :catalog_database_not_found}
-      %CatalogDatabaseRow{} = row -> {:ok, CatalogDatabaseRow.to_domain(row)}
+      %DatabaseRow{} = row -> {:ok, DatabaseRow.to_domain(row)}
     end
   end
 
@@ -106,7 +112,7 @@ defmodule Cadence.Catalog do
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     catalog_family = Keyword.get(opts, :catalog_family)
 
-    CatalogDatabaseRow
+    DatabaseRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -114,7 +120,7 @@ defmodule Cadence.Catalog do
     |> maybe_filter_catalog_family(catalog_family)
     |> order_by([row], asc: row.name, asc: row.catalog_database_id)
     |> Repo.all()
-    |> Enum.map(&CatalogDatabaseRow.to_domain/1)
+    |> Enum.map(&DatabaseRow.to_domain/1)
   end
 
   @spec persist_artifact(binary(), Artifact.t()) :: {:ok, Artifact.t()} | {:error, term()}
@@ -128,7 +134,7 @@ defmodule Cadence.Catalog do
              scoped_artifact.catalog_database_id
            ),
          {:ok, _row} <-
-           Repo.insert(CatalogArtifactRow.changeset(scoped_artifact),
+           Repo.insert(ArtifactRow.changeset(scoped_artifact),
              on_conflict: :nothing,
              conflict_target: [:artifact_id]
            ) do
@@ -143,13 +149,13 @@ defmodule Cadence.Catalog do
   def fetch_artifact(organization_id, mission_id, artifact_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(artifact_id) do
     case Repo.get_by(
-           CatalogArtifactRow,
+           ArtifactRow,
            organization_id: organization_id,
            mission_id: mission_id,
            artifact_id: artifact_id
          ) do
       nil -> {:error, :catalog_artifact_not_found}
-      %CatalogArtifactRow{} = row -> {:ok, CatalogArtifactRow.to_domain(row)}
+      %ArtifactRow{} = row -> {:ok, ArtifactRow.to_domain(row)}
     end
   end
 
@@ -159,7 +165,7 @@ defmodule Cadence.Catalog do
     catalog_family = Keyword.get(opts, :catalog_family)
     catalog_database_id = Keyword.get(opts, :catalog_database_id)
 
-    CatalogArtifactRow
+    ArtifactRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -168,7 +174,7 @@ defmodule Cadence.Catalog do
     |> maybe_filter_catalog_database_id(catalog_database_id)
     |> order_by([row], desc: row.uploaded_at, desc: row.artifact_id)
     |> Repo.all()
-    |> Enum.map(&CatalogArtifactRow.to_domain/1)
+    |> Enum.map(&ArtifactRow.to_domain/1)
   end
 
   @spec start_import_run(binary(), binary(), binary(), binary(), keyword()) ::
@@ -233,13 +239,13 @@ defmodule Cadence.Catalog do
   def fetch_import_run(organization_id, mission_id, import_run_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(import_run_id) do
     case Repo.get_by(
-           CatalogImportRunRow,
+           ImportRunRow,
            organization_id: organization_id,
            mission_id: mission_id,
            import_run_id: import_run_id
          ) do
       nil -> {:error, :catalog_import_run_not_found}
-      %CatalogImportRunRow{} = row -> {:ok, CatalogImportRunRow.to_domain(row)}
+      %ImportRunRow{} = row -> {:ok, ImportRunRow.to_domain(row)}
     end
   end
 
@@ -250,7 +256,7 @@ defmodule Cadence.Catalog do
     catalog_database_id = Keyword.get(opts, :catalog_database_id)
     status = Keyword.get(opts, :status)
 
-    CatalogImportRunRow
+    ImportRunRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -260,21 +266,21 @@ defmodule Cadence.Catalog do
     |> maybe_filter_status(status)
     |> order_by([row], desc: row.started_at, desc: row.import_run_id)
     |> Repo.all()
-    |> Enum.map(&CatalogImportRunRow.to_domain/1)
+    |> Enum.map(&ImportRunRow.to_domain/1)
   end
 
   @spec latest_import_run_by_artifact(binary(), binary()) ::
           %{optional(binary()) => ImportRun.t()}
   def latest_import_run_by_artifact(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CatalogImportRunRow
+    ImportRunRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> order_by([row], desc: row.started_at, desc: row.import_run_id)
     |> Repo.all()
-    |> Enum.map(&CatalogImportRunRow.to_domain/1)
+    |> Enum.map(&ImportRunRow.to_domain/1)
     |> Enum.reduce(%{}, fn %ImportRun{artifact_id: artifact_id} = run, acc ->
       Map.put_new(acc, artifact_id, run)
     end)
@@ -285,7 +291,7 @@ defmodule Cadence.Catalog do
         }
   def latest_import_run_by_database(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CatalogImportRunRow
+    ImportRunRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -293,7 +299,7 @@ defmodule Cadence.Catalog do
     )
     |> order_by([row], desc: row.started_at, desc: row.import_run_id)
     |> Repo.all()
-    |> Enum.map(&CatalogImportRunRow.to_domain/1)
+    |> Enum.map(&ImportRunRow.to_domain/1)
     |> Enum.reduce(%{}, fn %ImportRun{catalog_database_id: catalog_database_id} = run, acc ->
       Map.put_new(acc, catalog_database_id, run)
     end)
@@ -307,7 +313,7 @@ defmodule Cadence.Catalog do
            put_telemetry_snapshot_organization_scope(snapshot, organization_id),
          {:ok, _mission} <- Missions.fetch_mission(organization_id, scoped_snapshot.mission_id),
          {:ok, _row} <-
-           Repo.insert(CatalogTelemetrySnapshotRow.changeset(scoped_snapshot),
+           Repo.insert(TelemetrySnapshotRow.changeset(scoped_snapshot),
              on_conflict: :nothing,
              conflict_target: [:snapshot_id]
            ) do
@@ -326,7 +332,7 @@ defmodule Cadence.Catalog do
            put_command_snapshot_organization_scope(snapshot, organization_id),
          {:ok, _mission} <- Missions.fetch_mission(organization_id, scoped_snapshot.mission_id),
          {:ok, _row} <-
-           Repo.insert(CatalogCommandSnapshotRow.changeset(scoped_snapshot),
+           Repo.insert(CommandSnapshotRow.changeset(scoped_snapshot),
              on_conflict: :nothing,
              conflict_target: [:snapshot_id]
            ) do
@@ -342,13 +348,13 @@ defmodule Cadence.Catalog do
   def fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) do
     case Repo.get_by(
-           CatalogTelemetrySnapshotRow,
+           TelemetrySnapshotRow,
            organization_id: organization_id,
            mission_id: mission_id,
            snapshot_id: snapshot_id
          ) do
       nil -> {:error, :catalog_telemetry_snapshot_not_found}
-      %CatalogTelemetrySnapshotRow{} = row -> {:ok, CatalogTelemetrySnapshotRow.to_domain(row)}
+      %TelemetrySnapshotRow{} = row -> {:ok, TelemetrySnapshotRow.to_domain(row)}
     end
   end
 
@@ -358,7 +364,7 @@ defmodule Cadence.Catalog do
     artifact_id = Keyword.get(opts, :artifact_id)
     import_run_id = Keyword.get(opts, :import_run_id)
 
-    CatalogTelemetrySnapshotRow
+    TelemetrySnapshotRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -368,7 +374,7 @@ defmodule Cadence.Catalog do
     |> order_by([row], desc: row.inserted_at, desc: row.snapshot_id)
     |> maybe_limit(Keyword.get(opts, :limit))
     |> Repo.all()
-    |> Enum.map(&CatalogTelemetrySnapshotRow.to_domain/1)
+    |> Enum.map(&TelemetrySnapshotRow.to_domain/1)
   end
 
   defp maybe_limit(query, nil), do: query
@@ -379,13 +385,13 @@ defmodule Cadence.Catalog do
   def fetch_command_snapshot(organization_id, mission_id, snapshot_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) do
     case Repo.get_by(
-           CatalogCommandSnapshotRow,
+           CommandSnapshotRow,
            organization_id: organization_id,
            mission_id: mission_id,
            snapshot_id: snapshot_id
          ) do
       nil -> {:error, :catalog_command_snapshot_not_found}
-      %CatalogCommandSnapshotRow{} = row -> {:ok, CatalogCommandSnapshotRow.to_domain(row)}
+      %CommandSnapshotRow{} = row -> {:ok, CommandSnapshotRow.to_domain(row)}
     end
   end
 
@@ -395,7 +401,7 @@ defmodule Cadence.Catalog do
     artifact_id = Keyword.get(opts, :artifact_id)
     import_run_id = Keyword.get(opts, :import_run_id)
 
-    CatalogCommandSnapshotRow
+    CommandSnapshotRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -404,7 +410,7 @@ defmodule Cadence.Catalog do
     |> maybe_filter_import_run_id(import_run_id)
     |> order_by([row], desc: row.inserted_at, desc: row.snapshot_id)
     |> Repo.all()
-    |> Enum.map(&CatalogCommandSnapshotRow.to_domain/1)
+    |> Enum.map(&CommandSnapshotRow.to_domain/1)
   end
 
   @spec fetch_revision(binary(), binary(), binary()) :: {:ok, Revision.t()} | {:error, term()}
@@ -412,13 +418,13 @@ defmodule Cadence.Catalog do
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_revision_id) do
     case Repo.get_by(
-           CatalogRevisionRow,
+           RevisionRow,
            organization_id: organization_id,
            mission_id: mission_id,
            catalog_revision_id: catalog_revision_id
          ) do
       nil -> {:error, :catalog_revision_not_found}
-      %CatalogRevisionRow{} = row -> {:ok, CatalogRevisionRow.to_domain(row)}
+      %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
     end
   end
 
@@ -427,20 +433,20 @@ defmodule Cadence.Catalog do
   def fetch_revision_by_import_run(organization_id, mission_id, import_run_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(import_run_id) do
     case Repo.get_by(
-           CatalogRevisionRow,
+           RevisionRow,
            organization_id: organization_id,
            mission_id: mission_id,
            import_run_id: import_run_id
          ) do
       nil -> {:error, :catalog_revision_not_found}
-      %CatalogRevisionRow{} = row -> {:ok, CatalogRevisionRow.to_domain(row)}
+      %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
     end
   end
 
   @spec list_revisions(binary(), binary(), binary() | nil, keyword()) :: [Revision.t()]
   def list_revisions(organization_id, mission_id, catalog_database_id \\ nil, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CatalogRevisionRow
+    RevisionRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -450,14 +456,14 @@ defmodule Cadence.Catalog do
     |> maybe_filter_import_run_id(Keyword.get(opts, :import_run_id))
     |> order_by([row], desc: row.revision_number, desc: row.inserted_at)
     |> Repo.all()
-    |> Enum.map(&CatalogRevisionRow.to_domain/1)
+    |> Enum.map(&RevisionRow.to_domain/1)
   end
 
   @spec latest_revision(binary(), binary(), binary()) :: {:ok, Revision.t()} | {:error, term()}
   def latest_revision(organization_id, mission_id, catalog_database_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_database_id) do
-    CatalogRevisionRow
+    RevisionRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -468,21 +474,21 @@ defmodule Cadence.Catalog do
     |> Repo.one()
     |> case do
       nil -> {:error, :catalog_revision_not_found}
-      %CatalogRevisionRow{} = row -> {:ok, CatalogRevisionRow.to_domain(row)}
+      %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
     end
   end
 
   @spec latest_revision_by_database(binary(), binary()) :: %{optional(binary()) => Revision.t()}
   def latest_revision_by_database(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CatalogRevisionRow
+    RevisionRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> order_by([row], desc: row.revision_number, desc: row.inserted_at)
     |> Repo.all()
-    |> Enum.map(&CatalogRevisionRow.to_domain/1)
+    |> Enum.map(&RevisionRow.to_domain/1)
     |> Enum.reduce(%{}, fn %Revision{catalog_database_id: catalog_database_id} = revision, acc ->
       Map.put_new(acc, catalog_database_id, revision)
     end)
@@ -632,8 +638,8 @@ defmodule Cadence.Catalog do
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %Database{} = database} <-
            fetch_database(run.organization_id, run.mission_id, run.catalog_database_id),
-         telemetry_snapshot <- snapshot_id_for_run(CatalogTelemetrySnapshotRow, run.import_run_id),
-         command_snapshot <- snapshot_id_for_run(CatalogCommandSnapshotRow, run.import_run_id),
+         telemetry_snapshot <- snapshot_id_for_run(TelemetrySnapshotRow, run.import_run_id),
+         command_snapshot <- snapshot_id_for_run(CommandSnapshotRow, run.import_run_id),
          :ok <- ensure_revision_has_snapshot(telemetry_snapshot, command_snapshot),
          revision_number <- next_revision_number(run.catalog_database_id),
          revision_label <- revision_label(run, revision_number),
@@ -657,9 +663,9 @@ defmodule Cadence.Catalog do
                "importer_key" => run.importer_key
              }
            }),
-         {:ok, %CatalogRevisionRow{} = row} <-
-           Repo.insert(CatalogRevisionRow.changeset(revision)),
-         revision = CatalogRevisionRow.to_domain(row),
+         {:ok, %RevisionRow{} = row} <-
+           Repo.insert(RevisionRow.changeset(revision)),
+         revision = RevisionRow.to_domain(row),
          {:ok, %OperationalEvent{}} <-
            revision
            |> OperationalEvent.from_catalog_revision(row.inserted_at)
@@ -700,7 +706,7 @@ defmodule Cadence.Catalog do
 
   defp next_revision_number(catalog_database_id) do
     query =
-      from(row in CatalogRevisionRow,
+      from(row in RevisionRow,
         where: row.catalog_database_id == ^catalog_database_id,
         select: max(row.revision_number)
       )
@@ -792,9 +798,9 @@ defmodule Cadence.Catalog do
   end
 
   defp insert_run(%ImportRun{} = run) do
-    case Repo.insert(CatalogImportRunRow.changeset(run)) do
-      {:ok, %CatalogImportRunRow{} = row} ->
-        domain_run = CatalogImportRunRow.to_domain(row)
+    case Repo.insert(ImportRunRow.changeset(run)) do
+      {:ok, %ImportRunRow{} = row} ->
+        domain_run = ImportRunRow.to_domain(row)
         Events.broadcast_started(domain_run)
         {:ok, domain_run}
 
@@ -807,14 +813,14 @@ defmodule Cadence.Catalog do
   end
 
   defp update_run(%ImportRun{} = run) do
-    case Repo.get(CatalogImportRunRow, run.import_run_id) do
+    case Repo.get(ImportRunRow, run.import_run_id) do
       nil ->
         {:error, :catalog_import_run_not_found}
 
-      %CatalogImportRunRow{} = row ->
-        case Repo.update(CatalogImportRunRow.changeset(row, run)) do
-          {:ok, %CatalogImportRunRow{} = updated_row} ->
-            domain_run = CatalogImportRunRow.to_domain(updated_row)
+      %ImportRunRow{} = row ->
+        case Repo.update(ImportRunRow.changeset(row, run)) do
+          {:ok, %ImportRunRow{} = updated_row} ->
+            domain_run = ImportRunRow.to_domain(updated_row)
             broadcast_for_status(domain_run)
             {:ok, domain_run}
 
@@ -837,9 +843,9 @@ defmodule Cadence.Catalog do
     do: Events.broadcast_updated(run)
 
   defp fetch_import_run_by_id(import_run_id) do
-    case Repo.get(CatalogImportRunRow, import_run_id) do
+    case Repo.get(ImportRunRow, import_run_id) do
       nil -> {:error, :catalog_import_run_not_found}
-      %CatalogImportRunRow{} = row -> {:ok, CatalogImportRunRow.to_domain(row)}
+      %ImportRunRow{} = row -> {:ok, ImportRunRow.to_domain(row)}
     end
   end
 

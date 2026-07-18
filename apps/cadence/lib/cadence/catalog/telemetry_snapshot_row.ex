@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CatalogTelemetrySnapshotRow do
+defmodule Cadence.Catalog.TelemetrySnapshotRow do
   @moduledoc false
 
   use Ecto.Schema

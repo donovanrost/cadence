@@ -750,10 +750,12 @@ owning `Organizations` and `Missions` contexts. The comms ground-station,
 transport, routing-rule, and routing-rule-event rows likewise moved under
 `Cadence.Comms`. The user, local-credential, session-token, organization
 membership, and organization-invitation rows now live under `Cadence.Accounts`,
-reducing schema edges from 205 to 193. New edges fail, removed edges must be
-deleted from the baseline in the same change, and the baseline has an explicit
-owner and review-by date. The public root facade still exists for external
-callers and remains a later decomposition target.
+and the artifact, database, import-run, revision, command-snapshot, and
+telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
+from 205 to 187. New edges fail, removed edges must be deleted from the
+baseline in the same change, and the baseline has an explicit owner and
+review-by date. The public root facade still exists for external callers and
+remains a later decomposition target.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates

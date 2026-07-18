@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CatalogDatabaseRow do
+defmodule Cadence.Catalog.DatabaseRow do
   @moduledoc false
 
   use Ecto.Schema
