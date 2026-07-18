@@ -7,8 +7,7 @@ defmodule Cadence.Organizations do
 
   alias Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.OrganizationRow
+  alias Cadence.Organizations.{Organization, OrganizationRow}
   alias Cadence.Repo
 
   @spec persist_organization(Organization.t()) :: {:ok, Organization.t()} | {:error, term()}

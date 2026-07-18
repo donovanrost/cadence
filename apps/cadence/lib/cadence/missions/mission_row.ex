@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.MissionRow do
+defmodule Cadence.Missions.MissionRow do
   @moduledoc false
 
   use Ecto.Schema

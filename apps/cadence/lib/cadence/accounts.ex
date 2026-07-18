@@ -14,11 +14,11 @@ defmodule Cadence.Accounts do
   alias Cadence.Ids
   alias Cadence.Notifications.Notification
   alias Cadence.Organizations
+  alias Cadence.Organizations.OrganizationRow
 
   alias Cadence.Persistence.Schemas.{
     OrganizationInvitationRow,
     OrganizationMembershipRow,
-    OrganizationRow,
     UserLocalCredentialRow,
     UserRow,
     UserSessionTokenRow

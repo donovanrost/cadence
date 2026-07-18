@@ -10,7 +10,7 @@ defmodule Cadence.Persistence.OrganizationScope do
   import Ecto.Changeset
   import Ecto.Query
 
-  alias Cadence.Persistence.Schemas.MissionRow
+  alias Cadence.Missions.MissionRow
   alias Cadence.Repo
 
   @spec put_organization_id(Ecto.Changeset.t()) :: Ecto.Changeset.t()

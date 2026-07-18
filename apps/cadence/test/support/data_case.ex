@@ -7,8 +7,8 @@ defmodule Cadence.DataCase do
   alias Ecto.Adapters.SQL.Sandbox
 
   alias Cadence.Missions.Mission
+  alias Cadence.Missions.MissionRow
   alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.MissionRow
 
   @repo_ready_attempts 200
   @repo_ready_sleep_ms 50

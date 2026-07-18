@@ -741,11 +741,13 @@ and ratchets two dependency boundaries. The initial graph contained 8 internal
 callers of the root `Cadence` facade and 205 direct dependencies from
 non-persistence code to `Cadence.Persistence.Schemas.*`. The first production
 cleanup routed all eight internal callers through their owning contexts, so the
-current baseline contains zero root-facade edges and 205 schema edges. New
-edges fail, removed edges must be deleted from the baseline in the same change,
-and the baseline has an explicit owner and review-by date. The public root
-facade still exists for external callers and remains a later decomposition
-target.
+current baseline contains zero root-facade edges. `OrganizationRow` and
+`MissionRow` then moved from the horizontal persistence namespace into their
+owning `Organizations` and `Missions` contexts, reducing schema edges from 205
+to 202. New edges fail, removed edges must be deleted from the baseline in the
+same change, and the baseline has an explicit owner and review-by date. The
+public root facade still exists for external callers and remains a later
+decomposition target.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates

@@ -7,9 +7,8 @@ defmodule Cadence.Missions do
 
   alias Ecto.Changeset
 
-  alias Cadence.Missions.Mission
+  alias Cadence.Missions.{Mission, MissionRow}
   alias Cadence.Organizations
-  alias Cadence.Persistence.Schemas.MissionRow
   alias Cadence.Repo
 
   @spec persist_mission(Mission.t()) :: {:ok, Mission.t()} | {:error, term()}
