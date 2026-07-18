@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.NotificationRow do
+defmodule Cadence.Notifications.NotificationRow do
   @moduledoc false
 
   use Ecto.Schema

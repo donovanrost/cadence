@@ -122,7 +122,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
                  invited_by_user_id: admin.user_id
                )
 
-      assert Repo.all(Cadence.Persistence.Schemas.NotificationRow) == []
+      assert Repo.all(Cadence.Notifications.NotificationRow) == []
     end
 
     test ":invited with existing non-durable user (e.g. bootstrap admin) still dispatches",

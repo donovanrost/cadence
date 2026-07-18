@@ -122,7 +122,6 @@ persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemet
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
 persistence_schema|lib/cadence/limits/definition_lifecycle.ex|lib/cadence/persistence/schemas/active_limit_definition_row.ex
 persistence_schema|lib/cadence/limits/definition_lifecycle.ex|lib/cadence/persistence/schemas/limit_definition_lifecycle_event_row.ex
-persistence_schema|lib/cadence/notifications.ex|lib/cadence/persistence/schemas/notification_row.ex
 persistence_schema|lib/cadence/operational_events.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/projections/derived_telemetry_latest_values.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_rebuild_run_row.ex
 persistence_schema|lib/cadence/projections/derived_telemetry_latest_values.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_row.ex

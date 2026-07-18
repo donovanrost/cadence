@@ -5,8 +5,7 @@ defmodule Cadence.Notifications do
 
   import Ecto.Query
 
-  alias Cadence.Notifications.Notification
-  alias Cadence.Persistence.Schemas.NotificationRow
+  alias Cadence.Notifications.{Notification, NotificationRow}
   alias Cadence.Repo
 
   @pubsub Cadence.PubSub

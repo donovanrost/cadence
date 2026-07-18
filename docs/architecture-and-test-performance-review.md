@@ -759,10 +759,11 @@ live under `Cadence.Governance`, reducing that baseline again to 178. The
 governed limit-definition row and persistence entrypoint now live under
 `Cadence.Limits`; Reads and Dashboards use its public domain APIs instead of
 the row. The background-job row now lives under `Cadence.Jobs`, reducing the
-baseline to 173. New edges fail, removed edges must be deleted from the baseline
-in the same change, and the baseline has an explicit owner and review-by date.
-Context-owned row modules are also protected from new callers outside their
-bounded context. The initial
+baseline to 173. The notification row likewise now lives under
+`Cadence.Notifications`, reducing the baseline to 172. New edges fail, removed
+edges must be deleted from the baseline in the same change, and the baseline
+has an explicit owner and review-by date. Context-owned row modules are also
+protected from new callers outside their bounded context. The initial
 `Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
 by exposing mission ownership through the `Missions` context, leaving the
 cross-context row baseline at zero. The public root facade still exists for
