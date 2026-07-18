@@ -6,10 +6,10 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
+  alias Cadence.Governance.BindingSetRow
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive.FileSystem, as: IngressArchiveFileSystem
   alias Cadence.OperationalEvents
-  alias Cadence.Persistence.Schemas.BindingSetRow
   alias Cadence.Protocol.RecordArchive.FileSystem, as: ProtocolRecordArchiveFileSystem
 
   alias Cadence.Persistence.Schemas.{

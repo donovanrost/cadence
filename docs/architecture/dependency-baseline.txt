@@ -104,13 +104,7 @@ persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/sche
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/binding_rule_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/binding_set_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/capability_instance_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/governed_derived_telemetry_definition_row.ex
 persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/governed_limit_definition_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/governed_packet_definition_row.ex
-persistence_schema|lib/cadence/governance.ex|lib/cadence/persistence/schemas/packet_definition_field_row.ex
 persistence_schema|lib/cadence/ground_networks/mission_providers.ex|lib/cadence/persistence/schemas/mission_provider_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_account_grant_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex

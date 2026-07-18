@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CapabilityInstanceRow do
+defmodule Cadence.Governance.CapabilityInstanceRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.GovernedPacketDefinitionRow do
+defmodule Cadence.Governance.GovernedPacketDefinitionRow do
   @moduledoc false
 
   use Ecto.Schema
@@ -18,7 +18,7 @@ defmodule Cadence.Persistence.Schemas.GovernedPacketDefinitionRow do
     field(:apid, :integer)
     field(:version, :integer)
 
-    has_many(:field_rows, Cadence.Persistence.Schemas.PacketDefinitionFieldRow,
+    has_many(:field_rows, Cadence.Governance.PacketDefinitionFieldRow,
       foreign_key: :packet_definition_row_id
     )
 

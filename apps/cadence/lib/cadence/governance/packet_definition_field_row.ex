@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
+defmodule Cadence.Governance.PacketDefinitionFieldRow do
   @moduledoc false
 
   use Ecto.Schema

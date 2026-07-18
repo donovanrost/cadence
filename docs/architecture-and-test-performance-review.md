@@ -754,10 +754,14 @@ and the artifact, database, import-run, revision, command-snapshot, and
 telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
 from 205 to 187. The active-binding-set and binding-set-activation rows now
 live under `Cadence.Activations`, and the service-identity row now lives under
-`Cadence.Auth`, reducing that baseline again to 184. New edges fail, removed
-edges must be deleted from the baseline in the same change, and the baseline
-has an explicit owner and review-by date. Context-owned row modules are also
-protected from new callers outside their bounded context. The initial
+`Cadence.Auth`. Six Governance-exclusive binding and definition rows also now
+live under `Cadence.Governance`, reducing that baseline again to 178. The
+governed limit-definition row remains in the horizontal namespace until its
+Limits, Reads, and Dashboards callers are replaced with a public read boundary.
+New edges fail, removed edges must be deleted from the baseline in the same
+change, and the baseline has an explicit owner and review-by date.
+Context-owned row modules are also protected from new callers outside their
+bounded context. The initial
 `Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
 by exposing mission ownership through the `Missions` context, leaving the
 cross-context row baseline at zero. The public root facade still exists for

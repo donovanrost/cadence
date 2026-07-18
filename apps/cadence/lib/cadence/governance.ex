@@ -18,21 +18,21 @@ defmodule Cadence.Governance do
 
   alias Cadence.Capabilities.{Registry, ValidationContext}
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
-  alias Cadence.Limits.Definition, as: LimitDefinition
-  alias Cadence.Limits.DefinitionLifecycle
-  alias Cadence.Missions
-  alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Governance.{
     BindingRuleRow,
     BindingSetRow,
     CapabilityInstanceRow,
     GovernedDerivedTelemetryDefinitionRow,
-    GovernedLimitDefinitionRow,
     GovernedPacketDefinitionRow,
     PacketDefinitionFieldRow
   }
 
+  alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.Limits.DefinitionLifecycle
+  alias Cadence.Missions
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.Schemas.GovernedLimitDefinitionRow
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.GovernedDerivedTelemetryDefinitionRow do
+defmodule Cadence.Governance.GovernedDerivedTelemetryDefinitionRow do
   @moduledoc false
 
   use Ecto.Schema

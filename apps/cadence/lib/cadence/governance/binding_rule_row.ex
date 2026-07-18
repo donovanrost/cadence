@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.BindingRuleRow do
+defmodule Cadence.Governance.BindingRuleRow do
   @moduledoc false
 
   use Ecto.Schema
