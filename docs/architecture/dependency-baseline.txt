@@ -168,8 +168,6 @@ persistence_schema|lib/cadence/replay/diff.ex|lib/cadence/persistence/schemas/re
 persistence_schema|lib/cadence/replay/diff.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
 persistence_schema|lib/cadence/source_endpoints.ex|lib/cadence/persistence/schemas/source_endpoint_row.ex
 persistence_schema|lib/cadence/spacecraft_store.ex|lib/cadence/persistence/schemas/source_endpoint_row.ex
-persistence_schema|lib/cadence/spacecraft_store.ex|lib/cadence/persistence/schemas/spacecraft_row.ex
-persistence_schema|lib/cadence/spacecraft_type_store.ex|lib/cadence/persistence/schemas/spacecraft_type_row.ex
 persistence_schema|lib/cadence/telemetry/current_value_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/telemetry/history_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/history_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex

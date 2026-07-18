@@ -9,10 +9,11 @@ defmodule Cadence.SpacecraftStore do
 
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.{SourceEndpointRow, SpacecraftRow}
+  alias Cadence.Persistence.Schemas.SourceEndpointRow
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.SpacecraftStore.SpacecraftRow
 
   @type list_filter ::
           :missing_profile

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.SpacecraftRow do
+defmodule Cadence.SpacecraftStore.SpacecraftRow do
   @moduledoc false
 
   use Ecto.Schema

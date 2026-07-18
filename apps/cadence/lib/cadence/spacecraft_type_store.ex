@@ -14,9 +14,9 @@ defmodule Cadence.SpacecraftTypeStore do
   alias Ecto.Changeset
 
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.SpacecraftTypeRow
   alias Cadence.Repo
   alias Cadence.SpacecraftType
+  alias Cadence.SpacecraftTypeStore.SpacecraftTypeRow
 
   @spec persist_spacecraft_type(binary(), SpacecraftType.t()) ::
           {:ok, SpacecraftType.t()} | {:error, term()}
