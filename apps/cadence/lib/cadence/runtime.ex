@@ -69,9 +69,33 @@ defmodule Cadence.Runtime do
   @spec stop_mission(binary()) :: :ok | {:error, term()}
   def stop_mission(mission_id) when is_binary(mission_id) do
     case runtime_pid(mission_id) do
-      nil -> :ok
-      mission_runtime -> Supervisor.stop(mission_runtime)
+      nil ->
+        :ok
+
+      mission_runtime ->
+        DynamicSupervisor.terminate_child(
+          Cadence.Runtime.MissionSupervisor,
+          mission_runtime
+        )
     end
+  end
+
+  @spec running_mission_ids() :: [binary()]
+  def running_mission_ids do
+    case Process.whereis(Cadence.Runtime.Registry) do
+      registry when is_pid(registry) ->
+        Cadence.Runtime.Registry
+        |> Registry.select([{{{:mission_runtime, :"$1"}, :_, :_}, [], [:"$1"]}])
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      nil ->
+        []
+    end
+  rescue
+    ArgumentError -> []
+  catch
+    :exit, _reason -> []
   end
 
   @spec stop_all_missions() :: :ok
@@ -85,7 +109,7 @@ defmodule Cadence.Runtime do
         |> safe_which_children()
         |> Enum.each(fn
           {_child_id, mission_runtime, :supervisor, _modules} when is_pid(mission_runtime) ->
-            safe_stop_supervisor(mission_runtime)
+            safe_terminate_child(mission_supervisor, mission_runtime)
 
           _other_child ->
             :ok
@@ -364,8 +388,8 @@ defmodule Cadence.Runtime do
     :exit, _reason -> []
   end
 
-  defp safe_stop_supervisor(mission_runtime) do
-    Supervisor.stop(mission_runtime)
+  defp safe_terminate_child(mission_supervisor, mission_runtime) do
+    DynamicSupervisor.terminate_child(mission_supervisor, mission_runtime)
   catch
     :exit, _reason -> :ok
   end

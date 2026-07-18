@@ -20,6 +20,17 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     %{mission_id: mission_id}
   end
 
+  test "reports only currently running mission runtimes", %{mission_id: mission_id} do
+    refute mission_id in Runtime.running_mission_ids()
+
+    assert {:ok, mission_runtime} = Runtime.ensure_mission_started(mission_id)
+    assert is_pid(mission_runtime)
+    assert mission_id in Runtime.running_mission_ids()
+
+    assert :ok = Runtime.stop_mission(mission_id)
+    refute mission_id in Runtime.running_mission_ids()
+  end
+
   test "processes ingress against the active mission runtime and reconciles partition owners on activation changes",
        %{mission_id: mission_id} do
     source_endpoint = persist_source_endpoint(mission_id)

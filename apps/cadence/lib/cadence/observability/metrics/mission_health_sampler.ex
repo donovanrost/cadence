@@ -12,6 +12,7 @@ defmodule Cadence.Observability.Metrics.MissionHealthSampler do
   alias Cadence.Contacts
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
   alias Cadence.Observability.Metrics.Reporter
+  alias Cadence.Runtime
   alias Cadence.Telemetry.CurrentValueStore
 
   @default_freshness_grace_seconds 30
@@ -265,17 +266,7 @@ defmodule Cadence.Observability.Metrics.MissionHealthSampler do
 
   defp schedule_sample(interval_ms), do: Process.send_after(self(), :sample, interval_ms)
 
-  defp active_mission_ids do
-    case Process.whereis(Cadence.Runtime.Registry) do
-      pid when is_pid(pid) ->
-        Cadence.Runtime.Registry
-        |> Registry.select([{{{:mission_runtime, :"$1"}, :_, :_}, [], [:"$1"]}])
-        |> Enum.uniq()
-
-      nil ->
-        []
-    end
-  end
+  defp active_mission_ids, do: Runtime.running_mission_ids()
 
   defp contacts(mission_id) do
     %{
