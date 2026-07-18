@@ -9,9 +9,17 @@ defmodule Cadence.Limits do
   alias Ecto.Changeset
   alias Ecto.Multi
 
-  alias Cadence.Governance
   alias Cadence.Jobs
-  alias Cadence.Limits.{Definition, DefinitionLifecycle, Evaluator, Event, Run}
+
+  alias Cadence.Limits.{
+    Definition,
+    DefinitionLifecycle,
+    Evaluator,
+    Event,
+    GovernedLimitDefinitionRow,
+    Run
+  }
+
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Telemetry.LatestProjectionOrder
 
@@ -27,6 +35,118 @@ defmodule Cadence.Limits do
 
   @mission_scope_key "__mission__"
   @type evaluation_mode :: :canonical_event | :latest_value_projection
+
+  @spec persist_limit_definition(Definition.t()) :: {:ok, Definition.t()} | {:error, term()}
+  def persist_limit_definition(%Definition{} = definition) do
+    with :ok <- Definition.validate(definition) do
+      changeset = GovernedLimitDefinitionRow.changeset(definition)
+
+      case Repo.insert(changeset,
+             on_conflict: :nothing,
+             conflict_target: [:mission_id, :limit_definition_id, :version]
+           ) do
+        {:ok, %GovernedLimitDefinitionRow{} = row} ->
+          _ = DefinitionLifecycle.record_definition_activation(definition, row)
+          {:ok, definition}
+
+        {:error, %Changeset{} = changeset} ->
+          {:error, changeset}
+      end
+    end
+  end
+
+  @spec list_limit_definitions(binary()) :: [Definition.t()]
+  def list_limit_definitions(mission_id) when is_binary(mission_id) do
+    GovernedLimitDefinitionRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> order_by([row], asc: row.limit_definition_id, desc: row.version)
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn row, acc ->
+      Map.put_new(acc, row.limit_definition_id, row)
+    end)
+    |> Map.values()
+    |> Enum.map(&GovernedLimitDefinitionRow.to_domain/1)
+    |> Enum.sort_by(& &1.point_id)
+  end
+
+  @spec fetch_limit_definition(
+          binary() | nil,
+          binary(),
+          binary(),
+          pos_integer(),
+          keyword()
+        ) ::
+          {:ok, Definition.t()} | {:error, :limit_definition_not_found}
+  def fetch_limit_definition(
+        organization_id,
+        mission_id,
+        limit_definition_id,
+        version,
+        opts \\ []
+      )
+      when (is_nil(organization_id) or is_binary(organization_id)) and is_binary(mission_id) and
+             is_binary(limit_definition_id) and is_integer(version) and version > 0 and
+             is_list(opts) do
+    GovernedLimitDefinitionRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and row.limit_definition_id == ^limit_definition_id and
+        row.version == ^version
+    )
+    |> scope_limit_definition_organization(organization_id, opts)
+    |> Repo.one()
+    |> limit_definition_result()
+  end
+
+  @spec fetch_latest_limit_definition(binary() | nil, binary(), binary(), keyword()) ::
+          {:ok, Definition.t()} | {:error, :limit_definition_not_found}
+  def fetch_latest_limit_definition(
+        organization_id,
+        mission_id,
+        limit_definition_id,
+        opts \\ []
+      )
+      when (is_nil(organization_id) or is_binary(organization_id)) and is_binary(mission_id) and
+             is_binary(limit_definition_id) and is_list(opts) do
+    GovernedLimitDefinitionRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and row.limit_definition_id == ^limit_definition_id
+    )
+    |> scope_limit_definition_organization(organization_id, opts)
+    |> order_by([row], desc: row.version)
+    |> limit(1)
+    |> Repo.one()
+    |> limit_definition_result()
+  end
+
+  @spec list_limit_definition_versions(
+          binary() | nil,
+          binary(),
+          [{binary(), pos_integer()}]
+        ) :: [Definition.t()]
+  def list_limit_definition_versions(_organization_id, _mission_id, []), do: []
+
+  def list_limit_definition_versions(organization_id, mission_id, identities)
+      when (is_nil(organization_id) or is_binary(organization_id)) and is_binary(mission_id) and
+             is_list(identities) do
+    identity_set = MapSet.new(identities)
+    limit_definition_ids = Enum.map(identities, &elem(&1, 0))
+    versions = Enum.map(identities, &elem(&1, 1))
+
+    GovernedLimitDefinitionRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and row.limit_definition_id in ^limit_definition_ids and
+        row.version in ^versions
+    )
+    |> scope_limit_definition_organization(organization_id, [])
+    |> Repo.all()
+    |> Enum.map(&GovernedLimitDefinitionRow.to_domain/1)
+    |> Enum.filter(fn definition ->
+      MapSet.member?(identity_set, {definition.limit_definition_id, definition.version})
+    end)
+  end
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
@@ -391,9 +511,29 @@ defmodule Cadence.Limits do
 
   defp active_limit_definitions(mission_id) do
     case DefinitionLifecycle.list_active_definitions(mission_id) do
-      [] -> Governance.list_limit_definitions(mission_id)
+      [] -> list_limit_definitions(mission_id)
       definitions -> definitions
     end
+  end
+
+  defp scope_limit_definition_organization(query, nil, _opts), do: query
+
+  defp scope_limit_definition_organization(query, organization_id, opts) do
+    if Keyword.get(opts, :include_unscoped?, false) do
+      where(
+        query,
+        [row],
+        is_nil(row.organization_id) or row.organization_id == ^organization_id
+      )
+    else
+      where(query, [row], row.organization_id == ^organization_id)
+    end
+  end
+
+  defp limit_definition_result(nil), do: {:error, :limit_definition_not_found}
+
+  defp limit_definition_result(%GovernedLimitDefinitionRow{} = row) do
+    {:ok, GovernedLimitDefinitionRow.to_domain(row)}
   end
 
   defp insert_run(%Run{} = run) do

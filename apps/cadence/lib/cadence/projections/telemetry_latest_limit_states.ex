@@ -9,7 +9,6 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   alias Ecto.Changeset
 
-  alias Cadence.Governance
   alias Cadence.Jobs
   alias Cadence.Limits
   alias Cadence.Limits.Event
@@ -203,7 +202,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   defp execute_refresh_from_latest_values(%Run{} = run, opts) do
     mission_id = run.mission_id
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
-    definitions = Governance.list_limit_definitions(mission_id)
+    definitions = Limits.list_limit_definitions(mission_id)
 
     with {:ok, source_samples} <- fetch_latest_value_sources(mission_id, spacecraft_id),
          {:ok, latest_state_events} <-

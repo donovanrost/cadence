@@ -31,6 +31,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   }
 
   alias Cadence.Jobs
+  alias Cadence.Limits
   alias Cadence.Limits.DefinitionInterval
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.EffectiveInterval
@@ -47,7 +48,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     DashboardDataBindingEventRow,
     DashboardSourceHealthEventRow,
     DashboardSourceWatermarkEventRow,
-    GovernedLimitDefinitionRow,
     LimitDefinitionLifecycleEventRow,
     MissionEventRow,
     OperationalEventRow,
@@ -401,21 +401,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_limit_definition(%DataLink{} = link, organization_id, mission_id) do
-    definition_row =
-      GovernedLimitDefinitionRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.limit_definition_id == ^link.target_id
-      )
-      |> order_by([row], desc: row.version)
-      |> limit(1)
-      |> Repo.one()
-
-    case definition_row do
-      %GovernedLimitDefinitionRow{} = definition_row ->
-        definition = GovernedLimitDefinitionRow.to_domain(definition_row)
-
+    case Limits.fetch_latest_limit_definition(organization_id, mission_id, link.target_id) do
+      {:ok, definition} ->
         {:ok,
          inspector(
            link,
@@ -425,7 +412,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
            limit_definition_related_links(link, definition)
          )}
 
-      nil ->
+      {:error, :limit_definition_not_found} ->
         {:error, inspector(link, :missing, "Limit definition was not found in this mission.", [])}
     end
   end
@@ -3834,17 +3821,15 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp fetch_limit_definition_for_interval(event, organization_id, mission_id) do
-    GovernedLimitDefinitionRow
-    |> where(
-      [row],
-      (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-        row.mission_id == ^mission_id and row.limit_definition_id == ^event.limit_definition_id and
-        row.version == ^event.limit_definition_version
-    )
-    |> Repo.one()
-    |> case do
-      %GovernedLimitDefinitionRow{} = row -> GovernedLimitDefinitionRow.to_domain(row)
-      nil -> nil
+    case Limits.fetch_limit_definition(
+           organization_id,
+           mission_id,
+           event.limit_definition_id,
+           event.limit_definition_version,
+           include_unscoped?: true
+         ) do
+      {:ok, definition} -> definition
+      {:error, :limit_definition_not_found} -> nil
     end
   end
 

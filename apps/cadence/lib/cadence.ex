@@ -3119,12 +3119,12 @@ defmodule Cadence do
   @spec persist_limit_definition(LimitDefinition.t()) ::
           {:ok, LimitDefinition.t()} | {:error, term()}
   def persist_limit_definition(%LimitDefinition{} = definition) do
-    Governance.persist_limit_definition(definition)
+    LimitsService.persist_limit_definition(definition)
   end
 
   @spec list_limit_definitions(binary()) :: [LimitDefinition.t()]
   def list_limit_definitions(mission_id) when is_binary(mission_id) do
-    Governance.list_limit_definitions(mission_id)
+    LimitsService.list_limit_definitions(mission_id)
   end
 
   @spec backfill_telemetry_samples([Cadence.Telemetry.Sample.t()], map(), keyword()) ::

@@ -8,13 +8,19 @@ defmodule Cadence.Limits.DefinitionLifecycle do
   alias Ecto.Changeset
 
   alias Cadence.Dashboards.RuntimeInvalidation
-  alias Cadence.Limits.{ActiveDefinition, Definition, DefinitionLifecycleEvent}
+
+  alias Cadence.Limits.{
+    ActiveDefinition,
+    Definition,
+    DefinitionLifecycleEvent,
+    GovernedLimitDefinitionRow
+  }
+
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Persistence.Schemas.{
     ActiveLimitDefinitionRow,
-    GovernedLimitDefinitionRow,
     LimitDefinitionLifecycleEventRow
   }
 

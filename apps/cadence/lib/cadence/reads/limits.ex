@@ -6,13 +6,13 @@ defmodule Cadence.Reads.Limits do
 
   import Ecto.Query
 
+  alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycleEvent, Event}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Telemetry.SourceFilters
 
   alias Cadence.Persistence.Schemas.{
-    GovernedLimitDefinitionRow,
     TelemetryLatestLimitStateRow,
     TelemetryLimitEventRow
   }
@@ -507,28 +507,11 @@ defmodule Cadence.Reads.Limits do
       |> Enum.map(&definition_identity/1)
       |> Enum.uniq()
 
-    limit_definition_ids = Enum.map(identities, &elem(&1, 0))
-    versions = Enum.map(identities, &elem(&1, 1))
-
-    GovernedLimitDefinitionRow
-    |> where(
-      [definition_row],
-      definition_row.mission_id == ^mission_id and
-        definition_row.limit_definition_id in ^limit_definition_ids and
-        definition_row.version in ^versions
-    )
-    |> maybe_scope_definition_organization(organization_id)
-    |> Repo.all()
-    |> Map.new(fn row ->
-      definition = GovernedLimitDefinitionRow.to_domain(row)
+    organization_id
+    |> Limits.list_limit_definition_versions(mission_id, identities)
+    |> Map.new(fn definition ->
       {{definition.limit_definition_id, definition.version}, definition}
     end)
-  end
-
-  defp maybe_scope_definition_organization(query, nil), do: query
-
-  defp maybe_scope_definition_organization(query, organization_id) do
-    where(query, [definition_row], definition_row.organization_id == ^organization_id)
   end
 
   defp build_definition_intervals(events, definitions) do

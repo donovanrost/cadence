@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.GovernedLimitDefinitionRow do
+defmodule Cadence.Limits.GovernedLimitDefinitionRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -28,11 +28,8 @@ defmodule Cadence.Governance do
     PacketDefinitionFieldRow
   }
 
-  alias Cadence.Limits.Definition, as: LimitDefinition
-  alias Cadence.Limits.DefinitionLifecycle
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.GovernedLimitDefinitionRow
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
@@ -237,34 +234,6 @@ defmodule Cadence.Governance do
     mission_id
     |> latest_definition_rows(GovernedDerivedTelemetryDefinitionRow, :derived_definition_id)
     |> Enum.map(&GovernedDerivedTelemetryDefinitionRow.to_domain/1)
-    |> Enum.sort_by(& &1.point_id)
-  end
-
-  @spec persist_limit_definition(LimitDefinition.t()) ::
-          {:ok, LimitDefinition.t()} | {:error, term()}
-  def persist_limit_definition(%LimitDefinition{} = definition) do
-    with :ok <- LimitDefinition.validate(definition) do
-      changeset = GovernedLimitDefinitionRow.changeset(definition)
-
-      case Repo.insert(changeset,
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :limit_definition_id, :version]
-           ) do
-        {:ok, %GovernedLimitDefinitionRow{} = row} ->
-          _ = DefinitionLifecycle.record_definition_activation(definition, row)
-          {:ok, definition}
-
-        {:error, %Changeset{} = changeset} ->
-          {:error, changeset}
-      end
-    end
-  end
-
-  @spec list_limit_definitions(binary()) :: [LimitDefinition.t()]
-  def list_limit_definitions(mission_id) when is_binary(mission_id) do
-    mission_id
-    |> latest_definition_rows(GovernedLimitDefinitionRow, :limit_definition_id)
-    |> Enum.map(&GovernedLimitDefinitionRow.to_domain/1)
     |> Enum.sort_by(& &1.point_id)
   end
 

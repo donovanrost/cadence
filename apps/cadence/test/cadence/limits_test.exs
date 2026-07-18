@@ -16,8 +16,68 @@ defmodule Cadence.LimitsTest do
 
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Limits
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Telemetry.PacketDefinition
+
+  test "owns versioned limit definition persistence and scoped reads" do
+    organization_id = "org-limit-definitions"
+    mission_id = "mission-limit-definitions"
+    persist_mission_scope(organization_id, mission_id)
+
+    first_definition =
+      LimitDefinition.new(%{
+        mission_id: mission_id,
+        limit_definition_id: "counter-limits",
+        point_id: "HK.counter",
+        version: 1,
+        thresholds: %{"yellow_high" => 10}
+      })
+
+    latest_definition =
+      LimitDefinition.new(%{
+        mission_id: mission_id,
+        limit_definition_id: "counter-limits",
+        point_id: "HK.counter",
+        version: 2,
+        thresholds: %{"yellow_high" => 20}
+      })
+
+    assert {:ok, ^first_definition} = Limits.persist_limit_definition(first_definition)
+    assert {:ok, ^latest_definition} = Limits.persist_limit_definition(latest_definition)
+    assert [^latest_definition] = Limits.list_limit_definitions(mission_id)
+
+    assert {:ok, ^first_definition} =
+             Limits.fetch_limit_definition(
+               organization_id,
+               mission_id,
+               "counter-limits",
+               1
+             )
+
+    assert {:ok, ^latest_definition} =
+             Limits.fetch_latest_limit_definition(
+               organization_id,
+               mission_id,
+               "counter-limits"
+             )
+
+    assert [^first_definition, ^latest_definition] =
+             organization_id
+             |> Limits.list_limit_definition_versions(
+               mission_id,
+               [{"counter-limits", 1}, {"counter-limits", 2}]
+             )
+             |> Enum.sort_by(& &1.version)
+
+    assert {:error, :limit_definition_not_found} =
+             Limits.fetch_limit_definition(
+               organization_id,
+               mission_id,
+               "counter-limits",
+               3
+             )
+  end
 
   test "evaluates governed telemetry limits over derived telemetry in an async job" do
     binding_set = persist_binding_set_fixture()
