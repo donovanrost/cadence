@@ -81,6 +81,26 @@ The codebase does not need a broad rewrite. It needs dependency direction,
 smaller compilation units, explicit runtime ownership, and automated
 architecture constraints.
 
+## Implementation progress
+
+The first Phase 1 performance slices landed on 2026-07-18:
+
+- The 93-case rendered viewport browser matrix now lives under
+  `apps/cadence_web/browser_test`, outside default `mix test` discovery. The
+  root and child `test.browser` and `test.browser.full` aliases explicitly
+  select it from that location.
+- The 6,573-line replay transport evidence test body and its shared fixtures
+  now compile as `test/support` modules. The discovered LiveView test retains a
+  compact ExUnit wrapper, so repeated test discovery does not rebuild that
+  scenario.
+
+On the same checkout, warm `cadence_web` require-time profiling fell from
+139.16 seconds to 11.43 seconds, and the complete default web suite fell from
+166.54 seconds to 49.7 seconds with 1,632 passing tests. These results satisfy
+the Phase 1 timing exit conditions. Structural decomposition remains active:
+the compiled replay scenario and several other source-family test bodies still
+need to be split into smaller scenario and assertion units.
+
 ## Measured baseline
 
 ### Repository size
