@@ -753,13 +753,14 @@ membership, and organization-invitation rows now live under `Cadence.Accounts`,
 and the artifact, database, import-run, revision, command-snapshot, and
 telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
 from 205 to 187. The active-binding-set and binding-set-activation rows now
-live under `Cadence.Activations`, reducing that baseline again to 185. New edges
-fail, removed edges must be deleted from the baseline in the same change, and
-the baseline has an explicit owner and review-by date. Context-owned row
-modules are also protected from new callers outside their bounded context. The
-initial `Persistence.OrganizationScope -> Missions.MissionRow` exception was
-removed by exposing mission ownership through the `Missions` context, leaving
-the cross-context row baseline at zero. The public root facade still exists for
+live under `Cadence.Activations`, and the service-identity row now lives under
+`Cadence.Auth`, reducing that baseline again to 184. New edges fail, removed
+edges must be deleted from the baseline in the same change, and the baseline
+has an explicit owner and review-by date. Context-owned row modules are also
+protected from new callers outside their bounded context. The initial
+`Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
+by exposing mission ownership through the `Missions` context, leaving the
+cross-context row baseline at zero. The public root facade still exists for
 external callers and remains a later decomposition target.
 
 When a dependency exception is introduced, update the context map or decision

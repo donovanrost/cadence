@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ServiceIdentityRow do
+defmodule Cadence.Auth.ServiceIdentityRow do
   @moduledoc false
 
   use Ecto.Schema

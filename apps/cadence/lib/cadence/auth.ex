@@ -11,12 +11,11 @@ defmodule Cadence.Auth do
 
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationMembership
-  alias Cadence.Auth.{Scope, ServiceIdentity}
+  alias Cadence.Auth.{Scope, ServiceIdentity, ServiceIdentityRow}
   alias Cadence.Missions
   alias Cadence.Missions.Mission
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
-  alias Cadence.Persistence.Schemas.ServiceIdentityRow
   alias Cadence.Repo
 
   @type issued_service_identity :: %{
