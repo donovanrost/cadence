@@ -7,10 +7,9 @@ defmodule Cadence.Comms.GroundStationStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.GroundStation
+  alias Cadence.Comms.{GroundStation, GroundStationRow}
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.CommsGroundStationRow
   alias Cadence.Repo
 
   @spec persist_ground_station(binary(), GroundStation.t()) ::
@@ -24,7 +23,7 @@ defmodule Cadence.Comms.GroundStationStore do
              scoped_ground_station.mission_id
            ),
          {:ok, _row} <-
-           Repo.insert(CommsGroundStationRow.changeset(scoped_ground_station),
+           Repo.insert(GroundStationRow.changeset(scoped_ground_station),
              on_conflict: :nothing,
              conflict_target: [:mission_id, :ground_station_id]
            ) do
@@ -44,7 +43,7 @@ defmodule Cadence.Comms.GroundStationStore do
   def fetch_ground_station(organization_id, mission_id, ground_station_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(ground_station_id) do
-    case Repo.get_by(CommsGroundStationRow,
+    case Repo.get_by(GroundStationRow,
            organization_id: organization_id,
            mission_id: mission_id,
            ground_station_id: ground_station_id
@@ -52,18 +51,18 @@ defmodule Cadence.Comms.GroundStationStore do
       nil ->
         {:error, :ground_station_not_found}
 
-      %CommsGroundStationRow{lifecycle_state: "archived"} ->
+      %GroundStationRow{lifecycle_state: "archived"} ->
         {:error, :ground_station_not_found}
 
-      %CommsGroundStationRow{} = row ->
-        {:ok, CommsGroundStationRow.to_domain(row)}
+      %GroundStationRow{} = row ->
+        {:ok, GroundStationRow.to_domain(row)}
     end
   end
 
   @spec list_ground_stations(binary(), binary()) :: [GroundStation.t()]
   def list_ground_stations(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CommsGroundStationRow
+    GroundStationRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -71,7 +70,7 @@ defmodule Cadence.Comms.GroundStationStore do
     )
     |> order_by([row], asc: row.display_name, asc: row.ground_station_id)
     |> Repo.all()
-    |> Enum.map(&CommsGroundStationRow.to_domain/1)
+    |> Enum.map(&GroundStationRow.to_domain/1)
   end
 
   @spec update_ground_station(binary(), binary(), binary(), map()) ::
@@ -119,11 +118,11 @@ defmodule Cadence.Comms.GroundStationStore do
   end
 
   defp update_ground_station_row(%GroundStation{} = ground_station) do
-    changeset = CommsGroundStationRow.changeset(ground_station)
+    changeset = GroundStationRow.changeset(ground_station)
 
     if changeset.valid? do
       {count, _rows} =
-        CommsGroundStationRow
+        GroundStationRow
         |> where(
           [row],
           row.organization_id == ^ground_station.organization_id and

@@ -31,10 +31,6 @@ persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/com
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/staged_command_item_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/transport_action_request_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/transport_capability_record_row.ex
-persistence_schema|lib/cadence/comms/ground_station_store.ex|lib/cadence/persistence/schemas/comms_ground_station_row.ex
-persistence_schema|lib/cadence/comms/routing_rule_store.ex|lib/cadence/persistence/schemas/comms_routing_rule_event_row.ex
-persistence_schema|lib/cadence/comms/routing_rule_store.ex|lib/cadence/persistence/schemas/comms_routing_rule_row.ex
-persistence_schema|lib/cadence/comms/transport_store.ex|lib/cadence/persistence/schemas/comms_transport_row.ex
 persistence_schema|lib/cadence/contact_planning/automation_grants.ex|lib/cadence/persistence/schemas/automation_grant_row.ex
 persistence_schema|lib/cadence/contact_planning/contact_plan_approvals.ex|lib/cadence/persistence/schemas/contact_plan_approval_row.ex
 persistence_schema|lib/cadence/contact_planning/contact_plan_approvals.ex|lib/cadence/persistence/schemas/contact_plan_row.ex

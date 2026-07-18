@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommsGroundStationRow do
+defmodule Cadence.Comms.GroundStationRow do
   @moduledoc false
 
   use Ecto.Schema

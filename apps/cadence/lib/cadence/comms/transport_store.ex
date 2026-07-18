@@ -7,13 +7,12 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.{Transport, TransportKind}
+  alias Cadence.Comms.{Transport, TransportKind, TransportRow}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Contacts, as: ContactsService
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.{MissionProvider, Validation}
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.CommsTransportRow
   alias Cadence.Repo
 
   @spec persist_transport(binary(), Transport.t()) :: {:ok, Transport.t()} | {:error, term()}
@@ -25,7 +24,7 @@ defmodule Cadence.Comms.TransportStore do
          {:ok, normalized_transport} <- normalize_transport(scoped_transport),
          {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
          {:ok, _row} <-
-           Repo.insert(CommsTransportRow.changeset(transport_with_provider),
+           Repo.insert(TransportRow.changeset(transport_with_provider),
              on_conflict: :nothing,
              conflict_target: [:mission_id, :transport_id, :version]
            ) do
@@ -48,11 +47,11 @@ defmodule Cadence.Comms.TransportStore do
       nil ->
         {:error, :transport_not_found}
 
-      %CommsTransportRow{lifecycle_state: "archived"} ->
+      %TransportRow{lifecycle_state: "archived"} ->
         {:error, :transport_not_found}
 
-      %CommsTransportRow{} = row ->
-        {:ok, CommsTransportRow.to_domain(row)}
+      %TransportRow{} = row ->
+        {:ok, TransportRow.to_domain(row)}
     end
   end
 
@@ -61,21 +60,21 @@ defmodule Cadence.Comms.TransportStore do
   def fetch_transport_version(organization_id, mission_id, transport_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
              is_integer(version) and version > 0 do
-    case Repo.get_by(CommsTransportRow,
+    case Repo.get_by(TransportRow,
            organization_id: organization_id,
            mission_id: mission_id,
            transport_id: transport_id,
            version: version
          ) do
       nil -> {:error, :transport_not_found}
-      %CommsTransportRow{} = row -> {:ok, CommsTransportRow.to_domain(row)}
+      %TransportRow{} = row -> {:ok, TransportRow.to_domain(row)}
     end
   end
 
   @spec list_transports(binary(), binary()) :: [Transport.t()]
   def list_transports(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CommsTransportRow
+    TransportRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -86,13 +85,13 @@ defmodule Cadence.Comms.TransportStore do
     |> Map.values()
     |> Enum.reject(&(&1.lifecycle_state == "archived"))
     |> Enum.sort_by(& &1.display_name)
-    |> Enum.map(&CommsTransportRow.to_domain/1)
+    |> Enum.map(&TransportRow.to_domain/1)
   end
 
   @spec list_transport_versions(binary(), binary(), binary()) :: [Transport.t()]
   def list_transport_versions(organization_id, mission_id, transport_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) do
-    CommsTransportRow
+    TransportRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -100,7 +99,7 @@ defmodule Cadence.Comms.TransportStore do
     )
     |> order_by([row], desc: row.version)
     |> Repo.all()
-    |> Enum.map(&CommsTransportRow.to_domain/1)
+    |> Enum.map(&TransportRow.to_domain/1)
   end
 
   @spec version_transport(binary(), binary(), binary(), map()) ::
@@ -217,7 +216,7 @@ defmodule Cadence.Comms.TransportStore do
   end
 
   defp latest_versioned_row(organization_id, mission_id, transport_id) do
-    CommsTransportRow
+    TransportRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and

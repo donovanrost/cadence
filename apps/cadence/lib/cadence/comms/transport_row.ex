@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommsTransportRow do
+defmodule Cadence.Comms.TransportRow do
   @moduledoc false
 
   use Ecto.Schema

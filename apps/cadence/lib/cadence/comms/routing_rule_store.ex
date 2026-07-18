@@ -7,12 +7,18 @@ defmodule Cadence.Comms.RoutingRuleStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.{RoutingRule, RoutingRuleEvent, Transport}
+  alias Cadence.Comms.{
+    RoutingRule,
+    RoutingRuleEvent,
+    RoutingRuleEventRow,
+    RoutingRuleRow,
+    Transport
+  }
+
   alias Cadence.Comms.TransportStore
   alias Cadence.Contacts, as: ContactsService
   alias Cadence.Contacts.{LinkAssignment, PathTemplate}
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.{CommsRoutingRuleEventRow, CommsRoutingRuleRow}
   alias Cadence.Repo
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
@@ -28,7 +34,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
                Missions.fetch_mission(scoped_rule.organization_id, scoped_rule.mission_id),
              {:ok, prepared_rule} <- prepare_rule(scoped_rule),
              {:ok, materialized_rule} <- materialize_runtime_compatibility(prepared_rule),
-             {:ok, _row} <- Repo.insert(CommsRoutingRuleRow.changeset(materialized_rule)),
+             {:ok, _row} <- Repo.insert(RoutingRuleRow.changeset(materialized_rule)),
              {:ok, _created_event} <- append_event(materialized_rule, :created, opts),
              {:ok, _materialized_event} <- append_event(materialized_rule, :materialized, opts) do
           materialized_rule
@@ -127,7 +133,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
           {:ok, RoutingRule.t()} | {:error, term()}
   def fetch_routing_rule(organization_id, mission_id, routing_rule_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(routing_rule_id) do
-    case Repo.get_by(CommsRoutingRuleRow,
+    case Repo.get_by(RoutingRuleRow,
            organization_id: organization_id,
            mission_id: mission_id,
            routing_rule_id: routing_rule_id
@@ -135,11 +141,11 @@ defmodule Cadence.Comms.RoutingRuleStore do
       nil ->
         {:error, :routing_rule_not_found}
 
-      %CommsRoutingRuleRow{lifecycle_state: "archived"} ->
+      %RoutingRuleRow{lifecycle_state: "archived"} ->
         {:error, :routing_rule_not_found}
 
-      %CommsRoutingRuleRow{} = row ->
-        {:ok, CommsRoutingRuleRow.to_domain(row)}
+      %RoutingRuleRow{} = row ->
+        {:ok, RoutingRuleRow.to_domain(row)}
     end
   end
 
@@ -147,20 +153,20 @@ defmodule Cadence.Comms.RoutingRuleStore do
           {:ok, RoutingRule.t()} | {:error, term()}
   def fetch_routing_rule_state(organization_id, mission_id, routing_rule_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(routing_rule_id) do
-    case Repo.get_by(CommsRoutingRuleRow,
+    case Repo.get_by(RoutingRuleRow,
            organization_id: organization_id,
            mission_id: mission_id,
            routing_rule_id: routing_rule_id
          ) do
       nil -> {:error, :routing_rule_not_found}
-      %CommsRoutingRuleRow{} = row -> {:ok, CommsRoutingRuleRow.to_domain(row)}
+      %RoutingRuleRow{} = row -> {:ok, RoutingRuleRow.to_domain(row)}
     end
   end
 
   @spec list_routing_rules(binary(), binary()) :: [RoutingRule.t()]
   def list_routing_rules(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    CommsRoutingRuleRow
+    RoutingRuleRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -168,13 +174,13 @@ defmodule Cadence.Comms.RoutingRuleStore do
     )
     |> order_by([row], asc: row.spacecraft_id, asc: row.purpose_label, asc: row.direction)
     |> Repo.all()
-    |> Enum.map(&CommsRoutingRuleRow.to_domain/1)
+    |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
   @spec list_routing_rules_for_spacecraft(binary(), binary(), binary()) :: [RoutingRule.t()]
   def list_routing_rules_for_spacecraft(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    CommsRoutingRuleRow
+    RoutingRuleRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -182,13 +188,13 @@ defmodule Cadence.Comms.RoutingRuleStore do
     )
     |> order_by([row], asc: row.purpose_label, asc: row.direction)
     |> Repo.all()
-    |> Enum.map(&CommsRoutingRuleRow.to_domain/1)
+    |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
   @spec list_routing_rule_events(binary(), binary(), binary()) :: [RoutingRuleEvent.t()]
   def list_routing_rule_events(organization_id, mission_id, routing_rule_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(routing_rule_id) do
-    CommsRoutingRuleEventRow
+    RoutingRuleEventRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
@@ -196,7 +202,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     )
     |> order_by([row], asc: row.occurred_at, asc: row.routing_rule_event_id)
     |> Repo.all()
-    |> Enum.map(&CommsRoutingRuleEventRow.to_domain/1)
+    |> Enum.map(&RoutingRuleEventRow.to_domain/1)
   end
 
   defp prepare_rule(%RoutingRule{} = rule) do
@@ -359,8 +365,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
         payload: event_payload(rule, event_type)
       })
 
-    case Repo.insert(CommsRoutingRuleEventRow.changeset(event)) do
-      {:ok, %CommsRoutingRuleEventRow{} = row} -> {:ok, CommsRoutingRuleEventRow.to_domain(row)}
+    case Repo.insert(RoutingRuleEventRow.changeset(event)) do
+      {:ok, %RoutingRuleEventRow{} = row} -> {:ok, RoutingRuleEventRow.to_domain(row)}
       {:error, %Changeset{} = changeset} -> {:error, changeset}
     end
   end
@@ -378,7 +384,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
   end
 
   defp update_rule_row(%RoutingRule{} = rule) do
-    case Repo.get_by(CommsRoutingRuleRow,
+    case Repo.get_by(RoutingRuleRow,
            organization_id: rule.organization_id,
            mission_id: rule.mission_id,
            routing_rule_id: rule.routing_rule_id
@@ -386,9 +392,9 @@ defmodule Cadence.Comms.RoutingRuleStore do
       nil ->
         {:error, :routing_rule_not_found}
 
-      %CommsRoutingRuleRow{} ->
+      %RoutingRuleRow{} ->
         {count, _rows} =
-          CommsRoutingRuleRow
+          RoutingRuleRow
           |> where(
             [row],
             row.organization_id == ^rule.organization_id and

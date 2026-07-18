@@ -743,11 +743,12 @@ non-persistence code to `Cadence.Persistence.Schemas.*`. The first production
 cleanup routed all eight internal callers through their owning contexts, so the
 current baseline contains zero root-facade edges. `OrganizationRow` and
 `MissionRow` then moved from the horizontal persistence namespace into their
-owning `Organizations` and `Missions` contexts, reducing schema edges from 205
-to 202. New edges fail, removed edges must be deleted from the baseline in the
-same change, and the baseline has an explicit owner and review-by date. The
-public root facade still exists for external callers and remains a later
-decomposition target.
+owning `Organizations` and `Missions` contexts. The comms ground-station,
+transport, routing-rule, and routing-rule-event rows likewise moved under
+`Cadence.Comms`, reducing schema edges from 205 to 198. New edges fail, removed
+edges must be deleted from the baseline in the same change, and the baseline
+has an explicit owner and review-by date. The public root facade still exists
+for external callers and remains a later decomposition target.
 
 When a dependency exception is introduced, update the context map or decision
 record in the same change. The current runtime architecture guard demonstrates

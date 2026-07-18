@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
+defmodule Cadence.Comms.RoutingRuleRow do
   @moduledoc false
 
   use Ecto.Schema
