@@ -1,6 +1,8 @@
 defmodule Cadence.ContactsSchedulerTest do
   use Cadence.ConfigCase, async: false
 
+  @moduletag :runtime
+
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Contacts.Scheduler

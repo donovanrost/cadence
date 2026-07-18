@@ -17,6 +17,23 @@ defmodule Cadence.ConfigCase do
   end
 
   setup tags do
-    Cadence.RuntimeCase.setup_owned_runtime(tags)
+    if tags[:runtime] do
+      Cadence.RuntimeCase.setup_owned_runtime(tags)
+    else
+      setup_owned_config(tags)
+    end
+  end
+
+  defp setup_owned_config(tags) do
+    Cadence.DataCase.ensure_cadence_started!()
+
+    pid = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
+
+    on_exit(fn ->
+      Cadence.DataCase.stop_sandbox_owner(pid)
+      Cadence.DataCase.ensure_cadence_started!()
+    end)
+
+    :ok
   end
 end

@@ -119,9 +119,11 @@ only when a restarted Repo has not finished its ownership handoff.
 Two complete core-suite runs with different seeds passed all 1,522 tests in
 27.2 and 29.2 seconds, below the Phase 2 timing target. Runtime ownership is
 still transitional: `RuntimeCase` retains compatibility-wide mission cleanup
-until its callers start and track mission processes explicitly, `ConfigCase`
-currently reuses that conservative runtime setup, and the core test helper
-still boots `:cadence` before ExUnit selects cases.
+until its callers start and track mission processes explicitly, and the core
+test helper still boots `:cadence` before ExUnit selects cases. `ConfigCase`
+now owns only the serial shared sandbox needed by configuration tests and their
+supervised child processes. Of its 22 callers, only the contact-scheduler suite
+also carries the `:runtime` tag and opts into the compatibility mission cleanup.
 
 Global configuration ownership is now visible outside the core cases as well.
 The 45 web test files that mutate application configuration carry the
