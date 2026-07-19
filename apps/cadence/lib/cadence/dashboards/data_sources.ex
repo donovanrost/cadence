@@ -30,11 +30,11 @@ defmodule Cadence.Dashboards.DataSources do
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.Schemas.{
-    DashboardDataBindingEventRow,
-    DashboardDataBindingRow,
-    DashboardDataSourceEventRow,
-    DashboardDataSourceRow
+  alias Cadence.Dashboards.DataSources.{
+    DataBindingEventRow,
+    DataBindingRow,
+    DataSourceEventRow,
+    DataSourceRow
   }
 
   alias Cadence.Repo
@@ -256,17 +256,17 @@ defmodule Cadence.Dashboards.DataSources do
 
   @spec fetch_data_binding(binary()) :: {:ok, DataBinding.t()} | {:error, :data_binding_not_found}
   def fetch_data_binding(binding_id) when is_binary(binding_id) do
-    case Repo.get(DashboardDataBindingRow, binding_id) do
+    case Repo.get(DataBindingRow, binding_id) do
       nil -> {:error, :data_binding_not_found}
-      row -> {:ok, DashboardDataBindingRow.to_domain(row)}
+      row -> {:ok, DataBindingRow.to_domain(row)}
     end
   end
 
   @spec fetch_data_source(binary()) :: {:ok, DataSource.t()} | {:error, :data_source_not_found}
   def fetch_data_source(data_source_id) when is_binary(data_source_id) do
-    case Repo.get(DashboardDataSourceRow, data_source_id) do
+    case Repo.get(DataSourceRow, data_source_id) do
       nil -> {:error, :data_source_not_found}
-      row -> {:ok, DashboardDataSourceRow.to_domain(row)}
+      row -> {:ok, DataSourceRow.to_domain(row)}
     end
   end
 
@@ -561,12 +561,12 @@ defmodule Cadence.Dashboards.DataSources do
       when is_binary(binding_id) and is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
 
-    DashboardDataBindingEventRow
+    DataBindingEventRow
     |> where([row], row.binding_id == ^binding_id)
     |> order_by([row], desc: row.occurred_at, desc: row.inserted_at)
     |> limit(^limit)
     |> Repo.all()
-    |> Enum.map(&DashboardDataBindingEventRow.to_domain/1)
+    |> Enum.map(&DataBindingEventRow.to_domain/1)
   end
 
   @spec list_data_source_events(binary() | nil, binary() | nil, keyword()) :: [
@@ -575,48 +575,48 @@ defmodule Cadence.Dashboards.DataSources do
   def list_data_source_events(organization_id \\ nil, mission_id \\ nil, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
 
-    DashboardDataSourceEventRow
+    DataSourceEventRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> maybe_filter_data_source_id(Keyword.get(opts, :data_source_id))
     |> order_by([row], desc: row.occurred_at, desc: row.inserted_at)
     |> limit(^limit)
     |> Repo.all()
-    |> Enum.map(&DashboardDataSourceEventRow.to_domain/1)
+    |> Enum.map(&DataSourceEventRow.to_domain/1)
   end
 
   @spec list_data_binding_intervals(binary() | nil, binary() | nil, keyword()) :: [
           DataBindingInterval.t()
         ]
   def list_data_binding_intervals(organization_id \\ nil, mission_id \\ nil, opts \\ []) do
-    DashboardDataBindingEventRow
+    DataBindingEventRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> order_by([row], asc: row.binding_id, asc: row.occurred_at, asc: row.inserted_at)
     |> Repo.all()
-    |> Enum.map(&DashboardDataBindingEventRow.to_domain/1)
+    |> Enum.map(&DataBindingEventRow.to_domain/1)
     |> events_to_intervals()
     |> filter_intervals(opts)
   end
 
   @spec list_data_sources(binary() | nil, binary() | nil) :: [DataSource.t()]
   def list_data_sources(organization_id \\ nil, mission_id \\ nil) do
-    DashboardDataSourceRow
+    DataSourceRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> order_by([row], asc: row.data_source_id)
     |> Repo.all()
-    |> Enum.map(&DashboardDataSourceRow.to_domain/1)
+    |> Enum.map(&DataSourceRow.to_domain/1)
   end
 
   @spec list_data_bindings(binary() | nil, binary() | nil) :: [DataBinding.t()]
   def list_data_bindings(organization_id \\ nil, mission_id \\ nil) do
-    DashboardDataBindingRow
+    DataBindingRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> order_by([row], asc: row.priority, asc: row.binding_id)
     |> Repo.all()
-    |> Enum.map(&DashboardDataBindingRow.to_domain/1)
+    |> Enum.map(&DataBindingRow.to_domain/1)
   end
 
   @spec list_data_realms(binary() | nil, binary() | nil, keyword()) :: [binary()]
@@ -718,8 +718,8 @@ defmodule Cadence.Dashboards.DataSources do
   end
 
   defp persist_data_source_projection(%DataSource{} = data_source, opts) do
-    previous_row = Repo.get(DashboardDataSourceRow, data_source.data_source_id)
-    previous = previous_row && DashboardDataSourceRow.to_domain(previous_row)
+    previous_row = Repo.get(DataSourceRow, data_source.data_source_id)
+    previous = previous_row && DataSourceRow.to_domain(previous_row)
 
     if same_data_source_projection?(previous, data_source) do
       {:ok, previous, nil}
@@ -730,10 +730,9 @@ defmodule Cadence.Dashboards.DataSources do
       with {:ok, row} <- persist_data_source_row(previous_row, data_source),
            {:ok, event_row} <-
              event
-             |> DashboardDataSourceEventRow.changeset()
+             |> DataSourceEventRow.changeset()
              |> Repo.insert() do
-        {:ok, DashboardDataSourceRow.to_domain(row),
-         DashboardDataSourceEventRow.to_domain(event_row)}
+        {:ok, DataSourceRow.to_domain(row), DataSourceEventRow.to_domain(event_row)}
       else
         {:error, %Changeset{} = changeset} -> {:error, changeset}
         {:error, reason} -> {:error, reason}
@@ -1294,13 +1293,13 @@ defmodule Cadence.Dashboards.DataSources do
 
   defp persist_data_source_row(nil, %DataSource{} = data_source) do
     data_source
-    |> DashboardDataSourceRow.changeset()
+    |> DataSourceRow.changeset()
     |> Repo.insert()
   end
 
-  defp persist_data_source_row(%DashboardDataSourceRow{} = row, %DataSource{} = data_source) do
+  defp persist_data_source_row(%DataSourceRow{} = row, %DataSource{} = data_source) do
     row
-    |> DashboardDataSourceRow.changeset(data_source)
+    |> DataSourceRow.changeset(data_source)
     |> Repo.update()
   end
 
@@ -1379,8 +1378,8 @@ defmodule Cadence.Dashboards.DataSources do
   end
 
   defp persist_data_binding_projection(%DataBinding{} = data_binding, opts) do
-    previous_row = Repo.get(DashboardDataBindingRow, data_binding.binding_id)
-    previous = previous_row && DashboardDataBindingRow.to_domain(previous_row)
+    previous_row = Repo.get(DataBindingRow, data_binding.binding_id)
+    previous = previous_row && DataBindingRow.to_domain(previous_row)
     data_binding = prepare_data_binding_projection(data_binding, previous)
 
     if same_data_binding_projection?(previous, data_binding) do
@@ -1392,11 +1391,11 @@ defmodule Cadence.Dashboards.DataSources do
       with {:ok, row} <- persist_data_binding_row(previous_row, data_binding),
            {:ok, event_row} <-
              event
-             |> DashboardDataBindingEventRow.changeset()
+             |> DataBindingEventRow.changeset()
              |> Repo.insert(),
-           event = DashboardDataBindingEventRow.to_domain(event_row),
+           event = DataBindingEventRow.to_domain(event_row),
            {:ok, _operational_event_or_skipped} <- persist_data_binding_operational_event(event) do
-        {:ok, DashboardDataBindingRow.to_domain(row), event}
+        {:ok, DataBindingRow.to_domain(row), event}
       else
         {:error, %Changeset{} = changeset} -> {:error, changeset}
         {:error, reason} -> {:error, reason}
@@ -1427,13 +1426,13 @@ defmodule Cadence.Dashboards.DataSources do
 
   defp persist_data_binding_row(nil, %DataBinding{} = data_binding) do
     data_binding
-    |> DashboardDataBindingRow.changeset()
+    |> DataBindingRow.changeset()
     |> Repo.insert()
   end
 
-  defp persist_data_binding_row(%DashboardDataBindingRow{} = row, %DataBinding{} = data_binding) do
+  defp persist_data_binding_row(%DataBindingRow{} = row, %DataBinding{} = data_binding) do
     row
-    |> DashboardDataBindingRow.changeset(data_binding)
+    |> DataBindingRow.changeset(data_binding)
     |> Repo.update()
   end
 

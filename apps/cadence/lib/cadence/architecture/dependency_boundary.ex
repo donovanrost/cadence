@@ -41,6 +41,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]
   @jobs_context ["lib/cadence/jobs.ex", "lib/cadence/jobs/"]
   @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
+  @dashboards_context ["lib/cadence/dashboards/"]
   @projections_context ["lib/cadence/projections/"]
   @context_owned_schemas [
     {[
@@ -56,6 +57,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/limits/"], @limits_context},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},
+    {["lib/cadence/dashboards/"], @dashboards_context},
     {["lib/cadence/projections/"], @projections_context}
   ]
 

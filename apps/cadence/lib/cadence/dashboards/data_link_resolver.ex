@@ -30,6 +30,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     TelemetryActions
   }
 
+  alias Cadence.Dashboards.DataSources.DataBindingEventRow
   alias Cadence.Jobs
   alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
@@ -45,7 +46,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     CommandReleaseAttemptRow,
     CommandRequestRow,
     CommandVerifierInstanceRow,
-    DashboardDataBindingEventRow,
     DashboardSourceHealthEventRow,
     DashboardSourceWatermarkEventRow,
     MissionEventRow,
@@ -782,7 +782,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp resolve_source_binding_event(%DataLink{} = link, organization_id, mission_id) do
     event_row =
-      DashboardDataBindingEventRow
+      DataBindingEventRow
       |> where(
         [row],
         (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
@@ -791,8 +791,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       |> Repo.one()
 
     case event_row do
-      %DashboardDataBindingEventRow{} = event_row ->
-        event = DashboardDataBindingEventRow.to_domain(event_row)
+      %DataBindingEventRow{} = event_row ->
+        event = DataBindingEventRow.to_domain(event_row)
 
         {:ok,
          inspector(

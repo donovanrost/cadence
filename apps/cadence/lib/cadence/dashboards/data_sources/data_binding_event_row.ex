@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardDataBindingEventRow do
+defmodule Cadence.Dashboards.DataSources.DataBindingEventRow do
   @moduledoc false
 
   use Ecto.Schema

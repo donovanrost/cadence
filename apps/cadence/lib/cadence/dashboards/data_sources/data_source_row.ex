@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardDataSourceRow do
+defmodule Cadence.Dashboards.DataSources.DataSourceRow do
   @moduledoc false
 
   use Ecto.Schema
