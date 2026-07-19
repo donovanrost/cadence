@@ -1188,6 +1188,12 @@ source-endpoint, and projected snapshot reads, freshness annotation, and
 revision projection. This reduced the adapter from 2,284 to 2,191 lines; it
 retains only connection-family dispatch and source identity, while production
 source-size pressure remains 8.
+Completing antenna-pointing ownership added a 150-line family resolver over the
+existing row and frame modules. It owns callback selection, default
+source-endpoint and projected snapshot reads, freshness annotation, and
+revision projection. This reduced the adapter from 2,191 to 2,096 lines and
+removed its direct SourceEndpoints dependency; it retains only pointing-family
+dispatch and source identity, while production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
