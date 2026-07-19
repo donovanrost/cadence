@@ -780,7 +780,10 @@ ownership in the parent. Extracting runtime partition construction,
 managed-application initialization and snapshotting, and managed-runtime record
 shaping from the 1,547-line partition owner reduced the count to 18 while
 keeping GenServer callbacks, decoding, dispatch, timers, and reconciliation in
-the owner.
+the owner. Moving lifecycle-event persistence, comparison-review workflows,
+health snapshots, and publish-readiness history out of the 1,556-line dashboard
+document store reduced the count to 17 while leaving document/version
+transactions and runtime invalidation in the parent.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
