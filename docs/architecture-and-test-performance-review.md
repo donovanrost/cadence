@@ -1779,6 +1779,17 @@ return state, while the LiveView retains its main render root, events, and
 scoped resource reads. The app-wide LiveView layout and authenticated `:ops`
 route remain unchanged; production source-size pressure remains 3 and
 dependency ratchets are unchanged.
+Moving the main data-sources template and its key-value, status, event-list,
+and open-binding presentation helpers into the 769-line
+`CadenceWeb.OpsDataSourcesLive.Page` reduced `OpsDataSourcesLive` from 1,562 to
+808 lines. The LiveView now delegates rendering while retaining mount,
+parameter and event orchestration, forms, mission-scoped reads, persistence,
+and telemetry payload construction. Its existing page-level LiveView suites
+cover the delegated full render, focus and remediation flows, deployment
+actions, and BYO lifecycle behavior. The app-wide LiveView layout and
+authenticated `:ops` route remain unchanged. Production source-size pressure
+falls from 3 to 2, with zero oversized test files or functions and unchanged
+dependency ratchets.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
