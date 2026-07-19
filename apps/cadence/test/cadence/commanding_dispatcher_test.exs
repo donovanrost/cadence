@@ -288,7 +288,10 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, _spacecraft} =
-             Cadence.persist_spacecraft(dispatcher_scope.organization_id, spacecraft)
+             Cadence.SpacecraftStore.persist_spacecraft(
+               dispatcher_scope.organization_id,
+               spacecraft
+             )
 
     source_endpoint =
       SourceEndpoint.new(%{

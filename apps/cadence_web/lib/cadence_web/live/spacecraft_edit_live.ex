@@ -9,7 +9,9 @@ defmodule CadenceWeb.SpacecraftEditLive do
     spacecraft = socket.assigns.current_spacecraft
     organization_id = socket.assigns.current_scope.organization_id
     mission_id = socket.assigns.current_mission.mission_id
-    available_types = Cadence.list_spacecraft_types(organization_id, mission_id)
+
+    available_types =
+      Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
 
     {:ok,
      socket
@@ -49,7 +51,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
           )
         )
 
-      case Cadence.update_spacecraft(organization_id, spacecraft) do
+      case Cadence.SpacecraftStore.update_spacecraft(organization_id, spacecraft) do
         {:ok, updated_spacecraft} ->
           {:noreply, after_spacecraft_update(socket, organization_id, updated_spacecraft)}
 
@@ -148,7 +150,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
 
   defp maybe_sync_managed_source_endpoint(organization_id, %Spacecraft{scid: scid} = spacecraft)
        when is_integer(scid) do
-    case Cadence.ensure_managed_spacecraft_source_endpoint(organization_id, spacecraft) do
+    case Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft) do
       {:ok, _endpoint} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -163,7 +165,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
            source_endpoint_id
          ) do
       {:ok, _endpoint} ->
-        case Cadence.ensure_managed_spacecraft_source_endpoint(organization_id, spacecraft) do
+        case Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft) do
           {:ok, _endpoint} -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -189,7 +191,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
   defp resolve_type_binding(socket, spacecraft_type_id) when is_binary(spacecraft_type_id) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.fetch_spacecraft_type(
+    case Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
            scope.organization_id,
            mission.mission_id,
            spacecraft_type_id

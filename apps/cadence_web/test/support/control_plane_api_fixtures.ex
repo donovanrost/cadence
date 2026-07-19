@@ -173,7 +173,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
         paths: contact_paths(source_endpoint.source_endpoint_id)
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     assert {:ok, _source_endpoint} =
              Cadence.persist_source_endpoint(organization_id, source_endpoint)

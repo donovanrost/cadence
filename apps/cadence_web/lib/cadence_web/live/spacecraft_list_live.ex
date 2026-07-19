@@ -4,7 +4,7 @@ defmodule CadenceWeb.SpacecraftListLive do
 
   Canonical URL-driven list pattern: `handle_params/3` parses
   `?q=&sort=&dir=&page=&filter=` via `CadenceWeb.ListParams`, fetches one
-  page from `Cadence.list_spacecraft_page/3`, and toolbar events translate
+  page from `Cadence.SpacecraftStore.list_spacecraft_page/3`, and toolbar events translate
   into `push_patch` — so list state is shareable and back-button-safe.
   """
 
@@ -22,9 +22,12 @@ defmodule CadenceWeb.SpacecraftListLive do
   def mount(_params, _session, socket) do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
-    profiles = Cadence.list_spacecraft_types(organization_id, mission.mission_id)
+
+    profiles =
+      Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission.mission_id)
+
     latest_versions = Map.new(profiles, &{&1.spacecraft_type_id, &1.version})
-    summary = Cadence.spacecraft_fleet_summary(organization_id, mission.mission_id)
+    summary = Cadence.SpacecraftStore.fleet_summary(organization_id, mission.mission_id)
 
     {:ok,
      socket
@@ -130,7 +133,7 @@ defmodule CadenceWeb.SpacecraftListLive do
 
   defp fetch_roster(organization_id, mission_id, list, filter, socket) do
     page =
-      Cadence.list_spacecraft_page(organization_id, mission_id,
+      Cadence.SpacecraftStore.list_spacecraft_page(organization_id, mission_id,
         search: list.q,
         sort: sort_tuple(list),
         filter: store_filter(filter, socket.assigns.latest_versions),

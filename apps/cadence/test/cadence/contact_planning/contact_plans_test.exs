@@ -18,7 +18,7 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
       persist_mission_scope(@organization_id, @mission_id)
 
     assert {:ok, _spacecraft} =
-             Cadence.persist_spacecraft(
+             Cadence.SpacecraftStore.persist_spacecraft(
                @organization_id,
                Spacecraft.new(%{
                  spacecraft_id: @spacecraft_id,
@@ -223,7 +223,7 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
       persist_mission_scope("org-contact-plans-foreign", "mission-contact-plans-foreign")
 
     assert {:ok, _spacecraft} =
-             Cadence.persist_spacecraft(
+             Cadence.SpacecraftStore.persist_spacecraft(
                foreign_organization.organization_id,
                Spacecraft.new(%{
                  spacecraft_id: "spacecraft-contact-plans-foreign",

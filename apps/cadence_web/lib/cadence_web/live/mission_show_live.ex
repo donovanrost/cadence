@@ -142,7 +142,9 @@ defmodule CadenceWeb.MissionShowLive do
   end
 
   defp load_summary(%{current_scope: scope, current_mission: mission}) do
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
+    spacecraft =
+      Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
+
     source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
     link_assignments = Cadence.list_link_assignments(scope.organization_id, mission.mission_id)

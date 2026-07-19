@@ -6,7 +6,9 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
   def mount(_params, _session, socket) do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
-    profiles = Cadence.list_spacecraft_types(organization_id, mission.mission_id)
+
+    profiles =
+      Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission.mission_id)
 
     {:ok,
      socket

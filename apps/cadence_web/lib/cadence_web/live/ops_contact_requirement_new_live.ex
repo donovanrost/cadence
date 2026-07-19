@@ -6,7 +6,10 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
+
+    spacecraft =
+      Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
+
     starts_at = DateTime.utc_now() |> DateTime.add(15 * 60, :second) |> DateTime.truncate(:second)
 
     form =

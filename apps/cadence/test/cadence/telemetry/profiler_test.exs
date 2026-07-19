@@ -19,7 +19,7 @@ defmodule Cadence.Telemetry.ProfilerTest do
         display_name: "SC Profile"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

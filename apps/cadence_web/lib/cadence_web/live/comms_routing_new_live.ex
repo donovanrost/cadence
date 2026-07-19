@@ -7,7 +7,10 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   @impl true
   def mount(params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
+
+    spacecraft =
+      Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
+
     transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
 
     {:ok,

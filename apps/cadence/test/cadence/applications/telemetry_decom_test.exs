@@ -525,7 +525,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         display_name: Keyword.fetch!(opts, :display_name)
       })
 
-    {:ok, persisted} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    {:ok, persisted} = Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
     persisted
   end
 

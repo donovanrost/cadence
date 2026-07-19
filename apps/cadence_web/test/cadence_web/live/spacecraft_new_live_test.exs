@@ -67,7 +67,9 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
 
       assert target =~ "/missions/#{mission.mission_id}/spacecraft/"
 
-      [persisted] = Cadence.list_spacecraft(org.organization_id, mission.mission_id)
+      [persisted] =
+        Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id)
+
       assert persisted.display_name == "Orbital-1"
       assert target =~ persisted.spacecraft_id
     end
@@ -82,7 +84,9 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
                |> form("#spacecraft-form", spacecraft: %{display_name: "Orbital-42", scid: "42"})
                |> render_submit()
 
-      [persisted] = Cadence.list_spacecraft(org.organization_id, mission.mission_id)
+      [persisted] =
+        Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id)
+
       assert persisted.scid == 42
 
       assert [endpoint] =

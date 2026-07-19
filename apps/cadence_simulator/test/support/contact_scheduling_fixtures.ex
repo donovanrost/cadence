@@ -288,7 +288,8 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
         display_name: "Boundary Proof Spacecraft"
       })
 
-    assert {:ok, spacecraft} = Cadence.persist_spacecraft(setup.organization_id, spacecraft)
+    assert {:ok, spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(setup.organization_id, spacecraft)
 
     endpoint =
       SourceEndpoint.new(%{

@@ -8,7 +8,7 @@ defmodule CadenceWeb.Components.ListControls do
   into `push_patch` so all list state lives in the URL
   (`?q=&sort=&dir=&page=&filter=`) and stays shareable and
   back-button-safe. Parse params with `CadenceWeb.ListParams` and fetch
-  via a paged facade function (e.g. `Cadence.list_spacecraft_page/3`).
+  via a paged context function (e.g. `Cadence.SpacecraftStore.list_spacecraft_page/3`).
   See `CadenceWeb.SpacecraftListLive` for the canonical pattern.
 
   Lists that are organizationally bounded (missions, profiles, catalog)

@@ -94,7 +94,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
 
     mission_summaries =
       Enum.map(missions, fn mission ->
-        spacecraft = Cadence.list_spacecraft(organization_id, mission.mission_id)
+        spacecraft = Cadence.SpacecraftStore.list_spacecraft(organization_id, mission.mission_id)
         Map.put(mission_status(spacecraft), :mission, mission)
       end)
 

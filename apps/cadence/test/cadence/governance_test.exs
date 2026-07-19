@@ -25,7 +25,8 @@ defmodule Cadence.GovernanceTest do
         display_name: "SC-001"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

@@ -29,7 +29,9 @@ defmodule Cadence.SpacecraftTypeStoreTest do
           applications: %{"telemetry_decom" => %{}}
         })
 
-      assert {:ok, persisted_v1} = Cadence.persist_spacecraft_type(organization_id, type_v1)
+      assert {:ok, persisted_v1} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type_v1)
+
       assert persisted_v1.organization_id == organization_id
       assert persisted_v1.version == 1
       assert persisted_v1.downlink_protocol == :aos
@@ -52,12 +54,14 @@ defmodule Cadence.SpacecraftTypeStoreTest do
           applications: %{"telemetry_decom" => %{}}
         })
 
-      assert {:ok, persisted_v2} = Cadence.persist_spacecraft_type(organization_id, type_v2)
+      assert {:ok, persisted_v2} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type_v2)
+
       assert persisted_v2.version == 2
       assert persisted_v2.downlink_protocol == :uslp
 
       assert {:ok, latest} =
-               Cadence.fetch_spacecraft_type(
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
                  organization_id,
                  mission_id,
                  persisted_v1.spacecraft_type_id
@@ -66,7 +70,7 @@ defmodule Cadence.SpacecraftTypeStoreTest do
       assert latest.version == 2
 
       assert {:ok, v1_fetch} =
-               Cadence.fetch_spacecraft_type_version(
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type_version(
                  organization_id,
                  mission_id,
                  persisted_v1.spacecraft_type_id,
@@ -75,12 +79,14 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
       assert v1_fetch.downlink_protocol == :aos
 
-      assert [listed] = Cadence.list_spacecraft_types(organization_id, mission_id)
+      assert [listed] =
+               Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+
       assert listed.spacecraft_type_id == persisted_v1.spacecraft_type_id
       assert listed.version == 2
 
       versions =
-        Cadence.list_spacecraft_type_versions(
+        Cadence.SpacecraftTypeStore.list_spacecraft_type_versions(
           organization_id,
           mission_id,
           persisted_v1.spacecraft_type_id
@@ -110,11 +116,13 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
       assert type.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
 
-      assert {:ok, persisted} = Cadence.persist_spacecraft_type(organization_id, type)
+      assert {:ok, persisted} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type)
+
       assert persisted.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
 
       assert {:ok, fetched} =
-               Cadence.fetch_spacecraft_type(
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
                  organization_id,
                  mission_id,
                  persisted.spacecraft_type_id
@@ -128,7 +136,11 @@ defmodule Cadence.SpacecraftTypeStoreTest do
       mission_id: mission_id
     } do
       assert {:error, :spacecraft_type_not_found} =
-               Cadence.fetch_spacecraft_type(organization_id, mission_id, "missing")
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
+                 organization_id,
+                 mission_id,
+                 "missing"
+               )
     end
   end
 end

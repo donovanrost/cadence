@@ -34,13 +34,15 @@ defmodule Cadence.SpacecraftFacadeTest do
         display_name: "Sat-1"
       })
 
-    assert {:ok, persisted} = Cadence.persist_spacecraft(org.organization_id, spacecraft)
+    assert {:ok, persisted} =
+             Cadence.SpacecraftStore.persist_spacecraft(org.organization_id, spacecraft)
+
     assert persisted.organization_id == org.organization_id
     assert persisted.mission_id == mission.mission_id
     assert persisted.display_name == "Sat-1"
 
     assert {:ok, fetched} =
-             Cadence.fetch_spacecraft(
+             Cadence.SpacecraftStore.fetch_spacecraft(
                org.organization_id,
                mission.mission_id,
                persisted.spacecraft_id
@@ -55,25 +57,25 @@ defmodule Cadence.SpacecraftFacadeTest do
     {_org_b, mission_b} = seed_org_and_mission()
 
     {:ok, _} =
-      Cadence.persist_spacecraft(
+      Cadence.SpacecraftStore.persist_spacecraft(
         org_a.organization_id,
         Spacecraft.new(%{mission_id: mission_a.mission_id, display_name: "A1"})
       )
 
     {:ok, _} =
-      Cadence.persist_spacecraft(
+      Cadence.SpacecraftStore.persist_spacecraft(
         org_a.organization_id,
         Spacecraft.new(%{mission_id: mission_a.mission_id, display_name: "A2"})
       )
 
     {:ok, _} =
-      Cadence.persist_spacecraft(
+      Cadence.SpacecraftStore.persist_spacecraft(
         mission_b.organization_id,
         Spacecraft.new(%{mission_id: mission_b.mission_id, display_name: "B1"})
       )
 
     names =
-      Cadence.list_spacecraft(org_a.organization_id, mission_a.mission_id)
+      Cadence.SpacecraftStore.list_spacecraft(org_a.organization_id, mission_a.mission_id)
       |> Enum.map(& &1.display_name)
 
     assert Enum.sort(names) == ["A1", "A2"]
@@ -84,13 +86,13 @@ defmodule Cadence.SpacecraftFacadeTest do
     {org_b, _mission_b} = seed_org_and_mission()
 
     {:ok, persisted} =
-      Cadence.persist_spacecraft(
+      Cadence.SpacecraftStore.persist_spacecraft(
         org_a.organization_id,
         Spacecraft.new(%{mission_id: mission_a.mission_id, display_name: "Cross-org test"})
       )
 
     assert {:error, :spacecraft_not_found} =
-             Cadence.fetch_spacecraft(
+             Cadence.SpacecraftStore.fetch_spacecraft(
                org_b.organization_id,
                mission_a.mission_id,
                persisted.spacecraft_id

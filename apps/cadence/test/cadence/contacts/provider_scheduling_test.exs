@@ -247,7 +247,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
         display_name: "Spacecraft #{name}"
       })
 
-    {:ok, spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
+    {:ok, spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
     spacecraft
   end
 

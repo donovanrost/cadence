@@ -130,7 +130,11 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   end
 
   defp fetch_spacecraft(organization_id, mission_id, routing_rule) do
-    case Cadence.fetch_spacecraft(organization_id, mission_id, routing_rule.spacecraft_id) do
+    case Cadence.SpacecraftStore.fetch_spacecraft(
+           organization_id,
+           mission_id,
+           routing_rule.spacecraft_id
+         ) do
       {:ok, spacecraft} -> spacecraft
       {:error, _reason} -> nil
     end

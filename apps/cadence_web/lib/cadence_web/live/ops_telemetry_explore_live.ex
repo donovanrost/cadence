@@ -30,7 +30,10 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     points = Cadence.list_ops_telemetry_points(scope.organization_id, mission.mission_id)
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
+
+    spacecraft =
+      Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
+
     data_sources = DataSources.list_data_sources(scope.organization_id, mission.mission_id)
     data_bindings = DataSources.list_data_bindings(scope.organization_id, mission.mission_id)
     data_realms = Cadence.list_dashboard_data_realms(scope.organization_id, mission.mission_id)

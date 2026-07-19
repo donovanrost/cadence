@@ -22,7 +22,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementsTest do
         display_name: "Aurora 3"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     %{
       organization: organization,

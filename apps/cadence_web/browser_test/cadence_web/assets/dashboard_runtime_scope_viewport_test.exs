@@ -531,10 +531,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, alpha_spacecraft} =
-             Cadence.persist_spacecraft(org.organization_id, alpha_spacecraft)
+             Cadence.SpacecraftStore.persist_spacecraft(org.organization_id, alpha_spacecraft)
 
     assert {:ok, beta_spacecraft} =
-             Cadence.persist_spacecraft(org.organization_id, beta_spacecraft)
+             Cadence.SpacecraftStore.persist_spacecraft(org.organization_id, beta_spacecraft)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

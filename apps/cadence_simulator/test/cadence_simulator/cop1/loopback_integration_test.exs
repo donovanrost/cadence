@@ -147,7 +147,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
         display_name: "SC Simulator"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

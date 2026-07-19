@@ -100,7 +100,10 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     {conn, organization, mission} = signed_in_org_and_mission()
     provider = persist_provider!(organization.organization_id, mission.mission_id)
 
-    assert Cadence.list_spacecraft(organization.organization_id, mission.mission_id) == []
+    assert Cadence.SpacecraftStore.list_spacecraft(
+             organization.organization_id,
+             mission.mission_id
+           ) == []
 
     {:ok, view, _html} =
       live(
@@ -129,7 +132,11 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert has_element?(view, "#delivery-profile-delivery-cadence-primary")
     assert has_element?(view, "#provider-service-profile-count", "1")
     assert has_element?(view, "#provider-delivery-profile-count", "1")
-    assert Cadence.list_spacecraft(organization.organization_id, mission.mission_id) == []
+
+    assert Cadence.SpacecraftStore.list_spacecraft(
+             organization.organization_id,
+             mission.mission_id
+           ) == []
   end
 
   test "progressively renders delivery limits and rejects mission resource widening" do

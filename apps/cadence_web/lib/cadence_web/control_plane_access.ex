@@ -29,7 +29,7 @@ defmodule CadenceWeb.ControlPlaneAccess do
   def authorize_spacecraft(%Scope{} = current_scope, organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
     with {:ok, _mission} <- authorize_mission(current_scope, organization_id, mission_id) do
-      Cadence.fetch_spacecraft(organization_id, mission_id, spacecraft_id)
+      Cadence.SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id)
     end
   end
 

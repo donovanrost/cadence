@@ -77,7 +77,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       assert target == ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
 
       assert {:ok, updated_spacecraft} =
-               Cadence.fetch_spacecraft(
+               Cadence.SpacecraftStore.fetch_spacecraft(
                  org.organization_id,
                  mission.mission_id,
                  spacecraft.spacecraft_id
@@ -102,7 +102,10 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
 
       assert {:ok, _endpoint} =
-               Cadence.ensure_managed_spacecraft_source_endpoint(org.organization_id, spacecraft)
+               Cadence.SpacecraftStore.ensure_managed_source_endpoint(
+                 org.organization_id,
+                 spacecraft
+               )
 
       {:ok, view, _html} =
         live(
@@ -118,7 +121,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
                |> render_submit()
 
       assert {:ok, updated_spacecraft} =
-               Cadence.fetch_spacecraft(
+               Cadence.SpacecraftStore.fetch_spacecraft(
                  org.organization_id,
                  mission.mission_id,
                  spacecraft.spacecraft_id

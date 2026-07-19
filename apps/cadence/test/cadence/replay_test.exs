@@ -472,7 +472,7 @@ defmodule Cadence.ReplayTest do
         display_name: "SC " <> mission_id
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

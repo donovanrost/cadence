@@ -153,7 +153,7 @@ defmodule CadenceWeb.LinkAssignmentController do
   end
 
   defp application_spacecraft(organization_id, mission_id, %{"target_mode" => "selected"} = attrs) do
-    spacecraft = Cadence.list_spacecraft(organization_id, mission_id)
+    spacecraft = Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
     spacecraft_by_id = Map.new(spacecraft, &{&1.spacecraft_id, &1})
     spacecraft_ids = attrs["spacecraft_ids"]
 
@@ -169,7 +169,7 @@ defmodule CadenceWeb.LinkAssignmentController do
   defp application_spacecraft(organization_id, mission_id, attrs) do
     spacecraft =
       organization_id
-      |> Cadence.list_spacecraft(mission_id)
+      |> Cadence.SpacecraftStore.list_spacecraft(mission_id)
       |> filter_spacecraft(attrs["spacecraft_query"])
 
     {:ok, spacecraft}

@@ -23,7 +23,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
       persist_mission_scope(@organization_id, @mission_id)
 
     assert {:ok, _spacecraft} =
-             Cadence.persist_spacecraft(
+             Cadence.SpacecraftStore.persist_spacecraft(
                @organization_id,
                Spacecraft.new(%{
                  spacecraft_id: @spacecraft_id,

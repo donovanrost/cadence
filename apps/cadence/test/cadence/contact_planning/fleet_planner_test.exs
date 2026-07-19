@@ -36,7 +36,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     for suffix <- ~w(alpha beta gamma) do
       assert {:ok, _spacecraft} =
-               Cadence.persist_spacecraft(
+               Cadence.SpacecraftStore.persist_spacecraft(
                  @organization_id,
                  Spacecraft.new(%{
                    spacecraft_id: spacecraft_id(suffix),

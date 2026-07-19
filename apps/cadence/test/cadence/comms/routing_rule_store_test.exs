@@ -19,7 +19,8 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
         scid: 42
       })
 
-    assert {:ok, spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
+    assert {:ok, spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     transport =
       Transport.new(%{

@@ -28,7 +28,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
         display_name: "Aurora Fleet"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     admin_scope = scope(organization, :organization_admin)
     member_scope = scope(organization, :member)

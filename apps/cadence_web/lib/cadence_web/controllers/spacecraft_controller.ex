@@ -14,7 +14,7 @@ defmodule CadenceWeb.SpacecraftController do
              mission_id
            ) do
       spacecraft =
-        Cadence.list_spacecraft(organization_id, mission_id)
+        Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
         |> Enum.map(&ControlPlaneJSON.spacecraft/1)
 
       json(conn, %{data: spacecraft})
@@ -35,7 +35,7 @@ defmodule CadenceWeb.SpacecraftController do
          {:ok, %Spacecraft{} = spacecraft} <-
            ControlPlaneParams.spacecraft(organization_id, mission_id, spacecraft_params),
          {:ok, %Spacecraft{} = persisted_spacecraft} <-
-           Cadence.persist_spacecraft(organization_id, spacecraft) do
+           Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.spacecraft(persisted_spacecraft)})
@@ -54,7 +54,7 @@ defmodule CadenceWeb.SpacecraftController do
              mission_id
            ),
          {:ok, %Spacecraft{} = spacecraft} <-
-           Cadence.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
+           Cadence.SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
       json(conn, %{data: ControlPlaneJSON.spacecraft(spacecraft)})
     end
   end

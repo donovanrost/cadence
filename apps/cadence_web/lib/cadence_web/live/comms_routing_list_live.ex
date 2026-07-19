@@ -104,7 +104,7 @@ defmodule CadenceWeb.CommsRoutingListLive do
 
   defp spacecraft_lookup(organization_id, mission_id) do
     organization_id
-    |> Cadence.list_spacecraft(mission_id)
+    |> Cadence.SpacecraftStore.list_spacecraft(mission_id)
     |> Map.new(&{&1.spacecraft_id, &1})
   end
 

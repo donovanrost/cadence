@@ -268,7 +268,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
         display_name: spacecraft_id
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

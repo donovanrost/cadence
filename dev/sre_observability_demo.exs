@@ -190,7 +190,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         scid: 11
       })
 
-    Cadence.persist_spacecraft(ids.organization_id, spacecraft)
+    Cadence.SpacecraftStore.persist_spacecraft(ids.organization_id, spacecraft)
   end
 
   defp persist_source_endpoint(ids) do

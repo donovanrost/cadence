@@ -7,10 +7,14 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
 
-    case Cadence.fetch_spacecraft_type(organization_id, mission.mission_id, profile_id) do
+    case Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
+           organization_id,
+           mission.mission_id,
+           profile_id
+         ) do
       {:ok, profile} ->
         versions =
-          Cadence.list_spacecraft_type_versions(
+          Cadence.SpacecraftTypeStore.list_spacecraft_type_versions(
             organization_id,
             mission.mission_id,
             profile.spacecraft_type_id

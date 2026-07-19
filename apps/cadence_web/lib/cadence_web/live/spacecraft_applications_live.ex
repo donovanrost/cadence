@@ -190,7 +190,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   defp load_type_binding(organization_id, mission_id, spacecraft) do
     pinned =
-      Cadence.fetch_spacecraft_type_version(
+      Cadence.SpacecraftTypeStore.fetch_spacecraft_type_version(
         organization_id,
         mission_id,
         spacecraft.spacecraft_type_id,
@@ -198,7 +198,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       )
 
     latest =
-      Cadence.fetch_spacecraft_type(
+      Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
         organization_id,
         mission_id,
         spacecraft.spacecraft_type_id

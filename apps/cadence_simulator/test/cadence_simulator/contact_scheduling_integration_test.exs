@@ -806,7 +806,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
       spacecraft_id = fleet_spacecraft_id(index)
 
       assert {:ok, _spacecraft} =
-               Cadence.persist_spacecraft(
+               Cadence.SpacecraftStore.persist_spacecraft(
                  setup.organization_id,
                  Spacecraft.new(%{
                    spacecraft_id: spacecraft_id,

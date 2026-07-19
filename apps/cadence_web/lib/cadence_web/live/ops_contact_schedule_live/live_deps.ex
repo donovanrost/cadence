@@ -5,7 +5,7 @@ defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
 
   def list_spacecraft(organization_id, mission_id) do
     call(:list_spacecraft, [organization_id, mission_id], fn ->
-      Cadence.list_spacecraft(organization_id, mission_id)
+      Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
     end)
   end
 

@@ -29,7 +29,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
         display_name: "Provider ingress trace spacecraft"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

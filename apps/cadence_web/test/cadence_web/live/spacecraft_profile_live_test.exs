@@ -116,7 +116,9 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       assert target =~ "/missions/#{mission.mission_id}/spacecraft/profiles/"
 
-      [persisted] = Cadence.list_spacecraft_types(org.organization_id, mission.mission_id)
+      [persisted] =
+        Cadence.SpacecraftTypeStore.list_spacecraft_types(org.organization_id, mission.mission_id)
+
       assert persisted.display_name == "Lab TM/TC"
       assert target =~ persisted.spacecraft_type_id
     end

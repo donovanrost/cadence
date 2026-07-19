@@ -38,7 +38,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_spacecraft(opts) do
-    Keyword.get(opts, :list_spacecraft, &Cadence.list_spacecraft/2)
+    Keyword.get(opts, :list_spacecraft, &Cadence.SpacecraftStore.list_spacecraft/2)
   end
 
   defp list_source_endpoints(opts) do

@@ -41,7 +41,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           applications: applications
         })
 
-      case Cadence.persist_spacecraft_type(scope.organization_id, type) do
+      case Cadence.SpacecraftTypeStore.persist_spacecraft_type(scope.organization_id, type) do
         {:ok, persisted} ->
           {:noreply,
            push_navigate(socket,

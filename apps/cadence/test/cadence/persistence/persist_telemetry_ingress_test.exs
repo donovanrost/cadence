@@ -34,7 +34,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC Alpha"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -405,7 +405,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC Archived Gap"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -604,7 +604,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC Retry"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
+    assert {:ok, _persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -701,7 +702,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC Batch"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -781,7 +782,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC TM"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -891,7 +892,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         display_name: "SC GAP"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+    assert {:ok, _persisted_spacecraft} = Cadence.SpacecraftStore.persist_spacecraft(spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

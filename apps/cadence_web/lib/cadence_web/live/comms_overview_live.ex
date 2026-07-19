@@ -181,7 +181,9 @@ defmodule CadenceWeb.CommsOverviewLive do
   end
 
   defp load_summary(%{current_scope: scope, current_mission: mission}) do
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
+    spacecraft =
+      Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
+
     source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
     transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
     provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)

@@ -12,7 +12,9 @@ defmodule CadenceWeb.SpacecraftNewLive do
   def mount(_params, _session, socket) do
     organization_id = socket.assigns.current_scope.organization_id
     mission_id = socket.assigns.current_mission.mission_id
-    available_types = Cadence.list_spacecraft_types(organization_id, mission_id)
+
+    available_types =
+      Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
 
     {:ok,
      socket
@@ -48,7 +50,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
           )
         )
 
-      case Cadence.persist_spacecraft(organization_id, spacecraft) do
+      case Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
         {:ok, persisted} ->
           _ = maybe_ensure_source_endpoint(organization_id, persisted)
 
@@ -165,7 +167,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
   defp resolve_type_binding(socket, spacecraft_type_id) when is_binary(spacecraft_type_id) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.fetch_spacecraft_type(
+    case Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
            scope.organization_id,
            mission.mission_id,
            spacecraft_type_id
@@ -206,7 +208,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
   defp maybe_ensure_source_endpoint(_organization_id, %{scid: nil}), do: :ok
 
   defp maybe_ensure_source_endpoint(organization_id, spacecraft) do
-    Cadence.ensure_managed_spacecraft_source_endpoint(organization_id, spacecraft)
+    Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft)
   end
 
   defp format_errors(%Ecto.Changeset{} = changeset) do

@@ -1056,7 +1056,8 @@ defmodule Cadence.CommandingTest do
         display_name: "SC Alpha"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

@@ -352,7 +352,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
 
     spacecraft_options =
       scope.organization_id
-      |> Cadence.list_spacecraft(mission.mission_id)
+      |> Cadence.SpacecraftStore.list_spacecraft(mission.mission_id)
       |> Enum.map(&{&1.display_name, &1.spacecraft_id})
 
     socket

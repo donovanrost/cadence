@@ -131,7 +131,9 @@ defmodule CadenceWeb.TestFixtures do
         spacecraft_type_version: Keyword.get(opts, :spacecraft_type_version)
       })
 
-    assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)
+    assert {:ok, persisted} =
+             Cadence.SpacecraftStore.persist_spacecraft(mission.organization_id, spacecraft)
+
     persisted
   end
 
@@ -174,7 +176,9 @@ defmodule CadenceWeb.TestFixtures do
         applications: Keyword.get(opts, :applications, %{"telemetry_decom" => %{}})
       })
 
-    assert {:ok, persisted} = Cadence.persist_spacecraft_type(mission.organization_id, profile)
+    assert {:ok, persisted} =
+             Cadence.SpacecraftTypeStore.persist_spacecraft_type(mission.organization_id, profile)
+
     persisted
   end
 

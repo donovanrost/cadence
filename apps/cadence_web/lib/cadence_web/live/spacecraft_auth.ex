@@ -12,7 +12,7 @@ defmodule CadenceWeb.SpacecraftAuth do
       ) do
     organization_id = socket.assigns.current_scope.organization_id
 
-    case Cadence.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
+    case Cadence.SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
       {:ok, spacecraft} ->
         {:cont, assign(socket, :current_spacecraft, spacecraft)}
 

@@ -17,7 +17,8 @@ defmodule Cadence.SpacecraftStoreTest do
         scid: 42
       })
 
-    assert {:ok, persisted_spacecraft} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
+    assert {:ok, persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft("org-spacecraft", spacecraft)
 
     assert persisted_spacecraft.organization_id == "org-spacecraft"
     assert persisted_spacecraft.mission_id == "mission-spacecraft"
@@ -25,11 +26,17 @@ defmodule Cadence.SpacecraftStoreTest do
     assert persisted_spacecraft.scid == 42
 
     assert {:ok, fetched_spacecraft} =
-             Cadence.fetch_spacecraft("org-spacecraft", "mission-spacecraft", "spacecraft-001")
+             Cadence.SpacecraftStore.fetch_spacecraft(
+               "org-spacecraft",
+               "mission-spacecraft",
+               "spacecraft-001"
+             )
 
     assert fetched_spacecraft == persisted_spacecraft
 
-    assert [listed_spacecraft] = Cadence.list_spacecraft("org-spacecraft", "mission-spacecraft")
+    assert [listed_spacecraft] =
+             Cadence.SpacecraftStore.list_spacecraft("org-spacecraft", "mission-spacecraft")
+
     assert listed_spacecraft == persisted_spacecraft
   end
 
@@ -51,7 +58,8 @@ defmodule Cadence.SpacecraftStoreTest do
         applications: %{"telemetry_decom" => %{}}
       })
 
-    assert {:ok, persisted_type} = Cadence.persist_spacecraft_type("org-spacecraft", type)
+    assert {:ok, persisted_type} =
+             Cadence.SpacecraftTypeStore.persist_spacecraft_type("org-spacecraft", type)
 
     spacecraft =
       Spacecraft.new(%{
@@ -64,12 +72,14 @@ defmodule Cadence.SpacecraftStoreTest do
         spacecraft_type_version: persisted_type.version
       })
 
-    assert {:ok, persisted} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
+    assert {:ok, persisted} =
+             Cadence.SpacecraftStore.persist_spacecraft("org-spacecraft", spacecraft)
+
     assert persisted.spacecraft_type_id == persisted_type.spacecraft_type_id
     assert persisted.spacecraft_type_version == 1
 
     assert {:ok, fetched} =
-             Cadence.fetch_spacecraft(
+             Cadence.SpacecraftStore.fetch_spacecraft(
                "org-spacecraft",
                "mission-spacecraft",
                "spacecraft-typed-001"
@@ -91,7 +101,8 @@ defmodule Cadence.SpacecraftStoreTest do
         scid: 7
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
+    assert {:ok, _persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft("org-spacecraft", spacecraft)
 
     updated =
       Spacecraft.new(%{
@@ -100,12 +111,18 @@ defmodule Cadence.SpacecraftStoreTest do
           scid: 8
       })
 
-    assert {:ok, persisted_update} = Cadence.update_spacecraft("org-spacecraft", updated)
+    assert {:ok, persisted_update} =
+             Cadence.SpacecraftStore.update_spacecraft("org-spacecraft", updated)
+
     assert persisted_update.display_name == "SC-001 Prime"
     assert persisted_update.scid == 8
 
     assert {:ok, fetched_spacecraft} =
-             Cadence.fetch_spacecraft("org-spacecraft", "mission-spacecraft", "spacecraft-001")
+             Cadence.SpacecraftStore.fetch_spacecraft(
+               "org-spacecraft",
+               "mission-spacecraft",
+               "spacecraft-001"
+             )
 
     assert fetched_spacecraft.display_name == "SC-001 Prime"
     assert fetched_spacecraft.scid == 8
@@ -123,10 +140,11 @@ defmodule Cadence.SpacecraftStoreTest do
         scid: 7
       })
 
-    assert {:ok, persisted_spacecraft} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
+    assert {:ok, persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft("org-spacecraft", spacecraft)
 
     assert {:ok, endpoint} =
-             Cadence.ensure_managed_spacecraft_source_endpoint(
+             Cadence.SpacecraftStore.ensure_managed_source_endpoint(
                "org-spacecraft",
                persisted_spacecraft
              )
@@ -140,10 +158,11 @@ defmodule Cadence.SpacecraftStoreTest do
           scid: 8
       })
 
-    assert {:ok, persisted_update} = Cadence.update_spacecraft("org-spacecraft", updated)
+    assert {:ok, persisted_update} =
+             Cadence.SpacecraftStore.update_spacecraft("org-spacecraft", updated)
 
     assert {:ok, updated_endpoint} =
-             Cadence.ensure_managed_spacecraft_source_endpoint(
+             Cadence.SpacecraftStore.ensure_managed_source_endpoint(
                "org-spacecraft",
                persisted_update
              )
@@ -225,7 +244,9 @@ defmodule Cadence.SpacecraftStoreTest do
 
     test "paginates and reports the filtered total", context do
       page =
-        Cadence.list_spacecraft_page(context.fleet_organization_id, context.fleet_mission_id,
+        Cadence.SpacecraftStore.list_spacecraft_page(
+          context.fleet_organization_id,
+          context.fleet_mission_id,
           page: 2,
           page_size: 3
         )
@@ -278,7 +299,7 @@ defmodule Cadence.SpacecraftStoreTest do
         type: nil
       )
 
-      summary = Cadence.spacecraft_fleet_summary(organization_id, mission_id)
+      summary = Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id)
 
       assert summary.total == 4
       assert summary.missing_scid == 1
@@ -295,7 +316,7 @@ defmodule Cadence.SpacecraftStoreTest do
 
       persist_mission_scope(organization_id, mission_id)
 
-      summary = Cadence.spacecraft_fleet_summary(organization_id, mission_id)
+      summary = Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id)
 
       assert summary == %{
                total: 0,
@@ -331,13 +352,13 @@ defmodule Cadence.SpacecraftStoreTest do
         spacecraft_type_version: type_version
       })
 
-    {:ok, persisted} = Cadence.persist_spacecraft(organization_id, spacecraft)
+    {:ok, persisted} = Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
     persisted
   end
 
   defp names(context, opts) do
     context.fleet_organization_id
-    |> Cadence.list_spacecraft_page(context.fleet_mission_id, opts)
+    |> Cadence.SpacecraftStore.list_spacecraft_page(context.fleet_mission_id, opts)
     |> Map.fetch!(:items)
     |> Enum.map(& &1.display_name)
   end

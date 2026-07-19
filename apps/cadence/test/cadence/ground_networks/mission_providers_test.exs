@@ -149,7 +149,10 @@ defmodule Cadence.GroundNetworks.MissionProvidersTest do
           %{"id" => "SC-#{index}", "display_name" => "Provider craft #{index}"}
         end)
 
-      assert Cadence.list_spacecraft(organization.organization_id, mission.mission_id) == []
+      assert Cadence.SpacecraftStore.list_spacecraft(
+               organization.organization_id,
+               mission.mission_id
+             ) == []
 
       assert {:ok, synced} =
                GroundNetworks.sync_provider(
@@ -172,7 +175,11 @@ defmodule Cadence.GroundNetworks.MissionProvidersTest do
       assert get_in(synced.inventory_sync_document, ["spacecraft", "truncated"])
       assert length(get_in(synced.inventory_sync_document, ["service_profiles", "items"])) == 1
       assert length(get_in(synced.inventory_sync_document, ["delivery_profiles", "items"])) == 1
-      assert Cadence.list_spacecraft(organization.organization_id, mission.mission_id) == []
+
+      assert Cadence.SpacecraftStore.list_spacecraft(
+               organization.organization_id,
+               mission.mission_id
+             ) == []
 
       assert [_single_version] =
                GroundNetworks.list_provider_versions(

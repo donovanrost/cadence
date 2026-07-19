@@ -79,10 +79,6 @@ defmodule Cadence do
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias Cadence.Spacecraft
-  alias Cadence.SpacecraftStore
-  alias Cadence.SpacecraftType
-  alias Cadence.SpacecraftTypeStore
 
   alias Cadence.Projections.DerivedTelemetryLatestValues,
     as: DerivedTelemetryLatestValueProjection
@@ -123,111 +119,6 @@ defmodule Cadence do
           runtime_records: map(),
           ingress_latency_metric: ingress_latency_metric() | nil
         }
-
-  @spec persist_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  def persist_spacecraft(organization_id, %Spacecraft{} = spacecraft)
-      when is_binary(organization_id) do
-    SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
-  end
-
-  @spec persist_spacecraft(Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  def persist_spacecraft(%Spacecraft{} = spacecraft) do
-    SpacecraftStore.persist_spacecraft(spacecraft)
-  end
-
-  @spec update_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  def update_spacecraft(organization_id, %Spacecraft{} = spacecraft)
-      when is_binary(organization_id) do
-    SpacecraftStore.update_spacecraft(organization_id, spacecraft)
-  end
-
-  @spec fetch_spacecraft(binary(), binary(), binary()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  def fetch_spacecraft(organization_id, mission_id, spacecraft_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id)
-  end
-
-  @spec fetch_spacecraft(binary(), binary()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  def fetch_spacecraft(mission_id, spacecraft_id)
-      when is_binary(mission_id) and is_binary(spacecraft_id) do
-    SpacecraftStore.fetch_spacecraft(mission_id, spacecraft_id)
-  end
-
-  @spec list_spacecraft(binary(), binary()) :: [Spacecraft.t()]
-  def list_spacecraft(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    SpacecraftStore.list_spacecraft(organization_id, mission_id)
-  end
-
-  @spec list_spacecraft(binary()) :: [Spacecraft.t()]
-  def list_spacecraft(mission_id) when is_binary(mission_id) do
-    SpacecraftStore.list_spacecraft(mission_id)
-  end
-
-  @spec list_spacecraft_page(binary(), binary(), [SpacecraftStore.list_opt()]) ::
-          Cadence.Listing.Page.t()
-  def list_spacecraft_page(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) do
-    SpacecraftStore.list_spacecraft_page(organization_id, mission_id, opts)
-  end
-
-  @spec spacecraft_fleet_summary(binary(), binary()) :: map()
-  def spacecraft_fleet_summary(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    SpacecraftStore.fleet_summary(organization_id, mission_id)
-  end
-
-  @spec ensure_managed_spacecraft_source_endpoint(binary(), Spacecraft.t()) ::
-          {:ok, SourceEndpoint.t()} | {:error, term()}
-  def ensure_managed_spacecraft_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
-      when is_binary(organization_id) do
-    SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft)
-  end
-
-  @spec persist_spacecraft_type(binary(), SpacecraftType.t()) ::
-          {:ok, SpacecraftType.t()} | {:error, term()}
-  def persist_spacecraft_type(organization_id, %SpacecraftType{} = type)
-      when is_binary(organization_id) do
-    SpacecraftTypeStore.persist_spacecraft_type(organization_id, type)
-  end
-
-  @spec fetch_spacecraft_type(binary(), binary(), binary()) ::
-          {:ok, SpacecraftType.t()} | {:error, term()}
-  def fetch_spacecraft_type(organization_id, mission_id, spacecraft_type_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(spacecraft_type_id) do
-    SpacecraftTypeStore.fetch_spacecraft_type(organization_id, mission_id, spacecraft_type_id)
-  end
-
-  @spec fetch_spacecraft_type_version(binary(), binary(), binary(), pos_integer()) ::
-          {:ok, SpacecraftType.t()} | {:error, term()}
-  def fetch_spacecraft_type_version(organization_id, mission_id, spacecraft_type_id, version)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(spacecraft_type_id) and is_integer(version) and version > 0 do
-    SpacecraftTypeStore.fetch_spacecraft_type_version(
-      organization_id,
-      mission_id,
-      spacecraft_type_id,
-      version
-    )
-  end
-
-  @spec list_spacecraft_types(binary(), binary()) :: [SpacecraftType.t()]
-  def list_spacecraft_types(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
-  end
-
-  @spec list_spacecraft_type_versions(binary(), binary(), binary()) :: [SpacecraftType.t()]
-  def list_spacecraft_type_versions(organization_id, mission_id, spacecraft_type_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(spacecraft_type_id) do
-    SpacecraftTypeStore.list_spacecraft_type_versions(
-      organization_id,
-      mission_id,
-      spacecraft_type_id
-    )
-  end
 
   @spec persist_transport(binary(), Transport.t()) :: {:ok, Transport.t()} | {:error, term()}
   def persist_transport(organization_id, %Transport{} = transport)

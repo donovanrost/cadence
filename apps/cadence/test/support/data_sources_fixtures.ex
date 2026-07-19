@@ -295,7 +295,8 @@ defmodule Cadence.Dashboards.DataSourcesFixtures do
         display_name: "SC-001"
       })
 
-    assert {:ok, _spacecraft} = Cadence.persist_spacecraft("org-dash-source", spacecraft)
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft("org-dash-source", spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{

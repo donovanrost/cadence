@@ -21,7 +21,8 @@ defmodule Cadence.SourceEndpointsTest do
         display_name: "SC-001"
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -80,10 +81,10 @@ defmodule Cadence.SourceEndpointsTest do
       })
 
     assert {:ok, _persisted_spacecraft} =
-             Cadence.persist_spacecraft(@organization_id, spacecraft_alpha)
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft_alpha)
 
     assert {:ok, _persisted_spacecraft} =
-             Cadence.persist_spacecraft(@organization_id, spacecraft_beta)
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft_beta)
 
     assert {:ok, _endpoint_alpha} =
              Cadence.persist_source_endpoint(
@@ -131,7 +132,8 @@ defmodule Cadence.SourceEndpointsTest do
         scid: 42
       })
 
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+    assert {:ok, _persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
     source_endpoint =
       SourceEndpoint.new(%{
