@@ -982,6 +982,11 @@ provenance, and source-dependency metadata out of the runtime path reduced the
 engine to 1,634 lines. The new 249-line source-result annotation module owns the
 consumer-facing evidence added before caching and materialization; production
 source-size pressure remains 10.
+Extracting provider execution policy, timeout and failure conversion,
+source-result caching, cache-key identity, and source-selection metadata reduced
+the dashboard engine to 965 lines. The 745-line source-request execution service
+returns resolved results and cache provenance to the engine for frame
+materialization, reducing production source-size pressure from 10 to 9.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
