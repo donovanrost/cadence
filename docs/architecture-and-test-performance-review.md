@@ -808,9 +808,10 @@ source-binding metadata, and request warnings from the 2,456-line events
 source reduced the adapter to 2,146 lines; its new request-planning boundary is
 352 lines. Extracting read-option filters, replay/live reader selection,
 canonical-event filtering, cursors, and source-capability matching then reduced
-the adapter to 1,569 lines behind a 640-line read boundary. These are bounded
-reductions for that remaining production pressure item, so the production-file
-count is intentionally unchanged.
+the adapter to 1,569 lines. Finally, isolating contact interval projection and
+event presentation reduced the adapter to 989 lines and production-file
+pressure to 11. The resulting request-planning, read, contact, and presentation
+boundaries are 385, 653, 397, and 180 lines.
 Moving telemetry-backfill lifecycle source cases and their local fixtures out
 of the 1,580-line events-source test reduced test-file pressure from 21 to 20;
 the original source-family test is now 1,339 lines and the focused backfill

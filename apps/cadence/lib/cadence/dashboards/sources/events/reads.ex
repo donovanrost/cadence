@@ -29,6 +29,19 @@ defmodule Cadence.Dashboards.Sources.Events.Reads do
   ]
   @default_limit 500
 
+  @type scheduled_contacts_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type realized_contacts_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type contact_operational_events_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type mission_events_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type source_health_events_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type source_watermark_events_fun :: (binary() | nil, binary(), keyword() -> [struct()])
+  @type source_capability_posture_events_fun :: (binary() | nil, binary(), keyword() ->
+                                                   [struct()])
+  @type telemetry_backfill_lifecycle_events_fun :: (binary() | nil, binary(), keyword() ->
+                                                      [struct()])
+  @type telemetry_revision_decision_events_fun :: (binary() | nil, binary(), keyword() ->
+                                                     [struct()])
+
   def contact_opts(%PlannedSourceRequest{} = request, source_binding, limit) do
     base_opts(request, source_binding, limit)
   end

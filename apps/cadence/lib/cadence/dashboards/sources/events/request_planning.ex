@@ -6,7 +6,8 @@ defmodule Cadence.Dashboards.Sources.Events.RequestPlanning do
     DataLinks,
     PlannedSourceRequest,
     ResolveWarning,
-    ScopeContext
+    ScopeContext,
+    SourceCapabilities
   }
 
   @supported_products [
@@ -20,6 +21,38 @@ defmodule Cadence.Dashboards.Sources.Events.RequestPlanning do
   ]
   @supported_sampling [:event_history]
   @default_limit 500
+
+  @spec capabilities() :: SourceCapabilities.t()
+  def capabilities do
+    SourceCapabilities.new(%{
+      logical_source: :events,
+      supported_sampling: @supported_sampling,
+      supported_products: @supported_products,
+      supported_time_axes: [:occurred_at],
+      supported_value_types: [],
+      supported_shapes: [:intervals, :events],
+      supports_watermarks?: false,
+      completeness: :partial,
+      metadata: %{
+        supported_families: [
+          :contacts,
+          :mission_timeline,
+          :source_health,
+          :source_watermarks,
+          :source_capabilities,
+          :telemetry_backfills,
+          :telemetry_revisions
+        ],
+        unsupported_families: [
+          :commands,
+          :catalog_runtime,
+          :replay,
+          :eclipse,
+          :flight_dynamics
+        ]
+      }
+    })
+  end
 
   def ensure_events_source(%PlannedSourceRequest{logical_source: :events}), do: :ok
 
