@@ -1790,6 +1790,17 @@ actions, and BYO lifecycle behavior. The app-wide LiveView layout and
 authenticated `:ops` route remain unchanged. Production source-size pressure
 falls from 3 to 2, with zero oversized test files or functions and unchanged
 dependency ratchets.
+Extracting request-local sampling, source-product, and time-axis compatibility
+policy into the 292-line
+`Cadence.Dashboards.SourceRegistry.CapabilityPosture` reduced
+`SourceRegistry` from 3,038 to 2,767 lines. The registry still owns its public
+capability API, adapter and binding resolution, provenance construction,
+contract validation, persisted health and watermark evidence, and source
+execution. Direct policy tests cover telemetry time-axis fallback, independent
+sampling and product mismatches, and operational-observable source-backing
+products, while the existing registry and evidence suites preserve facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
