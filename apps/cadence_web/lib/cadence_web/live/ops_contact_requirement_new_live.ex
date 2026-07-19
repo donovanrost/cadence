@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ContactPlanning.ContactRequirements
+
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
@@ -58,7 +60,7 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
 
     with {:ok, attrs} <- requirement_attrs(params),
          {:ok, requirement, _version} <-
-           Cadence.create_contact_requirement(scope, mission.mission_id, attrs) do
+           ContactRequirements.create(scope, mission.mission_id, attrs) do
       {:noreply,
        push_navigate(socket,
          to:

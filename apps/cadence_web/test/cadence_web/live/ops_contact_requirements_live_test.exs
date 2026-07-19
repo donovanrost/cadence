@@ -78,7 +78,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     |> render_submit()
 
     [{requirement, version}] =
-      Cadence.list_contact_requirements(org.organization_id, mission.mission_id)
+      ContactRequirements.list(org.organization_id, mission.mission_id)
 
     assert_redirect(
       view,

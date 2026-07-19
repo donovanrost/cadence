@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ContactPlanning.ContactRequirementTemplates
+
   @impl true
   def mount(_params, _session, socket) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
@@ -55,7 +57,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
 
     with {:ok, attrs} <- template_attrs(params),
          {:ok, _template, _version} <-
-           Cadence.create_contact_requirement_template(scope, mission.mission_id, attrs) do
+           ContactRequirementTemplates.create(scope, mission.mission_id, attrs) do
       {:noreply,
        socket
        |> load_templates()
@@ -341,7 +343,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
 
     rows =
       scope.organization_id
-      |> Cadence.list_contact_requirement_templates(mission.mission_id)
+      |> ContactRequirementTemplates.list(mission.mission_id)
       |> Enum.map(fn {template, version} ->
         %{
           id: template.contact_requirement_template_id,
@@ -374,7 +376,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
         result =
           case action do
             :pause ->
-              Cadence.pause_contact_requirement_template(
+              ContactRequirementTemplates.pause(
                 scope,
                 mission.mission_id,
                 template_id,
@@ -383,7 +385,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
               )
 
             :activate ->
-              Cadence.activate_contact_requirement_template(
+              ContactRequirementTemplates.activate(
                 scope,
                 mission.mission_id,
                 template_id,
@@ -392,7 +394,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
               )
 
             :close ->
-              Cadence.close_contact_requirement_template(
+              ContactRequirementTemplates.close(
                 scope,
                 mission.mission_id,
                 template_id,

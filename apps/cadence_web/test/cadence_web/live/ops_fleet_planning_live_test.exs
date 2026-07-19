@@ -9,7 +9,13 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{ContactRequirements, FleetPlanningPolicies}
+
+  alias Cadence.ContactPlanning.{
+    ContactRequirements,
+    ContactRequirementTemplates,
+    FleetPlanningPolicies
+  }
+
   alias CadenceWeb.TestFixtures
 
   test "authenticated mission operators can navigate the planning journey and see stopped state",
@@ -142,7 +148,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     |> render_submit()
 
     [{template, version}] =
-      Cadence.list_contact_requirement_templates(
+      ContactRequirementTemplates.list(
         org.organization_id,
         mission.mission_id
       )
@@ -157,7 +163,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     |> render_click()
 
     [{paused, _version}] =
-      Cadence.list_contact_requirement_templates(
+      ContactRequirementTemplates.list(
         org.organization_id,
         mission.mission_id
       )

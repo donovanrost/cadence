@@ -346,7 +346,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
     requirement_id = socket.assigns.contact_requirement_id
 
     with {:ok, requirement, version} <-
-           Cadence.fetch_contact_requirement(
+           ContactRequirements.fetch(
              scope.organization_id,
              mission.mission_id,
              requirement_id

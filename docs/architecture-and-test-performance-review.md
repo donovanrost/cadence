@@ -1549,6 +1549,15 @@ already used the owning context. The mission-events API remains in the
 authenticated API pipeline, and dashboard evidence remains in the authenticated
 `:ops` LiveView session; production source-size pressure remains 4 and
 dependency ratchets are unchanged.
+Retiring the 13 contact-requirement and requirement-template workflow clauses
+from the root facade moved 12 production and test call sites directly to
+`Cadence.ContactPlanning.ContactRequirements` and
+`ContactRequirementTemplates`. This reduced `Cadence` from 2,480 to 2,264
+lines and reduced production web callers of the root facade from 28 to 26
+files. Requirement and template pages remain in the authenticated `:ops`
+LiveView session, and direct owner calls continue passing `current_scope` as
+their first argument; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

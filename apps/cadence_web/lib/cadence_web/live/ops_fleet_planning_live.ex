@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ContactPlanning.ContactRequirementTemplates
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -272,7 +274,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
       end
 
     templates =
-      Cadence.list_contact_requirement_templates(
+      ContactRequirementTemplates.list(
         scope.organization_id,
         mission.mission_id,
         lifecycle_state: :active

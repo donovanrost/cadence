@@ -3,12 +3,12 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.Planner
+  alias Cadence.ContactPlanning.{ContactRequirements, Planner}
 
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    requirements = Cadence.list_contact_requirements(scope.organization_id, mission.mission_id)
+    requirements = ContactRequirements.list(scope.organization_id, mission.mission_id)
     plans = Cadence.list_contact_plans(scope.organization_id, mission.mission_id)
 
     rows =
