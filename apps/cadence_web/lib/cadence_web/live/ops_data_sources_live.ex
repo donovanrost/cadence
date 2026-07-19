@@ -21,7 +21,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceContract,
     SourceFocus,
     SourceFocusPresentation,
-    SourceFocusResources
+    SourceFocusResources,
+    SourceRegistration
   }
 
   @impl true
@@ -36,7 +37,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
      |> assign(:change_binding_form, to_form(%{}, as: :binding))
      |> assign(:change_binding_error, nil)
      |> assign(:register_source?, false)
-     |> assign(:register_source_form, to_form(register_source_defaults(), as: :source))
+     |> assign(:register_source_form, to_form(SourceRegistration.defaults(), as: :source))
      |> assign(:register_source_error, nil)
      |> assign(:source_focus, SourceFocus.default())
      |> assign(:source_focus_resources, SourceFocusResources.default())
@@ -59,7 +60,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     {:noreply,
      socket
      |> assign(:register_source?, true)
-     |> assign(:register_source_form, to_form(register_source_defaults(), as: :source))
+     |> assign(:register_source_form, to_form(SourceRegistration.defaults(), as: :source))
      |> assign(:register_source_error, nil)}
   end
 
@@ -250,7 +251,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("register_source", %{"source" => params}, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    with {:ok, attrs} <- register_source_attrs(params, scope, mission),
+    with {:ok, attrs} <-
+           SourceRegistration.parse(params, scope.organization_id, mission.mission_id),
          :ok <-
            maybe_register_source_credentials(
              attrs,
@@ -259,7 +261,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
            ),
          {:ok, _source} <-
            attrs
-           |> data_source_from_attrs()
+           |> SourceRegistration.data_source()
            |> DataSources.persist_data_source(
              actor_id: current_user_id(scope),
              payload:
@@ -522,21 +524,21 @@ defmodule CadenceWeb.OpsDataSourcesLive do
               field={@register_source_form[:logical_source]}
               type="select"
               label="Logical source"
-              options={logical_source_options()}
+              options={SourceRegistration.logical_source_options()}
               required
             />
             <.input
               field={@register_source_form[:kind]}
               type="select"
               label="Ownership"
-              options={source_kind_options()}
+              options={SourceRegistration.source_kind_options()}
               required
             />
             <.input
               field={@register_source_form[:isolation_level]}
               type="select"
               label="Isolation"
-              options={source_isolation_options()}
+              options={SourceRegistration.source_isolation_options()}
               required
             />
             <.input
@@ -548,7 +550,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
               field={@register_source_form[:credential_provider]}
               type="select"
               label="Credential provider"
-              options={credential_provider_options()}
+              options={SourceRegistration.credential_provider_options()}
             />
             <.input
               field={@register_source_form[:endpoint_ref]}
@@ -569,7 +571,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
               field={@register_source_form[:storage]}
               type="select"
               label="Storage"
-              options={source_storage_options()}
+              options={SourceRegistration.source_storage_options()}
               required
             />
             <div class="flex items-end gap-2">
@@ -1905,71 +1907,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp enable_action?(%DataSource{}, _deployment_status), do: false
 
-  defp register_source_defaults do
-    %{
-      "data_source_id" => "",
-      "logical_source" => "telemetry",
-      "kind" => "byo_tsdb",
-      "isolation_level" => "customer_owned",
-      "credentials_ref" => "",
-      "credential_provider" => "questdb",
-      "endpoint_ref" => "",
-      "material_env_profile" => "",
-      "http_endpoint_env" => "",
-      "storage" => "questdb"
-    }
-  end
-
-  defp register_source_attrs(params, scope, mission) do
-    with {:ok, data_source_id} <- required_text(params, "data_source_id", "Source ID"),
-         {:ok, logical_source} <- parse_logical_source(Map.get(params, "logical_source")),
-         {:ok, kind} <- parse_source_kind(Map.get(params, "kind")),
-         {:ok, isolation_level} <- parse_isolation_level(Map.get(params, "isolation_level")),
-         :ok <- validate_kind_isolation(kind, isolation_level),
-         {:ok, storage} <- parse_source_storage(Map.get(params, "storage")),
-         {:ok, credentials_ref} <- source_credentials_ref(params, kind) do
-      {:ok,
-       %{
-         data_source_id: data_source_id,
-         logical_source: logical_source,
-         kind: kind,
-         owner: source_owner(kind),
-         isolation_level: isolation_level,
-         organization_id: scope.organization_id,
-         mission_id: mission.mission_id,
-         credentials_ref: credentials_ref,
-         credential_provider: optional_text(Map.get(params, "credential_provider")),
-         endpoint_ref: optional_text(Map.get(params, "endpoint_ref")),
-         material_env_profile: optional_text(Map.get(params, "material_env_profile")),
-         http_endpoint_env: optional_text(Map.get(params, "http_endpoint_env")),
-         storage: storage
-       }}
-    end
-  end
-
-  defp data_source_from_attrs(attrs) do
-    %DataSource{
-      data_source_id: attrs.data_source_id,
-      owner: attrs.owner,
-      kind: attrs.kind,
-      adapter: source_adapter(attrs.logical_source),
-      organization_id: attrs.organization_id,
-      mission_id: attrs.mission_id,
-      isolation_level: attrs.isolation_level,
-      credentials_ref: attrs.credentials_ref,
-      capabilities: source_capabilities(attrs.logical_source),
-      metadata:
-        %{
-          storage: attrs.storage,
-          registered_by: "ops_data_sources_live",
-          logical_source: attrs.logical_source,
-          endpoint_ref: attrs.endpoint_ref,
-          material_env_profile: attrs.material_env_profile
-        }
-        |> compact_query_params()
-    }
-  end
-
   defp maybe_register_source_credentials(%{credentials_ref: nil}, _scope, _payload), do: :ok
 
   defp maybe_register_source_credentials(attrs, scope, payload) do
@@ -1979,185 +1916,13 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
       {:error, :credential_reference_not_found} ->
         attrs
-        |> source_credential_attrs(payload)
+        |> SourceRegistration.credential_attrs(payload)
         |> SourceCredentials.register_reference(actor_id: current_user_id(scope))
         |> case do
           {:ok, _reference, _event} -> :ok
           {:error, reason} -> {:error, reason}
         end
     end
-  end
-
-  defp source_credential_attrs(attrs, payload) do
-    %{
-      credentials_ref: attrs.credentials_ref,
-      organization_id: attrs.organization_id,
-      mission_id: attrs.mission_id,
-      data_source_id: attrs.data_source_id,
-      owner: attrs.owner,
-      kind: credential_kind(attrs.kind),
-      provider: attrs.credential_provider,
-      metadata:
-        %{
-          storage: attrs.storage,
-          registered_by: "ops_data_sources_live",
-          endpoint_ref: attrs.endpoint_ref,
-          material_env_profile: attrs.material_env_profile,
-          http_endpoint_env: attrs.http_endpoint_env
-        }
-        |> compact_query_params(),
-      payload: payload
-    }
-  end
-
-  defp required_text(params, key, label) do
-    params
-    |> Map.get(key)
-    |> optional_text()
-    |> case do
-      nil -> {:error, "#{label} is required."}
-      value -> {:ok, value}
-    end
-  end
-
-  defp source_credentials_ref(params, :byo_tsdb) do
-    params
-    |> Map.get("credentials_ref")
-    |> optional_text()
-    |> case do
-      nil -> {:error, "Credential ref is required for BYO TSDB sources."}
-      value -> {:ok, value}
-    end
-  end
-
-  defp source_credentials_ref(params, :managed_tsdb) do
-    {:ok, optional_text(Map.get(params, "credentials_ref"))}
-  end
-
-  defp optional_text(value) when is_binary(value) do
-    value = String.trim(value)
-    if value == "", do: nil, else: value
-  end
-
-  defp optional_text(_value), do: nil
-
-  defp parse_logical_source("telemetry"), do: {:ok, :telemetry}
-  defp parse_logical_source("limits"), do: {:ok, :limits}
-  defp parse_logical_source("operational_observables"), do: {:ok, :operational_observables}
-  defp parse_logical_source("events"), do: {:ok, :events}
-  defp parse_logical_source(_value), do: {:error, "Choose a logical source."}
-
-  defp parse_source_kind("managed_tsdb"), do: {:ok, :managed_tsdb}
-  defp parse_source_kind("byo_tsdb"), do: {:ok, :byo_tsdb}
-  defp parse_source_kind(_value), do: {:error, "Choose a source ownership model."}
-
-  defp parse_isolation_level("shared"), do: {:ok, :shared}
-  defp parse_isolation_level("org_isolated"), do: {:ok, :org_isolated}
-  defp parse_isolation_level("mission_isolated"), do: {:ok, :mission_isolated}
-  defp parse_isolation_level("customer_owned"), do: {:ok, :customer_owned}
-  defp parse_isolation_level(_value), do: {:error, "Choose an isolation model."}
-
-  defp validate_kind_isolation(:byo_tsdb, isolation_level)
-       when isolation_level in [:customer_owned, :org_isolated, :mission_isolated],
-       do: :ok
-
-  defp validate_kind_isolation(:byo_tsdb, _isolation_level),
-    do:
-      {:error,
-       "BYO TSDB sources must use customer_owned, org_isolated, or mission_isolated isolation."}
-
-  defp validate_kind_isolation(:managed_tsdb, :customer_owned),
-    do: {:error, "Managed TSDB sources cannot use customer_owned isolation."}
-
-  defp validate_kind_isolation(:managed_tsdb, _isolation_level), do: :ok
-
-  defp parse_source_storage("questdb"), do: {:ok, :questdb}
-  defp parse_source_storage("postgres_projection"), do: {:ok, :postgres_projection}
-  defp parse_source_storage(_value), do: {:error, "Choose a storage backend."}
-
-  defp source_owner(:byo_tsdb), do: :customer
-  defp source_owner(:managed_tsdb), do: :cadence
-
-  defp credential_kind(:byo_tsdb), do: :byo_tsdb_connection
-  defp credential_kind(:managed_tsdb), do: :managed_tsdb_connection
-
-  defp source_adapter(:telemetry), do: Cadence.Dashboards.Sources.Telemetry
-  defp source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
-
-  defp source_adapter(:operational_observables),
-    do: Cadence.Dashboards.Sources.OperationalObservables
-
-  defp source_adapter(:events), do: Cadence.Dashboards.Sources.Events
-
-  defp source_capabilities(:telemetry) do
-    %{
-      latest?: true,
-      range_scan?: true,
-      bounded_history?: true,
-      watermarks?: true,
-      native_decimation?: false
-    }
-  end
-
-  defp source_capabilities(:limits) do
-    %{latest_state?: true, event_history?: true, definition_intervals?: true, watermarks?: true}
-  end
-
-  defp source_capabilities(:operational_observables) do
-    %{constellation_health?: true, watermarks?: false}
-  end
-
-  defp source_capabilities(:events) do
-    %{
-      contact_intervals?: true,
-      mission_timeline?: true,
-      source_health_transitions?: true,
-      source_watermark_events?: true,
-      source_capability_postures?: true,
-      telemetry_backfill_lifecycle?: true,
-      telemetry_revision_decisions?: true,
-      watermarks?: false
-    }
-  end
-
-  defp logical_source_options do
-    [
-      {"Telemetry", "telemetry"},
-      {"Limits", "limits"},
-      {"Operational observables", "operational_observables"},
-      {"Events", "events"}
-    ]
-  end
-
-  defp source_kind_options do
-    [
-      {"Bring your own TSDB", "byo_tsdb"},
-      {"Managed TSDB", "managed_tsdb"}
-    ]
-  end
-
-  defp source_isolation_options do
-    [
-      {"Customer owned", "customer_owned"},
-      {"Mission isolated", "mission_isolated"},
-      {"Organization isolated", "org_isolated"},
-      {"Shared", "shared"}
-    ]
-  end
-
-  defp credential_provider_options do
-    [
-      {"QuestDB", "questdb"},
-      {"External vault", "external_vault"},
-      {"Cadence managed", "cadence_managed"}
-    ]
-  end
-
-  defp source_storage_options do
-    [
-      {"QuestDB", "questdb"},
-      {"Postgres projection", "postgres_projection"}
-    ]
   end
 
   defp find_binding(bindings, binding_id) do
@@ -2703,7 +2468,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp clear_register_source(socket) do
     socket
     |> assign(:register_source?, false)
-    |> assign(:register_source_form, to_form(register_source_defaults(), as: :source))
+    |> assign(:register_source_form, to_form(SourceRegistration.defaults(), as: :source))
     |> assign(:register_source_error, nil)
   end
 

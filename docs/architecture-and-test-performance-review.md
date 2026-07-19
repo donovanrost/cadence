@@ -1730,6 +1730,16 @@ Direct tests cover resolved endpoint labels, inferred and unverified ground
 stations, fetched-station precedence, and navigation values. The authenticated
 `:ops` route remains unchanged; production source-size pressure remains 3 and
 dependency ratchets are unchanged.
+Extracting source-registration defaults, parameter parsing, ownership and
+isolation validation, capability presets, persistence payload construction,
+and form option lists into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceRegistration` reduced
+`OpsDataSourcesLive` from 2,712 to 2,477 lines. The LiveView still derives
+organization and mission ownership from `current_scope` and the current
+mission, then performs credential and source persistence with the current
+actor. Direct tests cover BYO and managed payloads, validation failures, and
+form options. The authenticated `:ops` route remains unchanged; production
+source-size pressure remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
