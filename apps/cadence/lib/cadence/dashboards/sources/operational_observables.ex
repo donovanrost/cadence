@@ -39,6 +39,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     AntennaPointingRows,
     ConnectionFrames,
     ConnectionRows,
+    LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
     ProductPolicy,
@@ -1424,7 +1425,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    link_rf_metric_rows(
+    LinkRfMetricRows.latest(
       request.observables,
       transports_fun.(organization_id, mission_id, adapter_opts),
       link_rf_metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
@@ -1444,7 +1445,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports = transports_fun.(organization_id, mission_id, adapter_opts)
     snapshots = link_rf_metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
 
-    link_rf_metric_history_rows(request.observables, transports, snapshots, request)
+    LinkRfMetricRows.history(request.observables, transports, snapshots, request)
   end
 
   defp antenna_pointing_history_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -2841,248 +2842,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       _missing -> nil
     end
   end
-
-  defp link_rf_metric_rows(observables, transports, snapshots, request) do
-    snapshots = Enum.map(snapshots, &normalize_link_rf_metric_snapshot/1)
-
-    observables
-    |> Enum.filter(&(&1 in @link_rf_metric_observable_ids))
-    |> Enum.flat_map(fn observable_id ->
-      Enum.map(transports, &link_rf_metric_row(observable_id, &1, snapshots))
-    end)
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp link_rf_metric_history_rows(observables, transports, snapshots, request) do
-    observables = Enum.filter(observables, &(&1 in @link_rf_metric_observable_ids))
-
-    rows =
-      snapshots
-      |> Enum.map(&normalize_link_rf_metric_snapshot/1)
-      |> Enum.filter(&(attr(&1, :observable_id) in observables))
-      |> Enum.map(&link_rf_metric_history_row(transports, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&metric_history_row_in_request?(&1, request))
-      |> Enum.sort_by(&metric_history_sort_key/1)
-      |> apply_request_limit(request)
-
-    rows ++ empty_link_rf_metric_history_rows(observables, transports, rows, request)
-  end
-
-  defp empty_link_rf_metric_history_rows(observables, transports, rows, request) do
-    present_series = MapSet.new(Enum.map(rows, &metric_history_series_key/1))
-
-    for observable_id <- observables,
-        transport <- transports,
-        row = link_rf_metric_row(observable_id, transport, []),
-        matches_connection_scope?(row, request),
-        metric_history_series_key(row) not in present_series do
-      Map.put(row, :empty_series?, true)
-    end
-  end
-
-  defp link_rf_metric_row(observable_id, transport, snapshots) do
-    transport_id = attr(transport, :transport_id)
-    link_id = link_id_for([transport])
-    snapshot = link_rf_metric_snapshot(snapshots, observable_id, transport_id, link_id)
-
-    %{
-      observable_id: observable_id,
-      resource_id: link_id || transport_id,
-      label: link_rf_metric_label(observable_id, transport, link_id),
-      scope_kind: :link,
-      transport_id: transport_id,
-      source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-      ground_station_id: transport_ground_station_id(transport, snapshot),
-      link_id: link_id_for([snapshot, transport]),
-      adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-      value: link_rf_metric_value(snapshot, observable_id),
-      unit: link_rf_metric_unit(snapshot, observable_id),
-      observed_at: attr(snapshot, :observed_at),
-      source_event_id: attr(snapshot, :source_event_id),
-      source: transport
-    }
-  end
-
-  defp link_rf_metric_history_row(transports, snapshot) do
-    observable_id = attr(snapshot, :observable_id)
-
-    with transport when not is_nil(transport) <-
-           LinkRfStateRows.find_transport(transports, snapshot),
-         value when is_number(value) <- link_rf_metric_value(snapshot, observable_id),
-         %DateTime{} = observed_at <- attr(snapshot, :observed_at) do
-      transport_id = attr(transport, :transport_id)
-      link_id = link_id_for([snapshot, transport])
-
-      %{
-        observable_id: observable_id,
-        resource_id: link_id || transport_id,
-        label: link_rf_metric_label(observable_id, transport, link_id),
-        scope_kind: :link,
-        transport_id: transport_id,
-        source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-        ground_station_id: transport_ground_station_id(transport, snapshot),
-        link_id: link_id,
-        adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-        value: value,
-        unit: link_rf_metric_unit(snapshot, observable_id),
-        observed_at: observed_at,
-        source_event_id: attr(snapshot, :source_event_id),
-        source: transport
-      }
-    else
-      _missing -> nil
-    end
-  end
-
-  defp normalize_link_rf_metric_snapshot(snapshot) do
-    %{
-      observable_id: link_rf_metric_observable_id(snapshot),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      value: attr(snapshot, :value),
-      snr_db: attr(snapshot, :snr_db),
-      snr: attr(snapshot, :snr),
-      signal_to_noise_ratio_db: attr(snapshot, :signal_to_noise_ratio_db),
-      eb_n0_db: attr(snapshot, :eb_n0_db),
-      ebn0_db: attr(snapshot, :ebn0_db),
-      energy_per_bit_to_noise_density_db: attr(snapshot, :energy_per_bit_to_noise_density_db),
-      symbol_rate_sps: attr(snapshot, :symbol_rate_sps),
-      symbol_rate: attr(snapshot, :symbol_rate),
-      symbols_per_second: attr(snapshot, :symbols_per_second),
-      doppler_hz: attr(snapshot, :doppler_hz),
-      doppler: attr(snapshot, :doppler),
-      frequency_offset_hz: attr(snapshot, :frequency_offset_hz),
-      carrier_frequency_offset_hz: attr(snapshot, :carrier_frequency_offset_hz),
-      unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
-      observed_at: attr(snapshot, :observed_at),
-      source_event_id: attr(snapshot, :source_event_id)
-    }
-  end
-
-  defp link_rf_metric_observable_id(snapshot) do
-    attr(snapshot, :observable_id) ||
-      cond do
-        Enum.any?(
-          [:eb_n0_db, :ebn0_db, :energy_per_bit_to_noise_density_db],
-          &present_metric?(snapshot, &1)
-        ) ->
-          "link.eb_n0_db"
-
-        Enum.any?(
-          [:symbol_rate_sps, :symbol_rate, :symbols_per_second],
-          &present_metric?(snapshot, &1)
-        ) ->
-          "link.symbol_rate_sps"
-
-        Enum.any?(
-          [:doppler_hz, :doppler, :frequency_offset_hz, :carrier_frequency_offset_hz],
-          &present_metric?(snapshot, &1)
-        ) ->
-          "link.doppler_hz"
-
-        Enum.any?(
-          [:snr_db, :snr, :signal_to_noise_ratio_db, :value],
-          &present_metric?(snapshot, &1)
-        ) ->
-          "link.snr_db"
-
-        true ->
-          nil
-      end
-  end
-
-  defp present_metric?(snapshot, key), do: not is_nil(attr(snapshot, key))
-
-  defp link_rf_metric_snapshot(snapshots, observable_id, transport_id, link_id) do
-    Enum.find(snapshots, fn snapshot ->
-      attr(snapshot, :observable_id) == observable_id and
-        ((present_text?(transport_id) and
-            (attr(snapshot, :transport_id) == transport_id or
-               attr(snapshot, :resource_id) == transport_id)) or
-           (present_text?(link_id) and
-              (attr(snapshot, :link_id) == link_id or attr(snapshot, :resource_id) == link_id)))
-    end)
-  end
-
-  defp link_rf_metric_label("link.snr_db", transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "RF SNR / #{resource_label}"
-  end
-
-  defp link_rf_metric_label("link.eb_n0_db", transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "RF Eb/N0 / #{resource_label}"
-  end
-
-  defp link_rf_metric_label("link.symbol_rate_sps", transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "RF Symbol Rate / #{resource_label}"
-  end
-
-  defp link_rf_metric_label("link.doppler_hz", transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "RF Doppler / #{resource_label}"
-  end
-
-  defp link_rf_metric_label(observable_id, transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "#{observable_id} / #{resource_label}"
-  end
-
-  defp link_rf_metric_value(snapshot, "link.snr_db") do
-    [
-      attr(snapshot, :snr_db),
-      attr(snapshot, :signal_to_noise_ratio_db),
-      attr(snapshot, :snr),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp link_rf_metric_value(snapshot, "link.eb_n0_db") do
-    [
-      attr(snapshot, :eb_n0_db),
-      attr(snapshot, :ebn0_db),
-      attr(snapshot, :energy_per_bit_to_noise_density_db),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp link_rf_metric_value(snapshot, "link.symbol_rate_sps") do
-    [
-      attr(snapshot, :symbol_rate_sps),
-      attr(snapshot, :symbols_per_second),
-      attr(snapshot, :symbol_rate),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp link_rf_metric_value(snapshot, "link.doppler_hz") do
-    [
-      attr(snapshot, :doppler_hz),
-      attr(snapshot, :frequency_offset_hz),
-      attr(snapshot, :carrier_frequency_offset_hz),
-      attr(snapshot, :doppler),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp link_rf_metric_value(snapshot, _observable_id), do: attr(snapshot, :value)
-
-  defp link_rf_metric_unit(snapshot, "link.snr_db"), do: attr(snapshot, :unit) || "dB"
-  defp link_rf_metric_unit(snapshot, "link.eb_n0_db"), do: attr(snapshot, :unit) || "dB"
-  defp link_rf_metric_unit(snapshot, "link.symbol_rate_sps"), do: attr(snapshot, :unit) || "sym/s"
-  defp link_rf_metric_unit(snapshot, "link.doppler_hz"), do: attr(snapshot, :unit) || "Hz"
-  defp link_rf_metric_unit(snapshot, _observable_id), do: attr(snapshot, :unit)
 
   defp normalize_ingress_processing_latency_snapshot(snapshot) do
     %{
@@ -5131,8 +4890,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp link_rf_metric_revision_entry(snapshot) do
+    observable_id = LinkRfMetricRows.observable_id(snapshot)
+
     %{
-      observable_id: link_rf_metric_observable_id(snapshot),
+      observable_id: observable_id,
       resource_id: attr(snapshot, :resource_id),
       transport_id: attr(snapshot, :transport_id),
       source_endpoint_id:
@@ -5140,8 +4901,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      value: link_rf_metric_value(snapshot, link_rf_metric_observable_id(snapshot)),
-      unit: link_rf_metric_unit(snapshot, link_rf_metric_observable_id(snapshot)),
+      value: LinkRfMetricRows.value(snapshot, observable_id),
+      unit: LinkRfMetricRows.unit(snapshot, observable_id),
       observed_at: attr(snapshot, :observed_at)
     }
   end

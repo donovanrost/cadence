@@ -1098,6 +1098,12 @@ classification, request-scope filtering, time windows, ordering, and limits
 into a 304-line row module reduced the adapter from 5,593 to 5,339 lines.
 Provider callbacks and freshness annotation remain adapter-owned; production
 source-size pressure remains 8.
+Extracting RF metric observable inference, value/unit normalization,
+transport/link joins, request filtering, ordering, limits, and empty-series
+materialization into a 382-line row module reduced the adapter from 5,339 to
+5,100 lines. Revision fingerprints reuse the same normalization API while
+provider callbacks and frame construction remain adapter-owned; production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
