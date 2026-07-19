@@ -11,14 +11,14 @@ defmodule CadenceWeb.NotificationsLive do
     {:ok,
      socket
      |> assign(:page_title, "Notifications")
-     |> assign(:notifications, Cadence.list_notifications(user_id))}
+     |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
   end
 
   @impl true
   def handle_event("accept_invitation", %{"notification_id" => id}, socket) do
     user_id = socket.assigns.current_scope.user.user_id
 
-    with {:ok, notification} <- Cadence.fetch_notification(id),
+    with {:ok, notification} <- Cadence.Notifications.fetch_notification(id),
          true <- notification.user_id == user_id,
          :organization_invitation <- notification.kind,
          invitation_id when is_binary(invitation_id) <-
@@ -37,14 +37,14 @@ defmodule CadenceWeb.NotificationsLive do
           {:noreply,
            socket
            |> put_flash(:error, accept_error_message(reason))
-           |> assign(:notifications, Cadence.list_notifications(user_id))}
+           |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
       end
     else
       _other ->
         {:noreply,
          socket
          |> put_flash(:error, "That notification is no longer available.")
-         |> assign(:notifications, Cadence.list_notifications(user_id))}
+         |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
     end
   end
 
@@ -52,7 +52,7 @@ defmodule CadenceWeb.NotificationsLive do
   def handle_event("mark_read", %{"notification_id" => id}, socket) do
     user_id = socket.assigns.current_scope.user.user_id
 
-    case Cadence.mark_notification_read(id, user_id) do
+    case Cadence.Notifications.mark_notification_read(id, user_id) do
       {:ok, updated} ->
         {:noreply,
          socket
@@ -78,7 +78,7 @@ defmodule CadenceWeb.NotificationsLive do
     user_id = socket.assigns.current_scope.user.user_id
     # After accept_invitation_as_user marks related notifications read, the bell hook
     # already fired; just refresh the full list from DB so stale rows disappear.
-    {:noreply, assign(socket, :notifications, Cadence.list_notifications(user_id))}
+    {:noreply, assign(socket, :notifications, Cadence.Notifications.list_notifications(user_id))}
   end
 
   @impl true

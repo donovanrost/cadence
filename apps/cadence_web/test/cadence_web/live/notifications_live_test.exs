@@ -37,7 +37,7 @@ defmodule CadenceWeb.NotificationsLiveTest do
 
     [notification] =
       user.user_id
-      |> Cadence.list_notifications()
+      |> Cadence.Notifications.list_notifications()
       |> Enum.filter(&(&1.kind == :organization_invitation))
 
     {org, invitation, notification}

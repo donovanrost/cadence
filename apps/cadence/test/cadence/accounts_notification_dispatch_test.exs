@@ -89,7 +89,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
                  invited_by_user_id: admin.user_id
                )
 
-      notifications = Cadence.list_notifications(existing.user_id)
+      notifications = Cadence.Notifications.list_notifications(existing.user_id)
       assert [%{kind: :organization_access_granted, title: title}] = notifications
       assert title =~ "Demo Org"
     end
@@ -105,7 +105,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
                  force_invitation: true
                )
 
-      [notification] = Cadence.list_notifications(existing.user_id)
+      [notification] = Cadence.Notifications.list_notifications(existing.user_id)
       assert notification.kind == :organization_invitation
       assert notification.metadata["organization_invitation_id"] == inv.organization_invitation_id
     end
@@ -148,7 +148,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
                  invited_by_user_id: admin.user_id
                )
 
-      [notification] = Cadence.list_notifications(user.user_id)
+      [notification] = Cadence.Notifications.list_notifications(user.user_id)
       assert notification.kind == :organization_invitation
 
       assert notification.metadata["organization_invitation_id"] ==
@@ -168,7 +168,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
           force_invitation: true
         )
 
-      [notification] = Cadence.list_notifications(user.user_id, only_unread: true)
+      [notification] = Cadence.Notifications.list_notifications(user.user_id, only_unread: true)
       assert notification.kind == :organization_invitation
 
       :ok = Notifications.subscribe(user.user_id)
@@ -191,7 +191,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
       assert_receive {:invitation_accepted, %{organization_invitation_id: id}}
       assert id == invitation.organization_invitation_id
 
-      reloaded = Cadence.list_notifications(user.user_id)
+      reloaded = Cadence.Notifications.list_notifications(user.user_id)
       assert Enum.all?(reloaded, fn n -> n.read_at != nil end)
     end
 

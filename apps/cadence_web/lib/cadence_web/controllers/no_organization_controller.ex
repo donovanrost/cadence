@@ -13,7 +13,7 @@ defmodule CadenceWeb.NoOrganizationController do
   defp count_pending_invitations(%Cadence.Auth.Scope{user: %{user_id: user_id}})
        when is_binary(user_id) do
     user_id
-    |> Cadence.list_notifications(only_unread: true)
+    |> Cadence.Notifications.list_notifications(only_unread: true)
     |> Enum.count(&(&1.kind == :organization_invitation))
   end
 
