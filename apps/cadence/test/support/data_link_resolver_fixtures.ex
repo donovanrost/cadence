@@ -122,7 +122,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
 
   def activate_binding_set!(organization_id, mission_id, binding_set) do
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                binding_set.binding_set_id,

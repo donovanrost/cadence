@@ -16,13 +16,13 @@ defmodule Cadence.ActivationsTest do
     end)
 
     assert {:error, :no_active_binding_set} =
-             Cadence.fetch_active_binding_set_activation(
+             Cadence.Activations.fetch_active_activation(
                @organization_id,
                binding_set.mission_id
              )
 
     assert {:ok, activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                @organization_id,
                binding_set.mission_id,
                binding_set.binding_set_id,
@@ -36,7 +36,7 @@ defmodule Cadence.ActivationsTest do
     assert activation.metadata["reason"] == "initial bootstrap"
 
     assert {:ok, active_activation} =
-             Cadence.fetch_active_binding_set_activation(
+             Cadence.Activations.fetch_active_activation(
                @organization_id,
                binding_set.mission_id
              )
@@ -44,7 +44,10 @@ defmodule Cadence.ActivationsTest do
     assert active_activation.activation_id == activation.activation_id
 
     assert {:ok, active_binding_set} =
-             Cadence.fetch_active_binding_set(@organization_id, binding_set.mission_id)
+             Cadence.Activations.fetch_active_binding_set(
+               @organization_id,
+               binding_set.mission_id
+             )
 
     assert active_binding_set.binding_set_id == binding_set.binding_set_id
     assert active_binding_set.version == binding_set.version

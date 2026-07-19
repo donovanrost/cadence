@@ -21,7 +21,7 @@ defmodule CadenceWeb.ActivationController do
          {:ok, {binding_set_id, version, opts}} <-
            ControlPlaneParams.activation(mission_id, activation_params),
          {:ok, %BindingSetActivation{} = activation} <-
-           Cadence.activate_binding_set(
+           Cadence.Activations.activate_binding_set(
              organization_id,
              mission_id,
              binding_set_id,
@@ -42,9 +42,9 @@ defmodule CadenceWeb.ActivationController do
              mission_id
            ),
          {:ok, %BindingSetActivation{} = activation} <-
-           Cadence.fetch_active_binding_set_activation(organization_id, mission_id),
+           Cadence.Activations.fetch_active_activation(organization_id, mission_id),
          {:ok, %BindingSet{} = binding_set} <-
-           Cadence.fetch_active_binding_set(organization_id, mission_id) do
+           Cadence.Activations.fetch_active_binding_set(organization_id, mission_id) do
       json(conn, %{data: ControlPlaneJSON.active_binding_set(activation, binding_set)})
     end
   end

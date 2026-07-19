@@ -1496,6 +1496,15 @@ of the root facade from 47 to 45 files. Binding-set and packet-definition API
 routes remain in the authenticated API pipeline, and spacecraft telemetry pages
 remain in their existing authenticated LiveView session; production source-size
 pressure remains 4 and dependency ratchets are unchanged.
+Retiring the six binding-set activation and active-basis clauses from the root
+facade moved 55 production, test-support, simulator, opt-in browser, and demo
+call sites directly to durable `Cadence.Activations` or the mission-only
+`Cadence.Runtime` boundary, preserving the overload semantics. This reduced
+`Cadence` from 3,302 to 3,259 lines and reduced production web callers of the
+root facade from 45 to 40 files. Activation API routes remain in the
+authenticated API pipeline, while operations and spacecraft pages remain in
+their existing authenticated LiveView sessions; production source-size pressure
+remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

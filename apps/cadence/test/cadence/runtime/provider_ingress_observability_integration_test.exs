@@ -45,7 +45,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
     binding_set = persist_binding_set(mission_id)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set.binding_set_id,
                binding_set.version

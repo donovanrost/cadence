@@ -657,7 +657,7 @@ defmodule CadenceWeb.CommsValidation do
   defp telemetry_action_label(_status), do: "Review telemetry"
 
   defp active_telemetry_activation(organization_id, mission_id) do
-    case Cadence.fetch_active_binding_set_activation(organization_id, mission_id) do
+    case Cadence.Activations.fetch_active_activation(organization_id, mission_id) do
       {:ok, activation} ->
         %{
           binding_set_id: activation.binding_set_id,

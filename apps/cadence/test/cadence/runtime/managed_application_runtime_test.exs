@@ -47,7 +47,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
     assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -143,7 +143,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
              Cadence.Governance.persist_binding_set(telemetry_binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                packet_counter_binding_set.binding_set_id,
                packet_counter_binding_set.version
@@ -166,7 +166,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
     assert Repo.aggregate(ManagedTimerEventRow, :count, :timer_event_id) == 1
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                telemetry_binding_set.binding_set_id,
                telemetry_binding_set.version

@@ -97,7 +97,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
              Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                binding_set.binding_set_id,

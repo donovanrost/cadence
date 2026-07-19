@@ -78,7 +78,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -250,7 +250,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -427,7 +427,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -611,7 +611,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -659,7 +659,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       )
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                org.organization_id,
                mission.mission_id,
                ingress_evidence_binding_set.binding_set_id,
@@ -849,7 +849,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version

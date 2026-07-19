@@ -604,7 +604,7 @@ defmodule Cadence.OperationalEventsTest do
              Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                first_binding_set.binding_set_id,
@@ -613,7 +613,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                second_binding_set.binding_set_id,
@@ -693,7 +693,7 @@ defmodule Cadence.OperationalEventsTest do
              Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                first_binding_set.binding_set_id,
@@ -702,7 +702,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Activations.activate_binding_set(
                organization_id,
                mission_id,
                second_binding_set.binding_set_id,

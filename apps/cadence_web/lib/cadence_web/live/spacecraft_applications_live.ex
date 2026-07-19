@@ -228,7 +228,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       end
 
     active =
-      case Cadence.fetch_active_binding_set_activation(organization_id, mission_id) do
+      case Cadence.Activations.fetch_active_activation(organization_id, mission_id) do
         {:ok, activation} ->
           %{
             binding_set_id: activation.binding_set_id,

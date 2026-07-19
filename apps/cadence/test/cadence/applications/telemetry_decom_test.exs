@@ -175,7 +175,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert %DateTime{} = applied.applied_at
 
       assert {:ok, activation} =
-               Cadence.fetch_active_binding_set_activation(@organization_id, @mission_id)
+               Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
 
       assert activation.binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
       assert activation.binding_set_version == 1
@@ -268,7 +268,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                )
 
       assert {:ok, activation} =
-               Cadence.fetch_active_binding_set_activation(@organization_id, @mission_id)
+               Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
 
       assert activation.binding_set_version == 2
 

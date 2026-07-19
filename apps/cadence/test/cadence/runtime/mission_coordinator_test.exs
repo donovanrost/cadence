@@ -38,7 +38,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     binding_set_v2 = persisted_binding_set(mission_id, 2, "THERMAL")
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set_v1.binding_set_id,
                binding_set_v1.version
@@ -66,7 +66,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     assert partition_snapshot_v1.rule_count == 1
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set_v2.binding_set_id,
                binding_set_v2.version
@@ -125,7 +125,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -170,7 +170,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     [frame_one, frame_two] = build_tm_space_packet_frames(42, 5, <<0, 11>>, frame_size)
 
     assert {:ok, _activation} =
-             Cadence.activate_binding_set(
+             Cadence.Runtime.activate_binding_set(
                mission_id,
                binding_set.binding_set_id,
                binding_set.version

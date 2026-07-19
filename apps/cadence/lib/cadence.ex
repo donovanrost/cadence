@@ -11,7 +11,6 @@ defmodule Cadence do
   5. canonical telemetry samples
   """
 
-  alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.ApplicationDispatch.DispatchDecision
   alias Cadence.ApplicationDispatch.Dispatcher
@@ -311,48 +310,6 @@ defmodule Cadence do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(organization_id, mission_id, binding_set_id, version, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
-             is_integer(version) and version > 0 and is_list(opts) do
-    Activations.activate_binding_set(organization_id, mission_id, binding_set_id, version, opts)
-  end
-
-  @spec activate_binding_set(binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(mission_id, binding_set_id, version, opts \\ [])
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 and is_list(opts) do
-    Runtime.activate_binding_set(mission_id, binding_set_id, version, opts)
-  end
-
-  @spec fetch_active_binding_set(binary(), binary()) ::
-          {:ok, Cadence.ApplicationDispatch.BindingSet.t()} | {:error, term()}
-  def fetch_active_binding_set(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    Activations.fetch_active_binding_set(organization_id, mission_id)
-  end
-
-  @spec fetch_active_binding_set(binary()) ::
-          {:ok, Cadence.ApplicationDispatch.BindingSet.t()} | {:error, term()}
-  def fetch_active_binding_set(mission_id) when is_binary(mission_id) do
-    Runtime.fetch_active_binding_set(mission_id)
-  end
-
-  @spec fetch_active_binding_set_activation(binary(), binary()) ::
-          {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}
-  def fetch_active_binding_set_activation(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    Activations.fetch_active_activation(organization_id, mission_id)
-  end
-
-  @spec fetch_active_binding_set_activation(binary()) ::
-          {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}
-  def fetch_active_binding_set_activation(mission_id) when is_binary(mission_id) do
-    Runtime.fetch_active_activation(mission_id)
-  end
 
   @spec persist_scheduled_contact(ScheduledContact.t()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
