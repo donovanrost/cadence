@@ -1290,6 +1290,12 @@ sample-history lookup, and diagnostics into a 135-line
 2,930 to 2,844 lines. Background historical jobs and late-data policy execution
 now share that boundary; production source-size pressure remains 6 and
 dependency ratchets are unchanged.
+Extracting late-data decision normalization, execution-mode selection, locked
+sample-write options, projection semantics, and audit-event payloads into a
+341-line `DataManagement.LateDataPolicy` module reduced `DataManagement` from
+2,844 to 2,550 lines. The typed record, execute, mode, and write-option APIs
+remain unchanged and consume the shared historical source reader; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

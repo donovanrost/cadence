@@ -9,6 +9,7 @@ defmodule Cadence.Telemetry.DataManagement do
 
   alias Cadence.Jobs
   alias Cadence.Telemetry.DataManagement.HistoricalSourceSamples
+  alias Cadence.Telemetry.DataManagement.LateDataPolicy
   alias Cadence.Telemetry.DataManagement.ObservationIdentityDecisions
   alias Cadence.Telemetry.DataManagement.WorkflowPolicy
   alias Cadence.Telemetry.Sample
@@ -85,7 +86,6 @@ defmodule Cadence.Telemetry.DataManagement do
     :failed,
     :retried
   ]
-  @late_data_policy_decisions [:accept, :reject]
   @stale_historical_data_workflow_job_seconds 15 * 60
 
   @spec backfill_samples([Sample.t()], workflow_attrs(), keyword()) :: :ok | {:error, term()}
@@ -2069,14 +2069,7 @@ defmodule Cadence.Telemetry.DataManagement do
           {:ok, Storage.BackfillLifecycleEvent.t()} | {:error, term()}
   def record_late_data_policy_decision(decision, attrs, opts \\ [])
       when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
-    with {:ok, decision} <- normalize_late_data_policy_decision(decision),
-         :ok <- require_late_data_policy_context(attrs),
-         {:ok, event_attrs} <- late_data_policy_event_attrs(decision, attrs) do
-      Storage.record_backfill_lifecycle_event(
-        event_attrs,
-        Keyword.take(opts, [:dashboard_runtime_invalidation?, :runtime_cache])
-      )
-    end
+    LateDataPolicy.record(decision, attrs, opts)
   end
 
   @spec execute_late_data_policy(
@@ -2087,47 +2080,17 @@ defmodule Cadence.Telemetry.DataManagement do
           {:ok, late_data_policy_execution_result()} | {:error, term()}
   def execute_late_data_policy(decision, attrs, opts \\ [])
       when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
-    with {:ok, decision} <- normalize_late_data_policy_decision(decision),
-         :ok <- require_late_data_policy_context(attrs),
-         {:ok, samples, diagnostics} <- HistoricalSourceSamples.fetch(attrs),
-         :ok <- persist_late_data_policy_samples(decision, samples, attrs, opts),
-         {:ok, event_attrs} <- late_data_policy_event_attrs(decision, attrs, samples, diagnostics),
-         {:ok, event} <-
-           Storage.record_backfill_lifecycle_event(
-             event_attrs,
-             Keyword.take(opts, [:dashboard_runtime_invalidation?, :runtime_cache])
-           ) do
-      {:ok, %{event: event, sample_count: length(samples), diagnostics: diagnostics}}
-    end
+    LateDataPolicy.execute(decision, attrs, opts)
   end
 
   @spec late_data_policy_execution_mode(workflow_attrs()) :: late_data_policy_execution_mode()
-  def late_data_policy_execution_mode(attrs) when is_map(attrs) do
-    if Enum.all?(
-         [
-           get_attr(attrs, :point_id),
-           get_attr(attrs, :source_from),
-           get_attr(attrs, :source_to)
-         ],
-         &late_data_policy_present?/1
-       ) do
-      :sample_execution
-    else
-      :event_only
-    end
-  end
-
-  def late_data_policy_execution_mode(_attrs), do: :event_only
-
-  defp late_data_policy_present?(value), do: value not in [nil, ""]
+  def late_data_policy_execution_mode(attrs), do: LateDataPolicy.execution_mode(attrs)
 
   @spec late_data_policy_write_opts(late_data_policy_decision() | binary(), keyword()) ::
           {:ok, keyword()} | {:error, term()}
   def late_data_policy_write_opts(decision, opts \\ [])
       when (is_atom(decision) or is_binary(decision)) and is_list(opts) do
-    with {:ok, decision} <- normalize_late_data_policy_decision(decision) do
-      {:ok, merge_late_data_policy_write_opts(decision, opts)}
-    end
+    LateDataPolicy.write_opts(decision, opts)
   end
 
   defp execute_sample_workflow(workflow, samples, attrs, opts) do
@@ -2250,41 +2213,6 @@ defmodule Cadence.Telemetry.DataManagement do
     with {:ok, write_opts} <- historical_data_workflow_write_opts(workflow, attrs) do
       Storage.persist_samples(samples, write_opts)
     end
-  end
-
-  defp persist_late_data_policy_samples(_decision, [], _attrs, _opts), do: :ok
-
-  defp persist_late_data_policy_samples(decision, samples, attrs, opts) do
-    with {:ok, write_opts} <- late_data_policy_sample_write_opts(decision, attrs, opts) do
-      Storage.persist_samples(samples, write_opts)
-    end
-  end
-
-  defp late_data_policy_sample_write_opts(decision, attrs, opts) do
-    base_opts =
-      [
-        organization_id: get_attr(attrs, :organization_id),
-        realm: get_attr(attrs, :realm),
-        data_source_id: get_attr(attrs, :data_source_id),
-        binding_id: get_attr(attrs, :binding_id),
-        source_endpoint_id: get_attr(attrs, :source_endpoint_id),
-        replay_run_id: get_attr(attrs, :replay_run_id),
-        recorded_at: get_attr(attrs, :recorded_at),
-        metadata: get_attr(attrs, :metadata, %{}),
-        revision: get_attr(attrs, :revision),
-        supersedes_observation_id: get_attr(attrs, :supersedes_observation_id),
-        dashboard_runtime_invalidation?:
-          Keyword.get(opts, :dashboard_runtime_invalidation?, true),
-        dashboard_runtime_cache: Keyword.get(opts, :dashboard_runtime_cache),
-        record_backfill_lifecycle_event?: false,
-        backfill_run_id: get_attr(attrs, :backfill_run_id),
-        reason: get_attr(attrs, :reason) || "late_data_policy_write",
-        actor_id: get_attr(attrs, :actor_id),
-        actor_kind: get_attr(attrs, :actor_kind)
-      ]
-      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-
-    late_data_policy_write_opts(decision, base_opts)
   end
 
   defp historical_data_workflow_write_opts(workflow, attrs) do
@@ -2443,192 +2371,6 @@ defmodule Cadence.Telemetry.DataManagement do
     if failure_retryable?(reason), do: "retry_job", else: "correct_workflow_request"
   end
 
-  defp late_data_policy_event_attrs(decision, attrs) do
-    late_data_policy_event_attrs(decision, attrs, nil, nil)
-  end
-
-  defp late_data_policy_event_attrs(decision, attrs, samples, diagnostics) do
-    with {:ok, source_from} <- optional_datetime_attr(attrs, :source_from),
-         {:ok, source_to} <- optional_datetime_attr(attrs, :source_to),
-         {:ok, receipt_from} <- optional_datetime_attr(attrs, :receipt_from),
-         {:ok, receipt_to} <- optional_datetime_attr(attrs, :receipt_to) do
-      attrs =
-        attrs
-        |> late_data_policy_base_attrs()
-        |> Map.merge(%{
-          event_type: late_data_policy_event_type(decision),
-          authority: late_data_policy_authority(decision, attrs),
-          reason: late_data_policy_reason(decision, attrs),
-          source_from: source_from,
-          source_to: source_to,
-          receipt_from: receipt_from,
-          receipt_to: receipt_to,
-          sample_count: late_data_policy_sample_count(attrs, samples),
-          payload: late_data_policy_payload(decision, attrs, samples, diagnostics)
-        })
-        |> compact_attrs()
-
-      {:ok, attrs}
-    end
-  end
-
-  defp late_data_policy_base_attrs(attrs) do
-    %{
-      backfill_run_id: get_attr(attrs, :backfill_run_id),
-      organization_id: get_attr(attrs, :organization_id),
-      mission_id: get_attr(attrs, :mission_id),
-      realm: get_attr(attrs, :realm),
-      data_source_id: get_attr(attrs, :data_source_id),
-      binding_id: get_attr(attrs, :binding_id),
-      observable_id: get_attr(attrs, :observable_id),
-      point_id: get_attr(attrs, :point_id),
-      spacecraft_id: get_attr(attrs, :spacecraft_id),
-      actor_id: get_attr(attrs, :actor_id),
-      actor_kind: get_attr(attrs, :actor_kind)
-    }
-  end
-
-  defp late_data_policy_event_type(:accept), do: :late_data_accepted
-  defp late_data_policy_event_type(:reject), do: :late_data_rejected
-
-  defp late_data_policy_authority(:accept, attrs) do
-    get_attr(attrs, :authority) || :authoritative
-  end
-
-  defp late_data_policy_authority(:reject, attrs) do
-    get_attr(attrs, :authority) || :advisory
-  end
-
-  defp late_data_policy_reason(decision, attrs) do
-    get_attr(attrs, :reason) || "dashboard_late_data_#{decision}"
-  end
-
-  defp late_data_policy_sample_count(_attrs, samples) when is_list(samples), do: length(samples)
-
-  defp late_data_policy_sample_count(attrs, _samples) do
-    case get_attr(attrs, :sample_count) do
-      count when is_integer(count) and count >= 0 -> count
-      count when is_binary(count) -> parse_non_negative_integer(count)
-      _count -> nil
-    end
-  end
-
-  defp parse_non_negative_integer(value) do
-    case Integer.parse(value) do
-      {integer, ""} when integer >= 0 -> integer
-      _invalid -> nil
-    end
-  end
-
-  defp late_data_policy_payload(decision, attrs, samples, diagnostics) do
-    execution_mode = late_data_policy_payload_execution_mode(attrs, samples)
-
-    attrs
-    |> get_attr(:payload, %{})
-    |> ensure_map()
-    |> Map.merge(%{
-      "kind" => "late_data_policy_decision",
-      "policy_decision" => Atom.to_string(decision),
-      "execution_mode" => Atom.to_string(execution_mode),
-      "write_validity_state" => decision |> late_data_policy_validity_state() |> Atom.to_string(),
-      "record_current_values" =>
-        late_data_policy_record_current_values?(decision, execution_mode),
-      "refresh_latest_value" => late_data_policy_refresh_latest_value?(decision, execution_mode),
-      "projection_effect" => late_data_policy_projection_effect(decision, execution_mode),
-      "source_event_id" => get_attr(attrs, :source_event_id),
-      "source_event_type" => get_attr(attrs, :source_event_type),
-      "requested_by" => get_attr(attrs, :requested_by) || "dashboard_data_link_inspector",
-      "selected_sample_count" => selected_sample_count(samples),
-      "source" => diagnostics
-    })
-    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-    |> Map.new()
-  end
-
-  defp selected_sample_count(samples) when is_list(samples), do: length(samples)
-  defp selected_sample_count(_samples), do: nil
-
-  defp late_data_policy_payload_execution_mode(attrs, samples) do
-    case get_attr(attrs, :execution_mode) do
-      mode when mode in [:sample_execution, "sample_execution"] -> :sample_execution
-      mode when mode in [:event_only, "event_only"] -> :event_only
-      _mode when is_list(samples) -> :sample_execution
-      _mode -> :event_only
-    end
-  end
-
-  defp merge_late_data_policy_write_opts(decision, opts) do
-    opts
-    |> Keyword.merge(late_data_policy_locked_write_opts(decision))
-    |> Keyword.update(
-      :metadata,
-      late_data_policy_metadata(decision),
-      &Map.merge(ensure_map(&1), late_data_policy_metadata(decision))
-    )
-  end
-
-  defp late_data_policy_locked_write_opts(decision) do
-    [
-      late_data?: true,
-      backfill_lifecycle_event_type: late_data_policy_event_type(decision),
-      validity_state: late_data_policy_validity_state(decision),
-      record_current_values?: late_data_policy_record_current_values?(decision),
-      refresh_latest_value?: late_data_policy_refresh_latest_value?(decision),
-      authority: late_data_policy_authority(decision, %{})
-    ]
-  end
-
-  defp late_data_policy_metadata(decision) do
-    %{
-      "late_data_policy_decision" => Atom.to_string(decision),
-      "late_data_projection_effect" => late_data_policy_projection_effect(decision)
-    }
-  end
-
-  defp late_data_policy_validity_state(:accept), do: :canonical
-  defp late_data_policy_validity_state(:reject), do: :advisory
-
-  defp late_data_policy_record_current_values?(decision),
-    do: late_data_policy_record_current_values?(decision, :sample_execution)
-
-  defp late_data_policy_record_current_values?(:accept, :sample_execution), do: true
-  defp late_data_policy_record_current_values?(_decision, _execution_mode), do: false
-
-  defp late_data_policy_refresh_latest_value?(decision),
-    do: late_data_policy_refresh_latest_value?(decision, :sample_execution)
-
-  defp late_data_policy_refresh_latest_value?(:accept, :sample_execution), do: true
-  defp late_data_policy_refresh_latest_value?(_decision, _execution_mode), do: false
-
-  defp late_data_policy_projection_effect(decision),
-    do: late_data_policy_projection_effect(decision, :sample_execution)
-
-  defp late_data_policy_projection_effect(_decision, :event_only), do: "audit_event_only"
-
-  defp late_data_policy_projection_effect(:accept, :sample_execution),
-    do: "canonical_history_and_current_projection"
-
-  defp late_data_policy_projection_effect(:reject, :sample_execution), do: "advisory_history_only"
-
-  defp normalize_late_data_policy_decision(decision)
-       when decision in @late_data_policy_decisions,
-       do: {:ok, decision}
-
-  defp normalize_late_data_policy_decision(decision) when is_binary(decision) do
-    decision
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace("-", "_")
-    |> case do
-      value when value in ["accept", "accepted", "late_data_accepted"] -> {:ok, :accept}
-      value when value in ["reject", "rejected", "late_data_rejected"] -> {:ok, :reject}
-      _unsupported -> {:error, {:unsupported_late_data_policy_decision, decision}}
-    end
-  end
-
-  defp normalize_late_data_policy_decision(decision),
-    do: {:error, {:unsupported_late_data_policy_decision, decision}}
-
   defp normalize_historical_data_workflow(workflow)
        when workflow in @historical_data_workflows,
        do: {:ok, workflow}
@@ -2712,20 +2454,6 @@ defmodule Cadence.Telemetry.DataManagement do
     end
   end
 
-  defp require_late_data_policy_context(attrs) do
-    [:organization_id, :mission_id, :backfill_run_id, :data_source_id, :binding_id]
-    |> Enum.reduce_while(:ok, fn field, :ok ->
-      case require_present(attrs, field) do
-        :ok -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      :ok -> require_realm(attrs)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   defp require_historical_data_workflow_context(workflow, attrs) do
     [:organization_id, :mission_id, :data_source_id, :binding_id]
     |> Enum.reduce_while(:ok, fn field, :ok ->
@@ -2791,28 +2519,6 @@ defmodule Cadence.Telemetry.DataManagement do
 
   defp ensure_map(value) when is_map(value), do: value
   defp ensure_map(_value), do: %{}
-
-  defp optional_datetime_attr(attrs, field) do
-    case get_attr(attrs, field) do
-      nil ->
-        {:ok, nil}
-
-      "" ->
-        {:ok, nil}
-
-      %DateTime{} = datetime ->
-        {:ok, datetime}
-
-      value when is_binary(value) ->
-        case DateTime.from_iso8601(value) do
-          {:ok, datetime, _offset} -> {:ok, datetime}
-          {:error, reason} -> {:error, {:invalid_datetime_field, field, value, reason}}
-        end
-
-      value ->
-        {:error, {:invalid_datetime_field, field, value}}
-    end
-  end
 
   defp diagnostic_value_text(nil), do: nil
   defp diagnostic_value_text(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
