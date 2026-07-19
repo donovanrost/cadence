@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.OperationalEventRow do
+defmodule Cadence.OperationalEvents.EventRow do
   @moduledoc false
 
   use Ecto.Schema

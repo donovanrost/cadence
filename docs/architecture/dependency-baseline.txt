@@ -69,7 +69,6 @@ persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/pers
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_request_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_verifier_instance_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/mission_event_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/realized_contact_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/scheduled_contact_row.ex
@@ -86,7 +85,6 @@ persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/derived
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_latest_limit_state_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_limit_event_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/operational_events.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/projections/derived_telemetry_latest_values.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/projections/derived_telemetry_latest_values.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/combined_downlink_record_row.ex
@@ -94,7 +92,6 @@ persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persist
 persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/downlink_diagnostic_row.ex
 persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/managed_action_request_row.ex
 persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/mission_event_row.ex
-persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/projections/mission_events.ex|lib/cadence/persistence/schemas/telemetry_limit_event_row.ex
 persistence_schema|lib/cadence/projections/telemetry_latest_limit_states.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/projections/telemetry_latest_limit_states.ex|lib/cadence/persistence/schemas/telemetry_latest_limit_state_row.ex

@@ -91,6 +91,19 @@ defmodule Cadence.OperationalEventsTest do
     assert {:ok, fetched_event} = Cadence.fetch_operational_event(event.event_id)
     assert fetched_event.event_id == event.event_id
 
+    assert {:ok, scoped_event} =
+             OperationalEvents.fetch_event(organization_id, mission_id, event.event_id)
+
+    assert scoped_event.event_id == event.event_id
+
+    assert {:error, :not_found} =
+             OperationalEvents.fetch_event("other-organization", mission_id, event.event_id)
+
+    assert Enum.any?(
+             OperationalEvents.list_all_events(mission_id),
+             &(&1.event_id == event.event_id)
+           )
+
     assert [listed_event] =
              Cadence.list_operational_events(
                organization_id,

@@ -24,13 +24,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
   alias Cadence.Dashboards.{Document, RenderItem}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
+  alias Cadence.OperationalEvents.EventRow, as: OperationalEventRow
 
   alias Cadence.Persistence.Schemas.{
     CommandQueueEntryRow,
     CommandReleaseAttemptRow,
     CommandRequestRow,
-    CommandVerifierInstanceRow,
-    OperationalEventRow
+    CommandVerifierInstanceRow
   }
 
   alias Cadence.Repo

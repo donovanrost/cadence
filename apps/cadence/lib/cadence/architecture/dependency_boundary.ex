@@ -44,6 +44,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @applications_context ["lib/cadence/applications/"]
   @dashboards_context ["lib/cadence/dashboards/"]
   @ground_networks_context ["lib/cadence/ground_networks/"]
+  @operational_events_context [
+    "lib/cadence/operational_events.ex",
+    "lib/cadence/operational_events/"
+  ]
   @projections_context ["lib/cadence/projections/"]
   @context_owned_schemas [
     {[
@@ -62,6 +66,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/applications/"], @applications_context},
     {["lib/cadence/dashboards/"], @dashboards_context},
     {["lib/cadence/ground_networks/"], @ground_networks_context},
+    {["lib/cadence/operational_events/"], @operational_events_context},
     {["lib/cadence/projections/"], @projections_context}
   ]
 

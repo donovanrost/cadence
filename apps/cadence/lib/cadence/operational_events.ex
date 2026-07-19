@@ -14,7 +14,7 @@ defmodule Cadence.OperationalEvents do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Governance
   alias Cadence.OperationalEvents.{EffectiveInterval, Event}
-  alias Cadence.Persistence.Schemas.OperationalEventRow
+  alias Cadence.OperationalEvents.EventRow, as: OperationalEventRow
   alias Cadence.Repo
 
   @spec persist_event(Event.t()) :: {:ok, Event.t()} | {:error, term()}
@@ -48,6 +48,28 @@ defmodule Cadence.OperationalEvents do
       nil -> {:error, :not_found}
       %OperationalEventRow{} = row -> {:ok, OperationalEventRow.to_domain(row)}
     end
+  end
+
+  @spec fetch_event(binary(), binary(), binary()) :: {:ok, Event.t()} | {:error, :not_found}
+  def fetch_event(organization_id, mission_id, event_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(event_id) do
+    case Repo.get_by(OperationalEventRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           event_id: event_id
+         ) do
+      nil -> {:error, :not_found}
+      %OperationalEventRow{} = row -> {:ok, OperationalEventRow.to_domain(row)}
+    end
+  end
+
+  @doc false
+  @spec list_all_events(binary()) :: [Event.t()]
+  def list_all_events(mission_id) when is_binary(mission_id) do
+    OperationalEventRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> Repo.all()
+    |> Enum.map(&OperationalEventRow.to_domain/1)
   end
 
   @spec list_events(binary(), keyword()) :: [Event.t()]

@@ -13,6 +13,7 @@ defmodule Cadence.Projections.MissionEvents do
   alias Cadence.Jobs
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.MissionEvents.Entry
+  alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Persistence.Schemas.{
@@ -21,7 +22,6 @@ defmodule Cadence.Projections.MissionEvents do
     DownlinkDiagnosticRow,
     ManagedActionRequestRow,
     MissionEventRow,
-    OperationalEventRow,
     TelemetryLimitEventRow
   }
 
@@ -476,11 +476,7 @@ defmodule Cadence.Projections.MissionEvents do
       |> Repo.all()
       |> Enum.map(&DownlinkDiagnosticRow.to_domain/1)
 
-    operational_events =
-      OperationalEventRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&OperationalEventRow.to_domain/1)
+    operational_events = OperationalEvents.list_all_events(mission_id)
 
     operational_events ++
       contact_actions ++

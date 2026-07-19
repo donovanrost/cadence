@@ -38,6 +38,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.EffectiveInterval
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Ops.PointCatalog
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.SourceEndpoints
@@ -49,7 +50,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     CommandRequestRow,
     CommandVerifierInstanceRow,
     MissionEventRow,
-    OperationalEventRow,
     RawEvidenceRow,
     RealizedContactRow,
     ScheduledContactRow,
@@ -509,19 +509,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          organization_id,
          mission_id
        ) do
-    event_row =
-      OperationalEventRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.event_id == ^operational_event_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %OperationalEventRow{} = event_row ->
-        event = OperationalEventRow.to_domain(event_row)
-
+    case OperationalEvents.fetch_event(organization_id, mission_id, operational_event_id) do
+      {:ok, %OperationalEvent{} = event} ->
         event
         |> MissionEventProjection.project()
         |> Enum.find(&(&1.mission_event_id == link.target_id))
@@ -541,7 +530,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
              )}
         end
 
-      nil ->
+      {:error, :not_found} ->
         {:error, inspector(link, :missing, "Mission event was not found in this mission.", [])}
     end
   end
@@ -550,22 +539,11 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     do: {:error, inspector(link, :missing, "Mission event was not found in this mission.", [])}
 
   defp resolve_operational_event(%DataLink{} = link, organization_id, mission_id) do
-    event_row =
-      OperationalEventRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.event_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %OperationalEventRow{} = event_row ->
-        event = OperationalEventRow.to_domain(event_row)
-
+    case OperationalEvents.fetch_event(organization_id, mission_id, link.target_id) do
+      {:ok, %OperationalEvent{} = event} ->
         {:ok, inspector(link, :resolved, nil, operational_event_rows(event))}
 
-      nil ->
+      {:error, :not_found} ->
         {:error,
          inspector(link, :missing, "Operational event was not found in this mission.", [])}
     end
@@ -606,22 +584,13 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_transport_capability_record(%DataLink{} = link, organization_id, mission_id) do
-    event_row =
-      OperationalEventRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.source_record_kind == "transport_capability_record" and
-          row.source_record_id == ^link.target_id
-      )
-      |> order_by([row], asc: row.occurred_at, asc: row.event_id)
-      |> limit(1)
-      |> Repo.one()
-
-    case event_row do
-      %OperationalEventRow{} = event_row ->
-        event = OperationalEventRow.to_domain(event_row)
-
+    case first_operational_event_for_source_record(
+           organization_id,
+           mission_id,
+           "transport_capability_record",
+           link.target_id
+         ) do
+      %OperationalEvent{} = event ->
         {:ok,
          inspector(
            link,
@@ -643,22 +612,13 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_transport_action_request(%DataLink{} = link, organization_id, mission_id) do
-    event_row =
-      OperationalEventRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.source_record_kind == "transport_action_request" and
-          row.source_record_id == ^link.target_id
-      )
-      |> order_by([row], asc: row.occurred_at, asc: row.event_id)
-      |> limit(1)
-      |> Repo.one()
-
-    case event_row do
-      %OperationalEventRow{} = event_row ->
-        event = OperationalEventRow.to_domain(event_row)
-
+    case first_operational_event_for_source_record(
+           organization_id,
+           mission_id,
+           "transport_action_request",
+           link.target_id
+         ) do
+      %OperationalEvent{} = event ->
         {:ok,
          inspector(
            link,
@@ -1908,24 +1868,33 @@ defmodule Cadence.Dashboards.DataLinkResolver do
        ) do
     case state_value(release_attempt.metadata, :transport_action_request_id) do
       action_request_id when is_binary(action_request_id) and action_request_id != "" ->
-        OperationalEventRow
-        |> where(
-          [row],
-          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-            row.source_record_kind == "transport_action_request" and
-            row.source_record_id == ^action_request_id
+        first_operational_event_for_source_record(
+          organization_id,
+          mission_id,
+          "transport_action_request",
+          action_request_id
         )
-        |> order_by([row], asc: row.occurred_at, asc: row.event_id)
-        |> limit(1)
-        |> Repo.one()
-        |> case do
-          %OperationalEventRow{} = event_row -> OperationalEventRow.to_domain(event_row)
-          nil -> nil
-        end
 
       _missing ->
         nil
     end
+  end
+
+  defp first_operational_event_for_source_record(
+         organization_id,
+         mission_id,
+         source_record_kind,
+         source_record_id
+       ) do
+    organization_id
+    |> OperationalEvents.list_events(
+      mission_id,
+      source_record_kind: source_record_kind,
+      source_record_id: source_record_id,
+      order: :asc,
+      limit: 1
+    )
+    |> List.first()
   end
 
   defp command_release_attempt_related_links(

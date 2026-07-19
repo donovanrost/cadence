@@ -790,6 +790,9 @@ reducing the baseline to 132.
 Contacts now appends provider audit entries through `ProviderAudit`, preserving
 its outer transaction, and the audit row lives under that context, reducing
 the baseline to 130.
+Dashboards now uses scoped Operational Events fetch/list APIs, and the mission
+event projection uses an explicit rebuild feed. The operational-event row now
+lives under its owning context, reducing the baseline to 127.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their
