@@ -893,6 +893,12 @@ reduced test-file pressure to 2. Its public scenario is now a 25-line
 orchestrator over eight phase modules of 388, 1,222, 889, 653, 654, 685,
 1,093, and 1,238 lines; all five transport-evidence LiveView tests remain
 green in the focused app-local run.
+Decomposing the 2,190-line source-endpoint command-queue test into queue,
+release-resource, verifier, transport-action, and back-link phases reduced the
+2,939-line LiveView test to 426 lines, test-file pressure to 1, and overlong
+test pressure from 34 to 33. The 19-line scenario orchestrates phase modules of
+517, 603, 467, 499, and 292 lines, backed by 344 lines of shared fixtures; all
+three source-endpoint scope proofs remain green.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
