@@ -835,6 +835,10 @@ Moving latest-value and archive-bound cases out of the 1,890-line telemetry
 source test reduced test-file pressure to 13; the source-family and focused
 latest-value files are now 1,461 and 268 lines, backed by 188 lines of shared
 request, sample, and binding fixtures.
+Moving operational-observable state, RF-state, connection-state, and metric
+projection cases out of the 2,323-line operational-events context test reduced
+test-file pressure to 12; the context and observable-family files are now
+1,161 and 782 lines, backed by 407 lines of shared event and scope builders.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
