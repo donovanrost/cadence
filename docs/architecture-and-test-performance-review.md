@@ -1335,6 +1335,12 @@ gates, retry execution, lifecycle audit events, and structured summaries into a
 1,212 to 808 lines. The typed single and group retry APIs remain unchanged.
 Crossing the 1,000-line guideline reduces production source-size pressure from
 6 to 5; dependency ratchets are unchanged.
+Extracting telemetry and transport verifier evaluation, input ordering,
+delay/timeout handling, subject normalization, and comparison, range, and
+compound criteria matching into a 327-line `Commanding.VerifierEvaluation`
+module reduced `Commanding` from 3,436 to 3,071 lines. Existing Commanding
+evaluation APIs and persistence orchestration remain unchanged; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
