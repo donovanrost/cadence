@@ -64,60 +64,83 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewGrou
     :exit, _reason -> :ok
   end
 
+  defp record_comparison_review_request!(user, org, mission, dashboard) do
+    assert {:ok, request_event} =
+             Cadence.Dashboards.record_dashboard_comparison_review_request(
+               org.organization_id,
+               mission.mission_id,
+               dashboard.dashboard_id,
+               %{
+                 "schema" => "dashboard_comparison_review_request.v1",
+                 "request_kind" => "comparison_open_findings_review",
+                 "open_count" => 2,
+                 "open_placement_ids" => ["placement-counter", "placement-voltage"],
+                 "workflow_intent" => %{
+                   "schema" => "dashboard_comparison_workflow_intent.v1",
+                   "kind" => "bulk_correction_authority_review",
+                   "source" => "dashboard_comparison_rollup",
+                   "action" => "request_comparison_review",
+                   "selection_kind" => "open_comparison_findings",
+                   "selection_count" => 2,
+                   "placement_ids" => ["placement-counter", "placement-voltage"],
+                   "primary_data_view" => "all_revisions",
+                   "compare_data_view" => "canonical"
+                 },
+                 "open_findings" => %{
+                   "schema" => "dashboard_comparison_open_findings.v1",
+                   "comparison" => %{
+                     "primary_data_view" => "all_revisions",
+                     "compare_data_view" => "canonical"
+                   },
+                   "findings" => [
+                     %{
+                       "placement_id" => "placement-counter",
+                       "title" => "Counter",
+                       "state" => "increased",
+                       "decision_status" => "unhandled",
+                       "primary_observable_ids" => ["HK.counter"],
+                       "compare_observable_ids" => ["HK.counter"]
+                     },
+                     %{
+                       "placement_id" => "placement-voltage",
+                       "title" => "Voltage",
+                       "state" => "missing",
+                       "decision_status" => "unhandled",
+                       "primary_observable_ids" => ["HK.voltage"],
+                       "compare_observable_ids" => ["HK.voltage"]
+                     }
+                   ]
+                 }
+               },
+               actor_id: user.user_id
+             )
+
+    request_event
+  end
+
+  defp submit_group_stage(view, stage, reason) do
+    view
+    |> element("#dashboard-historical-workflow-group-form")
+    |> render_submit(%{
+      "historical_workflow_group" => %{
+        "workflow" => "backfill",
+        "request_group_id" => "dashboard-comparison-workflow-run",
+        "realm" => "backfill",
+        "data_source_id" => "managed_questdb_backfill",
+        "source_binding_id" => "backfill_telemetry",
+        "stage" => stage,
+        "reason" => reason,
+        "confirmed" => "confirmed"
+      }
+    })
+  end
+
   describe "historical workflow comparison-review surfaces" do
     test "starts a grouped historical workflow request from an open comparison review" do
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-      assert {:ok, request_event} =
-               Cadence.Dashboards.record_dashboard_comparison_review_request(
-                 org.organization_id,
-                 mission.mission_id,
-                 dashboard.dashboard_id,
-                 %{
-                   "schema" => "dashboard_comparison_review_request.v1",
-                   "request_kind" => "comparison_open_findings_review",
-                   "open_count" => 2,
-                   "open_placement_ids" => ["placement-counter", "placement-voltage"],
-                   "workflow_intent" => %{
-                     "schema" => "dashboard_comparison_workflow_intent.v1",
-                     "kind" => "bulk_correction_authority_review",
-                     "source" => "dashboard_comparison_rollup",
-                     "action" => "request_comparison_review",
-                     "selection_kind" => "open_comparison_findings",
-                     "selection_count" => 2,
-                     "placement_ids" => ["placement-counter", "placement-voltage"],
-                     "primary_data_view" => "all_revisions",
-                     "compare_data_view" => "canonical"
-                   },
-                   "open_findings" => %{
-                     "schema" => "dashboard_comparison_open_findings.v1",
-                     "comparison" => %{
-                       "primary_data_view" => "all_revisions",
-                       "compare_data_view" => "canonical"
-                     },
-                     "findings" => [
-                       %{
-                         "placement_id" => "placement-counter",
-                         "title" => "Counter",
-                         "state" => "increased",
-                         "decision_status" => "unhandled",
-                         "primary_observable_ids" => ["HK.counter"],
-                         "compare_observable_ids" => ["HK.counter"]
-                       },
-                       %{
-                         "placement_id" => "placement-voltage",
-                         "title" => "Voltage",
-                         "state" => "missing",
-                         "decision_status" => "unhandled",
-                         "primary_observable_ids" => ["HK.voltage"],
-                         "compare_observable_ids" => ["HK.voltage"]
-                       }
-                     ]
-                   }
-                 },
-                 actor_id: user.user_id
-               )
+      request_event = record_comparison_review_request!(user, org, mission, dashboard)
 
       path =
         show_path(mission, dashboard) <>
@@ -326,20 +349,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewGrou
                "placement-voltage"
              )
 
-      view
-      |> element("#dashboard-historical-workflow-group-form")
-      |> render_submit(%{
-        "historical_workflow_group" => %{
-          "workflow" => "backfill",
-          "request_group_id" => "dashboard-comparison-workflow-run",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "stage" => "approved",
-          "reason" => "operator_approved_bulk_correction_authority_review",
-          "confirmed" => "confirmed"
-        }
-      })
+      submit_group_stage(
+        view,
+        "approved",
+        "operator_approved_bulk_correction_authority_review"
+      )
 
       assert_patch(view)
 
@@ -360,20 +374,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewGrou
                "Record start transition for 2 eligible items in request group dashboard-comparison-workflow-run"
              )
 
-      view
-      |> element("#dashboard-historical-workflow-group-form")
-      |> render_submit(%{
-        "historical_workflow_group" => %{
-          "workflow" => "backfill",
-          "request_group_id" => "dashboard-comparison-workflow-run",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "stage" => "started",
-          "reason" => "operator_started_bulk_correction_authority_review",
-          "confirmed" => "confirmed"
-        }
-      })
+      submit_group_stage(
+        view,
+        "started",
+        "operator_started_bulk_correction_authority_review"
+      )
 
       assert_patch(view)
 

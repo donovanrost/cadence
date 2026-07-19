@@ -959,6 +959,11 @@ Reusing the managed-runtime inspector field selector and extracting the live
 action/timer dashboard fixture reduced that copied-route proof from 351 to 296
 lines while retaining both event-navigation and reopened-inspector contracts,
 reducing overlong-test pressure from 20 to 19.
+Extracting the comparison-review request document and repeated request-group
+stage submissions reduced that historical workflow proof from 356 to 290 lines
+while retaining its prefilled form, lifecycle navigation, review-origin,
+orchestration, and queued-job assertions, reducing overlong-test pressure from
+19 to 18.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
