@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
   @moduledoc false
 
   alias Cadence.Dashboards.{DataContext, DataLink, ScopeContext}
+  alias CadenceWeb.OpsDashboardShowLive.DataLinkSelection.EvidencePanel
 
   alias CadenceWeb.OpsDashboardShowLive.{
     EvidenceQuery,
@@ -397,10 +398,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
 
   def evidence_state(panel, evidence_query) do
     cond do
-      evidence_panel_status(panel) == :missing ->
+      EvidencePanel.status(panel) == :missing ->
         "missing"
 
-      evidence_panel?(panel) ->
+      EvidencePanel.panel?(panel) ->
         "active"
 
       evidence_query?(evidence_query) ->
@@ -412,107 +413,107 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
   end
 
   def evidence_kind(panel, evidence_query) do
-    evidence_panel_kind(panel) ||
+    EvidencePanel.kind(panel) ||
       evidence_query_value(evidence_query, "selected_evidence_kind")
   end
 
   def evidence_source_request(panel, evidence_query) do
-    evidence_panel_source_request(panel) ||
+    EvidencePanel.source_request(panel) ||
       evidence_query_value(evidence_query, "selected_source_request")
   end
 
   def evidence_logical_source(panel, evidence_query) do
-    evidence_panel_logical_source(panel) ||
+    EvidencePanel.logical_source(panel) ||
       evidence_query_value(evidence_query, "selected_logical_source")
   end
 
   def evidence_realm(panel, evidence_query) do
-    evidence_panel_realm(panel) ||
+    EvidencePanel.realm(panel) ||
       evidence_query_value(evidence_query, "selected_realm")
   end
 
   def evidence_data_source_id(panel, evidence_query) do
-    evidence_panel_data_source_id(panel) ||
+    EvidencePanel.data_source_id(panel) ||
       evidence_query_value(evidence_query, "selected_data_source")
   end
 
   def evidence_source_binding_id(panel, evidence_query) do
-    evidence_panel_source_binding_id(panel) ||
+    EvidencePanel.source_binding_id(panel) ||
       evidence_query_value(evidence_query, "selected_source_binding")
   end
 
   def evidence_time_mode(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Time mode") ||
+    EvidencePanel.row_value(panel, "Time mode") ||
       evidence_query_value(evidence_query, "selected_time_mode")
   end
 
   def evidence_time_axis(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Time axis") ||
+    EvidencePanel.row_value(panel, "Time axis") ||
       evidence_query_value(evidence_query, "selected_time_axis")
   end
 
   def evidence_replay_run_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Replay run") ||
+    EvidencePanel.row_value(panel, "Replay run") ||
       evidence_query_value(evidence_query, "selected_replay_run_id")
   end
 
   def evidence_scope_kind(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Scope kind") ||
+    EvidencePanel.row_value(panel, "Scope kind") ||
       evidence_query_value(evidence_query, "selected_scope_kind")
   end
 
   def evidence_scope_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Scope") ||
+    EvidencePanel.row_value(panel, "Scope") ||
       evidence_query_value(evidence_query, "selected_scope_id")
   end
 
   def evidence_scope_ids(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Scopes") ||
+    EvidencePanel.row_value(panel, "Scopes") ||
       evidence_query_value(evidence_query, "selected_scope_ids")
   end
 
   def evidence_contact_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Contact") ||
+    EvidencePanel.row_value(panel, "Contact") ||
       evidence_query_value(evidence_query, "selected_contact_id")
   end
 
   def evidence_source_endpoint_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Source endpoint") ||
+    EvidencePanel.row_value(panel, "Source endpoint") ||
       evidence_query_value(evidence_query, "selected_source_endpoint_id")
   end
 
   def evidence_source_empty_reason(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Source empty reason") ||
+    EvidencePanel.row_value(panel, "Source empty reason") ||
       evidence_query_value(evidence_query, "selected_source_empty_reason")
   end
 
   def evidence_requested_realm(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested realm") ||
+    EvidencePanel.row_value(panel, "Requested realm") ||
       evidence_query_value(evidence_query, "selected_requested_realm")
   end
 
   def evidence_requested_data_view(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested data view") ||
+    EvidencePanel.row_value(panel, "Requested data view") ||
       evidence_query_value(evidence_query, "selected_requested_data_view")
   end
 
   def evidence_requested_data_source_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested data source") ||
+    EvidencePanel.row_value(panel, "Requested data source") ||
       evidence_query_value(evidence_query, "selected_requested_data_source")
   end
 
   def evidence_requested_source_binding_id(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested source binding") ||
+    EvidencePanel.row_value(panel, "Requested source binding") ||
       evidence_query_value(evidence_query, "selected_requested_source_binding")
   end
 
   def evidence_requested_dataset(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested dataset") ||
+    EvidencePanel.row_value(panel, "Requested dataset") ||
       evidence_query_value(evidence_query, "selected_requested_dataset")
   end
 
   def evidence_requested_validity_state(panel, evidence_query) do
-    evidence_panel_row_value(panel, "Requested validity") ||
+    EvidencePanel.row_value(panel, "Requested validity") ||
       evidence_query_value(evidence_query, "selected_requested_validity_state")
   end
 
@@ -686,86 +687,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkSelection do
 
   defp evidence_query?(evidence_query) do
     EvidenceQuery.query?(evidence_query)
-  end
-
-  defp evidence_panel?({:evidence, inspector}) when is_map(inspector), do: true
-  defp evidence_panel?(_panel), do: false
-
-  defp evidence_panel_status({:evidence, %{status: status}}), do: status
-  defp evidence_panel_status({:evidence, %{"status" => status}}), do: status
-  defp evidence_panel_status(_panel), do: nil
-
-  defp evidence_panel_kind({:evidence, %{kind: kind}}), do: context_text(kind)
-  defp evidence_panel_kind({:evidence, %{"kind" => kind}}), do: context_text(kind)
-  defp evidence_panel_kind(_panel), do: nil
-
-  defp evidence_panel_source_request({:evidence, inspector}) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value("Source request")
-  end
-
-  defp evidence_panel_source_request(_panel), do: nil
-
-  defp evidence_panel_logical_source({:evidence, inspector}) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value("Logical source")
-  end
-
-  defp evidence_panel_logical_source(_panel), do: nil
-
-  defp evidence_panel_realm({:evidence, inspector}) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value("Realm")
-  end
-
-  defp evidence_panel_realm(_panel), do: nil
-
-  defp evidence_panel_data_source_id({:evidence, inspector}) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value("Data source")
-  end
-
-  defp evidence_panel_data_source_id(_panel), do: nil
-
-  defp evidence_panel_source_binding_id({:evidence, inspector}) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value("Source binding")
-  end
-
-  defp evidence_panel_source_binding_id(_panel), do: nil
-
-  defp evidence_panel_row_value({:evidence, inspector}, label) do
-    inspector
-    |> evidence_rows()
-    |> evidence_row_value(label)
-  end
-
-  defp evidence_panel_row_value(_panel, _label), do: nil
-
-  defp evidence_rows(%{subject_rows: subject_rows, detail_rows: detail_rows}) do
-    List.wrap(subject_rows) ++ List.wrap(detail_rows)
-  end
-
-  defp evidence_rows(%{subject_rows: subject_rows}), do: List.wrap(subject_rows)
-
-  defp evidence_rows(%{"subject_rows" => subject_rows, "detail_rows" => detail_rows}) do
-    List.wrap(subject_rows) ++ List.wrap(detail_rows)
-  end
-
-  defp evidence_rows(%{"subject_rows" => subject_rows}), do: List.wrap(subject_rows)
-  defp evidence_rows(_inspector), do: []
-
-  defp evidence_row_value(rows, label) do
-    Enum.find_value(rows, fn
-      %{label: ^label, value: value} -> context_text(value)
-      %{"label" => ^label, "value" => value} -> context_text(value)
-      _other -> nil
-    end)
   end
 
   defp data_link_context_spacecraft_id(context) do

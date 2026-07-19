@@ -742,7 +742,9 @@ diagnostic reports 31 production files, 21 test files, and 35 test functions
 over their respective limits. Extracting uplink-gateway configuration
 normalization and validation from the 1,016-line transport extension reduced
 the current production-file pressure to 30 without changing the test-file or
-test-function counts.
+test-function counts. Extracting evidence-panel metadata parsing from the
+1,052-line dashboard data-link selection module reduced the production-file
+pressure again to 29.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
