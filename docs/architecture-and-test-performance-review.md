@@ -749,7 +749,10 @@ and error logging from the 1,165-line executor reduced that count to 28 while
 keeping queue ownership and processing order in the GenServer. Extracting
 provider, frame, scheduling, and parallel-mode configuration from the
 1,165-line simulator coordinator reduced the count to 27 while leaving
-generation and ordered emission coordinator-owned.
+generation and ordered emission coordinator-owned. Moving the governed packet
+definition, binding-set, capability-instance, and binding-rule write steps out
+of the 1,164-line Governance context reduced the count to 26 while preserving
+the context-owned transaction, validation, and hydration boundaries.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
