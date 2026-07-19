@@ -248,7 +248,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     replay_contact_starts_at = ~U[2026-06-17 12:01:00Z]
     replay_contact_ends_at = ~U[2026-06-17 12:04:00Z]

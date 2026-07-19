@@ -712,7 +712,7 @@ defmodule CadenceWeb.Assets.DashboardSourceReadinessViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     assert {:ok, matching_event} =
              contact_interval_operational_event(

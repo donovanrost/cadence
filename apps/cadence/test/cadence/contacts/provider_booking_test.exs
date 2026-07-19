@@ -155,7 +155,9 @@ defmodule Cadence.Contacts.ProviderBookingTest do
 
     assert replayed.scheduled_contact_id == confirmed.scheduled_contact_id
 
-    assert length(Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)) ==
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
+           ) ==
              1
   end
 
@@ -175,7 +177,9 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     assert failed.last_error_document["category"] == "provider_configuration_failure"
     assert reason == :delivery_descriptor_conflicts_with_transport
     assert failed.delivery_descriptor_document == %{}
-    assert Cadence.list_scheduled_contacts(context.organization_id, context.mission_id) == []
+
+    assert Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id) ==
+             []
   end
 
   test "provider rejection remains durable without a Scheduled Contact", context do
@@ -192,7 +196,9 @@ defmodule Cadence.Contacts.ProviderBookingTest do
 
     assert rejected.lifecycle_state == :rejected
     assert rejected.last_error_document["reason"] != nil
-    assert [] == Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)
+
+    assert [] ==
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
   end
 
   test "ambiguous timeout becomes unknown and is not resubmitted", context do
@@ -276,7 +282,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     assert unknown.lifecycle_state == :unknown
 
     assert {:ok, scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                booking.scheduled_contact.scheduled_contact_id

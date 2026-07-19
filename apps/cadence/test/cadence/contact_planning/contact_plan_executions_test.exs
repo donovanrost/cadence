@@ -275,7 +275,9 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     assert result.plan.lifecycle_state == :partially_reserved
     assert Enum.sort(Enum.map(result.items, & &1.lifecycle_state)) == [:rejected, :reserved]
 
-    assert length(Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)) ==
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
+           ) ==
              1
   end
 

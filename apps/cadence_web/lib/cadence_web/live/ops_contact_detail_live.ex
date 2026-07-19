@@ -521,7 +521,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
   end
 
   defp fetch_scheduled_contact(reservation) do
-    case Cadence.fetch_scheduled_contact(
+    case Cadence.Contacts.fetch_scheduled_contact(
            reservation.organization_id,
            reservation.mission_id,
            reservation.scheduled_contact_id

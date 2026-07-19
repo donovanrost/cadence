@@ -39,7 +39,6 @@ defmodule Cadence do
     PathTemplate,
     ProviderProfile,
     RealizedContact,
-    ScheduledContact,
     TransportProfile
   }
 
@@ -306,12 +305,6 @@ defmodule Cadence do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  @spec persist_scheduled_contact(ScheduledContact.t()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def persist_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    ContactsService.persist_scheduled_contact(scheduled_contact)
-  end
 
   @spec persist_provider_profile(binary(), ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
@@ -683,39 +676,6 @@ defmodule Cadence do
       path_template_id,
       metadata_patch
     )
-  end
-
-  @spec persist_scheduled_contact(binary(), ScheduledContact.t()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def persist_scheduled_contact(organization_id, %ScheduledContact{} = scheduled_contact)
-      when is_binary(organization_id) do
-    ContactsService.persist_scheduled_contact(organization_id, scheduled_contact)
-  end
-
-  @spec fetch_scheduled_contact(binary(), binary()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def fetch_scheduled_contact(mission_id, scheduled_contact_id)
-      when is_binary(mission_id) and is_binary(scheduled_contact_id) do
-    ContactsService.fetch_scheduled_contact(mission_id, scheduled_contact_id)
-  end
-
-  @spec fetch_scheduled_contact(binary(), binary(), binary()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(scheduled_contact_id) do
-    ContactsService.fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id)
-  end
-
-  @spec list_scheduled_contacts(binary()) :: [ScheduledContact.t()]
-  def list_scheduled_contacts(mission_id) when is_binary(mission_id) do
-    ContactsService.list_scheduled_contacts(mission_id)
-  end
-
-  @spec list_scheduled_contacts(binary(), binary()) :: [ScheduledContact.t()]
-  def list_scheduled_contacts(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ContactsService.list_scheduled_contacts(organization_id, mission_id)
   end
 
   @spec create_contact_requirement(CurrentScope.t(), binary(), map(), keyword()) ::
@@ -1651,46 +1611,6 @@ defmodule Cadence do
           {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
   def fetch_mission_event_rebuild_job(rebuild_run_id) when is_binary(rebuild_run_id) do
     Jobs.fetch_job_for_run(:mission_event_rebuild, rebuild_run_id)
-  end
-
-  @spec realize_scheduled_contact(binary(), binary(), keyword()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def realize_scheduled_contact(mission_id, scheduled_contact_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(scheduled_contact_id) and is_list(opts) do
-    ContactsService.realize_scheduled_contact(mission_id, scheduled_contact_id, opts)
-  end
-
-  @spec realize_scheduled_contact(binary(), binary(), binary(), keyword()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def realize_scheduled_contact(organization_id, mission_id, scheduled_contact_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(scheduled_contact_id) and is_list(opts) do
-    ContactsService.realize_scheduled_contact(
-      organization_id,
-      mission_id,
-      scheduled_contact_id,
-      opts
-    )
-  end
-
-  @spec cancel_scheduled_contact(binary(), binary(), keyword()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def cancel_scheduled_contact(mission_id, scheduled_contact_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(scheduled_contact_id) and is_list(opts) do
-    ContactsService.cancel_scheduled_contact(mission_id, scheduled_contact_id, opts)
-  end
-
-  @spec cancel_scheduled_contact(binary(), binary(), binary(), keyword()) ::
-          {:ok, ScheduledContact.t()} | {:error, term()}
-  def cancel_scheduled_contact(organization_id, mission_id, scheduled_contact_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(scheduled_contact_id) and is_list(opts) do
-    ContactsService.cancel_scheduled_contact(
-      organization_id,
-      mission_id,
-      scheduled_contact_id,
-      opts
-    )
   end
 
   @spec reconcile_contact_lifecycle(DateTime.t()) :: {:ok, map()}

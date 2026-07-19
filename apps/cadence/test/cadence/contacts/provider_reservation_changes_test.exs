@@ -44,7 +44,7 @@ defmodule Cadence.Contacts.ProviderReservationChangesTest do
     refute reservation.cadence_accepted_snapshot_document["starts_at"] == shifted_start
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                reservation.scheduled_contact_id
@@ -88,7 +88,7 @@ defmodule Cadence.Contacts.ProviderReservationChangesTest do
     assert change.lifecycle_state == :configuration_failure
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                context.reservation.scheduled_contact_id
@@ -115,7 +115,7 @@ defmodule Cadence.Contacts.ProviderReservationChangesTest do
     refute change.actionable
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                reservation.scheduled_contact_id
@@ -148,7 +148,7 @@ defmodule Cadence.Contacts.ProviderReservationChangesTest do
     assert reservation.cadence_accepted_snapshot_document["provider_revision"] == 2
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                reservation.scheduled_contact_id
@@ -172,7 +172,7 @@ defmodule Cadence.Contacts.ProviderReservationChangesTest do
     assert replayed.provider_revision == 2
 
     assert {:ok, same_schedule} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                reservation.scheduled_contact_id

@@ -62,8 +62,8 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(due_contact)
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(future_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(due_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(future_contact)
     refute GenServer.whereis(Scheduler)
 
     assert {:ok, summary} = Contacts.reconcile(mission_id, reference_time)
@@ -76,13 +76,19 @@ defmodule Cadence.ContactsSchedulerTest do
     assert summary.errors == []
 
     assert {:ok, realized_due_contact} =
-             Cadence.fetch_scheduled_contact(mission_id, due_contact.scheduled_contact_id)
+             Cadence.Contacts.fetch_scheduled_contact(
+               mission_id,
+               due_contact.scheduled_contact_id
+             )
 
     assert realized_due_contact.lifecycle_state == :realized
     assert realized_due_contact.realized_contact_id == "due-contact_run"
 
     assert {:ok, untouched_future_contact} =
-             Cadence.fetch_scheduled_contact(mission_id, future_contact.scheduled_contact_id)
+             Cadence.Contacts.fetch_scheduled_contact(
+               mission_id,
+               future_contact.scheduled_contact_id
+             )
 
     assert untouched_future_contact.lifecycle_state == :scheduled
 
@@ -156,7 +162,8 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+    assert {:ok, _scheduled_contact} =
+             Cadence.Contacts.persist_scheduled_contact(scheduled_contact)
 
     scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
 
@@ -215,7 +222,8 @@ defmodule Cadence.ContactsSchedulerTest do
     refute GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id))
     refute GenServer.whereis(Scheduler)
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+    assert {:ok, _scheduled_contact} =
+             Cadence.Contacts.persist_scheduled_contact(scheduled_contact)
 
     assert is_pid(GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id)))
     refute GenServer.whereis(Scheduler)
@@ -343,7 +351,8 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+    assert {:ok, _scheduled_contact} =
+             Cadence.Contacts.persist_scheduled_contact(scheduled_contact)
 
     scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
 
@@ -432,7 +441,7 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(future_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(future_contact)
 
     scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
 
@@ -475,8 +484,8 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(due_contact)
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(other_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(due_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(other_contact)
 
     assert Contacts.next_contact_scheduler_wakeup(mission_id, reference_time) == reference_time
 
@@ -490,7 +499,10 @@ defmodule Cadence.ContactsSchedulerTest do
     assert summary.realized_scheduled_contact_ids == ["mission-scoped-due-contact_run"]
 
     assert {:ok, untouched_other_contact} =
-             Cadence.fetch_scheduled_contact(other_mission_id, other_contact.scheduled_contact_id)
+             Cadence.Contacts.fetch_scheduled_contact(
+               other_mission_id,
+               other_contact.scheduled_contact_id
+             )
 
     assert untouched_other_contact.lifecycle_state == :scheduled
   end
@@ -512,10 +524,11 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+    assert {:ok, _scheduled_contact} =
+             Cadence.Contacts.persist_scheduled_contact(scheduled_contact)
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                mission_id,
                scheduled_contact.scheduled_contact_id,
                clock_mode: :live,
@@ -552,7 +565,7 @@ defmodule Cadence.ContactsSchedulerTest do
         paths: contact_paths()
       })
 
-    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(missed_contact)
+    assert {:ok, _scheduled_contact} = Cadence.Contacts.persist_scheduled_contact(missed_contact)
 
     assert {:ok, summary} = Contacts.reconcile(mission_id, reference_time)
 
@@ -564,7 +577,10 @@ defmodule Cadence.ContactsSchedulerTest do
     assert summary.errors == []
 
     assert {:ok, expired_contact} =
-             Cadence.fetch_scheduled_contact(mission_id, missed_contact.scheduled_contact_id)
+             Cadence.Contacts.fetch_scheduled_contact(
+               mission_id,
+               missed_contact.scheduled_contact_id
+             )
 
     assert expired_contact.lifecycle_state == :expired
     assert expired_contact.metadata["expired_at"]

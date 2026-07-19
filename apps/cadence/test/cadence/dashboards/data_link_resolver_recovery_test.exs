@@ -431,10 +431,10 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert {:ok, _canceled_contact} =
-             Cadence.cancel_scheduled_contact(
+             Cadence.Contacts.cancel_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,

@@ -139,7 +139,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
            |> length() ==
              1
 
-    assert Cadence.list_scheduled_contacts(org.organization_id, mission.mission_id) |> length() ==
+    assert Cadence.Contacts.list_scheduled_contacts(org.organization_id, mission.mission_id)
+           |> length() ==
              1
   end
 
@@ -191,7 +192,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
              "#reservation-delivery-status-#{reservation.provider_reservation_id}"
            )
 
-    assert Cadence.list_scheduled_contacts(org.organization_id, mission.mission_id) == []
+    assert Cadence.Contacts.list_scheduled_contacts(org.organization_id, mission.mission_id) == []
   end
 
   test "cancellation converges provider and Scheduled Contact state" do
@@ -261,7 +262,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert has_element?(view, "#provider-reservations article", "canceled")
 
     assert {:ok, contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                org.organization_id,
                mission.mission_id,
                reservation.scheduled_contact_id

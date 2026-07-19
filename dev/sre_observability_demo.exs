@@ -298,7 +298,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         ]
       })
 
-    Cadence.persist_scheduled_contact(ids.organization_id, scheduled_contact)
+    Cadence.Contacts.persist_scheduled_contact(ids.organization_id, scheduled_contact)
   end
 
   defp persist_native_dashboard(ids) do

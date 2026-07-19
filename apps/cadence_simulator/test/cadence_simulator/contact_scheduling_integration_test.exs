@@ -218,7 +218,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert_event_page_survives_processor_restart(setup)
 
     assert {:ok, scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                setup.organization_id,
                setup.mission_id,
                booking.provider_reservation.scheduled_contact_id
@@ -227,7 +227,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert scheduled_contact.provider_contact_ref ==
              booking.provider_reservation.provider_contact_ref
 
-    assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(setup.organization_id, setup.mission_id)
+           ) == 1
 
     assert {:ok, %ProviderContact{status: :confirmed, pass_phase: :scheduled}} =
              SimulatorHTTP.describe_contact(
@@ -336,7 +338,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert {:ok, _scheduler_summary} =
              Cadence.Contacts.reconcile(setup.mission_id, DateTime.add(opportunity_ends_at, 1))
 
-    assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(setup.organization_id, setup.mission_id)
+           ) == 1
 
     assert length(ProviderReservations.list_for_mission(setup.organization_id, setup.mission_id)) ==
              1
@@ -449,7 +453,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              )
 
     assert [scheduled_contact] =
-             Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)
+             Cadence.Contacts.list_scheduled_contacts(setup.organization_id, setup.mission_id)
 
     assert scheduled_contact.scheduled_contact_id == recovered_reservation.scheduled_contact_id
 
@@ -667,7 +671,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert acknowledged.lifecycle_state == :acknowledged
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                setup.organization_id,
                setup.mission_id,
                reservation.scheduled_contact_id

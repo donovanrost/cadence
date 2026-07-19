@@ -260,7 +260,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
         })
 
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
       refreshed_html = render_dashboard_async(view)
       refreshed_chart_id = chart_dom_id(refreshed_html, trend_widget.widget_id)

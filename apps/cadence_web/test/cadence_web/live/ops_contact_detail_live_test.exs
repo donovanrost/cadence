@@ -73,7 +73,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     assert has_element?(view, "#provider-change-#{change.provider_reservation_change_id}")
 
     assert {:ok, scheduled} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                org.organization_id,
                mission.mission_id,
                setup.reservation.scheduled_contact_id

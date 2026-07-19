@@ -239,7 +239,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
         })
 
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
       dashboard =
         TestFixtures.persist_dashboard_document!(mission,

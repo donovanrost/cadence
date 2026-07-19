@@ -112,7 +112,9 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
                describe_response: {:ok, response}
              )
 
-    assert length(Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)) ==
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
+           ) ==
              1
   end
 
@@ -173,7 +175,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
     assert failed.lifecycle_state == :failed
 
     assert {:ok, contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                context.organization_id,
                context.mission_id,
                reservation.scheduled_contact_id
@@ -232,7 +234,9 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
     assert failed.lifecycle_state == :failed
     assert failed.last_error_document["category"] == "provider_configuration_failure"
     assert failed.delivery_descriptor_document == %{}
-    assert Cadence.list_scheduled_contacts(context.organization_id, context.mission_id) == []
+
+    assert Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id) ==
+             []
   end
 
   test "organization and mission scope constrain durable work", context do

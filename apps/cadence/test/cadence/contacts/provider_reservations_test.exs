@@ -208,7 +208,9 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
     assert replay.scheduled_contact.scheduled_contact_id ==
              first.scheduled_contact.scheduled_contact_id
 
-    assert length(Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)) ==
+    assert length(
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
+           ) ==
              1
   end
 
@@ -239,7 +241,8 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
                reservation.provider_reservation_id
              )
 
-    assert [] == Cadence.list_scheduled_contacts(context.organization_id, context.mission_id)
+    assert [] ==
+             Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id)
 
     assert {:ok, persisted} =
              ProviderReservations.fetch(

@@ -242,10 +242,10 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, alpha_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     binding_set = persist_binding_set!(org, mission)
 

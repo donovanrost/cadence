@@ -43,7 +43,7 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, persisted_scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert persisted_scheduled_contact.lifecycle_state == :scheduled
 
@@ -65,7 +65,7 @@ defmodule Cadence.ContactsTest do
            )
 
     assert {:ok, fetched_scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id
@@ -74,12 +74,12 @@ defmodule Cadence.ContactsTest do
     assert fetched_scheduled_contact.provider_contact_ref == "provider-contact-001"
 
     assert [listed_scheduled_contact] =
-             Cadence.list_scheduled_contacts(organization_id, mission_id)
+             Cadence.Contacts.list_scheduled_contacts(organization_id, mission_id)
 
     assert listed_scheduled_contact.scheduled_contact_id == scheduled_contact.scheduled_contact_id
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -93,7 +93,7 @@ defmodule Cadence.ContactsTest do
     assert realized_contact.clock_mode == :replay
 
     assert {:ok, realized_scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id
@@ -281,10 +281,10 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -392,7 +392,7 @@ defmodule Cadence.ContactsTest do
     starts_at = DateTime.from_unix!(1_700_042_500, :second)
 
     assert {:ok, %ScheduledContact{} = persisted_scheduled_contact} =
-             Cadence.persist_scheduled_contact(
+             Cadence.Contacts.persist_scheduled_contact(
                organization_id,
                ScheduledContact.new(%{
                  scheduled_contact_id: contact_id(mission_id, "templated-contact-versioned"),
@@ -441,7 +441,7 @@ defmodule Cadence.ContactsTest do
            ]
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                persisted_scheduled_contact.scheduled_contact_id,
@@ -484,10 +484,10 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert {:ok, canceled_scheduled_contact} =
-             Cadence.cancel_scheduled_contact(
+             Cadence.Contacts.cancel_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -535,7 +535,7 @@ defmodule Cadence.ContactsTest do
              scheduled_contact.scheduled_contact_id
 
     assert {:error, :scheduled_contact_canceled} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -560,10 +560,10 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -584,7 +584,7 @@ defmodule Cadence.ContactsTest do
     assert stopped_realized_contact.metadata["reason"] == "operator stop"
 
     assert {:ok, canceled_scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id
@@ -651,10 +651,10 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert {:ok, realized_contact} =
-             Cadence.realize_scheduled_contact(
+             Cadence.Contacts.realize_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
@@ -663,7 +663,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, canceled_scheduled_contact} =
-             Cadence.cancel_scheduled_contact(
+             Cadence.Contacts.cancel_scheduled_contact(
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,

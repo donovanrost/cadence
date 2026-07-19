@@ -92,7 +92,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
     assert {:ok, reservation} = reconcile_reservation(booking.provider_reservation)
 
     assert {:ok, scheduled_contact} =
-             Cadence.fetch_scheduled_contact(
+             Cadence.Contacts.fetch_scheduled_contact(
                setup.organization_id,
                setup.mission_id,
                reservation.scheduled_contact_id
@@ -609,7 +609,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
              ProviderReservationReconciler.reconcile_now(name)
 
     assert [scheduled_contact] =
-             Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)
+             Cadence.Contacts.list_scheduled_contacts(setup.organization_id, setup.mission_id)
 
     assert scheduled_contact.scheduled_contact_id == reservation.scheduled_contact_id
 

@@ -53,7 +53,7 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100,
       source_endpoint_id: "source-endpoint-beta"
@@ -188,13 +188,13 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, realized_contact)
 
     assert {:ok, _beta_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -319,13 +319,13 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, realized_contact)
 
     assert {:ok, _beta_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -496,16 +496,19 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, gamma_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, gamma_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -669,19 +672,22 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, gamma_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, gamma_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, other_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, other_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

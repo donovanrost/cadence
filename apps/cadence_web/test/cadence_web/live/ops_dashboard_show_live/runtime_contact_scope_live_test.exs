@@ -184,7 +184,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
         })
 
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100,
         source_endpoint_id: "source-endpoint-beta"
@@ -368,10 +368,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
         })
 
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, contact_alpha)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, contact_alpha)
 
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, contact_gamma)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, contact_gamma)
 
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100,
         source_endpoint_id: "source-endpoint-beta"

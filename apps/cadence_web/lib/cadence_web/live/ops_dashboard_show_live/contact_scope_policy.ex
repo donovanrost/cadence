@@ -31,7 +31,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ContactScopePolicy do
   end
 
   defp fetch_scheduled_contact_fn(opts) do
-    Keyword.get(opts, :fetch_scheduled_contact, &Cadence.fetch_scheduled_contact/3)
+    Keyword.get(opts, :fetch_scheduled_contact, &Cadence.Contacts.fetch_scheduled_contact/3)
   end
 
   defp fetch_realized_contact_fn(opts) do

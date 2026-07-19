@@ -64,7 +64,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_scheduled_contacts(opts) do
-    Keyword.get(opts, :list_scheduled_contacts, &Cadence.list_scheduled_contacts/2)
+    Keyword.get(opts, :list_scheduled_contacts, &Cadence.Contacts.list_scheduled_contacts/2)
   end
 
   defp list_realized_contacts(opts) do

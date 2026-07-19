@@ -92,7 +92,9 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
              ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
 
     assert processed.processing_state == :processed
-    assert Cadence.list_scheduled_contacts(context.organization_id, context.mission_id) == []
+
+    assert Cadence.Contacts.list_scheduled_contacts(context.organization_id, context.mission_id) ==
+             []
   end
 
   test "event correlation cannot cross an exact Provider Account boundary", context do

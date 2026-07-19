@@ -171,10 +171,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, alpha_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

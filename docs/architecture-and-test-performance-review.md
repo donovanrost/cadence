@@ -1514,6 +1514,14 @@ scheduling dependency module still uses root scheduled-contact APIs. The
 operations scheduling route remains in its existing authenticated LiveView
 session; production source-size pressure remains 4 and dependency ratchets are
 unchanged.
+Retiring the ten scheduled-contact persistence, read, realization, and
+cancellation clauses from the root facade moved 115 production, test-support,
+simulator, opt-in browser, and demo call sites directly to `Cadence.Contacts`.
+This reduced `Cadence` from 3,209 to 3,129 lines and reduced production web
+callers of the root facade from 40 to 38 files. Scheduled-contact API routes
+remain in the authenticated API pipeline, and contact operations pages remain
+in their existing authenticated LiveView sessions; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

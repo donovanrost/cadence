@@ -123,7 +123,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       })
 
     assert {:ok, persisted} =
-             Cadence.persist_scheduled_contact(org.organization_id, scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     persisted
   end

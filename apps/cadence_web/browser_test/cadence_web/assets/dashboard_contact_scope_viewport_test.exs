@@ -133,13 +133,16 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -296,13 +299,16 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -491,13 +497,16 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, beta_contact)
+             Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -663,14 +672,17 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     for contact <- [beta_contact, gamma_contact] do
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, contact)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, contact)
     end
 
     dashboard =
@@ -870,14 +882,17 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _scheduled_contact} =
-             Cadence.persist_scheduled_contact(org.organization_id, alpha_scheduled_contact)
+             Cadence.Contacts.persist_scheduled_contact(
+               org.organization_id,
+               alpha_scheduled_contact
+             )
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
 
     for contact <- [beta_contact, gamma_contact] do
       assert {:ok, _scheduled_contact} =
-               Cadence.persist_scheduled_contact(org.organization_id, contact)
+               Cadence.Contacts.persist_scheduled_contact(org.organization_id, contact)
     end
 
     dashboard =

@@ -68,7 +68,7 @@ defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
 
   defp reservation_row(organization_id, mission_id, reservation) do
     scheduled_contact =
-      case Cadence.fetch_scheduled_contact(
+      case Cadence.Contacts.fetch_scheduled_contact(
              organization_id,
              mission_id,
              reservation.scheduled_contact_id
