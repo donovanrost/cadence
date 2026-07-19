@@ -1170,6 +1170,12 @@ resolution, and the default revision read behind the now 301-line family
 module. This reduced the adapter from 2,731 to 2,675 lines; it retains only
 transport-execution dispatch and source identity for this family, while
 production source-size pressure remains 8.
+Completing managed and transport runtime ownership moved event and verifier
+callback selection, default OperationalEvents and Commanding reads, verifier
+enrichment orchestration, frame resolution, and both default revision reads
+behind the now 811-line runtime-activity module. This reduced the adapter from
+2,675 to 2,474 lines; it retains only runtime-family dispatch and source
+identity, while production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

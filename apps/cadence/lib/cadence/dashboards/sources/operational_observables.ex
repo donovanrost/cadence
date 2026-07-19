@@ -18,7 +18,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     SourceResult
   }
 
-  alias Cadence.Commanding
   alias Cadence.Comms.TransportStore
   alias Cadence.OperationalEvents
   alias Cadence.SourceEndpoints
@@ -67,43 +66,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @managed_runtime_observable_ids ["runtime.managed_activity"]
   @transport_runtime_observable_ids ["runtime.transport_activity"]
   @connection_states [:connected, :connecting, :degraded, :disconnected, :unknown]
-  @managed_runtime_event_kinds [
-    :managed_capability_initialized,
-    :managed_capability_record_handled,
-    :managed_capability_timer_handled,
-    :managed_action_requested,
-    :managed_timer_scheduled,
-    :managed_timer_fired,
-    :managed_timer_canceled
-  ]
-  @managed_runtime_source_record_kinds [
-    :managed_capability_record,
-    :managed_action_request,
-    :managed_timer_event
-  ]
-  @transport_runtime_event_kinds [
-    :transport_initialized,
-    :transport_event_handled,
-    :transport_control_input_handled,
-    :transport_timer_handled,
-    :transport_action_requested,
-    :transport_timer_scheduled,
-    :transport_timer_fired,
-    :transport_timer_canceled
-  ]
-  @transport_runtime_source_record_kinds [
-    :transport_capability_record,
-    :transport_action_request,
-    :transport_timer_event
-  ]
-
-  @type contact_fun :: (binary(), binary(), keyword() -> [struct()])
   @type connection_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @type transport_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
-  @type transport_execution_intervals_fun :: (binary(), binary(), keyword() ->
-                                                [
-                                                  map() | struct()
-                                                ])
   @type runtime_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @spec backed_observable_ids() :: [binary()]
   defdelegate backed_observable_ids(), to: ProductPolicy
@@ -207,8 +171,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_metric: &default_link_rf_metric_revision/3,
       transport_bitrate: &default_transport_bitrate_revision/3,
       transport_execution_state: &TransportExecutionState.default_revision/3,
-      managed_runtime_activity: &default_managed_runtime_activity_revision/3,
-      transport_runtime_activity: &default_transport_runtime_activity_revision/3,
+      managed_runtime_activity: &RuntimeActivity.default_managed_revision/3,
+      transport_runtime_activity: &RuntimeActivity.default_transport_revision/3,
       ingress_processing_latency: &default_ingress_processing_latency_revision/3,
       command_queue_depth: &CommandQueueDepth.default_revision/3
     ]
@@ -494,16 +458,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      managed_runtime_activity_history_frame(
+      RuntimeActivity.resolve_managed(
         request,
-        source_binding,
-        managed_runtime_activity_history_rows(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :managed_runtime_activity_history, [frame])
@@ -518,16 +479,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      transport_runtime_activity_history_frame(
+      RuntimeActivity.resolve_transport(
         request,
-        source_binding,
-        transport_runtime_activity_history_rows(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :transport_runtime_activity_history, [frame])
@@ -1241,16 +1199,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @managed_runtime_observable_ids)) do
       frame =
-        managed_runtime_activity_history_frame(
+        RuntimeActivity.resolve_managed(
           request,
-          source_binding,
-          managed_runtime_activity_history_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1269,16 +1224,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @transport_runtime_observable_ids)) do
       frame =
-        transport_runtime_activity_history_frame(
+        RuntimeActivity.resolve_transport(
           request,
-          source_binding,
-          transport_runtime_activity_history_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1752,14 +1704,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
-  defp managed_runtime_activity_history_frame(request, source_binding, rows) do
-    RuntimeActivity.managed_frame(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
   defp link_rf_metric_frame(request, source_binding, rows) do
     OperationalMetricFrames.link_rf_latest(
       request,
@@ -1791,69 +1735,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       rows,
       frame_source_context(request, source_binding)
     )
-  end
-
-  defp transport_runtime_activity_history_frame(request, source_binding, rows) do
-    RuntimeActivity.transport_frame(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp managed_runtime_activity_history_rows(
-         request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       ) do
-    managed_runtime_events_fun =
-      Keyword.get(opts, :managed_runtime_events_fun, &default_managed_runtime_events/3)
-
-    managed_runtime_events_fun.(
-      organization_id,
-      mission_id,
-      adapter_opts(request, source_binding)
-    )
-    |> RuntimeActivity.managed_rows(request)
-  end
-
-  defp transport_runtime_activity_history_rows(
-         request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       ) do
-    transport_runtime_events_fun =
-      Keyword.get(opts, :transport_runtime_events_fun, &default_transport_runtime_events/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    rows =
-      transport_runtime_events_fun.(organization_id, mission_id, adapter_opts)
-      |> RuntimeActivity.transport_rows(request)
-
-    command_verifier_instances_fun =
-      Keyword.get(
-        opts,
-        :command_verifier_instances_fun,
-        &default_command_verifier_instances/3
-      )
-
-    command_verifier_instances =
-      command_verifier_instances_fun.(
-        organization_id,
-        mission_id,
-        Keyword.put(
-          adapter_opts,
-          :command_release_attempt_ids,
-          RuntimeActivity.command_release_attempt_ids(rows)
-        )
-      )
-
-    RuntimeActivity.attach_verifier_outcomes(rows, command_verifier_instances)
   end
 
   defp connection_state(value) do
@@ -2129,65 +2010,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp default_managed_runtime_events(organization_id, mission_id, opts) do
-    OperationalEvents.list_events(
-      organization_id,
-      mission_id,
-      managed_runtime_event_opts(opts)
-    )
-  end
-
-  defp managed_runtime_event_opts(opts) do
-    [
-      category: :runtime,
-      kind: @managed_runtime_event_kinds,
-      source_record_kind: @managed_runtime_source_record_kinds,
-      from_occurred_at: Keyword.get(opts, :from),
-      to_occurred_at: Keyword.get(opts, :to),
-      replay_run_id: Keyword.get(opts, :replay_run_id),
-      order: :asc,
-      limit: Keyword.get(opts, :event_limit, 1_000)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp default_transport_runtime_events(organization_id, mission_id, opts) do
-    OperationalEvents.list_events(
-      organization_id,
-      mission_id,
-      transport_runtime_event_opts(opts)
-    )
-  end
-
-  defp default_command_verifier_instances(organization_id, mission_id, opts) do
-    case Keyword.get(opts, :command_release_attempt_ids, []) do
-      [] ->
-        []
-
-      command_release_attempt_ids when is_list(command_release_attempt_ids) ->
-        command_release_attempt_ids
-        |> Enum.flat_map(fn command_release_attempt_id ->
-          Commanding.list_command_verifier_instances(organization_id, mission_id,
-            command_release_attempt_id: command_release_attempt_id
-          )
-        end)
-    end
-  end
-
-  defp transport_runtime_event_opts(opts) do
-    [
-      category: :comms,
-      kind: @transport_runtime_event_kinds,
-      source_record_kind: @transport_runtime_source_record_kinds,
-      from_occurred_at: Keyword.get(opts, :from),
-      to_occurred_at: Keyword.get(opts, :to),
-      replay_run_id: Keyword.get(opts, :replay_run_id),
-      order: :asc,
-      limit: Keyword.get(opts, :event_limit, 1_000)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
   defp default_connection_state_revision(organization_id, mission_id, opts) do
     "connection_state:" <>
       RuntimeCacheKey.fingerprint(%{
@@ -2239,29 +2061,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.map(&transport_metric_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
       })
-  end
-
-  defp default_managed_runtime_activity_revision(organization_id, mission_id, opts) do
-    organization_id
-    |> default_managed_runtime_events(mission_id, opts)
-    |> RuntimeActivity.managed_revision()
-  end
-
-  defp default_transport_runtime_activity_revision(organization_id, mission_id, opts) do
-    events = default_transport_runtime_events(organization_id, mission_id, opts)
-
-    command_verifier_instances =
-      default_command_verifier_instances(
-        organization_id,
-        mission_id,
-        Keyword.put(
-          opts,
-          :command_release_attempt_ids,
-          RuntimeActivity.command_release_attempt_ids_from_events(events)
-        )
-      )
-
-    RuntimeActivity.transport_revision(events, command_verifier_instances)
   end
 
   defp default_link_rf_lock_state_revision(organization_id, mission_id, opts) do

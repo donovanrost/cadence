@@ -17,6 +17,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
     ScopeContext
   }
 
+  alias Cadence.Commanding
+  alias Cadence.OperationalEvents
   alias Cadence.Persistence.JsonDocument
 
   @managed_observable_id "runtime.managed_activity"
@@ -42,6 +44,84 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
     :transport_timer_fired,
     :transport_timer_canceled
   ]
+
+  @managed_source_record_kinds [
+    :managed_capability_record,
+    :managed_action_request,
+    :managed_timer_event
+  ]
+
+  @transport_source_record_kinds [
+    :transport_capability_record,
+    :transport_action_request,
+    :transport_timer_event
+  ]
+
+  @spec resolve_managed(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve_managed(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    events_fun =
+      Keyword.get(opts, :managed_runtime_events_fun, &default_managed_events/3)
+
+    events_fun.(organization_id, mission_id, adapter_opts)
+    |> managed_rows(request)
+    |> then(&managed_frame(request, &1, source_context))
+  end
+
+  @spec resolve_transport(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve_transport(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    events_fun =
+      Keyword.get(opts, :transport_runtime_events_fun, &default_transport_events/3)
+
+    rows =
+      events_fun.(organization_id, mission_id, adapter_opts)
+      |> transport_rows(request)
+
+    verifier_instances_fun =
+      Keyword.get(
+        opts,
+        :command_verifier_instances_fun,
+        &default_command_verifier_instances/3
+      )
+
+    verifier_instances =
+      verifier_instances_fun.(
+        organization_id,
+        mission_id,
+        Keyword.put(adapter_opts, :command_release_attempt_ids, command_release_attempt_ids(rows))
+      )
+
+    rows
+    |> attach_verifier_outcomes(verifier_instances)
+    |> then(&transport_frame(request, &1, source_context))
+  end
 
   @spec managed_rows([term()], PlannedSourceRequest.t()) :: [map()]
   def managed_rows(events, %PlannedSourceRequest{} = request) do
@@ -276,6 +356,89 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
           |> Enum.map(&verifier_revision_entry/1)
           |> Enum.sort_by(&(&1.command_verifier_instance_id || ""))
       })
+  end
+
+  @spec default_managed_revision(binary(), binary(), keyword()) :: binary()
+  def default_managed_revision(organization_id, mission_id, opts) do
+    organization_id
+    |> default_managed_events(mission_id, opts)
+    |> managed_revision()
+  end
+
+  @spec default_transport_revision(binary(), binary(), keyword()) :: binary()
+  def default_transport_revision(organization_id, mission_id, opts) do
+    events = default_transport_events(organization_id, mission_id, opts)
+
+    verifier_instances =
+      default_command_verifier_instances(
+        organization_id,
+        mission_id,
+        Keyword.put(
+          opts,
+          :command_release_attempt_ids,
+          command_release_attempt_ids_from_events(events)
+        )
+      )
+
+    transport_revision(events, verifier_instances)
+  end
+
+  defp default_managed_events(organization_id, mission_id, opts) do
+    OperationalEvents.list_events(
+      organization_id,
+      mission_id,
+      managed_event_opts(opts)
+    )
+  end
+
+  defp managed_event_opts(opts) do
+    [
+      category: :runtime,
+      kind: @managed_event_kinds,
+      source_record_kind: @managed_source_record_kinds,
+      from_occurred_at: Keyword.get(opts, :from),
+      to_occurred_at: Keyword.get(opts, :to),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      order: :asc,
+      limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp default_transport_events(organization_id, mission_id, opts) do
+    OperationalEvents.list_events(
+      organization_id,
+      mission_id,
+      transport_event_opts(opts)
+    )
+  end
+
+  defp transport_event_opts(opts) do
+    [
+      category: :comms,
+      kind: @transport_event_kinds,
+      source_record_kind: @transport_source_record_kinds,
+      from_occurred_at: Keyword.get(opts, :from),
+      to_occurred_at: Keyword.get(opts, :to),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      order: :asc,
+      limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp default_command_verifier_instances(organization_id, mission_id, opts) do
+    case Keyword.get(opts, :command_release_attempt_ids, []) do
+      [] ->
+        []
+
+      command_release_attempt_ids when is_list(command_release_attempt_ids) ->
+        Enum.flat_map(command_release_attempt_ids, fn command_release_attempt_id ->
+          Commanding.list_command_verifier_instances(organization_id, mission_id,
+            command_release_attempt_id: command_release_attempt_id
+          )
+        end)
+    end
   end
 
   defp managed_row(event) do
