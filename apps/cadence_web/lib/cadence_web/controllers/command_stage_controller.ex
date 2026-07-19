@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandStageController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_stage_filters(params) do
       command_stages =
-        Cadence.list_command_stages(organization_id, mission_id, filters)
+        Cadence.Commanding.list_command_stages(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_stage/1)
 
       json(conn, %{data: command_stages})
@@ -41,7 +41,7 @@ defmodule CadenceWeb.CommandStageController do
              default_owner: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, %CommandStage{} = persisted_command_stage} <-
-           Cadence.persist_command_stage(organization_id, command_stage) do
+           Cadence.Commanding.persist_command_stage(organization_id, command_stage) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.command_stage(persisted_command_stage)})
@@ -60,7 +60,7 @@ defmodule CadenceWeb.CommandStageController do
              mission_id
            ),
          {:ok, %CommandStage{} = command_stage} <-
-           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id) do
+           Cadence.Commanding.fetch_command_stage(organization_id, mission_id, command_stage_id) do
       json(conn, %{data: ControlPlaneJSON.command_stage(command_stage)})
     end
   end
@@ -78,11 +78,11 @@ defmodule CadenceWeb.CommandStageController do
              mission_id
            ),
          {:ok, %CommandStage{} = existing_command_stage} <-
-           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id),
+           Cadence.Commanding.fetch_command_stage(organization_id, mission_id, command_stage_id),
          {:ok, %CommandStage{} = updated_command_stage} <-
            ControlPlaneParams.command_stage(existing_command_stage, command_stage_params),
          {:ok, %CommandStage{} = persisted_command_stage} <-
-           Cadence.update_command_stage(organization_id, updated_command_stage) do
+           Cadence.Commanding.update_command_stage(organization_id, updated_command_stage) do
       json(conn, %{data: ControlPlaneJSON.command_stage(persisted_command_stage)})
     end
   end
@@ -105,7 +105,7 @@ defmodule CadenceWeb.CommandStageController do
              default_requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, command_requests} <-
-           Cadence.submit_staged_command_items(
+           Cadence.Commanding.submit_staged_command_items(
              organization_id,
              mission_id,
              command_stage_id,

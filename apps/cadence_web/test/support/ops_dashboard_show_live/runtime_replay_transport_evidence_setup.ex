@@ -118,7 +118,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
            }
 
     assert {:ok, fetched_release_attempt} =
-             Cadence.fetch_command_release_attempt(
+             Cadence.Commanding.fetch_command_release_attempt(
                org.organization_id,
                mission.mission_id,
                release_attempt.command_release_attempt_id
@@ -131,7 +131,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_release_attempt.verification_state == :failed
 
     assert {:ok, fetched_command_request} =
-             Cadence.fetch_command_request(
+             Cadence.Commanding.fetch_command_request(
                org.organization_id,
                mission.mission_id,
                release_attempt.command_request_id
@@ -140,7 +140,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_command_request.verification_state == :failed
 
     assert {:ok, fetched_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                org.organization_id,
                mission.mission_id,
                verifier_instance.command_verifier_instance_id
@@ -150,7 +150,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_verifier_instance.matched_record_id == "transport-action-request-1"
 
     assert {:ok, fetched_telemetry_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                org.organization_id,
                mission.mission_id,
                telemetry_verifier_instance.command_verifier_instance_id
@@ -161,7 +161,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_telemetry_verifier_instance.matched_record_id == telemetry_sample.sample_id
 
     assert {:ok, fetched_capability_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                org.organization_id,
                mission.mission_id,
                capability_verifier_instance.command_verifier_instance_id
@@ -175,7 +175,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_capability_verifier_instance.matched_record_id == "transport-runtime-record-1"
 
     assert {:ok, fetched_failed_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                org.organization_id,
                mission.mission_id,
                failed_verifier_instance.command_verifier_instance_id
@@ -185,7 +185,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert fetched_failed_verifier_instance.failure_reason == "failure_criteria_matched"
 
     assert {:ok, fetched_timed_out_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                org.organization_id,
                mission.mission_id,
                timed_out_verifier_instance.command_verifier_instance_id

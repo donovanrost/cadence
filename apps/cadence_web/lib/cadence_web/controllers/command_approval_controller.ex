@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandApprovalController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_approval_filters(params) do
       command_approvals =
-        Cadence.list_command_approvals(organization_id, mission_id, filters)
+        Cadence.Commanding.list_command_approvals(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_approval/1)
 
       json(conn, %{data: command_approvals})
@@ -34,7 +34,11 @@ defmodule CadenceWeb.CommandApprovalController do
              mission_id
            ),
          {:ok, %CommandApproval{} = command_approval} <-
-           Cadence.fetch_command_approval(organization_id, mission_id, command_approval_id) do
+           Cadence.Commanding.fetch_command_approval(
+             organization_id,
+             mission_id,
+             command_approval_id
+           ) do
       json(conn, %{data: ControlPlaneJSON.command_approval(command_approval)})
     end
   end

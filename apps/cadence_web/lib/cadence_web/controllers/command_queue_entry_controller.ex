@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_queue_entry_filters(params) do
       command_queue_entries =
-        Cadence.list_command_queue_entries(organization_id, mission_id, filters)
+        Cadence.Commanding.list_command_queue_entries(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_queue_entry/1)
 
       json(conn, %{data: command_queue_entries})
@@ -34,7 +34,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              mission_id
            ),
          {:ok, %CommandQueueEntry{} = command_queue_entry} <-
-           Cadence.fetch_command_queue_entry(
+           Cadence.Commanding.fetch_command_queue_entry(
              organization_id,
              mission_id,
              command_queue_entry_id
@@ -63,7 +63,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              default_released_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, result} <-
-           Cadence.release_command_queue_entry(
+           Cadence.Commanding.release_command_queue_entry(
              organization_id,
              mission_id,
              command_queue_entry_id,

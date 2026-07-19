@@ -65,7 +65,8 @@ defmodule Cadence.CommandingTest do
         visibility: :shared
       })
 
-    assert {:ok, persisted_stage} = Cadence.persist_command_stage(@organization_id, command_stage)
+    assert {:ok, persisted_stage} =
+             Cadence.Commanding.persist_command_stage(@organization_id, command_stage)
 
     staged_command_item =
       StagedCommandItem.new(%{
@@ -81,7 +82,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %StagedCommandItem{} = persisted_item} =
-             Cadence.persist_staged_command_item(@organization_id, staged_command_item)
+             Cadence.Commanding.persist_staged_command_item(@organization_id, staged_command_item)
 
     updated_item = %StagedCommandItem{
       persisted_item
@@ -91,7 +92,7 @@ defmodule Cadence.CommandingTest do
     }
 
     assert {:ok, fetched_stage} =
-             Cadence.fetch_command_stage(
+             Cadence.Commanding.fetch_command_stage(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id
@@ -100,14 +101,14 @@ defmodule Cadence.CommandingTest do
     assert fetched_stage.visibility == :shared
 
     assert {:ok, updated_persisted_item} =
-             Cadence.update_staged_command_item(@organization_id, updated_item)
+             Cadence.Commanding.update_staged_command_item(@organization_id, updated_item)
 
     assert updated_persisted_item.argument_values == %{"mode" => 3}
     assert updated_persisted_item.priority == 1
     assert updated_persisted_item.notes == "Reviewed by FDO"
 
     [listed_item] =
-      Cadence.list_staged_command_items(
+      Cadence.Commanding.list_staged_command_items(
         @organization_id,
         @mission_id,
         command_stage_id: persisted_stage.command_stage_id
@@ -131,7 +132,8 @@ defmodule Cadence.CommandingTest do
         visibility: :shared
       })
 
-    assert {:ok, persisted_stage} = Cadence.persist_command_stage(@organization_id, command_stage)
+    assert {:ok, persisted_stage} =
+             Cadence.Commanding.persist_command_stage(@organization_id, command_stage)
 
     staged_command_item =
       StagedCommandItem.new(%{
@@ -147,10 +149,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_item} =
-             Cadence.persist_staged_command_item(@organization_id, staged_command_item)
+             Cadence.Commanding.persist_staged_command_item(@organization_id, staged_command_item)
 
     assert {:ok, [command_request]} =
-             Cadence.submit_staged_command_items(
+             Cadence.Commanding.submit_staged_command_items(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id,
@@ -172,7 +174,7 @@ defmodule Cadence.CommandingTest do
     assert command_request.requested_by == %{"user_id" => "user-789"}
 
     assert {:ok, fetched_item} =
-             Cadence.fetch_staged_command_item(
+             Cadence.Commanding.fetch_staged_command_item(
                @organization_id,
                @mission_id,
                persisted_item.staged_command_item_id
@@ -182,7 +184,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_item.submitted_command_request_id == command_request.command_request_id
 
     assert {:ok, fetched_stage} =
-             Cadence.fetch_command_stage(
+             Cadence.Commanding.fetch_command_stage(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id
@@ -191,7 +193,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_stage.lifecycle_state == :submitted
 
     [listed_request] =
-      Cadence.list_command_requests(
+      Cadence.Commanding.list_command_requests(
         @organization_id,
         @mission_id,
         command_stage_id: persisted_stage.command_stage_id
@@ -215,14 +217,14 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     assert persisted_request.lifecycle_state == :approval_pending
 
     persisted_request_id = persisted_request.command_request_id
 
     assert {:error, {:command_request_self_approval_not_allowed, ^persisted_request_id}} =
-             Cadence.approve_command_request(
+             Cadence.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -230,7 +232,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:error, {:command_request_requires_approval, ^persisted_request_id}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -238,7 +240,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{approval: approval, command_request: approved_request}} =
-             Cadence.approve_command_request(
+             Cadence.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -252,7 +254,7 @@ defmodule Cadence.CommandingTest do
     assert approved_request.lifecycle_state == :approved
 
     assert {:ok, fetched_approval} =
-             Cadence.fetch_command_approval(
+             Cadence.Commanding.fetch_command_approval(
                @organization_id,
                @mission_id,
                approval.command_approval_id
@@ -261,7 +263,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_approval.command_request_id == persisted_request.command_request_id
 
     [listed_approval] =
-      Cadence.list_command_approvals(
+      Cadence.Commanding.list_command_approvals(
         @organization_id,
         @mission_id,
         command_request_id: persisted_request.command_request_id
@@ -270,7 +272,7 @@ defmodule Cadence.CommandingTest do
     assert listed_approval.command_approval_id == approval.command_approval_id
 
     assert {:ok, %{queue_entry: queue_entry, command_request: queued_request}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -301,7 +303,7 @@ defmodule Cadence.CommandingTest do
     assert second_high_priority_request.lifecycle_state == :validated
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
@@ -309,7 +311,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: first_high_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                first_high_priority_request.command_request_id,
@@ -317,7 +319,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: second_high_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                second_high_priority_request.command_request_id,
@@ -325,7 +327,7 @@ defmodule Cadence.CommandingTest do
              )
 
     listed_queue_entries =
-      Cadence.list_command_queue_entries(
+      Cadence.Commanding.list_command_queue_entries(
         @organization_id,
         @mission_id,
         queue_lane_key: source_endpoint.source_endpoint_id
@@ -343,7 +345,7 @@ defmodule Cadence.CommandingTest do
              expected_queue_entry_ids
 
     assert [filtered_queue_entry] =
-             Cadence.list_command_queue_entries(
+             Cadence.Commanding.list_command_queue_entries(
                @organization_id,
                @mission_id,
                command_request_id: first_high_priority_request.command_request_id
@@ -367,7 +369,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:error, {:missing_required_command_argument, "mode"}} =
-             Cadence.persist_command_request(@organization_id, missing_required_request)
+             Cadence.Commanding.persist_command_request(
+               @organization_id,
+               missing_required_request
+             )
 
     unknown_argument_request =
       CommandRequest.new(%{
@@ -379,7 +384,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:error, {:unknown_command_arguments, ["bogus"]}} =
-             Cadence.persist_command_request(@organization_id, unknown_argument_request)
+             Cadence.Commanding.persist_command_request(
+               @organization_id,
+               unknown_argument_request
+             )
   end
 
   test "releases the next queued command through the selected uplink transport and persists an uplink request",
@@ -391,7 +399,7 @@ defmodule Cadence.CommandingTest do
       persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "release"})
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -406,7 +414,7 @@ defmodule Cadence.CommandingTest do
               queue_entry: released_queue_entry,
               command_request: released_request
             }} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -426,7 +434,7 @@ defmodule Cadence.CommandingTest do
     assert released_request.verification_state == :not_required
 
     assert {:ok, fetched_release_attempt} =
-             Cadence.fetch_command_release_attempt(
+             Cadence.Commanding.fetch_command_release_attempt(
                @organization_id,
                @mission_id,
                release_attempt.command_release_attempt_id
@@ -435,7 +443,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_release_attempt.command_request_id == persisted_request.command_request_id
 
     [listed_release_attempt] =
-      Cadence.list_command_release_attempts(
+      Cadence.Commanding.list_command_release_attempts(
         @organization_id,
         @mission_id,
         command_queue_entry_id: queue_entry.command_queue_entry_id
@@ -528,7 +536,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -564,7 +572,7 @@ defmodule Cadence.CommandingTest do
     end)
 
     assert {:ok, %{release_attempt: release_attempt}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -612,7 +620,7 @@ defmodule Cadence.CommandingTest do
       persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "high"})
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
@@ -620,7 +628,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                high_priority_request.command_request_id,
@@ -635,7 +643,7 @@ defmodule Cadence.CommandingTest do
     assert {:error,
             {:command_queue_entry_not_next_for_release, ^low_priority_queue_entry_id,
              ^high_priority_queue_entry_id}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                low_priority_queue_entry_id,
@@ -644,7 +652,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{release_attempt: release_attempt}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                high_priority_queue_entry_id,
@@ -671,10 +679,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     assert {:ok, %{command_request: approved_request}} =
-             Cadence.approve_command_request(
+             Cadence.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -682,7 +690,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
@@ -692,7 +700,7 @@ defmodule Cadence.CommandingTest do
     realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -705,7 +713,7 @@ defmodule Cadence.CommandingTest do
     assert released_request.verification_state == :pending
 
     verifier_instances =
-      Cadence.list_command_verifier_instances(
+      Cadence.Commanding.list_command_verifier_instances(
         @organization_id,
         @mission_id,
         command_request_id: released_request.command_request_id
@@ -758,7 +766,7 @@ defmodule Cadence.CommandingTest do
     assert satisfied_verifier_instance.matched_record_id == sample.sample_id
 
     assert {:ok, fetched_verifier_instance} =
-             Cadence.fetch_command_verifier_instance(
+             Cadence.Commanding.fetch_command_verifier_instance(
                @organization_id,
                @mission_id,
                completion_verifier_instance.command_verifier_instance_id
@@ -767,7 +775,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_verifier_instance.lifecycle_state == :satisfied
 
     assert {:ok, fetched_request} =
-             Cadence.fetch_command_request(
+             Cadence.Commanding.fetch_command_request(
                @organization_id,
                @mission_id,
                released_request.command_request_id
@@ -776,7 +784,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_request.verification_state == :satisfied
 
     assert {:ok, fetched_release_attempt} =
-             Cadence.fetch_command_release_attempt(
+             Cadence.Commanding.fetch_command_release_attempt(
                @organization_id,
                @mission_id,
                release_attempt.command_release_attempt_id
@@ -801,10 +809,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     assert {:ok, %{command_request: approved_request}} =
-             Cadence.approve_command_request(
+             Cadence.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -812,7 +820,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
@@ -822,7 +830,7 @@ defmodule Cadence.CommandingTest do
     realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -842,7 +850,7 @@ defmodule Cadence.CommandingTest do
     assert timed_out_verifier_instance.failure_reason == "timed_out"
 
     assert {:ok, fetched_request} =
-             Cadence.fetch_command_request(
+             Cadence.Commanding.fetch_command_request(
                @organization_id,
                @mission_id,
                released_request.command_request_id
@@ -851,7 +859,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_request.verification_state == :timed_out
 
     assert {:ok, fetched_release_attempt} =
-             Cadence.fetch_command_release_attempt(
+             Cadence.Commanding.fetch_command_release_attempt(
                @organization_id,
                @mission_id,
                release_attempt.command_release_attempt_id
@@ -874,10 +882,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -895,7 +903,7 @@ defmodule Cadence.CommandingTest do
     attempted_at = DateTime.from_unix!(1_700_400_000, :second)
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -908,7 +916,7 @@ defmodule Cadence.CommandingTest do
     assert released_request.verification_state == :pending
 
     initial_verifier_instances =
-      Cadence.list_command_verifier_instances(
+      Cadence.Commanding.list_command_verifier_instances(
         @organization_id,
         @mission_id,
         command_request_id: released_request.command_request_id
@@ -924,7 +932,7 @@ defmodule Cadence.CommandingTest do
     assert started_verifier_instance.matched_record_kind == :transport_capability_record
 
     assert {:ok, request_after_start} =
-             Cadence.fetch_command_request(
+             Cadence.Commanding.fetch_command_request(
                @organization_id,
                @mission_id,
                released_request.command_request_id
@@ -944,7 +952,7 @@ defmodule Cadence.CommandingTest do
              )
 
     completed_verifier_instance =
-      Cadence.list_command_verifier_instances(
+      Cadence.Commanding.list_command_verifier_instances(
         @organization_id,
         @mission_id,
         command_request_id: released_request.command_request_id
@@ -956,7 +964,7 @@ defmodule Cadence.CommandingTest do
     assert completed_verifier_instance.matched_record_kind == :transport_capability_record
 
     assert {:ok, request_after_completion} =
-             Cadence.fetch_command_request(
+             Cadence.Commanding.fetch_command_request(
                @organization_id,
                @mission_id,
                released_request.command_request_id
@@ -965,7 +973,7 @@ defmodule Cadence.CommandingTest do
     assert request_after_completion.verification_state == :satisfied
 
     assert {:ok, release_attempt_after_completion} =
-             Cadence.fetch_command_release_attempt(
+             Cadence.Commanding.fetch_command_release_attempt(
                @organization_id,
                @mission_id,
                release_attempt.command_release_attempt_id
@@ -984,7 +992,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -1002,7 +1010,7 @@ defmodule Cadence.CommandingTest do
     attempted_at = DateTime.from_unix!(1_700_410_000, :second)
 
     assert {:ok, %{release_attempt: release_attempt}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -1192,7 +1200,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     persisted_request
   end

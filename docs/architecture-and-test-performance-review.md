@@ -1413,6 +1413,13 @@ from 1,037 to 940 lines. Release dispatch, completion/failure transactions, and
 verifier coordination remain in the facade with unchanged public APIs. Crossing
 the 1,000-line guideline reduces production source-size pressure from 5 to 4;
 dependency ratchets are unchanged.
+Retiring the 24 commanding delegates from the root `Cadence` facade and moving
+seven authenticated command controllers directly to `Cadence.Commanding`
+reduced the facade from 4,353 to 4,089 lines and reduced production web callers
+of the root facade from 102 to 95 files. Commanding tests, simulator integration
+coverage, and shared web test support now call the owning context directly as
+well. Existing routes and authentication pipelines are unchanged; production
+source-size pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

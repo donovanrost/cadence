@@ -87,10 +87,10 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(@organization_id, command_request)
+             Cadence.Commanding.persist_command_request(@organization_id, command_request)
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -98,7 +98,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
              )
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
-             Cadence.release_command_queue_entry(
+             Cadence.Commanding.release_command_queue_entry(
                @organization_id,
                @mission_id,
                queue_entry.command_queue_entry_id,
@@ -110,7 +110,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     assert release_attempt.verification_state in [:pending, :satisfied]
 
     assert_eventually(fn ->
-      case Cadence.fetch_command_request(
+      case Cadence.Commanding.fetch_command_request(
              @organization_id,
              @mission_id,
              released_request.command_request_id
@@ -121,7 +121,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     end)
 
     assert_eventually(fn ->
-      case Cadence.fetch_command_release_attempt(
+      case Cadence.Commanding.fetch_command_release_attempt(
              @organization_id,
              @mission_id,
              release_attempt.command_release_attempt_id

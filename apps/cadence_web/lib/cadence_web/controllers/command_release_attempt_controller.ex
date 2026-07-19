@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_release_attempt_filters(params) do
       command_release_attempts =
-        Cadence.list_command_release_attempts(organization_id, mission_id, filters)
+        Cadence.Commanding.list_command_release_attempts(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_release_attempt/1)
 
       json(conn, %{data: command_release_attempts})
@@ -34,7 +34,7 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
              mission_id
            ),
          {:ok, %CommandReleaseAttempt{} = command_release_attempt} <-
-           Cadence.fetch_command_release_attempt(
+           Cadence.Commanding.fetch_command_release_attempt(
              organization_id,
              mission_id,
              command_release_attempt_id

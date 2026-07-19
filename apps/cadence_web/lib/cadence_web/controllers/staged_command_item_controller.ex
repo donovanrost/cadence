@@ -22,12 +22,12 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id
            ),
          {:ok, %CommandStage{}} <-
-           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id),
+           Cadence.Commanding.fetch_command_stage(organization_id, mission_id, command_stage_id),
          {:ok, filters} <- ControlPlaneParams.staged_command_item_filters(params) do
       staged_command_items =
         filters
         |> Keyword.put(:command_stage_id, command_stage_id)
-        |> then(&Cadence.list_staged_command_items(organization_id, mission_id, &1))
+        |> then(&Cadence.Commanding.list_staged_command_items(organization_id, mission_id, &1))
         |> Enum.map(&ControlPlaneJSON.staged_command_item/1)
 
       json(conn, %{data: staged_command_items})
@@ -47,7 +47,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id
            ),
          {:ok, %CommandStage{}} <-
-           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id),
+           Cadence.Commanding.fetch_command_stage(organization_id, mission_id, command_stage_id),
          {:ok, %StagedCommandItem{} = staged_command_item} <-
            ControlPlaneParams.staged_command_item(
              organization_id,
@@ -56,7 +56,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              staged_command_item_params
            ),
          {:ok, %StagedCommandItem{} = persisted_staged_command_item} <-
-           Cadence.persist_staged_command_item(organization_id, staged_command_item) do
+           Cadence.Commanding.persist_staged_command_item(organization_id, staged_command_item) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
@@ -75,7 +75,11 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id
            ),
          {:ok, %StagedCommandItem{} = staged_command_item} <-
-           Cadence.fetch_staged_command_item(organization_id, mission_id, staged_command_item_id) do
+           Cadence.Commanding.fetch_staged_command_item(
+             organization_id,
+             mission_id,
+             staged_command_item_id
+           ) do
       json(conn, %{data: ControlPlaneJSON.staged_command_item(staged_command_item)})
     end
   end
@@ -93,14 +97,21 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id
            ),
          {:ok, %StagedCommandItem{} = existing_staged_command_item} <-
-           Cadence.fetch_staged_command_item(organization_id, mission_id, staged_command_item_id),
+           Cadence.Commanding.fetch_staged_command_item(
+             organization_id,
+             mission_id,
+             staged_command_item_id
+           ),
          {:ok, %StagedCommandItem{} = updated_staged_command_item} <-
            ControlPlaneParams.staged_command_item(
              existing_staged_command_item,
              staged_command_item_params
            ),
          {:ok, %StagedCommandItem{} = persisted_staged_command_item} <-
-           Cadence.update_staged_command_item(organization_id, updated_staged_command_item) do
+           Cadence.Commanding.update_staged_command_item(
+             organization_id,
+             updated_staged_command_item
+           ) do
       json(conn, %{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
     end
   end

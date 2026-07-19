@@ -71,7 +71,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                low_priority_request.command_request_id,
@@ -79,14 +79,14 @@ defmodule Cadence.CommandingDispatcherTest do
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                high_priority_request.command_request_id,
                %{"user_id" => "queue-operator"}
              )
 
-    assert Cadence.list_command_release_attempts(
+    assert Cadence.Commanding.list_command_release_attempts(
              dispatcher_scope.organization_id,
              dispatcher_scope.mission_id
            ) == []
@@ -97,7 +97,7 @@ defmodule Cadence.CommandingDispatcherTest do
     release_attempts =
       wait_until(fn ->
         attempts =
-          Cadence.list_command_release_attempts(
+          Cadence.Commanding.list_command_release_attempts(
             dispatcher_scope.organization_id,
             dispatcher_scope.mission_id
           )
@@ -115,14 +115,14 @@ defmodule Cadence.CommandingDispatcherTest do
            ]
 
     assert {:ok, released_high_priority_queue_entry} =
-             Cadence.fetch_command_queue_entry(
+             Cadence.Commanding.fetch_command_queue_entry(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                high_priority_queue_entry.command_queue_entry_id
              )
 
     assert {:ok, released_low_priority_queue_entry} =
-             Cadence.fetch_command_queue_entry(
+             Cadence.Commanding.fetch_command_queue_entry(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                low_priority_queue_entry.command_queue_entry_id
@@ -164,7 +164,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.enqueue_command_request(
+             Cadence.Commanding.enqueue_command_request(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                command_request.command_request_id,
@@ -178,7 +178,7 @@ defmodule Cadence.CommandingDispatcherTest do
 
     Process.sleep(80)
 
-    assert Cadence.list_command_release_attempts(
+    assert Cadence.Commanding.list_command_release_attempts(
              dispatcher_scope.organization_id,
              dispatcher_scope.mission_id
            ) == []
@@ -193,7 +193,7 @@ defmodule Cadence.CommandingDispatcherTest do
 
     release_attempt =
       wait_until(fn ->
-        case Cadence.list_command_release_attempts(
+        case Cadence.Commanding.list_command_release_attempts(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id
              ) do
@@ -209,7 +209,7 @@ defmodule Cadence.CommandingDispatcherTest do
     assert release_attempt.lifecycle_state == :released
 
     assert {:ok, released_queue_entry} =
-             Cadence.fetch_command_queue_entry(
+             Cadence.Commanding.fetch_command_queue_entry(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                queue_entry.command_queue_entry_id
@@ -384,7 +384,10 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.persist_command_request(dispatcher_scope.organization_id, command_request)
+             Cadence.Commanding.persist_command_request(
+               dispatcher_scope.organization_id,
+               command_request
+             )
 
     persisted_request
   end

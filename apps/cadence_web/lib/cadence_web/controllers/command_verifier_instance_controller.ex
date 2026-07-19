@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_verifier_instance_filters(params) do
       command_verifier_instances =
-        Cadence.list_command_verifier_instances(organization_id, mission_id, filters)
+        Cadence.Commanding.list_command_verifier_instances(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_verifier_instance/1)
 
       json(conn, %{data: command_verifier_instances})
@@ -34,7 +34,7 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
              mission_id
            ),
          {:ok, %CommandVerifierInstance{} = command_verifier_instance} <-
-           Cadence.fetch_command_verifier_instance(
+           Cadence.Commanding.fetch_command_verifier_instance(
              organization_id,
              mission_id,
              command_verifier_instance_id
