@@ -799,6 +799,10 @@ Extracting command-workflow parameter assembly and shared typed-value parsing
 from the 1,971-line control-plane parameter module reduced the count to 13
 while preserving `ControlPlaneParams` as the controller-facing facade for all
 parameter families.
+Separating runtime and operational-observable conversion, dashboard and source
+lifecycle conversion, and enum-independent normalization from the 2,289-line
+operational-event model reduced the count to 12 while leaving the canonical
+event struct, types, `new/1`, and public converter entry points on `Event`.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
