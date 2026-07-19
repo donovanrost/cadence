@@ -16,7 +16,71 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ContactPhase do
     ScopeContext
   }
 
+  alias Cadence.Contacts
+  alias Cadence.Dashboards.Sources.OperationalObservables.LatestFreshness
+  alias Cadence.SourceEndpoints
+
   @observable_id "contacts.phase"
+
+  @spec resolve_latest(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve_latest(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    {scheduled_contacts, realized_contacts} =
+      contacts(organization_id, mission_id, adapter_opts, opts)
+
+    rows =
+      scheduled_contacts
+      |> latest_rows(
+        realized_contacts,
+        resolve_scope(request, organization_id, mission_id, adapter_opts, opts)
+      )
+      |> LatestFreshness.annotate(request, opts)
+
+    latest_frame(request, rows, source_context)
+  end
+
+  @spec resolve_history(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve_history(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    {scheduled_contacts, realized_contacts} =
+      contacts(organization_id, mission_id, adapter_opts, opts)
+
+    rows =
+      history_rows(
+        scheduled_contacts,
+        realized_contacts,
+        resolve_scope(request, organization_id, mission_id, adapter_opts, opts),
+        request
+      )
+
+    history_frame(request, rows, source_context)
+  end
 
   @spec scope(PlannedSourceRequest.t(), [term()]) :: map()
   def scope(%PlannedSourceRequest{} = request, source_endpoints \\ []) do
@@ -146,6 +210,53 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ContactPhase do
           |> Enum.map(&realized_revision_entry/1)
           |> Enum.sort_by(&(&1.realized_contact_id || ""))
       })
+  end
+
+  @spec default_revision(binary(), binary(), keyword()) :: binary()
+  def default_revision(organization_id, mission_id, opts) do
+    revision(
+      default_scheduled_contacts(organization_id, mission_id, opts),
+      default_realized_contacts(organization_id, mission_id, opts)
+    )
+  end
+
+  defp contacts(organization_id, mission_id, adapter_opts, opts) do
+    scheduled_contacts_fun =
+      Keyword.get(opts, :scheduled_contacts_fun, &default_scheduled_contacts/3)
+
+    realized_contacts_fun =
+      Keyword.get(opts, :realized_contacts_fun, &default_realized_contacts/3)
+
+    {
+      scheduled_contacts_fun.(organization_id, mission_id, adapter_opts),
+      realized_contacts_fun.(organization_id, mission_id, adapter_opts)
+    }
+  end
+
+  defp resolve_scope(request, organization_id, mission_id, adapter_opts, opts) do
+    source_endpoints =
+      if source_endpoint_scope_required?(request) do
+        source_endpoints_fun =
+          Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
+
+        source_endpoints_fun.(organization_id, mission_id, adapter_opts)
+      else
+        []
+      end
+
+    scope(request, source_endpoints)
+  end
+
+  defp default_scheduled_contacts(organization_id, mission_id, _opts) do
+    Contacts.list_scheduled_contacts(organization_id, mission_id)
+  end
+
+  defp default_realized_contacts(organization_id, mission_id, _opts) do
+    Contacts.list_realized_contacts(organization_id, mission_id)
+  end
+
+  defp default_source_endpoints(organization_id, mission_id, _opts) do
+    SourceEndpoints.list_source_endpoints(organization_id, mission_id)
   end
 
   defp contact_rows(scheduled_contacts, realized_contacts, scope) do

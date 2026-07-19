@@ -15,13 +15,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     RuntimeCacheKey,
     SourceCapabilities,
     SourceFacts,
-    SourceFreshness,
     SourceResult
   }
 
   alias Cadence.Commanding
   alias Cadence.Comms.TransportStore
-  alias Cadence.Contacts
   alias Cadence.OperationalEvents
   alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.RuntimeHealth
@@ -35,6 +33,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     ConstellationHealth,
     ContactPhase,
     IngressProcessingLatencyRows,
+    LatestFreshness,
     LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
@@ -200,7 +199,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp revision_defaults do
     [
-      contacts_phase: &default_contact_phase_revision/3,
+      contacts_phase: &ContactPhase.default_revision/3,
       connection_state: &default_connection_state_revision/3,
       ground_station_antenna_pointing_state: &default_antenna_pointing_state_revision/3,
       link_rf_lock_state: &default_link_rf_lock_state_revision/3,
@@ -277,10 +276,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      ContactPhase.latest_frame(
+      ContactPhase.resolve_latest(
         request,
-        contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts),
-        frame_source_context(request, source_binding)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :contacts_phase, [frame])
@@ -295,10 +297,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      ContactPhase.history_frame(
+      ContactPhase.resolve_history(
         request,
-        contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts),
-        frame_source_context(request, source_binding)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :contacts_phase_history, [frame])
@@ -951,10 +956,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "contacts.phase" in request.observables do
       frame =
-        ContactPhase.latest_frame(
+        ContactPhase.resolve_latest(
           request,
-          contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts),
-          frame_source_context(request, source_binding)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1332,31 +1340,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts) do
-    scheduled_contacts_fun =
-      Keyword.get(opts, :scheduled_contacts_fun, &default_scheduled_contacts/3)
-
-    realized_contacts_fun =
-      Keyword.get(opts, :realized_contacts_fun, &default_realized_contacts/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    ContactPhase.latest_rows(
-      scheduled_contacts_fun.(
-        organization_id,
-        mission_id,
-        adapter_opts
-      ),
-      realized_contacts_fun.(
-        organization_id,
-        mission_id,
-        adapter_opts
-      ),
-      contact_phase_scope(request, organization_id, mission_id, opts, adapter_opts)
-    )
-    |> annotate_latest_freshness(request, opts)
-  end
-
   defp connection_latest_rows(request, source_binding, organization_id, mission_id, opts) do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
     source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
@@ -1373,7 +1356,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       connection_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp antenna_pointing_latest_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1393,7 +1376,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       antenna_pointing_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp link_rf_lock_latest_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1409,7 +1392,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_lock_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp link_rf_metric_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1426,7 +1409,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp link_rf_metric_history_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1479,7 +1462,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_frame_sync_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp transport_bitrate_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1495,7 +1478,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp transport_bitrate_history_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1526,7 +1509,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       mission_id,
       Keyword.get(opts, :read_time, DateTime.utc_now())
     )
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp ingress_processing_latency_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1545,7 +1528,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       opts
     )
     |> IngressProcessingLatencyRows.latest(request, mission_id)
-    |> annotate_latest_freshness(request, opts)
+    |> LatestFreshness.annotate(request, opts)
   end
 
   defp ingress_processing_latency_history_rows(
@@ -1581,10 +1564,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "contacts.phase" in request.observables do
       frame =
-        ContactPhase.history_frame(
+        ContactPhase.resolve_history(
           request,
-          contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts),
-          frame_source_context(request, source_binding)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1663,31 +1649,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     else
       frames
     end
-  end
-
-  defp contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    scheduled_contacts_fun =
-      Keyword.get(opts, :scheduled_contacts_fun, &default_scheduled_contacts/3)
-
-    realized_contacts_fun =
-      Keyword.get(opts, :realized_contacts_fun, &default_realized_contacts/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    ContactPhase.history_rows(
-      scheduled_contacts_fun.(
-        organization_id,
-        mission_id,
-        adapter_opts
-      ),
-      realized_contacts_fun.(
-        organization_id,
-        mission_id,
-        adapter_opts
-      ),
-      contact_phase_scope(request, organization_id, mission_id, opts, adapter_opts),
-      request
-    )
   end
 
   defp connection_history_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1865,63 +1826,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
-  defp annotate_latest_freshness(rows, request, opts) do
-    Enum.map(rows, &put_latest_freshness(&1, request, opts))
-  end
-
-  defp put_latest_freshness(row, request, opts) when is_map(row) do
-    observed_at = row_observed_at(row)
-    freshness = row_freshness(observed_at, request, opts)
-
-    row
-    |> Map.put(:observed_at, observed_at)
-    |> Map.put(:freshness_state, freshness.state)
-    |> Map.put(:age_ms, freshness.age_ms)
-    |> Map.put(:freshness_policy, freshness.policy)
-    |> Map.put(:freshness_checked_at, freshness.checked_at)
-  end
-
-  defp row_observed_at(row) do
-    case attr(row, :observed_at) || attr(row, :time) do
-      %DateTime{} = observed_at -> observed_at
-      _other -> nil
-    end
-  end
-
-  defp row_freshness(observed_at, request, opts) do
-    policy =
-      SourceFreshness.resolve_policy([
-        Keyword.get(opts, :freshness_policy),
-        context_value(request.sampling, :freshness_policy),
-        context_value(request.data_context, :freshness_policy)
-      ])
-
-    checked_at = Keyword.get_lazy(opts, :freshness_now, &DateTime.utc_now/0)
-    age_ms = metric_age_ms(observed_at, checked_at)
-
-    %{
-      state: metric_freshness_state(observed_at, age_ms, policy),
-      age_ms: age_ms,
-      policy: policy,
-      checked_at: checked_at
-    }
-  end
-
-  defp metric_age_ms(%DateTime{} = observed_at, %DateTime{} = checked_at) do
-    max(DateTime.diff(checked_at, observed_at, :millisecond), 0)
-  end
-
-  defp metric_age_ms(_observed_at, _checked_at), do: nil
-
-  defp metric_freshness_state(nil, _age_ms, _policy), do: :missing
-
-  defp metric_freshness_state(_observed_at, age_ms, %{stale_after_ms: stale_after_ms})
-       when is_integer(age_ms) and is_integer(stale_after_ms) and stale_after_ms >= 0 and
-              age_ms > stale_after_ms,
-       do: :stale
-
-  defp metric_freshness_state(_observed_at, _age_ms, _policy), do: :fresh
-
   defp transport_execution_history_rows(
          request,
          source_binding,
@@ -2065,14 +1969,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metadata_attr(value, :materialized_link_assignment_id)
     ]
     |> Enum.find(&present_text?/1)
-  end
-
-  defp default_scheduled_contacts(organization_id, mission_id, _opts) do
-    Contacts.list_scheduled_contacts(organization_id, mission_id)
-  end
-
-  defp default_realized_contacts(organization_id, mission_id, _opts) do
-    Contacts.list_realized_contacts(organization_id, mission_id)
   end
 
   defp default_transports(organization_id, mission_id, _opts) do
@@ -2359,13 +2255,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       limit: Keyword.get(opts, :event_limit, 1_000)
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp default_contact_phase_revision(organization_id, mission_id, opts) do
-    ContactPhase.revision(
-      default_scheduled_contacts(organization_id, mission_id, opts),
-      default_realized_contacts(organization_id, mission_id, opts)
-    )
   end
 
   defp default_connection_state_revision(organization_id, mission_id, opts) do
@@ -2791,26 +2680,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         {:warning,
          warning(request, :"missing_#{key}", :error, "Missing request context", %{key: key})}
     end
-  end
-
-  defp contact_phase_scope(
-         %PlannedSourceRequest{} = request,
-         organization_id,
-         mission_id,
-         opts,
-         adapter_opts
-       ) do
-    source_endpoints =
-      if ContactPhase.source_endpoint_scope_required?(request) do
-        source_endpoints_fun =
-          Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
-
-        source_endpoints_fun.(organization_id, mission_id, adapter_opts)
-      else
-        []
-      end
-
-    ContactPhase.scope(request, source_endpoints)
   end
 
   defp realm(%PlannedSourceRequest{data_context: data_context}, source_binding) do

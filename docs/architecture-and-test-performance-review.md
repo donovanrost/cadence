@@ -1151,6 +1151,14 @@ spacecraft reads, worst-state rollup, counts, and matrix-frame presentation into
 a 115-line family module reduced the adapter from 2,972 to 2,891 lines. The
 adapter now supplies tenant and source identity and retains only product
 dispatch for this family; production source-size pressure remains 8.
+Completing contact-phase ownership moved callback selection, default Contacts
+and SourceEndpoints reads, endpoint-scope hydration, latest/history
+materialization, and the default revision read behind the now 510-line family
+module. A 71-line shared latest-freshness primitive preserves one annotation
+policy for contact and the remaining latest families. Together these changes
+reduced the adapter from 2,891 to 2,760 lines; it now retains only contact-family
+dispatch, source identity, and the shared result envelope, while production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
