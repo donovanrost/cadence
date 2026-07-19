@@ -162,6 +162,25 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects derived telemetry rows through their owning context" do
+    graph = %{
+      "lib/cadence/dashboards/data_link_resolver.ex" => %{
+        "lib/cadence/derived_telemetry/evaluation_run_row.ex" => "export"
+      },
+      "lib/cadence/derived_telemetry.ex" => %{
+        "lib/cadence/derived_telemetry/evaluation_run_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/data_link_resolver.ex",
+               sink: "lib/cadence/derived_telemetry/evaluation_run_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "compares current edges with the checked-in debt baseline" do
     findings =
       DependencyBoundary.findings(%{

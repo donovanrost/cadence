@@ -10,11 +10,11 @@ defmodule Cadence.DerivedTelemetry do
   alias Ecto.Multi
 
   alias Cadence.DerivedTelemetry.{Definition, ExpressionEvaluator, Run, Sample}
+  alias Cadence.DerivedTelemetry.EvaluationRunRow, as: DerivedTelemetryEvaluationRunRow
   alias Cadence.Governance
   alias Cadence.Jobs
 
   alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryEvaluationRunRow,
     DerivedTelemetryLatestValueRow,
     DerivedTelemetrySampleRow,
     TelemetrySampleRow

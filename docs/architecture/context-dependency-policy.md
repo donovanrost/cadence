@@ -90,9 +90,9 @@ The current ratchet enforces three high-confidence rules from this policy:
 
 The moved-row guard currently covers Identity and tenancy, Catalog and
 activation, Comms configuration, Limits, Jobs, Notifications, Applications,
-Dashboards, Ground Networks, Operational Events, and Projections ownership
-paths. Extend the executable ownership map in the same change whenever another
-context receives row modules.
+Dashboards, Derived Telemetry, Ground Networks, Operational Events, and
+Projections ownership paths. Extend the executable ownership map in the same
+change whenever another context receives row modules.
 
 The live debt is recorded in
 [`dependency-baseline.txt`](dependency-baseline.txt). Each entry is an existing

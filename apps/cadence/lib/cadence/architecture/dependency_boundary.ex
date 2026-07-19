@@ -43,6 +43,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
   @applications_context ["lib/cadence/applications/"]
   @dashboards_context ["lib/cadence/dashboards/"]
+  @derived_telemetry_context [
+    "lib/cadence/derived_telemetry.ex",
+    "lib/cadence/derived_telemetry/"
+  ]
   @ground_networks_context ["lib/cadence/ground_networks/"]
   @operational_events_context [
     "lib/cadence/operational_events.ex",
@@ -65,6 +69,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/notifications/"], @notifications_context},
     {["lib/cadence/applications/"], @applications_context},
     {["lib/cadence/dashboards/"], @dashboards_context},
+    {["lib/cadence/derived_telemetry/"], @derived_telemetry_context},
     {["lib/cadence/ground_networks/"], @ground_networks_context},
     {["lib/cadence/operational_events/"], @operational_events_context},
     {["lib/cadence/projections/"], @projections_context}

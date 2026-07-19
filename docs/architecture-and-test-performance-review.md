@@ -793,6 +793,8 @@ the baseline to 130.
 Dashboards now uses scoped Operational Events fetch/list APIs, and the mission
 event projection uses an explicit rebuild feed. The operational-event row now
 lives under its owning context, reducing the baseline to 127.
+The derived-telemetry evaluation-run row now lives under its owning context,
+reducing the baseline to 126.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their
