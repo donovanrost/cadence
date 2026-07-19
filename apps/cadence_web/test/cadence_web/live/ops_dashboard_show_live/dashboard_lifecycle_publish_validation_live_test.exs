@@ -11,8 +11,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Dashboards.Document
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.OpsDashboardRow
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 

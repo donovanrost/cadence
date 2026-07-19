@@ -37,6 +37,11 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
 
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+
+  alias Cadence.Dashboards.DocumentStore.LifecycleEventRow,
+    as: DashboardLifecycleEventRow
+
   alias Cadence.Runtime.{
     ManagedActionRequest,
     ManagedCapabilityRecord,
@@ -49,8 +54,6 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     CommandReleaseAttemptRow,
     CommandRequestRow,
     CommandVerifierInstanceRow,
-    DashboardLifecycleEventRow,
-    OpsDashboardRow,
     TelemetryObservationIdentityDecisionEventRow,
     TelemetrySampleRow
   }

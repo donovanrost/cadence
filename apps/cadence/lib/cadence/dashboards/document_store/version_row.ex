@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardVersionRow do
+defmodule Cadence.Dashboards.DocumentStore.VersionRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -14,9 +14,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableDefaultMultiEntit
 
   alias Cadence.Comms.Transport
   alias Cadence.Dashboards.{Document, RenderItem}
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Persistence.JsonDocument
-
-  alias Cadence.Persistence.Schemas.OpsDashboardRow
 
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint

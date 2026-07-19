@@ -81,11 +81,6 @@ persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/pers
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/scheduled_contact_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/telemetry_limit_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/dashboards/document_store.ex|lib/cadence/persistence/schemas/dashboard_lifecycle_event_row.ex
-persistence_schema|lib/cadence/dashboards/document_store.ex|lib/cadence/persistence/schemas/dashboard_version_row.ex
-persistence_schema|lib/cadence/dashboards/document_store.ex|lib/cadence/persistence/schemas/ops_dashboard_row.ex
-persistence_schema|lib/cadence/dashboards/investigation_presets.ex|lib/cadence/persistence/schemas/dashboard_investigation_preset_row.ex
-persistence_schema|lib/cadence/dashboards/investigation_presets.ex|lib/cadence/persistence/schemas/ops_dashboard_row.ex
 persistence_schema|lib/cadence/dashboards/runtime_invalidation/decision_events.ex|lib/cadence/persistence/schemas/dashboard_runtime_invalidation_decision_event_row.ex
 persistence_schema|lib/cadence/dashboards/source_credentials.ex|lib/cadence/persistence/schemas/dashboard_source_credential_event_row.ex
 persistence_schema|lib/cadence/dashboards/source_credentials.ex|lib/cadence/persistence/schemas/dashboard_source_credential_reference_row.ex

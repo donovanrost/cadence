@@ -52,10 +52,12 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.{EffectiveInterval, Event}
 
+  alias Cadence.Dashboards.DocumentStore.LifecycleEventRow,
+    as: DashboardLifecycleEventRow
+
   alias Cadence.Persistence.Schemas.{
     CommandQueueEntryRow,
     CommandRequestRow,
-    DashboardLifecycleEventRow,
     ReplayRunRow,
     ReplayTelemetrySampleRow,
     TelemetryLimitEventRow,

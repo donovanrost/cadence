@@ -6,7 +6,9 @@ defmodule Cadence.Dashboards.InvestigationPresets do
   import Ecto.Query
 
   alias Cadence.Dashboards.InvestigationPreset
-  alias Cadence.Persistence.Schemas.{DashboardInvestigationPresetRow, OpsDashboardRow}
+
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+  alias Cadence.Dashboards.InvestigationPresets.PresetRow, as: DashboardInvestigationPresetRow
   alias Cadence.Repo
 
   @spec save(binary(), binary(), binary(), map(), keyword()) ::

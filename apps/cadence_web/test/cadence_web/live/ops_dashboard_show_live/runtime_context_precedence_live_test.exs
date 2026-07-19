@@ -14,9 +14,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextPrecedenceLiveTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document}
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.OpsDashboardRow
   alias Cadence.Repo
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures

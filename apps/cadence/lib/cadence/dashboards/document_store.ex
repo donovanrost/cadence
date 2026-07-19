@@ -22,15 +22,15 @@ defmodule Cadence.Dashboards.DocumentStore do
     Version
   }
 
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+
+  alias Cadence.Dashboards.DocumentStore.LifecycleEventRow,
+    as: DashboardLifecycleEventRow
+
+  alias Cadence.Dashboards.DocumentStore.VersionRow, as: DashboardVersionRow
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-
-  alias Cadence.Persistence.Schemas.{
-    DashboardLifecycleEventRow,
-    DashboardVersionRow,
-    OpsDashboardRow
-  }
 
   alias Cadence.Repo
 

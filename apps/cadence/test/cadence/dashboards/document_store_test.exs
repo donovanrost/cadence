@@ -17,8 +17,9 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
     Version
   }
 
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+  alias Cadence.Dashboards.DocumentStore.VersionRow, as: DashboardVersionRow
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.{DashboardVersionRow, OpsDashboardRow}
   alias Cadence.Repo
 
   @fixture_dir Path.expand("../../fixtures/dashboards", __DIR__)

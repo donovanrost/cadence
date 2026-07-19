@@ -32,6 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
     SourceHealth
   }
 
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Ingress.RawEvidence
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
@@ -42,7 +43,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
     CommandReleaseAttemptRow,
     CommandRequestRow,
     CommandVerifierInstanceRow,
-    OpsDashboardRow,
     PacketRecordRow,
     RawEvidenceRow,
     ReplayRunRow

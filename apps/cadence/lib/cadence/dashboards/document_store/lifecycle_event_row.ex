@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardLifecycleEventRow do
+defmodule Cadence.Dashboards.DocumentStore.LifecycleEventRow do
   @moduledoc false
 
   use Ecto.Schema

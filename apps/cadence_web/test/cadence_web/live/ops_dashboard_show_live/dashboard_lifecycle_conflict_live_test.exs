@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Dashboards.Document
-  alias Cadence.Persistence.Schemas.OpsDashboardRow
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 

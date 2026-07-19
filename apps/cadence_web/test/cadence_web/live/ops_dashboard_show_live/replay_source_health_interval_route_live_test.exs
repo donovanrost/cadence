@@ -23,10 +23,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
     SourceHealth
   }
 
+  alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.{OpsDashboardRow, ReplayRunRow}
+  alias Cadence.Persistence.Schemas.ReplayRunRow
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint

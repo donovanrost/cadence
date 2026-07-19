@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardInvestigationPresetRow do
+defmodule Cadence.Dashboards.InvestigationPresets.PresetRow do
   @moduledoc false
 
   use Ecto.Schema

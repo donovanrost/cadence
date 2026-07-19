@@ -770,6 +770,8 @@ Four projection rebuild-run rows now live beside their owning projection
 modules, reducing the baseline to 162.
 Four dashboard data-source and binding rows now live under
 `Cadence.Dashboards.DataSources`, reducing the baseline to 157.
+Canonical dashboard, version, lifecycle-event, and investigation-preset rows
+now live under their owning dashboard stores, reducing the baseline to 152.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their
