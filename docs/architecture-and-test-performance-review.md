@@ -769,7 +769,10 @@ while preserving the existing LiveView events, form IDs, and evidence
 attributes. Moving the telemetry explorer page, provenance formatting, and
 filter-option rendering out of the 1,345-line LiveView reduced the count to 21
 while leaving parameter canonicalization, sample loading, and socket-event
-ownership in the LiveView.
+ownership in the LiveView. Separating event-store queries and operational
+observable state, connection, link-RF, and metric projections from the
+1,419-line OperationalEvents context reduced the count to 20 while preserving
+the context's public read API and keeping event persistence in the facade.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
