@@ -1245,6 +1245,12 @@ binding-event inspection into a 427-line source-state target module reduced
 `DataLinkResolver` from 3,214 to 2,813 lines. Interval target routing, replay
 scoping, rows, and evidence links now live with those source-state reads;
 production source-size pressure remains 7 and dependency ratchets are unchanged.
+Extracting transport capability-record and action-request inspection into a
+116-line transport-runtime target module reduced `DataLinkResolver` from 2,813
+to 2,682 lines. The module owns the scoped operational-event reads and shares
+its row projections with generic operational-event inspection, keeping the two
+views aligned; production source-size pressure remains 7 and dependency
+ratchets are unchanged.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

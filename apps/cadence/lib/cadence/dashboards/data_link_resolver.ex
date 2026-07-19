@@ -18,6 +18,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.Dashboards.DataLinkResolver.CommandTargets
   alias Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets
   alias Cadence.Dashboards.DataLinkResolver.SourceStateTargets
+  alias Cadence.Dashboards.DataLinkResolver.TransportRuntimeTargets
   alias Cadence.Jobs
   alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
@@ -165,14 +166,14 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          organization_id,
          mission_id
        ),
-       do: resolve_transport_capability_record(link, organization_id, mission_id)
+       do: TransportRuntimeTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :transport_action_request} = link,
          organization_id,
          mission_id
        ),
-       do: resolve_transport_action_request(link, organization_id, mission_id)
+       do: TransportRuntimeTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(%DataLink{target: target} = link, organization_id, mission_id)
        when target in [
@@ -525,62 +526,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     end
   end
 
-  defp resolve_transport_capability_record(%DataLink{} = link, organization_id, mission_id) do
-    case first_operational_event_for_source_record(
-           organization_id,
-           mission_id,
-           "transport_capability_record",
-           link.target_id
-         ) do
-      %OperationalEvent{} = event ->
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           transport_capability_record_rows(event),
-           [related_link(link, :operational_event, event.event_id, "Operational event")]
-         )}
-
-      nil ->
-        {:error,
-         inspector(
-           link,
-           :missing,
-           "Transport capability record was not found in this mission.",
-           []
-         )}
-    end
-  end
-
-  defp resolve_transport_action_request(%DataLink{} = link, organization_id, mission_id) do
-    case first_operational_event_for_source_record(
-           organization_id,
-           mission_id,
-           "transport_action_request",
-           link.target_id
-         ) do
-      %OperationalEvent{} = event ->
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           transport_action_request_rows(event),
-           [related_link(link, :operational_event, event.event_id, "Operational event")]
-         )}
-
-      nil ->
-        {:error,
-         inspector(
-           link,
-           :missing,
-           "Transport action request was not found in this mission.",
-           []
-         )}
-    end
-  end
-
   defp resolve_comparison_finding(%DataLink{} = link, organization_id, mission_id) do
     {:ok,
      inspector(
@@ -853,11 +798,11 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp operational_event_semantic_rows_for(kind, event)
        when kind in [:transport_action_request, "transport_action_request"],
-       do: transport_action_request_rows(event)
+       do: TransportRuntimeTargets.action_request_rows(event)
 
   defp operational_event_semantic_rows_for(kind, event)
        when kind in [:transport_capability_record, "transport_capability_record"],
-       do: transport_capability_record_rows(event)
+       do: TransportRuntimeTargets.capability_rows(event)
 
   defp operational_event_semantic_rows_for(kind, event)
        when kind in [:transport_timer_event, "transport_timer_event"],
@@ -1102,65 +1047,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     ]
   end
 
-  defp transport_capability_record_rows(event) do
-    payload = event.payload || %{}
-
-    [
-      row("Transport capability record", state_value(payload, :transport_record_id)),
-      row("Operational event", event.event_id),
-      row("Occurred", event.occurred_at),
-      row("Kind", event.kind),
-      row("Contact", state_value(payload, :contact_id)),
-      row("Path", state_value(payload, :path_id)),
-      row("Capability instance", state_value(payload, :capability_instance_id)),
-      row("Family", state_value(payload, :family_key)),
-      row("Binding set", state_value(payload, :binding_set_id)),
-      row("Binding set version", state_value(payload, :binding_set_version)),
-      row("Activation", state_value(payload, :activation_id)),
-      row("Partition affinity", state_value(payload, :partition_affinity)),
-      row("Partition value", state_value(payload, :partition_value)),
-      row("Event kind", state_value(payload, :event_kind)),
-      row("Timer", state_value(payload, :timer_key)),
-      row("Emitted record kinds", state_value(payload, :emitted_record_kinds)),
-      row("Emitted record count", state_value(payload, :emitted_record_count)),
-      row("Action request count", state_value(payload, :action_request_count)),
-      row("State snapshot", state_value(payload, :state_snapshot)),
-      row("Record metadata", state_value(payload, :record_metadata)),
-      row("Recorded", state_value(payload, :recorded_at)),
-      row("Replay run", state_value(payload, :replay_run_id))
-    ]
-  end
-
-  defp transport_action_request_rows(event) do
-    payload = event.payload || %{}
-
-    [
-      row("Transport action request", state_value(payload, :action_request_id)),
-      row("Operational event", event.event_id),
-      row("Occurred", event.occurred_at),
-      row("Kind", event.kind),
-      row("Contact", state_value(payload, :contact_id)),
-      row("Path", state_value(payload, :path_id)),
-      row("Capability instance", state_value(payload, :capability_instance_id)),
-      row("Family", state_value(payload, :family_key)),
-      row("Binding set", state_value(payload, :binding_set_id)),
-      row("Binding set version", state_value(payload, :binding_set_version)),
-      row("Activation", state_value(payload, :activation_id)),
-      row("Partition affinity", state_value(payload, :partition_affinity)),
-      row("Partition value", state_value(payload, :partition_value)),
-      row("Source endpoint", state_value(payload, :source_endpoint_ref)),
-      row("Command release attempt", state_value(payload, :command_release_attempt_id)),
-      row("Command request", state_value(payload, :command_request_id)),
-      row("Command", state_value(payload, :command_name)),
-      row("Signal phase", state_value(payload, :signal_phase)),
-      row("Action kind", state_value(payload, :action_kind)),
-      row("Request document", state_value(payload, :request_document)),
-      row("Requested", state_value(payload, :requested_at)),
-      row("Action metadata", state_value(payload, :action_metadata)),
-      row("Replay run", state_value(payload, :replay_run_id))
-    ]
-  end
-
   defp transport_timer_event_rows(event) do
     payload = event.payload || %{}
 
@@ -1262,23 +1148,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       row("Recorded", state_value(payload, :recorded_at)),
       row("Replay run", state_value(payload, :replay_run_id))
     ]
-  end
-
-  defp first_operational_event_for_source_record(
-         organization_id,
-         mission_id,
-         source_record_kind,
-         source_record_id
-       ) do
-    organization_id
-    |> OperationalEvents.list_events(
-      mission_id,
-      source_record_kind: source_record_kind,
-      source_record_id: source_record_id,
-      order: :asc,
-      limit: 1
-    )
-    |> List.first()
   end
 
   defp comparison_finding_rows(%DataLink{} = link, organization_id, mission_id) do
