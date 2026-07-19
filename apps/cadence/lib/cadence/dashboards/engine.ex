@@ -26,10 +26,10 @@ defmodule Cadence.Dashboards.Engine do
     RuntimeCacheKey,
     SourceExecutionPolicy,
     SourceFacts,
-    SourceFreshness,
     SourceRegistry,
     SourceRequestPlanning,
     SourceResult,
+    SourceResultAnnotation,
     SourceResultPreflight,
     ValidationResult,
     WidgetFrameContract,
@@ -644,7 +644,10 @@ defmodule Cadence.Dashboards.Engine do
     source_result_cache_entries =
       Map.new(source_executions, fn {source_request, _source_result, cache_entry} ->
         {source_request.request_id,
-         put_cache_entry_capability_provenance(cache_entry, source_request)}
+         SourceResultAnnotation.put_cache_entry_capability_provenance(
+           cache_entry,
+           source_request
+         )}
       end)
 
     source_keys =
@@ -916,7 +919,7 @@ defmodule Cadence.Dashboards.Engine do
         SourceRequestPlanning.source_registry_opts(source_request, opts)
       )
       |> then(
-        &annotate_source_freshness(
+        &SourceResultAnnotation.annotate_result(
           resolve_request,
           plan_result,
           source_request,
@@ -1079,7 +1082,7 @@ defmodule Cadence.Dashboards.Engine do
        ) do
     case RuntimeCache.get_source_result(cache_key, server) do
       {:ok, cached_result} ->
-        cached_result = annotate_source_result_provenance(cached_result, source_request)
+        cached_result = SourceResultAnnotation.annotate_provenance(cached_result, source_request)
 
         preflight =
           SourceResultPreflight.evaluate(cache_key, cached_result, cache_key,
@@ -1139,7 +1142,7 @@ defmodule Cadence.Dashboards.Engine do
 
   defp put_source_facts_cache_metadata(cache_entry, %SourceFacts{} = facts)
        when is_map(cache_entry) do
-    facts_meta = ensure_map(facts.meta)
+    facts_meta = if is_map(facts.meta), do: facts.meta, else: %{}
 
     cache_entry
     |> maybe_put_cache_metadata(
@@ -1159,7 +1162,13 @@ defmodule Cadence.Dashboards.Engine do
          %DateTime{} = freshness_now,
          opts
        ) do
-    freshness_policy = freshness_policy(resolve_request, plan_result, source_request, opts)
+    freshness_policy =
+      SourceResultAnnotation.freshness_policy(
+        resolve_request,
+        plan_result,
+        source_request,
+        opts
+      )
 
     registry_opts =
       source_request
@@ -1171,7 +1180,7 @@ defmodule Cadence.Dashboards.Engine do
     |> SourceRegistry.resolve(registry_opts)
     |> validate_source_result_contract!(opts)
     |> then(
-      &annotate_source_freshness(
+      &SourceResultAnnotation.annotate_result(
         resolve_request,
         plan_result,
         source_request,
@@ -1189,14 +1198,25 @@ defmodule Cadence.Dashboards.Engine do
          %DateTime{} = freshness_now,
          opts
        ) do
-    freshness_policy = freshness_policy(resolve_request, plan_result, source_request, opts)
+    freshness_policy =
+      SourceResultAnnotation.freshness_policy(
+        resolve_request,
+        plan_result,
+        source_request,
+        opts
+      )
 
     registry_opts = SourceRequestPlanning.source_registry_opts(source_request, opts)
 
     with {:ok, %SourceFacts{} = source_facts} <-
            SourceRegistry.facts(source_request, registry_opts) do
       source_facts =
-        annotate_source_facts(source_facts, source_request, freshness_policy, freshness_now)
+        SourceResultAnnotation.annotate_facts(
+          source_facts,
+          source_request,
+          freshness_policy,
+          freshness_now
+        )
 
       {:ok,
        SourceFacts.runtime_cache_key(source_request, source_facts,
@@ -1204,175 +1224,6 @@ defmodule Cadence.Dashboards.Engine do
          freshness_policy: freshness_policy
        ), source_facts}
     end
-  end
-
-  defp annotate_source_facts(
-         %SourceFacts{watermark: nil, watermarks: []} = source_facts,
-         %PlannedSourceRequest{},
-         _freshness_policy,
-         %DateTime{}
-       ) do
-    source_facts
-  end
-
-  defp annotate_source_facts(
-         %SourceFacts{} = source_facts,
-         %PlannedSourceRequest{} = source_request,
-         freshness_policy,
-         %DateTime{} = freshness_now
-       ) do
-    %SourceFacts{
-      source_facts
-      | watermark:
-          annotate_source_watermark(
-            source_facts.watermark,
-            source_request,
-            freshness_policy,
-            freshness_now
-          ),
-        watermarks:
-          Enum.map(source_facts.watermarks, fn watermark ->
-            annotate_source_watermark(watermark, source_request, freshness_policy, freshness_now)
-          end)
-    }
-  end
-
-  defp annotate_source_watermark(nil, %PlannedSourceRequest{}, _freshness_policy, %DateTime{}),
-    do: nil
-
-  defp annotate_source_watermark(
-         watermark,
-         %PlannedSourceRequest{} = source_request,
-         freshness_policy,
-         %DateTime{} = freshness_now
-       ) do
-    SourceFreshness.annotate(
-      watermark,
-      source_request,
-      freshness_policy,
-      freshness_now
-    )
-  end
-
-  defp annotate_source_freshness(
-         %DashboardResolveRequest{} = resolve_request,
-         %DashboardResolveResult{} = plan_result,
-         %PlannedSourceRequest{} = source_request,
-         source_result,
-         %DateTime{} = now,
-         opts
-       ) do
-    freshness_policy = freshness_policy(resolve_request, plan_result, source_request, opts)
-
-    watermarks =
-      Enum.map(source_result.watermarks, fn watermark ->
-        SourceFreshness.annotate(watermark, source_request, freshness_policy, now)
-      end)
-
-    freshness_warnings =
-      watermarks
-      |> Enum.map(&SourceFreshness.warning(&1, source_request))
-      |> Enum.reject(&is_nil/1)
-
-    %{
-      source_result
-      | watermarks: watermarks,
-        warnings: source_result.warnings ++ freshness_warnings
-    }
-    |> annotate_source_result_provenance(source_request)
-  end
-
-  defp annotate_source_result_provenance(source_result, %PlannedSourceRequest{} = source_request) do
-    provenance = capability_provenance(source_request)
-
-    %{
-      source_result
-      | meta:
-          source_result.meta
-          |> ensure_map()
-          |> maybe_put_capability_provenance(provenance)
-          |> maybe_put_source_dependencies(source_request.source_dependencies)
-    }
-  end
-
-  defp freshness_policy(
-         %DashboardResolveRequest{} = resolve_request,
-         %DashboardResolveResult{} = plan_result,
-         %PlannedSourceRequest{} = source_request,
-         opts
-       ) do
-    SourceFreshness.resolve_policy(
-      [
-        source_freshness_policy(source_request.logical_source, opts),
-        dashboard_freshness_policy(resolve_request),
-        request_freshness_policy(source_request),
-        consumer_freshness_policy(resolve_request.document, plan_result, source_request)
-      ]
-      |> List.flatten()
-    )
-  end
-
-  defp source_freshness_policy(logical_source, opts) do
-    opts
-    |> Keyword.get(:source_freshness_policies, %{})
-    |> get_attr(logical_source)
-  end
-
-  defp dashboard_freshness_policy(%DashboardResolveRequest{document: document}) do
-    defaults = document.defaults || %{}
-    health_defaults = get_attr(defaults, :health) || %{}
-
-    [
-      get_attr(defaults, :freshness_policy),
-      get_attr(health_defaults, :freshness_policy)
-    ]
-  end
-
-  defp request_freshness_policy(%PlannedSourceRequest{} = request) do
-    [
-      get_attr(request.sampling, :freshness_policy),
-      get_attr(request.data_context, :freshness_policy),
-      get_attr(request.limit_context, :freshness_policy)
-    ]
-  end
-
-  defp consumer_freshness_policy(
-         document,
-         %DashboardResolveResult{} = plan_result,
-         source_request
-       ) do
-    placement_by_id = Map.new(document.placements, &{&1.placement_id, &1})
-    planned_request_ids = MapSet.new([source_request.request_id])
-
-    plan_result.frames_by_placement
-    |> Enum.filter(fn {_placement_id, frames} ->
-      Enum.any?(frames.planned_request_ids, &MapSet.member?(planned_request_ids, &1))
-    end)
-    |> Enum.flat_map(fn {placement_id, _frames} ->
-      case Map.get(placement_by_id, placement_id) do
-        nil -> []
-        placement -> placement_freshness_policies(placement)
-      end
-    end)
-  end
-
-  defp placement_freshness_policies(%Placement{} = placement) do
-    widget_options =
-      case placement.widget_def do
-        %{options: options} when is_map(options) -> options
-        _other -> %{}
-      end
-
-    widget_health = get_attr(widget_options, :health) || %{}
-    overrides = placement.overrides || %{}
-    override_health = get_attr(overrides, :health) || %{}
-
-    [
-      get_attr(widget_options, :freshness_policy),
-      get_attr(widget_health, :freshness_policy),
-      get_attr(overrides, :freshness_policy),
-      get_attr(override_health, :freshness_policy)
-    ]
   end
 
   defp source_result_keys_by_request_id(
@@ -1461,7 +1312,13 @@ defmodule Cadence.Dashboards.Engine do
       source_binding_segments:
         get_in(source_result_meta(source_result), [:source_binding_segments]),
       data_source: resolved_binding && resolved_binding.data_source,
-      freshness_policy: freshness_policy(resolve_request, plan_result, source_request, opts),
+      freshness_policy:
+        SourceResultAnnotation.freshness_policy(
+          resolve_request,
+          plan_result,
+          source_request,
+          opts
+        ),
       watermark: List.first(source_result.watermarks)
     )
   end
@@ -1586,37 +1443,6 @@ defmodule Cadence.Dashboards.Engine do
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()
   end
-
-  defp put_cache_entry_capability_provenance(
-         cache_entry,
-         %PlannedSourceRequest{} = source_request
-       )
-       when is_map(cache_entry) do
-    case capability_provenance(source_request) do
-      nil -> cache_entry
-      provenance -> Map.put(cache_entry, :capability_provenance, provenance)
-    end
-  end
-
-  defp capability_provenance(%PlannedSourceRequest{} = source_request) do
-    source_request.metadata
-    |> ensure_map()
-    |> Map.get(:capability_provenance)
-  end
-
-  defp maybe_put_capability_provenance(meta, nil), do: meta
-
-  defp maybe_put_capability_provenance(meta, provenance) do
-    Map.put(meta, :capability_provenance, provenance)
-  end
-
-  defp maybe_put_source_dependencies(meta, []), do: meta
-
-  defp maybe_put_source_dependencies(meta, dependencies),
-    do: Map.put(meta, :source_dependencies, dependencies)
-
-  defp ensure_map(map) when is_map(map), do: map
-  defp ensure_map(_value), do: %{}
 
   defp put_frame_cache_entry(cache_entries, materialized, cache_entry) do
     update_in(

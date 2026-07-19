@@ -977,6 +977,11 @@ snapshot time policy, source-binding windows, and placement sizing reduced the
 engine again to 1,808 lines. The 614-line source-request planner owns those
 request derivations without executing providers; production source-size
 pressure remains 10 while the engine is still above the 1,000-line limit.
+Moving freshness-policy composition, watermark annotation, capability
+provenance, and source-dependency metadata out of the runtime path reduced the
+engine to 1,634 lines. The new 249-line source-result annotation module owns the
+consumer-facing evidence added before caching and materialization; production
+source-size pressure remains 10.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
