@@ -1208,6 +1208,13 @@ frame resolution, and revision projection. This reduced the adapter from 1,876
 to 1,799 lines and removed its direct TransportStore dependency; it retains
 only bitrate dispatch and source identity, while production source-size
 pressure remains 8.
+Completing ingress processing-latency ownership added a 275-line family
+resolver over the existing row and shared metric-frame modules. It owns callback
+precedence, durable and runtime source reads, live overlay selection, replay
+isolation, freshness, latest/history frame resolution, and revision projection.
+This reduced the adapter from 1,799 to 1,521 lines and removed its direct
+RuntimeHealth dependency; it retains only ingress-latency dispatch and source
+identity, while production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

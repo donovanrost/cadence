@@ -12,13 +12,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     OperationalObservable,
     PlannedSourceRequest,
     ResolveWarning,
-    RuntimeCacheKey,
     SourceCapabilities,
     SourceFacts,
     SourceResult
   }
-
-  alias Cadence.Telemetry.RuntimeHealth
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     AntennaPointing,
@@ -26,11 +23,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     Connection,
     ConstellationHealth,
     ContactPhase,
-    IngressProcessingLatencyRows,
-    LatestFreshness,
+    IngressProcessingLatency,
     LinkRf,
-    OperationalEventSnapshots,
-    OperationalMetricFrames,
     ProductPolicy,
     RevisionPolicy,
     RuntimeActivity,
@@ -61,7 +55,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @transport_runtime_observable_ids ["runtime.transport_activity"]
   @type connection_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @type transport_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
-  @type runtime_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @spec backed_observable_ids() :: [binary()]
   defdelegate backed_observable_ids(), to: ProductPolicy
 
@@ -166,7 +159,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       transport_execution_state: &TransportExecutionState.default_revision/3,
       managed_runtime_activity: &RuntimeActivity.default_managed_revision/3,
       transport_runtime_activity: &RuntimeActivity.default_transport_revision/3,
-      ingress_processing_latency: &default_ingress_processing_latency_revision/3,
+      ingress_processing_latency: &IngressProcessingLatency.default_revision/3,
       command_queue_depth: &CommandQueueDepth.default_revision/3
     ]
   end
@@ -792,16 +785,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      ingress_processing_latency_frame(
+      IngressProcessingLatency.resolve_latest(
         request,
-        source_binding,
-        ingress_processing_latency_rows(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :ingress_processing_latency, [frame])
@@ -816,17 +806,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frames =
-      request
-      |> ingress_processing_latency_history_rows(
-        source_binding,
+      IngressProcessingLatency.resolve_history(
+        request,
         organization_id,
         mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
         opts
-      )
-      |> operational_metric_history_frames(
-        request,
-        source_binding,
-        :ingress_processing_latency_history
       )
 
     source_result(request, source_binding, :ingress_processing_latency_history, frames)
@@ -1066,17 +1052,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @ingress_latency_observable_ids)) do
       history_frames =
-        request
-        |> ingress_processing_latency_history_rows(
-          source_binding,
+        IngressProcessingLatency.resolve_history(
+          request,
           organization_id,
           mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
           opts
-        )
-        |> operational_metric_history_frames(
-          request,
-          source_binding,
-          :ingress_processing_latency_history
         )
 
       frames ++ history_frames
@@ -1320,64 +1302,19 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "ingress.processing_latency_ms" in request.observables do
       frame =
-        ingress_processing_latency_frame(
+        IngressProcessingLatency.resolve_latest(
           request,
-          source_binding,
-          ingress_processing_latency_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
     else
       frames
     end
-  end
-
-  defp ingress_processing_latency_rows(request, source_binding, organization_id, mission_id, opts) do
-    metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :ingress_processing_latency_snapshots_fun,
-        Keyword.get(opts, :runtime_metric_snapshots_fun)
-      )
-
-    ingress_processing_latency_snapshots(
-      metric_snapshots_fun,
-      organization_id,
-      mission_id,
-      adapter_opts(request, source_binding),
-      opts
-    )
-    |> IngressProcessingLatencyRows.latest(request, mission_id)
-    |> LatestFreshness.annotate(request, opts)
-  end
-
-  defp ingress_processing_latency_history_rows(
-         request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       ) do
-    metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :ingress_processing_latency_history_snapshots_fun,
-        Keyword.get(
-          opts,
-          :durable_ingress_processing_latency_snapshots_fun,
-          &default_durable_ingress_processing_latency_snapshots/3
-        )
-      )
-
-    organization_id
-    |> metric_snapshots_fun.(mission_id, adapter_opts(request, source_binding))
-    |> IngressProcessingLatencyRows.history(request, mission_id)
   end
 
   defp maybe_add_contact_phase_history_frame(
@@ -1490,213 +1427,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp operational_metric_history_frames(rows, request, source_binding, capability) do
-    OperationalMetricFrames.history(
-      request,
-      rows,
-      capability,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp ingress_processing_latency_frame(request, source_binding, rows) do
-    OperationalMetricFrames.ingress_latency_latest(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp ingress_processing_latency_snapshots(
-         nil,
-         organization_id,
-         mission_id,
-         adapter_opts,
-         opts
-       ) do
-    default_ingress_processing_latency_snapshots(
-      organization_id,
-      mission_id,
-      Keyword.merge(
-        adapter_opts,
-        Keyword.take(opts, [
-          :durable_ingress_processing_latency_snapshots_fun,
-          :runtime_health_ingress_processing_latency_snapshots_fun
-        ])
-      )
-    )
-  end
-
-  defp ingress_processing_latency_snapshots(
-         metric_snapshots_fun,
-         organization_id,
-         mission_id,
-         adapter_opts,
-         _opts
-       )
-       when is_function(metric_snapshots_fun, 3) do
-    metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
-  end
-
-  defp link_id_for(values) when is_list(values) do
-    values
-    |> Enum.find_value(&link_id/1)
-  end
-
-  defp link_id(value) do
-    [
-      attr(value, :link_id),
-      attr(value, :link_assignment_id),
-      attr(value, :link_assignment_ref),
-      attr(value, :materialized_link_assignment_id),
-      metadata_attr(value, :link_id),
-      metadata_attr(value, :link_assignment_id),
-      metadata_attr(value, :link_assignment_ref),
-      metadata_attr(value, :materialized_link_assignment_id)
-    ]
-    |> Enum.find(&present_text?/1)
-  end
-
-  defp default_runtime_metric_snapshots(_organization_id, _mission_id, _opts) do
-    RuntimeHealth.snapshot()
-    |> Map.get(:metrics, %{})
-    |> Map.get(:ingress_processing_latency_ms, [])
-  end
-
-  defp overlay_ingress_processing_latency_snapshots(durable_snapshots, runtime_snapshots) do
-    durable_snapshots
-    |> Enum.map(&IngressProcessingLatencyRows.normalize_snapshot/1)
-    |> Enum.map(&{&1, 0})
-    |> Kernel.++(
-      runtime_snapshots
-      |> Enum.map(&IngressProcessingLatencyRows.normalize_snapshot/1)
-      |> Enum.map(&{&1, 1})
-    )
-    |> Enum.reduce(%{}, fn {snapshot, source_rank}, acc ->
-      key = ingress_processing_latency_snapshot_key(snapshot)
-      current = Map.get(acc, key)
-
-      if newer_ingress_processing_latency_snapshot?({snapshot, source_rank}, current) do
-        Map.put(acc, key, {snapshot, source_rank})
-      else
-        acc
-      end
-    end)
-    |> Map.values()
-    |> Enum.map(fn {snapshot, _source_rank} -> snapshot end)
-    |> Enum.sort_by(
-      &{attr(&1, :source_endpoint_id) || "", attr(&1, :spacecraft_id) || "",
-       attr(&1, :observed_at) || DateTime.from_unix!(0)},
-      :desc
-    )
-  end
-
-  defp newer_ingress_processing_latency_snapshot?({_snapshot, _source_rank}, nil), do: true
-
-  defp newer_ingress_processing_latency_snapshot?(
-         {snapshot, source_rank},
-         {current_snapshot, current_source_rank}
-       ) do
-    case compare_ingress_processing_latency_observed_at(
-           attr(snapshot, :observed_at),
-           attr(current_snapshot, :observed_at)
-         ) do
-      :gt -> true
-      :eq -> source_rank >= current_source_rank
-      :lt -> false
-    end
-  end
-
-  defp compare_ingress_processing_latency_observed_at(%DateTime{} = left, %DateTime{} = right),
-    do: DateTime.compare(left, right)
-
-  defp compare_ingress_processing_latency_observed_at(%DateTime{}, _right), do: :gt
-  defp compare_ingress_processing_latency_observed_at(_left, %DateTime{}), do: :lt
-  defp compare_ingress_processing_latency_observed_at(_left, _right), do: :eq
-
-  defp ingress_processing_latency_snapshot_key(snapshot) do
-    cond do
-      is_binary(attr(snapshot, :source_endpoint_id)) and attr(snapshot, :source_endpoint_id) != "" ->
-        {:source_endpoint, attr(snapshot, :mission_id), attr(snapshot, :source_endpoint_id)}
-
-      is_binary(attr(snapshot, :spacecraft_id)) and attr(snapshot, :spacecraft_id) != "" ->
-        {:spacecraft, attr(snapshot, :mission_id), attr(snapshot, :spacecraft_id)}
-
-      true ->
-        {:mission, attr(snapshot, :mission_id)}
-    end
-  end
-
-  defp default_ingress_processing_latency_snapshots(organization_id, mission_id, opts) do
-    durable_metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :durable_ingress_processing_latency_snapshots_fun,
-        &default_durable_ingress_processing_latency_snapshots/3
-      )
-
-    durable_snapshots =
-      durable_metric_snapshots_fun.(organization_id, mission_id, opts)
-
-    if Keyword.get(opts, :replay_run_id) do
-      durable_snapshots
-    else
-      runtime_metric_snapshots_fun =
-        Keyword.get(
-          opts,
-          :runtime_health_ingress_processing_latency_snapshots_fun,
-          &default_runtime_metric_snapshots/3
-        )
-
-      durable_snapshots
-      |> overlay_ingress_processing_latency_snapshots(
-        runtime_metric_snapshots_fun.(organization_id, mission_id, opts)
-      )
-    end
-  end
-
-  defp default_durable_ingress_processing_latency_snapshots(organization_id, mission_id, opts) do
-    OperationalEventSnapshots.ingress_latency(organization_id, mission_id, opts)
-  end
-
-  defp default_ingress_processing_latency_revision(organization_id, mission_id, opts) do
-    "ingress_processing_latency:" <>
-      RuntimeCacheKey.fingerprint(%{
-        snapshots:
-          organization_id
-          |> default_ingress_processing_latency_snapshots(mission_id, opts)
-          |> Enum.map(&ingress_processing_latency_revision_entry/1)
-          |> Enum.sort_by(
-            &{&1.source_endpoint_id || "", &1.spacecraft_id || "", &1.observed_at || ""}
-          )
-      })
-  end
-
-  defp ingress_processing_latency_revision_entry(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id) || "ingress.processing_latency_ms",
-      mission_id: attr(snapshot, :mission_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) ||
-          attr(snapshot, :source_endpoint_ref) ||
-          attr(snapshot, :source_ref),
-      spacecraft_id: attr(snapshot, :spacecraft_id),
-      contact_id:
-        attr(snapshot, :contact_id) ||
-          attr(snapshot, :scheduled_contact_id) ||
-          attr(snapshot, :realized_contact_id),
-      transport_id: attr(snapshot, :transport_id),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      value: IngressProcessingLatencyRows.value(snapshot),
-      unit: attr(snapshot, :unit) || "ms",
-      observed_at: attr(snapshot, :observed_at),
-      error?: attr(snapshot, :error?) || false,
-      replay_run_id: attr(snapshot, :replay_run_id)
-    }
-  end
-
   defp adapter_opts(%PlannedSourceRequest{} = request, source_binding) do
     [
       realm: realm(request, source_binding),
@@ -1778,14 +1508,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp normalize_time_bound(_value), do: nil
-
-  defp metadata_attr(value, key) when is_atom(key) do
-    value
-    |> attr(:metadata)
-    |> attr(key)
-  end
-
-  defp present_text?(value), do: is_binary(value) and value != ""
 
   defp warning(%PlannedSourceRequest{} = request, code, severity, message, details) do
     %ResolveWarning{
