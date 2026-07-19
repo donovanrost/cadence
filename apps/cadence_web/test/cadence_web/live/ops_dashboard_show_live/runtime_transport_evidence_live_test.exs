@@ -17,6 +17,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
 
   alias CadenceWeb.TestFixtures
 
+  defp assert_data_link_field(view, field) do
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="#{field}"])
+           )
+  end
+
+  defp assert_data_link_field(view, field, value) do
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="#{field}"]),
+             value
+           )
+  end
+
   test "opens live transport runtime capability-record operational-event copied route from frame evidence" do
     record_at = ~U[2026-06-17 12:01:00Z]
     action_at = ~U[2026-06-17 12:01:30Z]
@@ -875,139 +890,46 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
              ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{record_event_route_id}"][data-clipboard-text*="selected_time=#{record_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
            )
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed capability record"]),
-             "managed-capability-record-handled-1"
-           )
+    assert_data_link_field(
+      reopened_record_event_view,
+      "Managed capability record",
+      "managed-capability-record-handled-1"
+    )
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Event kind"]),
-             "record_handled"
-           )
+    assert_data_link_field(reopened_record_event_view, "Event kind", "record_handled")
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Capability instance"]),
-             "managed-capability-alpha"
-           )
+    assert_data_link_field(
+      reopened_record_event_view,
+      "Capability instance",
+      "managed-capability-alpha"
+    )
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Family"]),
-             "packet_counter"
-           )
+    assert_data_link_field(reopened_record_event_view, "Family", "packet_counter")
+    assert_data_link_field(reopened_record_event_view, "Binding set", "managed-binding-set-alpha")
+    assert_data_link_field(reopened_record_event_view, "Binding set version", "1")
+    assert_data_link_field(reopened_record_event_view, "Activation", "managed-activation-alpha")
+    assert_data_link_field(reopened_record_event_view, "Partition affinity", "spacecraft")
+    assert_data_link_field(reopened_record_event_view, "Partition value", "spacecraft-alpha")
+    assert_data_link_field(reopened_record_event_view, "Packet", "managed-packet-alpha")
+    assert_data_link_field(reopened_record_event_view, "Evidence", "managed-evidence-alpha")
+    assert_data_link_field(reopened_record_event_view, "Emitted record kinds", "derived_metric")
+    assert_data_link_field(reopened_record_event_view, "Emitted record count", "2")
+    assert_data_link_field(reopened_record_event_view, "Action request count", "1")
+    assert_data_link_field(reopened_record_event_view, "State snapshot", "heartbeat_count")
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set"]),
-             "managed-binding-set-alpha"
-           )
+    assert_data_link_field(
+      reopened_record_event_view,
+      "Record metadata",
+      "managed-action-request-2"
+    )
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set version"]),
-             "1"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Activation"]),
-             "managed-activation-alpha"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition affinity"]),
-             "spacecraft"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition value"]),
-             "spacecraft-alpha"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Packet"]),
-             "managed-packet-alpha"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Evidence"]),
-             "managed-evidence-alpha"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Emitted record kinds"]),
-             "derived_metric"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Emitted record count"]),
-             "2"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Action request count"]),
-             "1"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="State snapshot"]),
-             "heartbeat_count"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Record metadata"]),
-             "managed-action-request-2"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Record metadata"]),
-             "limit-state-1"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Record metadata"]),
-             "derived-metric-1"
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Recorded"])
-           )
-
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
-             replay_run_id
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed capability record"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Event kind"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"])
-           )
+    assert_data_link_field(reopened_record_event_view, "Record metadata", "limit-state-1")
+    assert_data_link_field(reopened_record_event_view, "Record metadata", "derived-metric-1")
+    assert_data_link_field(reopened_record_event_view, "Recorded")
+    assert_data_link_field(reopened_record_event_view, "Replay run", replay_run_id)
+    assert_data_link_field(view, "Managed capability record")
+    assert_data_link_field(view, "Event kind")
+    assert_data_link_field(view, "Replay run")
 
     stop_dashboard_view(reopened_record_event_view)
     stop_dashboard_view(view)

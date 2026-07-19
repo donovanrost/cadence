@@ -973,6 +973,10 @@ Moving the original requests, failure events, corrected replacements, and
 preapproval into a group-recovery fixture reduced that proof from 365 to 144
 lines while retaining its recovery-state, closure-readiness, and three staged
 transition assertions, reducing overlong-test pressure from 17 to 16.
+Centralizing the replay managed-capability inspector field selector reduced
+that lifecycle copied-route proof from 376 to 284 lines while keeping every
+field-value, replay-run, route, and reopen assertion explicit, reducing
+overlong-test pressure from 16 to 15.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
