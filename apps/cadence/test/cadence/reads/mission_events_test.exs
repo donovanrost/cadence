@@ -18,6 +18,7 @@ defmodule Cadence.Reads.MissionEventsTest do
   alias Cadence.OperationalEvents.Event
   alias Cadence.Persistence.Schemas.MissionEventRow
   alias Cadence.Projections.MissionEvents
+  alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Repo
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -103,6 +104,20 @@ defmodule Cadence.Reads.MissionEventsTest do
 
     limit_event = Enum.find(mission_events, &(&1.kind == :limit_violation))
     contact_event = Enum.find(mission_events, &(&1.kind == :scheduled_contact_canceled))
+
+    assert {:ok, ^limit_event} =
+             MissionEventReads.fetch_for_mission(
+               organization_id,
+               mission_id,
+               limit_event.mission_event_id
+             )
+
+    assert {:error, :mission_event_not_found} =
+             MissionEventReads.fetch_for_mission(
+               "other-organization",
+               mission_id,
+               limit_event.mission_event_id
+             )
 
     assert limit_event.category == :health
     assert limit_event.severity == :warning

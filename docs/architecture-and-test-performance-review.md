@@ -1256,6 +1256,12 @@ into a 264-line limits target module reduced `DataLinkResolver` from 2,682 to
 2,417 lines. Scoped event fetches and sample-history reads now run through the
 owning `Limits` context, reducing direct persistence-schema edges from 116 to
 115; production source-size pressure remains 7.
+Extracting persisted and projected mission events plus operational-event
+semantic inspection into a 531-line event target module reduced
+`DataLinkResolver` from 2,417 to 1,889 lines. Mission-event lookup now runs
+through the scoped `Reads.MissionEvents` boundary, reducing direct
+persistence-schema edges from 115 to 114; production source-size pressure
+remains 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

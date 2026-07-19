@@ -9,6 +9,24 @@ defmodule Cadence.Reads.MissionEvents do
   alias Cadence.Persistence.Schemas.MissionEventRow
   alias Cadence.Repo
 
+  @spec fetch_for_mission(binary(), binary(), binary()) ::
+          {:ok, Entry.t()} | {:error, :mission_event_not_found}
+  def fetch_for_mission(organization_id, mission_id, mission_event_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(mission_event_id) do
+    MissionEventRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.mission_event_id == ^mission_event_id
+    )
+    |> Repo.one()
+    |> case do
+      %MissionEventRow{} = row -> {:ok, MissionEventRow.to_domain(row)}
+      nil -> {:error, :mission_event_not_found}
+    end
+  end
+
   @spec list_for_mission(binary(), keyword()) :: [Entry.t()]
   def list_for_mission(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
