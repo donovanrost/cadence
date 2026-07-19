@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.TelemetryObservationIdentityDecisionEventRow do
+defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow do
   @moduledoc false
 
   use Ecto.Schema

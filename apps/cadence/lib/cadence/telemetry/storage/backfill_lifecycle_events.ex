@@ -9,9 +9,11 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.TelemetryBackfillLifecycleEventRow
   alias Cadence.Repo
   alias Cadence.Telemetry.Storage.BackfillLifecycleEvent
+
+  alias Cadence.Telemetry.Storage.BackfillLifecycleEvents.EventRow,
+    as: TelemetryBackfillLifecycleEventRow
 
   @spec record_event(map(), keyword()) ::
           {:ok, BackfillLifecycleEvent.t()} | {:error, term()}

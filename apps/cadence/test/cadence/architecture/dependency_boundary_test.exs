@@ -181,6 +181,25 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects telemetry storage rows through their owning context" do
+    graph = %{
+      "lib/cadence/dashboards/data_link_resolver.ex" => %{
+        "lib/cadence/telemetry/storage/backfill_lifecycle_events/event_row.ex" => "export"
+      },
+      "lib/cadence/telemetry/storage/backfill_lifecycle_events.ex" => %{
+        "lib/cadence/telemetry/storage/backfill_lifecycle_events/event_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/data_link_resolver.ex",
+               sink: "lib/cadence/telemetry/storage/backfill_lifecycle_events/event_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "compares current edges with the checked-in debt baseline" do
     findings =
       DependencyBoundary.findings(%{

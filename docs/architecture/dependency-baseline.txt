@@ -127,8 +127,6 @@ persistence_schema|lib/cadence/spacecraft_store.ex|lib/cadence/persistence/schem
 persistence_schema|lib/cadence/telemetry/current_value_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/telemetry/history_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/history_store/postgres.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/telemetry/storage/backfill_lifecycle_events.ex|lib/cadence/persistence/schemas/telemetry_backfill_lifecycle_event_row.ex
-persistence_schema|lib/cadence/telemetry/storage/observation_identity_states.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_decision_event_row.ex
 persistence_schema|lib/cadence/telemetry/storage/observation_identity_states.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/storage/questdb/observation_reader.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/telemetry/storage/writers/postgres_read_model.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex

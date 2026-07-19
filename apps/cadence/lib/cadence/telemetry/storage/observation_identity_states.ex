@@ -19,15 +19,14 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Projections.TelemetryLatestValues
 
-  alias Cadence.Persistence.Schemas.{
-    TelemetryObservationIdentityDecisionEventRow,
-    TelemetryObservationIdentityStateRow
-  }
-
+  alias Cadence.Persistence.Schemas.TelemetryObservationIdentityStateRow
   alias Cadence.Repo
   alias Cadence.Telemetry.Storage.ObservationEnvelope
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
   alias Cadence.Telemetry.Storage.ObservationIdentityState
+
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow,
+    as: TelemetryObservationIdentityDecisionEventRow
 
   @decisions [:mark_canonical, :mark_conflict, :mark_superseded, :mark_advisory]
 

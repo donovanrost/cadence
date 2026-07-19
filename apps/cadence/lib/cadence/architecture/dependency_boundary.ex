@@ -53,6 +53,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/operational_events/"
   ]
   @projections_context ["lib/cadence/projections/"]
+  @telemetry_context ["lib/cadence/telemetry/"]
   @context_owned_schemas [
     {[
        "lib/cadence/accounts/",
@@ -72,7 +73,11 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/derived_telemetry/"], @derived_telemetry_context},
     {["lib/cadence/ground_networks/"], @ground_networks_context},
     {["lib/cadence/operational_events/"], @operational_events_context},
-    {["lib/cadence/projections/"], @projections_context}
+    {["lib/cadence/projections/"], @projections_context},
+    {[
+       "lib/cadence/telemetry/storage/backfill_lifecycle_events/",
+       "lib/cadence/telemetry/storage/observation_identity_states/"
+     ], @telemetry_context}
   ]
 
   @type finding :: %{

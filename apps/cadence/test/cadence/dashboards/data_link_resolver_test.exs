@@ -49,12 +49,14 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     TransportCapabilityRecord
   }
 
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow,
+    as: TelemetryObservationIdentityDecisionEventRow
+
   alias Cadence.Persistence.Schemas.{
     CommandQueueEntryRow,
     CommandReleaseAttemptRow,
     CommandRequestRow,
     CommandVerifierInstanceRow,
-    TelemetryObservationIdentityDecisionEventRow,
     TelemetrySampleRow
   }
 

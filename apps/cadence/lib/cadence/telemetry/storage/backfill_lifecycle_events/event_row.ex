@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.TelemetryBackfillLifecycleEventRow do
+defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents.EventRow do
   @moduledoc false
 
   use Ecto.Schema
