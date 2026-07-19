@@ -18,6 +18,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     DataLinkResolver
   }
 
+  alias Cadence.Limits
   alias Cadence.Limits.{Definition, DefinitionLifecycle}
 
   alias Cadence.Persistence.Schemas.{
@@ -771,6 +772,25 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert {:ok, _run} = Cadence.evaluate_telemetry_limits(mission_id)
 
     event = Cadence.latest_telemetry_limit_state(organization_id, mission_id, "HK.counter", [])
+
+    assert {:ok, fetched_event} =
+             Limits.fetch_limit_event(organization_id, mission_id, event.limit_event_id)
+
+    assert fetched_event.limit_event_id == event.limit_event_id
+
+    assert [listed_event] =
+             Limits.list_limit_events_for_sample(organization_id, mission_id, sample_id,
+               source_sample_type: :telemetry_sample,
+               limit: 5
+             )
+
+    assert listed_event.limit_event_id == event.limit_event_id
+
+    assert {:error, :limit_event_not_found} =
+             Limits.fetch_limit_event("other-organization", mission_id, event.limit_event_id)
+
+    assert [] =
+             Limits.list_limit_events_for_sample("other-organization", mission_id, sample_id)
 
     event_link = %DataLink{
       label: "Limit event",

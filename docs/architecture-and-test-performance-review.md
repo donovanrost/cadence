@@ -1251,6 +1251,11 @@ to 2,682 lines. The module owns the scoped operational-event reads and shares
 its row projections with generic operational-event inspection, keeping the two
 views aligned; production source-size pressure remains 7 and dependency
 ratchets are unchanged.
+Extracting limit events, definitions, lifecycle events, and effective intervals
+into a 264-line limits target module reduced `DataLinkResolver` from 2,682 to
+2,417 lines. Scoped event fetches and sample-history reads now run through the
+owning `Limits` context, reducing direct persistence-schema edges from 116 to
+115; production source-size pressure remains 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

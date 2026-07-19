@@ -148,6 +148,44 @@ defmodule Cadence.Limits do
     end)
   end
 
+  @spec fetch_limit_event(binary(), binary(), binary()) ::
+          {:ok, Event.t()} | {:error, :limit_event_not_found}
+  def fetch_limit_event(organization_id, mission_id, limit_event_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(limit_event_id) do
+    TelemetryLimitEventRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.limit_event_id == ^limit_event_id
+    )
+    |> Repo.one()
+    |> case do
+      %TelemetryLimitEventRow{} = row -> {:ok, TelemetryLimitEventRow.to_domain(row)}
+      nil -> {:error, :limit_event_not_found}
+    end
+  end
+
+  @spec list_limit_events_for_sample(binary(), binary(), binary(), keyword()) :: [Event.t()]
+  def list_limit_events_for_sample(organization_id, mission_id, sample_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(sample_id) and
+             is_list(opts) do
+    source_sample_type = Keyword.get(opts, :source_sample_type)
+    query_limit = Keyword.get(opts, :limit, 100)
+
+    TelemetryLimitEventRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.sample_id == ^sample_id
+    )
+    |> maybe_filter_limit_event_source_sample_type(source_sample_type)
+    |> order_by([row], desc: row.receipt_time)
+    |> limit(^query_limit)
+    |> Repo.all()
+    |> Enum.map(&TelemetryLimitEventRow.to_domain/1)
+  end
+
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
     run = build_run(mission_id, opts)
@@ -588,4 +626,16 @@ defmodule Cadence.Limits do
 
   defp maybe_filter_derived_spacecraft(query, spacecraft_id),
     do: where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
+
+  defp maybe_filter_limit_event_source_sample_type(query, nil), do: query
+
+  defp maybe_filter_limit_event_source_sample_type(query, source_sample_type)
+       when is_atom(source_sample_type) do
+    where(query, [row], row.source_sample_type == ^Atom.to_string(source_sample_type))
+  end
+
+  defp maybe_filter_limit_event_source_sample_type(query, source_sample_type)
+       when is_binary(source_sample_type) do
+    where(query, [row], row.source_sample_type == ^source_sample_type)
+  end
 end
