@@ -73,10 +73,7 @@ defmodule Cadence.Runtime do
         :ok
 
       mission_runtime ->
-        DynamicSupervisor.terminate_child(
-          Cadence.Runtime.MissionSupervisor,
-          mission_runtime
-        )
+        stop_mission_runtime(mission_id, mission_runtime)
     end
   end
 
@@ -85,7 +82,11 @@ defmodule Cadence.Runtime do
     case Process.whereis(Cadence.Runtime.Registry) do
       registry when is_pid(registry) ->
         Cadence.Runtime.Registry
-        |> Registry.select([{{{:mission_runtime, :"$1"}, :_, :_}, [], [:"$1"]}])
+        |> Registry.select([
+          {{{:mission_runtime, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+        ])
+        |> Enum.filter(fn {_mission_id, mission_runtime} -> Process.alive?(mission_runtime) end)
+        |> Enum.map(fn {mission_id, _mission_runtime} -> mission_id end)
         |> Enum.uniq()
         |> Enum.sort()
 
@@ -306,9 +307,23 @@ defmodule Cadence.Runtime do
 
   defp runtime_pid(mission_id) do
     case Registry.lookup(Cadence.Runtime.Registry, {:mission_runtime, mission_id}) do
-      [{mission_runtime, _value}] -> mission_runtime
-      [] -> nil
+      [{mission_runtime, _value}] when is_pid(mission_runtime) ->
+        if Process.alive?(mission_runtime), do: mission_runtime, else: nil
+
+      [] ->
+        nil
     end
+  end
+
+  defp stop_mission_runtime(mission_id, mission_runtime) do
+    stop_registered_child(
+      Cadence.Runtime.MissionSupervisor,
+      mission_runtime,
+      fn ->
+        Registry.lookup(Cadence.Runtime.Registry, {:mission_runtime, mission_id}) != []
+      end,
+      :mission_runtime_stop_timeout
+    )
   end
 
   defp realized_contact_runtime(mission_id, realized_contact_id) do
@@ -322,18 +337,24 @@ defmodule Cadence.Runtime do
   end
 
   defp stop_realized_contact_runtime(mission_id, realized_contact_id, realized_contact_runtime) do
-    monitor_ref = Process.monitor(realized_contact_runtime)
+    stop_registered_child(
+      MissionRuntime.realized_contact_supervisor_name(mission_id),
+      realized_contact_runtime,
+      fn ->
+        match?({:ok, _pid}, realized_contact_runtime(mission_id, realized_contact_id))
+      end,
+      :realized_contact_stop_timeout
+    )
+  end
 
-    result =
-      DynamicSupervisor.terminate_child(
-        MissionRuntime.realized_contact_supervisor_name(mission_id),
-        realized_contact_runtime
-      )
+  defp stop_registered_child(supervisor, runtime, registered?, timeout_reason) do
+    monitor_ref = Process.monitor(runtime)
+    result = DynamicSupervisor.terminate_child(supervisor, runtime)
 
     case result do
       :ok ->
-        with :ok <- await_realized_contact_runtime_down(monitor_ref) do
-          await_realized_contact_runtime_unregistered(mission_id, realized_contact_id, 500)
+        with :ok <- await_runtime_down(monitor_ref, timeout_reason) do
+          await_runtime_unregistered(registered?, 500, timeout_reason)
         end
 
       {:error, _reason} = error ->
@@ -342,33 +363,26 @@ defmodule Cadence.Runtime do
     end
   end
 
-  defp await_realized_contact_runtime_down(monitor_ref) do
+  defp await_runtime_down(monitor_ref, timeout_reason) do
     receive do
       {:DOWN, ^monitor_ref, :process, _pid, _reason} -> :ok
     after
       5_000 ->
         Process.demonitor(monitor_ref, [:flush])
-        {:error, :realized_contact_stop_timeout}
+        {:error, timeout_reason}
     end
   end
 
-  defp await_realized_contact_runtime_unregistered(_mission_id, _realized_contact_id, 0) do
-    {:error, :realized_contact_stop_timeout}
+  defp await_runtime_unregistered(_registered?, 0, timeout_reason) do
+    {:error, timeout_reason}
   end
 
-  defp await_realized_contact_runtime_unregistered(mission_id, realized_contact_id, attempts_left) do
-    case realized_contact_runtime(mission_id, realized_contact_id) do
-      {:error, :realized_contact_runtime_not_running} ->
-        :ok
-
-      {:ok, _pid} ->
-        Process.sleep(10)
-
-        await_realized_contact_runtime_unregistered(
-          mission_id,
-          realized_contact_id,
-          attempts_left - 1
-        )
+  defp await_runtime_unregistered(registered?, attempts_left, timeout_reason) do
+    if registered?.() do
+      Process.sleep(10)
+      await_runtime_unregistered(registered?, attempts_left - 1, timeout_reason)
+    else
+      :ok
     end
   end
 

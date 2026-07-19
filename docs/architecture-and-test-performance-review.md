@@ -120,9 +120,11 @@ Two complete core-suite runs with different seeds passed all 1,522 tests in
 27.2 and 29.2 seconds, below the Phase 2 timing target. `RuntimeCase` now
 snapshots the runtime registry and stops only mission runtimes that appeared
 during the current test; it no longer stops every mission before and after
-each test. The core test helper still boots `:cadence` before ExUnit selects
-cases. `ConfigCase` owns only the serial shared sandbox needed by configuration
-tests and their supervised child processes. Of its 22 callers, only the
+each test. Mission shutdown now waits for both the runtime process and its
+registry entry to disappear, and runtime enumeration filters dead registry
+PIDs. The core test helper still boots `:cadence` before ExUnit selects cases.
+`ConfigCase` owns only the serial shared sandbox needed by configuration tests
+and their supervised child processes. Of its 22 callers, only the
 contact-scheduler suite also carries the `:runtime` tag and opts into owned
 mission-runtime cleanup.
 
