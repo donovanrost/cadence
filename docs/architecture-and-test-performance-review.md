@@ -744,7 +744,9 @@ normalization and validation from the 1,016-line transport extension reduced
 the current production-file pressure to 30 without changing the test-file or
 test-function counts. Extracting evidence-panel metadata parsing from the
 1,052-line dashboard data-link selection module reduced the production-file
-pressure again to 29.
+pressure again to 29. Extracting provider-ingress tracing, telemetry emission,
+and error logging from the 1,165-line executor reduced that count to 28 while
+keeping queue ownership and processing order in the GenServer.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
