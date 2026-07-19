@@ -871,6 +871,11 @@ Separating runtime planning, frame resolution, cache/execution policy, and live
 resolution from the 3,642-line dashboard engine test reduced test-file pressure
 to 7. Those five engine test files are now 1,001, 673, 355, 657, and 758 lines,
 backed by 277 lines of shared engine fixtures.
+Separating projected operational intervals, mission and runtime operational
+events, telemetry and source lifecycle, and recovery diagnostics from the
+4,489-line dashboard data-link resolver test reduced test-file pressure to 6.
+Those five resolver test files are now 939, 755, 1,015, 959, and 499 lines,
+backed by 375 lines of shared resolver fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
