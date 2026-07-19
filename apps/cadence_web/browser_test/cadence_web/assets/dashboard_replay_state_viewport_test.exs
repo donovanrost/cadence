@@ -260,19 +260,36 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
         ]
       )
 
+    assert_connection_state_timeline_viewport!(%{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      beta_transport: beta_transport,
+      dashboard: dashboard,
+      dss_14: dss_14,
+      dss_63: dss_63,
+      from_time: from_time,
+      mission: mission,
+      replay_run_id: replay_run_id,
+      sandbox_owner: sandbox_owner,
+      to_time: to_time,
+      transport_connection_source_event_id: transport_connection_source_event_id,
+      user: user
+    })
+  end
+
+  defp assert_connection_state_timeline_viewport!(context) do
     app_root = Path.expand("../../..", __DIR__)
     ensure_assets_built!(app_root)
 
     port = free_tcp_port()
-
-    start_browser_endpoint!(port, sandbox_owner)
+    start_browser_endpoint!(port, context.sandbox_owner)
 
     base_url = "http://localhost:#{port}"
-    scope_ids = "#{dss_14.ground_station_id},#{dss_63.ground_station_id}"
+    scope_ids = "#{context.dss_14.ground_station_id},#{context.dss_63.ground_station_id}"
 
     dashboard_url =
       base_url <>
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "ground_station", scope_ids: scope_ids, time_mode: "replay_run", replay_run_id: replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
+        ~p"/missions/#{context.mission.mission_id}/ops/dashboards/#{context.dashboard.dashboard_id}?#{%{scope_kind: "ground_station", scope_ids: scope_ids, time_mode: "replay_run", replay_run_id: context.replay_run_id, from: DateTime.to_iso8601(context.from_time), to: DateTime.to_iso8601(context.to_time)}}"
 
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
@@ -287,27 +304,27 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
                  "--expected-scope-kind",
                  "ground_station",
                  "--expected-scope-id",
-                 dss_14.ground_station_id,
+                 context.dss_14.ground_station_id,
                  "--expected-scope-ids",
                  scope_ids,
                  "--expected-link-id",
                  "link-alpha",
                  "--expected-source-endpoint-id",
-                 alpha_endpoint.source_endpoint_id,
+                 context.alpha_endpoint.source_endpoint_id,
                  "--expected-transport-id",
-                 alpha_transport.transport_id,
+                 context.alpha_transport.transport_id,
                  "--expected-ground-station-id",
-                 dss_14.ground_station_id,
+                 context.dss_14.ground_station_id,
                  "--expected-replay-run-id",
-                 replay_run_id,
+                 context.replay_run_id,
                  "--expected-operational-event-id",
-                 transport_connection_source_event_id,
+                 context.transport_connection_source_event_id,
                  "--expected-beta-transport-id",
-                 beta_transport.transport_id,
+                 context.beta_transport.transport_id,
                  "--expected-beta-operational-event-id",
-                 "operational_event:connection_state_snapshot:#{replay_run_id}:transport-beta-replay-connected",
+                 "operational_event:connection_state_snapshot:#{context.replay_run_id}:transport-beta-replay-connected",
                  "--expected-beta-ground-station-id",
-                 dss_63.ground_station_id,
+                 context.dss_63.ground_station_id,
                  "--excluded-transport-id",
                  "browser-transport-excluded",
                  "--excluded-ground-station-id",
@@ -317,7 +334,7 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
                  "--login-url",
                  base_url <> ~p"/sign-in",
                  "--login-email",
-                 user.email,
+                 context.user.email,
                  "--login-password",
                  TestFixtures.default_password()
                ],
