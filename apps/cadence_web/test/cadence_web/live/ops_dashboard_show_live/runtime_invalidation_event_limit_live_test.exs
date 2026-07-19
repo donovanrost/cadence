@@ -288,7 +288,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
       binding_set = persist_binding_set!(org, mission)
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100)
       persist_counter_limit_definition!(mission, 1, %{"yellow_high" => 10, "red_high" => 20})
-      assert {:ok, _run} = Cadence.evaluate_telemetry_limits(mission.mission_id)
+      assert {:ok, _run} = Cadence.Limits.evaluate(mission.mission_id)
 
       dashboard =
         TestFixtures.persist_dashboard_document!(mission,

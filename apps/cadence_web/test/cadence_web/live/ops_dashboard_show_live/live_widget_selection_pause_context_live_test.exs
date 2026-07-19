@@ -99,7 +99,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       })
 
     {:ok, _definition} = Cadence.Limits.persist_limit_definition(limit_definition)
-    {:ok, _run} = Cadence.evaluate_telemetry_limits(mission.mission_id)
+    {:ok, _run} = Cadence.Limits.evaluate(mission.mission_id)
   end
 
   defp show_path(mission, dashboard) do

@@ -777,7 +777,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
       })
 
     assert {:ok, _definition} = Cadence.Limits.persist_limit_definition(definition)
-    assert {:ok, _run} = Cadence.evaluate_telemetry_limits(mission_id)
+    assert {:ok, _run} = Cadence.Limits.evaluate(mission_id)
 
     event = LimitReads.latest_state(organization_id, mission_id, "HK.counter", [])
 

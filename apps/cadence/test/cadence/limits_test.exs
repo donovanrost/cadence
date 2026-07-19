@@ -1,5 +1,6 @@
 defmodule Cadence.LimitsTest do
   alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Jobs
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.ConfigCase, async: false
@@ -130,10 +131,12 @@ defmodule Cadence.LimitsTest do
     assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==
              60
 
-    assert {:ok, run} = Cadence.start_evaluate_telemetry_limits("mission-alpha")
+    assert {:ok, run} = Limits.start_evaluate("mission-alpha")
     assert run.status == :running
 
-    assert {:ok, queued_job} = Cadence.fetch_telemetry_limit_job(run.limit_run_id)
+    assert {:ok, queued_job} =
+             Jobs.fetch_job_for_run(:telemetry_limit_evaluation, run.limit_run_id)
+
     assert queued_job.status == :queued
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
@@ -145,7 +148,7 @@ defmodule Cadence.LimitsTest do
     assert completed_job.job_type == :telemetry_limit_evaluation
     assert completed_job.attempt_count == 1
 
-    assert {:ok, completed_run} = Cadence.fetch_telemetry_limit_run(run.limit_run_id)
+    assert {:ok, completed_run} = Limits.fetch_run(run.limit_run_id)
     assert completed_run.status == :completed
     assert completed_run.evaluated_sample_count == 4
     assert completed_run.emitted_event_count == 2

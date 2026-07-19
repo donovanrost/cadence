@@ -1,5 +1,7 @@
 defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
   alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Jobs
+  alias Cadence.Projections.TelemetryLatestLimitStates
   alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.DataCase, async: false
 
@@ -37,7 +39,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
                binding_set.version
              )
 
-    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits("mission-alpha")
+    assert {:ok, limit_run} = Cadence.Limits.evaluate("mission-alpha")
     assert limit_run.status == :completed
 
     assert LimitReads.latest_state("mission-alpha", "HK.counter").limit_state ==
@@ -47,12 +49,15 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert LimitReads.latest_state("mission-alpha", "HK.counter") == nil
 
     assert {:ok, rebuild_run} =
-             Cadence.start_rebuild_latest_telemetry_limit_states("mission-alpha")
+             TelemetryLatestLimitStates.start_rebuild("mission-alpha")
 
     assert rebuild_run.status == :running
 
     assert {:ok, queued_job} =
-             Cadence.fetch_latest_telemetry_limit_state_rebuild_job(rebuild_run.rebuild_run_id)
+             Jobs.fetch_job_for_run(
+               :telemetry_latest_limit_state_rebuild,
+               rebuild_run.rebuild_run_id
+             )
 
     assert queued_job.status == :queued
 
@@ -66,7 +71,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert completed_job.attempt_count == 1
 
     assert {:ok, completed_run} =
-             Cadence.fetch_latest_telemetry_limit_state_rebuild_run(rebuild_run.rebuild_run_id)
+             TelemetryLatestLimitStates.fetch_run(rebuild_run.rebuild_run_id)
 
     assert completed_run.status == :completed
     assert completed_run.rebuilt_state_count == 1
@@ -135,12 +140,15 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     Repo.delete_all(TelemetryLatestLimitStateRow)
 
     assert {:ok, refresh_run} =
-             Cadence.start_refresh_latest_telemetry_limit_states("mission-alpha")
+             TelemetryLatestLimitStates.start_refresh_from_latest_values("mission-alpha")
 
     assert refresh_run.status == :running
 
     assert {:ok, queued_job} =
-             Cadence.fetch_latest_telemetry_limit_state_refresh_job(refresh_run.rebuild_run_id)
+             Jobs.fetch_job_for_run(
+               :telemetry_latest_limit_state_refresh,
+               refresh_run.rebuild_run_id
+             )
 
     assert queued_job.status == :queued
 
@@ -154,7 +162,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert completed_job.attempt_count == 1
 
     assert {:ok, completed_run} =
-             Cadence.fetch_latest_telemetry_limit_state_refresh_run(refresh_run.rebuild_run_id)
+             TelemetryLatestLimitStates.fetch_run(refresh_run.rebuild_run_id)
 
     assert completed_run.status == :completed
     assert completed_run.rebuilt_state_count == 2

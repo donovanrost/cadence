@@ -356,8 +356,11 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   end
 
   def evaluate_limit_events!(org, mission, spacecraft) do
+    assert {:ok, _mission} =
+             Cadence.Missions.fetch_mission(org.organization_id, mission.mission_id)
+
     assert {:ok, run} =
-             Cadence.evaluate_telemetry_limits(org.organization_id, mission.mission_id,
+             Cadence.Limits.evaluate(mission.mission_id,
                spacecraft_id: spacecraft.spacecraft_id
              )
 

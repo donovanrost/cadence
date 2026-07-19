@@ -19,7 +19,6 @@ defmodule Cadence do
   alias Cadence.Governance
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
-  alias Cadence.Limits, as: LimitsService
   alias Cadence.Missions
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
   alias Cadence.Persistence
@@ -27,7 +26,6 @@ defmodule Cadence do
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
 
-  alias Cadence.Projections.TelemetryLatestLimitStates, as: TelemetryLatestLimitStateProjection
   alias Cadence.Projections.TelemetryLatestValues, as: TelemetryLatestValueProjection
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
@@ -1095,48 +1093,6 @@ defmodule Cadence do
     ReplayDiff.diff_run(replay_run_id)
   end
 
-  @spec evaluate_telemetry_limits(binary(), keyword()) ::
-          {:ok, Cadence.Limits.Run.t()} | {:error, term()}
-  def evaluate_telemetry_limits(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    LimitsService.evaluate(mission_id, opts)
-  end
-
-  @spec evaluate_telemetry_limits(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Limits.Run.t()} | {:error, term()}
-  def evaluate_telemetry_limits(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      LimitsService.evaluate(mission_id, opts)
-    end)
-  end
-
-  @spec start_evaluate_telemetry_limits(binary(), keyword()) ::
-          {:ok, Cadence.Limits.Run.t()} | {:error, term()}
-  def start_evaluate_telemetry_limits(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    LimitsService.start_evaluate(mission_id, opts)
-  end
-
-  @spec start_evaluate_telemetry_limits(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Limits.Run.t()} | {:error, term()}
-  def start_evaluate_telemetry_limits(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      LimitsService.start_evaluate(mission_id, opts)
-    end)
-  end
-
-  @spec fetch_telemetry_limit_run(binary()) :: {:ok, Cadence.Limits.Run.t()} | {:error, term()}
-  def fetch_telemetry_limit_run(limit_run_id) when is_binary(limit_run_id) do
-    LimitsService.fetch_run(limit_run_id)
-  end
-
-  @spec fetch_telemetry_limit_job(binary()) :: {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_telemetry_limit_job(limit_run_id) when is_binary(limit_run_id) do
-    Jobs.fetch_job_for_run(:telemetry_limit_evaluation, limit_run_id)
-  end
-
   @spec rebuild_latest_telemetry_values(binary(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, term()}
   def rebuild_latest_telemetry_values(mission_id, opts \\ [])
@@ -1181,98 +1137,6 @@ defmodule Cadence do
   def fetch_latest_telemetry_value_rebuild_job(rebuild_run_id)
       when is_binary(rebuild_run_id) do
     Jobs.fetch_job_for_run(:telemetry_latest_value_rebuild, rebuild_run_id)
-  end
-
-  @spec rebuild_latest_telemetry_limit_states(binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_telemetry_limit_states(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestLimitStateProjection.rebuild(mission_id, opts)
-  end
-
-  @spec rebuild_latest_telemetry_limit_states(binary(), binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_telemetry_limit_states(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestLimitStateProjection.rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec refresh_latest_telemetry_limit_states(binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def refresh_latest_telemetry_limit_states(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestLimitStateProjection.refresh_from_latest_values(mission_id, opts)
-  end
-
-  @spec refresh_latest_telemetry_limit_states(binary(), binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def refresh_latest_telemetry_limit_states(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestLimitStateProjection.refresh_from_latest_values(mission_id, opts)
-    end)
-  end
-
-  @spec start_rebuild_latest_telemetry_limit_states(binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def start_rebuild_latest_telemetry_limit_states(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestLimitStateProjection.start_rebuild(mission_id, opts)
-  end
-
-  @spec start_rebuild_latest_telemetry_limit_states(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def start_rebuild_latest_telemetry_limit_states(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestLimitStateProjection.start_rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec start_refresh_latest_telemetry_limit_states(binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def start_refresh_latest_telemetry_limit_states(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestLimitStateProjection.start_refresh_from_latest_values(mission_id, opts)
-  end
-
-  @spec start_refresh_latest_telemetry_limit_states(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def start_refresh_latest_telemetry_limit_states(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestLimitStateProjection.start_refresh_from_latest_values(mission_id, opts)
-    end)
-  end
-
-  @spec fetch_latest_telemetry_limit_state_rebuild_run(binary()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def fetch_latest_telemetry_limit_state_rebuild_run(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    TelemetryLatestLimitStateProjection.fetch_run(rebuild_run_id)
-  end
-
-  @spec fetch_latest_telemetry_limit_state_refresh_run(binary()) ::
-          {:ok, Cadence.Projections.TelemetryLatestLimitStates.Run.t()} | {:error, term()}
-  def fetch_latest_telemetry_limit_state_refresh_run(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    TelemetryLatestLimitStateProjection.fetch_run(rebuild_run_id)
-  end
-
-  @spec fetch_latest_telemetry_limit_state_rebuild_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_latest_telemetry_limit_state_rebuild_job(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    Jobs.fetch_job_for_run(:telemetry_latest_limit_state_rebuild, rebuild_run_id)
-  end
-
-  @spec fetch_latest_telemetry_limit_state_refresh_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_latest_telemetry_limit_state_refresh_job(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    Jobs.fetch_job_for_run(:telemetry_latest_limit_state_refresh, rebuild_run_id)
   end
 
   defp with_mission_scope(organization_id, mission_id, fun)

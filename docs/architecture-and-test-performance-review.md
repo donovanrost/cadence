@@ -1632,6 +1632,16 @@ production web callers of the root facade remain at 13 files because production
 already used the owning services. No route or authentication placement is
 involved; production source-size pressure remains 4 and dependency ratchets are
 unchanged.
+Retiring the 18 telemetry-limit evaluation and latest-limit-state projection
+clauses from the root facade moved 23 test, test-support, and opt-in browser
+call sites directly to `Cadence.Limits`,
+`Cadence.Projections.TelemetryLatestLimitStates`, and `Cadence.Jobs`. The two
+organization-form fixture paths retain explicit mission ownership checks before
+evaluation. This reduced `Cadence` from 1,386 to 1,250 lines; production web
+callers of the root facade remain at 13 files because production already used
+the owning services. No route or authentication placement is involved;
+production source-size pressure remains 4 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

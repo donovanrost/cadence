@@ -203,7 +203,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
                persisted_binding_set.version
              )
 
-    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(organization_id, mission_id, [])
+    assert {:ok, _mission} = Cadence.Missions.fetch_mission(organization_id, mission_id)
+    assert {:ok, limit_run} = Cadence.Limits.evaluate(mission_id, [])
     assert limit_run.status == :completed
   end
 

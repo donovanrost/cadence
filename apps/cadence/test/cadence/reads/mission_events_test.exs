@@ -99,7 +99,7 @@ defmodule Cadence.Reads.MissionEventsTest do
                binding_set.version
              )
 
-    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(mission_id)
+    assert {:ok, limit_run} = Cadence.Limits.evaluate(mission_id)
     assert limit_run.status == :completed
 
     mission_events = MissionEventReads.list_for_mission(organization_id, mission_id, limit: 10)
