@@ -912,6 +912,12 @@ and the real smoke lane passes all three cases in 58.5 seconds. That run also
 refreshed the browser contract for the current telemetry-first toolbar and
 shared overlays, and fixed repeated warning popover IDs plus narrow dashboard
 title wrapping.
+Extracting QuestDB connection and schema probing, diagnostic classification,
+credential headers, and endpoint selection from the 2,882-line telemetry
+source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
+backend health checks separate from telemetry fact and frame resolution;
+production-file pressure remains 11 while the remaining telemetry
+responsibilities are split.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
