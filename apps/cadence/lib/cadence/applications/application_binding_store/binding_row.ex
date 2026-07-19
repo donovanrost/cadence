@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ApplicationBindingRow do
+defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
   @moduledoc false
 
   use Ecto.Schema

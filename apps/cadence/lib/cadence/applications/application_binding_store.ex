@@ -6,14 +6,14 @@ defmodule Cadence.Applications.ApplicationBindingStore do
   import Ecto.Query
 
   alias Cadence.Applications.ApplicationBinding
-  alias Cadence.Persistence.Schemas.ApplicationBindingRow
+  alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Repo
 
   @type app_key :: atom() | binary()
 
   @spec upsert(ApplicationBinding.t()) :: {:ok, ApplicationBinding.t()} | {:error, term()}
   def upsert(%ApplicationBinding{} = binding) do
-    changeset = ApplicationBindingRow.changeset(binding)
+    changeset = BindingRow.changeset(binding)
 
     upsert_opts = [
       on_conflict:
@@ -33,7 +33,7 @@ defmodule Cadence.Applications.ApplicationBindingStore do
     ]
 
     case Repo.insert(changeset, upsert_opts) do
-      {:ok, row} -> {:ok, ApplicationBindingRow.to_domain(row)}
+      {:ok, row} -> {:ok, BindingRow.to_domain(row)}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -42,21 +42,21 @@ defmodule Cadence.Applications.ApplicationBindingStore do
           {:ok, ApplicationBinding.t()} | {:error, :application_binding_not_configured}
   def fetch(organization_id, mission_id, spacecraft_id, application_key)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    case Repo.get_by(ApplicationBindingRow,
+    case Repo.get_by(BindingRow,
            organization_id: organization_id,
            mission_id: mission_id,
            spacecraft_id: spacecraft_id,
            application_key: normalize_application_key(application_key)
          ) do
       nil -> {:error, :application_binding_not_configured}
-      row -> {:ok, ApplicationBindingRow.to_domain(row)}
+      row -> {:ok, BindingRow.to_domain(row)}
     end
   end
 
   @spec list(binary(), binary(), keyword()) :: [ApplicationBinding.t()]
   def list(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) do
-    ApplicationBindingRow
+    BindingRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
@@ -69,7 +69,7 @@ defmodule Cadence.Applications.ApplicationBindingStore do
     |> maybe_filter(:enabled, Keyword.get(opts, :enabled))
     |> order_by([row], asc: row.spacecraft_id, asc: row.application_key)
     |> Repo.all()
-    |> Enum.map(&ApplicationBindingRow.to_domain/1)
+    |> Enum.map(&BindingRow.to_domain/1)
   end
 
   @spec list_apid_conflicts(binary(), binary(), binary(), app_key()) ::

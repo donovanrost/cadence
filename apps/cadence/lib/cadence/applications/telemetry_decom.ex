@@ -20,6 +20,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.ApplicationBinding
   alias Cadence.Applications.ApplicationBindingStore
+  alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Catalog
@@ -30,7 +31,6 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Governance
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.ApplicationBindingRow
   alias Cadence.Repo
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
@@ -532,7 +532,7 @@ defmodule Cadence.Applications.TelemetryDecom do
     now = DateTime.utc_now()
 
     from(
-      row in ApplicationBindingRow,
+      row in BindingRow,
       where:
         row.organization_id == ^organization_id and row.mission_id == ^mission_id and
           row.application_key == ^@application_key and row.enabled == false

@@ -6,8 +6,6 @@
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
 
-persistence_schema|lib/cadence/applications/application_binding_store.ex|lib/cadence/persistence/schemas/application_binding_row.ex
-persistence_schema|lib/cadence/applications/telemetry_decom.ex|lib/cadence/persistence/schemas/application_binding_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_approval_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_queue_entry_row.ex
 persistence_schema|lib/cadence/commanding.ex|lib/cadence/persistence/schemas/command_release_attempt_row.ex

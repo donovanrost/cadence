@@ -95,10 +95,14 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
-  test "protects dashboard and projection rows through their owning contexts" do
+  test "protects application dashboard and projection rows through their owning contexts" do
     graph = %{
       "lib/cadence/accounts.ex" => %{
+        "lib/cadence/applications/application_binding_store/binding_row.ex" => "export",
         "lib/cadence/dashboards/data_sources/data_source_row.ex" => "export"
+      },
+      "lib/cadence/applications/telemetry_decom.ex" => %{
+        "lib/cadence/applications/application_binding_store/binding_row.ex" => "export"
       },
       "lib/cadence/dashboards/data_sources.ex" => %{
         "lib/cadence/dashboards/data_sources/data_source_row.ex" => "export"
@@ -112,6 +116,11 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
     }
 
     assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/accounts.ex",
+               sink: "lib/cadence/applications/application_binding_store/binding_row.ex"
+             },
              %{
                kind: :context_schema,
                source: "lib/cadence/accounts.ex",
