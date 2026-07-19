@@ -25,9 +25,9 @@ defmodule CadenceWeb.CommsValidation do
         spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
         source_endpoints:
           Cadence.SourceEndpoints.list_source_endpoints(organization_id, mission_id),
-        path_templates: Cadence.list_path_templates(organization_id, mission_id),
-        provider_profiles: Cadence.list_provider_profiles(organization_id, mission_id),
-        transport_profiles: Cadence.list_transport_profiles(organization_id, mission_id),
+        path_templates: Cadence.Contacts.list_path_templates(organization_id, mission_id),
+        provider_profiles: Cadence.Contacts.list_provider_profiles(organization_id, mission_id),
+        transport_profiles: Cadence.Contacts.list_transport_profiles(organization_id, mission_id),
         transports: TransportStore.list_transports(organization_id, mission_id),
         routing_rules: RoutingRuleStore.list_routing_rules(organization_id, mission_id)
       }
@@ -72,7 +72,7 @@ defmodule CadenceWeb.CommsValidation do
         provider_profiles,
         path_templates,
         "provider_profile_id",
-        &Cadence.list_provider_profile_versions/3,
+        &Cadence.Contacts.list_provider_profile_versions/3,
         organization_id,
         mission_id
       )
@@ -82,7 +82,7 @@ defmodule CadenceWeb.CommsValidation do
         transport_profiles,
         path_templates,
         "transport_profile_id",
-        &Cadence.list_transport_profile_versions/3,
+        &Cadence.Contacts.list_transport_profile_versions/3,
         organization_id,
         mission_id
       )
@@ -93,7 +93,7 @@ defmodule CadenceWeb.CommsValidation do
       |> Map.new(&{&1.spacecraft_id, &1})
 
     active_telemetry = active_telemetry_activation(organization_id, mission_id)
-    link_assignments = Cadence.list_link_assignments(organization_id, mission_id)
+    link_assignments = Cadence.Contacts.list_link_assignments(organization_id, mission_id)
 
     findings(
       source_endpoints,

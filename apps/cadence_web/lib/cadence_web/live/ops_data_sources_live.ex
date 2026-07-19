@@ -1363,7 +1363,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp fetch_focused_link_assignment(_organization_id, _mission_id, nil), do: nil
 
   defp fetch_focused_link_assignment(organization_id, mission_id, link_assignment_id) do
-    case Cadence.fetch_link_assignment(organization_id, mission_id, link_assignment_id) do
+    case Cadence.Contacts.fetch_link_assignment(organization_id, mission_id, link_assignment_id) do
       {:ok, link_assignment} -> link_assignment
       {:error, _reason} -> nil
     end

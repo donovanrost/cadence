@@ -411,10 +411,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _path_template} =
-             Cadence.persist_path_template(org.organization_id, alpha_template)
+             Cadence.Contacts.persist_path_template(org.organization_id, alpha_template)
 
     assert {:ok, _path_template} =
-             Cadence.persist_path_template(org.organization_id, beta_template)
+             Cadence.Contacts.persist_path_template(org.organization_id, beta_template)
 
     alpha_link =
       LinkAssignment.new(%{
@@ -443,10 +443,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _link_assignment} =
-             Cadence.persist_link_assignment(org.organization_id, alpha_link)
+             Cadence.Contacts.persist_link_assignment(org.organization_id, alpha_link)
 
     assert {:ok, _link_assignment} =
-             Cadence.persist_link_assignment(org.organization_id, beta_link)
+             Cadence.Contacts.persist_link_assignment(org.organization_id, beta_link)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

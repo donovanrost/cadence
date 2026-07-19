@@ -48,7 +48,8 @@ defmodule CadenceWeb.MissionShowLiveTest do
         metadata: %{"display_name" => "TCP Provider"}
       })
 
-    assert {:ok, provider} = Cadence.persist_provider_profile(org.organization_id, provider)
+    assert {:ok, provider} =
+             Cadence.Contacts.persist_provider_profile(org.organization_id, provider)
 
     path_template =
       PathTemplate.new(%{
@@ -63,7 +64,7 @@ defmodule CadenceWeb.MissionShowLiveTest do
       })
 
     assert {:ok, path_template} =
-             Cadence.persist_path_template(org.organization_id, path_template)
+             Cadence.Contacts.persist_path_template(org.organization_id, path_template)
 
     link_assignment =
       LinkAssignment.new(%{
@@ -79,7 +80,7 @@ defmodule CadenceWeb.MissionShowLiveTest do
       })
 
     assert {:ok, _link_assignment} =
-             Cadence.persist_link_assignment(org.organization_id, link_assignment)
+             Cadence.Contacts.persist_link_assignment(org.organization_id, link_assignment)
 
     %{
       spacecraft: spacecraft,

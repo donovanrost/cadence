@@ -79,7 +79,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     assert is_binary(persisted.materialized_link_assignment_id)
 
     assert {:ok, assignment} =
-             Cadence.fetch_link_assignment(
+             Cadence.Contacts.fetch_link_assignment(
                organization_id,
                mission_id,
                persisted.materialized_link_assignment_id

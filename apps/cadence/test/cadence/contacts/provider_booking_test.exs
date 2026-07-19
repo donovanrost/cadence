@@ -33,14 +33,14 @@ defmodule Cadence.Contacts.ProviderBookingTest do
       )
 
     {:ok, runtime_profile} =
-      Cadence.fetch_provider_profile(
+      Cadence.Contacts.fetch_provider_profile(
         organization_id,
         mission_id,
         transport.materialized_provider_profile_id
       )
 
     {:ok, path_template} =
-      Cadence.persist_path_template(
+      Cadence.Contacts.persist_path_template(
         organization_id,
         PathTemplate.new(%{
           path_template_id: "simulator-downlink-#{suffix}",

@@ -192,12 +192,14 @@ defmodule CadenceWeb.CommsOverviewLive do
     transports =
       TransportStore.list_transports(scope.organization_id, mission.mission_id)
 
-    provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)
+    provider_profiles =
+      Cadence.Contacts.list_provider_profiles(scope.organization_id, mission.mission_id)
 
     transport_profiles =
-      Cadence.list_transport_profiles(scope.organization_id, mission.mission_id)
+      Cadence.Contacts.list_transport_profiles(scope.organization_id, mission.mission_id)
 
-    path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
+    path_templates =
+      Cadence.Contacts.list_path_templates(scope.organization_id, mission.mission_id)
 
     routing_rules =
       RoutingRuleStore.list_routing_rules(scope.organization_id, mission.mission_id)

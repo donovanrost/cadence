@@ -1531,6 +1531,15 @@ of the root facade from 38 to 37 files. Realized-contact API routes remain in
 the authenticated API pipeline, and contact operations pages remain in their
 existing authenticated LiveView sessions; production source-size pressure
 remains 4 and dependency ratchets are unchanged.
+Retiring the 42 provider-profile, transport-profile, path-template, shared-link,
+and link-assignment clauses from the root facade moved 75 production,
+test-support, simulator, opt-in browser, and test call sites directly to
+`Cadence.Contacts`. This reduced `Cadence` from 3,033 to 2,655 lines and
+reduced production web callers of the root facade from 37 to 28 files. Contact
+configuration API routes remain in the authenticated API pipeline, while Comms,
+mission, and operations pages remain in their existing authenticated LiveView
+sessions; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

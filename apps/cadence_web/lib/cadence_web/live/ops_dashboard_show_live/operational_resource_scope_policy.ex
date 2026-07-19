@@ -65,7 +65,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
     do: Keyword.get(opts, :fetch_transport, &TransportStore.fetch_transport/3)
 
   defp fetch_link_assignment_fn(opts),
-    do: Keyword.get(opts, :fetch_link_assignment, &Cadence.fetch_link_assignment/3)
+    do: Keyword.get(opts, :fetch_link_assignment, &Cadence.Contacts.fetch_link_assignment/3)
 
   defp fetch_metadata_backed_link(organization_id, mission_id, link_id, opts) do
     resources =

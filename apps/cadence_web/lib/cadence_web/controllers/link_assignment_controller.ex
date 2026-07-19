@@ -14,7 +14,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              mission_id
            ) do
       link_assignments =
-        Cadence.list_link_assignments(organization_id, mission_id)
+        Cadence.Contacts.list_link_assignments(organization_id, mission_id)
         |> filter_link_assignments(params)
         |> Enum.map(&ControlPlaneJSON.link_assignment/1)
 
@@ -40,7 +40,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              link_assignment_params
            ),
          {:ok, %LinkAssignment{} = persisted_link_assignment} <-
-           Cadence.persist_link_assignment(organization_id, link_assignment) do
+           Cadence.Contacts.persist_link_assignment(organization_id, link_assignment) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.link_assignment(persisted_link_assignment)})
@@ -59,7 +59,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              mission_id
            ),
          {:ok, %LinkAssignment{} = link_assignment} <-
-           Cadence.fetch_link_assignment(organization_id, mission_id, link_assignment_id) do
+           Cadence.Contacts.fetch_link_assignment(organization_id, mission_id, link_assignment_id) do
       json(conn, %{data: ControlPlaneJSON.link_assignment(link_assignment)})
     end
   end
@@ -82,7 +82,7 @@ defmodule CadenceWeb.LinkAssignmentController do
            ),
          {:ok, metadata} <- ControlPlaneParams.link_assignment_delete(link_assignment_params),
          {:ok, %LinkAssignment{} = link_assignment} <-
-           Cadence.delete_link_assignment(
+           Cadence.Contacts.delete_link_assignment(
              organization_id,
              mission_id,
              link_assignment_id,
@@ -113,7 +113,7 @@ defmodule CadenceWeb.LinkAssignmentController do
            fetch_application_path_template(organization_id, mission_id, path_template_id, attrs),
          {:ok, spacecraft} <- application_spacecraft(organization_id, mission_id, attrs),
          {:ok, result} <-
-           Cadence.apply_link_template(
+           Cadence.Contacts.apply_link_template(
              organization_id,
              mission_id,
              source_template,
@@ -140,10 +140,10 @@ defmodule CadenceWeb.LinkAssignmentController do
   defp fetch_application_path_template(organization_id, mission_id, path_template_id, attrs) do
     case attrs["path_template_version"] do
       nil ->
-        Cadence.fetch_path_template(organization_id, mission_id, path_template_id)
+        Cadence.Contacts.fetch_path_template(organization_id, mission_id, path_template_id)
 
       version ->
-        Cadence.fetch_path_template_version(
+        Cadence.Contacts.fetch_path_template_version(
           organization_id,
           mission_id,
           path_template_id,

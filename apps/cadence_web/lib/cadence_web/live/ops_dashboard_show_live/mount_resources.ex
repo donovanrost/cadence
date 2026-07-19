@@ -60,7 +60,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_link_assignments(opts) do
-    Keyword.get(opts, :list_link_assignments, &Cadence.list_link_assignments/2)
+    Keyword.get(opts, :list_link_assignments, &Cadence.Contacts.list_link_assignments/2)
   end
 
   defp list_scheduled_contacts(opts) do

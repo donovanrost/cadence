@@ -337,7 +337,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
              )
 
     assert {:ok, path} =
-             Cadence.fetch_path_template_version(
+             Cadence.Contacts.fetch_path_template_version(
                setup.organization_id,
                setup.mission_id,
                route.path_template_id,

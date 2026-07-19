@@ -100,7 +100,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert is_binary(persisted_v1.materialized_provider_profile_id)
 
       assert {:ok, provider} =
-               Cadence.fetch_provider_profile(
+               Cadence.Contacts.fetch_provider_profile(
                  organization_id,
                  mission_id,
                  persisted_v1.materialized_provider_profile_id
@@ -212,7 +212,7 @@ defmodule Cadence.Comms.TransportStoreTest do
              ]) == "[REDACTED]"
 
       assert {:ok, runtime_profile} =
-               Cadence.fetch_provider_profile(
+               Cadence.Contacts.fetch_provider_profile(
                  organization_id,
                  mission_id,
                  persisted.materialized_provider_profile_id

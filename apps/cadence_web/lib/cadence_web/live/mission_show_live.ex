@@ -148,8 +148,11 @@ defmodule CadenceWeb.MissionShowLive do
     source_endpoints =
       Cadence.SourceEndpoints.list_source_endpoints(scope.organization_id, mission.mission_id)
 
-    path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
-    link_assignments = Cadence.list_link_assignments(scope.organization_id, mission.mission_id)
+    path_templates =
+      Cadence.Contacts.list_path_templates(scope.organization_id, mission.mission_id)
+
+    link_assignments =
+      Cadence.Contacts.list_link_assignments(scope.organization_id, mission.mission_id)
 
     spacecraft_readiness =
       SpacecraftCommsReadiness.readiness_rows(

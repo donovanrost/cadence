@@ -44,9 +44,9 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
 
   def link_assignment(organization_id, mission_id, %SourceEndpoint{} = runtime_identity) do
     link_assignment_from_assignments(
-      Cadence.list_link_assignments(organization_id, mission_id),
+      Cadence.Contacts.list_link_assignments(organization_id, mission_id),
       runtime_identity,
-      Cadence.list_path_templates(organization_id, mission_id)
+      Cadence.Contacts.list_path_templates(organization_id, mission_id)
     )
   end
 

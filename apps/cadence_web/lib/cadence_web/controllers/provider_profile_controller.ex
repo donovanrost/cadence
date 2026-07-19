@@ -14,7 +14,7 @@ defmodule CadenceWeb.ProviderProfileController do
              mission_id
            ) do
       provider_profiles =
-        Cadence.list_provider_profiles(organization_id, mission_id)
+        Cadence.Contacts.list_provider_profiles(organization_id, mission_id)
         |> Enum.map(&ControlPlaneJSON.provider_profile/1)
 
       json(conn, %{data: provider_profiles})
@@ -39,7 +39,7 @@ defmodule CadenceWeb.ProviderProfileController do
              provider_profile_params
            ),
          {:ok, %ProviderProfile{} = persisted_provider_profile} <-
-           Cadence.persist_provider_profile(organization_id, provider_profile) do
+           Cadence.Contacts.persist_provider_profile(organization_id, provider_profile) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.provider_profile(persisted_provider_profile)})
@@ -58,7 +58,11 @@ defmodule CadenceWeb.ProviderProfileController do
              mission_id
            ),
          {:ok, %ProviderProfile{} = provider_profile} <-
-           Cadence.fetch_provider_profile(organization_id, mission_id, provider_profile_id) do
+           Cadence.Contacts.fetch_provider_profile(
+             organization_id,
+             mission_id,
+             provider_profile_id
+           ) do
       json(conn, %{data: ControlPlaneJSON.provider_profile(provider_profile)})
     end
   end
@@ -75,7 +79,11 @@ defmodule CadenceWeb.ProviderProfileController do
              mission_id
            ) do
       provider_profiles =
-        Cadence.list_provider_profile_versions(organization_id, mission_id, provider_profile_id)
+        Cadence.Contacts.list_provider_profile_versions(
+          organization_id,
+          mission_id,
+          provider_profile_id
+        )
         |> Enum.map(&ControlPlaneJSON.provider_profile/1)
 
       json(conn, %{data: provider_profiles})
@@ -98,7 +106,7 @@ defmodule CadenceWeb.ProviderProfileController do
            ),
          {:ok, version} <- ControlPlaneParams.resource_version(params),
          {:ok, %ProviderProfile{} = provider_profile} <-
-           Cadence.fetch_provider_profile_version(
+           Cadence.Contacts.fetch_provider_profile_version(
              organization_id,
              mission_id,
              provider_profile_id,
@@ -126,7 +134,7 @@ defmodule CadenceWeb.ProviderProfileController do
            ),
          {:ok, attrs} <- ControlPlaneParams.provider_profile_patch(provider_profile_params),
          {:ok, %ProviderProfile{} = provider_profile} <-
-           Cadence.version_provider_profile(
+           Cadence.Contacts.version_provider_profile(
              organization_id,
              mission_id,
              provider_profile_id,
@@ -154,7 +162,7 @@ defmodule CadenceWeb.ProviderProfileController do
            ),
          {:ok, attrs} <- ControlPlaneParams.provider_profile_patch(provider_profile_params),
          {:ok, %ProviderProfile{} = provider_profile} <-
-           Cadence.delete_provider_profile(
+           Cadence.Contacts.delete_provider_profile(
              organization_id,
              mission_id,
              provider_profile_id,

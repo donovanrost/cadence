@@ -215,7 +215,7 @@ defmodule Cadence.ContactsTest do
     mission_id: mission_id
   } do
     assert {:ok, %ProviderProfile{} = provider_profile} =
-             Cadence.persist_provider_profile(
+             Cadence.Contacts.persist_provider_profile(
                organization_id,
                ProviderProfile.new(%{
                  provider_profile_id: "tcp-downlink-profile",
@@ -231,7 +231,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %TransportProfile{} = transport_profile} =
-             Cadence.persist_transport_profile(
+             Cadence.Contacts.persist_transport_profile(
                organization_id,
                TransportProfile.new(%{
                  transport_profile_id: "uplink-gateway-profile",
@@ -243,7 +243,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %PathTemplate{}} =
-             Cadence.persist_path_template(
+             Cadence.Contacts.persist_path_template(
                organization_id,
                PathTemplate.new(%{
                  path_template_id: "uplink-template-alpha",
@@ -257,7 +257,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %PathTemplate{}} =
-             Cadence.persist_path_template(
+             Cadence.Contacts.persist_path_template(
                organization_id,
                PathTemplate.new(%{
                  path_template_id: "downlink-template-alpha",
@@ -336,7 +336,7 @@ defmodule Cadence.ContactsTest do
     mission_id: mission_id
   } do
     assert {:ok, %ProviderProfile{} = provider_profile_v1} =
-             Cadence.persist_provider_profile(
+             Cadence.Contacts.persist_provider_profile(
                organization_id,
                ProviderProfile.new(%{
                  provider_profile_id: "tcp-downlink-versioned",
@@ -352,7 +352,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %TransportProfile{} = transport_profile_v1} =
-             Cadence.persist_transport_profile(
+             Cadence.Contacts.persist_transport_profile(
                organization_id,
                TransportProfile.new(%{
                  transport_profile_id: "uplink-gateway-versioned",
@@ -364,7 +364,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %PathTemplate{}} =
-             Cadence.persist_path_template(
+             Cadence.Contacts.persist_path_template(
                organization_id,
                PathTemplate.new(%{
                  path_template_id: "uplink-template-versioned",
@@ -378,7 +378,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, %PathTemplate{} = _path_template_v1} =
-             Cadence.persist_path_template(
+             Cadence.Contacts.persist_path_template(
                organization_id,
                PathTemplate.new(%{
                  path_template_id: "downlink-template-versioned",
@@ -412,7 +412,7 @@ defmodule Cadence.ContactsTest do
            ]
 
     assert {:ok, %ProviderProfile{} = provider_profile_v2} =
-             Cadence.version_provider_profile(
+             Cadence.Contacts.version_provider_profile(
                organization_id,
                mission_id,
                "tcp-downlink-versioned",
@@ -429,7 +429,7 @@ defmodule Cadence.ContactsTest do
     assert provider_profile_v2.version == 2
 
     assert {:ok, %PathTemplate{} = path_template_v2} =
-             Cadence.version_path_template(
+             Cadence.Contacts.version_path_template(
                organization_id,
                mission_id,
                "downlink-template-versioned",
