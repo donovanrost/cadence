@@ -876,6 +876,11 @@ events, telemetry and source lifecycle, and recovery diagnostics from the
 4,489-line dashboard data-link resolver test reduced test-file pressure to 6.
 Those five resolver test files are now 939, 755, 1,015, 959, and 499 lines,
 backed by 375 lines of shared resolver fixtures.
+Separating connection and interval state, replay runtime activity, RF latest
+and history, transport and queue metrics, and ingress latency from the
+6,541-line operational-observables source test reduced test-file pressure to
+5. The seven source-family files are now 1,164, 980, 596, 724, 944, 798, and
+1,024 lines, backed by 367 lines of shared operational-observable fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
