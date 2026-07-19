@@ -1354,6 +1354,12 @@ lines. The facade retains schema-backed reads, writes, transactions, and
 notifications, so its public verifier APIs remain unchanged without adding
 direct persistence-schema callers; production source-size pressure remains 5
 and dependency ratchets are unchanged.
+Extracting catalog command-basis resolution, request enrichment, argument
+normalization and validation, and approval-state derivation into a 264-line
+`Commanding.RequestValidation` module reduced `Commanding` from 2,804 to 2,558
+lines. Request persistence, staged submission, and release paths consume the
+same boundary without changing their public contracts; production source-size
+pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
