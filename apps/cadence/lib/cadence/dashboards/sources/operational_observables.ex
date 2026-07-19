@@ -8,14 +8,12 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   alias Cadence.Dashboards.{
     DataContext,
-    DataLinks,
     Field,
     Frame,
     OperationalObservable,
     PlannedSourceRequest,
     ResolveWarning,
     RuntimeCacheKey,
-    ScopeContext,
     SourceCapabilities,
     SourceFacts,
     SourceFreshness,
@@ -39,6 +37,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     CommandQueueDepth,
     ConnectionFrames,
     ConnectionRows,
+    ContactPhase,
     IngressProcessingLatencyRows,
     LinkRfMetricRows,
     LinkRfStateFrames,
@@ -287,10 +286,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      contacts_phase_frame(
+      ContactPhase.latest_frame(
         request,
-        source_binding,
-        contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts)
+        contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts),
+        frame_source_context(request, source_binding)
       )
 
     source_result(request, source_binding, :contacts_phase, [frame])
@@ -305,10 +304,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      contacts_phase_history_frame(
+      ContactPhase.history_frame(
         request,
-        source_binding,
-        contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts)
+        contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts),
+        frame_source_context(request, source_binding)
       )
 
     source_result(request, source_binding, :contacts_phase_history, [frame])
@@ -961,10 +960,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "contacts.phase" in request.observables do
       frame =
-        contacts_phase_frame(
+        ContactPhase.latest_frame(
           request,
-          source_binding,
-          contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts)
+          contact_phase_latest_rows(request, source_binding, organization_id, mission_id, opts),
+          frame_source_context(request, source_binding)
         )
 
       frames ++ [frame]
@@ -1351,7 +1350,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    contact_phase_rows(
+    ContactPhase.latest_rows(
       scheduled_contacts_fun.(
         organization_id,
         mission_id,
@@ -1591,10 +1590,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "contacts.phase" in request.observables do
       frame =
-        contacts_phase_history_frame(
+        ContactPhase.history_frame(
           request,
-          source_binding,
-          contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts)
+          contact_phase_history_rows(request, source_binding, organization_id, mission_id, opts),
+          frame_source_context(request, source_binding)
         )
 
       frames ++ [frame]
@@ -1684,7 +1683,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    contact_phase_rows(
+    ContactPhase.history_rows(
       scheduled_contacts_fun.(
         organization_id,
         mission_id,
@@ -1695,11 +1694,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         mission_id,
         adapter_opts
       ),
-      contact_phase_scope(request, organization_id, mission_id, opts, adapter_opts)
+      contact_phase_scope(request, organization_id, mission_id, opts, adapter_opts),
+      request
     )
-    |> Enum.filter(&time_in_request_window?(Map.get(&1, :time), request))
-    |> Enum.sort_by(&datetime_sort_key(Map.get(&1, :time)))
-    |> apply_request_limit(request)
   end
 
   defp connection_history_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1787,146 +1784,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         counts: rollup.counts,
         returned_points: length(rollup.spacecraft),
         warning_codes: []
-      }
-    }
-  end
-
-  defp contacts_phase_frame(request, source_binding, contact_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:contacts_phase",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(contact_rows, & &1.observable_id)
-        },
-        %Field{
-          name: "contact_id",
-          kind: :string,
-          values: Enum.map(contact_rows, & &1.contact_id)
-        },
-        %Field{
-          name: "contact_kind",
-          kind: :enum,
-          values: Enum.map(contact_rows, & &1.contact_kind)
-        },
-        %Field{
-          name: "phase",
-          kind: :enum,
-          values: Enum.map(contact_rows, & &1.phase)
-        },
-        %Field{
-          name: "observed_at",
-          kind: :time,
-          values: Enum.map(contact_rows, & &1.observed_at)
-        },
-        %Field{
-          name: "freshness_state",
-          kind: :enum,
-          values: Enum.map(contact_rows, & &1.freshness_state)
-        },
-        %Field{
-          name: "age_ms",
-          kind: :number,
-          values: Enum.map(contact_rows, & &1.age_ms)
-        }
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :contacts_phase,
-        observable_id: "contacts.phase",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(contact_rows),
-        freshness_policy: latest_freshness_policy(contact_rows),
-        freshness_checked_at: latest_freshness_checked_at(contact_rows),
-        warning_codes: latest_freshness_warning_codes(contact_rows),
-        links:
-          DataLinks.contact_links(request, Enum.map(contact_rows, & &1.source), source: :frame)
-      }
-    }
-  end
-
-  defp contacts_phase_history_frame(request, source_binding, contact_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:contacts_phase_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "time",
-          kind: :time,
-          values: Enum.map(contact_rows, & &1.time),
-          metadata: %{axis: :occurred_at}
-        },
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(contact_rows, & &1.observable_id)
-        },
-        %Field{
-          name: "resource_id",
-          kind: :string,
-          values: Enum.map(contact_rows, & &1.contact_id)
-        },
-        %Field{
-          name: "lane_id",
-          kind: :string,
-          values: Enum.map(contact_rows, &contact_phase_lane_id/1)
-        },
-        %Field{
-          name: "label",
-          kind: :string,
-          values: Enum.map(contact_rows, &contact_phase_label/1)
-        },
-        %Field{
-          name: "scope_kind",
-          kind: :enum,
-          values: Enum.map(contact_rows, fn _row -> :contact end)
-        },
-        %Field{
-          name: "contact_id",
-          kind: :string,
-          values: Enum.map(contact_rows, & &1.contact_id)
-        },
-        %Field{
-          name: "contact_kind",
-          kind: :enum,
-          values: Enum.map(contact_rows, & &1.contact_kind)
-        },
-        %Field{name: "phase", kind: :enum, values: Enum.map(contact_rows, & &1.phase)},
-        %Field{
-          name: "normalized_state",
-          kind: :enum,
-          values: Enum.map(contact_rows, & &1.phase)
-        }
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :contacts_phase_history,
-        observable_id: "contacts.phase",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(contact_rows),
-        warning_codes: [],
-        links:
-          DataLinks.contact_links(request, Enum.map(contact_rows, & &1.source), source: :frame)
       }
     }
   end
@@ -2096,27 +1953,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp latest_freshness_warning_codes(rows) do
-    rows
-    |> Enum.map(& &1.freshness_state)
-    |> Enum.uniq()
-    |> Enum.flat_map(fn
-      :stale -> [:stale_data]
-      :missing -> [:missing_snapshot]
-      :unknown -> [:watermark_unknown]
-      _state -> []
-    end)
-    |> Enum.uniq()
-  end
-
-  defp latest_freshness_policy([%{freshness_policy: policy} | _rows]), do: policy
-  defp latest_freshness_policy(_rows), do: %{}
-
-  defp latest_freshness_checked_at([%{freshness_checked_at: %DateTime{} = checked_at} | _rows]),
-    do: checked_at
-
-  defp latest_freshness_checked_at(_rows), do: nil
-
   defp metric_age_ms(%DateTime{} = observed_at, %DateTime{} = checked_at) do
     max(DateTime.diff(checked_at, observed_at, :millisecond), 0)
   end
@@ -2258,21 +2094,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
   end
 
-  defp scope_ids(%PlannedSourceRequest{} = request, kind) do
-    primary_ids =
-      if ScopeContext.primary_kind(request.scope_context) in [kind, Atom.to_string(kind)] do
-        ScopeContext.primary_ids(request.scope_context)
-      else
-        []
-      end
-
-    typed_id = ScopeContext.scope_id(request.scope_context, kind)
-
-    [typed_id | primary_ids]
-    |> Enum.filter(&(is_binary(&1) and &1 != ""))
-    |> Enum.uniq()
-  end
-
   defp link_id_for(values) when is_list(values) do
     values
     |> Enum.find_value(&link_id/1)
@@ -2290,126 +2111,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metadata_attr(value, :materialized_link_assignment_id)
     ]
     |> Enum.find(&present_text?/1)
-  end
-
-  defp contact_phase_rows(scheduled_contacts, realized_contacts, contact_phase_scope) do
-    (Enum.map(scheduled_contacts, &scheduled_contact_row/1) ++
-       Enum.map(realized_contacts, &realized_contact_row/1))
-    |> Enum.filter(&matches_contact_phase_scope?(&1, contact_phase_scope))
-  end
-
-  defp scheduled_contact_row(contact) do
-    %{
-      observable_id: "contacts.phase",
-      contact_id: attr(contact, :scheduled_contact_id),
-      related_contact_id: attr(contact, :realized_contact_id),
-      contact_kind: :scheduled,
-      phase: attr(contact, :lifecycle_state),
-      time: attr(contact, :starts_at),
-      source: contact
-    }
-  end
-
-  defp realized_contact_row(contact) do
-    %{
-      observable_id: "contacts.phase",
-      contact_id: attr(contact, :realized_contact_id),
-      related_contact_id: attr(contact, :scheduled_contact_id),
-      contact_kind: :realized,
-      phase: attr(contact, :lifecycle_state),
-      time: attr(contact, :realized_at) || attr(contact, :initial_time),
-      source: contact
-    }
-  end
-
-  defp contact_phase_label(row) do
-    [Map.get(row, :contact_kind), Map.get(row, :contact_id)]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map_join(" / ", &to_string/1)
-  end
-
-  defp contact_phase_lane_id(%{contact_kind: :realized, related_contact_id: related_contact_id})
-       when is_binary(related_contact_id),
-       do: related_contact_id
-
-  defp contact_phase_lane_id(row), do: Map.get(row, :contact_id)
-
-  defp matches_contact_phase_scope?(row, scope) do
-    matches_contact_scope?(row, Map.get(scope, :contact_ids, [])) and
-      matches_contact_source_endpoint_scope?(row, Map.get(scope, :source_endpoint_ids, [])) and
-      matches_contact_spacecraft_scope?(
-        row,
-        Map.get(scope, :spacecraft_ids, []),
-        Map.get(scope, :source_endpoints_by_id, %{})
-      ) and
-      matches_contact_ground_station_scope?(
-        row,
-        Map.get(scope, :ground_station_ids, []),
-        Map.get(scope, :source_endpoints_by_id, %{})
-      )
-  end
-
-  defp matches_contact_scope?(_row, []), do: true
-
-  defp matches_contact_scope?(row, contact_scope_ids) do
-    row.contact_id in contact_scope_ids or row.related_contact_id in contact_scope_ids
-  end
-
-  defp matches_contact_source_endpoint_scope?(_row, []), do: true
-
-  defp matches_contact_source_endpoint_scope?(row, source_endpoint_ids) do
-    row
-    |> contact_phase_source_endpoint_refs()
-    |> Enum.any?(&(&1 in source_endpoint_ids))
-  end
-
-  defp matches_contact_spacecraft_scope?(_row, [], _source_endpoints_by_id), do: true
-
-  defp matches_contact_spacecraft_scope?(row, spacecraft_ids, source_endpoints_by_id) do
-    row
-    |> contact_phase_source_endpoints(source_endpoints_by_id)
-    |> Enum.any?(&(attr(&1, :spacecraft_id) in spacecraft_ids))
-  end
-
-  defp matches_contact_ground_station_scope?(_row, [], _source_endpoints_by_id), do: true
-
-  defp matches_contact_ground_station_scope?(row, ground_station_ids, source_endpoints_by_id) do
-    row
-    |> contact_phase_source_endpoints(source_endpoints_by_id)
-    |> Enum.any?(&(source_endpoint_ground_station_id(&1) in ground_station_ids))
-  end
-
-  defp contact_phase_source_endpoints(row, source_endpoints_by_id) do
-    row
-    |> contact_phase_source_endpoint_refs()
-    |> Enum.map(&Map.get(source_endpoints_by_id, &1))
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp contact_phase_source_endpoint_refs(row) do
-    contact = Map.get(row, :source)
-
-    [
-      attr(contact, :source_endpoint_ref),
-      attr(contact, :source_endpoint_refs),
-      contact_phase_path_source_endpoint_refs(attr(contact, :paths))
-    ]
-    |> List.flatten()
-    |> Enum.filter(&present_text?/1)
-    |> Enum.uniq()
-  end
-
-  defp contact_phase_path_source_endpoint_refs(paths) when is_list(paths) do
-    paths
-    |> Enum.map(&attr(&1, :source_endpoint_ref))
-    |> Enum.filter(&present_text?/1)
-  end
-
-  defp contact_phase_path_source_endpoint_refs(_paths), do: []
-
-  defp source_endpoint_ground_station_id(source_endpoint) do
-    metadata_attr(source_endpoint, :ground_station_id) ||
-      metadata_attr(source_endpoint, :antenna_id)
   end
 
   defp rollup(spacecraft, point_states) do
@@ -2742,19 +2443,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp default_contact_phase_revision(organization_id, mission_id, opts) do
-    "contacts_phase:" <>
-      RuntimeCacheKey.fingerprint(%{
-        scheduled_contacts:
-          organization_id
-          |> default_scheduled_contacts(mission_id, opts)
-          |> Enum.map(&scheduled_contact_revision_entry/1)
-          |> Enum.sort_by(&(&1.scheduled_contact_id || "")),
-        realized_contacts:
-          organization_id
-          |> default_realized_contacts(mission_id, opts)
-          |> Enum.map(&realized_contact_revision_entry/1)
-          |> Enum.sort_by(&(&1.realized_contact_id || ""))
-      })
+    ContactPhase.revision(
+      default_scheduled_contacts(organization_id, mission_id, opts),
+      default_realized_contacts(organization_id, mission_id, opts)
+    )
   end
 
   defp default_connection_state_revision(organization_id, mission_id, opts) do
@@ -3020,35 +2712,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     |> CommandQueueDepth.revision()
   end
 
-  defp scheduled_contact_revision_entry(contact) do
-    %{
-      scheduled_contact_id: attr(contact, :scheduled_contact_id),
-      realized_contact_id: attr(contact, :realized_contact_id),
-      ground_station_id: attr(contact, :ground_station_id),
-      source_endpoint_id: attr(contact, :source_endpoint_id),
-      spacecraft_id: attr(contact, :spacecraft_id),
-      lifecycle_state: attr(contact, :lifecycle_state),
-      starts_at: attr(contact, :starts_at),
-      ends_at: attr(contact, :ends_at),
-      metadata: attr(contact, :metadata)
-    }
-  end
-
-  defp realized_contact_revision_entry(contact) do
-    %{
-      realized_contact_id: attr(contact, :realized_contact_id),
-      scheduled_contact_id: attr(contact, :scheduled_contact_id),
-      ground_station_id: attr(contact, :ground_station_id),
-      source_endpoint_id: attr(contact, :source_endpoint_id),
-      spacecraft_id: attr(contact, :spacecraft_id),
-      lifecycle_state: attr(contact, :lifecycle_state),
-      realized_at: attr(contact, :realized_at),
-      initial_time: attr(contact, :initial_time),
-      stopped_at: attr(contact, :stopped_at),
-      metadata: attr(contact, :metadata)
-    }
-  end
-
   defp transport_revision_entry(transport) do
     %{
       transport_id: attr(transport, :transport_id),
@@ -3211,10 +2874,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp contact_scope_ids(%PlannedSourceRequest{} = request) do
-    scope_ids(request, :contact)
-  end
-
   defp contact_phase_scope(
          %PlannedSourceRequest{} = request,
          organization_id,
@@ -3222,31 +2881,17 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts,
          adapter_opts
        ) do
-    scope = %{
-      contact_ids: contact_scope_ids(request),
-      source_endpoint_ids: scope_ids(request, :source_endpoint),
-      spacecraft_ids: scope_ids(request, :spacecraft),
-      ground_station_ids: scope_ids(request, :ground_station),
-      source_endpoints_by_id: %{}
-    }
+    source_endpoints =
+      if ContactPhase.source_endpoint_scope_required?(request) do
+        source_endpoints_fun =
+          Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
 
-    if contact_phase_source_endpoint_scope_required?(scope) do
-      source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
-
-      source_endpoints_by_id =
         source_endpoints_fun.(organization_id, mission_id, adapter_opts)
-        |> Map.new(&{attr(&1, :source_endpoint_id), &1})
+      else
+        []
+      end
 
-      %{scope | source_endpoints_by_id: source_endpoints_by_id}
-    else
-      scope
-    end
-  end
-
-  defp contact_phase_source_endpoint_scope_required?(scope) do
-    Map.get(scope, :source_endpoint_ids, []) != [] or
-      Map.get(scope, :spacecraft_ids, []) != [] or
-      Map.get(scope, :ground_station_ids, []) != []
+    ContactPhase.scope(request, source_endpoints)
   end
 
   defp realm(%PlannedSourceRequest{data_context: data_context}, source_binding) do
@@ -3306,28 +2951,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp normalize_time_bound(_value), do: nil
-
-  defp time_in_request_window?(%DateTime{} = time, %PlannedSourceRequest{} = request) do
-    from_time = request_time_bound(request, [:from, :start, :start_time])
-    to_time = request_time_bound(request, [:to, :end, :end_time])
-
-    after_from? = is_nil(from_time) or DateTime.compare(time, from_time) != :lt
-    before_to? = is_nil(to_time) or DateTime.compare(time, to_time) != :gt
-
-    after_from? and before_to?
-  end
-
-  defp time_in_request_window?(_time, _request), do: false
-
-  defp apply_request_limit(rows, %PlannedSourceRequest{} = request) do
-    case context_value(request.sampling, :limit) do
-      limit when is_integer(limit) and limit > 0 -> Enum.take(rows, limit)
-      _other -> rows
-    end
-  end
-
-  defp datetime_sort_key(%DateTime{} = datetime), do: DateTime.to_unix(datetime, :microsecond)
-  defp datetime_sort_key(_datetime), do: 0
 
   defp metadata_attr(value, key) when is_atom(key) do
     value

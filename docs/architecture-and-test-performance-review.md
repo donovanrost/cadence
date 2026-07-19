@@ -1139,6 +1139,13 @@ and both revision projections into a 648-line runtime-activity module reduced
 the adapter from 3,958 to 3,349 lines. Event and verifier provider queries plus
 source identity remain adapter-owned; production source-size pressure remains
 8.
+Extracting scheduled and realized contact normalization, multi-axis contact
+scope resolution, time-window filtering, latest and historical frame
+presentation, contact links, freshness metadata, and revision projection into a
+399-line contact-phase module reduced the adapter from 3,349 to 2,972 lines.
+Contact and source-endpoint provider queries, shared freshness annotation, and
+source identity remain adapter-owned; production source-size pressure remains
+8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
