@@ -934,6 +934,10 @@ overlong-test pressure from 27 to 26.
 Extracting replay transport-execution interval setup and table-driven
 reopened-inspector detail assertions reduced its sibling test from 344 to 244
 lines and overlong-test pressure from 26 to 25.
+Moving the resolvable evidence-inspector fixture out of its component test body
+reduced that handoff test from 345 to 196 lines while preserving every rendered
+detail and data-link attribute assertion, reducing overlong-test pressure from
+25 to 24.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

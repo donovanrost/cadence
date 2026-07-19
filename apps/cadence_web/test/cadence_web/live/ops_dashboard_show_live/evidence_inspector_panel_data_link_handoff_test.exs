@@ -9,157 +9,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelDataLinkHandoffT
   test "evidence_panel turns resolvable evidence refs into data link handoffs" do
     html =
       render_component(&EvidenceInspectorPanelComponents.evidence_panel/1,
-        inspector: %{
-          kind: :frame,
-          kind_text: "frame",
-          subject: "source-request-1:HK.counter",
-          status: :resolved,
-          status_text: "resolved",
-          title: "Frame Evidence",
-          message: nil,
-          subject_rows: [
-            %{label: "Realm", value: "replay"},
-            %{label: "Data source", value: "managed_operational_observables"},
-            %{label: "Source binding", value: "default_flight_operational_observables"}
-          ],
-          detail_rows: [
-            %{label: "Replay run", value: "replay-run-1"},
-            %{
-              label: "Limit definition interval",
-              value: "limit-def-1 v3 / ops (2026-06-21T20:00:00Z -> open)"
-            },
-            %{label: "Limit definition interval lifecycle event", value: "limit-lifecycle-1"},
-            %{
-              label: "Catalog revision interval",
-              value: "catalog-revision-limits (2026-06-21T20:00:00Z -> open)"
-            },
-            %{
-              label: "Catalog revision interval source event",
-              value: "operational-event-catalog-limits"
-            }
-          ],
-          evidence: [
-            %{
-              kind: :operational_interval,
-              kind_text: "operational interval",
-              id: "operational-event-binding-set",
-              source_text: "events",
-              confidence: :direct,
-              confidence_text: "direct",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :binding_set_interval,
-              kind_text: "binding set interval",
-              id: "binding-set-interval-runtime-apps-a",
-              source_text: "events",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :application_binding_interval,
-              kind_text: "application binding interval",
-              id: "application-binding-interval-runtime-apps-a-packet-counter",
-              source_text: "telemetry",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :catalog_revision_interval,
-              kind_text: "catalog revision interval",
-              id: "catalog-revision-interval-fsw-3-6",
-              source_text: "telemetry",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :limit_definition_interval,
-              kind_text: "limit definition interval",
-              id: "effective_interval:limit_definition:activation-key-1",
-              source_text: "limits",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :source_binding_interval,
-              kind_text: "source binding interval",
-              id: "effective_interval:source_binding:source-binding-event-1",
-              source_text: "telemetry",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :transport_execution_interval,
-              kind_text: "transport execution interval",
-              id: "transport-execution-interval-uplink-heartbeat",
-              source_text: "operational observables",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :transport_connection_state_interval,
-              kind_text: "transport connection state interval",
-              id: "effective_interval:transport_connection_state:event-transport-connected",
-              source_text: "operational observables",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :ground_station_connection_state_interval,
-              kind_text: "ground station connection state interval",
-              id: "effective_interval:ground_station_connection_state:event-ground-connected",
-              source_text: "operational observables",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :link_rf_lock_state_interval,
-              kind_text: "link rf lock state interval",
-              id: "effective_interval:link_rf_lock_state:event-rf-locked",
-              source_text: "operational observables",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :link_frame_sync_state_interval,
-              kind_text: "link frame sync state interval",
-              id: "effective_interval:link_frame_sync_state:event-frame-sync",
-              source_text: "operational observables",
-              confidence: :projected,
-              confidence_text: "projected",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :source_binding_event,
-              kind_text: "source binding event",
-              id: "source-binding-event-1",
-              source_text: "telemetry",
-              confidence: :direct,
-              confidence_text: "direct",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            },
-            %{
-              kind: :limit_definition_lifecycle_event,
-              kind_text: "limit definition lifecycle event",
-              id: "limit-lifecycle-1",
-              source_text: "limits",
-              confidence: :direct,
-              confidence_text: "direct",
-              observed_at_text: "2026-06-21T20:00:00Z"
-            }
-          ],
-          links: [],
-          actions: []
-        },
+        inspector: resolvable_inspector(),
         mission_id: "mission-1",
         dashboard_document: %Document{dashboard_id: "dashboard-1", name: "Dashboard"},
         dashboard_current_path:
@@ -422,6 +272,160 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelDataLinkHandoffT
              document
              |> LazyHTML.query("[data-evidence-link-ref]")
              |> LazyHTML.attribute("phx-value-replay-run-id")
+  end
+
+  defp resolvable_inspector do
+    %{
+      kind: :frame,
+      kind_text: "frame",
+      subject: "source-request-1:HK.counter",
+      status: :resolved,
+      status_text: "resolved",
+      title: "Frame Evidence",
+      message: nil,
+      subject_rows: [
+        %{label: "Realm", value: "replay"},
+        %{label: "Data source", value: "managed_operational_observables"},
+        %{label: "Source binding", value: "default_flight_operational_observables"}
+      ],
+      detail_rows: [
+        %{label: "Replay run", value: "replay-run-1"},
+        %{
+          label: "Limit definition interval",
+          value: "limit-def-1 v3 / ops (2026-06-21T20:00:00Z -> open)"
+        },
+        %{label: "Limit definition interval lifecycle event", value: "limit-lifecycle-1"},
+        %{
+          label: "Catalog revision interval",
+          value: "catalog-revision-limits (2026-06-21T20:00:00Z -> open)"
+        },
+        %{
+          label: "Catalog revision interval source event",
+          value: "operational-event-catalog-limits"
+        }
+      ],
+      evidence: [
+        %{
+          kind: :operational_interval,
+          kind_text: "operational interval",
+          id: "operational-event-binding-set",
+          source_text: "events",
+          confidence: :direct,
+          confidence_text: "direct",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :binding_set_interval,
+          kind_text: "binding set interval",
+          id: "binding-set-interval-runtime-apps-a",
+          source_text: "events",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :application_binding_interval,
+          kind_text: "application binding interval",
+          id: "application-binding-interval-runtime-apps-a-packet-counter",
+          source_text: "telemetry",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :catalog_revision_interval,
+          kind_text: "catalog revision interval",
+          id: "catalog-revision-interval-fsw-3-6",
+          source_text: "telemetry",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :limit_definition_interval,
+          kind_text: "limit definition interval",
+          id: "effective_interval:limit_definition:activation-key-1",
+          source_text: "limits",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :source_binding_interval,
+          kind_text: "source binding interval",
+          id: "effective_interval:source_binding:source-binding-event-1",
+          source_text: "telemetry",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :transport_execution_interval,
+          kind_text: "transport execution interval",
+          id: "transport-execution-interval-uplink-heartbeat",
+          source_text: "operational observables",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :transport_connection_state_interval,
+          kind_text: "transport connection state interval",
+          id: "effective_interval:transport_connection_state:event-transport-connected",
+          source_text: "operational observables",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :ground_station_connection_state_interval,
+          kind_text: "ground station connection state interval",
+          id: "effective_interval:ground_station_connection_state:event-ground-connected",
+          source_text: "operational observables",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :link_rf_lock_state_interval,
+          kind_text: "link rf lock state interval",
+          id: "effective_interval:link_rf_lock_state:event-rf-locked",
+          source_text: "operational observables",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :link_frame_sync_state_interval,
+          kind_text: "link frame sync state interval",
+          id: "effective_interval:link_frame_sync_state:event-frame-sync",
+          source_text: "operational observables",
+          confidence: :projected,
+          confidence_text: "projected",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :source_binding_event,
+          kind_text: "source binding event",
+          id: "source-binding-event-1",
+          source_text: "telemetry",
+          confidence: :direct,
+          confidence_text: "direct",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        },
+        %{
+          kind: :limit_definition_lifecycle_event,
+          kind_text: "limit definition lifecycle event",
+          id: "limit-lifecycle-1",
+          source_text: "limits",
+          confidence: :direct,
+          confidence_text: "direct",
+          observed_at_text: "2026-06-21T20:00:00Z"
+        }
+      ],
+      links: [],
+      actions: []
+    }
   end
 
   defp evidence_link_without_context(target, target_id, label) do
