@@ -1182,6 +1182,12 @@ bitrate, and ingress latency into a 246-line shared provider reduced the adapter
 from 2,474 to 2,284 lines. The remaining family modules can now own their
 default projected reads without copying OperationalEvents translation logic;
 production source-size pressure remains 8.
+Completing connection-state ownership added a 186-line family resolver over the
+existing row and frame modules. It owns callback selection, default transport,
+source-endpoint, and projected snapshot reads, freshness annotation, and
+revision projection. This reduced the adapter from 2,284 to 2,191 lines; it
+retains only connection-family dispatch and source identity, while production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

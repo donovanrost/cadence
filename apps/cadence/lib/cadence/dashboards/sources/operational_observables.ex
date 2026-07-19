@@ -26,8 +26,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     AntennaPointingFrames,
     AntennaPointingRows,
     CommandQueueDepth,
-    ConnectionFrames,
-    ConnectionRows,
+    Connection,
     ConstellationHealth,
     ContactPhase,
     IngressProcessingLatencyRows,
@@ -65,7 +64,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @ingress_latency_observable_ids ["ingress.processing_latency_ms"]
   @managed_runtime_observable_ids ["runtime.managed_activity"]
   @transport_runtime_observable_ids ["runtime.transport_activity"]
-  @connection_states [:connected, :connecting, :degraded, :disconnected, :unknown]
   @type connection_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @type transport_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @type runtime_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
@@ -164,7 +162,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   defp revision_defaults do
     [
       contacts_phase: &ContactPhase.default_revision/3,
-      connection_state: &default_connection_state_revision/3,
+      connection_state: &Connection.default_revision/3,
       ground_station_antenna_pointing_state: &default_antenna_pointing_state_revision/3,
       link_rf_lock_state: &default_link_rf_lock_state_revision/3,
       link_rf_frame_sync_state: &default_link_rf_frame_sync_state_revision/3,
@@ -282,10 +280,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      connection_state_frame(
+      Connection.resolve_latest(
         request,
-        source_binding,
-        connection_latest_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :connection_state, [frame])
@@ -300,10 +301,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      connection_state_history_frame(
+      Connection.resolve_history(
         request,
-        source_binding,
-        connection_history_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :connection_state_history, [frame])
@@ -939,10 +943,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @connection_observable_ids)) do
       frame =
-        connection_state_frame(
+        Connection.resolve_latest(
           request,
-          source_binding,
-          connection_latest_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1292,25 +1299,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp connection_latest_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-    source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
-
-    connection_snapshots_fun =
-      Keyword.get(opts, :connection_snapshots_fun, &OperationalEventSnapshots.connection/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    ConnectionRows.latest(
-      request.observables,
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      source_endpoints_fun.(organization_id, mission_id, adapter_opts),
-      connection_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-    |> LatestFreshness.annotate(request, opts)
-  end
-
   defp antenna_pointing_latest_rows(request, source_binding, organization_id, mission_id, opts) do
     source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
 
@@ -1540,10 +1528,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @connection_observable_ids)) do
       frame =
-        connection_state_history_frame(
+        Connection.resolve_history(
           request,
-          source_binding,
-          connection_history_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1602,24 +1593,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp connection_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-    source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
-
-    connection_snapshots_fun =
-      Keyword.get(opts, :connection_snapshots_fun, &OperationalEventSnapshots.connection/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    ConnectionRows.history(
-      request.observables,
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      source_endpoints_fun.(organization_id, mission_id, adapter_opts),
-      connection_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-  end
-
   defp link_rf_lock_history_rows(request, source_binding, organization_id, mission_id, opts) do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
@@ -1662,22 +1635,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       data_source_id: data_source_id(request, source_binding),
       replay_run_id: replay_run_id(request)
     }
-  end
-
-  defp connection_state_frame(request, source_binding, connection_rows) do
-    ConnectionFrames.latest(
-      request,
-      connection_rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp connection_state_history_frame(request, source_binding, connection_rows) do
-    ConnectionFrames.history(
-      request,
-      connection_rows,
-      frame_source_context(request, source_binding)
-    )
   end
 
   defp antenna_pointing_state_frame(request, source_binding, pointing_rows) do
@@ -1753,20 +1710,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
-  defp connection_state(value) do
-    value
-    |> attr(:connection_state)
-    |> normalize_connection_state()
-  end
-
-  defp normalize_connection_state(value) when value in @connection_states, do: value
-
-  defp normalize_connection_state(value) when is_binary(value) do
-    Enum.find(@connection_states, &(Atom.to_string(&1) == value))
-  end
-
-  defp normalize_connection_state(_value), do: nil
-
   defp ingress_processing_latency_snapshots(
          nil,
          organization_id,
@@ -1823,27 +1766,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp default_source_endpoints(organization_id, mission_id, _opts) do
     SourceEndpoints.list_source_endpoints(organization_id, mission_id)
-  end
-
-  defp default_connection_state_revision(organization_id, mission_id, opts) do
-    "connection_state:" <>
-      RuntimeCacheKey.fingerprint(%{
-        transports:
-          organization_id
-          |> default_transports(mission_id, opts)
-          |> Enum.map(&transport_revision_entry/1)
-          |> Enum.sort_by(&(&1.transport_id || "")),
-        source_endpoints:
-          organization_id
-          |> default_source_endpoints(mission_id, opts)
-          |> Enum.map(&source_endpoint_revision_entry/1)
-          |> Enum.sort_by(&(&1.source_endpoint_id || "")),
-        snapshots:
-          organization_id
-          |> OperationalEventSnapshots.connection(mission_id, opts)
-          |> Enum.map(&connection_snapshot_revision_entry/1)
-          |> Enum.sort_by(&{&1.resource_id || "", &1.observed_at || ""})
-      })
   end
 
   defp default_antenna_pointing_state_revision(organization_id, mission_id, opts) do
@@ -2059,21 +1981,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       display_name: attr(source_endpoint, :display_name),
       adapter_key: attr(source_endpoint, :adapter_key),
       metadata: attr(source_endpoint, :metadata)
-    }
-  end
-
-  defp connection_snapshot_revision_entry(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      connection_state: connection_state(snapshot),
-      observed_at: attr(snapshot, :observed_at)
     }
   end
 
