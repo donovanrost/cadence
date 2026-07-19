@@ -23,7 +23,7 @@ defmodule CadenceWeb.NotificationsLive do
          :organization_invitation <- notification.kind,
          invitation_id when is_binary(invitation_id) <-
            Map.get(notification.metadata, "organization_invitation_id") do
-      case Cadence.accept_invitation_as_user(user_id, invitation_id) do
+      case Cadence.Accounts.accept_invitation_as_user(user_id, invitation_id) do
         {:ok, %{invitation: _invitation}} ->
           org_name =
             Map.get(notification.metadata, "organization_display_name", "the organization")

@@ -62,7 +62,7 @@ defmodule Cadence.AccountsTest do
 
     test "bootstrap admin with enabled config can sign in" do
       enable_bootstrap_admin!()
-      assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+      assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
       assert {:ok, session} =
                Accounts.sign_in(@bootstrap_admin_email, @bootstrap_admin_password)
@@ -72,7 +72,7 @@ defmodule Cadence.AccountsTest do
 
     test "bootstrap admin with wrong password fails with :invalid_credentials" do
       enable_bootstrap_admin!()
-      assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+      assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
       assert {:error, :invalid_credentials} =
                Accounts.sign_in(@bootstrap_admin_email, "wrong")
@@ -80,7 +80,7 @@ defmodule Cadence.AccountsTest do
 
     test "bootstrap admin with bootstrap_admin_enabled? false fails with :invalid_credentials" do
       enable_bootstrap_admin!()
-      assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+      assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
       Application.put_env(:cadence, :bootstrap_admin, enabled: false)
 
@@ -90,7 +90,7 @@ defmodule Cadence.AccountsTest do
 
     test "user with both credentials dispatches to durable path when durable password is correct" do
       enable_bootstrap_admin!()
-      assert {:ok, _bootstrap_user} = Cadence.ensure_bootstrap_admin()
+      assert {:ok, _bootstrap_user} = Cadence.Auth.ensure_bootstrap_admin()
 
       # Attach a password credential to the bootstrap admin user so it has both.
       durable_password = "durable-password-123"
@@ -102,7 +102,7 @@ defmodule Cadence.AccountsTest do
 
     test "user with both credentials does not fall back to bootstrap when durable password is wrong" do
       enable_bootstrap_admin!()
-      assert {:ok, _bootstrap_user} = Cadence.ensure_bootstrap_admin()
+      assert {:ok, _bootstrap_user} = Cadence.Auth.ensure_bootstrap_admin()
 
       durable_password = "durable-password-123"
       attach_password_credential!(@bootstrap_admin_email, durable_password)

@@ -19,7 +19,7 @@ defmodule CadenceWeb.BootstrapController do
            ),
          {:ok, mission} <-
            ControlPlaneParams.bootstrap_mission(organization.organization_id, bootstrap_params),
-         {:ok, result} <- Cadence.bootstrap_organization(organization, service_identity, mission) do
+         {:ok, result} <- Cadence.Auth.bootstrap(organization, service_identity, mission) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.bootstrap(result)})

@@ -23,7 +23,7 @@ defmodule CadenceWeb.BrowserShellTest do
       session_ttl_seconds: 3600
     )
 
-    assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
     flush_mailbox()
 
     on_exit(fn ->
@@ -174,7 +174,7 @@ defmodule CadenceWeb.BrowserShellTest do
       |> get("/")
 
     assert redirected_to(copied_conn) == "/sign-in"
-    assert {:error, :unauthenticated} = Cadence.authenticate_api_token(session_token)
+    assert {:error, :unauthenticated} = Cadence.Auth.authenticate_api_token(session_token)
   end
 
   test "disabled bootstrap config rejects bootstrap credentials",
@@ -195,7 +195,7 @@ defmodule CadenceWeb.BrowserShellTest do
 
   defp bootstrap_admin_session_token do
     assert {:ok, issued_session} =
-             Cadence.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
+             Cadence.Auth.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
 
     issued_session.session_token
   end

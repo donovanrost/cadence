@@ -34,7 +34,7 @@ defmodule CadenceWeb.AdminLiveTest do
     )
 
     reset_bootstrap_state!()
-    assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
     flush_mailbox()
 
     on_exit(fn ->
@@ -60,7 +60,7 @@ defmodule CadenceWeb.AdminLiveTest do
         capabilities: []
       )
 
-      {:ok, session} = Cadence.sign_in("regular@example.com", durable_password)
+      {:ok, session} = Cadence.Auth.sign_in("regular@example.com", durable_password)
       conn = build_conn() |> init_test_session(%{user_session_token: session.session_token})
 
       assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin")
@@ -556,7 +556,7 @@ defmodule CadenceWeb.AdminLiveTest do
 
   defp bootstrap_admin_session_token do
     assert {:ok, issued_session} =
-             Cadence.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
+             Cadence.Auth.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
 
     issued_session.session_token
   end

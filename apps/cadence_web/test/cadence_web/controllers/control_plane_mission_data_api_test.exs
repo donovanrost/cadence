@@ -28,7 +28,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     )
 
     reset_bootstrap_state!()
-    assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
+    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
     on_exit(fn ->
       Application.put_env(:cadence, :catalog_importers, previous_importers)

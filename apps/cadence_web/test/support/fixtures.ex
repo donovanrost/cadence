@@ -91,7 +91,7 @@ defmodule CadenceWeb.TestFixtures do
 
   @spec member_session_token!(User.t()) :: binary()
   def member_session_token!(%User{email: email}) do
-    assert {:ok, session} = Cadence.sign_in(email, @default_password)
+    assert {:ok, session} = Cadence.Auth.sign_in(email, @default_password)
     session.session_token
   end
 

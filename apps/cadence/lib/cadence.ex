@@ -11,8 +11,6 @@ defmodule Cadence do
   5. canonical telemetry samples
   """
 
-  alias Cadence.Accounts
-  alias Cadence.Accounts.User
   alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.ApplicationDispatch.DispatchDecision
@@ -73,11 +71,9 @@ defmodule Cadence do
   alias Cadence.Limits, as: LimitsService
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Missions
-  alias Cadence.Missions.Mission
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
-  alias Cadence.Organizations.Organization
   alias Cadence.Persistence
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Runtime
@@ -127,118 +123,6 @@ defmodule Cadence do
           runtime_records: map(),
           ingress_latency_metric: ingress_latency_metric() | nil
         }
-
-  @spec bootstrap_organization(Organization.t(), ServiceIdentity.t(), Mission.t() | nil) ::
-          {:ok,
-           %{
-             organization: Organization.t(),
-             mission: Mission.t() | nil,
-             service_identity: ServiceIdentity.t(),
-             api_token: binary()
-           }}
-          | {:error, term()}
-  def bootstrap_organization(
-        %Organization{} = organization,
-        %ServiceIdentity{} = service_identity,
-        mission \\ nil
-      ) do
-    Auth.bootstrap(organization, service_identity, mission)
-  end
-
-  @spec authenticate_api_token(binary(), keyword()) :: {:ok, CurrentScope.t()} | {:error, term()}
-  def authenticate_api_token(api_token, opts \\ []) when is_binary(api_token) and is_list(opts) do
-    Auth.authenticate_api_token(api_token, opts)
-  end
-
-  @spec sign_in(binary(), binary()) ::
-          {:ok, Cadence.Accounts.issued_user_session()} | {:error, term()}
-  def sign_in(email, password) when is_binary(email) and is_binary(password) do
-    Auth.sign_in(email, password)
-  end
-
-  @spec login_bootstrap_admin(binary(), binary()) ::
-          {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
-          | {:error, term()}
-  def login_bootstrap_admin(email, password)
-      when is_binary(email) and is_binary(password) do
-    Auth.login_bootstrap_admin(email, password)
-  end
-
-  @spec login_user(binary(), binary()) ::
-          {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
-          | {:error, term()}
-  def login_user(email, password) when is_binary(email) and is_binary(password) do
-    Auth.login_user(email, password)
-  end
-
-  @spec ensure_bootstrap_admin() :: {:ok, User.t()} | {:error, term()}
-  def ensure_bootstrap_admin do
-    Auth.ensure_bootstrap_admin()
-  end
-
-  @spec revoke_bootstrap_admin_session(binary()) :: :ok
-  def revoke_bootstrap_admin_session(session_token) when is_binary(session_token) do
-    Auth.revoke_bootstrap_admin_session(session_token)
-  end
-
-  @spec revoke_user_session(binary()) :: :ok
-  def revoke_user_session(session_token) when is_binary(session_token) do
-    Auth.revoke_user_session(session_token)
-  end
-
-  @spec fetch_organization_invitation(binary()) ::
-          {:ok, Cadence.Accounts.OrganizationInvitation.t()} | {:error, term()}
-  def fetch_organization_invitation(invitation_token) when is_binary(invitation_token) do
-    Auth.fetch_organization_invitation(invitation_token)
-  end
-
-  @spec accept_organization_invitation(binary(), map()) :: {:ok, map()} | {:error, term()}
-  def accept_organization_invitation(invitation_token, attrs)
-      when is_binary(invitation_token) and is_map(attrs) do
-    Auth.accept_organization_invitation(invitation_token, attrs)
-  end
-
-  @spec accept_invitation_as_user(binary(), binary()) :: {:ok, map()} | {:error, term()}
-  def accept_invitation_as_user(user_id, invitation_id)
-      when is_binary(user_id) and is_binary(invitation_id),
-      do: Accounts.accept_invitation_as_user(user_id, invitation_id)
-
-  @spec bootstrap_admin_enabled?() :: boolean()
-  def bootstrap_admin_enabled? do
-    Auth.bootstrap_admin_enabled?()
-  end
-
-  @spec list_organization_members(binary()) :: [map()]
-  def list_organization_members(organization_id) when is_binary(organization_id) do
-    Accounts.list_organization_members(organization_id)
-  end
-
-  @spec list_user_memberships(binary()) :: [
-          %{
-            membership: Cadence.Accounts.OrganizationMembership.t(),
-            organization: Cadence.Organizations.Organization.t()
-          }
-        ]
-  def list_user_memberships(user_id) when is_binary(user_id) do
-    Accounts.list_user_memberships(user_id)
-  end
-
-  @spec fetch_user_membership(binary(), binary()) ::
-          {:ok, Cadence.Accounts.OrganizationMembership.t()} | {:error, :not_found}
-  def fetch_user_membership(user_id, organization_id)
-      when is_binary(user_id) and is_binary(organization_id) do
-    Accounts.fetch_user_membership(user_id, organization_id)
-  end
-
-  @spec list_pending_invitations(binary()) :: [map()]
-  def list_pending_invitations(organization_id) when is_binary(organization_id) do
-    Accounts.list_pending_invitations(organization_id)
-  end
-
-  @spec count_users() :: non_neg_integer()
-  def count_users do
-    Accounts.count_users()
-  end
 
   @spec persist_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def persist_spacecraft(organization_id, %Spacecraft{} = spacecraft)

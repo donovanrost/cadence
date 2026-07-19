@@ -38,7 +38,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
         with {:ok, acceptance_attrs} <-
                ControlPlaneParams.organization_invitation_acceptance(acceptance_params),
              {:ok, acceptance_result} <-
-               Cadence.accept_organization_invitation(invitation_token, acceptance_attrs) do
+               Cadence.Auth.accept_organization_invitation(invitation_token, acceptance_attrs) do
           finalize_acceptance(conn, acceptance_result)
         else
           {:error, reason} ->
@@ -88,7 +88,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
   end
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do
-    with {:ok, invitation} <- Cadence.fetch_organization_invitation(invitation_token),
+    with {:ok, invitation} <- Cadence.Auth.fetch_organization_invitation(invitation_token),
          {:ok, organization} <-
            Cadence.Organizations.fetch_organization(invitation.organization_id) do
       {:ok,
@@ -124,7 +124,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp redirect_target(acceptance_result) do
     current_scope =
-      case Cadence.authenticate_api_token(acceptance_result.session_token,
+      case Cadence.Auth.authenticate_api_token(acceptance_result.session_token,
              current_organization_id: acceptance_result.current_organization_id
            ) do
         {:ok, %Scope{} = current_scope} -> current_scope

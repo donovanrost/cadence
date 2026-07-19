@@ -31,7 +31,7 @@ defmodule CadenceWeb.UserAuth do
 
   defp memberships_for(%{assigns: %{current_scope: %Scope{user: %{user_id: user_id}}}})
        when is_binary(user_id) do
-    Cadence.list_user_memberships(user_id)
+    Cadence.Accounts.list_user_memberships(user_id)
   end
 
   defp memberships_for(_socket), do: []

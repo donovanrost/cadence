@@ -14,7 +14,7 @@ defmodule CadenceWeb.ScopeLoader do
 
     case session["user_session_token"] do
       token when is_binary(token) ->
-        case Cadence.authenticate_api_token(token,
+        case Cadence.Auth.authenticate_api_token(token,
                current_organization_id: session["current_organization_id"]
              ) do
           {:ok, %Scope{} = scope} -> assign(socket, :current_scope, scope)

@@ -9,7 +9,7 @@ defmodule CadenceWeb.AdminHomeLive do
      |> assign(:page_title, "Platform Admin")
      |> assign(:nav_item, :admin_dashboard)
      |> assign(:org_count, Cadence.Organizations.count_organizations())
-     |> assign(:user_count, Cadence.count_users())}
+     |> assign(:user_count, Cadence.Accounts.count_users())}
   end
 
   @impl true

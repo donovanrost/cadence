@@ -89,7 +89,7 @@ defmodule CadenceWeb.NotificationsLiveTest do
 
       # Accept directly via the domain.
       assert {:ok, _} =
-               Cadence.accept_invitation_as_user(
+               Cadence.Accounts.accept_invitation_as_user(
                  user.user_id,
                  invitation.organization_invitation_id
                )

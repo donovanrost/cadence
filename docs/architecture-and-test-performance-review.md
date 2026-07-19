@@ -1441,6 +1441,14 @@ unreachable generic-error branch in the organization creation LiveView.
 Existing admin and invitation routes and authentication pipelines are
 unchanged; production source-size pressure remains 4 and dependency ratchets
 are unchanged.
+Retiring 17 authentication, session, invitation, and membership delegates from
+the root facade and moving controllers, auth plugs, LiveView auth helpers, and
+focused tests directly to `Cadence.Auth` and `Cadence.Accounts` reduced
+`Cadence` from 4,029 to 3,913 lines and reduced production web callers of the
+root facade from 87 to 75 files. Browser/API scope loading, bootstrap and
+session routes, and their existing authentication and redirect pipelines are
+unchanged; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

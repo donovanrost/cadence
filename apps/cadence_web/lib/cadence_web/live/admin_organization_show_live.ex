@@ -6,8 +6,8 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
   def mount(%{"org_id" => org_id}, _session, socket) do
     case Cadence.Organizations.fetch_organization(org_id) do
       {:ok, organization} ->
-        members = Cadence.list_organization_members(org_id)
-        invitations = Cadence.list_pending_invitations(org_id)
+        members = Cadence.Accounts.list_organization_members(org_id)
+        invitations = Cadence.Accounts.list_pending_invitations(org_id)
 
         {:ok,
          socket

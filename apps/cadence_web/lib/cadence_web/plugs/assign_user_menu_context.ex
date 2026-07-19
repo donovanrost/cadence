@@ -19,7 +19,7 @@ defmodule CadenceWeb.Plugs.AssignUserMenuContext do
 
   defp memberships_for(%Plug.Conn{assigns: %{current_scope: %Scope{user: %{user_id: user_id}}}})
        when is_binary(user_id) do
-    Cadence.list_user_memberships(user_id)
+    Cadence.Accounts.list_user_memberships(user_id)
   end
 
   defp memberships_for(_conn), do: []

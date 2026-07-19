@@ -7,7 +7,7 @@ defmodule CadenceWeb.UserSessionController do
 
   def create(conn, %{"user" => credentials}) when is_map(credentials) do
     with {:ok, {email, password}} <- ControlPlaneParams.durable_session(credentials),
-         {:ok, issued_session} <- Cadence.sign_in(email, password) do
+         {:ok, issued_session} <- Cadence.Auth.sign_in(email, password) do
       finalize_sign_in(conn, issued_session)
     else
       {:error, reason} ->
@@ -35,7 +35,7 @@ defmodule CadenceWeb.UserSessionController do
   def update(conn, %{"organization_id" => organization_id}) when is_binary(organization_id) do
     user_id = conn.assigns.current_scope.user.user_id
 
-    case Cadence.fetch_user_membership(user_id, organization_id) do
+    case Cadence.Accounts.fetch_user_membership(user_id, organization_id) do
       {:ok, _membership} ->
         conn
         |> put_session(:current_organization_id, organization_id)
@@ -66,7 +66,7 @@ defmodule CadenceWeb.UserSessionController do
 
   defp redirect_target(conn, issued_session) do
     current_scope =
-      case Cadence.authenticate_api_token(issued_session.session_token,
+      case Cadence.Auth.authenticate_api_token(issued_session.session_token,
              current_organization_id: issued_session.current_organization_id
            ) do
         {:ok, %Scope{} = scope} -> scope
@@ -96,7 +96,7 @@ defmodule CadenceWeb.UserSessionController do
   defp revoke_session_token(conn) do
     case get_session(conn, :user_session_token) do
       session_token when is_binary(session_token) ->
-        Cadence.revoke_user_session(session_token)
+        Cadence.Auth.revoke_user_session(session_token)
 
       _other ->
         :ok

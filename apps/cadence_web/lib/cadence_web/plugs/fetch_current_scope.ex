@@ -11,7 +11,7 @@ defmodule CadenceWeb.Plugs.FetchCurrentScope do
         assign(conn, :current_scope, nil)
 
       ["Bearer " <> api_token] ->
-        case Cadence.authenticate_api_token(api_token) do
+        case Cadence.Auth.authenticate_api_token(api_token) do
           {:ok, current_scope} ->
             assign(conn, :current_scope, current_scope)
 

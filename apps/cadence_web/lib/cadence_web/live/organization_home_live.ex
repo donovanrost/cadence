@@ -90,7 +90,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
 
   defp load_summary(organization_id) do
     missions = Cadence.Missions.list_missions(organization_id)
-    members = Cadence.list_organization_members(organization_id)
+    members = Cadence.Accounts.list_organization_members(organization_id)
 
     mission_summaries =
       Enum.map(missions, fn mission ->
