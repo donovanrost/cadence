@@ -7,9 +7,9 @@ defmodule Cadence.GroundNetworks.MissionProviders do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountGrants, ProviderAccounts}
+  alias Cadence.GroundNetworks.MissionProviders.ProviderRow, as: MissionProviderRow
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.MissionProviderRow
   alias Cadence.Repo
 
   @spec persist_provider(Scope.t() | binary(), MissionProvider.t()) ::

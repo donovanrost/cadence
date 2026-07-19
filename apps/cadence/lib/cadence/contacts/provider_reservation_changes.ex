@@ -22,7 +22,6 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   alias Cadence.Persistence.JsonDocument
 
   alias Cadence.Persistence.Schemas.{
-    MissionProviderRow,
     ProviderAuditEntryRow,
     ProviderChangeApprovalRow,
     ProviderReservationChangeRow,
@@ -479,23 +478,18 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   end
 
   defp require_current_policy(change, reservation) do
-    MissionProviderRow
-    |> where(
-      [row],
-      row.organization_id == ^reservation.organization_id and
-        row.mission_id == ^reservation.mission_id and row.provider_id == ^reservation.provider_id and
-        row.version == ^reservation.provider_version
-    )
-    |> Repo.one()
-    |> case do
-      nil ->
+    case MissionProviders.fetch_provider_version(
+           reservation.organization_id,
+           reservation.mission_id,
+           reservation.provider_id,
+           reservation.provider_version
+         ) do
+      {:error, :mission_provider_not_found} ->
         {:error, :mission_provider_not_found}
 
-      row ->
+      {:ok, provider} ->
         with {:ok, policy} <-
-               row.delivery_policy_document
-               |> JsonDocument.unwrap_value()
-               |> DeliveryPolicy.normalize(),
+               DeliveryPolicy.normalize(provider.delivery_policy_document),
              true <- policy.version == change.policy_version,
              true <-
                DeliveryPolicy.to_document(policy) ==

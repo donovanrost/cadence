@@ -784,6 +784,9 @@ Provider-account, account-version, and account-grant rows now live under their
 owning Ground Networks stores, reducing the baseline to 138.
 Provider-credential, event-cursor, event-inbox, and evidence rows now also live
 under their owning Ground Networks stores, reducing the baseline to 134.
+Contacts now resolves exact mission-provider versions through the existing
+Ground Networks API, and the provider row lives under `MissionProviders`,
+reducing the baseline to 132.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.MissionProviderRow do
+defmodule Cadence.GroundNetworks.MissionProviders.ProviderRow do
   @moduledoc false
 
   use Ecto.Schema
