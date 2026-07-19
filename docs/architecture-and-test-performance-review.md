@@ -1128,6 +1128,11 @@ presentation, queue-entry evidence, and revision fingerprint projection into a
 261-line family module reduced the adapter from 4,312 to 4,126 lines. Provider
 callbacks and shared freshness annotation remain adapter-owned; production
 source-size pressure remains 8.
+Extracting transport execution interval normalization, state classification,
+scope/time filtering, ordering, limits, event-frame fields and evidence, and
+revision projection into a 246-line family module reduced the adapter from
+4,126 to 3,958 lines. Provider callbacks and source identity remain
+adapter-owned; production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

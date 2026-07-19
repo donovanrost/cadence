@@ -47,7 +47,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     OperationalMetricFrames,
     ProductPolicy,
     RevisionPolicy,
-    TransportBitrateRows
+    TransportBitrateRows,
+    TransportExecutionState
   }
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
@@ -1997,81 +1998,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp transport_execution_state_history_frame(request, source_binding, rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:transport_execution_state_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "time",
-          kind: :time,
-          values: Enum.map(rows, & &1.starts_at),
-          metadata: %{axis: :occurred_at}
-        },
-        %Field{name: "ends_at", kind: :time, values: Enum.map(rows, & &1.ends_at)},
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(rows, & &1.observable_id)
-        },
-        %Field{name: "resource_id", kind: :string, values: Enum.map(rows, & &1.resource_id)},
-        %Field{name: "lane_id", kind: :string, values: Enum.map(rows, & &1.lane_id)},
-        %Field{name: "label", kind: :string, values: Enum.map(rows, & &1.label)},
-        %Field{name: "scope_kind", kind: :enum, values: Enum.map(rows, & &1.scope_kind)},
-        %Field{name: "transport_id", kind: :string, values: Enum.map(rows, & &1.transport_id)},
-        %Field{
-          name: "source_endpoint_id",
-          kind: :string,
-          values: Enum.map(rows, & &1.source_endpoint_id)
-        },
-        %Field{
-          name: "ground_station_id",
-          kind: :string,
-          values: Enum.map(rows, & &1.ground_station_id)
-        },
-        %Field{name: "link_id", kind: :string, values: Enum.map(rows, & &1.link_id)},
-        %Field{name: "contact_id", kind: :string, values: Enum.map(rows, & &1.contact_id)},
-        %Field{name: "path_id", kind: :string, values: Enum.map(rows, & &1.path_id)},
-        %Field{
-          name: "transport_record_id",
-          kind: :string,
-          values: Enum.map(rows, & &1.transport_record_id)
-        },
-        %Field{name: "interval_id", kind: :string, values: Enum.map(rows, & &1.interval_id)},
-        %Field{
-          name: "source_event_id",
-          kind: :string,
-          values: Enum.map(rows, & &1.source_event_id)
-        },
-        %Field{name: "state", kind: :enum, values: Enum.map(rows, & &1.state)},
-        %Field{
-          name: "normalized_state",
-          kind: :enum,
-          values: Enum.map(rows, & &1.normalized_state)
-        }
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :transport_execution_state_history,
-        product_family: :comms_transport,
-        state_color_policy: :transport_execution_state,
-        observable_ids: observable_ids(rows),
-        observable_id: "comms.transport.execution_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(rows),
-        warning_codes: [],
-        links: operational_history_links(request, rows),
-        evidence_refs: DataLinks.operational_interval_evidence_refs(Enum.map(rows, & &1.interval))
-      }
-    }
+    TransportExecutionState.frame(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp managed_runtime_activity_history_frame(request, source_binding, rows) do
@@ -2339,42 +2270,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       )
 
     intervals_fun.(organization_id, mission_id, adapter_opts(request, source_binding))
-    |> Enum.map(&transport_execution_history_row/1)
-    |> Enum.filter(
-      &(matches_transport_execution_scope?(&1, request) and
-          interval_overlaps_request?(&1, request))
-    )
-    |> Enum.sort_by(&datetime_sort_key(&1.starts_at))
-    |> apply_request_limit(request)
-  end
-
-  defp transport_execution_history_row(interval) do
-    payload = attr(interval, :payload) || %{}
-    transport_id = attr(interval, :subject_id) || attr(payload, :capability_instance_id)
-    state = transport_execution_state(attr(payload, :event_kind))
-
-    %{
-      observable_id: "comms.transport.execution_state",
-      resource_id: transport_id,
-      lane_id: transport_id,
-      label: "Transport execution / #{transport_id}",
-      scope_kind: :transport,
-      transport_id: transport_id,
-      source_endpoint_id:
-        attr(payload, :source_endpoint_id) || attr(payload, :source_endpoint_ref),
-      ground_station_id: attr(payload, :ground_station_id) || attr(payload, :antenna_id),
-      link_id: attr(payload, :link_id) || attr(payload, :link_assignment_id),
-      contact_id: attr(payload, :contact_id) || attr(payload, :realized_contact_id),
-      path_id: attr(payload, :path_id),
-      transport_record_id: attr(payload, :transport_record_id),
-      interval_id: attr(interval, :interval_id),
-      source_event_id: attr(interval, :source_event_id),
-      state: state,
-      normalized_state: state,
-      starts_at: attr(interval, :starts_at),
-      ends_at: attr(interval, :ends_at),
-      interval: interval
-    }
+    |> TransportExecutionState.rows(request)
   end
 
   defp transport_runtime_activity_history_frame(request, source_binding, rows) do
@@ -2877,34 +2773,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp normalize_connection_state(_value), do: nil
 
-  defp transport_execution_state(value)
-       when value in [
-              :initialized,
-              :transport_event_handled,
-              :control_input_handled,
-              :timer_handled
-            ],
-       do: value
-
-  defp transport_execution_state(value) when is_binary(value) do
-    normalized = value |> String.downcase() |> String.replace("-", "_")
-
-    Enum.find(
-      [:initialized, :transport_event_handled, :control_input_handled, :timer_handled],
-      &(Atom.to_string(&1) == normalized)
-    ) || :unknown
-  end
-
-  defp transport_execution_state(_value), do: :unknown
-
-  defp matches_transport_execution_scope?(row, request) do
-    matches_scope?(row.transport_id, scope_ids(request, :transport)) and
-      matches_scope?(row.source_endpoint_id, scope_ids(request, :source_endpoint)) and
-      matches_scope?(row.ground_station_id, scope_ids(request, :ground_station)) and
-      matches_scope?(row.link_id, scope_ids(request, :link)) and
-      matches_scope?(row.contact_id, scope_ids(request, :contact))
-  end
-
   defp matches_managed_runtime_activity_scope?(event, request) do
     payload = attr(event, :payload) || attr(event, :current) || %{}
 
@@ -2923,21 +2791,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ) and
       matches_scope?(attr(payload, :source_endpoint_ref), scope_ids(request, :source_endpoint)) and
       matches_scope?(attr(payload, :path_id), scope_ids(request, :link))
-  end
-
-  defp interval_overlaps_request?(row, request) do
-    from_time = request_time_bound(request, [:from, :start, :start_time])
-    to_time = request_time_bound(request, [:to, :end, :end_time])
-
-    starts_before_to? =
-      is_nil(to_time) or
-        (match?(%DateTime{}, row.starts_at) and DateTime.compare(row.starts_at, to_time) == :lt)
-
-    ends_after_from? =
-      is_nil(from_time) or is_nil(row.ends_at) or
-        (match?(%DateTime{}, row.ends_at) and DateTime.compare(row.ends_at, from_time) == :gt)
-
-    starts_before_to? and ends_after_from?
   end
 
   defp ingress_processing_latency_snapshots(
@@ -3527,14 +3380,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp default_transport_execution_state_revision(organization_id, mission_id, opts) do
-    "transport_execution_state:" <>
-      RuntimeCacheKey.fingerprint(%{
-        intervals:
-          organization_id
-          |> default_transport_execution_intervals(mission_id, opts)
-          |> Enum.map(&transport_execution_interval_revision_entry/1)
-          |> Enum.sort_by(&{&1.transport_id || "", &1.starts_at || ""})
-      })
+    organization_id
+    |> default_transport_execution_intervals(mission_id, opts)
+    |> TransportExecutionState.revision()
   end
 
   defp default_managed_runtime_activity_revision(organization_id, mission_id, opts) do
@@ -3857,22 +3705,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
       observed_at: attr(snapshot, :observed_at),
       source_event_id: attr(snapshot, :source_event_id)
-    }
-  end
-
-  defp transport_execution_interval_revision_entry(interval) do
-    payload = attr(interval, :payload) || %{}
-
-    %{
-      interval_id: attr(interval, :interval_id),
-      transport_id: attr(interval, :subject_id) || attr(payload, :capability_instance_id),
-      transport_record_id: attr(payload, :transport_record_id),
-      contact_id: attr(payload, :contact_id) || attr(payload, :realized_contact_id),
-      path_id: attr(payload, :path_id),
-      event_kind: attr(payload, :event_kind),
-      starts_at: attr(interval, :starts_at),
-      ends_at: attr(interval, :ends_at),
-      source_event_id: attr(interval, :source_event_id)
     }
   end
 
