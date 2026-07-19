@@ -766,7 +766,10 @@ membership and invitation workflows context-owned. Extracting corrected
 replacement work, job diagnostics, and closure-readiness rendering from the
 1,340-line historical workflow group-status component reduced the count to 22
 while preserving the existing LiveView events, form IDs, and evidence
-attributes.
+attributes. Moving the telemetry explorer page, provenance formatting, and
+filter-option rendering out of the 1,345-line LiveView reduced the count to 21
+while leaving parameter canonicalization, sample loading, and socket-event
+ownership in the LiveView.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
