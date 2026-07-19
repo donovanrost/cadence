@@ -50,6 +50,188 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     {dashboard, timeline_widget.widget_id}
   end
 
+  defp assert_replay_managed_action_event_route(
+         conn,
+         evidence_path,
+         action_event,
+         action_at,
+         replay_run_id,
+         replay_sources
+       ) do
+    {:ok, action_evidence_view, _html} = live(conn, evidence_path)
+
+    action_event_selector =
+      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{action_event.event_id}"])
+
+    action_event_id = action_event.event_id
+    action_event_route_id = URI.encode_www_form(action_event_id)
+    action_event_at_ms = DateTime.to_unix(action_at, :millisecond)
+
+    action_event_evidence =
+      action_evidence_view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(action_event_selector)
+
+    assert ["operational_event"] =
+             LazyHTML.attribute(action_event_evidence, "phx-value-target")
+
+    assert [^action_event_id] =
+             LazyHTML.attribute(action_event_evidence, "phx-value-target-id")
+
+    assert ["evidence-ref:operational_event:" <> _] =
+             LazyHTML.attribute(action_event_evidence, "phx-value-link-id")
+
+    action_evidence_view
+    |> element(action_event_selector)
+    |> render_click(%{
+      "link-id" => "evidence-ref:operational_event:#{action_event_id}",
+      "target" => "operational_event",
+      "target-id" => action_event_id,
+      "timestamp-ms" => action_event_at_ms,
+      "realm" => "replay",
+      "time-mode" => "replay_run",
+      "replay-run-id" => replay_run_id,
+      "data-source-id" => replay_sources.operational_data_source_id,
+      "source-binding-id" => replay_sources.operational_binding_id
+    })
+
+    assert has_element?(
+             action_evidence_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    action_event_path = assert_patch(action_evidence_view)
+    assert action_event_path =~ "panel=data_link"
+    assert action_event_path =~ "selected_target=operational_event"
+    assert action_event_path =~ "selected_id=#{action_event_route_id}"
+    assert action_event_path =~ "selected_time=#{action_event_at_ms}"
+    assert action_event_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert has_element?(
+             action_evidence_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
+           )
+
+    action_event_copied_path =
+      action_evidence_view
+      |> render()
+      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
+
+    assert action_event_copied_path =~ "panel=data_link"
+    assert action_event_copied_path =~ "selected_target=operational_event"
+    assert action_event_copied_path =~ "selected_id=#{action_event_route_id}"
+    assert action_event_copied_path =~ "selected_time=#{action_event_at_ms}"
+    assert action_event_copied_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert action_event_copied_path =~
+             "data_source_id=#{replay_sources.operational_data_source_id}"
+
+    assert action_event_copied_path =~
+             "source_binding_id=#{replay_sources.operational_binding_id}"
+
+    {:ok, reopened_action_event_view, _html} = live(conn, action_event_copied_path)
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed action request"]),
+             "managed-action-request-1"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Action kind"]),
+             "schedule_timer"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Request document"]),
+             "timer_key"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Capability instance"]),
+             "managed-capability-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Family"]),
+             "packet_counter"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set"]),
+             "managed-binding-set-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set version"]),
+             "1"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Activation"]),
+             "managed-activation-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition affinity"]),
+             "spacecraft"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition value"]),
+             "spacecraft-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Packet"]),
+             "managed-packet-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Evidence"]),
+             "managed-evidence-alpha"
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Requested"])
+           )
+
+    assert has_element?(
+             reopened_action_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
+             replay_run_id
+           )
+
+    assert_data_link_field(action_evidence_view, "Managed action request")
+    assert_data_link_field(action_evidence_view, "Action kind")
+    assert_data_link_field(action_evidence_view, "Replay run")
+
+    stop_dashboard_view(action_evidence_view)
+  end
+
   test "opens replay managed runtime action and timer evidence from rendered operational observable frame panel" do
     replay_run_id = "replay_run_managed_runtime_ops"
     action_at = ~U[2026-06-17 12:01:30Z]
@@ -297,189 +479,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"])
            )
 
-    {:ok, action_evidence_view, _html} = live(conn, evidence_path)
+    assert_replay_managed_action_event_route(
+      conn,
+      evidence_path,
+      action_event,
+      action_at,
+      replay_run_id,
+      replay_sources
+    )
 
-    action_event_selector =
-      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{action_event.event_id}"])
-
-    action_event_id = action_event.event_id
-    action_event_route_id = URI.encode_www_form(action_event_id)
-    action_event_at_ms = DateTime.to_unix(action_at, :millisecond)
-
-    action_event_evidence =
-      action_evidence_view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(action_event_selector)
-
-    assert ["operational_event"] =
-             LazyHTML.attribute(action_event_evidence, "phx-value-target")
-
-    assert [^action_event_id] =
-             LazyHTML.attribute(action_event_evidence, "phx-value-target-id")
-
-    assert ["evidence-ref:operational_event:" <> _] =
-             LazyHTML.attribute(action_event_evidence, "phx-value-link-id")
-
-    action_evidence_view
-    |> element(action_event_selector)
-    |> render_click(%{
-      "link-id" => "evidence-ref:operational_event:#{action_event_id}",
-      "target" => "operational_event",
-      "target-id" => action_event_id,
-      "timestamp-ms" => action_event_at_ms,
-      "realm" => "replay",
-      "time-mode" => "replay_run",
-      "replay-run-id" => replay_run_id,
-      "data-source-id" => replay_sources.operational_data_source_id,
-      "source-binding-id" => replay_sources.operational_binding_id
-    })
-
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    action_event_path = assert_patch(action_evidence_view)
-    assert action_event_path =~ "panel=data_link"
-    assert action_event_path =~ "selected_target=operational_event"
-    assert action_event_path =~ "selected_id=#{action_event_route_id}"
-    assert action_event_path =~ "selected_time=#{action_event_at_ms}"
-    assert action_event_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
-           )
-
-    action_event_copied_path =
-      action_evidence_view
-      |> render()
-      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
-
-    assert action_event_copied_path =~ "panel=data_link"
-    assert action_event_copied_path =~ "selected_target=operational_event"
-    assert action_event_copied_path =~ "selected_id=#{action_event_route_id}"
-    assert action_event_copied_path =~ "selected_time=#{action_event_at_ms}"
-    assert action_event_copied_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert action_event_copied_path =~
-             "data_source_id=#{replay_sources.operational_data_source_id}"
-
-    assert action_event_copied_path =~
-             "source_binding_id=#{replay_sources.operational_binding_id}"
-
-    {:ok, reopened_action_event_view, _html} = live(conn, action_event_copied_path)
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed action request"]),
-             "managed-action-request-1"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Action kind"]),
-             "schedule_timer"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Request document"]),
-             "timer_key"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Capability instance"]),
-             "managed-capability-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Family"]),
-             "packet_counter"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set"]),
-             "managed-binding-set-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set version"]),
-             "1"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Activation"]),
-             "managed-activation-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition affinity"]),
-             "spacecraft"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition value"]),
-             "spacecraft-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Packet"]),
-             "managed-packet-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Evidence"]),
-             "managed-evidence-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Requested"])
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
-             replay_run_id
-           )
-
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed action request"])
-           )
-
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Action kind"])
-           )
-
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"])
-           )
-
-    stop_dashboard_view(action_evidence_view)
     stop_dashboard_view(view)
   end
 

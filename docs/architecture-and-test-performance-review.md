@@ -1284,6 +1284,12 @@ that test from 469 to 295 lines and overlong test-function pressure from 13 to
 12. The existing authenticated route and LiveView session are unchanged, and
 the row selectors, evidence navigation, copied-link replay, DataLink
 inspection, and filtering outcomes remain covered.
+Extracting the 181-line replay managed-action evidence and copied-route proof
+into a named assertion helper reduced its LiveView test from 432 to 258 lines
+and overlong test-function pressure from 12 to 11. The existing authenticated
+route and LiveView session are unchanged, while action target metadata,
+DataLink navigation, copied-link replay, runtime context fields, and the
+companion timer proof remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
