@@ -73,6 +73,85 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     }
   end
 
+  defp setup_transport_execution_interval_evidence! do
+    observed_at = ~U[2026-06-17 12:02:00Z]
+    replay_run_id = "replay_run_transport_execution_ops"
+
+    enable_dashboard_engine_inline_resolves!()
+    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
+
+    {conn, org, mission} = signed_in_org_and_mission()
+    _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
+    replay_sources = persist_replay_event_and_operational_sources!(mission)
+    persist_replay_run!(mission, replay_run_id)
+    {_source_endpoint, transport} = persist_replay_connection_state_resources!(org, mission)
+
+    assert {:ok, _transport_execution_event} =
+             transport_capability_record(
+               mission.mission_id,
+               "transport-execution-replay-source-health-1",
+               transport.transport_id,
+               :initialized,
+               observed_at,
+               state_snapshot: %{active?: true, heartbeat_count: 1}
+             )
+             |> Event.from_transport_capability_record(replay_run_id)
+             |> OperationalEvents.persist_event()
+
+    [transport_execution_interval] =
+      Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
+        capability_instance_id: transport.transport_id,
+        replay_run_id: replay_run_id,
+        order: :asc
+      )
+
+    {source_health_event, source_health_interval} =
+      record_replay_operational_source_health!(
+        org,
+        mission,
+        replay_sources,
+        observed_at,
+        replay_run_id
+      )
+
+    {
+      conn,
+      org,
+      mission,
+      replay_sources,
+      transport,
+      transport_execution_interval,
+      source_health_event,
+      source_health_interval,
+      observed_at,
+      replay_run_id
+    }
+  end
+
+  defp assert_transport_execution_details(view, transport, replay_run_id) do
+    for {field, value} <- [
+          {"Transport capability record", "transport-execution-replay-source-health-1"},
+          {"Event kind", "initialized"},
+          {"Capability instance", transport.transport_id},
+          {"Contact", "replay-contact-alpha"},
+          {"Path", "replay-uplink-path"},
+          {"Family", "heartbeat_monitor"},
+          {"Binding set", "replay-binding-set-1"},
+          {"Binding set version", "1"},
+          {"Activation", "replay-activation-1"},
+          {"Partition affinity", "source_endpoint"},
+          {"Partition value", "replay-source-health-endpoint"},
+          {"State snapshot", "heartbeat_count"},
+          {"Replay run", replay_run_id}
+        ] do
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="#{field}"]),
+               value
+             )
+    end
+  end
+
   test "opens replay source-health and ground-station connection interval evidence from rendered operational observable frame panel" do
     {
       conn,
@@ -367,45 +446,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
   end
 
   test "opens replay source-health and transport execution interval evidence from rendered operational observable frame panel" do
-    observed_at = ~U[2026-06-17 12:02:00Z]
-    replay_run_id = "replay_run_transport_execution_ops"
-
-    enable_dashboard_engine_inline_resolves!()
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
-
-    {conn, org, mission} = signed_in_org_and_mission()
-    _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
-    replay_sources = persist_replay_event_and_operational_sources!(mission)
-    persist_replay_run!(mission, replay_run_id)
-    {_source_endpoint, transport} = persist_replay_connection_state_resources!(org, mission)
-
-    assert {:ok, _transport_execution_event} =
-             transport_capability_record(
-               mission.mission_id,
-               "transport-execution-replay-source-health-1",
-               transport.transport_id,
-               :initialized,
-               observed_at,
-               state_snapshot: %{active?: true, heartbeat_count: 1}
-             )
-             |> Event.from_transport_capability_record(replay_run_id)
-             |> OperationalEvents.persist_event()
-
-    [transport_execution_interval] =
-      Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
-        capability_instance_id: transport.transport_id,
-        replay_run_id: replay_run_id,
-        order: :asc
-      )
-
-    {source_health_event, source_health_interval} =
-      record_replay_operational_source_health!(
-        org,
-        mission,
-        replay_sources,
-        observed_at,
-        replay_run_id
-      )
+    {
+      conn,
+      org,
+      mission,
+      replay_sources,
+      transport,
+      transport_execution_interval,
+      source_health_event,
+      source_health_interval,
+      observed_at,
+      replay_run_id
+    } = setup_transport_execution_interval_evidence!()
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -623,83 +675,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
              ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{transport_execution_operational_event_route_id}"][data-clipboard-text*="selected_time=#{transport_execution_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
            )
 
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Transport capability record"]),
-             "transport-execution-replay-source-health-1"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Event kind"]),
-             "initialized"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Capability instance"]),
-             transport.transport_id
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Contact"]),
-             "replay-contact-alpha"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Path"]),
-             "replay-uplink-path"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Family"]),
-             "heartbeat_monitor"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set"]),
-             "replay-binding-set-1"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set version"]),
-             "1"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Activation"]),
-             "replay-activation-1"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition affinity"]),
-             "source_endpoint"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition value"]),
-             "replay-source-health-endpoint"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="State snapshot"]),
-             "heartbeat_count"
-           )
-
-    assert has_element?(
-             reopened_transport_execution_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
-             replay_run_id
-           )
+    assert_transport_execution_details(
+      reopened_transport_execution_event_view,
+      transport,
+      replay_run_id
+    )
 
     assert has_element?(
              view,
