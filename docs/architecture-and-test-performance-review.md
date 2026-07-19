@@ -1296,6 +1296,13 @@ sample-write options, projection semantics, and audit-event payloads into a
 2,844 to 2,550 lines. The typed record, execute, mode, and write-option APIs
 remain unchanged and consume the shared historical source reader; production
 source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting historical workflow and stage normalization, required event context,
+single-event recording, and grouped request-item construction into a 245-line
+`DataManagement.WorkflowEvents` module reduced `DataManagement` from 2,550 to
+2,341 lines. Its typed event and request APIs remain unchanged, while
+correction, transition, group, and job paths consume the shared normalization
+and validation boundary directly; production source-size pressure remains 6
+and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

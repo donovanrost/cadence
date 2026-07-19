@@ -11,6 +11,7 @@ defmodule Cadence.Telemetry.DataManagement do
   alias Cadence.Telemetry.DataManagement.HistoricalSourceSamples
   alias Cadence.Telemetry.DataManagement.LateDataPolicy
   alias Cadence.Telemetry.DataManagement.ObservationIdentityDecisions
+  alias Cadence.Telemetry.DataManagement.WorkflowEvents
   alias Cadence.Telemetry.DataManagement.WorkflowPolicy
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
@@ -76,16 +77,6 @@ defmodule Cadence.Telemetry.DataManagement do
           errors: [map()]
         }
 
-  @historical_data_workflows [:backfill, :import]
-  @historical_data_workflow_stages [
-    :requested,
-    :approved,
-    :rejected,
-    :started,
-    :completed,
-    :failed,
-    :retried
-  ]
   @stale_historical_data_workflow_job_seconds 15 * 60
 
   @spec backfill_samples([Sample.t()], workflow_attrs(), keyword()) :: :ok | {:error, term()}
@@ -110,16 +101,7 @@ defmodule Cadence.Telemetry.DataManagement do
   def record_historical_data_workflow_event(workflow, stage, attrs, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
              is_map(attrs) and is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
-         {:ok, stage} <- normalize_historical_data_workflow_stage(stage),
-         :ok <- require_historical_data_workflow_context(workflow, attrs) do
-      Storage.record_backfill_lifecycle_workflow_event(
-        workflow,
-        stage,
-        attrs,
-        historical_data_workflow_event_opts(opts)
-      )
-    end
+    WorkflowEvents.record(workflow, stage, attrs, opts)
   end
 
   @spec record_historical_data_workflow_request(
@@ -132,18 +114,7 @@ defmodule Cadence.Telemetry.DataManagement do
   def record_historical_data_workflow_request(workflow, attrs, point_ids, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_list(point_ids) and
              is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow) do
-      {point_ids, request_group_id, attrs} =
-        historical_data_workflow_request_context(attrs, point_ids)
-
-      record_historical_data_workflow_request_items(
-        workflow,
-        attrs,
-        point_ids,
-        request_group_id,
-        opts
-      )
-    end
+    WorkflowEvents.record_request(workflow, attrs, point_ids, opts)
   end
 
   @spec record_historical_data_workflow_correction_request(
@@ -156,7 +127,7 @@ defmodule Cadence.Telemetry.DataManagement do
   def record_historical_data_workflow_correction_request(workflow, attrs, correction, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_map(correction) and
              is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
          {:ok, source_event} <-
            historical_data_workflow_correction_source_event(correction, attrs),
          :ok <- require_historical_data_workflow_correction_source(workflow, source_event),
@@ -188,8 +159,8 @@ defmodule Cadence.Telemetry.DataManagement do
       )
       when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
              is_binary(correction_event_id) and is_map(attrs) and is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
-         {:ok, stage} <- normalize_historical_data_workflow_stage(stage),
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
          {:ok, correction_event} <-
            fetch_historical_data_workflow_event(correction_event_id, attrs) do
       record_historical_data_workflow_correction_transition_event(
@@ -219,8 +190,8 @@ defmodule Cadence.Telemetry.DataManagement do
       )
       when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
              is_binary(source_event_id) and is_map(attrs) and is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
-         {:ok, stage} <- normalize_historical_data_workflow_stage(stage),
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
          {:ok, source_event} <- fetch_historical_data_workflow_event(source_event_id, attrs),
          :ok <- require_historical_data_workflow_transition_source(workflow, stage, source_event),
          :ok <- require_historical_data_workflow_stage_transition_policy(stage, source_event) do
@@ -392,7 +363,7 @@ defmodule Cadence.Telemetry.DataManagement do
   defp historical_data_workflow_correction_source_workflow(source_event) do
     source_event
     |> historical_data_workflow_event_workflow()
-    |> normalize_historical_data_workflow()
+    |> WorkflowEvents.normalize_workflow()
     |> case do
       {:ok, workflow} -> workflow
       {:error, _reason} -> nil
@@ -573,118 +544,6 @@ defmodule Cadence.Telemetry.DataManagement do
     end
   end
 
-  defp historical_data_workflow_request_context(attrs, point_ids) do
-    point_ids = if point_ids == [], do: [nil], else: point_ids
-
-    request_group_id =
-      get_attr(attrs, :backfill_run_id) || Cadence.Ids.new("telemetry_backfill_run")
-
-    attrs = Map.put(attrs, :backfill_run_id, request_group_id)
-
-    {point_ids, request_group_id, attrs}
-  end
-
-  defp record_historical_data_workflow_request_items(
-         workflow,
-         attrs,
-         point_ids,
-         request_group_id,
-         opts
-       ) do
-    item_count = length(point_ids)
-
-    point_ids
-    |> Enum.with_index(1)
-    |> Enum.reduce_while({:ok, []}, fn {point_id, item_index}, {:ok, events} ->
-      record_historical_data_workflow_request_item(
-        workflow,
-        attrs,
-        point_id,
-        request_group_id,
-        item_count,
-        item_index,
-        opts,
-        events
-      )
-    end)
-    |> historical_data_workflow_request_result()
-  end
-
-  defp record_historical_data_workflow_request_item(
-         workflow,
-         attrs,
-         point_id,
-         request_group_id,
-         item_count,
-         item_index,
-         opts,
-         events
-       ) do
-    item_attrs =
-      attrs
-      |> historical_data_workflow_request_item_attrs(
-        point_id,
-        request_group_id,
-        item_count,
-        item_index
-      )
-      |> compact_attrs()
-
-    case record_historical_data_workflow_event(workflow, :requested, item_attrs, opts) do
-      {:ok, event} -> {:cont, {:ok, [event | events]}}
-      {:error, reason} -> {:halt, {:error, reason}}
-    end
-  end
-
-  defp historical_data_workflow_request_result({:ok, events}), do: {:ok, Enum.reverse(events)}
-  defp historical_data_workflow_request_result({:error, reason}), do: {:error, reason}
-
-  defp historical_data_workflow_request_item_attrs(
-         attrs,
-         point_id,
-         request_group_id,
-         item_count,
-         item_index
-       ) do
-    item_run_id =
-      historical_data_workflow_request_item_run_id(request_group_id, item_count, item_index)
-
-    request_mode = if item_count == 1, do: "single_point", else: "bulk_points"
-
-    attrs
-    |> Map.put(:backfill_run_id, item_run_id)
-    |> Map.put(:import_run_id, item_run_id)
-    |> maybe_put_request_point(point_id)
-    |> Map.put(
-      :payload,
-      attrs
-      |> get_attr(:payload, %{})
-      |> ensure_map()
-      |> Map.merge(%{
-        "request_source" => "dashboard_direct_request",
-        "request_mode" => request_mode,
-        "request_group_id" => request_group_id,
-        "request_item_index" => item_index,
-        "request_item_count" => item_count,
-        "request_item_run_id" => item_run_id
-      })
-    )
-  end
-
-  defp maybe_put_request_point(attrs, nil), do: attrs
-
-  defp maybe_put_request_point(attrs, point_id) do
-    attrs
-    |> Map.put(:observable_id, point_id)
-    |> Map.put(:point_id, point_id)
-  end
-
-  defp historical_data_workflow_request_item_run_id(request_group_id, 1, _item_index),
-    do: request_group_id
-
-  defp historical_data_workflow_request_item_run_id(request_group_id, _item_count, item_index),
-    do: "#{request_group_id}-#{String.pad_leading(Integer.to_string(item_index), 3, "0")}"
-
   @spec record_historical_data_workflow_group_transition(
           historical_data_workflow() | binary(),
           historical_data_workflow_stage() | binary(),
@@ -701,8 +560,8 @@ defmodule Cadence.Telemetry.DataManagement do
         opts \\ []
       )
       when is_map(attrs) and is_list(opts) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
-         {:ok, stage} <- normalize_historical_data_workflow_stage(stage),
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
          {:ok, group_events} <- historical_data_workflow_group_events(group_events, attrs),
          {:ok, transition_sources} <-
            Storage.BackfillLifecycleGroup.transition_sources(
@@ -782,8 +641,8 @@ defmodule Cadence.Telemetry.DataManagement do
           {:ok, Jobs.Job.t()} | {:error, term()}
   def start_historical_data_workflow_job(workflow, attrs, _opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow),
-         :ok <- require_historical_data_workflow_context(workflow, attrs) do
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         :ok <- WorkflowEvents.validate_context(workflow, attrs) do
       run_id = historical_data_workflow_run_id(workflow, attrs)
 
       Jobs.enqueue(
@@ -2163,10 +2022,6 @@ defmodule Cadence.Telemetry.DataManagement do
     ])
   end
 
-  defp historical_data_workflow_event_opts(opts) do
-    Keyword.take(opts, [:runtime_cache, :dashboard_runtime_invalidation?])
-  end
-
   defp historical_data_workflow_job_payload(workflow, attrs) do
     %{
       "workflow" => Atom.to_string(workflow),
@@ -2176,7 +2031,7 @@ defmodule Cadence.Telemetry.DataManagement do
 
   defp historical_data_workflow_job_attrs(%{"workflow" => workflow, "attrs" => attrs})
        when is_binary(workflow) and is_map(attrs) do
-    with {:ok, workflow} <- normalize_historical_data_workflow(workflow) do
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow) do
       {:ok, workflow, attrs}
     end
   end
@@ -2371,49 +2226,6 @@ defmodule Cadence.Telemetry.DataManagement do
     if failure_retryable?(reason), do: "retry_job", else: "correct_workflow_request"
   end
 
-  defp normalize_historical_data_workflow(workflow)
-       when workflow in @historical_data_workflows,
-       do: {:ok, workflow}
-
-  defp normalize_historical_data_workflow(workflow) when is_binary(workflow) do
-    normalize_enum(
-      workflow,
-      @historical_data_workflows,
-      :unsupported_historical_data_workflow
-    )
-  end
-
-  defp normalize_historical_data_workflow(workflow),
-    do: {:error, {:unsupported_historical_data_workflow, workflow}}
-
-  defp normalize_historical_data_workflow_stage(stage)
-       when stage in @historical_data_workflow_stages,
-       do: {:ok, stage}
-
-  defp normalize_historical_data_workflow_stage(stage) when is_binary(stage) do
-    normalize_enum(
-      stage,
-      @historical_data_workflow_stages,
-      :unsupported_historical_data_workflow_stage
-    )
-  end
-
-  defp normalize_historical_data_workflow_stage(stage),
-    do: {:error, {:unsupported_historical_data_workflow_stage, stage}}
-
-  defp normalize_enum(value, allowed, error) do
-    normalized =
-      value
-      |> String.trim()
-      |> String.downcase()
-      |> String.replace("-", "_")
-
-    case Enum.find(allowed, &(Atom.to_string(&1) == normalized)) do
-      nil -> {:error, {error, value}}
-      atom -> {:ok, atom}
-    end
-  end
-
   defp require_samples([]), do: {:error, :no_telemetry_samples}
   defp require_samples([%Sample{} | _rest]), do: :ok
   defp require_samples(_samples), do: {:error, :invalid_telemetry_samples}
@@ -2451,27 +2263,6 @@ defmodule Cadence.Telemetry.DataManagement do
       {:error, {:missing_field, :realm}}
     else
       :ok
-    end
-  end
-
-  defp require_historical_data_workflow_context(workflow, attrs) do
-    [:organization_id, :mission_id, :data_source_id, :binding_id]
-    |> Enum.reduce_while(:ok, fn field, :ok ->
-      case require_present(attrs, field) do
-        :ok -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      :ok -> require_historical_data_workflow_realm_and_run_id(workflow, attrs)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp require_historical_data_workflow_realm_and_run_id(workflow, attrs) do
-    case require_realm(attrs) do
-      :ok -> require_run_id(workflow, attrs)
-      {:error, reason} -> {:error, reason}
     end
   end
 
