@@ -4,7 +4,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   import Ecto.Query
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.ProtocolArchiveRecordEntryRow
+
+  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
+    as: ProtocolArchiveRecordEntryRow
+
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
   alias Cadence.Replay.Scope

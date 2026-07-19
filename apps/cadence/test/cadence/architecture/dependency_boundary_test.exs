@@ -200,6 +200,34 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects archive manifest rows through their owning contexts" do
+    graph = %{
+      "lib/cadence/dashboards/data_link_resolver.ex" => %{
+        "lib/cadence/ingress_archive/file_system/evidence_entry_row.ex" => "export",
+        "lib/cadence/protocol/record_archive/file_system/record_entry_row.ex" => "export"
+      },
+      "lib/cadence/ingress_archive/filesystem.ex" => %{
+        "lib/cadence/ingress_archive/file_system/evidence_entry_row.ex" => "export"
+      },
+      "lib/cadence/protocol/record_archive/filesystem.ex" => %{
+        "lib/cadence/protocol/record_archive/file_system/record_entry_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/data_link_resolver.ex",
+               sink: "lib/cadence/ingress_archive/file_system/evidence_entry_row.ex"
+             },
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/data_link_resolver.ex",
+               sink: "lib/cadence/protocol/record_archive/file_system/record_entry_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "compares current edges with the checked-in debt baseline" do
     findings =
       DependencyBoundary.findings(%{

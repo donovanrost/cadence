@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProtocolArchiveRecordEntryRow do
+defmodule Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -13,8 +13,8 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive.FileSystem.EvidenceEntryRow, as: IngressArchiveEvidenceEntryRow
   alias Cadence.IngressArchive.FileSystem.Writer
-  alias Cadence.Persistence.Schemas.IngressArchiveEvidenceEntryRow
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 

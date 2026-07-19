@@ -4,7 +4,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
   alias Cadence.IngressArchive.FileSystem
-  alias Cadence.Persistence.Schemas.IngressArchiveEvidenceEntryRow
+  alias Cadence.IngressArchive.FileSystem.EvidenceEntryRow, as: IngressArchiveEvidenceEntryRow
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.IngressArchiveEvidenceEntryRow do
+defmodule Cadence.IngressArchive.FileSystem.EvidenceEntryRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -78,7 +78,6 @@ persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/sche
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex
-persistence_schema|lib/cadence/ingress_archive/filesystem.ex|lib/cadence/persistence/schemas/ingress_archive_evidence_entry_row.ex
 persistence_schema|lib/cadence/ingress_archive/postgres.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/telemetry_latest_limit_state_row.ex
@@ -99,7 +98,6 @@ persistence_schema|lib/cadence/projections/telemetry_latest_limit_states.ex|lib/
 persistence_schema|lib/cadence/projections/telemetry_latest_values.ex|lib/cadence/persistence/schemas/telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/projections/telemetry_latest_values.ex|lib/cadence/persistence/schemas/telemetry_observation_identity_state_row.ex
 persistence_schema|lib/cadence/projections/telemetry_latest_values.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
-persistence_schema|lib/cadence/protocol/record_archive/filesystem.ex|lib/cadence/persistence/schemas/protocol_archive_record_entry_row.ex
 persistence_schema|lib/cadence/protocol/record_archive/postgres.ex|lib/cadence/persistence/schemas/packet_record_row.ex
 persistence_schema|lib/cadence/protocol/record_archive/postgres.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/protocol/record_archive/postgres.ex|lib/cadence/persistence/schemas/transfer_frame_record_row.ex

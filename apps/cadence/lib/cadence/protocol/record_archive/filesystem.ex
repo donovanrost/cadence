@@ -14,8 +14,11 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.ProtocolArchiveRecordEntryRow
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
+
+  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
+    as: ProtocolArchiveRecordEntryRow
+
   alias Cadence.Protocol.RecordArchive.FileSystem.Writer
   alias Cadence.Replay.Scope
   alias Cadence.Repo

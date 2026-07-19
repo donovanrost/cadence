@@ -48,9 +48,17 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/derived_telemetry/"
   ]
   @ground_networks_context ["lib/cadence/ground_networks/"]
+  @ingress_archive_context [
+    "lib/cadence/ingress_archive.ex",
+    "lib/cadence/ingress_archive/"
+  ]
   @operational_events_context [
     "lib/cadence/operational_events.ex",
     "lib/cadence/operational_events/"
+  ]
+  @protocol_record_archive_context [
+    "lib/cadence/protocol/record_archive.ex",
+    "lib/cadence/protocol/record_archive/"
   ]
   @projections_context ["lib/cadence/projections/"]
   @telemetry_context ["lib/cadence/telemetry/"]
@@ -72,7 +80,9 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/dashboards/"], @dashboards_context},
     {["lib/cadence/derived_telemetry/"], @derived_telemetry_context},
     {["lib/cadence/ground_networks/"], @ground_networks_context},
+    {["lib/cadence/ingress_archive/file_system/"], @ingress_archive_context},
     {["lib/cadence/operational_events/"], @operational_events_context},
+    {["lib/cadence/protocol/record_archive/file_system/"], @protocol_record_archive_context},
     {["lib/cadence/projections/"], @projections_context},
     {[
        "lib/cadence/telemetry/storage/backfill_lifecycle_events/",
