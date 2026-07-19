@@ -1,4 +1,5 @@
 defmodule CadenceWeb.MissionHealthController do
+  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   use CadenceWeb, :controller
 
   action_fallback CadenceWeb.FallbackController
@@ -13,7 +14,7 @@ defmodule CadenceWeb.MissionHealthController do
              mission_id
            ),
          {:ok, opts} <- ControlPlaneParams.mission_health_filters(params) do
-      summary = Cadence.mission_health_summary(organization_id, mission_id, opts)
+      summary = MissionHealthReads.summary(organization_id, mission_id, opts)
 
       json(conn, %{data: ControlPlaneJSON.mission_health(organization_id, summary)})
     end

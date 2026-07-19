@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectionLiveTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -229,7 +230,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
       evaluate_limits!(mission)
 
       assert [_older_sample, latest_sample] =
-               Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+               TelemetryReads.sample_history(
+                 org.organization_id,
+                 mission.mission_id,
+                 "HK.counter",
                  spacecraft_id: spacecraft.spacecraft_id,
                  order: :asc
                )

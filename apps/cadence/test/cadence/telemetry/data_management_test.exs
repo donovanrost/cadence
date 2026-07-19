@@ -1,4 +1,5 @@
 defmodule Cadence.Telemetry.DataManagementTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.ConfigCase, async: false
 
   import Cadence.Telemetry.DataManagementFixtures
@@ -400,7 +401,7 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert_receive {:telemetry_storage_envelopes, [_accepted_envelope]}
 
     latest =
-      Cadence.latest_telemetry_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
 
     assert latest.sample_id == "sample-late-policy-accepted"
     assert latest.raw_value == 20
@@ -418,7 +419,7 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert_receive {:telemetry_storage_envelopes, [_rejected_envelope]}
 
     latest =
-      Cadence.latest_telemetry_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
 
     assert latest.sample_id == "sample-late-policy-accepted"
     assert latest.raw_value == 20
@@ -531,7 +532,7 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert envelope.validity_state == :advisory
 
     latest =
-      Cadence.latest_telemetry_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
 
     assert latest.sample_id == "sample-late-reject-baseline"
     assert latest.raw_value == 10

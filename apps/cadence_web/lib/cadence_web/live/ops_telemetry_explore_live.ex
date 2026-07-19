@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsTelemetryExploreLive do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -327,7 +328,12 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       |> maybe_put(:data_source_id, context.data_source_id)
       |> maybe_put(:binding_id, context.source_binding_id)
 
-    case Cadence.telemetry_history_result(organization_id, mission_id, context.point_id, opts) do
+    case TelemetryReads.sample_history_result(
+           organization_id,
+           mission_id,
+           context.point_id,
+           opts
+         ) do
       {:ok, %{samples: samples, diagnostics: diagnostics}} ->
         physical_exists? =
           samples != [] || physical_samples_exist?(organization_id, mission_id, context)
@@ -353,7 +359,12 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       |> maybe_put(:data_source_id, context.data_source_id)
       |> maybe_put(:binding_id, context.source_binding_id)
 
-    case Cadence.telemetry_history_result(organization_id, mission_id, context.point_id, opts) do
+    case TelemetryReads.sample_history_result(
+           organization_id,
+           mission_id,
+           context.point_id,
+           opts
+         ) do
       {:ok, %{samples: [_ | _]}} -> true
       _other -> false
     end

@@ -1,4 +1,5 @@
 defmodule Cadence.Dashboards.DataLinkResolverFixtures do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
 
   import Cadence.DataCase, only: [persist_mission_scope: 2]
@@ -34,7 +35,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
     activate_binding_set!(organization_id, mission_id, binding_set)
     ingest!(mission_id, binding_set, spacecraft_id, value)
 
-    sample = Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter", [])
+    sample = TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
 
     %{
       organization_id: organization_id,
@@ -62,7 +63,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
       sequence_count: 1
     )
 
-    primary = Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter", [])
+    primary = TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
 
     ingest!(
       mission_id,
@@ -73,7 +74,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
       sequence_count: 2
     )
 
-    compare = Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter", [])
+    compare = TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
 
     %{
       organization_id: organization_id,

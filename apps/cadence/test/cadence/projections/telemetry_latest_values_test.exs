@@ -1,4 +1,5 @@
 defmodule Cadence.Projections.TelemetryLatestValuesTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -40,13 +41,13 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                binding_set.version
              )
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").raw_value == 20
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
 
     Repo.delete_all(TelemetryLatestValueRow)
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter") == nil
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
 
     assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").raw_value == 20
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
   end
 
   test "rebuild keeps late-arriving older source-time samples from replacing latest" do
@@ -82,12 +83,12 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                binding_set.version
              )
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").raw_value == 20
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
 
     Repo.delete_all(TelemetryLatestValueRow)
 
     assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").raw_value == 20
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
   end
 
   test "rebuild preserves source-scoped latest values for the same point" do
@@ -124,13 +125,13 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
 
     assert {:ok, 2} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter",
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter",
              realm: :flight,
              data_source_id: "flight-questdb",
              source_binding_id: "flight-binding"
            ).raw_value == 1
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter",
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter",
              realm: :rehearsal,
              data_source_id: "rehearsal-questdb",
              source_binding_id: "rehearsal-binding"
@@ -159,16 +160,16 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                validity_state: :conflict
              )
 
-    latest_before_rebuild = Cadence.latest_telemetry_value("mission-alpha", "HK.counter")
+    latest_before_rebuild = TelemetryReads.latest_value("mission-alpha", "HK.counter")
     assert latest_before_rebuild.sample_id == "sample-rebuild-canonical"
     assert latest_before_rebuild.raw_value == 20
 
     Repo.delete_all(TelemetryLatestValueRow)
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter") == nil
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
 
     assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
 
-    latest_after_rebuild = Cadence.latest_telemetry_value("mission-alpha", "HK.counter")
+    latest_after_rebuild = TelemetryReads.latest_value("mission-alpha", "HK.counter")
     assert latest_after_rebuild.sample_id == "sample-rebuild-canonical"
     assert latest_after_rebuild.raw_value == 20
     assert latest_after_rebuild.provenance["storage"]["validity_state"] == "canonical"
@@ -196,7 +197,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                validity_state: :conflict
              )
 
-    latest_before_decision = Cadence.latest_telemetry_value("mission-alpha", "HK.counter")
+    latest_before_decision = TelemetryReads.latest_value("mission-alpha", "HK.counter")
     assert latest_before_decision.sample_id == canonical.sample_id
 
     [state] =
@@ -221,7 +222,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                dashboard_runtime_invalidation?: false
              )
 
-    latest_after_decision = Cadence.latest_telemetry_value("mission-alpha", "HK.counter")
+    latest_after_decision = TelemetryReads.latest_value("mission-alpha", "HK.counter")
     assert latest_after_decision.sample_id == conflict.sample_id
     assert latest_after_decision.raw_value == 99
     assert latest_after_decision.provenance["storage"]["validity_state"] == "canonical"
@@ -230,13 +231,16 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
              "operator_selected_conflict_candidate"
 
     canonical_history =
-      Cadence.telemetry_history("mission-alpha", "HK.counter", order: :asc, limit: 10)
+      TelemetryReads.sample_history("mission-alpha", "HK.counter",
+        order: :asc,
+        limit: 10
+      )
 
     assert Enum.map(canonical_history, & &1.sample_id) == [conflict.sample_id]
     assert hd(canonical_history).provenance["storage"]["validity_state"] == "canonical"
 
     all_revisions_history =
-      Cadence.telemetry_history("mission-alpha", "HK.counter",
+      TelemetryReads.sample_history("mission-alpha", "HK.counter",
         view: :all_revisions,
         order: :asc,
         limit: 10
@@ -259,7 +263,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     persist_sample_scope!(canonical)
     assert :ok = Storage.persist_samples([canonical], organization_id: "org-test")
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").sample_id ==
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").sample_id ==
              canonical.sample_id
 
     [state] =
@@ -281,8 +285,12 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
                dashboard_runtime_invalidation?: false
              )
 
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter") == nil
-    assert Cadence.telemetry_history("mission-alpha", "HK.counter", order: :asc, limit: 10) == []
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
+
+    assert TelemetryReads.sample_history("mission-alpha", "HK.counter",
+             order: :asc,
+             limit: 10
+           ) == []
   end
 
   test "rebuilds the latest-value projection in an async job" do
@@ -339,7 +347,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     assert completed_run.rebuilt_value_count == 1
     assert rebuild_job.job_type == :telemetry_latest_value_rebuild
     assert rebuild_job.attempt_count == 1
-    assert Cadence.latest_telemetry_value("mission-alpha", "HK.counter").raw_value == 40
+    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 40
   end
 
   defp persist_binding_set_fixture do

@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -256,7 +257,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
       assert policy_event.reason == "operator_accepts_late_data"
       assert policy_event.sample_count == 1
 
-      assert %Sample{} = latest = Cadence.latest_telemetry_value(mission.mission_id, "HK.counter")
+      assert %Sample{} =
+               latest = TelemetryReads.latest_value(mission.mission_id, "HK.counter")
+
       assert latest.sample_id == "dashboard-late-source-sample"
       assert latest.raw_value == 72
 

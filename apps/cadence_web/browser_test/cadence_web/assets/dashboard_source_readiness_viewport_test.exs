@@ -29,6 +29,7 @@ defmodule CadenceWeb.Assets.DashboardSourceReadinessViewportTest do
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.OperationalEvents
   alias Cadence.Persistence.Schemas.ReplayRunRow
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
@@ -432,7 +433,10 @@ defmodule CadenceWeb.Assets.DashboardSourceReadinessViewportTest do
     ingest!(mission, binding_set, spacecraft.spacecraft_id, 26, base_unix + 10)
 
     [older_sample, latest_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )

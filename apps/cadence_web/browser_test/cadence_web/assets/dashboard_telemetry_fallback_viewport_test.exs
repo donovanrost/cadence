@@ -22,6 +22,7 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.SourceWatermarks
   alias Cadence.Dashboards.WidgetDef
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias CadenceWeb.TestFixtures
 
   @tag :browser
@@ -581,7 +582,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
     )
 
     [counter_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -701,7 +705,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
     )
 
     [counter_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -853,7 +860,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
     )
 
     [counter_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -973,7 +983,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
     )
 
     [counter_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )

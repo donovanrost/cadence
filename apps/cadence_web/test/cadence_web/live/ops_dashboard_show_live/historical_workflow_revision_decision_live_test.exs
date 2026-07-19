@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLiveTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
@@ -201,7 +202,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
 
       assert %Sample{} =
                latest_before_decision =
-               Cadence.latest_telemetry_value(
+               TelemetryReads.latest_value(
                  org.organization_id,
                  mission.mission_id,
                  "HK.counter",
@@ -243,7 +244,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
 
       assert %Sample{} =
                latest_after_source_decision =
-               Cadence.latest_telemetry_value(
+               TelemetryReads.latest_value(
                  org.organization_id,
                  mission.mission_id,
                  "HK.counter",
@@ -385,7 +386,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
                "dashboard_limit_mode" => "compare"
              }
 
-      refute Cadence.latest_telemetry_value(org.organization_id, mission.mission_id, "HK.counter",
+      refute TelemetryReads.latest_value(
+               org.organization_id,
+               mission.mission_id,
+               "HK.counter",
                spacecraft_id: sample.spacecraft_id,
                realm: :flight,
                data_source_id: "managed_questdb_primary",

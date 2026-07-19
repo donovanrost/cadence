@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -243,7 +244,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       evaluate_limits!(mission)
 
       assert [older_sample, _latest_sample] =
-               Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+               TelemetryReads.sample_history(
+                 org.organization_id,
+                 mission.mission_id,
+                 "HK.counter",
                  spacecraft_id: spacecraft.spacecraft_id,
                  order: :asc
                )
@@ -332,7 +336,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
 
       future_sample =
         org.organization_id
-        |> Cadence.telemetry_history(mission.mission_id, "HK.counter",
+        |> TelemetryReads.sample_history(mission.mission_id, "HK.counter",
           spacecraft_id: spacecraft.spacecraft_id,
           order: :asc
         )

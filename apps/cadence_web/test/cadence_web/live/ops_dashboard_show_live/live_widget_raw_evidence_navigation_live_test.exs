@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -185,7 +186,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
 
       latest_sample =
         org.organization_id
-        |> Cadence.telemetry_history(mission.mission_id, "HK.counter",
+        |> TelemetryReads.sample_history(mission.mission_id, "HK.counter",
           spacecraft_id: spacecraft.spacecraft_id,
           order: :asc
         )

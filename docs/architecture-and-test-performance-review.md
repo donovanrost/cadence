@@ -1606,6 +1606,17 @@ to 1,714 lines; production web callers of the root facade remain at 17 files
 because production already used the owning contexts. No route or authentication
 placement is involved; production source-size pressure remains 4 and dependency
 ratchets are unchanged.
+Retiring the 26 telemetry, derived-telemetry, limit-state, and mission-health
+read clauses from the root facade moved 91 production, test, browser, and demo
+call sites directly to `Cadence.Reads.Telemetry`,
+`Cadence.Reads.DerivedTelemetry`, `Cadence.Reads.Limits`, and
+`Cadence.Reads.MissionHealth`. This reduced `Cadence` from 1,714 to 1,526 lines
+and reduced production web callers of the root facade from 17 to 13 files.
+Telemetry and mission-health API routes remain in the authenticated API
+pipeline, while telemetry exploration and dashboard routes remain in the
+authenticated `:ops` LiveView session; organization-scoped owner arities are
+preserved. Production source-size pressure remains 4 and dependency ratchets
+are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

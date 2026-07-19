@@ -1,4 +1,6 @@
 defmodule Cadence.LimitsTest do
+  alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
+  alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.ConfigCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -124,7 +126,7 @@ defmodule Cadence.LimitsTest do
     assert {:ok, derived_run} = Cadence.evaluate_derived_telemetry("mission-alpha")
     assert derived_run.status == :completed
 
-    assert Cadence.latest_derived_telemetry_value("mission-alpha", "DERIVED.counter_double").value ==
+    assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==
              60
 
     assert {:ok, run} = Cadence.start_evaluate_telemetry_limits("mission-alpha")
@@ -162,7 +164,7 @@ defmodule Cadence.LimitsTest do
     assert Enum.map(bounded_event_history, & &1.limit_state) == [:green]
 
     as_of_state =
-      Cadence.latest_telemetry_limit_state("mission-alpha", "DERIVED.counter_double",
+      LimitReads.latest_state("mission-alpha", "DERIVED.counter_double",
         to_receipt_time: DateTime.from_unix!(1_700_000_205)
       )
 
@@ -170,7 +172,7 @@ defmodule Cadence.LimitsTest do
     assert as_of_state.normalized_state == :green
 
     latest_state =
-      Cadence.latest_telemetry_limit_state("mission-alpha", "DERIVED.counter_double")
+      LimitReads.latest_state("mission-alpha", "DERIVED.counter_double")
 
     assert latest_state.limit_state == :yellow_high
     assert latest_state.normalized_state == :yellow

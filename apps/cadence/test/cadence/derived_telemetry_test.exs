@@ -1,4 +1,5 @@
 defmodule Cadence.DerivedTelemetryTest do
+  alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -73,23 +74,31 @@ defmodule Cadence.DerivedTelemetryTest do
     assert completed_run.emitted_sample_count == 4
     assert completed_run.definition_count == 2
 
-    base_history = Cadence.derived_telemetry_history("mission-alpha", "DERIVED.counter_double")
+    base_history =
+      DerivedTelemetryReads.sample_history("mission-alpha", "DERIVED.counter_double")
+
     assert Enum.map(base_history, & &1.value) == [40, 20]
 
     chained_history =
-      Cadence.derived_telemetry_history("mission-alpha", "DERIVED.counter_double_plus_one")
+      DerivedTelemetryReads.sample_history(
+        "mission-alpha",
+        "DERIVED.counter_double_plus_one"
+      )
 
     assert Enum.map(chained_history, & &1.value) == [41, 21]
 
     latest =
-      Cadence.latest_derived_telemetry_value("mission-alpha", "DERIVED.counter_double_plus_one")
+      DerivedTelemetryReads.latest_value(
+        "mission-alpha",
+        "DERIVED.counter_double_plus_one"
+      )
 
     assert latest.value == 41
     assert latest.trigger_sample_id == List.first(chained_history).trigger_sample_id
     assert latest.provenance["source_point_ids"] == ["DERIVED.counter_double"]
 
     latest_values =
-      Cadence.latest_derived_telemetry_values("mission-alpha")
+      DerivedTelemetryReads.latest_values_for_mission("mission-alpha")
       |> Enum.map(fn sample -> {sample.point_id, sample.value} end)
 
     assert latest_values == [

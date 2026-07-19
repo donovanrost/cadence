@@ -1,4 +1,5 @@
 defmodule Cadence.Reads.TelemetryTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -50,12 +51,14 @@ defmodule Cadence.Reads.TelemetryTest do
                binding_set.version
              )
 
-    latest_sample = Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter", [])
+    latest_sample =
+      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
+
     assert latest_sample.raw_value == 20
     assert DateTime.compare(latest_sample.receipt_time, newer_evidence.receipt_time) == :eq
 
     as_of_sample =
-      Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter",
+      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
         to_receipt_time: older_evidence.receipt_time
       )
 
@@ -63,11 +66,16 @@ defmodule Cadence.Reads.TelemetryTest do
     assert DateTime.compare(as_of_sample.receipt_time, older_evidence.receipt_time) == :eq
 
     history =
-      Cadence.telemetry_history(organization_id, mission_id, "HK.counter", order: :asc, limit: 10)
+      TelemetryReads.sample_history(organization_id, mission_id, "HK.counter",
+        order: :asc,
+        limit: 10
+      )
 
     assert Enum.map(history, & &1.raw_value) == [10, 20]
 
-    latest_values = Cadence.latest_telemetry_values(organization_id, mission_id, [])
+    latest_values =
+      TelemetryReads.latest_values_for_mission(organization_id, mission_id, [])
+
     assert Enum.map(latest_values, & &1.point_name) == ["HK.counter"]
     assert hd(latest_values).raw_value == 20
   end
@@ -93,12 +101,14 @@ defmodule Cadence.Reads.TelemetryTest do
     mark_samples_as_replay([replay_older, replay_newer], "replay-run-1")
     mark_samples_as_replay([other_replay], "replay-run-2")
 
-    latest_live = Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter", [])
+    latest_live =
+      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
+
     assert latest_live.sample_id == live_sample.sample_id
     assert latest_live.raw_value == 20
 
     latest_replay =
-      Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter",
+      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
         realm: :replay,
         data_source_id: "managed_questdb_replay",
         source_binding_id: "replay_telemetry",
@@ -110,7 +120,7 @@ defmodule Cadence.Reads.TelemetryTest do
     assert latest_replay.provenance["storage"]["replay_run_id"] == "replay-run-1"
 
     latest_other_replay =
-      Cadence.latest_telemetry_value(organization_id, mission_id, "HK.counter",
+      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
         realm: :replay,
         data_source_id: "managed_questdb_replay",
         source_binding_id: "replay_telemetry",

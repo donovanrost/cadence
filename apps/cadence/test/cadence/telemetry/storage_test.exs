@@ -1,4 +1,5 @@
 defmodule Cadence.Telemetry.StorageTest do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.ConfigCase, async: false
 
   alias Cadence.Dashboards.{
@@ -247,9 +248,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert_receive {:telemetry_storage_envelopes, [_canonical_envelope]}
 
     latest =
-      Cadence.latest_telemetry_value("mission-storage-current", "HK.counter",
-        spacecraft_id: "sc-1"
-      )
+      TelemetryReads.latest_value("mission-storage-current", "HK.counter", spacecraft_id: "sc-1")
 
     assert latest.sample_id == "sample-current-canonical"
     assert latest.raw_value == 42
@@ -266,9 +265,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert_receive {:telemetry_storage_envelopes, [_conflict_envelope]}
 
     latest =
-      Cadence.latest_telemetry_value("mission-storage-current", "HK.counter",
-        spacecraft_id: "sc-1"
-      )
+      TelemetryReads.latest_value("mission-storage-current", "HK.counter", spacecraft_id: "sc-1")
 
     assert latest.sample_id == "sample-current-canonical"
     assert latest.raw_value == 42

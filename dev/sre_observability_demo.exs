@@ -1,4 +1,5 @@
 defmodule Cadence.Dev.SreObservabilityDemo do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -462,7 +463,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       fn ->
         now = DateTime.utc_now()
 
-        case Cadence.telemetry_history_result(
+        case TelemetryReads.sample_history_result(
                ids.organization_id,
                ids.mission_id,
                "SRE_DEMO_HOUSEKEEPING.uptime_seconds",

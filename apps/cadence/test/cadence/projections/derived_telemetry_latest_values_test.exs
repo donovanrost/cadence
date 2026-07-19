@@ -1,4 +1,5 @@
 defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
+  alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -38,15 +39,15 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
     assert {:ok, derived_run} = Cadence.evaluate_derived_telemetry("mission-alpha")
     assert derived_run.status == :completed
 
-    assert Cadence.latest_derived_telemetry_value("mission-alpha", "DERIVED.counter_double").value ==
+    assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==
              50
 
     Repo.delete_all(DerivedTelemetryLatestValueRow)
 
-    assert Cadence.latest_derived_telemetry_value("mission-alpha", "DERIVED.counter_double") ==
+    assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double") ==
              nil
 
-    assert Cadence.latest_derived_telemetry_values("mission-alpha") == []
+    assert DerivedTelemetryReads.latest_values_for_mission("mission-alpha") == []
 
     assert {:ok, rebuild_run} =
              Cadence.start_rebuild_latest_derived_telemetry_values("mission-alpha")
@@ -73,10 +74,10 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
     assert completed_run.status == :completed
     assert completed_run.rebuilt_value_count == 1
 
-    assert Cadence.latest_derived_telemetry_value("mission-alpha", "DERIVED.counter_double").value ==
+    assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==
              50
 
-    assert Cadence.latest_derived_telemetry_values("mission-alpha")
+    assert DerivedTelemetryReads.latest_values_for_mission("mission-alpha")
            |> Enum.map(fn sample -> {sample.point_id, sample.value} end) == [
              {"DERIVED.counter_double", 50}
            ]

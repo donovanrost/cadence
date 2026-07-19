@@ -1,4 +1,5 @@
 defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
 
   import ExUnit.Assertions
@@ -67,7 +68,10 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     evaluate_limit_events!(org, mission, spacecraft)
 
     [older_sample, latest_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -360,7 +364,7 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     evaluate_limit_events!(org, replay_policy_mission, replay_policy_spacecraft)
 
     [replay_older_sample, replay_latest_sample] =
-      Cadence.telemetry_history(
+      TelemetryReads.sample_history(
         org.organization_id,
         replay_policy_mission.mission_id,
         "HK.counter",

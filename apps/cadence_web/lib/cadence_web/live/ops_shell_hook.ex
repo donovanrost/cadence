@@ -1,4 +1,6 @@
 defmodule CadenceWeb.OpsShellHook do
+  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
+
   @moduledoc """
   on_mount hook for the ops console live_session: loads the assigns the
   `:ops` layout's status bar and nav rail render, so each ops LiveView does
@@ -15,7 +17,7 @@ defmodule CadenceWeb.OpsShellHook do
      socket
      |> assign(
        :fleet_health,
-       Cadence.mission_health_summary(scope.organization_id, mission.mission_id, [])
+       MissionHealthReads.summary(scope.organization_id, mission.mission_id, [])
      )
      |> assign(
        :ops_dashboards,

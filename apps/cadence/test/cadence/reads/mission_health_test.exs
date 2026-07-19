@@ -1,4 +1,5 @@
 defmodule Cadence.Reads.MissionHealthTest do
+  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -47,7 +48,7 @@ defmodule Cadence.Reads.MissionHealthTest do
     assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(mission_id)
     assert limit_run.status == :completed
 
-    summary = Cadence.mission_health_summary(organization_id, mission_id, [])
+    summary = MissionHealthReads.summary(organization_id, mission_id, [])
 
     assert summary.total_points == 6
     assert summary.violating_points == 4
@@ -104,7 +105,7 @@ defmodule Cadence.Reads.MissionHealthTest do
     assert limit_run.status == :completed
 
     summary =
-      Cadence.mission_health_summary(organization_id, mission_id, spacecraft_id: "sc-001")
+      MissionHealthReads.summary(organization_id, mission_id, spacecraft_id: "sc-001")
 
     assert summary.total_points == 2
     assert summary.violating_points == 2

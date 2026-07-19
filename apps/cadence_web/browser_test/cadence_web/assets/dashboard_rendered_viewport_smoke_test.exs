@@ -23,6 +23,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Dashboards.DataSources
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias CadenceWeb.TestFixtures
   alias CadenceWeb.Assets.DashboardAuthenticatedRouteScenario
 
@@ -66,7 +67,10 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100)
 
     [older_sample, _latest_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )

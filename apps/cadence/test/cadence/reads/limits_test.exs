@@ -1,4 +1,5 @@
 defmodule Cadence.Reads.LimitsTest do
+  alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.DataCase, async: false
 
   alias Cadence.Limits.{Definition, Event}
@@ -171,13 +172,13 @@ defmodule Cadence.Reads.LimitsTest do
              |> Repo.insert()
 
     latest_live =
-      Cadence.latest_telemetry_limit_state(@organization_id, mission_id, "HK.counter", [])
+      LimitReads.latest_state(@organization_id, mission_id, "HK.counter", [])
 
     assert latest_live.limit_event_id == "limit-live-latest"
     assert latest_live.evaluated_value == 20
 
     latest_replay =
-      Cadence.latest_telemetry_limit_state(@organization_id, mission_id, "HK.counter",
+      LimitReads.latest_state(@organization_id, mission_id, "HK.counter",
         realm: :replay,
         replay_run_id: "replay-run-1"
       )

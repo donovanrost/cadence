@@ -1,4 +1,5 @@
 defmodule CadenceWeb.TelemetryController do
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb, :controller
 
   action_fallback CadenceWeb.FallbackController
@@ -17,7 +18,7 @@ defmodule CadenceWeb.TelemetryController do
            ),
          {:ok, opts} <- ControlPlaneParams.telemetry_latest_filters(params) do
       latest_values =
-        Cadence.latest_telemetry_values(organization_id, mission_id, opts)
+        TelemetryReads.latest_values_for_mission(organization_id, mission_id, opts)
         |> Enum.map(&ControlPlaneJSON.telemetry_sample/1)
 
       json(conn, %{data: latest_values})
@@ -39,7 +40,8 @@ defmodule CadenceWeb.TelemetryController do
              mission_id
            ),
          {:ok, opts} <- ControlPlaneParams.telemetry_latest_filters(params) do
-      latest_value = Cadence.latest_telemetry_value(organization_id, mission_id, point_id, opts)
+      latest_value =
+        TelemetryReads.latest_value(organization_id, mission_id, point_id, opts)
 
       json(conn, %{data: latest_value && ControlPlaneJSON.telemetry_sample(latest_value)})
     end
@@ -61,7 +63,7 @@ defmodule CadenceWeb.TelemetryController do
            ),
          {:ok, opts} <- ControlPlaneParams.telemetry_history_filters(params) do
       history =
-        Cadence.telemetry_history(organization_id, mission_id, point_id, opts)
+        TelemetryReads.sample_history(organization_id, mission_id, point_id, opts)
         |> Enum.map(&ControlPlaneJSON.telemetry_sample/1)
 
       json(conn, %{data: history})

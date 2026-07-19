@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveRefresh do
+  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   @moduledoc false
 
   import Phoenix.Component, only: [assign: 3]
@@ -62,7 +63,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveRefresh do
   defp mission_health_summary(organization_id, mission_id, opts) do
     case Keyword.get(opts, :mission_health_summary) do
       callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> Cadence.mission_health_summary(organization_id, mission_id, [])
+      _missing -> MissionHealthReads.summary(organization_id, mission_id, [])
     end
   end
 

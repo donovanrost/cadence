@@ -21,6 +21,7 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
   alias Cadence.Dashboards.DataSources
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.WidgetDef
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
   alias CadenceWeb.TestFixtures
@@ -81,7 +82,10 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
     )
 
     [initial_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -253,7 +257,10 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
     )
 
     [initial_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
@@ -425,7 +432,10 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
     )
 
     [corrected_initial_sample] =
-      Cadence.telemetry_history(org.organization_id, mission.mission_id, "HK.counter",
+      TelemetryReads.sample_history(
+        org.organization_id,
+        mission.mission_id,
+        "HK.counter",
         spacecraft_id: spacecraft.spacecraft_id,
         order: :asc
       )
