@@ -758,7 +758,11 @@ correction-task and replacement-job parsing plus derived summaries from the
 leaving action selection and closure-readiness policy in the parent. Moving
 spacecraft, contact, mission-event, and mission-health response shaping out of
 the 1,297-line control-plane JSON module reduced the count to 24 while
-preserving its public serializer functions as delegates.
+preserving its public serializer functions as delegates. Extracting credential
+verification, bootstrap administration, durable-user lookup, and browser-session
+persistence from the 1,334-line Accounts context reduced the count to 23 while
+keeping its public authentication API on the context facade and leaving
+membership and invitation workflows context-owned.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
