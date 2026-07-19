@@ -332,7 +332,7 @@ defmodule Cadence.ReplayTest do
              :eq
 
     replay_runtime_events =
-      Cadence.list_operational_events(mission_id,
+      Cadence.OperationalEvents.list_events(mission_id,
         category: :runtime,
         replay_run_id: replay_run.replay_run_id,
         limit: 20,

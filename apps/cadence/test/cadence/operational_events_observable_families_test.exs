@@ -47,7 +47,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              |> OperationalEvents.persist_event()
 
     [slewing, tracking] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "ground.station.antenna_pointing_state",
         resource_id: "dss-14",
         order: :asc
@@ -115,7 +117,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              |> OperationalEvents.persist_event()
 
     [live_interval] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: "transport-alpha",
         order: :asc
@@ -132,7 +136,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert live_interval.payload["replay_run_id"] == nil
 
     [replay_first, replay_second] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: "transport-alpha",
         replay_run_id: "replay-run-1",
@@ -155,7 +161,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert replay_second.ends_at == nil
 
     [other_replay_interval] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: "transport-alpha",
         replay_run_id: "replay-run-2",
@@ -217,19 +225,19 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     end
 
     assert [connection_event] =
-             Cadence.list_operational_events(organization_id, mission_id,
+             Cadence.OperationalEvents.list_events(organization_id, mission_id,
                source_record_kind: :connection_state_snapshot,
                source_record_id: "shared-state-snapshot"
              )
 
     assert [rf_lock_event] =
-             Cadence.list_operational_events(organization_id, mission_id,
+             Cadence.OperationalEvents.list_events(organization_id, mission_id,
                source_record_kind: :link_rf_lock_state_snapshot,
                source_record_id: "shared-state-snapshot"
              )
 
     assert [frame_sync_event] =
-             Cadence.list_operational_events(organization_id, mission_id,
+             Cadence.OperationalEvents.list_events(organization_id, mission_id,
                source_record_kind: :link_frame_sync_state_snapshot,
                source_record_id: "shared-state-snapshot"
              )
@@ -244,7 +252,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              "operational_event:link_frame_sync_state_snapshot:shared-state-snapshot"
 
     [rf_lock_interval] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "link.rf_lock_state",
         resource_id: "link-alpha"
       )
@@ -253,7 +263,9 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert rf_lock_interval.metadata["source_record_kind"] == :link_rf_lock_state_snapshot
 
     [frame_sync_interval] =
-      Cadence.operational_observable_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        organization_id,
+        mission_id,
         observable_id: "link.frame_sync_state",
         resource_id: "link-alpha"
       )
@@ -336,7 +348,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              |> OperationalEvents.persist_event()
 
     [live_lock] =
-      Cadence.operational_link_rf_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(organization_id, mission_id,
         observable_id: "link.rf_lock_state",
         resource_id: "link-alpha",
         order: :asc
@@ -356,7 +368,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert live_lock.metadata["source_record_kind"] == :link_rf_lock_state_snapshot
 
     [replay_lock_first, replay_frame_sync, replay_lock_second] =
-      Cadence.operational_link_rf_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(organization_id, mission_id,
         resource_id: "link-alpha",
         replay_run_id: "replay-run-1",
         order: :asc
@@ -382,7 +394,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert replay_lock_second.ends_at == nil
 
     [other_replay_lock] =
-      Cadence.operational_link_rf_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(organization_id, mission_id,
         observable_id: "link.rf_lock_state",
         resource_id: "link-alpha",
         replay_run_id: "replay-run-2",
@@ -392,7 +404,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert other_replay_lock.payload["rf_lock_state"] == "unlocked"
 
     [family_filtered] =
-      Cadence.operational_link_rf_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(organization_id, mission_id,
         rf_state_family: :frame_sync,
         replay_run_id: "replay-run-1"
       )
@@ -462,7 +474,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              |> OperationalEvents.persist_event()
 
     [live_transport] =
-      Cadence.operational_connection_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(organization_id, mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: "transport-alpha",
         order: :asc
@@ -482,7 +494,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert live_transport.metadata["source_record_kind"] == :connection_state_snapshot
 
     [replay_transport_first, replay_ground_station, replay_transport_second] =
-      Cadence.operational_connection_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(organization_id, mission_id,
         replay_run_id: "replay-run-1",
         order: :asc
       )
@@ -512,7 +524,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert replay_transport_second.ends_at == nil
 
     [other_replay_transport] =
-      Cadence.operational_connection_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(organization_id, mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: "transport-alpha",
         replay_run_id: "replay-run-2",
@@ -522,7 +534,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert other_replay_transport.payload["connection_state"] == "disconnected"
 
     [family_filtered] =
-      Cadence.operational_connection_state_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(organization_id, mission_id,
         connection_state_family: :ground_station,
         replay_run_id: "replay-run-1"
       )
@@ -579,7 +591,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
              |> OperationalEvents.persist_event()
 
     [live_sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.snr_db",
         resource_id: "link-alpha",
         order: :asc
@@ -592,7 +604,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert Map.get(live_sample, :replay_run_id) == nil
 
     [replay_first, replay_second] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.snr_db",
         resource_id: "link-alpha",
         replay_run_id: "replay-run-1",
@@ -608,7 +620,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert replay_second.observed_at == ~U[2026-06-30 12:03:00Z]
 
     [other_replay_sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.snr_db",
         resource_id: "link-alpha",
         replay_run_id: "replay-run-2",
@@ -644,7 +656,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert {:ok, _event} = OperationalEvents.persist_event(event)
 
     [sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "comms.transport.uplink_bitrate",
         resource_id: "transport-alpha"
       )
@@ -684,7 +696,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert {:ok, _event} = OperationalEvents.persist_event(event)
 
     [sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.eb_n0_db",
         resource_id: "link-alpha"
       )
@@ -725,7 +737,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert {:ok, _event} = OperationalEvents.persist_event(event)
 
     [sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.symbol_rate_sps",
         resource_id: "link-alpha"
       )
@@ -766,7 +778,7 @@ defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
     assert {:ok, _event} = OperationalEvents.persist_event(event)
 
     [sample] =
-      Cadence.operational_observable_metric_samples(organization_id, mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(organization_id, mission_id,
         observable_id: "link.doppler_hz",
         resource_id: "link-alpha"
       )

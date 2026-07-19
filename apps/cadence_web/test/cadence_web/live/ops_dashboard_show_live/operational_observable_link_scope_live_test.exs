@@ -301,13 +301,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
              |> OperationalEvents.persist_event()
 
     [rf_lock_interval] =
-      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(org.organization_id, mission.mission_id,
         observable_id: "link.rf_lock_state",
         resource_id: "link-alpha"
       )
 
     [frame_sync_interval] =
-      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(org.organization_id, mission.mission_id,
         observable_id: "link.frame_sync_state",
         resource_id: "link-alpha"
       )

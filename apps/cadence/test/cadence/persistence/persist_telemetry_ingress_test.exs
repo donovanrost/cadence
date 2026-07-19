@@ -518,7 +518,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert Enum.all?(latency_events, &(Map.get(&1.metadata, "end_to_end_us") > 0))
 
     latency_samples =
-      Cadence.operational_observable_metric_samples("mission-alpha",
+      Cadence.OperationalEvents.operational_observable_metric_samples("mission-alpha",
         observable_id: "ingress.processing_latency_ms",
         source_endpoint_id: "endpoint-archived-gap",
         order: :asc

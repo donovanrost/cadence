@@ -99,7 +99,7 @@ defmodule Cadence.Dashboards.SourceHealthTest do
     assert first_event.source_health == :unavailable
 
     assert [operational_event] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                @organization_id,
                @mission_id,
                category: :data_source,

@@ -44,7 +44,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
              |> OperationalEvents.persist_event()
 
     [ground_station_interval] =
-      Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(
+        org.organization_id,
+        mission.mission_id,
         observable_id: "ground.station.connection_state",
         resource_id: "dss-14",
         replay_run_id: replay_run_id
@@ -99,7 +101,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
              |> OperationalEvents.persist_event()
 
     [transport_execution_interval] =
-      Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(
+        org.organization_id,
+        mission.mission_id,
         capability_instance_id: transport.transport_id,
         replay_run_id: replay_run_id,
         order: :asc
@@ -737,14 +741,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
              |> OperationalEvents.persist_event()
 
     [rf_lock_interval] =
-      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(org.organization_id, mission.mission_id,
         observable_id: "link.rf_lock_state",
         resource_id: "link-alpha",
         replay_run_id: replay_run_id
       )
 
     [frame_sync_interval] =
-      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.link_rf_state_intervals(org.organization_id, mission.mission_id,
         observable_id: "link.frame_sync_state",
         resource_id: "link-alpha",
         replay_run_id: replay_run_id

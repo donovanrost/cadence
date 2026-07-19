@@ -381,7 +381,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
              |> OperationalEvents.persist_event()
 
     [connection_interval] =
-      Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(
+        org.organization_id,
+        mission.mission_id,
         observable_id: "comms.transport.connection_state",
         resource_id: transport.transport_id,
         replay_run_id: replay_run_id
@@ -747,7 +749,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
              |> OperationalEvents.persist_event()
 
     [antenna_pointing_interval] =
-      Cadence.operational_observable_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.operational_observable_state_intervals(
+        org.organization_id,
+        mission.mission_id,
         observable_id: "ground.station.antenna_pointing_state",
         resource_id: "dss-14",
         replay_run_id: replay_run_id

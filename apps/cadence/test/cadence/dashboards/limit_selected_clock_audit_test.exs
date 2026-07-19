@@ -82,7 +82,7 @@ defmodule Cadence.Dashboards.LimitSelectedClockAuditTest do
              )
 
     assert [event] =
-             Cadence.list_operational_events(@organization_id, @mission_id,
+             Cadence.OperationalEvents.list_events(@organization_id, @mission_id,
                category: :limits,
                kind: :dashboard_limit_selected_clock,
                subject_kind: :telemetry_point,

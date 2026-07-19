@@ -44,7 +44,7 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
              )
 
     assert [operational_event] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                @organization_id,
                @mission_id,
                category: :limits,

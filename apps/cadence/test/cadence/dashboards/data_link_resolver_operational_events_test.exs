@@ -815,7 +815,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalEventsTest do
              )
 
     operational_event_id = Event.from_source_health_event(source_health_event).event_id
-    assert {:ok, _operational_event} = Cadence.fetch_operational_event(operational_event_id)
+    assert {:ok, _operational_event} = Cadence.OperationalEvents.fetch_event(operational_event_id)
 
     link = %DataLink{
       label: "Source health operational event",

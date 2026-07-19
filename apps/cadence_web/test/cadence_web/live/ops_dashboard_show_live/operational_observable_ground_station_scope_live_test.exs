@@ -234,7 +234,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
              |> OperationalEvents.persist_event()
 
     [ground_station_interval] =
-      Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.connection_state_intervals(
+        org.organization_id,
+        mission.mission_id,
         observable_id: "ground.station.connection_state",
         resource_id: dss_14.ground_station_id
       )

@@ -103,7 +103,7 @@ defmodule Cadence.Dashboards.SourceWatermarksTest do
     assert first_event.event_type == :observed
 
     assert [operational_event] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                @organization_id,
                @mission_id,
                category: :data_source,

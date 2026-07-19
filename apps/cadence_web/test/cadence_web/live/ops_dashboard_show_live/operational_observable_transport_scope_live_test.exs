@@ -177,7 +177,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
              |> OperationalEvents.persist_event()
 
     [transport_execution_interval] =
-      Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(
+        org.organization_id,
+        mission.mission_id,
         capability_instance_id: transport.transport_id,
         order: :asc
       )

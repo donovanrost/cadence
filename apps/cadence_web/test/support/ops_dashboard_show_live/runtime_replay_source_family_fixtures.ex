@@ -1026,7 +1026,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
              )
 
     intervals =
-      Cadence.operational_source_health_intervals(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.source_health_intervals(org.organization_id, mission.mission_id,
         data_source_id: event.data_source_id,
         source_binding_id: event.source_binding_id,
         realm: event.realm,

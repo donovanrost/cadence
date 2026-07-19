@@ -377,7 +377,7 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
     assert LifecycleEvent.details(event).current.published_version == 1
 
     assert [operational_event] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                "org-doc-publish-latest",
                "mission-doc-publish-latest",
                category: :dashboard,

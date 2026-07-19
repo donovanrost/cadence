@@ -97,7 +97,7 @@ defmodule Cadence.Reads.LimitsTest do
              )
 
     assert [_, _] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                @organization_id,
                mission_id,
                category: :limits,

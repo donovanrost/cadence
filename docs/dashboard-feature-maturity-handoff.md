@@ -533,7 +533,7 @@ handoff toward broader canonical runtime/source and replay workflow history.
 
 Current priority-1 movement: source-health transition operational events now
 project to `:source_health` effective intervals through `Cadence.OperationalEvents`
-and the public `Cadence.operational_source_health_intervals/2,3` facade, with
+and its public `Cadence.OperationalEvents.source_health_intervals/2,3` API, with
 focused proof that live, replay-run-1, and replay-run-2 intervals stay isolated
 and retain canonical source event ids. `SourceRegistry` now consumes the active
 source-health interval for operational-observable source reads and carries its

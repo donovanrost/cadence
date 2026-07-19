@@ -289,7 +289,7 @@ defmodule Cadence.CatalogTest do
       assert latest.catalog_revision_id == revision.catalog_revision_id
 
       assert [operational_event] =
-               Cadence.list_operational_events(organization_id(), mission_id(),
+               Cadence.OperationalEvents.list_events(organization_id(), mission_id(),
                  category: :catalog,
                  kind: :catalog_revision_registered,
                  source_record_kind: :catalog_revision,

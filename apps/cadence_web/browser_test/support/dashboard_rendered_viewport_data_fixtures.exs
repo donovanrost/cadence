@@ -132,7 +132,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     assert {:ok, _processing_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence)
 
     [latency_sample | _] =
-      Cadence.operational_observable_metric_samples(org.organization_id, mission.mission_id,
+      Cadence.OperationalEvents.operational_observable_metric_samples(
+        org.organization_id,
+        mission.mission_id,
         observable_id: "ingress.processing_latency_ms",
         source_endpoint_id: source_endpoint_id,
         order: :desc

@@ -75,7 +75,7 @@ defmodule Cadence.OperationalEventsTest do
 
     assert persisted_event.metadata == %{"operator supplied key" => "kept"}
 
-    assert {:ok, fetched_event} = Cadence.fetch_operational_event(event.event_id)
+    assert {:ok, fetched_event} = Cadence.OperationalEvents.fetch_event(event.event_id)
     assert fetched_event.event_id == event.event_id
 
     assert {:ok, scoped_event} =
@@ -92,7 +92,7 @@ defmodule Cadence.OperationalEventsTest do
            )
 
     assert [listed_event] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                category: :runtime,
@@ -133,7 +133,7 @@ defmodule Cadence.OperationalEventsTest do
     assert updated_event.metadata == %{"attempt" => 2}
 
     events =
-      Cadence.list_operational_events(
+      Cadence.OperationalEvents.list_events(
         mission_id,
         source_record_kind: :binding_set_activation,
         source_record_id: "activation-upsert"
@@ -356,7 +356,7 @@ defmodule Cadence.OperationalEventsTest do
     assert {:ok, _event} = OperationalEvents.persist_event(watermark_replay_two)
 
     assert [listed_health] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                source_record_kind: :source_health_event,
@@ -365,7 +365,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert [listed_watermark] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                source_record_kind: :source_watermark_event,
@@ -441,7 +441,7 @@ defmodule Cadence.OperationalEventsTest do
              |> OperationalEvents.persist_event()
 
     [live_interval] =
-      Cadence.operational_source_health_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_health_intervals(organization_id, mission_id,
         data_source_id: "live-questdb",
         order: :asc
       )
@@ -455,7 +455,7 @@ defmodule Cadence.OperationalEventsTest do
     assert live_interval.payload["replay_run_id"] == nil
 
     [replay_first, replay_second] =
-      Cadence.operational_source_health_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_health_intervals(organization_id, mission_id,
         data_source_id: "replay-questdb",
         replay_run_id: "replay-run-1",
         order: :asc
@@ -482,7 +482,7 @@ defmodule Cadence.OperationalEventsTest do
     assert replay_second.payload["replay_run_id"] == "replay-run-1"
 
     [other_replay_interval] =
-      Cadence.operational_source_health_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_health_intervals(organization_id, mission_id,
         data_source_id: "replay-questdb",
         replay_run_id: "replay-run-2",
         order: :asc
@@ -551,7 +551,7 @@ defmodule Cadence.OperationalEventsTest do
     assert {:ok, _event} = OperationalEvents.persist_event(timer_replay_two)
 
     assert [listed_capability] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                source_record_kind: :transport_capability_record,
@@ -560,7 +560,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert [listed_action] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                source_record_kind: :transport_action_request,
@@ -569,7 +569,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert [listed_timer] =
-             Cadence.list_operational_events(
+             Cadence.OperationalEvents.list_events(
                organization_id,
                mission_id,
                source_record_kind: :transport_timer_event,
@@ -622,7 +622,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     [first_interval, second_interval] =
-      Cadence.operational_binding_set_intervals(organization_id, mission_id, order: :asc)
+      Cadence.OperationalEvents.binding_set_intervals(organization_id, mission_id, order: :asc)
 
     assert first_interval.kind == :binding_set
     assert first_interval.subject_kind == :binding_set
@@ -638,7 +638,7 @@ defmodule Cadence.OperationalEventsTest do
     assert is_nil(second_interval.superseded_by_event_id)
 
     [active_before_second] =
-      Cadence.operational_binding_set_intervals(
+      Cadence.OperationalEvents.binding_set_intervals(
         organization_id,
         mission_id,
         at: DateTime.from_unix!(1_700_060_150, :second)
@@ -647,7 +647,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_before_second.subject_id == first_binding_set.binding_set_id
 
     [active_after_second] =
-      Cadence.operational_binding_set_intervals(
+      Cadence.OperationalEvents.binding_set_intervals(
         organization_id,
         mission_id,
         at: DateTime.from_unix!(1_700_060_250, :second)
@@ -656,7 +656,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_after_second.subject_id == second_binding_set.binding_set_id
 
     assert [^first_interval] =
-             Cadence.operational_binding_set_intervals(
+             Cadence.OperationalEvents.binding_set_intervals(
                organization_id,
                mission_id,
                binding_set_id: first_binding_set.binding_set_id
@@ -711,7 +711,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     [first_interval, second_interval] =
-      Cadence.operational_application_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.application_binding_intervals(organization_id, mission_id,
         source_endpoint_ref: "endpoint-sc-001",
         application_key: :packet_counter,
         order: :asc
@@ -745,7 +745,7 @@ defmodule Cadence.OperationalEventsTest do
     assert second_interval.payload["apid"] == 43
 
     [active_before_second] =
-      Cadence.operational_application_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.application_binding_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 20:30:00Z],
         target_scope: :source_endpoint
       )
@@ -753,7 +753,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_before_second.payload["binding_set_id"] == "runtime-apps-a"
 
     [active_after_second] =
-      Cadence.operational_application_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.application_binding_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 21:30:00Z],
         capability_instance_id: "runtime-apps-b-packet-counter"
       )
@@ -801,7 +801,7 @@ defmodule Cadence.OperationalEventsTest do
              |> OperationalEvents.persist_event()
 
     [first_interval, second_interval] =
-      Cadence.operational_catalog_revision_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.catalog_revision_intervals(organization_id, mission_id,
         catalog_database_id: "bus-catalog",
         order: :asc
       )
@@ -826,7 +826,7 @@ defmodule Cadence.OperationalEventsTest do
     assert second_interval.payload["revision_number"] == 2
 
     [active_before_second] =
-      Cadence.operational_catalog_revision_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.catalog_revision_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 20:30:00Z],
         catalog_family: :telemetry
       )
@@ -834,7 +834,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_before_second.subject_id == "catalog-revision-a"
 
     [active_after_second] =
-      Cadence.operational_catalog_revision_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.catalog_revision_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 21:30:00Z],
         catalog_revision_id: "catalog-revision-b"
       )
@@ -907,7 +907,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     [first_interval, second_interval] =
-      Cadence.operational_source_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_binding_intervals(organization_id, mission_id,
         binding_id: "interval-flight-telemetry",
         order: :asc
       )
@@ -936,7 +936,7 @@ defmodule Cadence.OperationalEventsTest do
     assert second_interval.metadata["source_record_id"] == changed.current_event_id
 
     [active_before_change] =
-      Cadence.operational_source_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_binding_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 20:30:00Z],
         logical_source: :telemetry,
         realm: :flight
@@ -945,7 +945,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_before_change.payload["data_source_id"] == "interval-questdb-v1"
 
     [active_after_change] =
-      Cadence.operational_source_binding_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.source_binding_intervals(organization_id, mission_id,
         at: ~U[2026-06-21 21:30:00Z],
         data_source_id: "interval-questdb-v2"
       )
@@ -1000,7 +1000,7 @@ defmodule Cadence.OperationalEventsTest do
              |> OperationalEvents.persist_event()
 
     [first_interval, second_interval] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         capability_instance_id: "uplink-heartbeat",
         order: :asc
       )
@@ -1037,7 +1037,7 @@ defmodule Cadence.OperationalEventsTest do
     assert is_nil(second_interval.ends_at)
 
     [active_before_control] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         at: ~U[2026-06-30 12:03:00Z],
         capability_instance_id: "uplink-heartbeat"
       )
@@ -1045,7 +1045,7 @@ defmodule Cadence.OperationalEventsTest do
     assert active_before_control.payload["transport_record_id"] == "transport-record-1"
 
     [paused_interval] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         event_kind: :control_input_handled
       )
 
@@ -1053,7 +1053,7 @@ defmodule Cadence.OperationalEventsTest do
     assert paused_interval.payload["record_metadata"] == %{"interaction" => "control_input"}
 
     [downlink_interval] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         path_id: "downlink-path-alpha"
       )
 
@@ -1120,7 +1120,7 @@ defmodule Cadence.OperationalEventsTest do
              |> OperationalEvents.persist_event()
 
     [live_interval] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         capability_instance_id: "uplink-heartbeat",
         order: :asc
       )
@@ -1129,7 +1129,7 @@ defmodule Cadence.OperationalEventsTest do
     assert live_interval.ends_at == nil
 
     [replay_first, replay_second] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         capability_instance_id: "uplink-heartbeat",
         replay_run_id: "replay-run-1",
         order: :asc
@@ -1152,7 +1152,7 @@ defmodule Cadence.OperationalEventsTest do
     assert replay_second.payload["replay_run_id"] == "replay-run-1"
 
     [other_replay_interval] =
-      Cadence.operational_transport_execution_intervals(organization_id, mission_id,
+      Cadence.OperationalEvents.transport_execution_intervals(organization_id, mission_id,
         capability_instance_id: "uplink-heartbeat",
         replay_run_id: "replay-run-2",
         order: :asc

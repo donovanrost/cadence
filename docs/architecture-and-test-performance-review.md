@@ -1540,6 +1540,15 @@ configuration API routes remain in the authenticated API pipeline, while Comms,
 mission, and operations pages remain in their existing authenticated LiveView
 sessions; production source-size pressure remains 4 and dependency ratchets
 are unchanged.
+Retiring the 23 operational-event query and effective-interval projection
+clauses from the root facade moved 82 test and browser-fixture call sites
+directly to `Cadence.OperationalEvents` and updated the remaining dashboard
+maturity handoff reference. This reduced `Cadence` from 2,655 to 2,480 lines;
+production web callers of the root facade remain at 28 files because production
+already used the owning context. The mission-events API remains in the
+authenticated API pipeline, and dashboard evidence remains in the authenticated
+`:ops` LiveView session; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

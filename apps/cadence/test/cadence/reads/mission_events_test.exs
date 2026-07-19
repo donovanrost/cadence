@@ -241,7 +241,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert activation_event.metadata["change_request"] == "CR-17"
 
     [operational_event] =
-      Cadence.list_operational_events(
+      Cadence.OperationalEvents.list_events(
         organization_id,
         mission_id,
         kind: :binding_set_activated,
