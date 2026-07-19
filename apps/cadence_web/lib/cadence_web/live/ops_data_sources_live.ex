@@ -18,6 +18,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   }
 
   alias CadenceWeb.OpsDataSourcesLive.{
+    SourceActivityPresentation,
     SourceContract,
     SourceFocus,
     SourceFocusPresentation,
@@ -1165,10 +1166,22 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     |> assign(:source_readiness_policy, readiness_policy_row(readiness_policy))
     |> assign(:binding_groups, binding_groups)
     |> assign(:source_rows, source_rows)
-    |> assign(:deployment_run_rows, Enum.map(deployment_runs, &deployment_run_row/1))
-    |> assign(:binding_event_rows, Enum.map(binding_events, &binding_event_row/1))
-    |> assign(:source_event_rows, Enum.map(source_events, &source_event_row/1))
-    |> assign(:source_health_event_rows, Enum.map(health_events, &source_health_event_row/1))
+    |> assign(
+      :deployment_run_rows,
+      Enum.map(deployment_runs, &SourceActivityPresentation.deployment_run_row/1)
+    )
+    |> assign(
+      :binding_event_rows,
+      Enum.map(binding_events, &SourceActivityPresentation.binding_event_row/1)
+    )
+    |> assign(
+      :source_event_rows,
+      Enum.map(source_events, &SourceActivityPresentation.source_event_row/1)
+    )
+    |> assign(
+      :source_health_event_rows,
+      Enum.map(health_events, &SourceActivityPresentation.source_health_event_row/1)
+    )
     |> assign_source_focus_state()
   end
 
@@ -2065,18 +2078,35 @@ defmodule CadenceWeb.OpsDataSourcesLive do
           readiness_status: readiness_status(readiness),
           readiness_policy_id: text(readiness.policy_id),
           readiness_reason: readiness_reason_text(readiness),
-          probe_kind: probe_payload_text(health.status, :probe_kind),
-          probe_message: probe_payload_text(health.status, :probe_message),
-          probe_metadata: probe_metadata_summary(health.status),
+          probe_kind: SourceActivityPresentation.probe_payload_text(health.status, :probe_kind),
+          probe_message:
+            SourceActivityPresentation.probe_payload_text(health.status, :probe_message),
+          probe_metadata: SourceActivityPresentation.probe_metadata_summary(health.status),
           probe_diagnostic_kind:
-            probe_metadata_payload_text(health.status, :probe_diagnostic_kind),
+            SourceActivityPresentation.probe_metadata_payload_text(
+              health.status,
+              :probe_diagnostic_kind
+            ),
           probe_diagnostic_stage:
-            probe_metadata_payload_text(health.status, :probe_diagnostic_stage),
-          probe_remediation: probe_metadata_payload_text(health.status, :probe_remediation),
-          connection_test_result: probe_payload_text(health.status, :connection_test_result),
-          connection_test_kind: probe_payload_text(health.status, :connection_test_kind),
-          connection_test_message: probe_payload_text(health.status, :connection_test_message),
-          connection_profile: source_connection_profile(health.status)
+            SourceActivityPresentation.probe_metadata_payload_text(
+              health.status,
+              :probe_diagnostic_stage
+            ),
+          probe_remediation:
+            SourceActivityPresentation.probe_metadata_payload_text(
+              health.status,
+              :probe_remediation
+            ),
+          connection_test_result:
+            SourceActivityPresentation.probe_payload_text(health.status, :connection_test_result),
+          connection_test_kind:
+            SourceActivityPresentation.probe_payload_text(health.status, :connection_test_kind),
+          connection_test_message:
+            SourceActivityPresentation.probe_payload_text(
+              health.status,
+              :connection_test_message
+            ),
+          connection_profile: SourceActivityPresentation.connection_profile(health.status)
         }
 
       [] ->
@@ -2158,138 +2188,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       "superseded" in statuses -> "superseded"
       true -> "unknown"
     end
-  end
-
-  defp deployment_run_row(run) do
-    %{
-      job_id: run.job_id,
-      run_id: run.run_id,
-      data_source_id: run.data_source_id,
-      status_text: run.status_text,
-      mode_text: run.mode_text,
-      backend_text: run.backend_text,
-      physical_boundary_text: run.physical_boundary_text,
-      attempt_count_text: text(run.attempt_count),
-      failure_summary: run.failure_summary,
-      started_at_text: text(run.started_at),
-      completed_at_text: text(run.completed_at),
-      remediation: run.remediation
-    }
-  end
-
-  defp binding_event_row(event) do
-    %{
-      id: "binding-event-#{event.data_binding_event_id}",
-      event_type: text(event.event_type),
-      title: "#{text(event.event_type)} #{event.binding_id}",
-      subtitle:
-        "#{text(event.current_logical_source)} / #{text(event.current_realm)} -> #{event.current_data_source_id}",
-      occurred_at: text(event.occurred_at)
-    }
-  end
-
-  defp source_event_row(event) do
-    %{
-      id: "source-event-#{event.data_source_event_id}",
-      event_type: text(event.event_type),
-      title: "#{text(event.event_type)} #{event.data_source_id}",
-      subtitle:
-        "#{module_text(event.current_adapter)} / #{text(event.current_kind)} / #{text(event.current_isolation_level)}",
-      occurred_at: text(event.occurred_at)
-    }
-  end
-
-  defp source_health_event_row(event) do
-    %{
-      id: "source-health-event-#{event.source_health_event_id}",
-      event_type: text(event.event_type),
-      title: "#{text(event.source_health)} #{text(event.logical_source)}",
-      subtitle: "#{event.data_source_id} / #{text(event.realm)} / #{text(event.reason)}",
-      occurred_at: text(event.observed_at),
-      probe_kind: probe_payload_text(event, :probe_kind),
-      probe_message: probe_payload_text(event, :probe_message),
-      probe_metadata: probe_metadata_summary(event),
-      probe_diagnostic_kind: probe_metadata_payload_text(event, :probe_diagnostic_kind),
-      probe_diagnostic_stage: probe_metadata_payload_text(event, :probe_diagnostic_stage),
-      probe_remediation: probe_metadata_payload_text(event, :probe_remediation),
-      connection_test_result: probe_payload_text(event, :connection_test_result),
-      connection_test_kind: probe_payload_text(event, :connection_test_kind),
-      connection_test_message: probe_payload_text(event, :connection_test_message)
-    }
-  end
-
-  defp probe_payload_text(source_health, key) do
-    source_health
-    |> probe_payload_value(key)
-    |> text()
-  end
-
-  defp probe_payload_value(%{payload: payload}, key) when is_map(payload) do
-    Map.get(payload, Atom.to_string(key), Map.get(payload, key))
-  end
-
-  defp probe_payload_value(_source_health, _key), do: nil
-
-  defp probe_metadata_payload_text(source_health, key) do
-    source_health
-    |> probe_payload_value(:probe_metadata)
-    |> metadata_value(key)
-    |> text()
-  end
-
-  defp probe_metadata_summary(source_health) do
-    case probe_payload_value(source_health, :probe_metadata) do
-      metadata when is_map(metadata) and map_size(metadata) > 0 ->
-        metadata
-        |> Enum.map(fn {key, value} -> "#{key}=#{safe_probe_metadata_value(key, value)}" end)
-        |> Enum.sort()
-        |> Enum.join(" ")
-
-      _other ->
-        "none"
-    end
-  end
-
-  defp safe_probe_metadata_value(key, _value)
-       when key in [
-              :access_key,
-              :api_key,
-              :api_token,
-              :apikey,
-              :bearer_token,
-              :credential,
-              :credentials,
-              :password,
-              :passwd,
-              :secret,
-              :secret_key,
-              :token,
-              "access_key",
-              "api_key",
-              "api_token",
-              "apikey",
-              "bearer_token",
-              "credential",
-              "credentials",
-              "password",
-              "passwd",
-              "secret",
-              "secret_key",
-              "token"
-            ],
-       do: "redacted"
-
-  defp safe_probe_metadata_value(_key, value) when is_boolean(value), do: to_string(value)
-  defp safe_probe_metadata_value(_key, nil), do: "none"
-  defp safe_probe_metadata_value(_key, value) when is_binary(value), do: value
-  defp safe_probe_metadata_value(_key, value) when is_atom(value), do: Atom.to_string(value)
-  defp safe_probe_metadata_value(_key, value) when is_number(value), do: to_string(value)
-  defp safe_probe_metadata_value(_key, _value), do: "complex"
-
-  defp source_connection_profile(source_health) do
-    source_health
-    |> probe_payload_value(:probe_metadata)
-    |> metadata_value(:source_connection_profile)
   end
 
   defp source_credential_rollup(%DataSource{credentials_ref: nil}, _credential, _profile) do

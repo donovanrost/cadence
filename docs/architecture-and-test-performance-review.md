@@ -1740,6 +1740,15 @@ mission, then performs credential and source persistence with the current
 actor. Direct tests cover BYO and managed payloads, validation failures, and
 form options. The authenticated `:ops` route remains unchanged; production
 source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting deployment, binding, source, and source-health activity rows plus
+probe diagnostic normalization into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceActivityPresentation` reduced
+`OpsDataSourcesLive` from 2,477 to 2,375 lines. Source-health rollups reuse the
+same probe payload and connection-profile readers, and direct tests lock down
+atom- and string-keyed secret redaction alongside event and deployment
+formatting. The LiveView retains scoped reads and event orchestration in its
+authenticated `:ops` route; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
