@@ -22,12 +22,7 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
-  @tag :browser
-  test "live multi-source-endpoint operational connection state timeline interval evidence passes browser smoke",
-       %{
-         conn: _conn,
-         sandbox_owner: sandbox_owner
-       } do
+  defp persist_multi_source_endpoint_connection_browser_fixture!(sandbox_owner) do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
@@ -308,6 +303,47 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "source_endpoint", scope_ids: scope_ids, time_mode: "archive", from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      beta_transport: beta_transport,
+      dashboard_url: dashboard_url,
+      dss_14: dss_14,
+      dss_43: dss_43,
+      dss_63: dss_63,
+      gamma_transport: gamma_transport,
+      scope_ids: scope_ids,
+      script: script,
+      user: user
+    }
+  end
+
+  @tag :browser
+  test "live multi-source-endpoint operational connection state timeline interval evidence passes browser smoke",
+       %{
+         conn: _conn,
+         sandbox_owner: sandbox_owner
+       } do
+    fixture = persist_multi_source_endpoint_connection_browser_fixture!(sandbox_owner)
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      beta_transport: beta_transport,
+      dashboard_url: dashboard_url,
+      dss_14: dss_14,
+      dss_43: dss_43,
+      dss_63: dss_63,
+      gamma_transport: gamma_transport,
+      scope_ids: scope_ids,
+      script: script,
+      user: user
+    } = fixture
 
     assert {output, 0} =
              run_dashboard_viewport_smoke(

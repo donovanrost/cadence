@@ -16541,7 +16541,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
 	      await clickAndWaitForSelector(
 	        client,
 	        betaTransportTableRowMenuSelector,
-	        `${betaTransportTableRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
+	        `${betaTransportTableRowSelector} [data-data-table-row-links][data-overlay-open]`,
 	        "multi-scope beta transport data-table row link menu"
 	      )
 

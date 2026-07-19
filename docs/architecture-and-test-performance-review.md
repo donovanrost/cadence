@@ -1335,6 +1335,14 @@ test from 403 to 215 lines and overlong test-function pressure from 5 to 4. The
 authenticated dashboard route and sign-in flow are unchanged; multi-link,
 no-data, unavailable-source, and degraded-source browser outcomes remain
 covered.
+Moving the 298-line multi-source-endpoint topology, observable-history,
+dashboard, and endpoint-startup fixture out of its browser scenario reduced
+that test from 331 to 68 lines and overlong test-function pressure from 4 to 3.
+The file-level browser run also corrected its multi-transport data-table menu
+wait to use the canonical `data-data-table-row-links` and `data-overlay-open`
+contract. The authenticated dashboard route and sign-in flow are unchanged;
+multi-endpoint inclusion, exclusion, and connection-evidence outcomes remain
+covered, and all four connection-aggregation browser scenarios pass.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
