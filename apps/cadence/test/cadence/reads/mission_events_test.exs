@@ -35,8 +35,13 @@ defmodule Cadence.Reads.MissionEventsTest do
     persist_mission_scope(organization_id, mission_id)
 
     on_exit(fn ->
-      Cadence.stop_realized_contact(organization_id, mission_id, "managed-runtime-contact")
-      Cadence.stop_realized_contact(organization_id, mission_id, "transport-contact")
+      Cadence.Contacts.stop_realized_contact(
+        organization_id,
+        mission_id,
+        "managed-runtime-contact"
+      )
+
+      Cadence.Contacts.stop_realized_contact(organization_id, mission_id, "transport-contact")
       Runtime.stop_mission(mission_id)
     end)
 
@@ -442,10 +447,10 @@ defmodule Cadence.Reads.MissionEventsTest do
       })
 
     assert {:ok, _persisted_realized_contact} =
-             Cadence.persist_realized_contact(organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
 
     assert {:ok, _pid} =
-             Cadence.start_realized_contact(
+             Cadence.Contacts.start_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id

@@ -83,7 +83,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
         ]
       })
 
-    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+    assert {:ok, _realized_contact_runtime} =
+             Cadence.Contacts.start_realized_contact(realized_contact)
 
     assert {:ok, contact_snapshot} =
              Cadence.realized_contact_snapshot(mission_id, realized_contact.realized_contact_id)
@@ -391,7 +392,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
         ]
       })
 
-    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+    assert {:ok, _realized_contact_runtime} =
+             Cadence.Contacts.start_realized_contact(realized_contact)
 
     assert {:ok, first_outputs} =
              Cadence.handle_path_transport_event(
@@ -500,7 +502,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
         ]
       })
 
-    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+    assert {:ok, _realized_contact_runtime} =
+             Cadence.Contacts.start_realized_contact(realized_contact)
 
     assert {:ok, contact_snapshot} =
              Cadence.realized_contact_snapshot(mission_id, realized_contact.realized_contact_id)
@@ -534,7 +537,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
         ]
       })
 
-    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+    assert {:ok, _realized_contact_runtime} =
+             Cadence.Contacts.start_realized_contact(realized_contact)
   end
 
   test "rejects command window realized contacts without a selected uplink path", %{
@@ -558,7 +562,7 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
       })
 
     assert {:error, :realized_contact_requires_selected_uplink_path} =
-             Cadence.start_realized_contact(invalid_contact)
+             Cadence.Contacts.start_realized_contact(invalid_contact)
   end
 
   test "rejects realized contacts with multiple selected uplink paths", %{mission_id: mission_id} do
@@ -597,6 +601,6 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
       })
 
     assert {:error, :realized_contact_has_multiple_selected_uplink_paths} =
-             Cadence.start_realized_contact(invalid_contact)
+             Cadence.Contacts.start_realized_contact(invalid_contact)
   end
 end

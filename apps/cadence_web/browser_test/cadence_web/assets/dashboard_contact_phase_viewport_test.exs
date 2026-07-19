@@ -191,7 +191,7 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(org.organization_id, realized_contact)
 
     assert {:ok, _beta_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -322,7 +322,7 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, scheduled_contact)
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(org.organization_id, realized_contact)
 
     assert {:ok, _beta_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -502,7 +502,10 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     assert {:ok, _scheduled_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -678,7 +681,10 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     assert {:ok, _scheduled_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)

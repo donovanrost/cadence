@@ -343,7 +343,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
              TransportStore.persist_transport(organization_id, transport)
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
   end
 
   def contact_paths(source_endpoint_ref) do

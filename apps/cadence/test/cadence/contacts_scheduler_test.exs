@@ -92,7 +92,9 @@ defmodule Cadence.ContactsSchedulerTest do
 
     assert untouched_future_contact.lifecycle_state == :scheduled
 
-    assert {:ok, realized_contact} = Cadence.fetch_realized_contact(mission_id, "due-contact_run")
+    assert {:ok, realized_contact} =
+             Cadence.Contacts.fetch_realized_contact(mission_id, "due-contact_run")
+
     assert realized_contact.lifecycle_state == :active
     assert realized_contact.clock_mode == :live
 
@@ -119,7 +121,9 @@ defmodule Cadence.ContactsSchedulerTest do
         metadata: %{origin: "persisted"}
       })
 
-    assert {:ok, _persisted_realized_contact} = Cadence.persist_realized_contact(realized_contact)
+    assert {:ok, _persisted_realized_contact} =
+             Cadence.Contacts.persist_realized_contact(realized_contact)
+
     refute Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
 
     scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
@@ -140,7 +144,10 @@ defmodule Cadence.ContactsSchedulerTest do
     assert Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
 
     assert {:ok, restarted_contact} =
-             Cadence.fetch_realized_contact(mission_id, realized_contact.realized_contact_id)
+             Cadence.Contacts.fetch_realized_contact(
+               mission_id,
+               realized_contact.realized_contact_id
+             )
 
     assert restarted_contact.lifecycle_state == :active
     assert restarted_contact.metadata["reconciled_at"]
@@ -179,14 +186,14 @@ defmodule Cadence.ContactsSchedulerTest do
     Scheduler.notify_contact_changed(scheduler_name, mission_id)
 
     wait_until(fn ->
-      case Cadence.fetch_realized_contact(mission_id, "notified-due-contact_run") do
+      case Cadence.Contacts.fetch_realized_contact(mission_id, "notified-due-contact_run") do
         {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
         _other -> :retry
       end
     end)
 
     assert {:ok, realized_contact} =
-             Cadence.fetch_realized_contact(mission_id, "notified-due-contact_run")
+             Cadence.Contacts.fetch_realized_contact(mission_id, "notified-due-contact_run")
 
     assert realized_contact.lifecycle_state == :active
     assert Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
@@ -229,7 +236,7 @@ defmodule Cadence.ContactsSchedulerTest do
     refute GenServer.whereis(Scheduler)
 
     wait_until(fn ->
-      case Cadence.fetch_realized_contact(mission_id, "mission-runtime-due-contact_run") do
+      case Cadence.Contacts.fetch_realized_contact(mission_id, "mission-runtime-due-contact_run") do
         {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
         _other -> :retry
       end
@@ -380,7 +387,7 @@ defmodule Cadence.ContactsSchedulerTest do
     end)
 
     wait_until(fn ->
-      case Cadence.fetch_realized_contact(mission_id, "telemetry-due-contact_run") do
+      case Cadence.Contacts.fetch_realized_contact(mission_id, "telemetry-due-contact_run") do
         {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
         _other -> :retry
       end

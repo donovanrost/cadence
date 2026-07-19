@@ -298,7 +298,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
       })
 
     assert {:ok, %RealizedContact{} = persisted_contact} =
-             Cadence.persist_realized_contact(org.organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(org.organization_id, realized_contact)
 
     persisted_contact
   end

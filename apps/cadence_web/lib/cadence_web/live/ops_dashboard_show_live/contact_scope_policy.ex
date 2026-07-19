@@ -35,6 +35,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ContactScopePolicy do
   end
 
   defp fetch_realized_contact_fn(opts) do
-    Keyword.get(opts, :fetch_realized_contact, &Cadence.fetch_realized_contact/3)
+    Keyword.get(opts, :fetch_realized_contact, &Cadence.Contacts.fetch_realized_contact/3)
   end
 end

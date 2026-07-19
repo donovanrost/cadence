@@ -298,7 +298,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
       })
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(org.organization_id, realized_contact)
 
     assert %CommandRequestRow{} =
              Repo.insert!(

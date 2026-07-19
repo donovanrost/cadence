@@ -410,7 +410,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
 
     wait_until(
       fn ->
-        case Cadence.fetch_realized_contact(
+        case Cadence.Contacts.fetch_realized_contact(
                ids.organization_id,
                ids.mission_id,
                realized_contact_id

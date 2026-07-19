@@ -93,7 +93,7 @@ for `:notification`, `:projection_rebuild`, `:timer_scheduled`,
 
 `:contact_scheduler_global_safety` controls the legacy no-mission global
 contact scheduler. It is disabled by default; manual global reconciliation
-remains available through `Cadence.reconcile_contact_lifecycle/1`.
+remains available through `Cadence.Contacts.reconcile/1`.
 
 `:command_dispatcher` controls durable command queue dispatch. Queue writes and
 release-target contact changes kick affected lanes directly. Lane dispatchers

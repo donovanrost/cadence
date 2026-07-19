@@ -139,7 +139,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     assert {:ok, _scheduled_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -305,7 +308,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     assert {:ok, _scheduled_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -503,7 +509,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     assert {:ok, _scheduled_contact} =
              Cadence.Contacts.persist_scheduled_contact(org.organization_id, beta_contact)
@@ -678,7 +687,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     for contact <- [beta_contact, gamma_contact] do
       assert {:ok, _scheduled_contact} =
@@ -888,7 +900,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
              )
 
     assert {:ok, _realized_contact} =
-             Cadence.persist_realized_contact(org.organization_id, alpha_realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               org.organization_id,
+               alpha_realized_contact
+             )
 
     for contact <- [beta_contact, gamma_contact] do
       assert {:ok, _scheduled_contact} =

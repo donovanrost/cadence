@@ -68,7 +68,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_realized_contacts(opts) do
-    Keyword.get(opts, :list_realized_contacts, &Cadence.list_realized_contacts/2)
+    Keyword.get(opts, :list_realized_contacts, &Cadence.Contacts.list_realized_contacts/2)
   end
 
   defp list_dashboard_data_realms(opts) do

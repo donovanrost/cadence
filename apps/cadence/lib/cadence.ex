@@ -38,7 +38,6 @@ defmodule Cadence do
     LinkAssignment,
     PathTemplate,
     ProviderProfile,
-    RealizedContact,
     TransportProfile
   }
 
@@ -1611,101 +1610,6 @@ defmodule Cadence do
           {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
   def fetch_mission_event_rebuild_job(rebuild_run_id) when is_binary(rebuild_run_id) do
     Jobs.fetch_job_for_run(:mission_event_rebuild, rebuild_run_id)
-  end
-
-  @spec reconcile_contact_lifecycle(DateTime.t()) :: {:ok, map()}
-  def reconcile_contact_lifecycle(%DateTime{} = reference_time) do
-    ContactsService.reconcile(reference_time)
-  end
-
-  @spec persist_realized_contact(RealizedContact.t()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def persist_realized_contact(%RealizedContact{} = realized_contact) do
-    ContactsService.persist_realized_contact(realized_contact)
-  end
-
-  @spec persist_realized_contact(binary(), RealizedContact.t()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def persist_realized_contact(organization_id, %RealizedContact{} = realized_contact)
-      when is_binary(organization_id) do
-    ContactsService.persist_realized_contact(organization_id, realized_contact)
-  end
-
-  @spec fetch_realized_contact(binary(), binary()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def fetch_realized_contact(mission_id, realized_contact_id)
-      when is_binary(mission_id) and is_binary(realized_contact_id) do
-    ContactsService.fetch_realized_contact(mission_id, realized_contact_id)
-  end
-
-  @spec fetch_realized_contact(binary(), binary(), binary()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def fetch_realized_contact(organization_id, mission_id, realized_contact_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(realized_contact_id) do
-    ContactsService.fetch_realized_contact(organization_id, mission_id, realized_contact_id)
-  end
-
-  @spec list_realized_contacts(binary()) :: [RealizedContact.t()]
-  def list_realized_contacts(mission_id) when is_binary(mission_id) do
-    ContactsService.list_realized_contacts(mission_id)
-  end
-
-  @spec list_realized_contacts(binary(), binary()) :: [RealizedContact.t()]
-  def list_realized_contacts(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ContactsService.list_realized_contacts(organization_id, mission_id)
-  end
-
-  @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
-  def start_realized_contact(%RealizedContact{} = realized_contact) do
-    ContactsService.start_realized_contact(realized_contact)
-  end
-
-  @spec start_realized_contact(binary(), binary()) :: {:ok, pid()} | {:error, term()}
-  def start_realized_contact(mission_id, realized_contact_id)
-      when is_binary(mission_id) and is_binary(realized_contact_id) do
-    ContactsService.start_realized_contact(mission_id, realized_contact_id)
-  end
-
-  @spec start_realized_contact(binary(), binary(), binary()) :: {:ok, pid()} | {:error, term()}
-  def start_realized_contact(organization_id, mission_id, realized_contact_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(realized_contact_id) do
-    ContactsService.start_realized_contact(organization_id, mission_id, realized_contact_id)
-  end
-
-  @spec end_realized_contact_early(binary(), binary(), keyword()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def end_realized_contact_early(mission_id, realized_contact_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(realized_contact_id) and is_list(opts) do
-    ContactsService.end_realized_contact_early(mission_id, realized_contact_id, opts)
-  end
-
-  @spec end_realized_contact_early(binary(), binary(), binary(), keyword()) ::
-          {:ok, RealizedContact.t()} | {:error, term()}
-  def end_realized_contact_early(organization_id, mission_id, realized_contact_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(realized_contact_id) and is_list(opts) do
-    ContactsService.end_realized_contact_early(
-      organization_id,
-      mission_id,
-      realized_contact_id,
-      opts
-    )
-  end
-
-  @spec stop_realized_contact(binary(), binary()) :: :ok | {:error, term()}
-  def stop_realized_contact(mission_id, realized_contact_id)
-      when is_binary(mission_id) and is_binary(realized_contact_id) do
-    ContactsService.stop_realized_contact(mission_id, realized_contact_id)
-  end
-
-  @spec stop_realized_contact(binary(), binary(), binary()) :: :ok | {:error, term()}
-  def stop_realized_contact(organization_id, mission_id, realized_contact_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(realized_contact_id) do
-    ContactsService.stop_realized_contact(organization_id, mission_id, realized_contact_id)
   end
 
   @spec realized_contact_snapshot(binary(), binary()) :: {:ok, map()} | {:error, term()}

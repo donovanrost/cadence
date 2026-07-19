@@ -428,7 +428,10 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, _persisted_realized_contact} =
-             Cadence.persist_realized_contact(dispatcher_scope.organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(
+               dispatcher_scope.organization_id,
+               realized_contact
+             )
 
     realized_contact
   end

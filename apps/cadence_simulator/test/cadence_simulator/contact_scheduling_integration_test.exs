@@ -279,7 +279,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
            ]
 
     assert [realized_contact] =
-             Cadence.list_realized_contacts(setup.organization_id, setup.mission_id)
+             Cadence.Contacts.list_realized_contacts(setup.organization_id, setup.mission_id)
 
     assert realized_contact.scheduled_contact_id == scheduled_contact.scheduled_contact_id
 

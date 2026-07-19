@@ -534,7 +534,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
   defp fetch_realized_contact(_reservation, nil), do: nil
 
   defp fetch_realized_contact(reservation, scheduled_contact) do
-    Cadence.list_realized_contacts(reservation.organization_id, reservation.mission_id)
+    Cadence.Contacts.list_realized_contacts(reservation.organization_id, reservation.mission_id)
     |> Enum.find(&(&1.scheduled_contact_id == scheduled_contact.scheduled_contact_id))
   end
 

@@ -14,7 +14,7 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ) do
       realized_contacts =
-        Cadence.list_realized_contacts(organization_id, mission_id)
+        Cadence.Contacts.list_realized_contacts(organization_id, mission_id)
         |> Enum.map(&ControlPlaneJSON.realized_contact/1)
 
       json(conn, %{data: realized_contacts})
@@ -33,7 +33,11 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ),
          {:ok, %RealizedContact{} = realized_contact} <-
-           Cadence.fetch_realized_contact(organization_id, mission_id, realized_contact_id) do
+           Cadence.Contacts.fetch_realized_contact(
+             organization_id,
+             mission_id,
+             realized_contact_id
+           ) do
       json(conn, %{data: ControlPlaneJSON.realized_contact(realized_contact)})
     end
   end
@@ -99,7 +103,7 @@ defmodule CadenceWeb.RealizedContactController do
          {:ok, termination_opts} <-
            ControlPlaneParams.contact_action(Map.get(params, "termination", %{})),
          {:ok, realized_contact} <-
-           Cadence.end_realized_contact_early(
+           Cadence.Contacts.end_realized_contact_early(
              organization_id,
              mission_id,
              realized_contact_id,

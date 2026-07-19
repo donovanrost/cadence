@@ -127,10 +127,10 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       })
 
     assert {:ok, _persisted_realized_contact} =
-             Cadence.persist_realized_contact(organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
 
     assert {:ok, _pid} =
-             Cadence.start_realized_contact(
+             Cadence.Contacts.start_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -328,10 +328,10 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       })
 
     assert {:ok, _persisted_realized_contact} =
-             Cadence.persist_realized_contact(organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
 
     assert {:ok, _pid} =
-             Cadence.start_realized_contact(
+             Cadence.Contacts.start_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id

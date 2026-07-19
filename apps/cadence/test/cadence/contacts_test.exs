@@ -113,7 +113,7 @@ defmodule Cadence.ContactsTest do
              realized_contact.realized_contact_id
 
     assert {:ok, fetched_realized_contact} =
-             Cadence.fetch_realized_contact(
+             Cadence.Contacts.fetch_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -136,7 +136,9 @@ defmodule Cadence.ContactsTest do
     assert contact_event_value(realized_event, :scheduled_contact_id) ==
              scheduled_contact.scheduled_contact_id
 
-    assert [listed_realized_contact] = Cadence.list_realized_contacts(organization_id, mission_id)
+    assert [listed_realized_contact] =
+             Cadence.Contacts.list_realized_contacts(organization_id, mission_id)
+
     assert listed_realized_contact.realized_contact_id == realized_contact.realized_contact_id
 
     assert {:ok, snapshot} =
@@ -169,19 +171,19 @@ defmodule Cadence.ContactsTest do
       })
 
     assert {:ok, persisted_realized_contact} =
-             Cadence.persist_realized_contact(organization_id, realized_contact)
+             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
 
     assert persisted_realized_contact.lifecycle_state == :defined
 
     assert {:ok, _pid} =
-             Cadence.start_realized_contact(
+             Cadence.Contacts.start_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
              )
 
     assert {:ok, active_realized_contact} =
-             Cadence.fetch_realized_contact(
+             Cadence.Contacts.fetch_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -191,14 +193,14 @@ defmodule Cadence.ContactsTest do
     assert active_realized_contact.metadata["started_at"]
 
     assert :ok =
-             Cadence.stop_realized_contact(
+             Cadence.Contacts.stop_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
              )
 
     assert {:ok, stopped_realized_contact} =
-             Cadence.fetch_realized_contact(
+             Cadence.Contacts.fetch_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -322,7 +324,7 @@ defmodule Cadence.ContactsTest do
     assert [%{provider_binding_id: "tcp-downlink-profile"}] = path_snapshot.provider_runtimes
 
     assert :ok =
-             Cadence.stop_realized_contact(
+             Cadence.Contacts.stop_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -462,7 +464,7 @@ defmodule Cadence.ContactsTest do
     assert provider_binding.metadata["provider_profile_version"] == 1
 
     assert :ok =
-             Cadence.stop_realized_contact(
+             Cadence.Contacts.stop_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
@@ -572,7 +574,7 @@ defmodule Cadence.ContactsTest do
              )
 
     assert {:ok, stopped_realized_contact} =
-             Cadence.end_realized_contact_early(
+             Cadence.Contacts.end_realized_contact_early(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id,
@@ -675,7 +677,7 @@ defmodule Cadence.ContactsTest do
     assert canceled_scheduled_contact.metadata["reason"] == "provider abort"
 
     assert {:ok, stopped_realized_contact} =
-             Cadence.fetch_realized_contact(
+             Cadence.Contacts.fetch_realized_contact(
                organization_id,
                mission_id,
                realized_contact.realized_contact_id
