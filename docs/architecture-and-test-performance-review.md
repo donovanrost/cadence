@@ -1176,6 +1176,12 @@ enrichment orchestration, frame resolution, and both default revision reads
 behind the now 811-line runtime-activity module. This reduced the adapter from
 2,675 to 2,474 lines; it retains only runtime-family dispatch and source
 identity, while production source-size pressure remains 8.
+Extracting OperationalEvents interval/sample option projection and snapshot
+normalization for connection, antenna pointing, RF state and metrics, transport
+bitrate, and ingress latency into a 246-line shared provider reduced the adapter
+from 2,474 to 2,284 lines. The remaining family modules can now own their
+default projected reads without copying OperationalEvents translation logic;
+production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

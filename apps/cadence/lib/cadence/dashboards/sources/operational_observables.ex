@@ -19,7 +19,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   }
 
   alias Cadence.Comms.TransportStore
-  alias Cadence.OperationalEvents
   alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.RuntimeHealth
 
@@ -36,6 +35,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
+    OperationalEventSnapshots,
     OperationalMetricFrames,
     ProductPolicy,
     RevisionPolicy,
@@ -1297,7 +1297,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
 
     connection_snapshots_fun =
-      Keyword.get(opts, :connection_snapshots_fun, &default_connection_snapshots/3)
+      Keyword.get(opts, :connection_snapshots_fun, &OperationalEventSnapshots.connection/3)
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1318,7 +1318,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       Keyword.get(
         opts,
         :antenna_pointing_snapshots_fun,
-        &default_antenna_pointing_snapshots/3
+        &OperationalEventSnapshots.antenna_pointing/3
       )
 
     adapter_opts = adapter_opts(request, source_binding)
@@ -1335,7 +1335,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     link_rf_lock_snapshots_fun =
-      Keyword.get(opts, :link_rf_lock_snapshots_fun, &default_link_rf_lock_snapshots/3)
+      Keyword.get(opts, :link_rf_lock_snapshots_fun, &OperationalEventSnapshots.link_rf_lock/3)
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1351,7 +1351,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     link_rf_metric_snapshots_fun =
-      Keyword.get(opts, :link_rf_metric_snapshots_fun, &default_link_rf_metric_snapshots/3)
+      Keyword.get(
+        opts,
+        :link_rf_metric_snapshots_fun,
+        &OperationalEventSnapshots.link_rf_metric/3
+      )
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1368,7 +1372,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     link_rf_metric_snapshots_fun =
-      Keyword.get(opts, :link_rf_metric_snapshots_fun, &default_link_rf_metric_snapshots/3)
+      Keyword.get(
+        opts,
+        :link_rf_metric_snapshots_fun,
+        &OperationalEventSnapshots.link_rf_metric/3
+      )
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1385,7 +1393,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       Keyword.get(
         opts,
         :antenna_pointing_snapshots_fun,
-        &default_antenna_pointing_snapshots/3
+        &OperationalEventSnapshots.antenna_pointing/3
       )
 
     adapter_opts = adapter_opts(request, source_binding)
@@ -1404,7 +1412,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       Keyword.get(
         opts,
         :link_rf_frame_sync_snapshots_fun,
-        &default_link_rf_frame_sync_snapshots/3
+        &OperationalEventSnapshots.link_rf_frame_sync/3
       )
 
     adapter_opts = adapter_opts(request, source_binding)
@@ -1421,7 +1429,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     metric_snapshots_fun =
-      Keyword.get(opts, :transport_metric_snapshots_fun, &default_transport_metric_snapshots/3)
+      Keyword.get(
+        opts,
+        :transport_metric_snapshots_fun,
+        &OperationalEventSnapshots.transport_bitrate/3
+      )
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1437,7 +1449,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     metric_snapshots_fun =
-      Keyword.get(opts, :transport_metric_snapshots_fun, &default_transport_metric_snapshots/3)
+      Keyword.get(
+        opts,
+        :transport_metric_snapshots_fun,
+        &OperationalEventSnapshots.transport_bitrate/3
+      )
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1591,7 +1607,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     source_endpoints_fun = Keyword.get(opts, :source_endpoints_fun, &default_source_endpoints/3)
 
     connection_snapshots_fun =
-      Keyword.get(opts, :connection_snapshots_fun, &default_connection_snapshots/3)
+      Keyword.get(opts, :connection_snapshots_fun, &OperationalEventSnapshots.connection/3)
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1608,7 +1624,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
 
     link_rf_lock_snapshots_fun =
-      Keyword.get(opts, :link_rf_lock_snapshots_fun, &default_link_rf_lock_snapshots/3)
+      Keyword.get(opts, :link_rf_lock_snapshots_fun, &OperationalEventSnapshots.link_rf_lock/3)
 
     adapter_opts = adapter_opts(request, source_binding)
 
@@ -1626,7 +1642,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       Keyword.get(
         opts,
         :link_rf_frame_sync_snapshots_fun,
-        &default_link_rf_frame_sync_snapshots/3
+        &OperationalEventSnapshots.link_rf_frame_sync/3
       )
 
     adapter_opts = adapter_opts(request, source_binding)
@@ -1809,207 +1825,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     SourceEndpoints.list_source_endpoints(organization_id, mission_id)
   end
 
-  defp default_connection_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.connection_state_intervals(
-      mission_id,
-      operational_state_interval_opts(@connection_observable_ids, opts)
-    )
-    |> Enum.map(&connection_snapshot_from_interval/1)
-  end
-
-  defp default_antenna_pointing_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.operational_observable_state_intervals(
-      mission_id,
-      operational_state_interval_opts(@antenna_pointing_observable_ids, opts)
-    )
-    |> Enum.map(&antenna_pointing_snapshot_from_interval/1)
-  end
-
-  defp default_transport_metric_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.operational_observable_metric_samples(
-      mission_id,
-      operational_metric_sample_opts(@bitrate_observable_ids, opts)
-    )
-    |> Enum.map(&operational_metric_snapshot_from_sample/1)
-  end
-
-  defp default_link_rf_lock_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.link_rf_state_intervals(
-      mission_id,
-      operational_state_interval_opts(@link_rf_lock_observable_ids, opts)
-    )
-    |> Enum.map(&rf_lock_snapshot_from_interval/1)
-  end
-
-  defp default_link_rf_frame_sync_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.link_rf_state_intervals(
-      mission_id,
-      operational_state_interval_opts(@link_rf_frame_sync_observable_ids, opts)
-    )
-    |> Enum.map(&rf_frame_sync_snapshot_from_interval/1)
-  end
-
-  defp default_link_rf_metric_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.operational_observable_metric_samples(
-      mission_id,
-      operational_metric_sample_opts(@link_rf_metric_observable_ids, opts)
-    )
-    |> Enum.map(&operational_metric_snapshot_from_sample/1)
-  end
-
-  defp operational_metric_sample_opts(observable_ids, opts) do
-    [
-      observable_id: observable_ids,
-      from_time: Keyword.get(opts, :from),
-      to_time: Keyword.get(opts, :to),
-      replay_run_id: Keyword.get(opts, :replay_run_id),
-      event_limit: Keyword.get(opts, :event_limit, 1_000),
-      order: operational_metric_sample_order(opts)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp operational_metric_sample_order(opts) do
-    if Keyword.get(opts, :from) || Keyword.get(opts, :to), do: :asc, else: :desc
-  end
-
-  defp operational_state_interval_opts(observable_ids, opts) do
-    [
-      observable_id: observable_ids,
-      from_time: Keyword.get(opts, :from),
-      to_time: Keyword.get(opts, :to),
-      replay_run_id: Keyword.get(opts, :replay_run_id),
-      event_limit: Keyword.get(opts, :event_limit, 1_000),
-      order: operational_state_interval_order(opts)
-    ]
-    |> maybe_add_latest_at(opts)
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp operational_state_interval_order(opts) do
-    if Keyword.get(opts, :from) || Keyword.get(opts, :to), do: :asc, else: :desc
-  end
-
-  defp maybe_add_latest_at(interval_opts, opts) do
-    if Keyword.get(opts, :from) || Keyword.get(opts, :to) do
-      interval_opts
-    else
-      [{:at, Keyword.get(opts, :at, DateTime.utc_now())} | interval_opts]
-    end
-  end
-
-  defp connection_snapshot_from_interval(interval) do
-    payload = attr(interval, :payload) || %{}
-
-    %{
-      observable_id: attr(payload, :observable_id),
-      resource_id: attr(payload, :resource_id) || attr(interval, :subject_id),
-      transport_id: attr(payload, :transport_id),
-      source_endpoint_id: attr(payload, :source_endpoint_id),
-      ground_station_id: attr(payload, :ground_station_id),
-      link_id: attr(payload, :link_id),
-      adapter_key: attr(payload, :adapter_key),
-      connection_state: attr(payload, :connection_state),
-      observed_at: attr(interval, :starts_at),
-      interval_id: attr(interval, :interval_id),
-      source_event_id: attr(interval, :source_event_id),
-      replay_run_id: attr(payload, :replay_run_id),
-      interval: interval
-    }
-  end
-
-  defp operational_metric_snapshot_from_sample(sample) do
-    %{
-      observable_id: attr(sample, :observable_id),
-      mission_id: attr(sample, :mission_id),
-      organization_id: attr(sample, :organization_id),
-      resource_id: attr(sample, :resource_id),
-      transport_id: attr(sample, :transport_id),
-      spacecraft_id: attr(sample, :spacecraft_id),
-      contact_id:
-        attr(sample, :contact_id) ||
-          attr(sample, :scheduled_contact_id) ||
-          attr(sample, :realized_contact_id),
-      source_endpoint_id: attr(sample, :source_endpoint_id),
-      ground_station_id: attr(sample, :ground_station_id),
-      link_id: attr(sample, :link_id),
-      link_assignment_id: attr(sample, :link_id),
-      adapter_key: attr(sample, :adapter_key),
-      value: attr(sample, :value),
-      unit: attr(sample, :unit),
-      downlink_bitrate: attr(sample, :downlink_bitrate),
-      downlink_bitrate_bps: attr(sample, :downlink_bitrate_bps),
-      uplink_bitrate: attr(sample, :uplink_bitrate),
-      uplink_bitrate_bps: attr(sample, :uplink_bitrate_bps),
-      bitrate: attr(sample, :bitrate),
-      snr_db: attr(sample, :snr_db),
-      snr: attr(sample, :snr),
-      signal_to_noise_ratio_db: attr(sample, :signal_to_noise_ratio_db),
-      eb_n0_db: attr(sample, :eb_n0_db),
-      ebn0_db: attr(sample, :ebn0_db),
-      energy_per_bit_to_noise_density_db: attr(sample, :energy_per_bit_to_noise_density_db),
-      symbol_rate_sps: attr(sample, :symbol_rate_sps),
-      symbol_rate: attr(sample, :symbol_rate),
-      symbols_per_second: attr(sample, :symbols_per_second),
-      doppler_hz: attr(sample, :doppler_hz),
-      doppler: attr(sample, :doppler),
-      frequency_offset_hz: attr(sample, :frequency_offset_hz),
-      carrier_frequency_offset_hz: attr(sample, :carrier_frequency_offset_hz),
-      observed_at: attr(sample, :observed_at),
-      source_event_id: attr(sample, :source_event_id),
-      replay_run_id: attr(sample, :replay_run_id)
-    }
-  end
-
-  defp rf_lock_snapshot_from_interval(interval) do
-    payload = attr(interval, :payload) || %{}
-    state = attr(payload, :state)
-
-    operational_state_snapshot_from_interval(interval, payload)
-    |> Map.merge(%{lock_state: state, state: state})
-  end
-
-  defp rf_frame_sync_snapshot_from_interval(interval) do
-    payload = attr(interval, :payload) || %{}
-    state = attr(payload, :state)
-
-    operational_state_snapshot_from_interval(interval, payload)
-    |> Map.merge(%{frame_sync_state: state, state: state})
-  end
-
-  defp antenna_pointing_snapshot_from_interval(interval) do
-    payload = attr(interval, :payload) || %{}
-    state = attr(payload, :state) || attr(payload, :normalized_state)
-
-    operational_state_snapshot_from_interval(interval, payload)
-    |> Map.merge(%{antenna_pointing_state: state, state: state})
-  end
-
-  defp operational_state_snapshot_from_interval(interval, payload) do
-    %{
-      observable_id: attr(payload, :observable_id),
-      resource_id: attr(payload, :resource_id) || attr(interval, :subject_id),
-      transport_id: attr(payload, :transport_id),
-      source_endpoint_id: attr(payload, :source_endpoint_id),
-      ground_station_id: attr(payload, :ground_station_id),
-      link_id: attr(payload, :link_id),
-      link_assignment_id: attr(payload, :link_id),
-      adapter_key: attr(payload, :adapter_key),
-      normalized_state: attr(payload, :normalized_state),
-      observed_at: attr(interval, :starts_at),
-      interval_id: attr(interval, :interval_id),
-      source_event_id: attr(interval, :source_event_id),
-      replay_run_id: attr(payload, :replay_run_id),
-      interval: interval
-    }
-  end
-
   defp default_connection_state_revision(organization_id, mission_id, opts) do
     "connection_state:" <>
       RuntimeCacheKey.fingerprint(%{
@@ -2025,7 +1840,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.source_endpoint_id || "")),
         snapshots:
           organization_id
-          |> default_connection_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.connection(mission_id, opts)
           |> Enum.map(&connection_snapshot_revision_entry/1)
           |> Enum.sort_by(&{&1.resource_id || "", &1.observed_at || ""})
       })
@@ -2041,7 +1856,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.source_endpoint_id || "")),
         snapshots:
           organization_id
-          |> default_antenna_pointing_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.antenna_pointing(mission_id, opts)
           |> Enum.map(&antenna_pointing_revision_entry/1)
           |> Enum.sort_by(&{&1.resource_id || "", &1.observed_at || ""})
       })
@@ -2057,7 +1872,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.transport_id || "")),
         snapshots:
           organization_id
-          |> default_transport_metric_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.transport_bitrate(mission_id, opts)
           |> Enum.map(&transport_metric_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
       })
@@ -2073,7 +1888,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.transport_id || "")),
         snapshots:
           organization_id
-          |> default_link_rf_lock_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.link_rf_lock(mission_id, opts)
           |> Enum.map(&link_rf_lock_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
       })
@@ -2089,7 +1904,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.transport_id || "")),
         snapshots:
           organization_id
-          |> default_link_rf_frame_sync_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.link_rf_frame_sync(mission_id, opts)
           |> Enum.map(&link_rf_frame_sync_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
       })
@@ -2105,7 +1920,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.sort_by(&(&1.transport_id || "")),
         snapshots:
           organization_id
-          |> default_link_rf_metric_snapshots(mission_id, opts)
+          |> OperationalEventSnapshots.link_rf_metric(mission_id, opts)
           |> Enum.map(&link_rf_metric_revision_entry/1)
           |> Enum.sort_by(
             &{&1.observable_id || "", &1.transport_id || &1.resource_id || "",
@@ -2213,12 +2028,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp default_durable_ingress_processing_latency_snapshots(organization_id, mission_id, opts) do
-    organization_id
-    |> OperationalEvents.operational_observable_metric_samples(
-      mission_id,
-      operational_metric_sample_opts(["ingress.processing_latency_ms"], opts)
-    )
-    |> Enum.map(&operational_metric_snapshot_from_sample/1)
+    OperationalEventSnapshots.ingress_latency(organization_id, mission_id, opts)
   end
 
   defp default_ingress_processing_latency_revision(organization_id, mission_id, opts) do
