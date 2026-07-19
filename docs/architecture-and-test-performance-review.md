@@ -1505,6 +1505,15 @@ root facade from 45 to 40 files. Activation API routes remain in the
 authenticated API pipeline, while operations and spacecraft pages remain in
 their existing authenticated LiveView sessions; production source-size pressure
 remains 4 and dependency ratchets are unchanged.
+Retiring the six provider reservation, booking, and opportunity-search delegates
+from the root facade moved 19 operations and simulator call sites directly to
+`Cadence.Contacts.ProviderReservations`, `ProviderBooking`, and
+`ProviderScheduling`. This reduced `Cadence` from 3,259 to 3,209 lines;
+production web callers of the root facade remain at 40 files because the
+scheduling dependency module still uses root scheduled-contact APIs. The
+operations scheduling route remains in its existing authenticated LiveView
+session; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

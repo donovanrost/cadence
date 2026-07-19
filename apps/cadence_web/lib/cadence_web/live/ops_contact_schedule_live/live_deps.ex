@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
   @moduledoc false
 
-  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Contacts.{ProviderBooking, ProviderReservations, ProviderScheduling}
 
   def list_spacecraft(organization_id, mission_id) do
     call(:list_spacecraft, [organization_id, mission_id], fn ->
@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
 
   def list_ready_routes(organization_id, mission_id, spacecraft_id) do
     call(:list_ready_routes, [organization_id, mission_id, spacecraft_id], fn ->
-      Cadence.list_ready_downlink_routes(organization_id, mission_id, spacecraft_id)
+      ProviderScheduling.list_ready_downlink_routes(organization_id, mission_id, spacecraft_id)
     end)
   end
 
@@ -32,25 +32,25 @@ defmodule CadenceWeb.OpsContactScheduleLive.LiveDeps do
 
   def search_opportunities(organization_id, mission_id, route_key, window) do
     call(:search_opportunities, [organization_id, mission_id, route_key, window], fn ->
-      Cadence.search_contact_opportunities(organization_id, mission_id, route_key, window)
+      ProviderScheduling.search_opportunities(organization_id, mission_id, route_key, window)
     end)
   end
 
   def reserve(organization_id, mission_id, provider_id, attrs) do
     call(:reserve, [organization_id, mission_id, provider_id, attrs], fn ->
-      Cadence.reserve_provider_contact(organization_id, mission_id, provider_id, attrs)
+      ProviderBooking.reserve(organization_id, mission_id, provider_id, attrs)
     end)
   end
 
   def cancel(organization_id, mission_id, provider_reservation_id) do
     call(:cancel, [organization_id, mission_id, provider_reservation_id], fn ->
-      Cadence.cancel_provider_reservation(organization_id, mission_id, provider_reservation_id)
+      ProviderBooking.cancel(organization_id, mission_id, provider_reservation_id)
     end)
   end
 
   def list_reservation_rows(organization_id, mission_id) do
     call(:list_reservation_rows, [organization_id, mission_id], fn ->
-      Cadence.list_provider_reservations(organization_id, mission_id)
+      ProviderReservations.list_for_mission(organization_id, mission_id)
       |> Enum.map(&reservation_row(organization_id, mission_id, &1))
     end)
   end

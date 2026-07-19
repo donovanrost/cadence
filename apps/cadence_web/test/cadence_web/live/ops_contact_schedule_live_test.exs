@@ -15,7 +15,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.{RoutingRule, Transport}
-  alias Cadence.Contacts.ProviderBooking
+  alias Cadence.Contacts.{ProviderBooking, ProviderReservations, ProviderScheduling}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -119,7 +119,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert has_element?(view, "#provider-reservations article")
     assert has_element?(view, "[id^=provider-reservation-provider_reservation_]")
 
-    [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
+    [reservation] = ProviderReservations.list_for_mission(org.organization_id, mission.mission_id)
 
     assert has_element?(
              view,
@@ -135,7 +135,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     refute_received :provider_mutation
 
-    assert Cadence.list_provider_reservations(org.organization_id, mission.mission_id) |> length() ==
+    assert ProviderReservations.list_for_mission(org.organization_id, mission.mission_id)
+           |> length() ==
              1
 
     assert Cadence.list_scheduled_contacts(org.organization_id, mission.mission_id) |> length() ==
@@ -175,7 +176,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     render_async(view, @async_timeout)
 
     assert has_element?(view, "#provider-reservations article", "pending")
-    [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
+    [reservation] = ProviderReservations.list_for_mission(org.organization_id, mission.mission_id)
 
     assert has_element?(
              view,
@@ -213,7 +214,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       end,
       cancel: fn organization_id, mission_id, provider_reservation_id ->
         {:ok, reservation} =
-          Cadence.fetch_provider_reservation(
+          ProviderReservations.fetch(
             organization_id,
             mission_id,
             provider_reservation_id
@@ -250,7 +251,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
     render_async(view, @async_timeout)
 
-    [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
+    [reservation] = ProviderReservations.list_for_mission(org.organization_id, mission.mission_id)
     cancel_selector = "#cancel-reservation-#{reservation.provider_reservation_id}"
     assert has_element?(view, cancel_selector)
 
@@ -311,7 +312,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert has_element?(view, "#contact-search-error")
 
     render_click(view, "reserve", %{"token" => "tampered"})
-    assert Cadence.list_provider_reservations(org.organization_id, mission.mission_id) == []
+    assert ProviderReservations.list_for_mission(org.organization_id, mission.mission_id) == []
   end
 
   test "opportunity tokens expire and reject tampering" do
@@ -379,7 +380,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
              RoutingRuleStore.create_routing_rule(org.organization_id, rule)
 
     assert {:ok, %{routes: [route]}} =
-             Cadence.list_ready_downlink_routes(
+             ProviderScheduling.list_ready_downlink_routes(
                org.organization_id,
                mission.mission_id,
                spacecraft.spacecraft_id

@@ -16,6 +16,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
     ProviderBooking,
     ProviderReservationChanges,
     ProviderReservationReconciler,
+    ProviderReservations,
     ProviderScheduling
   }
 
@@ -613,7 +614,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
     assert scheduled_contact.scheduled_contact_id == reservation.scheduled_contact_id
 
     assert [persisted_reservation] =
-             Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)
+             ProviderReservations.list_for_mission(setup.organization_id, setup.mission_id)
 
     assert persisted_reservation.provider_contact_ref == reservation.provider_contact_ref
   end

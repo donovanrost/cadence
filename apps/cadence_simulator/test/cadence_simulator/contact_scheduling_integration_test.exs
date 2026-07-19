@@ -23,6 +23,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ProviderBooking,
     ProviderChangeApprovals,
     ProviderReservationReconciler,
+    ProviderReservations,
     ProviderScheduling,
     ScheduledContactRevisions
   }
@@ -190,7 +191,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert is_binary(execution_item.provider_reservation_id)
 
     assert {:ok, initial_reservation} =
-             Cadence.fetch_provider_reservation(
+             ProviderReservations.fetch(
                setup.organization_id,
                setup.mission_id,
                execution_item.provider_reservation_id
@@ -236,7 +237,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              )
 
     assert {:ok, confirmed_reservation} =
-             Cadence.fetch_provider_reservation(
+             ProviderReservations.fetch(
                setup.organization_id,
                setup.mission_id,
                booking.provider_reservation.provider_reservation_id
@@ -312,7 +313,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              )
 
     assert {:ok, completed_reservation} =
-             Cadence.fetch_provider_reservation(
+             ProviderReservations.fetch(
                setup.organization_id,
                setup.mission_id,
                booking.provider_reservation.provider_reservation_id
@@ -337,7 +338,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert length(Cadence.list_scheduled_contacts(setup.organization_id, setup.mission_id)) == 1
 
-    assert length(Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)) ==
+    assert length(ProviderReservations.list_for_mission(setup.organization_id, setup.mission_id)) ==
              1
 
     assert is_list(more_snapshots)
@@ -427,7 +428,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              )
 
     assert {:ok, recovered_reservation} =
-             Cadence.fetch_provider_reservation(
+             ProviderReservations.fetch(
                setup.organization_id,
                setup.mission_id,
                ambiguous_reservation.provider_reservation_id
@@ -462,7 +463,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert_reconciler_restart_preserves_single_contact(setup, recovered_reservation)
 
     assert [_single_reservation] =
-             Cadence.list_provider_reservations(setup.organization_id, setup.mission_id)
+             ProviderReservations.list_for_mission(setup.organization_id, setup.mission_id)
   end
 
   test "credential rotation is observed between calls without recreating mission setup",
