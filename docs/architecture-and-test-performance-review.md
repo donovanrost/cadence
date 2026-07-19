@@ -819,6 +819,10 @@ Moving operational-observable, transport, and managed-runtime envelope cases
 out of the 1,676-line operational-event test reduced test-file pressure to 17
 and mirrored the production runtime-family boundary; the canonical envelope
 test is now 954 lines and the runtime-family test is 727 lines.
+Moving selected-interval evidence enrichment cases out of the 2,054-line
+source-registry test and sharing its request/binding/evidence fixtures reduced
+test-file pressure to 16; the registry files are now 813 and 865 lines, backed
+by a 399-line support module.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
