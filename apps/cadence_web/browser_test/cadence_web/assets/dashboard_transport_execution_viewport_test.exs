@@ -241,11 +241,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
     }
   end
 
-  @tag :browser
-  test "live operational transport execution state timeline DataLinks pass browser smoke", %{
-    conn: _conn,
-    sandbox_owner: sandbox_owner
-  } do
+  defp persist_live_transport_execution_browser_fixture!(sandbox_owner) do
     previous_source_execution =
       Application.get_env(:cadence_web, :dashboard_engine_source_execution)
 
@@ -440,16 +436,46 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
     ensure_assets_built!(app_root)
 
     port = free_tcp_port()
-
     start_browser_endpoint!(port, sandbox_owner)
-
     base_url = "http://localhost:#{port}"
 
-    dashboard_url =
-      base_url <>
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_ids: "link-alpha,link-beta"}}"
+    %{
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      beta_transport: beta_transport,
+      dashboard: dashboard,
+      dashboard_url:
+        base_url <>
+          ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_ids: "link-alpha,link-beta"}}",
+      gamma_transport: gamma_transport,
+      mission: mission,
+      org: org,
+      script: Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs"),
+      user: user
+    }
+  end
 
-    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+  @tag :browser
+  test "live operational transport execution state timeline DataLinks pass browser smoke", %{
+    conn: _conn,
+    sandbox_owner: sandbox_owner
+  } do
+    fixture = persist_live_transport_execution_browser_fixture!(sandbox_owner)
+
+    %{
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      beta_transport: beta_transport,
+      dashboard: dashboard,
+      dashboard_url: dashboard_url,
+      gamma_transport: gamma_transport,
+      mission: mission,
+      org: org,
+      script: script,
+      user: user
+    } = fixture
 
     assert {output, 0} =
              run_dashboard_viewport_smoke(

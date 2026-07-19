@@ -1329,6 +1329,12 @@ test from 327 to 140 lines and overlong test-function pressure from 6 to 5. The
 authenticated dashboard route and sign-in flow are unchanged; live replay,
 copied operational-event DataLinks, and degraded source-health browser proofs
 remain covered.
+Moving the 215-line live transport topology, source-binding, dashboard, and
+endpoint-startup fixture out of the adjacent browser scenario reduced that
+test from 403 to 215 lines and overlong test-function pressure from 5 to 4. The
+authenticated dashboard route and sign-in flow are unchanged; multi-link,
+no-data, unavailable-source, and degraded-source browser outcomes remain
+covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
