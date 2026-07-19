@@ -1685,6 +1685,13 @@ the Contacts boundary, so the scheduler process keeps using its three narrow
 context entry points without introducing new persistence-schema callers. No
 route or authentication placement is involved; production source-size pressure
 remains 3 and dependency ratchets are unchanged.
+Extracting pure contact configuration and lifecycle rules into
+`Cadence.Contacts.Validation` reduced `Cadence.Contacts` from 3,599 to 3,508
+lines. Mission IDs, reusable references, scheduled-contact path and intent
+rules, unique paths, realized-contact scope, and realization-state guards now
+live behind that persistence-free boundary, while resolution and database-backed
+checks remain in the context. No route or authentication placement is involved;
+production source-size pressure remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

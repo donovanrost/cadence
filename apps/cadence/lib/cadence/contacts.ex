@@ -21,7 +21,8 @@ defmodule Cadence.Contacts do
     Scheduler,
     SchedulerReadModel,
     TransportBinding,
-    TransportProfile
+    TransportProfile,
+    Validation
   }
 
   alias Cadence.Dashboards.RuntimeInvalidation
@@ -981,7 +982,7 @@ defmodule Cadence.Contacts do
   @spec persist_realized_contact(RealizedContact.t()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
   def persist_realized_contact(%RealizedContact{} = realized_contact) do
-    with :ok <- validate_realized_contact(realized_contact) do
+    with :ok <- Validation.realized_contact(realized_contact) do
       Multi.new()
       |> Multi.insert(:realized_contact, RealizedContactRow.changeset(realized_contact),
         on_conflict: :nothing,
@@ -1413,20 +1414,23 @@ defmodule Cadence.Contacts do
   end
 
   defp validate_path_template(%PathTemplate{} = path_template) do
-    with :ok <- validate_mission_id(path_template.mission_id),
-         :ok <- validate_reusable_path_refs(path_template.provider_profile_ids),
-         :ok <- validate_reusable_path_refs(path_template.transport_profile_ids),
+    with :ok <- Validation.mission_id(path_template.mission_id),
+         :ok <- Validation.reusable_path_refs(path_template.provider_profile_ids),
+         :ok <- Validation.reusable_path_refs(path_template.transport_profile_ids),
          {:ok, _path} <- resolve_path_template(path_template) do
       :ok
     end
   end
 
   defp validate_link_assignment(%LinkAssignment{} = assignment) do
-    with :ok <- validate_mission_id(assignment.mission_id),
-         :ok <- validate_required_binary(assignment.spacecraft_id, :missing_spacecraft_id),
+    with :ok <- Validation.mission_id(assignment.mission_id),
+         :ok <- Validation.required_binary(assignment.spacecraft_id, :missing_spacecraft_id),
          :ok <-
-           validate_required_binary(assignment.source_endpoint_ref, :missing_source_endpoint_ref),
-         :ok <- validate_required_binary(assignment.path_template_id, :missing_path_template_id),
+           Validation.required_binary(
+             assignment.source_endpoint_ref,
+             :missing_source_endpoint_ref
+           ),
+         :ok <- Validation.required_binary(assignment.path_template_id, :missing_path_template_id),
          {:ok, spacecraft} <-
            SpacecraftStore.fetch_spacecraft(
              assignment.organization_id,
@@ -1507,11 +1511,11 @@ defmodule Cadence.Contacts do
   end
 
   defp validate_link_assignment_refs(%LinkAssignment{} = assignment) do
-    case validate_reusable_path_refs(
+    case Validation.reusable_path_refs(
            ids_from_refs(assignment.provider_profile_refs, "provider_profile_id")
          ) do
       :ok ->
-        validate_reusable_path_refs(
+        Validation.reusable_path_refs(
           ids_from_refs(assignment.transport_profile_refs, "transport_profile_id")
         )
 
@@ -1521,113 +1525,17 @@ defmodule Cadence.Contacts do
   end
 
   defp validate_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    with :ok <- validate_mission_id(scheduled_contact.mission_id),
-         :ok <- validate_starts_before_end(scheduled_contact.starts_at, scheduled_contact.ends_at),
-         {:ok, resolved_paths} <- resolve_scheduled_contact_paths(scheduled_contact),
-         :ok <- validate_non_empty_paths(resolved_paths),
-         :ok <- validate_selected_path_presence(resolved_paths),
-         :ok <- validate_contact_intents(resolved_paths, scheduled_contact.contact_intents) do
-      validate_unique_path_ids(resolved_paths)
+    with {:ok, resolved_paths} <- resolve_scheduled_contact_paths(scheduled_contact) do
+      Validation.scheduled_contact(scheduled_contact, resolved_paths)
     end
   end
-
-  defp validate_realized_contact(%RealizedContact{} = realized_contact) do
-    validate_mission_id(realized_contact.mission_id)
-  end
-
-  defp validate_mission_id(mission_id) when is_binary(mission_id) and mission_id != "", do: :ok
-  defp validate_mission_id(_mission_id), do: {:error, :missing_mission_id}
-
-  defp validate_required_binary(value, _reason) when is_binary(value) and value != "", do: :ok
-  defp validate_required_binary(_value, reason), do: {:error, reason}
-
-  defp validate_starts_before_end(%DateTime{} = _starts_at, nil), do: :ok
-
-  defp validate_starts_before_end(%DateTime{} = starts_at, %DateTime{} = ends_at) do
-    case DateTime.compare(starts_at, ends_at) do
-      :gt -> {:error, :scheduled_contact_ends_before_it_starts}
-      _other -> :ok
-    end
-  end
-
-  defp validate_starts_before_end(_starts_at, _ends_at),
-    do: {:error, :scheduled_contact_requires_start_time}
-
-  defp validate_reusable_path_refs(refs) when is_list(refs) do
-    if length(refs) == MapSet.size(MapSet.new(refs)) do
-      :ok
-    else
-      {:error, :duplicate_contact_runtime_config_reference}
-    end
-  end
-
-  defp validate_non_empty_paths([]), do: {:error, :scheduled_contact_requires_path_configuration}
-  defp validate_non_empty_paths(_paths), do: :ok
-
-  defp validate_selected_path_presence(paths) do
-    if Enum.any?(paths, &(&1.selection_role == :selected)) do
-      :ok
-    else
-      {:error, :scheduled_contact_requires_selected_path}
-    end
-  end
-
-  defp validate_contact_intents(paths, contact_intents) do
-    with :ok <- validate_telemetry_downlink_intent(paths, contact_intents) do
-      validate_command_window_intent(paths, contact_intents)
-    end
-  end
-
-  defp validate_telemetry_downlink_intent(paths, contact_intents) do
-    if :telemetry_downlink in contact_intents and not selected_direction?(paths, :downlink) do
-      {:error, :scheduled_contact_requires_selected_downlink_path}
-    else
-      :ok
-    end
-  end
-
-  defp validate_command_window_intent(paths, contact_intents) do
-    if :command_window in contact_intents and not selected_direction?(paths, :uplink) do
-      {:error, :scheduled_contact_requires_selected_uplink_path}
-    else
-      :ok
-    end
-  end
-
-  defp selected_direction?(paths, direction) do
-    Enum.any?(paths, &(&1.direction == direction and &1.selection_role == :selected))
-  end
-
-  defp validate_unique_path_ids(paths) do
-    path_ids = Enum.map(paths, & &1.path_id)
-
-    if length(path_ids) == MapSet.size(MapSet.new(path_ids)) do
-      :ok
-    else
-      {:error, :duplicate_scheduled_contact_path_id}
-    end
-  end
-
-  defp validate_schedule_realization(%ScheduledContact{lifecycle_state: :scheduled}), do: :ok
-
-  defp validate_schedule_realization(%ScheduledContact{lifecycle_state: :realized}),
-    do: {:error, :scheduled_contact_already_realized}
-
-  defp validate_schedule_realization(%ScheduledContact{lifecycle_state: :completed}),
-    do: {:error, :scheduled_contact_completed}
-
-  defp validate_schedule_realization(%ScheduledContact{lifecycle_state: :expired}),
-    do: {:error, :scheduled_contact_expired}
-
-  defp validate_schedule_realization(%ScheduledContact{lifecycle_state: :canceled}),
-    do: {:error, :scheduled_contact_canceled}
 
   defp realize_scheduled_contact_record(%ScheduledContact{} = scheduled_contact, opts) do
     transition_time = Keyword.get(opts, :transition_time, DateTime.utc_now())
 
-    with :ok <- validate_schedule_realization(scheduled_contact),
+    with :ok <- Validation.schedule_realization(scheduled_contact),
          {:ok, realized_contact} <- build_realized_contact(scheduled_contact, opts),
-         :ok <- validate_unique_path_ids(realized_contact.paths) do
+         :ok <- Validation.unique_path_ids(realized_contact.paths) do
       with {:ok, %RealizedContact{} = persisted_realized_contact} <-
              persist_realized_contact_transaction(scheduled_contact, realized_contact),
            {:ok, _pid} <-
@@ -2367,11 +2275,11 @@ defmodule Cadence.Contacts do
              end
            ),
          :ok <-
-           validate_reusable_path_refs(
+           Validation.reusable_path_refs(
              ids_from_refs(provider_profile_refs, "provider_profile_id")
            ),
          :ok <-
-           validate_reusable_path_refs(
+           Validation.reusable_path_refs(
              ids_from_refs(transport_profile_refs, "transport_profile_id")
            ) do
       {:ok,
@@ -2395,7 +2303,7 @@ defmodule Cadence.Contacts do
              scheduled_contact.link_assignment_refs
            ),
          :ok <-
-           validate_reusable_path_refs(
+           Validation.reusable_path_refs(
              ids_from_refs(scheduled_contact.link_assignment_refs, "link_assignment_id")
            ),
          {:ok, path_template_refs} <-
@@ -2411,7 +2319,8 @@ defmodule Cadence.Contacts do
                )
              end
            ),
-         :ok <- validate_reusable_path_refs(ids_from_refs(path_template_refs, "path_template_id")) do
+         :ok <-
+           Validation.reusable_path_refs(ids_from_refs(path_template_refs, "path_template_id")) do
       source_endpoint_refs =
         scheduled_contact.source_endpoint_refs
         |> Kernel.++(Enum.map(link_assignments, & &1.source_endpoint_ref))
