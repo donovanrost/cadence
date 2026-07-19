@@ -787,7 +787,10 @@ transactions and runtime invalidation in the parent. Extracting effective-time
 historical binding resolution, range segmentation, interval diagnostics, and
 source-adapter facts execution from the 1,573-line data-source registry reduced
 the count to 16 while leaving current health-aware binding selection and
-registry loading in the parent.
+registry loading in the parent. Extracting artifact validation and parsing,
+compiled snapshot and runtime-artifact persistence, and result-document
+summarization from the 1,626-line Cadence YAML database importer reduced the
+count to 15 while keeping telemetry and command model conversion in the parent.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

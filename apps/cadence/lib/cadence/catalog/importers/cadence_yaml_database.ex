@@ -11,8 +11,6 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
   @behaviour Cadence.Catalog.Importer
 
-  alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Diagnostic, ImporterDescriptor, ImportResult}
   alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
@@ -37,8 +35,6 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     Unit
   }
 
-  alias Cadence.Governance
-
   alias Cadence.Catalog.Command.EnumerationValue, as: CommandEnumerationValue
   alias Cadence.Catalog.Command.Provenance, as: CommandProvenance
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
@@ -51,10 +47,12 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
   @supported_format_keys ["cadence_yaml_telemetry", "cadence_yaml"]
   @supported_media_types ["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"]
-  @supported_data_types ~w(uint int bool boolean float string binary)
-  @supported_match_criteria_types ~w(comparison range expression compound)
-  @supported_match_comparisons ~w(equal not_equal greater less greater_equal less_equal in_range not_in_range)
-  @supported_match_operators ~w(and or)
+
+  alias Cadence.Catalog.Importers.CadenceYamlDatabase.{
+    Persistence,
+    ResultBuilder,
+    Validation
+  }
 
   @impl true
   def descriptor do
@@ -71,19 +69,14 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
   @impl true
   def validate_artifact(%Artifact{} = artifact) do
-    with :ok <- validate_format(artifact),
-         {:ok, yaml_source} <- extract_yaml_source(artifact),
-         {:ok, parsed} <- parse_yaml(yaml_source) do
-      validate_root(parsed)
-    end
+    Validation.validate_artifact(artifact)
   end
 
   @impl true
   def import(%Artifact{} = artifact, %{import_run_id: import_run_id})
       when is_binary(import_run_id) do
     with :ok <- validate_artifact(artifact) do
-      {:ok, yaml_source} = extract_yaml_source(artifact)
-      {:ok, parsed} = parse_yaml(yaml_source)
+      {:ok, parsed} = Validation.parse_artifact(artifact)
 
       {telemetry_snapshot, telemetry_importer_diagnostics} =
         build_telemetry_snapshot(artifact, import_run_id, parsed)
@@ -110,28 +103,37 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         end
 
       with {:ok, persisted_telemetry_snapshot} <-
-             maybe_persist_telemetry_snapshot(artifact.organization_id, telemetry_snapshot),
+             Persistence.maybe_persist_telemetry_snapshot(
+               artifact.organization_id,
+               telemetry_snapshot
+             ),
            {:ok, binding_set} <-
-             maybe_persist_runtime_artifacts(
+             Persistence.maybe_persist_runtime_artifacts(
                persisted_telemetry_snapshot,
                import_run_id,
                telemetry_runtime_artifacts
              ),
            {:ok, persisted_command_snapshot} <-
-             maybe_persist_command_snapshot(artifact.organization_id, command_snapshot) do
+             Persistence.maybe_persist_command_snapshot(
+               artifact.organization_id,
+               command_snapshot
+             ) do
         {:ok,
          ImportResult.new(%{
            snapshot_id:
-             primary_snapshot_id(persisted_telemetry_snapshot, persisted_command_snapshot),
+             ResultBuilder.primary_snapshot_id(
+               persisted_telemetry_snapshot,
+               persisted_command_snapshot
+             ),
            imported_definition_count:
-             imported_definition_count(telemetry_snapshot, command_snapshot),
+             ResultBuilder.imported_definition_count(telemetry_snapshot, command_snapshot),
            diagnostics:
              telemetry_importer_diagnostics ++
                command_importer_diagnostics ++
-               telemetry_compiler_diagnostics(telemetry_runtime_artifacts) ++
+               ResultBuilder.telemetry_compiler_diagnostics(telemetry_runtime_artifacts) ++
                command_compiler_result.diagnostics,
            result_document:
-             build_result_document(
+             ResultBuilder.build_document(
                import_run_id,
                persisted_telemetry_snapshot,
                telemetry_runtime_artifacts,
@@ -144,58 +146,13 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     end
   end
 
-  defp validate_format(%Artifact{format_key: format_key} = artifact) do
-    cond do
-      format_key not in @supported_format_keys ->
-        {:error, {:unsupported_source_format, format_key}}
-
-      is_nil(artifact.media_type) ->
-        :ok
-
-      artifact.media_type in @supported_media_types ->
-        :ok
-
-      true ->
-        {:error, {:unsupported_media_type, artifact.media_type}}
+  defp build_telemetry_snapshot(%Artifact{} = artifact, import_run_id, parsed) do
+    if section_present?(parsed, "packets") do
+      build_present_telemetry_snapshot(artifact, import_run_id, parsed)
+    else
+      {nil, []}
     end
   end
-
-  defp extract_yaml_source(%Artifact{source_artifact: yaml_source}) when is_binary(yaml_source),
-    do: {:ok, yaml_source}
-
-  defp extract_yaml_source(%Artifact{source_artifact: %{"yaml" => yaml_source}})
-       when is_binary(yaml_source),
-       do: {:ok, yaml_source}
-
-  defp extract_yaml_source(%Artifact{source_artifact: %{yaml: yaml_source}})
-       when is_binary(yaml_source),
-       do: {:ok, yaml_source}
-
-  defp extract_yaml_source(%Artifact{}), do: {:error, :invalid_cadence_yaml_source_artifact}
-
-  defp parse_yaml(yaml_source) when is_binary(yaml_source) do
-    case YamlElixir.read_from_string(yaml_source) do
-      {:ok, parsed} -> {:ok, parsed}
-      {:error, reason} -> {:error, {:yaml_parse_error, reason}}
-    end
-  end
-
-  defp validate_root(parsed) when is_map(parsed) do
-    has_packets = section_present?(parsed, "packets")
-    has_commands = section_present?(parsed, "commands")
-
-    case {has_packets, has_commands} do
-      {false, false} ->
-        {:error, {:validation_error, "YAML must define a non-empty 'packets' or 'commands' list"}}
-
-      _other ->
-        with :ok <- maybe_validate_packets(parsed["packets"], has_packets) do
-          maybe_validate_commands(parsed["commands"], has_commands)
-        end
-    end
-  end
-
-  defp validate_root(_parsed), do: {:error, {:validation_error, "YAML root must be a map"}}
 
   defp section_present?(parsed, key) when is_map(parsed) and is_binary(key) do
     case Map.get(parsed, key) do
@@ -204,310 +161,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     end
   end
 
-  defp maybe_validate_packets(_packets, false), do: :ok
-  defp maybe_validate_packets(packets, true), do: validate_packets(packets)
-
-  defp maybe_validate_commands(_commands, false), do: :ok
-  defp maybe_validate_commands(commands, true), do: validate_commands(commands)
-
-  defp validate_packets(packets) do
-    Enum.reduce_while(Enum.with_index(packets), :ok, fn {packet, packet_index}, :ok ->
-      case validate_packet(packet, packet_index) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_packet(packet, packet_index) when is_map(packet) do
-    with {:ok, _name} <- require_binary(packet, "name", "packet", packet_index),
-         {:ok, _apid} <- optional_integer(packet, "apid"),
-         {:ok, items} <- require_list(packet, "items", "packet", packet_index) do
-      validate_items(packet["name"], items)
-    end
-  end
-
-  defp validate_packet(_packet, packet_index),
-    do: {:error, {:validation_error, "Packet at index #{packet_index} must be a map"}}
-
-  defp validate_items(packet_name, items) do
-    Enum.reduce_while(Enum.with_index(items), :ok, fn {item, item_index}, :ok ->
-      case validate_item(packet_name, item, item_index) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_item(packet_name, item, item_index) when is_map(item) do
-    with {:ok, data_type} <- require_binary(item, "data_type", "item", item_index),
-         {:ok, _name} <- require_binary(item, "name", "item", item_index),
-         {:ok, bit_offset} <- require_integer(item, "bit_offset", "item", item_index),
-         {:ok, bit_size} <- require_integer(item, "bit_size", "item", item_index) do
-      cond do
-        data_type not in @supported_data_types ->
-          {:error,
-           {:validation_error,
-            "Item '#{item["name"]}' in packet '#{packet_name}' has unsupported data_type '#{data_type}'"}}
-
-        bit_offset < 0 ->
-          {:error,
-           {:validation_error,
-            "Item '#{item["name"]}' in packet '#{packet_name}' must have non-negative bit_offset"}}
-
-        bit_size <= 0 ->
-          {:error,
-           {:validation_error,
-            "Item '#{item["name"]}' in packet '#{packet_name}' must have bit_size > 0"}}
-
-        true ->
-          :ok
-      end
-    end
-  end
-
-  defp validate_item(packet_name, _item, item_index),
-    do:
-      {:error,
-       {:validation_error, "Item at index #{item_index} in packet '#{packet_name}' must be a map"}}
-
-  defp validate_commands(commands) do
-    Enum.reduce_while(Enum.with_index(commands), :ok, fn {command, command_index}, :ok ->
-      case validate_command(command, command_index) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_command(command, command_index) when is_map(command) do
-    with {:ok, _name} <- require_binary(command, "name", "command", command_index),
-         {:ok, _opcode} <- optional_integer(command, "opcode"),
-         :ok <- validate_hazard_shape(command, command_index),
-         :ok <- validate_command_parameters(command) do
-      validate_command_verifiers(command)
-    end
-  end
-
-  defp validate_command(_command, command_index),
-    do: {:error, {:validation_error, "Command at index #{command_index} must be a map"}}
-
-  defp validate_hazard_shape(
-         %{"is_hazardous" => true, "hazard_description" => hazard_description},
-         _
-       )
-       when is_binary(hazard_description) and hazard_description != "",
-       do: :ok
-
-  defp validate_hazard_shape(%{"is_hazardous" => true, "name" => name}, _command_index) do
-    {:error, {:validation_error, "Hazardous command '#{name}' must define a hazard_description"}}
-  end
-
-  defp validate_hazard_shape(_command, _command_index), do: :ok
-
-  defp validate_command_parameters(%{"parameters" => nil}), do: :ok
-
-  defp validate_command_parameters(%{} = command) when not is_map_key(command, "parameters"),
-    do: :ok
-
-  defp validate_command_parameters(%{"name" => command_name, "parameters" => parameters})
-       when is_list(parameters) do
-    Enum.reduce_while(Enum.with_index(parameters), :ok, fn {parameter, parameter_index}, :ok ->
-      case validate_command_parameter(command_name, parameter, parameter_index) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_command_parameters(%{"name" => command_name}) do
-    {:error,
-     {:validation_error,
-      "Command '#{command_name}' field 'parameters' must be a list when present"}}
-  end
-
-  defp validate_command_verifiers(%{"verifiers" => nil}), do: :ok
-
-  defp validate_command_verifiers(%{} = command) when not is_map_key(command, "verifiers"),
-    do: :ok
-
-  defp validate_command_verifiers(%{"name" => command_name, "verifiers" => verifiers})
-       when is_list(verifiers) do
-    Enum.reduce_while(Enum.with_index(verifiers), :ok, fn {verifier, verifier_index}, :ok ->
-      case validate_command_verifier(command_name, verifier, verifier_index) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_command_verifiers(%{"name" => command_name}) do
-    {:error,
-     {:validation_error,
-      "Command '#{command_name}' field 'verifiers' must be a list when present"}}
-  end
-
-  defp validate_command_verifier(command_name, verifier, verifier_index) when is_map(verifier) do
-    with {:ok, _name} <- require_binary(verifier, "name", "verifier", verifier_index),
-         {:ok, _timeout_ms} <- optional_integer(verifier, "timeout_ms"),
-         {:ok, _delay_ms} <- optional_integer(verifier, "delay_ms"),
-         :ok <- validate_command_verifier_phase(verifier),
-         :ok <- validate_command_verifier_severity(verifier),
-         :ok <- validate_command_match_criteria(verifier["success_criteria"], "success_criteria"),
-         :ok <- validate_command_match_criteria(verifier["failure_criteria"], "failure_criteria") do
-      :ok
-    else
-      {:error, {:validation_error, reason}} ->
-        {:error,
-         {:validation_error,
-          "Verifier at index #{verifier_index} in command '#{command_name}' #{reason}"}}
-
-      {:error, _reason} = error ->
-        error
-    end
-  end
-
-  defp validate_command_verifier(command_name, _verifier, verifier_index) do
-    {:error,
-     {:validation_error,
-      "Verifier at index #{verifier_index} in command '#{command_name}' must be a map"}}
-  end
-
-  defp validate_command_verifier_phase(%{"phase" => phase})
-       when phase not in ["acceptance", "start", "completion", "custom"] do
-    {:error, {:validation_error, "has unsupported phase '#{phase}'"}}
-  end
-
-  defp validate_command_verifier_phase(_verifier), do: :ok
-
-  defp validate_command_verifier_severity(%{"severity" => severity})
-       when severity not in ["info", "warning", "error", "critical"] do
-    {:error, {:validation_error, "has unsupported severity '#{severity}'"}}
-  end
-
-  defp validate_command_verifier_severity(_verifier), do: :ok
-
-  defp validate_command_match_criteria(nil, _field), do: :ok
-
-  defp validate_command_match_criteria(criteria, field) when is_map(criteria) do
-    criteria_type = Map.get(criteria, "criteria_type", "comparison")
-
-    cond do
-      unsupported_match_criteria_type?(criteria_type) ->
-        invalid_match_criteria_type(field, criteria_type)
-
-      criteria_type == "comparison" ->
-        validate_comparison_match_criteria(criteria, field)
-
-      criteria_type == "compound" ->
-        validate_compound_match_criteria(criteria, field)
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_command_match_criteria(_criteria, field) do
-    {:error, {:validation_error, "#{field} must be a map when present"}}
-  end
-
-  defp unsupported_match_criteria_type?(criteria_type) do
-    criteria_type not in @supported_match_criteria_types
-  end
-
-  defp invalid_match_criteria_type(field, criteria_type) do
-    {:error, {:validation_error, "#{field} has unsupported criteria_type '#{criteria_type}'"}}
-  end
-
-  defp validate_comparison_match_criteria(criteria, field) do
-    comparison = Map.get(criteria, "comparison")
-
-    if comparison in @supported_match_comparisons do
-      :ok
-    else
-      {:error, {:validation_error, "#{field} has unsupported comparison '#{comparison}'"}}
-    end
-  end
-
-  defp validate_compound_match_criteria(criteria, field) do
-    with :ok <- validate_compound_match_operator(criteria, field),
-         {:ok, conditions} <- validate_compound_match_conditions(criteria, field) do
-      Enum.reduce_while(conditions, :ok, fn nested_criteria, :ok ->
-        reduce_nested_match_criteria(nested_criteria, field)
-      end)
-    end
-  end
-
-  defp validate_compound_match_operator(criteria, field) do
-    operator = Map.get(criteria, "operator")
-
-    if operator in @supported_match_operators do
-      :ok
-    else
-      {:error, {:validation_error, "#{field} has unsupported operator '#{operator}'"}}
-    end
-  end
-
-  defp validate_compound_match_conditions(criteria, field) do
-    conditions = Map.get(criteria, "conditions", [])
-
-    if is_list(conditions) do
-      {:ok, conditions}
-    else
-      {:error, {:validation_error, "#{field} conditions must be a list"}}
-    end
-  end
-
-  defp reduce_nested_match_criteria(nested_criteria, field) do
-    case validate_command_match_criteria(nested_criteria, field <> ".conditions") do
-      :ok -> {:cont, :ok}
-      {:error, _reason} = error -> {:halt, error}
-    end
-  end
-
-  defp validate_command_parameter(command_name, parameter, parameter_index)
-       when is_map(parameter) do
-    with {:ok, data_type} <- require_binary(parameter, "data_type", "parameter", parameter_index),
-         {:ok, _name} <- require_binary(parameter, "name", "parameter", parameter_index),
-         {:ok, bit_offset} <-
-           require_integer(parameter, "bit_offset", "parameter", parameter_index),
-         {:ok, bit_length} <-
-           require_integer(parameter, "bit_length", "parameter", parameter_index) do
-      cond do
-        data_type not in @supported_data_types ->
-          {:error,
-           {:validation_error,
-            "Parameter '#{parameter["name"]}' in command '#{command_name}' has unsupported data_type '#{data_type}'"}}
-
-        bit_offset < 0 ->
-          {:error,
-           {:validation_error,
-            "Parameter '#{parameter["name"]}' in command '#{command_name}' must have non-negative bit_offset"}}
-
-        bit_length <= 0 ->
-          {:error,
-           {:validation_error,
-            "Parameter '#{parameter["name"]}' in command '#{command_name}' must have bit_length > 0"}}
-
-        true ->
-          :ok
-      end
-    end
-  end
-
-  defp validate_command_parameter(command_name, _parameter, parameter_index) do
-    {:error,
-     {:validation_error,
-      "Parameter at index #{parameter_index} in command '#{command_name}' must be a map"}}
-  end
-
-  defp build_telemetry_snapshot(%Artifact{} = artifact, import_run_id, parsed) do
-    if section_present?(parsed, "packets") do
-      build_present_telemetry_snapshot(artifact, import_run_id, parsed)
-    else
-      {nil, []}
-    end
-  end
+  defp build_root_diagnostics(_parsed), do: []
 
   defp build_present_telemetry_snapshot(%Artifact{} = artifact, import_run_id, parsed) do
     snapshot_id = "telemetry_snapshot:" <> import_run_id
@@ -1109,258 +763,6 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     end)
   end
 
-  defp maybe_persist_telemetry_snapshot(_organization_id, nil), do: {:ok, nil}
-
-  defp maybe_persist_telemetry_snapshot(organization_id, %TelemetrySnapshot{} = snapshot) do
-    Catalog.persist_telemetry_snapshot(organization_id, snapshot)
-  end
-
-  defp maybe_persist_command_snapshot(_organization_id, nil), do: {:ok, nil}
-
-  defp maybe_persist_command_snapshot(organization_id, %CommandSnapshot{} = snapshot) do
-    Catalog.persist_command_snapshot(organization_id, snapshot)
-  end
-
-  defp maybe_persist_runtime_artifacts(_snapshot, _import_run_id, nil), do: {:ok, nil}
-
-  defp maybe_persist_runtime_artifacts(
-         %TelemetrySnapshot{} = snapshot,
-         import_run_id,
-         %{compiler_result: compiler_result}
-       ) do
-    persist_runtime_artifacts(snapshot, import_run_id, compiler_result)
-  end
-
-  defp persist_runtime_artifacts(
-         %TelemetrySnapshot{organization_id: organization_id, mission_id: mission_id},
-         _import_run_id,
-         %{selector_inputs: [], packet_definitions: []}
-       ) do
-    if is_binary(organization_id) and is_binary(mission_id) do
-      {:ok, nil}
-    else
-      {:error, :catalog_import_missing_scope}
-    end
-  end
-
-  defp persist_runtime_artifacts(
-         %TelemetrySnapshot{organization_id: organization_id, mission_id: mission_id} = snapshot,
-         _import_run_id,
-         compiler_result
-       ) do
-    if is_binary(organization_id) and is_binary(mission_id) do
-      binding_set = compiled_binding_set(snapshot, compiler_result)
-
-      case Governance.persist_binding_set(organization_id, binding_set) do
-        {:ok, %BindingSet{} = persisted_binding_set} -> {:ok, persisted_binding_set}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error, :catalog_import_missing_scope}
-    end
-  end
-
-  defp compiled_binding_set(%TelemetrySnapshot{} = snapshot, compiler_result) do
-    RuntimeArtifacts.build_binding_set(snapshot, compiler_result)
-  end
-
-  defp build_result_document(
-         import_run_id,
-         telemetry_snapshot,
-         telemetry_runtime_artifacts,
-         binding_set,
-         command_snapshot,
-         command_compiler_result
-       ) do
-    %{
-      "import_run_id" => import_run_id,
-      "primary_snapshot_id" => primary_snapshot_id(telemetry_snapshot, command_snapshot),
-      "snapshot" =>
-        telemetry_snapshot_summary(telemetry_snapshot) ||
-          command_snapshot_summary(command_snapshot),
-      "telemetry_snapshot" => telemetry_snapshot_summary(telemetry_snapshot),
-      "telemetry_runtime" =>
-        telemetry_runtime_summary(telemetry_snapshot, telemetry_runtime_artifacts),
-      "packet_definitions" => telemetry_packet_definitions(telemetry_runtime_artifacts),
-      "selector_input_count" => telemetry_selector_input_count(telemetry_runtime_artifacts),
-      "binding_set" =>
-        case binding_set do
-          %BindingSet{} ->
-            %{
-              "binding_set_id" => binding_set.binding_set_id,
-              "version" => binding_set.version,
-              "capability_instance_count" => length(binding_set.capability_instances),
-              "rule_count" => length(binding_set.rules)
-            }
-
-          nil ->
-            nil
-        end,
-      "command_snapshot" => command_snapshot_summary(command_snapshot),
-      "command_runtime" => command_runtime_summary(command_compiler_result)
-    }
-  end
-
-  defp build_root_diagnostics(_parsed), do: []
-
-  defp primary_snapshot_id(%TelemetrySnapshot{snapshot_id: snapshot_id}, _command_snapshot),
-    do: snapshot_id
-
-  defp primary_snapshot_id(nil, %CommandSnapshot{snapshot_id: snapshot_id}), do: snapshot_id
-  defp primary_snapshot_id(nil, nil), do: nil
-
-  defp imported_definition_count(telemetry_snapshot, command_snapshot) do
-    telemetry_count =
-      case telemetry_snapshot do
-        %TelemetrySnapshot{} = snapshot -> length(snapshot.packets)
-        nil -> 0
-      end
-
-    command_count =
-      case command_snapshot do
-        %CommandSnapshot{} = snapshot -> length(snapshot.command_definitions)
-        nil -> 0
-      end
-
-    telemetry_count + command_count
-  end
-
-  defp telemetry_compiler_diagnostics(nil), do: []
-
-  defp telemetry_compiler_diagnostics(%{compiler_result: %{diagnostics: diagnostics}})
-       when is_list(diagnostics),
-       do: diagnostics
-
-  defp telemetry_compiler_diagnostics(_other), do: []
-
-  defp telemetry_snapshot_summary(nil), do: nil
-
-  defp telemetry_snapshot_summary(%TelemetrySnapshot{} = snapshot) do
-    %{
-      "snapshot_id" => snapshot.snapshot_id,
-      "snapshot_name" => snapshot.snapshot_name,
-      "snapshot_version" => snapshot.snapshot_version,
-      "packet_count" => length(snapshot.packets),
-      "point_count" => length(snapshot.points),
-      "type_count" => length(snapshot.types),
-      "unit_count" => length(snapshot.units),
-      "calibration_algorithm_count" => length(snapshot.calibration_algorithms)
-    }
-  end
-
-  defp telemetry_packet_definitions(nil), do: []
-
-  defp telemetry_packet_definitions(%{compiler_result: %{packet_definitions: packet_definitions}})
-       when is_list(packet_definitions) do
-    Enum.map(packet_definitions, fn packet_definition ->
-      %{
-        "packet_definition_id" => packet_definition.packet_definition_id,
-        "packet_name" => packet_definition.packet_name,
-        "apid" => packet_definition.apid,
-        "field_count" => length(packet_definition.fields)
-      }
-    end)
-  end
-
-  defp telemetry_packet_definitions(_other), do: []
-
-  defp telemetry_selector_input_count(nil), do: 0
-
-  defp telemetry_selector_input_count(%{compiler_result: %{selector_inputs: selector_inputs}})
-       when is_list(selector_inputs),
-       do: length(selector_inputs)
-
-  defp telemetry_selector_input_count(_other), do: 0
-
-  defp telemetry_runtime_summary(nil, _telemetry_runtime_artifacts), do: nil
-
-  defp telemetry_runtime_summary(
-         %TelemetrySnapshot{} = snapshot,
-         %{compiler_result: %{packet_definitions: packet_definitions, diagnostics: diagnostics}}
-       )
-       when is_list(packet_definitions) and is_list(diagnostics) do
-    custom_application_candidate_packets =
-      custom_application_candidate_packets(snapshot, diagnostics)
-
-    %{
-      "packet_count" => length(snapshot.packets),
-      "built_in_telemetry_packet_count" => length(packet_definitions),
-      "compiler_diagnostic_count" => length(diagnostics),
-      "custom_application_candidate_packet_count" => length(custom_application_candidate_packets),
-      "custom_application_candidate_packets" => custom_application_candidate_packets
-    }
-  end
-
-  defp telemetry_runtime_summary(%TelemetrySnapshot{} = snapshot, _other) do
-    %{
-      "packet_count" => length(snapshot.packets),
-      "built_in_telemetry_packet_count" => 0,
-      "compiler_diagnostic_count" => 0,
-      "custom_application_candidate_packet_count" => 0,
-      "custom_application_candidate_packets" => []
-    }
-  end
-
-  defp custom_application_candidate_packets(%TelemetrySnapshot{} = snapshot, diagnostics) do
-    packet_names_by_id = Map.new(snapshot.packets, &{&1.packet_id, &1.name})
-
-    diagnostics
-    |> Enum.filter(fn diagnostic ->
-      diagnostic.metadata["consumption_status"] == "available_for_custom_application_binding"
-    end)
-    |> Enum.reduce(%{}, fn diagnostic, acc ->
-      packet_id = diagnostic.metadata["packet_id"]
-      packet_name = Map.get(packet_names_by_id, packet_id)
-
-      if is_binary(packet_id) do
-        Map.put_new(acc, packet_id, %{
-          "packet_id" => packet_id,
-          "packet_name" => packet_name,
-          "reason" =>
-            diagnostic.metadata["custom_application_candidate_reason"] ||
-              "custom_application_candidate"
-        })
-      else
-        acc
-      end
-    end)
-    |> Map.values()
-    |> Enum.sort_by(&{&1["packet_name"] || "", &1["packet_id"]})
-  end
-
-  defp command_snapshot_summary(nil), do: nil
-
-  defp command_snapshot_summary(%CommandSnapshot{} = snapshot) do
-    %{
-      "snapshot_id" => snapshot.snapshot_id,
-      "snapshot_name" => snapshot.snapshot_name,
-      "snapshot_version" => snapshot.snapshot_version,
-      "command_count" => length(snapshot.command_definitions),
-      "argument_count" => length(snapshot.arguments),
-      "argument_type_count" => length(snapshot.argument_types),
-      "encoding_layout_count" => length(snapshot.encoding_layouts)
-    }
-  end
-
-  defp command_runtime_summary(%CommandCompilerResult{} = compiler_result) do
-    %{
-      "runtime_definition_count" => length(compiler_result.runtime_definitions),
-      "constraint_plan_count" => length(compiler_result.constraint_plans),
-      "verifier_plan_count" => length(compiler_result.verifier_plans),
-      "operational_binding_count" => length(compiler_result.operational_bindings),
-      "runtime_definitions" =>
-        Enum.map(compiler_result.runtime_definitions, fn runtime_definition ->
-          %{
-            "command_id" => runtime_definition.command_id,
-            "name" => runtime_definition.name,
-            "apid" => runtime_definition.apid,
-            "opcode" => runtime_definition.opcode,
-            "argument_count" => length(runtime_definition.argument_specs)
-          }
-        end)
-    }
-  end
-
   defp command_provenance(%Artifact{} = artifact, import_run_id, source_path, source_ref) do
     CommandProvenance.new(%{
       artifact_id: artifact.artifact_id,
@@ -1586,41 +988,4 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
   end
 
   defp parsed_integer(_value), do: nil
-
-  defp require_binary(data, key, subject, index) when is_map(data) do
-    case Map.get(data, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _other -> {:error, {:validation_error, "#{subject} at index #{index} is missing '#{key}'"}}
-    end
-  end
-
-  defp require_list(data, key, subject, index) when is_map(data) do
-    case Map.get(data, key) do
-      value when is_list(value) and value != [] ->
-        {:ok, value}
-
-      _other ->
-        {:error, {:validation_error, "#{subject} at index #{index} is missing '#{key}' list"}}
-    end
-  end
-
-  defp require_integer(data, key, subject, index) when is_map(data) do
-    case parsed_integer(Map.get(data, key)) do
-      value when is_integer(value) -> {:ok, value}
-      _other -> {:error, {:validation_error, "#{subject} at index #{index} has invalid '#{key}'"}}
-    end
-  end
-
-  defp optional_integer(data, key) when is_map(data) do
-    case Map.get(data, key) do
-      nil ->
-        {:ok, nil}
-
-      value ->
-        if(is_integer(parsed_integer(value)),
-          do: {:ok, parsed_integer(value)},
-          else: {:error, {:validation_error, "Invalid '#{key}'"}}
-        )
-    end
-  end
 end
