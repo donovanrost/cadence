@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{
+    AutomationGrants,
     ContactRequirementTemplates,
     FleetPlanningPolicies,
     FleetPlanningRuns
@@ -285,7 +286,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
       )
 
     active_grants =
-      Cadence.list_automation_grants(
+      AutomationGrants.list(
         scope.organization_id,
         mission.mission_id,
         lifecycle_state: :active

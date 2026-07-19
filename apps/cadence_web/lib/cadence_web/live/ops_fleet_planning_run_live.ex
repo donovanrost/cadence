@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
   alias Cadence.ContactPlanning.{
     ContactPlans,
     ContactRequirements,
+    FleetAutomationActions,
     FleetPlanner,
     FleetPlanningRuns,
     FleetRepairs,
@@ -523,7 +524,7 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
       pressures = resource_pressure(run)
 
       actions =
-        Cadence.list_fleet_automation_actions(scope.organization_id, mission.mission_id, run_id)
+        FleetAutomationActions.list(scope.organization_id, mission.mission_id, run_id)
 
       repair_form = repair_form(run)
 

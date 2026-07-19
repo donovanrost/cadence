@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.FleetPlanningPolicies
+  alias Cadence.ContactPlanning.{AutomationGrants, FleetPlanningPolicies}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -82,7 +82,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
     with %{} <- policy,
          {:ok, attrs} <- grant_attrs(params, policy),
          {:ok, _grant} <-
-           Cadence.issue_automation_grant(scope, mission.mission_id, attrs) do
+           AutomationGrants.issue(scope, mission.mission_id, attrs) do
       {:noreply,
        socket
        |> load_policy()
@@ -105,7 +105,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
         {:noreply, put_flash(socket, :error, "Select an active grant.")}
 
       grant ->
-        case Cadence.revoke_automation_grant(
+        case AutomationGrants.revoke(
                scope,
                mission.mission_id,
                grant.automation_grant_id,
@@ -470,7 +470,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
         {:error, _reason} -> nil
       end
 
-    grants = Cadence.list_automation_grants(scope.organization_id, mission.mission_id)
+    grants = AutomationGrants.list(scope.organization_id, mission.mission_id)
     active_grants = Enum.filter(grants, &(&1.lifecycle_state == :active))
 
     service_identities =

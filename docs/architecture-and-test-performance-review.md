@@ -1574,6 +1574,14 @@ callers of the root facade from 26 to 25 files. Fleet-planning routes remain in
 the authenticated `:ops` LiveView session, and direct execution and repair calls
 continue passing `current_scope`; production source-size pressure remains 4 and
 dependency ratchets are unchanged.
+Retiring the seven automation-grant, automated-planning, and automation-action
+clauses from the root facade moved five production call sites directly to
+`Cadence.ContactPlanning.AutomationGrants`, `FleetAutomation`, and
+`FleetAutomationActions`. This reduced `Cadence` from 2,038 to 1,944 lines and
+reduced production web callers of the root facade from 25 to 23 files.
+Automation controls remain in the authenticated `:ops` LiveView session, and
+direct grant and automation mutations continue passing `current_scope`;
+production source-size pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
