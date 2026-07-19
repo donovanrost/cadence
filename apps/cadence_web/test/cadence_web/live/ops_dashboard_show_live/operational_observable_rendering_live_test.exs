@@ -124,6 +124,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     end)
   end
 
+  defp assert_antenna_pointing_copied_path(path, event_route_id, event_at_ms) do
+    assert path =~ "panel=data_link"
+    assert path =~ "selected_target=operational_event"
+    assert path =~ "selected_id=#{event_route_id}"
+    assert path =~ "selected_time=#{event_at_ms}"
+    assert path =~ "data_source_id=managed_operational_observables"
+    assert path =~ "source_binding_id=default_flight_operational_observables"
+    assert path =~ "scope_kind=ground_station"
+    assert path =~ "scope_id=dss-14"
+  end
+
   describe "operational observable rendering" do
     test "renders contact phase operational observable rows with phase presentation" do
       enable_dashboard_engine_inline_resolves!()
@@ -782,22 +793,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
         |> LazyHTML.attribute("data-clipboard-text")
         |> List.first()
 
-      assert antenna_pointing_event_copied_path =~ "panel=data_link"
-      assert antenna_pointing_event_copied_path =~ "selected_target=operational_event"
-
-      assert antenna_pointing_event_copied_path =~
-               "selected_id=#{antenna_pointing_event_route_id}"
-
-      assert antenna_pointing_event_copied_path =~ "selected_time=#{antenna_pointing_event_at_ms}"
-
-      assert antenna_pointing_event_copied_path =~
-               "data_source_id=managed_operational_observables"
-
-      assert antenna_pointing_event_copied_path =~
-               "source_binding_id=default_flight_operational_observables"
-
-      assert antenna_pointing_event_copied_path =~ "scope_kind=ground_station"
-      assert antenna_pointing_event_copied_path =~ "scope_id=dss-14"
+      assert_antenna_pointing_copied_path(
+        antenna_pointing_event_copied_path,
+        antenna_pointing_event_route_id,
+        antenna_pointing_event_at_ms
+      )
 
       {:ok, reopened_antenna_pointing_event_view, _html} =
         live(conn, antenna_pointing_event_copied_path)
