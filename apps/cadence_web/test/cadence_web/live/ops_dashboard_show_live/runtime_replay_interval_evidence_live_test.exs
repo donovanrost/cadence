@@ -15,7 +15,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
   alias Cadence.OperationalEvents.Event
   alias CadenceWeb.TestFixtures
 
-  test "opens replay source-health and ground-station connection interval evidence from rendered operational observable frame panel" do
+  defp setup_ground_station_interval_evidence! do
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_ground_station_connection_ops"
 
@@ -58,6 +58,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
         observed_at,
         replay_run_id
       )
+
+    {
+      conn,
+      org,
+      mission,
+      replay_sources,
+      transport,
+      ground_station_interval,
+      source_health_event,
+      source_health_interval,
+      observed_at,
+      replay_run_id
+    }
+  end
+
+  test "opens replay source-health and ground-station connection interval evidence from rendered operational observable frame panel" do
+    {
+      conn,
+      org,
+      mission,
+      replay_sources,
+      transport,
+      ground_station_interval,
+      source_health_event,
+      source_health_interval,
+      observed_at,
+      replay_run_id
+    } = setup_ground_station_interval_evidence!()
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

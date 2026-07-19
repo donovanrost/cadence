@@ -928,6 +928,9 @@ pressure from 29 to 28.
 Extracting the degraded workflow-dispatch outcome metadata contract reduced
 that data-link panel component test from 317 to 264 lines and overlong-test
 pressure from 28 to 27.
+Extracting replay ground-station connection, interval, and source-health setup
+reduced that interval-evidence LiveView test from 322 to 292 lines and
+overlong-test pressure from 27 to 26.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
