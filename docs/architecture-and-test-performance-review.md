@@ -1316,6 +1316,13 @@ recovery-action, and correction-lineage interpretation into a 125-line
 2,105 to 2,010 lines. Correction, transition, and recovery paths now consume
 one compatibility reader for current and older payload shapes; production
 source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting correction-source validation, supersession checks, action-policy
+gates, request construction, and correction-stage transitions into a 427-line
+`DataManagement.WorkflowCorrections` module reduced `DataManagement` from
+2,010 to 1,628 lines. The typed correction request and transition APIs remain
+unchanged, while generic stage and group transitions route correction events
+through the same lineage-preserving boundary; production source-size pressure
+remains 6 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
