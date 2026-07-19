@@ -97,7 +97,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
         thresholds: %{"yellow_high" => 10, "red_high" => 20}
       })
 
-    {:ok, _definition} = Cadence.persist_limit_definition(limit_definition)
+    {:ok, _definition} = Cadence.Limits.persist_limit_definition(limit_definition)
     {:ok, _run} = Cadence.evaluate_telemetry_limits(mission.mission_id)
   end
 

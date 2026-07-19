@@ -19,7 +19,7 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
         expression: "HK.counter * 2"
       })
 
-    assert {:ok, ^definition} = Cadence.persist_derived_definition(definition)
+    assert {:ok, ^definition} = Cadence.Governance.persist_derived_definition(definition)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(

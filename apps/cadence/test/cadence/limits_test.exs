@@ -100,9 +100,11 @@ defmodule Cadence.LimitsTest do
         thresholds: %{"yellow_high" => 50, "red_high" => 70}
       })
 
-    assert {:ok, ^derived_definition} = Cadence.persist_derived_definition(derived_definition)
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
-    assert [persisted_limit_definition] = Cadence.list_limit_definitions("mission-alpha")
+    assert {:ok, ^derived_definition} =
+             Cadence.Governance.persist_derived_definition(derived_definition)
+
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
+    assert [persisted_limit_definition] = Cadence.Limits.list_limit_definitions("mission-alpha")
     assert persisted_limit_definition.limit_set_name == "ops"
 
     assert {:ok, _result} =
@@ -241,7 +243,7 @@ defmodule Cadence.LimitsTest do
         thresholds: %{"yellow_high" => 10, "red_high" => 20}
       })
 
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
 
     assert RuntimeCache.get_source_result(limits_key, cache) == :miss
     assert RuntimeCache.get_frame(limits_frame_key, cache) == :miss

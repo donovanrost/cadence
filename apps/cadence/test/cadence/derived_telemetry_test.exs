@@ -27,11 +27,14 @@ defmodule Cadence.DerivedTelemetryTest do
         expression: "DERIVED.counter_double + 1"
       })
 
-    assert {:ok, ^base_definition} = Cadence.persist_derived_definition(base_definition)
-    assert {:ok, ^chained_definition} = Cadence.persist_derived_definition(chained_definition)
+    assert {:ok, ^base_definition} =
+             Cadence.Governance.persist_derived_definition(base_definition)
+
+    assert {:ok, ^chained_definition} =
+             Cadence.Governance.persist_derived_definition(chained_definition)
 
     assert ["DERIVED.counter_double + 1", "HK.counter * 2"] =
-             Cadence.list_derived_definitions("mission-alpha")
+             Cadence.Governance.list_derived_definitions("mission-alpha")
              |> Enum.map(& &1.expression)
              |> Enum.sort()
 

@@ -18,12 +18,12 @@ defmodule Cadence.Reads.LimitsTest do
     persist_mission_scope(@organization_id, @mission_id)
 
     assert {:ok, _definition} =
-             Cadence.persist_limit_definition(
+             Cadence.Limits.persist_limit_definition(
                limit_definition(version: 1, yellow_high: 10, red_high: 20)
              )
 
     assert {:ok, _definition} =
-             Cadence.persist_limit_definition(
+             Cadence.Limits.persist_limit_definition(
                limit_definition(version: 2, yellow_high: 15, red_high: 25)
              )
 
@@ -56,7 +56,7 @@ defmodule Cadence.Reads.LimitsTest do
     persist_mission_scope(@organization_id, @mission_id <> "-range")
 
     assert {:ok, _definition} =
-             Cadence.persist_limit_definition(
+             Cadence.Limits.persist_limit_definition(
                limit_definition(mission_id: @mission_id <> "-range", version: 1, yellow_high: 10)
              )
 
@@ -77,7 +77,7 @@ defmodule Cadence.Reads.LimitsTest do
     persist_mission_scope(@organization_id, mission_id)
 
     assert {:ok, _definition} =
-             Cadence.persist_limit_definition(
+             Cadence.Limits.persist_limit_definition(
                limit_definition(
                  mission_id: mission_id,
                  version: 1,
@@ -87,7 +87,7 @@ defmodule Cadence.Reads.LimitsTest do
              )
 
     assert {:ok, _definition} =
-             Cadence.persist_limit_definition(
+             Cadence.Limits.persist_limit_definition(
                limit_definition(
                  mission_id: mission_id,
                  version: 2,

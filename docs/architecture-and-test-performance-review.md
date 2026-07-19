@@ -1599,6 +1599,13 @@ from 19 to 17 files. Contact-action and mission-event controller routes remain
 in the authenticated API pipeline, and controller mission authorization still
 runs before the owner reads; production source-size pressure remains 4 and
 dependency ratchets are unchanged.
+Retiring the four derived-telemetry and limit-definition persistence/read
+clauses from the root facade moved 37 test and support call sites directly to
+`Cadence.Governance` and `Cadence.Limits`. This reduced `Cadence` from 1,738
+to 1,714 lines; production web callers of the root facade remain at 17 files
+because production already used the owning contexts. No route or authentication
+placement is involved; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

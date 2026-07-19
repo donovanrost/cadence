@@ -105,7 +105,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLimitIntervalsLiveTest d
         thresholds: thresholds
       })
 
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
     limit_definition
   end
 

@@ -775,7 +775,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         thresholds: %{"yellow_high" => 10, "red_high" => 20}
       })
 
-    assert {:ok, _definition} = Cadence.persist_limit_definition(definition)
+    assert {:ok, _definition} = Cadence.Limits.persist_limit_definition(definition)
     assert {:ok, _run} = Cadence.evaluate_telemetry_limits(mission_id)
 
     event = Cadence.latest_telemetry_limit_state(organization_id, mission_id, "HK.counter", [])
@@ -882,10 +882,10 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         thresholds: %{"yellow_high" => 20}
       })
 
-    assert {:ok, ^first_definition} = Cadence.persist_limit_definition(first_definition)
+    assert {:ok, ^first_definition} = Cadence.Limits.persist_limit_definition(first_definition)
 
     assert {:ok, ^replacement_definition} =
-             Cadence.persist_limit_definition(replacement_definition)
+             Cadence.Limits.persist_limit_definition(replacement_definition)
 
     [event | _older_events] =
       DefinitionLifecycle.list_definition_lifecycle_events(

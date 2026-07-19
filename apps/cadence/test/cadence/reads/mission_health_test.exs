@@ -187,10 +187,10 @@ defmodule Cadence.Reads.MissionHealthTest do
       })
 
     assert {:ok, ^counter_limit_definition} =
-             Cadence.persist_limit_definition(counter_limit_definition)
+             Cadence.Limits.persist_limit_definition(counter_limit_definition)
 
     assert {:ok, ^voltage_limit_definition} =
-             Cadence.persist_limit_definition(voltage_limit_definition)
+             Cadence.Limits.persist_limit_definition(voltage_limit_definition)
 
     :ok
   end

@@ -323,7 +323,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         thresholds: %{"yellow_high" => 20, "red_high" => 30}
       })
 
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
   end
 
   def seed_catalog_revision_event!(org, mission, %DateTime{} = occurred_at) do

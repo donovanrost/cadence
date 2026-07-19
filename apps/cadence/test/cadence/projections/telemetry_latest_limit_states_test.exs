@@ -19,7 +19,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
         thresholds: %{"yellow_high" => 10, "red_high" => 20}
       })
 
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
@@ -103,13 +103,14 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
         thresholds: %{"yellow_high" => 30, "red_high" => 60}
       })
 
-    assert {:ok, ^derived_definition} = Cadence.persist_derived_definition(derived_definition)
+    assert {:ok, ^derived_definition} =
+             Cadence.Governance.persist_derived_definition(derived_definition)
 
     assert {:ok, ^telemetry_limit_definition} =
-             Cadence.persist_limit_definition(telemetry_limit_definition)
+             Cadence.Limits.persist_limit_definition(telemetry_limit_definition)
 
     assert {:ok, ^derived_limit_definition} =
-             Cadence.persist_limit_definition(derived_limit_definition)
+             Cadence.Limits.persist_limit_definition(derived_limit_definition)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(

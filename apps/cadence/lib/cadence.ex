@@ -17,12 +17,10 @@ defmodule Cadence do
   alias Cadence.Dashboards
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
   alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
-  alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Governance
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
   alias Cadence.Limits, as: LimitsService
-  alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Missions
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
   alias Cadence.Persistence
@@ -488,28 +486,6 @@ defmodule Cadence do
     System.monotonic_time()
     |> Kernel.-(started_at)
     |> System.convert_time_unit(:native, :microsecond)
-  end
-
-  @spec persist_derived_definition(DerivedTelemetryDefinition.t()) ::
-          {:ok, DerivedTelemetryDefinition.t()} | {:error, term()}
-  def persist_derived_definition(%DerivedTelemetryDefinition{} = definition) do
-    Governance.persist_derived_definition(definition)
-  end
-
-  @spec list_derived_definitions(binary()) :: [DerivedTelemetryDefinition.t()]
-  def list_derived_definitions(mission_id) when is_binary(mission_id) do
-    Governance.list_derived_definitions(mission_id)
-  end
-
-  @spec persist_limit_definition(LimitDefinition.t()) ::
-          {:ok, LimitDefinition.t()} | {:error, term()}
-  def persist_limit_definition(%LimitDefinition{} = definition) do
-    LimitsService.persist_limit_definition(definition)
-  end
-
-  @spec list_limit_definitions(binary()) :: [LimitDefinition.t()]
-  def list_limit_definitions(mission_id) when is_binary(mission_id) do
-    LimitsService.list_limit_definitions(mission_id)
   end
 
   @spec backfill_telemetry_samples([Cadence.Telemetry.Sample.t()], map(), keyword()) ::

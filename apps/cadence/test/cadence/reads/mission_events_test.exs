@@ -90,7 +90,7 @@ defmodule Cadence.Reads.MissionEventsTest do
 
     assert persisted_binding_set.binding_set_id == binding_set.binding_set_id
     assert persisted_binding_set.organization_id == organization_id
-    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+    assert {:ok, ^limit_definition} = Cadence.Limits.persist_limit_definition(limit_definition)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(

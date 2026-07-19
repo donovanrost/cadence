@@ -14,11 +14,11 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
     first_definition = limit_definition(version: 1, yellow_high: 10)
     replacement_definition = limit_definition(version: 2, yellow_high: 20)
 
-    assert {:ok, ^first_definition} = Cadence.persist_limit_definition(first_definition)
-    assert {:ok, ^first_definition} = Cadence.persist_limit_definition(first_definition)
+    assert {:ok, ^first_definition} = Cadence.Limits.persist_limit_definition(first_definition)
+    assert {:ok, ^first_definition} = Cadence.Limits.persist_limit_definition(first_definition)
 
     assert {:ok, ^replacement_definition} =
-             Cadence.persist_limit_definition(replacement_definition)
+             Cadence.Limits.persist_limit_definition(replacement_definition)
 
     events =
       DefinitionLifecycle.list_definition_lifecycle_events(@organization_id, @mission_id,
