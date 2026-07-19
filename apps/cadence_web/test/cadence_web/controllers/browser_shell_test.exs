@@ -77,7 +77,7 @@ defmodule CadenceWeb.BrowserShellTest do
     persist_durable_user!(email: "ops-lead@example.com", password: durable_password)
 
     org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
-    assert {:ok, persisted_org} = Cadence.persist_organization(org)
+    assert {:ok, persisted_org} = Cadence.Organizations.persist_organization(org)
 
     assert {:ok, _result} =
              Cadence.Accounts.establish_organization_access(
@@ -101,7 +101,7 @@ defmodule CadenceWeb.BrowserShellTest do
 
   test "invitation acceptance creates a durable session and routes to org home", %{conn: _conn} do
     org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
-    assert {:ok, persisted_org} = Cadence.persist_organization(org)
+    assert {:ok, persisted_org} = Cadence.Organizations.persist_organization(org)
 
     assert {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} =
              Cadence.Accounts.establish_organization_access(

@@ -72,7 +72,7 @@ defmodule CadenceSimulator.DataCase do
         display_name: Keyword.get(opts, :mission_name, mission_id)
       })
 
-    {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    {:ok, persisted_organization} = Cadence.Organizations.persist_organization(organization)
     {:ok, persisted_mission} = Cadence.Missions.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}

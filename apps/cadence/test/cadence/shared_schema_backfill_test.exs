@@ -96,7 +96,9 @@ defmodule Cadence.SharedSchemaBackfillTest do
         display_name: Map.get(attrs, :mission_name, "Alpha Mission")
       })
 
-    assert {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    assert {:ok, persisted_organization} =
+             Cadence.Organizations.persist_organization(organization)
+
     assert {:ok, persisted_mission} = Cadence.Missions.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}

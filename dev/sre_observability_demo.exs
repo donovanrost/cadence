@@ -130,7 +130,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         display_name: "SRE Observability Demo"
       })
     end)
-    |> Cadence.persist_organization()
+    |> Cadence.Organizations.persist_organization()
   end
 
   defp persist_mission(ids) do

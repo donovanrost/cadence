@@ -8,7 +8,7 @@ defmodule CadenceWeb.ControlPlaneAccess do
   def authorize_organization(%Scope{} = current_scope, organization_id, action)
       when is_binary(organization_id) and is_atom(action) do
     with :ok <- Policy.authorize(current_scope, action, %{organization_id: organization_id}) do
-      Cadence.fetch_organization(organization_id)
+      Cadence.Organizations.fetch_organization(organization_id)
     end
   end
 

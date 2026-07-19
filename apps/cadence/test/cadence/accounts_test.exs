@@ -353,7 +353,7 @@ defmodule Cadence.AccountsTest do
         slug: slug
       })
 
-    {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    {:ok, persisted_organization} = Cadence.Organizations.persist_organization(organization)
     persisted_organization
   end
 

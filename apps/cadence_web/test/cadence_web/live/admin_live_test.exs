@@ -599,7 +599,7 @@ defmodule CadenceWeb.AdminLiveTest do
 
   defp create_test_org!(display_name, slug) do
     org = Organization.new(%{display_name: display_name, slug: slug})
-    assert {:ok, persisted} = Cadence.persist_organization(org)
+    assert {:ok, persisted} = Cadence.Organizations.persist_organization(org)
     persisted
   end
 

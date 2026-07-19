@@ -12,7 +12,7 @@ defmodule Cadence.SpacecraftFacadeTest do
         slug: "acme-#{System.unique_integer([:positive])}"
       })
 
-    {:ok, org} = Cadence.persist_organization(org)
+    {:ok, org} = Cadence.Organizations.persist_organization(org)
 
     mission =
       Mission.new(%{

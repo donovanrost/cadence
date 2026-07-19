@@ -77,7 +77,6 @@ defmodule Cadence do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
-  alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.Persistence
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
@@ -207,26 +206,6 @@ defmodule Cadence do
   @spec bootstrap_admin_enabled?() :: boolean()
   def bootstrap_admin_enabled? do
     Auth.bootstrap_admin_enabled?()
-  end
-
-  @spec persist_organization(Organization.t()) :: {:ok, Organization.t()} | {:error, term()}
-  def persist_organization(%Organization{} = organization) do
-    Organizations.persist_organization(organization)
-  end
-
-  @spec fetch_organization(binary()) :: {:ok, Organization.t()} | {:error, term()}
-  def fetch_organization(organization_id) when is_binary(organization_id) do
-    Organizations.fetch_organization(organization_id)
-  end
-
-  @spec list_organizations() :: [Organization.t()]
-  def list_organizations do
-    Organizations.list_organizations()
-  end
-
-  @spec count_organizations() :: non_neg_integer()
-  def count_organizations do
-    Organizations.count_organizations()
   end
 
   @spec list_organization_members(binary()) :: [map()]

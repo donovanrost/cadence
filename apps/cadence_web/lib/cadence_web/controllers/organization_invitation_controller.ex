@@ -89,7 +89,8 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do
     with {:ok, invitation} <- Cadence.fetch_organization_invitation(invitation_token),
-         {:ok, organization} <- Cadence.fetch_organization(invitation.organization_id) do
+         {:ok, organization} <-
+           Cadence.Organizations.fetch_organization(invitation.organization_id) do
       {:ok,
        %{
          invitation_token: invitation_token,

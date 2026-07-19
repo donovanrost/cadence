@@ -116,7 +116,7 @@ defmodule Cadence.DataCase do
         display_name: Keyword.get(opts, :mission_name, mission_id)
       })
 
-    {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    {:ok, persisted_organization} = Cadence.Organizations.persist_organization(organization)
 
     wait_for_repo_ready!()
 

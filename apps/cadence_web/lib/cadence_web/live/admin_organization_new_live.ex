@@ -30,7 +30,7 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
     else
       organization = Organization.new(%{display_name: display_name, slug: slug})
 
-      case Cadence.persist_organization(organization) do
+      case Cadence.Organizations.persist_organization(organization) do
         {:ok, _org} ->
           {:noreply,
            socket
@@ -39,10 +39,6 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply, put_flash(socket, :error, format_changeset_errors(changeset))}
-
-        {:error, reason} ->
-          {:noreply,
-           put_flash(socket, :error, "Failed to create organization: #{inspect(reason)}")}
       end
     end
   end

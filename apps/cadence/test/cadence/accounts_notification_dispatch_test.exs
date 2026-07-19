@@ -36,7 +36,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
         slug: "demo-#{System.unique_integer([:positive])}"
       })
 
-    {:ok, persisted_org} = Cadence.persist_organization(org)
+    {:ok, persisted_org} = Cadence.Organizations.persist_organization(org)
 
     {:ok, inviter: inviter, org: persisted_org}
   end
