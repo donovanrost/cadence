@@ -776,7 +776,11 @@ the context's public read API and keeping event persistence in the facade.
 Separating command, telemetry, limits, source, contact, and interval evidence
 reference builders from the 1,478-line dashboard DataLinks module reduced the
 count to 19 while leaving navigation-link construction and request-context
-ownership in the parent.
+ownership in the parent. Extracting runtime partition construction,
+managed-application initialization and snapshotting, and managed-runtime record
+shaping from the 1,547-line partition owner reduced the count to 18 while
+keeping GenServer callbacks, decoding, dispatch, timers, and reconciliation in
+the owner.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
