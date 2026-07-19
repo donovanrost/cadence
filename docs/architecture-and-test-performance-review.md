@@ -812,6 +812,9 @@ operational-observables replay integration test reduced test-file pressure to
 19. Replacing its inline metric seed matrix with one fixture call also reduced
 the overlong-test count from 35 to 34; the test file is now 913 lines and its
 shared support module is 617 lines.
+Moving compare-mode and observed analysis-bucket cases out of the 1,601-line
+limits-source test reduced test-file pressure to 18; the source-family file is
+now 1,408 lines and the focused analysis-buckets file is 325 lines.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
