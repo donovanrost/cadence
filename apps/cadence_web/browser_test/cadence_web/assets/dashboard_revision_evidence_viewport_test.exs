@@ -387,11 +387,7 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
     assert output =~ "\"telemetryRevisionRangeEvidence\""
   end
 
-  @tag :browser
-  test "live telemetry mixed revision range markers open frame evidence in browser", %{
-    conn: _conn,
-    sandbox_owner: sandbox_owner
-  } do
+  defp persist_mixed_revision_browser_fixture!(sandbox_owner) do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
@@ -599,6 +595,38 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{time_mode: "archive", data_view: "all_revisions", data_source_id: DataSources.default_managed_data_source().data_source_id, source_binding_id: "default_flight_telemetry", from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    %{
+      app_root: app_root,
+      base_url: base_url,
+      dashboard_url: dashboard_url,
+      from_time: from_time,
+      mission: mission,
+      script: script,
+      spacecraft: spacecraft,
+      to_time: to_time,
+      user: user
+    }
+  end
+
+  @tag :browser
+  test "live telemetry mixed revision range markers open frame evidence in browser", %{
+    conn: _conn,
+    sandbox_owner: sandbox_owner
+  } do
+    fixture = persist_mixed_revision_browser_fixture!(sandbox_owner)
+
+    %{
+      app_root: app_root,
+      base_url: base_url,
+      dashboard_url: dashboard_url,
+      from_time: from_time,
+      mission: mission,
+      script: script,
+      spacecraft: spacecraft,
+      to_time: to_time,
+      user: user
+    } = fixture
 
     shared_marker_args = [
       "--expected-revision-warning-codes",

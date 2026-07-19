@@ -1357,6 +1357,12 @@ bitrate, empty-replay, frame-evidence, and DataLink outcomes remain covered.
 The browser proof now waits for chart/data readiness before making precise
 semantic assertions and follows the current compact partial-lifecycle indicator
 contract instead of expecting the intentionally removed body notice.
+Moving the 221-line mixed-revision identity, operator-decision, dashboard, and
+endpoint fixture out of its browser scenario reduced that test from 344 to 150
+lines and overlong test-function pressure from 1 to 0. The authenticated
+dashboard route and sign-in flow are unchanged; corrected-range,
+advisory-backfill, mixed-marker, counter-only exclusion, frame-evidence, and
+copied-link outcomes remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
