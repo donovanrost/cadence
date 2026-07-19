@@ -977,6 +977,11 @@ Centralizing the replay managed-capability inspector field selector reduced
 that lifecycle copied-route proof from 376 to 284 lines while keeping every
 field-value, replay-run, route, and reopen assertion explicit, reducing
 overlong-test pressure from 16 to 15.
+Moving spacecraft, endpoint, provider-profile, and versioned path-template API
+prerequisites into a response-asserting helper reduced the mission link
+assignment proof from 398 to 295 lines while retaining assignment validation,
+template application, contact realization, and deletion outcomes, reducing
+overlong-test pressure from 15 to 14.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

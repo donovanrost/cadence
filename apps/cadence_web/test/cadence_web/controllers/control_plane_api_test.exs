@@ -36,6 +36,114 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     :ok
   end
 
+  defp persist_link_assignment_prerequisites(conn, api_token, organization_id, mission_id) do
+    spacecraft_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{
+          "spacecraft_id" => "spacecraft-link-api-001",
+          "display_name" => "SC Link API 001"
+        }
+      })
+
+    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-001"}} =
+             json_response(spacecraft_conn, 201)
+
+    second_spacecraft_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{
+          "spacecraft_id" => "spacecraft-link-api-002",
+          "display_name" => "SC Link API 002",
+          "scid" => 202
+        }
+      })
+
+    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-002", "scid" => 202}} =
+             json_response(second_spacecraft_conn, 201)
+
+    source_endpoint_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-link-api-001/source_endpoints",
+        %{
+          "source_endpoint" => %{
+            "source_endpoint_id" => "source-endpoint-link-api-001",
+            "source_ref" => "sc-link-api-001",
+            "display_name" => "SC Link API Endpoint"
+          }
+        }
+      )
+
+    assert %{"data" => %{"source_endpoint_id" => "source-endpoint-link-api-001"}} =
+             json_response(source_endpoint_conn, 201)
+
+    provider_profile_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles", %{
+        "provider_profile" => %{
+          "provider_profile_id" => "tcp-link-api-profile",
+          "adapter_key" => "tcp_socket",
+          "configuration" => %{
+            "mode" => "listen",
+            "port" => 0,
+            "ingress_protocol_family" => "tm",
+            "frame_size" => 1115
+          }
+        }
+      })
+
+    assert %{"data" => %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}} =
+             json_response(provider_profile_conn, 201)
+
+    path_template_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates", %{
+        "path_template" => %{
+          "path_template_id" => "downlink-link-api-template",
+          "path_id" => "downlink-link-api-path",
+          "direction" => "downlink",
+          "selection_role" => "selected",
+          "source_endpoint_ref" => "source-endpoint-link-api-001",
+          "provider_profile_ids" => ["tcp-link-api-profile"]
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "path_template_id" => "downlink-link-api-template",
+               "version" => 1,
+               "source_endpoint_ref" => nil
+             }
+           } = json_response(path_template_conn, 201)
+
+    path_template_patch_conn =
+      conn
+      |> authorize(api_token)
+      |> patch(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-link-api-template",
+        %{
+          "path_template" => %{
+            "source_endpoint_ref" => "source-endpoint-link-api-001",
+            "metadata" => %{"operator_label" => "ignored direct assignment"}
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "path_template_id" => "downlink-link-api-template",
+               "version" => 2,
+               "source_endpoint_ref" => nil
+             }
+           } = json_response(path_template_patch_conn, 200)
+  end
+
   test "bootstrap admin logs in and can bootstrap the first organization", %{conn: conn} do
     bootstrap_admin_token = bootstrap_admin_login(conn)
 
@@ -817,111 +925,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
-    spacecraft_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-link-api-001",
-          "display_name" => "SC Link API 001"
-        }
-      })
-
-    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-001"}} =
-             json_response(spacecraft_conn, 201)
-
-    second_spacecraft_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-link-api-002",
-          "display_name" => "SC Link API 002",
-          "scid" => 202
-        }
-      })
-
-    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-002", "scid" => 202}} =
-             json_response(second_spacecraft_conn, 201)
-
-    source_endpoint_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-link-api-001/source_endpoints",
-        %{
-          "source_endpoint" => %{
-            "source_endpoint_id" => "source-endpoint-link-api-001",
-            "source_ref" => "sc-link-api-001",
-            "display_name" => "SC Link API Endpoint"
-          }
-        }
-      )
-
-    assert %{"data" => %{"source_endpoint_id" => "source-endpoint-link-api-001"}} =
-             json_response(source_endpoint_conn, 201)
-
-    provider_profile_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles", %{
-        "provider_profile" => %{
-          "provider_profile_id" => "tcp-link-api-profile",
-          "adapter_key" => "tcp_socket",
-          "configuration" => %{
-            "mode" => "listen",
-            "port" => 0,
-            "ingress_protocol_family" => "tm",
-            "frame_size" => 1115
-          }
-        }
-      })
-
-    assert %{"data" => %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}} =
-             json_response(provider_profile_conn, 201)
-
-    path_template_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates", %{
-        "path_template" => %{
-          "path_template_id" => "downlink-link-api-template",
-          "path_id" => "downlink-link-api-path",
-          "direction" => "downlink",
-          "selection_role" => "selected",
-          "source_endpoint_ref" => "source-endpoint-link-api-001",
-          "provider_profile_ids" => ["tcp-link-api-profile"]
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "path_template_id" => "downlink-link-api-template",
-               "version" => 1,
-               "source_endpoint_ref" => nil
-             }
-           } = json_response(path_template_conn, 201)
-
-    path_template_patch_conn =
-      conn
-      |> authorize(api_token)
-      |> patch(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-link-api-template",
-        %{
-          "path_template" => %{
-            "source_endpoint_ref" => "source-endpoint-link-api-001",
-            "metadata" => %{"operator_label" => "ignored direct assignment"}
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "path_template_id" => "downlink-link-api-template",
-               "version" => 2,
-               "source_endpoint_ref" => nil
-             }
-           } = json_response(path_template_patch_conn, 200)
+    persist_link_assignment_prerequisites(conn, api_token, organization_id, mission_id)
 
     link_assignment_conn =
       conn
