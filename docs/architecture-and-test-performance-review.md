@@ -859,6 +859,10 @@ Replacing four duplicated RF metric copied-route LiveView cases with a shared
 table-driven scenario contract reduced the link-scope test from 1,701 to 909
 lines and reduced test-file pressure to 10 while preserving four independently
 named metric cases.
+Separating group transitions, job recovery, and correction-authority workflows
+from the 3,837-line telemetry data-management test reduced test-file pressure
+to 9. The policy/base, group, recovery, and correction files are now 1,298,
+1,052, 970, and 372 lines, backed by 303 lines of shared workflow fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
