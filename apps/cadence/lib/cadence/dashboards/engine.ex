@@ -12,10 +12,8 @@ defmodule Cadence.Dashboards.Engine do
     DashboardContract,
     DashboardResolveRequest,
     DashboardResolveResult,
-    DataContext,
     DataSourceRegistry,
     FrameMaterializer,
-    LimitContext,
     LimitSelectedClockAudit,
     Placement,
     PlacementExpansion,
@@ -26,14 +24,13 @@ defmodule Cadence.Dashboards.Engine do
     ResolveWarning,
     RuntimeCache,
     RuntimeCacheKey,
-    ScopeContext,
     SourceExecutionPolicy,
     SourceFacts,
     SourceFreshness,
     SourceRegistry,
+    SourceRequestPlanning,
     SourceResult,
     SourceResultPreflight,
-    TimeContext,
     ValidationResult,
     WidgetFrameContract,
     WidgetRegistry
@@ -227,9 +224,9 @@ defmodule Cadence.Dashboards.Engine do
           plan_key: plan_key,
           dependencies: plan_cache_dependencies(plan_key)
         },
-        time: time_context_metadata(request),
-        snapshot?: snapshot_time_context?(request),
-        live_append_eligible?: live_append_eligible?(request),
+        time: SourceRequestPlanning.time_context_metadata(request),
+        snapshot?: SourceRequestPlanning.snapshot_time_context?(request),
+        live_append_eligible?: SourceRequestPlanning.live_append_eligible?(request),
         source_request_count: length(batched_requests),
         unbatched_source_request_count: length(planned_requests),
         batched_consumer_count:
@@ -359,7 +356,9 @@ defmodule Cadence.Dashboards.Engine do
 
   defp plan_placement(%DashboardResolveRequest{} = request, %Placement{} = placement, opts) do
     widget_def = placement.widget_def
-    {runtime_contexts, context_warnings} = placement_runtime_contexts(request, placement)
+
+    {runtime_contexts, context_warnings} =
+      SourceRequestPlanning.runtime_contexts(request, placement)
 
     case WidgetRegistry.fetch_type(widget_def.widget_type_id, widget_def.widget_type_version) do
       {:ok, widget_type} ->
@@ -374,7 +373,7 @@ defmodule Cadence.Dashboards.Engine do
 
             {overlay_source_requests, overlay_warnings} =
               widget_type
-              |> source_backed_overlay_specs(placement)
+              |> SourceRequestPlanning.source_backed_overlay_specs(placement)
               |> Enum.flat_map(
                 &plan_overlay_requests(
                   request,
@@ -424,7 +423,8 @@ defmodule Cadence.Dashboards.Engine do
     role = Map.get(frame_spec, :role, :primary)
     source = Map.fetch!(frame_spec, :source)
 
-    planned_sampling = sampling(binding, frame_spec, request, placement, widget_type)
+    planned_sampling =
+      SourceRequestPlanning.sampling(binding, frame_spec, request, placement, widget_type)
 
     planned_request = %PlannedSourceRequest{
       request_id: source_request_id(placement.placement_id, role, source),
@@ -433,13 +433,14 @@ defmodule Cadence.Dashboards.Engine do
       logical_source: source,
       observables: Map.get(binding, :observables, []),
       scope_context: runtime_contexts.scope,
-      time_context: source_time_context(runtime_contexts.time, source, planned_sampling),
-      data_context: overlay_data_context(runtime_contexts.data, source),
+      time_context:
+        SourceRequestPlanning.source_time_context(runtime_contexts.time, source, planned_sampling),
+      data_context: SourceRequestPlanning.overlay_data_context(runtime_contexts.data, source),
       limit_context: runtime_contexts.limit,
       value_type: Map.get(binding, :value_type),
       sampling: planned_sampling,
       source_dependencies: source_dependencies(source, planned_sampling, runtime_contexts.limit),
-      overlays: unresolved_overlays(binding, widget_type),
+      overlays: SourceRequestPlanning.unresolved_overlays(binding, widget_type),
       consumers: [
         %{
           placement_id: placement.placement_id,
@@ -453,7 +454,7 @@ defmodule Cadence.Dashboards.Engine do
       planned_request,
       placement,
       frame_spec,
-      source_registry_opts(planned_request, opts)
+      SourceRequestPlanning.source_registry_opts(planned_request, opts)
     )
   end
 
@@ -474,7 +475,13 @@ defmodule Cadence.Dashboards.Engine do
          opts
        ) do
     samplings =
-      overlay_samplings(overlay_spec, primary_frame_specs, request, placement, widget_type)
+      SourceRequestPlanning.overlay_samplings(
+        overlay_spec,
+        primary_frame_specs,
+        request,
+        placement,
+        widget_type
+      )
 
     multi_product? = length(samplings) > 1
 
@@ -514,7 +521,8 @@ defmodule Cadence.Dashboards.Engine do
       logical_source: source,
       observables: Map.get(binding, :observables, []),
       scope_context: runtime_contexts.scope,
-      time_context: source_time_context(runtime_contexts.time, source, sampling),
+      time_context:
+        SourceRequestPlanning.source_time_context(runtime_contexts.time, source, sampling),
       data_context: runtime_contexts.data,
       limit_context: runtime_contexts.limit,
       value_type: Map.get(binding, :value_type),
@@ -534,426 +542,8 @@ defmodule Cadence.Dashboards.Engine do
       planned_request,
       placement,
       overlay_spec,
-      source_registry_opts(planned_request, opts)
+      SourceRequestPlanning.source_registry_opts(planned_request, opts)
     )
-  end
-
-  defp source_time_context(time_context, :events, _sampling) do
-    put_time_axis(time_context, :occurred_at)
-  end
-
-  defp source_time_context(time_context, :limits, sampling) do
-    if Map.get(sampling, :temporal?, false) do
-      put_time_axis(time_context, :receipt_time)
-    else
-      time_context
-    end
-  end
-
-  defp source_time_context(time_context, :telemetry, _sampling), do: time_context
-
-  defp source_time_context(time_context, _source, _sampling), do: time_context
-
-  defp put_time_axis(%TimeContext{} = time_context, axis),
-    do: %TimeContext{time_context | axis: axis}
-
-  defp put_time_axis(time_context, axis) when is_map(time_context),
-    do: Map.put(time_context, :axis, axis)
-
-  defp put_time_axis(time_context, _axis), do: time_context
-
-  defp source_backed_overlay_specs(widget_type, placement) do
-    requested_overlays = Map.get(placement.widget_def.binding, :overlays, [])
-
-    widget_type.data_contract
-    |> Map.get(:overlays, [])
-    |> Enum.filter(fn overlay_spec ->
-      source_backed_overlay?(overlay_spec) and
-        (Map.get(overlay_spec, :required?, false) or
-           Map.get(overlay_spec, :role) in requested_overlays)
-    end)
-  end
-
-  defp source_backed_overlay?(%{source: :limits}), do: true
-  defp source_backed_overlay?(%{source: :events}), do: true
-  defp source_backed_overlay?(_overlay_spec), do: false
-
-  defp unresolved_overlays(binding, widget_type) do
-    source_backed_roles =
-      widget_type
-      |> Map.get(:data_contract, %{})
-      |> Map.get(:overlays, [])
-      |> Enum.filter(&source_backed_overlay?/1)
-      |> Enum.map(&Map.get(&1, :role))
-
-    binding
-    |> Map.get(:overlays, [])
-    |> Enum.reject(&(&1 in source_backed_roles))
-  end
-
-  defp sampling(binding, frame_spec, request, placement, widget_type) do
-    poll_latest? = poll_latest_live_request?(request, widget_type, frame_spec)
-
-    mode =
-      if poll_latest? do
-        :latest
-      else
-        Map.get(binding, :sampling) || Map.get(frame_spec, :sampling)
-      end
-
-    %{
-      mode: mode,
-      target_points: target_points(placement_size(request, placement.placement_id)),
-      max_raw_points: 10_000,
-      temporal?: if(poll_latest?, do: false, else: Map.get(frame_spec, :temporal?, false))
-    }
-    |> maybe_put_sampling_products(frame_spec)
-    |> maybe_put_sampling_families(frame_spec)
-  end
-
-  defp maybe_put_sampling_products(sampling, %{products: products})
-       when is_list(products) and products != [] do
-    Map.put(sampling, :products, products)
-  end
-
-  defp maybe_put_sampling_products(sampling, _frame_spec), do: sampling
-
-  defp maybe_put_sampling_families(sampling, %{families: families})
-       when is_list(families) and families != [] do
-    Map.put(sampling, :families, families)
-  end
-
-  defp maybe_put_sampling_families(sampling, _frame_spec), do: sampling
-
-  defp overlay_samplings(
-         %{source: :limits},
-         primary_frame_specs,
-         request,
-         _placement,
-         widget_type
-       ) do
-    if poll_latest_live_request?(request, widget_type) do
-      [latest_limit_overlay_sampling()]
-    else
-      temporal? = Enum.any?(primary_frame_specs, &Map.get(&1, :temporal?, false))
-
-      decimated? =
-        Enum.any?(primary_frame_specs, &(Map.get(&1, :sampling) == :decimated_envelope))
-
-      cond do
-        temporal? and decimated? ->
-          [
-            limit_analysis_buckets_overlay_sampling(),
-            limit_definition_intervals_overlay_sampling()
-          ]
-
-        temporal? ->
-          [limit_event_history_overlay_sampling(), limit_definition_intervals_overlay_sampling()]
-
-        true ->
-          [latest_limit_overlay_sampling()]
-      end
-    end
-  end
-
-  defp overlay_samplings(
-         %{source: :events},
-         primary_frame_specs,
-         request,
-         placement,
-         _widget_type
-       ) do
-    temporal? = Enum.any?(primary_frame_specs, &Map.get(&1, :temporal?, false))
-
-    source_watermark_context =
-      source_watermark_overlay_context(primary_frame_specs, request, placement)
-
-    [
-      %{
-        mode: :event_history,
-        products: [
-          :contact_intervals,
-          :mission_timeline,
-          :source_health_transitions,
-          :source_watermark_events,
-          :source_capability_postures,
-          :telemetry_backfill_lifecycle,
-          :telemetry_revision_decisions
-        ],
-        families: [
-          :contacts,
-          :mission_timeline,
-          :source_health,
-          :source_watermarks,
-          :source_capabilities,
-          :telemetry_backfills,
-          :telemetry_revisions
-        ],
-        temporal?: temporal?,
-        source_watermark: source_watermark_context,
-        limit: 500
-      }
-      |> drop_empty_map_value(:source_watermark)
-    ]
-  end
-
-  defp source_watermark_overlay_context(primary_frame_specs, request, placement) do
-    logical_source = primary_logical_source(primary_frame_specs, placement)
-    data_context = placement_data_context(request, placement)
-
-    %{
-      logical_source: logical_source,
-      data_source_id: data_context_value(data_context, logical_source, :data_source_id),
-      source_binding_id: data_context_value(data_context, logical_source, :source_binding_id),
-      dataset: data_context_value(data_context, logical_source, :dataset)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-    |> Map.new()
-    |> non_empty_map()
-  end
-
-  defp primary_logical_source(primary_frame_specs, placement) do
-    binding = placement.widget_def.binding || %{}
-
-    Map.get(binding, :source) ||
-      primary_frame_specs
-      |> List.wrap()
-      |> Enum.find_value(&Map.get(&1, :source))
-  end
-
-  defp placement_data_context(%DashboardResolveRequest{} = request, %Placement{} = placement) do
-    defaults = request.document.defaults || %{}
-
-    time_context =
-      TimeContext.resolve(request.time_context, Map.get(defaults, "time") || %{}, nil)
-
-    request.data_context
-    |> DataContext.resolve(Map.get(defaults, "data") || %{}, placement.data_override)
-    |> default_replay_realm_if_implicit(
-      time_context,
-      request.data_context,
-      placement.data_override
-    )
-  end
-
-  defp data_context_value(%DataContext{} = data_context, nil, key),
-    do: Map.get(data_context, key)
-
-  defp data_context_value(%DataContext{} = data_context, logical_source, key),
-    do: DataContext.source_value(data_context, logical_source, key)
-
-  defp overlay_data_context(%DataContext{} = data_context, _source) do
-    %DataContext{data_context | data_source_id: nil, source_binding_id: nil, dataset: nil}
-  end
-
-  defp overlay_data_context(data_context, _source), do: data_context
-
-  defp non_empty_map(map) when map == %{}, do: nil
-  defp non_empty_map(map), do: map
-
-  defp drop_empty_map_value(map, key) do
-    case Map.get(map, key) do
-      nil -> Map.delete(map, key)
-      %{} = value when map_size(value) == 0 -> Map.delete(map, key)
-      _value -> map
-    end
-  end
-
-  defp latest_limit_overlay_sampling do
-    %{
-      mode: :latest_state,
-      products: [:latest_state],
-      semantics_mode: :observed,
-      temporal?: false
-    }
-  end
-
-  defp limit_event_history_overlay_sampling do
-    %{
-      mode: :event_history,
-      products: [:event_history],
-      semantics_mode: :observed,
-      temporal?: true,
-      limit: 1_000
-    }
-  end
-
-  defp limit_analysis_buckets_overlay_sampling do
-    %{
-      mode: :analysis_buckets,
-      products: [:analysis_buckets],
-      semantics_mode: :observed,
-      temporal?: true,
-      limit: 1_000
-    }
-  end
-
-  defp limit_definition_intervals_overlay_sampling do
-    %{
-      mode: :definition_intervals,
-      products: [:definition_intervals],
-      semantics_mode: :observed,
-      temporal?: true
-    }
-  end
-
-  defp poll_latest_live_request?(request, widget_type, frame_spec) do
-    poll_latest_live_request?(request, widget_type) and Map.get(frame_spec, :temporal?, false)
-  end
-
-  defp poll_latest_live_request?(%DashboardResolveRequest{} = request, widget_type) do
-    request.resolve_mode in [:live_tick, :stream_append] and
-      live_append_eligible?(request) and
-      get_in(widget_type.data_contract, [:live_mode]) == :poll_latest
-  end
-
-  defp live_append_eligible?(%DashboardResolveRequest{} = request) do
-    not snapshot_time_context?(request)
-  end
-
-  defp snapshot_time_context?(%DashboardResolveRequest{} = request) do
-    time_context_mode(request) in [:archive, :range, :replay_run]
-  end
-
-  defp time_context_metadata(%DashboardResolveRequest{} = request) do
-    time_context =
-      TimeContext.resolve(request.time_context, request_document_time_defaults(request), nil)
-
-    %{
-      mode: normalized_time_mode(time_context.mode),
-      axis: normalized_time_axis(time_context.axis),
-      from: time_context.from || time_context.start || time_context.start_time,
-      to: time_context.to || time_context.end || time_context.end_time,
-      replay_run_id: time_context.replay_run_id
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
-
-  defp time_context_mode(%DashboardResolveRequest{} = request) do
-    request
-    |> time_context_metadata()
-    |> Map.get(:mode)
-  end
-
-  defp request_document_time_defaults(%DashboardResolveRequest{document: %{defaults: defaults}})
-       when is_map(defaults) do
-    Map.get(defaults, "time") || Map.get(defaults, :time) || %{}
-  end
-
-  defp request_document_time_defaults(%DashboardResolveRequest{}), do: %{}
-
-  defp normalized_time_mode(value),
-    do: normalize_known_atom(value, [:live, :archive, :range, :replay_run])
-
-  defp normalized_time_axis(value),
-    do: normalize_known_atom(value, [:generation_time, :receipt_time])
-
-  defp normalize_known_atom(value, known_values) when is_atom(value) do
-    if value in known_values, do: value, else: value
-  end
-
-  defp normalize_known_atom(value, known_values) when is_binary(value) do
-    normalized =
-      value
-      |> String.trim()
-      |> String.downcase()
-      |> String.replace("-", "_")
-
-    Enum.find(known_values, &(Atom.to_string(&1) == normalized)) || value
-  end
-
-  defp normalize_known_atom(value, _known_values), do: value
-
-  defp target_points(%{width_px: width}) when is_integer(width) and width > 0, do: width
-  defp target_points(%{"width_px" => width}) when is_integer(width) and width > 0, do: width
-  defp target_points(_placement_size), do: 1200
-
-  defp placement_runtime_contexts(%DashboardResolveRequest{} = request, %Placement{} = placement) do
-    defaults = request.document.defaults || %{}
-
-    time_context =
-      TimeContext.resolve(request.time_context, Map.get(defaults, "time") || %{}, nil)
-
-    data_context =
-      request.data_context
-      |> DataContext.resolve(Map.get(defaults, "data") || %{}, placement.data_override)
-      |> default_replay_realm_if_implicit(
-        time_context,
-        request.data_context,
-        placement.data_override
-      )
-
-    contexts = %{
-      time: time_context,
-      scope:
-        ScopeContext.resolve(
-          request.scope_context,
-          Map.get(defaults, "scope") || %{},
-          placement.scope_override
-        ),
-      data: data_context,
-      limit:
-        LimitContext.resolve(
-          request.limit_context,
-          Map.get(defaults, "limits") || %{},
-          placement.limit_override
-        )
-    }
-
-    {contexts, context_warnings(contexts, placement)}
-  end
-
-  defp default_replay_realm_if_implicit(
-         %DataContext{} = data_context,
-         %TimeContext{} = time_context,
-         runtime_data_context,
-         placement_data_override
-       ) do
-    cond do
-      normalized_time_mode(time_context.mode) != :replay_run ->
-        data_context
-
-      explicit_data_realm?(runtime_data_context) or explicit_data_realm?(placement_data_override) ->
-        data_context
-
-      data_context.realm in [nil, :flight, "flight"] ->
-        %DataContext{data_context | realm: :replay}
-
-      true ->
-        data_context
-    end
-  end
-
-  defp explicit_data_realm?(%DataContext{realm: realm}), do: present_context_value?(realm)
-
-  defp explicit_data_realm?(attrs) when is_map(attrs),
-    do: present_context_value?(get_attr(attrs, :realm))
-
-  defp explicit_data_realm?(_attrs), do: false
-
-  defp present_context_value?(nil), do: false
-  defp present_context_value?(""), do: false
-  defp present_context_value?(_value), do: true
-
-  defp context_warnings(contexts, %Placement{} = placement) do
-    [
-      {:time, TimeContext.validate(contexts.time)},
-      {:scope, ScopeContext.validate(contexts.scope)},
-      {:data, DataContext.validate(contexts.data)},
-      {:limit, LimitContext.validate(contexts.limit)}
-    ]
-    |> Enum.reject(fn {_context, errors} -> errors == [] end)
-    |> Enum.map(fn {context, errors} ->
-      %ResolveWarning{
-        code: :invalid_runtime_context,
-        severity: :warning,
-        scope: :placement,
-        placement_id: placement.placement_id,
-        message: "Dashboard runtime context contains unsupported values",
-        details: %{context: context, errors: errors}
-      }
-    end)
   end
 
   defp batch_requests(requests) do
@@ -1226,7 +816,10 @@ defmodule Cadence.Dashboards.Engine do
   defp source_execution_policies(source_requests, opts) do
     Map.new(source_requests, fn %PlannedSourceRequest{} = source_request ->
       {source_request.request_id,
-       SourceRegistry.execution_policy(source_request, source_registry_opts(source_request, opts))}
+       SourceRegistry.execution_policy(
+         source_request,
+         SourceRequestPlanning.source_registry_opts(source_request, opts)
+       )}
     end)
   end
 
@@ -1318,7 +911,10 @@ defmodule Cadence.Dashboards.Engine do
        ) do
     source_result =
       source_request
-      |> SourceRegistry.unavailable(reason, source_registry_opts(source_request, opts))
+      |> SourceRegistry.unavailable(
+        reason,
+        SourceRequestPlanning.source_registry_opts(source_request, opts)
+      )
       |> then(
         &annotate_source_freshness(
           resolve_request,
@@ -1326,7 +922,7 @@ defmodule Cadence.Dashboards.Engine do
           source_request,
           &1,
           freshness_now,
-          source_registry_opts(source_request, opts)
+          SourceRequestPlanning.source_registry_opts(source_request, opts)
         )
       )
 
@@ -1372,7 +968,7 @@ defmodule Cadence.Dashboards.Engine do
          resolve_mode: :live_tick,
          planned_source_requests: requests
        }) do
-    Enum.filter(requests, &live_tick_refreshable?/1)
+    Enum.filter(requests, &SourceRequestPlanning.live_tick_refreshable?/1)
   end
 
   defp executable_source_requests(%DashboardResolveResult{planned_source_requests: requests}) do
@@ -1567,7 +1163,7 @@ defmodule Cadence.Dashboards.Engine do
 
     registry_opts =
       source_request
-      |> source_registry_opts(opts)
+      |> SourceRequestPlanning.source_registry_opts(opts)
       |> Keyword.put(:freshness_policy, freshness_policy)
       |> Keyword.put(:freshness_now, freshness_now)
 
@@ -1595,7 +1191,7 @@ defmodule Cadence.Dashboards.Engine do
        ) do
     freshness_policy = freshness_policy(resolve_request, plan_result, source_request, opts)
 
-    registry_opts = source_registry_opts(source_request, opts)
+    registry_opts = SourceRequestPlanning.source_registry_opts(source_request, opts)
 
     with {:ok, %SourceFacts{} = source_facts} <-
            SourceRegistry.facts(source_request, registry_opts) do
@@ -1856,7 +1452,7 @@ defmodule Cadence.Dashboards.Engine do
          source_result,
          opts
        ) do
-    registry_opts = source_registry_opts(source_request, opts)
+    registry_opts = SourceRequestPlanning.source_registry_opts(source_request, opts)
     resolved_binding = resolved_source_binding(source_request, registry_opts)
 
     RuntimeCacheKey.source_result(source_request,
@@ -1874,117 +1470,9 @@ defmodule Cadence.Dashboards.Engine do
   defp source_result_meta(_source_result), do: %{}
 
   defp source_result_cache_policy(%PlannedSourceRequest{} = source_request) do
-    if source_request_snapshot?(source_request), do: :snapshot, else: :live
-  end
-
-  defp source_request_snapshot?(%PlannedSourceRequest{} = source_request) do
-    source_request
-    |> source_request_time_mode()
-    |> Kernel.in([:archive, :range, :replay_run])
-  end
-
-  defp source_registry_opts(%PlannedSourceRequest{} = source_request, opts) do
-    opts = maybe_put_replay_operational_interval_at(opts, source_request)
-
-    case source_binding_time_window(source_request) do
-      %{at: %DateTime{} = at} = window ->
-        opts
-        |> Keyword.put_new(:source_binding_at, at)
-        |> maybe_put_source_binding_range(Map.get(window, :range))
-
-      nil ->
-        opts
-    end
-  end
-
-  defp maybe_put_replay_operational_interval_at(opts, %PlannedSourceRequest{} = source_request) do
-    if source_request_time_mode(source_request) == :replay_run do
-      case source_binding_range_window(source_request) do
-        %{at: %DateTime{} = at} -> Keyword.put_new(opts, :operational_interval_at, at)
-        _missing -> opts
-      end
-    else
-      opts
-    end
-  end
-
-  defp source_binding_time_window(%PlannedSourceRequest{} = source_request) do
-    case source_request_time_mode(source_request) do
-      :range -> source_binding_range_window(source_request)
-      :archive -> source_binding_archive_window(source_request)
-      _other -> nil
-    end
-  end
-
-  defp source_binding_archive_window(%PlannedSourceRequest{} = source_request) do
-    if source_request.logical_source == :telemetry and
-         source_request_sampling_mode(source_request) in [
-           :raw_series,
-           :bounded_history,
-           :bounded_raw_series
-         ] do
-      source_binding_range_window(source_request)
-    else
-      source_binding_point_window(source_request)
-    end
-  end
-
-  defp source_binding_range_window(%PlannedSourceRequest{} = source_request) do
-    {from, to} = source_request_time_bounds(source_request)
-
-    cond do
-      datetime?(from) and datetime?(to) and DateTime.compare(from, to) == :lt ->
-        %{at: from, range: %{from: from, to: to}}
-
-      datetime?(from) ->
-        %{at: from}
-
-      datetime?(to) ->
-        %{at: to}
-
-      true ->
-        nil
-    end
-  end
-
-  defp source_binding_point_window(%PlannedSourceRequest{} = source_request) do
-    {from, to} = source_request_time_bounds(source_request)
-
-    cond do
-      datetime?(to) -> %{at: to}
-      datetime?(from) -> %{at: from}
-      true -> nil
-    end
-  end
-
-  defp source_request_time_bounds(%PlannedSourceRequest{time_context: time_context}) do
-    {
-      get_attr(time_context, :from) || get_attr(time_context, :start) ||
-        get_attr(time_context, :start_time),
-      get_attr(time_context, :to) || get_attr(time_context, :end) ||
-        get_attr(time_context, :end_time)
-    }
-  end
-
-  defp maybe_put_source_binding_range(opts, nil), do: opts
-
-  defp maybe_put_source_binding_range(opts, range) when is_map(range) do
-    Keyword.put_new(opts, :source_binding_range, range)
-  end
-
-  defp datetime?(%DateTime{}), do: true
-  defp datetime?(_value), do: false
-
-  defp source_request_time_mode(%PlannedSourceRequest{time_context: time_context}) do
-    time_context
-    |> get_attr(:mode)
-    |> normalized_time_mode()
-  end
-
-  defp source_request_sampling_mode(%PlannedSourceRequest{sampling: sampling}) do
-    sampling
-    |> get_attr(:mode)
-    |> normalize_known_atom([:latest, :raw_series, :bounded_history, :bounded_raw_series])
+    if SourceRequestPlanning.source_request_snapshot?(source_request),
+      do: :snapshot,
+      else: :live
   end
 
   defp resolved_source_binding(%PlannedSourceRequest{} = source_request, opts) do
@@ -1994,45 +1482,9 @@ defmodule Cadence.Dashboards.Engine do
     end
   end
 
-  defp placement_size(
-         %DashboardResolveRequest{interaction_context: interaction_context},
-         placement_id
-       ) do
-    placement_sizes =
-      Map.get(
-        interaction_context,
-        :placement_sizes,
-        Map.get(interaction_context, "placement_sizes", %{})
-      )
-
-    Map.get(placement_sizes, placement_id) ||
-      Map.get(placement_sizes, PlacementExpansion.authored_placement_id(placement_id), %{})
-  end
-
   defp put_cache_provenance(plan_metadata, cache_provenance) do
     Map.update(plan_metadata, :cache, cache_provenance, &Map.merge(&1, cache_provenance))
   end
-
-  defp live_tick_refreshable?(%PlannedSourceRequest{
-         logical_source: :telemetry,
-         sampling: %{mode: :latest}
-       }),
-       do: true
-
-  defp live_tick_refreshable?(%PlannedSourceRequest{
-         logical_source: :limits,
-         sampling: %{mode: mode}
-       })
-       when mode in [:latest, :latest_state],
-       do: true
-
-  defp live_tick_refreshable?(%PlannedSourceRequest{
-         logical_source: :operational_observables,
-         sampling: %{mode: :latest}
-       }),
-       do: true
-
-  defp live_tick_refreshable?(%PlannedSourceRequest{}), do: false
 
   defp materialize_source_results(
          %DashboardResolveRequest{} = resolve_request,
@@ -2075,7 +1527,7 @@ defmodule Cadence.Dashboards.Engine do
       materialized =
         FrameMaterializer.materialize(source_request, source_result, consumer,
           source_result_key: source_key,
-          placement_size: placement_size(resolve_request, placement_id),
+          placement_size: SourceRequestPlanning.placement_size(resolve_request, placement_id),
           limit_context: source_request.limit_context
         )
 
@@ -2327,6 +1779,22 @@ defmodule Cadence.Dashboards.Engine do
   defp overlay_source_request_id(placement_id, role, source, _sampling, false) do
     source_request_id(placement_id, role, source)
   end
+
+  defp normalize_known_atom(value, known_values) when is_atom(value) do
+    if value in known_values, do: value, else: value
+  end
+
+  defp normalize_known_atom(value, known_values) when is_binary(value) do
+    normalized =
+      value
+      |> String.trim()
+      |> String.downcase()
+      |> String.replace("-", "_")
+
+    Enum.find(known_values, &(Atom.to_string(&1) == normalized)) || value
+  end
+
+  defp normalize_known_atom(value, _known_values), do: value
 
   defp get_attr(%_{} = attrs, key) when is_atom(key) do
     Map.get(Map.from_struct(attrs), key)

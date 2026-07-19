@@ -972,6 +972,11 @@ reduced the engine from 2,662 to 2,340 lines. The new 387-line validation module
 owns that policy while the engine retains request assembly and orchestration;
 production source-size pressure remains 10 until another engine responsibility
 is separated.
+Extracting runtime-context resolution, overlay and primary sampling, live versus
+snapshot time policy, source-binding windows, and placement sizing reduced the
+engine again to 1,808 lines. The 614-line source-request planner owns those
+request derivations without executing providers; production source-size
+pressure remains 10 while the engine is still above the 1,000-line limit.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
