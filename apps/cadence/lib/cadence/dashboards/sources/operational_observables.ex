@@ -43,6 +43,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
+    OperationalMetricFrames,
     ProductPolicy,
     RevisionPolicy,
     TransportBitrateRows
@@ -2212,316 +2213,29 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       DataLinks.operational_event_links(request, rows, source: :frame)
   end
 
-  defp link_rf_metric_frame(request, source_binding, metric_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:link_rf_metric",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.observable_id)
-        },
-        %Field{
-          name: "resource_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.resource_id)
-        },
-        %Field{name: "label", kind: :string, values: Enum.map(metric_rows, & &1.label)},
-        %Field{
-          name: "scope_kind",
-          kind: :enum,
-          values: Enum.map(metric_rows, & &1.scope_kind)
-        },
-        %Field{
-          name: "transport_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.transport_id)
-        },
-        %Field{
-          name: "source_endpoint_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.source_endpoint_id)
-        },
-        %Field{
-          name: "ground_station_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.ground_station_id)
-        },
-        %Field{
-          name: "link_id",
-          kind: :string,
-          values: Enum.map(metric_rows, & &1.link_id)
-        },
-        %Field{
-          name: "adapter_key",
-          kind: :enum,
-          values: Enum.map(metric_rows, & &1.adapter_key)
-        },
-        %Field{name: "value", kind: :number, values: Enum.map(metric_rows, & &1.value)},
-        %Field{name: "unit", kind: :string, values: Enum.map(metric_rows, & &1.unit)},
-        %Field{
-          name: "observed_at",
-          kind: :time,
-          values: Enum.map(metric_rows, & &1.observed_at)
-        },
-        %Field{
-          name: "freshness_state",
-          kind: :enum,
-          values: Enum.map(metric_rows, & &1.freshness_state)
-        },
-        %Field{name: "age_ms", kind: :number, values: Enum.map(metric_rows, & &1.age_ms)}
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :link_rf_metric,
-        product_family: :link_rf,
-        observable_ids: observable_ids(metric_rows),
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(metric_rows),
-        freshness_policy: latest_freshness_policy(metric_rows),
-        freshness_checked_at: latest_freshness_checked_at(metric_rows),
-        warning_codes: latest_freshness_warning_codes(metric_rows),
-        links: operational_metric_links(request, metric_rows),
-        evidence_refs: operational_metric_evidence_refs(metric_rows)
-      }
-    }
+  defp link_rf_metric_frame(request, source_binding, rows) do
+    OperationalMetricFrames.link_rf_latest(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
-  defp transport_bitrate_frame(request, source_binding, bitrate_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:transport_bitrate",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.observable_id)
-        },
-        %Field{
-          name: "resource_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.resource_id)
-        },
-        %Field{name: "label", kind: :string, values: Enum.map(bitrate_rows, & &1.label)},
-        %Field{
-          name: "scope_kind",
-          kind: :enum,
-          values: Enum.map(bitrate_rows, & &1.scope_kind)
-        },
-        %Field{
-          name: "transport_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.transport_id)
-        },
-        %Field{
-          name: "source_endpoint_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.source_endpoint_id)
-        },
-        %Field{
-          name: "ground_station_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.ground_station_id)
-        },
-        %Field{
-          name: "link_id",
-          kind: :string,
-          values: Enum.map(bitrate_rows, & &1.link_id)
-        },
-        %Field{
-          name: "adapter_key",
-          kind: :enum,
-          values: Enum.map(bitrate_rows, & &1.adapter_key)
-        },
-        %Field{
-          name: "value",
-          kind: :number,
-          values: Enum.map(bitrate_rows, & &1.value)
-        },
-        %Field{name: "unit", kind: :string, values: Enum.map(bitrate_rows, & &1.unit)},
-        %Field{
-          name: "observed_at",
-          kind: :time,
-          values: Enum.map(bitrate_rows, & &1.observed_at)
-        },
-        %Field{
-          name: "freshness_state",
-          kind: :enum,
-          values: Enum.map(bitrate_rows, & &1.freshness_state)
-        },
-        %Field{name: "age_ms", kind: :number, values: Enum.map(bitrate_rows, & &1.age_ms)}
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :transport_bitrate,
-        observable_ids: observable_ids(bitrate_rows),
-        observable_id: single_observable_id(bitrate_rows),
-        unit: "bit/s",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(bitrate_rows),
-        freshness_policy: latest_freshness_policy(bitrate_rows),
-        freshness_checked_at: latest_freshness_checked_at(bitrate_rows),
-        warning_codes: latest_freshness_warning_codes(bitrate_rows),
-        links: operational_metric_links(request, bitrate_rows),
-        evidence_refs: operational_metric_evidence_refs(bitrate_rows)
-      }
-    }
+  defp transport_bitrate_frame(request, source_binding, rows) do
+    OperationalMetricFrames.transport_bitrate_latest(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp operational_metric_history_frames(rows, request, source_binding, capability) do
-    rows
-    |> Enum.group_by(&metric_history_series_key/1)
-    |> Enum.sort_by(fn {series_key, _rows} -> series_key end)
-    |> Enum.map(fn {_series_key, series_rows} ->
-      operational_metric_history_frame(request, source_binding, capability, series_rows)
-    end)
-    |> mark_partial_metric_history_frames()
-  end
-
-  defp mark_partial_metric_history_frames(frames) do
-    returned? = Enum.any?(frames, &(frame_returned_points(&1) > 0))
-    empty? = Enum.any?(frames, &(frame_returned_points(&1) == 0))
-
-    if returned? and empty? do
-      Enum.map(frames, &put_frame_warning_code(&1, :partial_data))
-    else
-      frames
-    end
-  end
-
-  defp frame_returned_points(%Frame{meta: meta}) when is_map(meta) do
-    case attr(meta, :returned_points) do
-      count when is_integer(count) -> count
-      _other -> 0
-    end
-  end
-
-  defp frame_returned_points(_frame), do: 0
-
-  defp put_frame_warning_code(%Frame{meta: meta} = frame, code) when is_atom(code) do
-    warning_codes =
-      meta
-      |> attr(:warning_codes)
-      |> List.wrap()
-      |> Kernel.++([code])
-      |> Enum.uniq()
-
-    %Frame{frame | meta: Map.put(meta, :warning_codes, warning_codes)}
-  end
-
-  defp operational_metric_history_frame(request, source_binding, capability, rows) do
-    [%{observable_id: observable_id} = first_row | _rest] = rows
-    data_rows = Enum.reject(rows, &Map.get(&1, :empty_series?, false))
-    resource_links = DataLinks.operational_resource_links(request, [first_row], source: :frame)
-    resource_link_id = operational_resource_link_id(resource_links)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}:#{first_row.resource_id}",
-      source: :operational_observables,
-      shape: :wide,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      overlays: %{requested: request.overlays || []},
-      fields: [
-        %Field{
-          name: "time",
-          kind: :time,
-          values: Enum.map(data_rows, & &1.observed_at),
-          metadata: %{axis: :occurred_at}
-        },
-        %Field{
-          name: observable_id,
-          kind: :number,
-          values: Enum.map(data_rows, & &1.value),
-          metadata:
-            %{
-              observable_id: observable_id,
-              label: first_row.label,
-              unit: first_row.unit,
-              resource_id: first_row.resource_id,
-              scope_kind: first_row.scope_kind,
-              transport_id: first_row.transport_id,
-              source_endpoint_id: first_row.source_endpoint_id,
-              ground_station_id: first_row.ground_station_id,
-              link_id: first_row.link_id,
-              contact_id: Map.get(first_row, :contact_id),
-              adapter_key: first_row.adapter_key,
-              resource_link_id: resource_link_id,
-              links: resource_links
-            }
-            |> Map.reject(fn {_key, value} -> is_nil(value) end)
-        }
-      ],
-      meta:
-        %{
-          source_request_id: request.request_id,
-          logical_source: :operational_observables,
-          source_binding_id: source_binding_id(source_binding),
-          dataset: dataset(source_binding),
-          sampling: :raw_series,
-          supported_capability: capability,
-          product_family: metric_history_product_family(observable_id),
-          observable_ids: [observable_id],
-          observable_id: observable_id,
-          resource_id: first_row.resource_id,
-          scope_kind: first_row.scope_kind,
-          transport_id: first_row.transport_id,
-          source_endpoint_id: first_row.source_endpoint_id,
-          ground_station_id: first_row.ground_station_id,
-          link_id: first_row.link_id,
-          adapter_key: first_row.adapter_key,
-          unit: first_row.unit,
-          realm: realm(request, source_binding),
-          data_source_id: data_source_id(request, source_binding),
-          replay_run_id: replay_run_id(request),
-          returned_points: length(data_rows),
-          warning_codes: [],
-          resource_link_id: resource_link_id,
-          links:
-            resource_links ++
-              DataLinks.operational_event_links(request, data_rows, source: :frame),
-          evidence_refs: operational_metric_evidence_refs(data_rows)
-        }
-        |> maybe_put_contact_id(Map.get(first_row, :contact_id))
-    }
-  end
-
-  defp maybe_put_contact_id(meta, contact_id) when contact_id in [nil, ""], do: meta
-  defp maybe_put_contact_id(meta, contact_id), do: Map.put(meta, :contact_id, contact_id)
-
-  defp operational_metric_links(request, rows) do
-    DataLinks.operational_resource_links(request, rows, source: :frame) ++
-      DataLinks.operational_event_links(request, rows, source: :frame)
-  end
-
-  defp operational_metric_evidence_refs(rows) do
-    DataLinks.operational_event_evidence_refs(rows, source: :operational_observables)
-  end
-
-  defp operational_resource_link_id(links) do
-    Enum.find_value(links, fn
-      %{link_id: link_id} when is_binary(link_id) and link_id != "" -> link_id
-      _link -> nil
-    end)
+    OperationalMetricFrames.history(
+      request,
+      rows,
+      capability,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp command_queue_depth_frame(request, source_binding, depth_rows) do
@@ -2620,115 +2334,18 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end)
   end
 
-  defp ingress_processing_latency_frame(request, source_binding, latency_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:ingress_processing_latency",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "observable_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.observable_id)
-        },
-        %Field{
-          name: "resource_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.resource_id)
-        },
-        %Field{name: "label", kind: :string, values: Enum.map(latency_rows, & &1.label)},
-        %Field{
-          name: "scope_kind",
-          kind: :enum,
-          values: Enum.map(latency_rows, & &1.scope_kind)
-        },
-        %Field{
-          name: "source_endpoint_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.source_endpoint_id)
-        },
-        %Field{
-          name: "transport_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.transport_id)
-        },
-        %Field{
-          name: "ground_station_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.ground_station_id)
-        },
-        %Field{
-          name: "link_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.link_id)
-        },
-        %Field{
-          name: "contact_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.contact_id)
-        },
-        %Field{
-          name: "adapter_key",
-          kind: :enum,
-          values: Enum.map(latency_rows, & &1.adapter_key)
-        },
-        %Field{
-          name: "spacecraft_id",
-          kind: :string,
-          values: Enum.map(latency_rows, & &1.spacecraft_id)
-        },
-        %Field{name: "value", kind: :number, values: Enum.map(latency_rows, & &1.value)},
-        %Field{name: "unit", kind: :string, values: Enum.map(latency_rows, & &1.unit)},
-        %Field{
-          name: "observed_at",
-          kind: :time,
-          values: Enum.map(latency_rows, & &1.observed_at)
-        },
-        %Field{
-          name: "freshness_state",
-          kind: :enum,
-          values: Enum.map(latency_rows, & &1.freshness_state)
-        },
-        %Field{name: "age_ms", kind: :number, values: Enum.map(latency_rows, & &1.age_ms)},
-        %Field{name: "error", kind: :boolean, values: Enum.map(latency_rows, & &1.error?)}
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :ingress_processing_latency,
-        product_family: :runtime_ingress,
-        observable_ids: observable_ids(latency_rows),
-        observable_id: "ingress.processing_latency_ms",
-        unit: "ms",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(latency_rows),
-        freshness_policy: latest_freshness_policy(latency_rows),
-        freshness_checked_at: latest_freshness_checked_at(latency_rows),
-        warning_codes: latest_freshness_warning_codes(latency_rows),
-        links: operational_metric_links(request, latency_rows),
-        evidence_refs: operational_metric_evidence_refs(latency_rows)
-      }
-    }
+  defp ingress_processing_latency_frame(request, source_binding, rows) do
+    OperationalMetricFrames.ingress_latency_latest(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp observable_ids(rows) do
     rows
     |> Enum.map(& &1.observable_id)
     |> Enum.uniq()
-  end
-
-  defp single_observable_id(rows) do
-    case observable_ids(rows) do
-      [observable_id] -> observable_id
-      _observable_ids -> nil
-    end
   end
 
   defp annotate_latest_freshness(rows, request, opts) do
@@ -3424,12 +3041,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     starts_before_to? and ends_after_from?
   end
-
-  defp metric_history_product_family(observable_id) do
-    ProductPolicy.metric_history_product_family(observable_id)
-  end
-
-  defp metric_history_series_key(row), do: {row.observable_id, row.resource_id}
 
   defp ingress_processing_latency_snapshots(
          nil,

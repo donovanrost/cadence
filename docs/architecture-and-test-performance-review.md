@@ -1117,6 +1117,12 @@ source-endpoint empty series into a 314-line row module reduced the adapter from
 the same normalization API while provider callbacks, overlay selection,
 freshness annotation, and frame construction remain adapter-owned; production
 source-size pressure remains 8.
+Consolidating latest RF metric, transport bitrate, and ingress latency fields
+with their shared grouped-history frames, freshness metadata, partial-data
+warnings, resource links, and event evidence into a 323-line presentation
+module reduced the adapter from 4,701 to 4,312 lines. The adapter supplies
+resolved rows and source identity while the frame module owns only numeric
+operational-metric presentation; production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
