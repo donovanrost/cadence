@@ -1310,6 +1310,12 @@ a 264-line `DataManagement.WorkflowJobs` module reduced `DataManagement` from
 unchanged, and group transitions now start jobs through the same execution
 boundary directly; production source-size pressure remains 6 and dependency
 ratchets are unchanged.
+Extracting persisted lifecycle-event lookup plus workflow, job, retryability,
+recovery-action, and correction-lineage interpretation into a 125-line
+`DataManagement.WorkflowEventEvidence` module reduced `DataManagement` from
+2,105 to 2,010 lines. Correction, transition, and recovery paths now consume
+one compatibility reader for current and older payload shapes; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

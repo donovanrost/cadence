@@ -10,6 +10,7 @@ defmodule Cadence.Telemetry.DataManagement do
   alias Cadence.Jobs
   alias Cadence.Telemetry.DataManagement.LateDataPolicy
   alias Cadence.Telemetry.DataManagement.ObservationIdentityDecisions
+  alias Cadence.Telemetry.DataManagement.WorkflowEventEvidence
   alias Cadence.Telemetry.DataManagement.WorkflowEvents
   alias Cadence.Telemetry.DataManagement.WorkflowJobs
   alias Cadence.Telemetry.DataManagement.WorkflowPolicy
@@ -162,7 +163,7 @@ defmodule Cadence.Telemetry.DataManagement do
     with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
          {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
          {:ok, correction_event} <-
-           fetch_historical_data_workflow_event(correction_event_id, attrs) do
+           WorkflowEventEvidence.fetch(correction_event_id, attrs) do
       record_historical_data_workflow_correction_transition_event(
         workflow,
         stage,
@@ -192,7 +193,7 @@ defmodule Cadence.Telemetry.DataManagement do
              is_binary(source_event_id) and is_map(attrs) and is_list(opts) do
     with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
          {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
-         {:ok, source_event} <- fetch_historical_data_workflow_event(source_event_id, attrs),
+         {:ok, source_event} <- WorkflowEventEvidence.fetch(source_event_id, attrs),
          :ok <- require_historical_data_workflow_transition_source(workflow, stage, source_event),
          :ok <- require_historical_data_workflow_stage_transition_policy(stage, source_event) do
       record_historical_data_workflow_transition_event(
@@ -272,7 +273,7 @@ defmodule Cadence.Telemetry.DataManagement do
          {:invalid_historical_workflow_correction_source,
           source_event.backfill_lifecycle_event_id, :workflow_mismatch}}
 
-      historical_data_workflow_event_recovery_action(source_event) != "correct_workflow_request" ->
+      WorkflowEventEvidence.recovery_action(source_event) != "correct_workflow_request" ->
         {:error,
          {:invalid_historical_workflow_correction_source,
           source_event.backfill_lifecycle_event_id, :correction_not_required}}
@@ -330,7 +331,7 @@ defmodule Cadence.Telemetry.DataManagement do
       event_id: source_event.backfill_lifecycle_event_id,
       job_id: job.job_id,
       job_status: Atom.to_string(job.status),
-      recovery_action: historical_data_workflow_event_recovery_action(source_event)
+      recovery_action: WorkflowEventEvidence.recovery_action(source_event)
     }
   end
 
@@ -362,7 +363,7 @@ defmodule Cadence.Telemetry.DataManagement do
 
   defp historical_data_workflow_correction_source_workflow(source_event) do
     source_event
-    |> historical_data_workflow_event_workflow()
+    |> WorkflowEventEvidence.workflow()
     |> WorkflowEvents.normalize_workflow()
     |> case do
       {:ok, workflow} -> workflow
@@ -415,7 +416,7 @@ defmodule Cadence.Telemetry.DataManagement do
       "corrects_event_id" => source_event.backfill_lifecycle_event_id,
       "corrects_job_id" =>
         correction_text_attr(correction, :original_job_id) ||
-          historical_data_workflow_event_job_id(source_event)
+          WorkflowEventEvidence.job_id(source_event)
     })
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
     |> Map.new()
@@ -457,15 +458,6 @@ defmodule Cadence.Telemetry.DataManagement do
   defp empty_map_to_nil(map) when map_size(map) == 0, do: nil
   defp empty_map_to_nil(map), do: map
 
-  defp historical_data_workflow_event_job_id(%{payload: payload}) when is_map(payload) do
-    case first_nested_map_value(payload, [["job_id"], [:job_id]]) do
-      {:ok, job_id} -> job_id
-      :error -> nil
-    end
-  end
-
-  defp historical_data_workflow_event_job_id(_event), do: nil
-
   defp correction_text_attr(attrs, key) do
     case get_attr(attrs, key) do
       value when is_binary(value) and value != "" -> value
@@ -486,13 +478,6 @@ defmodule Cadence.Telemetry.DataManagement do
 
       _value ->
         nil
-    end
-  end
-
-  defp correction_lifecycle_event?(event) do
-    case Storage.BackfillLifecycleGroup.payload_value(event, :corrects_event_id) do
-      event_id when is_binary(event_id) and event_id != "" -> true
-      _event_id -> false
     end
   end
 
@@ -609,19 +594,6 @@ defmodule Cadence.Telemetry.DataManagement do
 
   defp historical_data_workflow_group_events(_request_group_id, _attrs),
     do: {:error, {:missing_field, :request_group_id}}
-
-  defp fetch_historical_data_workflow_event(event_id, attrs) do
-    with {:ok, organization_id} <- required_attr(attrs, :organization_id),
-         {:ok, mission_id} <- required_attr(attrs, :mission_id) do
-      case Storage.fetch_backfill_lifecycle_event(event_id,
-             organization_id: organization_id,
-             mission_id: mission_id
-           ) do
-        %Storage.BackfillLifecycleEvent{} = event -> {:ok, event}
-        nil -> {:error, {:historical_workflow_event_not_found, event_id}}
-      end
-    end
-  end
 
   defp normalize_request_group_id(request_group_id) when is_binary(request_group_id) do
     request_group_id = String.trim(request_group_id)
@@ -927,7 +899,7 @@ defmodule Cadence.Telemetry.DataManagement do
       limit: 1_000
     )
     |> Enum.filter(fn event ->
-      correction_lifecycle_event?(event) and
+      WorkflowEventEvidence.correction?(event) and
         Storage.BackfillLifecycleGroup.payload_value(event, :request_group_id) ==
           request_group_id
     end)
@@ -959,7 +931,7 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp require_historical_data_workflow_stale_replacement_event(source_event) do
-    if correction_lifecycle_event?(source_event) do
+    if WorkflowEventEvidence.correction?(source_event) do
       :ok
     else
       {:error,
@@ -1030,7 +1002,7 @@ defmodule Cadence.Telemetry.DataManagement do
          %Jobs.Job{} = job,
          error_tag
        ) do
-    case historical_data_workflow_event_job_id(source_event) do
+    case WorkflowEventEvidence.job_id(source_event) do
       event_job_id
       when is_binary(event_job_id) and event_job_id != "" and event_job_id != job.job_id ->
         {:error, {error_tag, source_event.backfill_lifecycle_event_id, :job_id_mismatch}}
@@ -1060,9 +1032,8 @@ defmodule Cadence.Telemetry.DataManagement do
       event_id: source_event.backfill_lifecycle_event_id,
       job_id: job.job_id,
       job_status: Atom.to_string(job.status),
-      retryable:
-        if(historical_data_workflow_event_retryable?(source_event), do: "true", else: "false"),
-      recovery_action: historical_data_workflow_event_recovery_action(source_event)
+      retryable: if(WorkflowEventEvidence.retryable?(source_event), do: "true", else: "false"),
+      recovery_action: WorkflowEventEvidence.recovery_action(source_event)
     }
   end
 
@@ -1085,13 +1056,13 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp historical_data_workflow_group_retry_candidate?(event) do
-    historical_data_workflow_event_retryable?(event) and
+    WorkflowEventEvidence.retryable?(event) and
       not historical_data_workflow_event_correction_request_blocked?(event)
   end
 
   defp retry_historical_data_workflow_group_failed_event(event, summary, attrs, opts) do
     cond do
-      not historical_data_workflow_event_retryable?(event) or
+      not WorkflowEventEvidence.retryable?(event) or
           historical_data_workflow_event_correction_request_blocked?(event) ->
         summary
         |> increment_historical_data_workflow_group_retry_summary(:nonretryable)
@@ -1164,7 +1135,7 @@ defmodule Cadence.Telemetry.DataManagement do
     |> historical_data_workflow_retry_attrs(retried_job, attrs)
     |> then(fn event_attrs ->
       record_historical_data_workflow_event(
-        historical_data_workflow_event_workflow(source_event),
+        WorkflowEventEvidence.workflow(source_event),
         :retried,
         event_attrs,
         opts
@@ -1341,7 +1312,7 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp historical_data_workflow_stale_replacement_inspection_event_type(source_event) do
-    case historical_data_workflow_event_workflow(source_event) do
+    case WorkflowEventEvidence.workflow(source_event) do
       :import -> :import_stale_replacement_inspected
       "import" -> :import_stale_replacement_inspected
       _workflow -> :backfill_stale_replacement_inspected
@@ -1349,7 +1320,7 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp historical_data_workflow_missing_replacement_inspection_event_type(source_event) do
-    case historical_data_workflow_event_workflow(source_event) do
+    case WorkflowEventEvidence.workflow(source_event) do
       :import -> :import_missing_replacement_inspected
       "import" -> :import_missing_replacement_inspected
       _workflow -> :backfill_missing_replacement_inspected
@@ -1357,7 +1328,7 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp historical_data_workflow_stale_replacement_requeue_event_type(source_event) do
-    case historical_data_workflow_event_workflow(source_event) do
+    case WorkflowEventEvidence.workflow(source_event) do
       :import -> :import_stale_replacement_requeued
       "import" -> :import_stale_replacement_requeued
       _workflow -> :backfill_stale_replacement_requeued
@@ -1469,38 +1440,6 @@ defmodule Cadence.Telemetry.DataManagement do
     })
   end
 
-  defp historical_data_workflow_event_workflow(source_event) do
-    case Map.get(source_event.payload, "workflow") do
-      workflow when workflow in ["backfill", "import"] ->
-        workflow
-
-      _other ->
-        workflow_from_historical_data_workflow_event_type(source_event.event_type)
-    end
-  end
-
-  defp workflow_from_historical_data_workflow_event_type(event_type) do
-    event_type
-    |> Atom.to_string()
-    |> case do
-      "import_" <> _stage -> :import
-      _event_type -> :backfill
-    end
-  end
-
-  defp historical_data_workflow_event_retryable?(%{payload: payload}) when is_map(payload) do
-    case first_nested_map_value(payload, [
-           ["source", "failure", "retryable"],
-           [:source, :failure, :retryable],
-           ["failure", "retryable"]
-         ]) do
-      {:ok, retryable} -> retryable not in [false, "false"]
-      :error -> true
-    end
-  end
-
-  defp historical_data_workflow_event_retryable?(_event), do: true
-
   defp require_historical_data_workflow_event_retryable(source_event) do
     cond do
       historical_data_workflow_event_correction_request_blocked?(source_event) ->
@@ -1508,7 +1447,7 @@ defmodule Cadence.Telemetry.DataManagement do
          {:historical_workflow_retry_blocked, source_event.backfill_lifecycle_event_id,
           :correct_workflow_request}}
 
-      historical_data_workflow_event_retryable?(source_event) ->
+      WorkflowEventEvidence.retryable?(source_event) ->
         :ok
 
       true ->
@@ -1519,43 +1458,8 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp historical_data_workflow_event_correction_request_blocked?(event) do
-    historical_data_workflow_event_recovery_action(event) == "correct_workflow_request" and
-      not correction_lifecycle_event?(event)
-  end
-
-  defp historical_data_workflow_event_recovery_action(%{payload: payload}) when is_map(payload) do
-    case first_nested_map_value(payload, [
-           ["source", "failure", "recovery_action"],
-           [:source, :failure, :recovery_action],
-           ["failure", "recovery_action"],
-           [:failure, :recovery_action],
-           ["recovery_action"],
-           [:recovery_action]
-         ]) do
-      {:ok, recovery_action} -> recovery_action
-      :error -> nil
-    end
-  end
-
-  defp historical_data_workflow_event_recovery_action(_event), do: nil
-
-  defp first_nested_map_value(map, paths) when is_map(map) and is_list(paths) do
-    Enum.find_value(paths, :error, fn path ->
-      case nested_map_value(map, path) do
-        {:ok, value} -> {:ok, value}
-        :error -> nil
-      end
-    end)
-  end
-
-  defp nested_map_value(map, keys) when is_map(map) and is_list(keys) do
-    Enum.reduce_while(keys, {:ok, map}, fn key, {:ok, acc} ->
-      if is_map(acc) and Map.has_key?(acc, key) do
-        {:cont, {:ok, Map.get(acc, key)}}
-      else
-        {:halt, :error}
-      end
-    end)
+    WorkflowEventEvidence.recovery_action(event) == "correct_workflow_request" and
+      not WorkflowEventEvidence.correction?(event)
   end
 
   defp historical_data_workflow_group_retry_summary do
@@ -1590,7 +1494,7 @@ defmodule Cadence.Telemetry.DataManagement do
     item =
       event
       |> historical_data_workflow_group_retry_item(nil, reason)
-      |> Map.put(:recovery_action, historical_data_workflow_event_recovery_action(event))
+      |> Map.put(:recovery_action, WorkflowEventEvidence.recovery_action(event))
       |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
       |> Map.new()
 
@@ -1667,7 +1571,7 @@ defmodule Cadence.Telemetry.DataManagement do
          event_attrs,
          opts
        ) do
-    if correction_lifecycle_event?(requested_event) do
+    if WorkflowEventEvidence.correction?(requested_event) do
       record_historical_data_workflow_correction_transition_event(
         workflow,
         stage,
