@@ -114,7 +114,7 @@ defmodule CadenceUmbrella.MixProject do
       "browser",
       "--include",
       "browser_smoke",
-      "browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+      "browser_test/cadence_web/assets"
       | args
     ])
   end

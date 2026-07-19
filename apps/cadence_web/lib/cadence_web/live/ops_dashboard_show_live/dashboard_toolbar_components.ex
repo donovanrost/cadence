@@ -61,7 +61,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       class="min-h-11 shrink-0 flex items-center gap-2 border-b border-base-300/60 bg-base-200/45 px-3 py-1.5"
     >
       <div class="min-w-0 flex-1">
-        <h1 class="truncate text-sm font-semibold tracking-tight" title={@dashboard_document.description}>
+        <h1
+          class="break-words text-sm font-semibold leading-tight tracking-tight"
+          title={@dashboard_document.description}
+        >
           {@dashboard_document.name}
         </h1>
         <p class="hidden truncate text-[0.65rem] text-base-content/50 sm:block">
@@ -180,7 +183,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
           </div>
           <div :if={@dashboard_warnings != []} class="mt-2 flex flex-wrap gap-1">
             <WidgetWarningComponents.engine_warning_badge
-              :for={warning <- @dashboard_warnings}
+              :for={{warning, index} <- Enum.with_index(@dashboard_warnings)}
+              id={"dashboard-data-issue-warning-#{index}"}
               warning={warning}
             />
           </div>

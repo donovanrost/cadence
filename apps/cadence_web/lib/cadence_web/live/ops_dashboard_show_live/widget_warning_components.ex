@@ -4,13 +4,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.{DataLinkAttrs, EvidenceAttrs}
 
+  attr :id, :string, required: true
   attr :warning, :map, required: true
   attr :placement_id, :string, default: nil
 
   def engine_warning_badge(assigns) do
     ~H"""
     <.popover
-      id={"engine-warning-#{@placement_id || "dashboard"}-#{@warning.code_text}"}
+      id={@id}
       label={@warning.label}
       width={:md}
       data-engine-warning-detail={@warning.code_text}

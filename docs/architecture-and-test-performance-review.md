@@ -899,6 +899,19 @@ release-resource, verifier, transport-action, and back-link phases reduced the
 test pressure from 34 to 33. The 19-line scenario orchestrates phase modules of
 517, 603, 467, 499, and 292 lines, backed by 344 lines of shared fixtures; all
 three source-endpoint scope proofs remain green.
+Splitting the 21,037-line opt-in rendered-viewport matrix into 20 focused test
+files reduced test-file pressure to zero; the largest browser test file is now
+1,359 lines. Decomposing its 2,359-line authenticated smoke workflow into a
+28-line scenario over setup, recovery, worker-evidence, replacement-evidence,
+and mixed-evidence phases reduced overlong-test pressure from 33 to 32; the
+largest shared browser support file is 932 lines. The child and root
+`test.browser` aliases still select the compact three-test smoke file, while
+`test.browser.full` selects the complete browser-test directory. Compile-only
+full-matrix discovery finds all 93 cases with none entering the default suite,
+and the real smoke lane passes all three cases in 58.5 seconds. That run also
+refreshed the browser contract for the current telemetry-first toolbar and
+shared overlays, and fixed repeated warning popover IDs plus narrow dashboard
+title wrapping.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

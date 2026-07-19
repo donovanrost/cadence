@@ -8,6 +8,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
   test "engine_warning_badge renders evidence controls and detail evidence rows" do
     html =
       render_component(&WidgetWarningComponents.engine_warning_badge/1,
+        id: "widget-placement-1-engine-warning-0",
         warning: warning(),
         placement_id: "placement-1"
       )
@@ -64,6 +65,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
   test "engine_warning_badge renders warning data links with context fallback" do
     html =
       render_component(&WidgetWarningComponents.engine_warning_badge/1,
+        id: "widget-placement-1-engine-warning-0",
         warning:
           warning(%{
             links: [

@@ -1706,15 +1706,14 @@ async function inspectRenderedSourceDependencyCause(client, options = {}) {
 }
 
 async function inspectOpsContextRail(client, options = {}) {
-  const { expectInitiallyCollapsed = false, restoreExpanded = false } = options
+  const { expectInitiallyExpanded = false, restoreCollapsed = false } = options
 
   await waitForExpression(
     client,
     `
       Boolean(
         document.querySelector("#ops-context-rail[data-ops-context-rail]") &&
-        document.querySelector("#ops-context-rail-toggle") &&
-        document.querySelector("[data-ops-context-section]")
+        document.querySelector("#ops-context-rail-toggle")
       )
     `,
     5_000,
@@ -1738,15 +1737,9 @@ async function inspectOpsContextRail(client, options = {}) {
           defaultExpanded: rail?.hasAttribute("data-default-expanded") || false,
           sectionKeys,
           collapsedKeys,
-          healthStatus: document
-            .querySelector("[data-ops-context-section='dashboard_health']")
-            ?.dataset.opsContextSectionStatus || "",
-          sourceStatus: document
-            .querySelector("[data-ops-context-section='source_status']")
-            ?.dataset.opsContextSectionStatus || "",
-          sourceSelectionCount: document
-            .querySelector("[data-ops-context-section='source_selection']")
-            ?.dataset.opsContextSectionCount || ""
+          comparisonStatus: document
+            .querySelector("[data-ops-context-section='comparison']")
+            ?.dataset.opsContextSectionStatus || ""
         }
       })()
     `,
@@ -1756,33 +1749,67 @@ async function inspectOpsContextRail(client, options = {}) {
   const snapshot = snapshotResult.result.value
   assert.equal(snapshot.present, true, "ops context rail should render")
   assert.equal(snapshot.storageKey, "cadence-ops-context-rail", "ops context rail should use the shared storage key")
-  assert.equal(snapshot.defaultExpanded, true, "ops context rail should default expanded")
+  assert.equal(snapshot.defaultExpanded, false, "ops context rail should default collapsed")
   assert.equal(
     snapshot.expanded,
-    !expectInitiallyCollapsed,
+    expectInitiallyExpanded,
     "ops context rail should hydrate the expected expanded state"
   )
   assert.equal(
-    snapshot.sectionKeys.includes("dashboard_health"),
+    snapshot.sectionKeys.every((key) => key === "comparison"),
     true,
-    "ops context rail should expose dashboard health section metadata"
-  )
-  assert.equal(
-    snapshot.sectionKeys.includes("source_status"),
-    true,
-    "ops context rail should expose source status section metadata"
-  )
-  assert.equal(
-    snapshot.sectionKeys.includes("source_selection"),
-    true,
-    "ops context rail should expose source selection section metadata"
+    "dashboard context rail should only expose comparison sections"
   )
   assert.equal(snapshot.collapsedKeys.length >= snapshot.sectionKeys.length, true, "collapsed rail badges should mirror sections")
-  assert.notEqual(snapshot.healthStatus, "", "dashboard health section should expose a status")
-  assert.notEqual(snapshot.sourceStatus, "", "source status section should expose a status")
-  assert.notEqual(snapshot.sourceSelectionCount, "", "source selection section should expose a count")
 
-  if (!expectInitiallyCollapsed) {
+  if (!expectInitiallyExpanded) {
+    await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          document.querySelector("#ops-context-rail-toggle")?.click()
+        })()
+      `,
+      returnByValue: true,
+    })
+
+    await waitForExpression(
+      client,
+      `
+        Boolean(
+          document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded") &&
+          JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}").state === "expanded"
+        )
+      `,
+      3_000,
+      "ops context rail expansion persistence"
+    )
+  }
+
+  const persistedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const rail = document.querySelector("#ops-context-rail")
+        const stored = JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}")
+
+        return {
+          expanded: rail?.hasAttribute("data-expanded") || false,
+          width: rail ? Math.round(rail.getBoundingClientRect().width) : 0,
+          storedState: stored.state || "",
+          storedWidth: Number.isFinite(stored.width) ? stored.width : null
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const persisted = persistedResult.result.value
+
+  if (expectInitiallyExpanded) {
+    assert.equal(persisted.expanded, true, "ops context rail should remain expanded after reload")
+    assert.equal(persisted.storedState, "expanded", "ops context rail should preserve expanded state in localStorage")
+  }
+
+  if (restoreCollapsed) {
     await client.send("Runtime.evaluate", {
       expression: `
         (() => {
@@ -1805,54 +1832,7 @@ async function inspectOpsContextRail(client, options = {}) {
     )
   }
 
-  const collapsedResult = await client.send("Runtime.evaluate", {
-    expression: `
-      (() => {
-        const rail = document.querySelector("#ops-context-rail")
-        const stored = JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}")
-
-        return {
-          expanded: rail?.hasAttribute("data-expanded") || false,
-          width: rail ? Math.round(rail.getBoundingClientRect().width) : 0,
-          storedState: stored.state || "",
-          storedWidth: Number.isFinite(stored.width) ? stored.width : null
-        }
-      })()
-    `,
-    returnByValue: true,
-  })
-
-  const collapsed = collapsedResult.result.value
-
-  if (expectInitiallyCollapsed) {
-    assert.equal(collapsed.expanded, false, "ops context rail should remain collapsed after reload")
-    assert.equal(collapsed.storedState, "collapsed", "ops context rail should preserve collapsed state in localStorage")
-  }
-
-  if (restoreExpanded) {
-    await client.send("Runtime.evaluate", {
-      expression: `
-        (() => {
-          document.querySelector("#ops-context-rail-toggle")?.click()
-        })()
-      `,
-      returnByValue: true,
-    })
-
-    await waitForExpression(
-      client,
-      `
-        Boolean(
-          document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded") &&
-          JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}").state === "expanded"
-        )
-      `,
-      3_000,
-      "ops context rail re-expand persistence"
-    )
-  }
-
-  return { snapshot, collapsed }
+  return { snapshot, persisted }
 }
 
 async function runLiveDashboardInteractions(client, url, profile) {
@@ -1867,13 +1847,14 @@ async function runLiveDashboardInteractions(client, url, profile) {
     expression: `
       (() => {
         const menu = document.querySelector("#dashboard-menu")
-        const trigger = menu?.querySelector("[data-dropdown-trigger]")
+        const trigger = menu?.querySelector(":scope > [data-overlay-trigger]")
+        const panel = menu?.querySelector(":scope > [data-overlay-panel]")
         trigger?.click()
 
         return {
-          open: menu?.classList.contains("dropdown-open") || false,
+          open: menu?.hasAttribute("data-overlay-open") && !panel?.hidden,
           expanded: trigger?.getAttribute("aria-expanded"),
-          itemCount: menu?.querySelectorAll("[role='menu'] button, [role='menu'] a, [role='menuitem']").length || 0
+          itemCount: panel?.querySelectorAll("[role='menuitem'], a, button").length || 0
         }
       })()
     `,
@@ -1892,7 +1873,12 @@ async function runLiveDashboardInteractions(client, url, profile) {
   })
   await waitForExpression(
     client,
-    "!document.querySelector('#dashboard-menu')?.classList.contains('dropdown-open')",
+    `
+      Boolean(
+        !document.querySelector("#dashboard-menu")?.hasAttribute("data-overlay-open") &&
+        document.querySelector("#dashboard-menu-menu")?.hidden
+      )
+    `,
     2_000,
     "dashboard action menu to close"
   )
@@ -1906,8 +1892,11 @@ async function runLiveDashboardInteractions(client, url, profile) {
           const style = getComputedStyle(el)
           return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
         }
+        const dataControls = document.querySelector("#dashboard-data-controls")
+        dataControls?.querySelector(":scope > [data-overlay-trigger]")?.click()
 
         return {
+          overlayOpen: dataControls?.hasAttribute("data-overlay-open") || false,
           controlsVisible: visible(document.querySelector("#runtime-context-controls")),
           formPresent: Boolean(document.querySelector("#runtime-context-form")),
           sourceBindingPresent: Boolean(document.querySelector("#dashboard-source-binding")),
@@ -1918,10 +1907,29 @@ async function runLiveDashboardInteractions(client, url, profile) {
     returnByValue: true,
   })
 
-  assert.equal(contextResult.result.value.controlsVisible, true, "runtime context controls should be visible at wide viewport")
+  assert.equal(contextResult.result.value.overlayOpen, true, "runtime context controls overlay should open")
+  assert.equal(contextResult.result.value.controlsVisible, true, "runtime context controls should be visible in the open overlay")
   assert.equal(contextResult.result.value.formPresent, true, "runtime context form should render")
   assert.equal(contextResult.result.value.sourceBindingPresent, true, "source binding control should render")
   assert.equal(contextResult.result.value.timePresetCount >= 4, true, "time preset controls should render")
+
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector("#dashboard-data-controls")?.hasAttribute("data-overlay-open") &&
+        document.querySelector("#dashboard-data-controls-panel")?.hidden
+      )
+    `,
+    2_000,
+    "runtime context controls overlay to close"
+  )
 
   await client.send("Runtime.evaluate", {
     expression: `
@@ -2048,6 +2056,24 @@ async function runLiveDashboardInteractions(client, url, profile) {
   assert.equal(editEnteredResult.result.value.editing, true, "edit layout should enter edit mode")
   assert.equal(editEnteredResult.result.value.interactive, true, "edit layout should arm GridStack interaction handles")
 
+  const preReloadResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        url: window.location.href,
+        panelPresent: Boolean(document.querySelector("#dashboard-panel")),
+        selectedDataLinkPresent: Boolean(document.querySelector("#dashboard-data-link-inspector"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(preReloadResult.result.value.panelPresent, false, "layout editing should close the selected panel")
+  assert.equal(
+    preReloadResult.result.value.selectedDataLinkPresent,
+    false,
+    "layout editing should clear the selected data-link inspector"
+  )
+
   const reloaded = client.once("Page.loadEventFired")
   await client.send("Page.reload", { ignoreCache: true })
   await reloaded
@@ -2068,20 +2094,24 @@ async function runLiveDashboardInteractions(client, url, profile) {
     returnByValue: true,
   })
 
-  assert.equal(reloadResult.result.value.url, url, "dashboard reload should preserve the deep-link URL")
+  assert.equal(
+    reloadResult.result.value.url,
+    preReloadResult.result.value.url,
+    "dashboard reload should preserve the post-edit operational URL"
+  )
   assert.equal(reloadResult.result.value.dashboardPresent, true, "dashboard should render after reload")
-  assert.equal(reloadResult.result.value.panelPresent, true, "selected panel should render after reload")
+  assert.equal(reloadResult.result.value.panelPresent, false, "closed panel should remain closed after reload")
   assert.equal(
     reloadResult.result.value.selectedDataLinkPresent,
-    true,
-    "query-selected data link should hydrate after reload"
+    false,
+    "cleared data-link selection should remain cleared after reload"
   )
   assert.equal(reloadResult.result.value.liveSocketConnected, true, "LiveSocket should reconnect after reload")
   assert.equal(reloadResult.result.value.chartRendered, true, "chart hook should render after reload")
 
   const contextRailAfterReload = await inspectOpsContextRail(client, {
-    expectInitiallyCollapsed: true,
-    restoreExpanded: true,
+    expectInitiallyExpanded: true,
+    restoreCollapsed: true,
   })
 
   const limitAnalysisEvidence = await inspectRenderedLimitAnalysisEvidence(client, {
@@ -25505,38 +25535,20 @@ async function runLiveWorkflowSurfaceInteractions(client) {
     expression: `
       (() => {
         const root = document.querySelector("#dashboard-source-selection")
-        const firstDetail = root?.querySelector("[data-source-selection-detail]")
-        const firstSummary = firstDetail?.querySelector("summary")
-        firstSummary?.click()
 
         return {
           present: Boolean(root),
-          requestCount: Number(root?.dataset.sourceSelectionRequests || 0),
-          requestIds: root?.dataset.sourceSelectionRequestIds || "",
-          detailCount: root?.querySelectorAll("[data-source-selection-detail]").length || 0,
-          candidateCount: root?.querySelectorAll("[data-source-selection-candidate]").length || 0,
-          firstDetailOpen: firstDetail?.open || false
+          requestCount: Number(root?.dataset.sourceSelectionRequests || 0)
         }
       })()
     `,
     returnByValue: true,
   })
 
-  assert.equal(sourceSelectionResult.result.value.present, true, "source selection controls should render")
   assert.equal(
-    sourceSelectionResult.result.value.requestCount >= 1,
-    true,
-    "source selection controls should expose source requests"
-  )
-  assert.equal(
-    sourceSelectionResult.result.value.detailCount >= 1,
-    true,
-    "source selection controls should expose detail drilldowns"
-  )
-  assert.equal(
-    sourceSelectionResult.result.value.firstDetailOpen,
-    true,
-    "source selection detail should open in the browser"
+    sourceSelectionResult.result.value.present,
+    false,
+    "source selection controls should stay out of the primary telemetry surface"
   )
 
   await clickAndWaitForSelector(
@@ -29845,8 +29857,10 @@ async function openComparisonSavedPresets(client, label) {
   await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const details = document.querySelector("#dashboard-comparison-saved-presets")
-        if (details) details.open = true
+        const popover = document.querySelector("#dashboard-comparison-saved-presets")
+        if (popover && !popover.hasAttribute("data-overlay-open")) {
+          popover.querySelector(":scope > [data-overlay-trigger]")?.click()
+        }
       })()
     `,
     returnByValue: true,
@@ -29855,7 +29869,10 @@ async function openComparisonSavedPresets(client, label) {
   await waitForExpression(
     client,
     `
-      Boolean(document.querySelector("#dashboard-comparison-saved-presets[open]"))
+      Boolean(
+        document.querySelector("#dashboard-comparison-saved-presets")?.hasAttribute("data-overlay-open") &&
+        !document.querySelector("#dashboard-comparison-saved-presets-panel")?.hidden
+      )
     `,
     3_000,
     `${label} saved preset menu`

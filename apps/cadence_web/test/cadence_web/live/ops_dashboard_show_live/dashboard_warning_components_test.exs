@@ -60,4 +60,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWarningComponentsTest do
              |> LazyHTML.query(~s([data-warning-detail="Selected clock"]))
              |> LazyHTML.attribute("data-warning-detail")
   end
+
+  test "dashboard warnings assign unique popover ids to repeated warning codes" do
+    repeated_warning = %{
+      code: :unknown_limit_definition,
+      code_text: "unknown_limit_definition",
+      severity: :warning,
+      severity_text: "warning",
+      label: "Unknown limit definition",
+      message: "A limit definition could not be resolved.",
+      details: %{},
+      detail_rows: [],
+      evidence: [],
+      links: [],
+      actions: []
+    }
+
+    html =
+      render_component(&Components.dashboard_warnings/1,
+        degraded?: true,
+        warnings: [repeated_warning, repeated_warning]
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["dashboard-engine-warning-0", "dashboard-engine-warning-1"] =
+             document
+             |> LazyHTML.query(~s([data-engine-warning-detail="unknown_limit_definition"]))
+             |> LazyHTML.attribute("id")
+  end
 end

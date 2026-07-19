@@ -74,7 +74,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       <span :if={@warnings == []} class="text-base-content/70">
         One or more sources returned degraded data.
       </span>
-      <WidgetWarningComponents.engine_warning_badge :for={warning <- @warnings} warning={warning} />
+      <WidgetWarningComponents.engine_warning_badge
+        :for={{warning, index} <- Enum.with_index(@warnings)}
+        id={"dashboard-engine-warning-#{index}"}
+        warning={warning}
+      />
     </div>
     """
   end
@@ -485,7 +489,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
                 badge={badge}
               />
               <WidgetWarningComponents.engine_warning_badge
-                :for={warning <- @warnings}
+                :for={{warning, index} <- Enum.with_index(@warnings)}
+                id={"widget-#{@placement_id}-engine-warning-#{index}"}
                 warning={warning}
                 placement_id={@placement_id}
               />
