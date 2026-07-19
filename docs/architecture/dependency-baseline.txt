@@ -72,8 +72,6 @@ persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/pers
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_release_attempt_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_request_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_verifier_instance_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/dashboard_source_health_event_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/dashboard_source_watermark_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/mission_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/operational_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
@@ -84,10 +82,6 @@ persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/pers
 persistence_schema|lib/cadence/dashboards/runtime_invalidation/decision_events.ex|lib/cadence/persistence/schemas/dashboard_runtime_invalidation_decision_event_row.ex
 persistence_schema|lib/cadence/dashboards/source_credentials.ex|lib/cadence/persistence/schemas/dashboard_source_credential_event_row.ex
 persistence_schema|lib/cadence/dashboards/source_credentials.ex|lib/cadence/persistence/schemas/dashboard_source_credential_reference_row.ex
-persistence_schema|lib/cadence/dashboards/source_health.ex|lib/cadence/persistence/schemas/dashboard_source_health_event_row.ex
-persistence_schema|lib/cadence/dashboards/source_health.ex|lib/cadence/persistence/schemas/dashboard_source_health_status_row.ex
-persistence_schema|lib/cadence/dashboards/source_watermarks.ex|lib/cadence/persistence/schemas/dashboard_source_watermark_event_row.ex
-persistence_schema|lib/cadence/dashboards/source_watermarks.ex|lib/cadence/persistence/schemas/dashboard_source_watermark_status_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_evaluation_run_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_latest_value_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex

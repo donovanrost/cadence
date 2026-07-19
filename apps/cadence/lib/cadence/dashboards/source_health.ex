@@ -25,11 +25,7 @@ defmodule Cadence.Dashboards.SourceHealth do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.{
-    DashboardSourceHealthEventRow,
-    DashboardSourceHealthStatusRow
-  }
-
+  alias Cadence.Dashboards.SourceHealth.{EventRow, StatusRow}
   alias Cadence.Repo
 
   @type record_result ::
@@ -59,8 +55,8 @@ defmodule Cadence.Dashboards.SourceHealth do
     seed = SourceHealthEvent.new(attrs)
 
     Repo.transaction(fn ->
-      current_row = Repo.get(DashboardSourceHealthStatusRow, seed.source_health_key)
-      current_status = current_row && DashboardSourceHealthStatusRow.to_domain(current_row)
+      current_row = Repo.get(StatusRow, seed.source_health_key)
+      current_status = current_row && StatusRow.to_domain(current_row)
 
       if same_health?(current_status, seed) do
         touch_status!(current_row, seed)
@@ -100,7 +96,7 @@ defmodule Cadence.Dashboards.SourceHealth do
   def list_source_health_events(organization_id, mission_id, opts \\ []) when is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
 
-    DashboardSourceHealthEventRow
+    EventRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> maybe_filter_in(:source_health_key, Keyword.get(opts, :source_health_keys))
@@ -116,14 +112,14 @@ defmodule Cadence.Dashboards.SourceHealth do
     |> order_source_health_events(Keyword.get(opts, :order, :desc))
     |> limit(^limit)
     |> Repo.all()
-    |> Enum.map(&DashboardSourceHealthEventRow.to_domain/1)
+    |> Enum.map(&EventRow.to_domain/1)
   end
 
   @spec list_source_health_statuses(binary() | nil, binary() | nil, keyword()) :: [
           SourceHealthStatus.t()
         ]
   def list_source_health_statuses(organization_id, mission_id, opts \\ []) when is_list(opts) do
-    DashboardSourceHealthStatusRow
+    StatusRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> maybe_filter(:logical_source, Keyword.get(opts, :logical_source))
@@ -135,15 +131,15 @@ defmodule Cadence.Dashboards.SourceHealth do
     |> maybe_filter(:source_health, Keyword.get(opts, :source_health))
     |> order_by([row], asc: row.logical_source, asc: row.data_source_id, asc: row.realm)
     |> Repo.all()
-    |> Enum.map(&DashboardSourceHealthStatusRow.to_domain/1)
+    |> Enum.map(&StatusRow.to_domain/1)
   end
 
   @spec fetch_source_health_status(binary()) ::
           {:ok, SourceHealthStatus.t()} | {:error, :source_health_status_not_found}
   def fetch_source_health_status(source_health_key) when is_binary(source_health_key) do
-    case Repo.get(DashboardSourceHealthStatusRow, source_health_key) do
+    case Repo.get(StatusRow, source_health_key) do
       nil -> {:error, :source_health_status_not_found}
-      row -> {:ok, DashboardSourceHealthStatusRow.to_domain(row)}
+      row -> {:ok, StatusRow.to_domain(row)}
     end
   end
 
@@ -234,12 +230,10 @@ defmodule Cadence.Dashboards.SourceHealth do
 
   defp same_health?(_status, _event), do: false
 
-  defp touch_status!(%DashboardSourceHealthStatusRow{} = row, %SourceHealthEvent{} = event) do
-    case Repo.update(
-           DashboardSourceHealthStatusRow.touch_changeset(row, event.observed_at, event.payload)
-         ) do
+  defp touch_status!(%StatusRow{} = row, %SourceHealthEvent{} = event) do
+    case Repo.update(StatusRow.touch_changeset(row, event.observed_at, event.payload)) do
       {:ok, row} ->
-        {:unchanged, DashboardSourceHealthStatusRow.to_domain(row)}
+        {:unchanged, StatusRow.to_domain(row)}
 
       {:error, %Changeset{} = changeset} ->
         Repo.rollback(changeset)
@@ -257,19 +251,19 @@ defmodule Cadence.Dashboards.SourceHealth do
       })
       |> SourceHealthEvent.new()
 
-    with {:ok, event_row} <- Repo.insert(DashboardSourceHealthEventRow.changeset(event)),
-         source_health_event <- DashboardSourceHealthEventRow.to_domain(event_row),
+    with {:ok, event_row} <- Repo.insert(EventRow.changeset(event)),
+         source_health_event <- EventRow.to_domain(event_row),
          {:ok, %OperationalEvent{}} <-
            persist_source_health_operational_event(source_health_event),
          {:ok, status_row} <-
            source_health_event
            |> SourceHealthStatus.from_event(next_transition_count(current_status))
-           |> DashboardSourceHealthStatusRow.changeset()
+           |> StatusRow.changeset()
            |> Repo.insert(
-             on_conflict: {:replace, DashboardSourceHealthStatusRow.upsert_fields()},
+             on_conflict: {:replace, StatusRow.upsert_fields()},
              conflict_target: :source_health_key
            ) do
-      {:changed, source_health_event, DashboardSourceHealthStatusRow.to_domain(status_row)}
+      {:changed, source_health_event, StatusRow.to_domain(status_row)}
     else
       {:error, %Changeset{} = changeset} -> Repo.rollback(changeset)
       {:error, reason} -> Repo.rollback(reason)

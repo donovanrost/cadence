@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardSourceWatermarkEventRow do
+defmodule Cadence.Dashboards.SourceWatermarks.EventRow do
   @moduledoc false
 
   use Ecto.Schema

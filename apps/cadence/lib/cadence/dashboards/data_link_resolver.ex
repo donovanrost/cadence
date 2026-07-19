@@ -31,6 +31,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   }
 
   alias Cadence.Dashboards.DataSources.DataBindingEventRow
+  alias Cadence.Dashboards.SourceHealth.EventRow, as: SourceHealthEventRow
+  alias Cadence.Dashboards.SourceWatermarks.EventRow, as: SourceWatermarkEventRow
   alias Cadence.Jobs
   alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
@@ -46,8 +48,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     CommandReleaseAttemptRow,
     CommandRequestRow,
     CommandVerifierInstanceRow,
-    DashboardSourceHealthEventRow,
-    DashboardSourceWatermarkEventRow,
     MissionEventRow,
     OperationalEventRow,
     RawEvidenceRow,
@@ -738,7 +738,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp resolve_source_health_event(%DataLink{} = link, organization_id, mission_id) do
     event_row =
-      DashboardSourceHealthEventRow
+      SourceHealthEventRow
       |> where(
         [row],
         (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
@@ -748,8 +748,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       |> Repo.one()
 
     case event_row do
-      %DashboardSourceHealthEventRow{} = row ->
-        event = DashboardSourceHealthEventRow.to_domain(row)
+      %SourceHealthEventRow{} = row ->
+        event = SourceHealthEventRow.to_domain(row)
         {:ok, inspector(link, :resolved, nil, source_health_event_rows(event))}
 
       nil ->
@@ -760,7 +760,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp resolve_source_watermark_event(%DataLink{} = link, organization_id, mission_id) do
     event_row =
-      DashboardSourceWatermarkEventRow
+      SourceWatermarkEventRow
       |> where(
         [row],
         (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
@@ -770,8 +770,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       |> Repo.one()
 
     case event_row do
-      %DashboardSourceWatermarkEventRow{} = row ->
-        event = DashboardSourceWatermarkEventRow.to_domain(row)
+      %SourceWatermarkEventRow{} = row ->
+        event = SourceWatermarkEventRow.to_domain(row)
         {:ok, inspector(link, :resolved, nil, source_watermark_event_rows(event))}
 
       nil ->

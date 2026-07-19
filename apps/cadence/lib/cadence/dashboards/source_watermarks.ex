@@ -20,11 +20,7 @@ defmodule Cadence.Dashboards.SourceWatermarks do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.{
-    DashboardSourceWatermarkEventRow,
-    DashboardSourceWatermarkStatusRow
-  }
-
+  alias Cadence.Dashboards.SourceWatermarks.{EventRow, StatusRow}
   alias Cadence.Repo
 
   @type record_result ::
@@ -37,8 +33,8 @@ defmodule Cadence.Dashboards.SourceWatermarks do
     seed = SourceWatermarkEvent.new(attrs)
 
     Repo.transaction(fn ->
-      current_row = Repo.get(DashboardSourceWatermarkStatusRow, seed.source_watermark_key)
-      current_status = current_row && DashboardSourceWatermarkStatusRow.to_domain(current_row)
+      current_row = Repo.get(StatusRow, seed.source_watermark_key)
+      current_status = current_row && StatusRow.to_domain(current_row)
 
       if same_watermark?(current_status, seed) do
         touch_status!(current_row, seed)
@@ -78,7 +74,7 @@ defmodule Cadence.Dashboards.SourceWatermarks do
   def list_source_watermark_events(organization_id, mission_id, opts \\ []) when is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
 
-    DashboardSourceWatermarkEventRow
+    EventRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> maybe_filter(:logical_source, Keyword.get(opts, :logical_source))
@@ -92,7 +88,7 @@ defmodule Cadence.Dashboards.SourceWatermarks do
     |> order_by([row], desc: row.observed_at, desc: row.inserted_at)
     |> limit(^limit)
     |> Repo.all()
-    |> Enum.map(&DashboardSourceWatermarkEventRow.to_domain/1)
+    |> Enum.map(&EventRow.to_domain/1)
   end
 
   @spec list_source_watermark_statuses(binary() | nil, binary() | nil, keyword()) :: [
@@ -100,7 +96,7 @@ defmodule Cadence.Dashboards.SourceWatermarks do
         ]
   def list_source_watermark_statuses(organization_id, mission_id, opts \\ [])
       when is_list(opts) do
-    DashboardSourceWatermarkStatusRow
+    StatusRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
     |> maybe_filter(:logical_source, Keyword.get(opts, :logical_source))
@@ -111,15 +107,15 @@ defmodule Cadence.Dashboards.SourceWatermarks do
     |> maybe_filter(:dataset, Keyword.get(opts, :dataset))
     |> order_by([row], asc: row.logical_source, asc: row.data_source_id, asc: row.realm)
     |> Repo.all()
-    |> Enum.map(&DashboardSourceWatermarkStatusRow.to_domain/1)
+    |> Enum.map(&StatusRow.to_domain/1)
   end
 
   @spec fetch_source_watermark_status(binary()) ::
           {:ok, SourceWatermarkStatus.t()} | {:error, :source_watermark_status_not_found}
   def fetch_source_watermark_status(source_watermark_key) when is_binary(source_watermark_key) do
-    case Repo.get(DashboardSourceWatermarkStatusRow, source_watermark_key) do
+    case Repo.get(StatusRow, source_watermark_key) do
       nil -> {:error, :source_watermark_status_not_found}
-      row -> {:ok, DashboardSourceWatermarkStatusRow.to_domain(row)}
+      row -> {:ok, StatusRow.to_domain(row)}
     end
   end
 
@@ -184,16 +180,16 @@ defmodule Cadence.Dashboards.SourceWatermarks do
 
   defp same_watermark?(_status, _event), do: false
 
-  defp touch_status!(%DashboardSourceWatermarkStatusRow{} = row, %SourceWatermarkEvent{} = event) do
+  defp touch_status!(%StatusRow{} = row, %SourceWatermarkEvent{} = event) do
     case Repo.update(
-           DashboardSourceWatermarkStatusRow.touch_changeset(
+           StatusRow.touch_changeset(
              row,
              event.observed_at,
              event.payload
            )
          ) do
       {:ok, row} ->
-        {:unchanged, DashboardSourceWatermarkStatusRow.to_domain(row)}
+        {:unchanged, StatusRow.to_domain(row)}
 
       {:error, %Changeset{} = changeset} ->
         Repo.rollback(changeset)
@@ -208,19 +204,19 @@ defmodule Cadence.Dashboards.SourceWatermarks do
       |> Map.put(:retention_starts_at, effective_retention_starts_at(current_status, seed))
       |> SourceWatermarkEvent.new()
 
-    with {:ok, event_row} <- Repo.insert(DashboardSourceWatermarkEventRow.changeset(event)),
-         source_watermark_event <- DashboardSourceWatermarkEventRow.to_domain(event_row),
+    with {:ok, event_row} <- Repo.insert(EventRow.changeset(event)),
+         source_watermark_event <- EventRow.to_domain(event_row),
          {:ok, %OperationalEvent{}} <-
            persist_source_watermark_operational_event(source_watermark_event),
          {:ok, status_row} <-
            source_watermark_event
            |> SourceWatermarkStatus.from_event(next_transition_count(current_status))
-           |> DashboardSourceWatermarkStatusRow.changeset()
+           |> StatusRow.changeset()
            |> Repo.insert(
-             on_conflict: {:replace, DashboardSourceWatermarkStatusRow.upsert_fields()},
+             on_conflict: {:replace, StatusRow.upsert_fields()},
              conflict_target: :source_watermark_key
            ) do
-      {:changed, source_watermark_event, DashboardSourceWatermarkStatusRow.to_domain(status_row)}
+      {:changed, source_watermark_event, StatusRow.to_domain(status_row)}
     else
       {:error, %Changeset{} = changeset} -> Repo.rollback(changeset)
       {:error, reason} -> Repo.rollback(reason)

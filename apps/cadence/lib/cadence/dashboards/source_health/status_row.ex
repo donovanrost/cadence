@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardSourceHealthStatusRow do
+defmodule Cadence.Dashboards.SourceHealth.StatusRow do
   @moduledoc false
 
   use Ecto.Schema

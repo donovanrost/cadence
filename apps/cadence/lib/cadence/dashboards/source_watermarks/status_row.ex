@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardSourceWatermarkStatusRow do
+defmodule Cadence.Dashboards.SourceWatermarks.StatusRow do
   @moduledoc false
 
   use Ecto.Schema
