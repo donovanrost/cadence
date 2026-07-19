@@ -19,6 +19,201 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
+  defp assert_replay_command_request_round_trip(
+         conn,
+         command_queue_entry_view,
+         queue_entry,
+         replay_run_id,
+         replay_sources,
+         command_queue_entry_route_id
+       ) do
+    command_request_related_selector =
+      ~s(#dashboard-data-link-inspector [data-data-link-related-target="command request"][data-data-link-related-id="#{queue_entry.command_request_id}"])
+
+    assert has_element?(command_queue_entry_view, command_request_related_selector)
+
+    command_queue_entry_view
+    |> element(command_request_related_selector)
+    |> render_click()
+
+    command_request_path = assert_patch(command_queue_entry_view)
+    command_request_route_id = URI.encode_www_form(queue_entry.command_request_id)
+    assert command_request_path =~ "panel=data_link"
+    assert command_request_path =~ "selected_target=command_request"
+    assert command_request_path =~ "selected_id=#{command_request_route_id}"
+    assert command_request_path =~ "nav_from_target=command_queue_entry"
+    assert command_request_path =~ "nav_from_target_id=#{command_queue_entry_route_id}"
+    assert command_request_path =~ "nav_trail="
+    assert command_request_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert command_request_path =~
+             "data_source_id=#{replay_sources.operational_data_source_id}"
+
+    assert command_request_path =~
+             "source_binding_id=#{replay_sources.operational_binding_id}"
+
+    assert has_element?(
+             command_queue_entry_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="command_request"][data-data-link-target-id="#{queue_entry.command_request_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    assert has_element?(
+             command_queue_entry_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_request"][data-clipboard-text*="selected_id=#{command_request_route_id}"][data-clipboard-text*="nav_from_target=command_queue_entry"][data-clipboard-text*="nav_from_target_id=#{command_queue_entry_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+           )
+
+    command_request_copied_path =
+      command_queue_entry_view
+      |> render()
+      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
+
+    assert command_request_copied_path =~ "panel=data_link"
+    assert command_request_copied_path =~ "selected_target=command_request"
+    assert command_request_copied_path =~ "selected_id=#{command_request_route_id}"
+    assert command_request_copied_path =~ "nav_from_target=command_queue_entry"
+    assert command_request_copied_path =~ "nav_from_target_id=#{command_queue_entry_route_id}"
+    assert command_request_copied_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert command_request_copied_path =~
+             "data_source_id=#{replay_sources.operational_data_source_id}"
+
+    assert command_request_copied_path =~
+             "source_binding_id=#{replay_sources.operational_binding_id}"
+
+    {:ok, reopened_command_request_view, _html} = live(conn, command_request_copied_path)
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="command_request"][data-data-link-target-id="#{queue_entry.command_request_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Command request"]),
+             queue_entry.command_request_id
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Lifecycle state"]),
+             "queued"
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
+             "replay-command-endpoint"
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Command"]),
+             "NOOP"
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Command id"]),
+             queue_entry.command_queue_entry_id <> "-command"
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Requested at"]),
+             "2026-06-17T12:00:00"
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-context="Replay run"]),
+             replay_run_id
+           )
+
+    command_request_queue_entry_related_selector =
+      ~s(#dashboard-data-link-inspector [data-data-link-related-target="command queue entry"][data-data-link-related-id="#{queue_entry.command_queue_entry_id}"])
+
+    assert has_element?(
+             reopened_command_request_view,
+             command_request_queue_entry_related_selector
+           )
+
+    reopened_command_request_view
+    |> element(command_request_queue_entry_related_selector)
+    |> render_click()
+
+    command_request_queue_entry_path = assert_patch(reopened_command_request_view)
+    assert command_request_queue_entry_path =~ "panel=data_link"
+    assert command_request_queue_entry_path =~ "selected_target=command_queue_entry"
+    assert command_request_queue_entry_path =~ "selected_id=#{command_queue_entry_route_id}"
+    assert command_request_queue_entry_path =~ "nav_from_target=command_request"
+    assert command_request_queue_entry_path =~ "nav_from_target_id=#{command_request_route_id}"
+    assert command_request_queue_entry_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert command_request_queue_entry_path =~
+             "data_source_id=#{replay_sources.operational_data_source_id}"
+
+    assert command_request_queue_entry_path =~
+             "source_binding_id=#{replay_sources.operational_binding_id}"
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="command_queue_entry"][data-data-link-target-id="#{queue_entry.command_queue_entry_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_command_request_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="nav_from_target=command_request"][data-clipboard-text*="nav_from_target_id=#{command_request_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+           )
+
+    command_request_queue_entry_copied_path =
+      reopened_command_request_view
+      |> render()
+      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
+
+    assert command_request_queue_entry_copied_path =~ "panel=data_link"
+    assert command_request_queue_entry_copied_path =~ "selected_target=command_queue_entry"
+
+    assert command_request_queue_entry_copied_path =~
+             "selected_id=#{command_queue_entry_route_id}"
+
+    assert command_request_queue_entry_copied_path =~ "nav_from_target=command_request"
+
+    assert command_request_queue_entry_copied_path =~
+             "nav_from_target_id=#{command_request_route_id}"
+
+    assert command_request_queue_entry_copied_path =~ "replay_run_id=#{replay_run_id}"
+
+    {:ok, reopened_command_request_queue_entry_view, _html} =
+      live(conn, command_request_queue_entry_copied_path)
+
+    assert has_element?(
+             reopened_command_request_queue_entry_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="command_queue_entry"][data-data-link-target-id="#{queue_entry.command_queue_entry_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_command_request_queue_entry_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Command queue entry"]),
+             queue_entry.command_queue_entry_id
+           )
+
+    assert has_element?(
+             reopened_command_request_queue_entry_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Command request"]),
+             queue_entry.command_request_id
+           )
+
+    assert has_element?(
+             reopened_command_request_queue_entry_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-context="Replay run"]),
+             replay_run_id
+           )
+
+    stop_dashboard_view(reopened_command_request_queue_entry_view)
+    stop_dashboard_view(reopened_command_request_view)
+    stop_dashboard_view(command_queue_entry_view)
+  end
+
   test "replay URL runtime params drive event and operational observable source families" do
     enable_dashboard_engine_inline_resolves!()
 
@@ -444,191 +639,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
              replay_run_id
            )
 
-    command_request_related_selector =
-      ~s(#dashboard-data-link-inspector [data-data-link-related-target="command request"][data-data-link-related-id="#{queue_entry.command_request_id}"])
+    assert_replay_command_request_round_trip(
+      conn,
+      reopened_command_queue_entry_view,
+      queue_entry,
+      replay_run_id,
+      replay_sources,
+      command_queue_entry_route_id
+    )
 
-    assert has_element?(reopened_command_queue_entry_view, command_request_related_selector)
-
-    reopened_command_queue_entry_view
-    |> element(command_request_related_selector)
-    |> render_click()
-
-    command_request_path = assert_patch(reopened_command_queue_entry_view)
-    command_request_route_id = URI.encode_www_form(queue_entry.command_request_id)
-    assert command_request_path =~ "panel=data_link"
-    assert command_request_path =~ "selected_target=command_request"
-    assert command_request_path =~ "selected_id=#{command_request_route_id}"
-    assert command_request_path =~ "nav_from_target=command_queue_entry"
-    assert command_request_path =~ "nav_from_target_id=#{command_queue_entry_route_id}"
-    assert command_request_path =~ "nav_trail="
-    assert command_request_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert command_request_path =~
-             "data_source_id=#{replay_sources.operational_data_source_id}"
-
-    assert command_request_path =~
-             "source_binding_id=#{replay_sources.operational_binding_id}"
-
-    assert has_element?(
-             reopened_command_queue_entry_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="command_request"][data-data-link-target-id="#{queue_entry.command_request_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_command_queue_entry_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_request"][data-clipboard-text*="selected_id=#{command_request_route_id}"][data-clipboard-text*="nav_from_target=command_queue_entry"][data-clipboard-text*="nav_from_target_id=#{command_queue_entry_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
-
-    command_request_copied_path =
-      reopened_command_queue_entry_view
-      |> render()
-      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
-
-    assert command_request_copied_path =~ "panel=data_link"
-    assert command_request_copied_path =~ "selected_target=command_request"
-    assert command_request_copied_path =~ "selected_id=#{command_request_route_id}"
-    assert command_request_copied_path =~ "nav_from_target=command_queue_entry"
-    assert command_request_copied_path =~ "nav_from_target_id=#{command_queue_entry_route_id}"
-    assert command_request_copied_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert command_request_copied_path =~
-             "data_source_id=#{replay_sources.operational_data_source_id}"
-
-    assert command_request_copied_path =~
-             "source_binding_id=#{replay_sources.operational_binding_id}"
-
-    {:ok, reopened_command_request_view, _html} = live(conn, command_request_copied_path)
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="command_request"][data-data-link-target-id="#{queue_entry.command_request_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Command request"]),
-             queue_entry.command_request_id
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Lifecycle state"]),
-             "queued"
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-             "replay-command-endpoint"
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Command"]),
-             "NOOP"
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Command id"]),
-             queue_entry.command_queue_entry_id <> "-command"
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Requested at"]),
-             "2026-06-17T12:00:00"
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-context="Replay run"]),
-             replay_run_id
-           )
-
-    command_request_queue_entry_related_selector =
-      ~s(#dashboard-data-link-inspector [data-data-link-related-target="command queue entry"][data-data-link-related-id="#{queue_entry.command_queue_entry_id}"])
-
-    assert has_element?(
-             reopened_command_request_view,
-             command_request_queue_entry_related_selector
-           )
-
-    reopened_command_request_view
-    |> element(command_request_queue_entry_related_selector)
-    |> render_click()
-
-    command_request_queue_entry_path = assert_patch(reopened_command_request_view)
-    assert command_request_queue_entry_path =~ "panel=data_link"
-    assert command_request_queue_entry_path =~ "selected_target=command_queue_entry"
-    assert command_request_queue_entry_path =~ "selected_id=#{command_queue_entry_route_id}"
-    assert command_request_queue_entry_path =~ "nav_from_target=command_request"
-    assert command_request_queue_entry_path =~ "nav_from_target_id=#{command_request_route_id}"
-    assert command_request_queue_entry_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert command_request_queue_entry_path =~
-             "data_source_id=#{replay_sources.operational_data_source_id}"
-
-    assert command_request_queue_entry_path =~
-             "source_binding_id=#{replay_sources.operational_binding_id}"
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="command_queue_entry"][data-data-link-target-id="#{queue_entry.command_queue_entry_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_command_request_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="nav_from_target=command_request"][data-clipboard-text*="nav_from_target_id=#{command_request_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
-
-    command_request_queue_entry_copied_path =
-      reopened_command_request_view
-      |> render()
-      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
-
-    assert command_request_queue_entry_copied_path =~ "panel=data_link"
-    assert command_request_queue_entry_copied_path =~ "selected_target=command_queue_entry"
-
-    assert command_request_queue_entry_copied_path =~
-             "selected_id=#{command_queue_entry_route_id}"
-
-    assert command_request_queue_entry_copied_path =~ "nav_from_target=command_request"
-
-    assert command_request_queue_entry_copied_path =~
-             "nav_from_target_id=#{command_request_route_id}"
-
-    assert command_request_queue_entry_copied_path =~ "replay_run_id=#{replay_run_id}"
-
-    {:ok, reopened_command_request_queue_entry_view, _html} =
-      live(conn, command_request_queue_entry_copied_path)
-
-    assert has_element?(
-             reopened_command_request_queue_entry_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="command_queue_entry"][data-data-link-target-id="#{queue_entry.command_queue_entry_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_command_request_queue_entry_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Command queue entry"]),
-             queue_entry.command_queue_entry_id
-           )
-
-    assert has_element?(
-             reopened_command_request_queue_entry_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Command request"]),
-             queue_entry.command_request_id
-           )
-
-    assert has_element?(
-             reopened_command_request_queue_entry_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-context="Replay run"]),
-             replay_run_id
-           )
-
-    stop_dashboard_view(reopened_command_request_queue_entry_view)
-    stop_dashboard_view(reopened_command_request_view)
-    stop_dashboard_view(reopened_command_queue_entry_view)
     stop_dashboard_view(view)
   end
 end

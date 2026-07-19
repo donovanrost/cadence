@@ -1296,6 +1296,12 @@ LiveView scenario from 522 to 219 lines and overlong test-function pressure
 from 11 to 10. The existing authenticated route and LiveView session are
 unchanged; interval evidence, target metadata, DataLink navigation, copied-link
 replay, and source-health context fields remain covered.
+Extracting the 194-line replay command-request round-trip proof reduced its
+command-queue LiveView scenario from 441 to 265 lines and overlong
+test-function pressure from 10 to 9. The existing authenticated route and
+LiveView session are unchanged; frame evidence, queue-entry inspection,
+queue-to-request navigation, copied routes, navigation trails, and the return
+to the queue entry remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
