@@ -1221,6 +1221,12 @@ from 1,521 to 891 lines. Direct product dispatch, source identity, facts, and
 the shared warning/result envelope remain in the adapter, while family reads
 and presentation remain in their focused modules. The adapter is now below the
 1,000-line guideline, reducing production source-size pressure from 8 to 7.
+Extracting inspector construction, related-link normalization, dashboard
+context and navigation projection, and shared row/value formatting into a
+284-line data-link resolver support module reduced `DataLinkResolver` from
+4,471 to 4,237 lines. This establishes a common contract for the planned
+target-specific resolver modules without duplicating inspector behavior;
+production source-size pressure remains 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
