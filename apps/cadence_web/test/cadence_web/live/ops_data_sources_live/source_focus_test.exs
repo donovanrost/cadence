@@ -86,6 +86,32 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusTest do
     end
   end
 
+  describe "dashboard return state" do
+    test "defaults to publish-readiness versions and requests a readiness refresh" do
+      focus = SourceFocus.default()
+
+      assert SourceFocus.return_panel(focus) == "versions"
+      assert SourceFocus.return_activity_filter(focus) == "publish_readiness"
+      assert SourceFocus.return_activity_event(focus) == nil
+      assert SourceFocus.return_refresh_readiness(focus) == "source_return"
+    end
+
+    test "preserves explicit return state without forcing unrelated refreshes" do
+      focus =
+        SourceFocus.from_params(%{
+          "source_empty_reason" => "stale_data",
+          "source_return_panel" => "activity",
+          "source_return_activity_filter" => "deployments",
+          "source_return_activity_event" => "deployment-failed"
+        })
+
+      assert SourceFocus.return_panel(focus) == "activity"
+      assert SourceFocus.return_activity_filter(focus) == "deployments"
+      assert SourceFocus.return_activity_event(focus) == "deployment-failed"
+      assert SourceFocus.return_refresh_readiness(focus) == nil
+    end
+  end
+
   defp data_source(data_source_id) do
     %DataSource{data_source_id: data_source_id}
   end

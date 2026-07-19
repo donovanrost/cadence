@@ -188,6 +188,33 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocus do
     |> Enum.map_join(" ", fn {label, value} -> "#{label}=#{value}" end)
   end
 
+  @spec return_panel(map()) :: binary()
+  def return_panel(%{source_return_panel: panel}) when is_binary(panel) and panel != "",
+    do: panel
+
+  def return_panel(_focus), do: "versions"
+
+  @spec return_activity_filter(map()) :: binary()
+  def return_activity_filter(%{source_return_activity_filter: activity_filter})
+      when is_binary(activity_filter) and activity_filter != "",
+      do: activity_filter
+
+  def return_activity_filter(_focus), do: "publish_readiness"
+
+  @spec return_activity_event(map()) :: binary() | nil
+  def return_activity_event(%{source_return_activity_event: activity_event})
+      when is_binary(activity_event) and activity_event != "",
+      do: activity_event
+
+  def return_activity_event(_focus), do: nil
+
+  @spec return_refresh_readiness(map()) :: binary() | nil
+  def return_refresh_readiness(%{source_return_activity_filter: "publish_readiness"}),
+    do: "source_return"
+
+  def return_refresh_readiness(%{source_return_activity_filter: nil}), do: "source_return"
+  def return_refresh_readiness(_focus), do: nil
+
   defp requested?(focus) do
     Enum.any?(
       [

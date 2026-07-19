@@ -1768,6 +1768,17 @@ latest watermark selection, and disabled-source enablement. The LiveView still
 owns organization- and mission-scoped inventory reads on its authenticated
 `:ops` route; production source-size pressure remains 3 and dependency
 ratchets are unchanged.
+Extracting focused-source resource, remediation, and evidence function
+components plus their verified mission navigation into
+`CadenceWeb.OpsDataSourcesLive.SourceFocusComponents` reduced
+`OpsDataSourcesLive` from 1,877 to 1,562 lines. Dashboard-return defaults now
+live in the persistence-free `SourceFocus` model so rendered links and emitted
+source-action events share one normalization contract. Direct component tests
+cover operational-resource routes, remediation return queries, and evidence
+return state, while the LiveView retains its main render root, events, and
+scoped resource reads. The app-wide LiveView layout and authenticated `:ops`
+route remain unchanged; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
