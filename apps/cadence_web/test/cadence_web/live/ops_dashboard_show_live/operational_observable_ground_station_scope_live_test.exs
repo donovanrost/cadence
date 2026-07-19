@@ -106,156 +106,178 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
     end)
   end
 
+  defp persist_ground_station_scope_fixture(org, mission) do
+    dss_14 =
+      GroundStation.new(%{
+        ground_station_id: "dss-14",
+        mission_id: mission.mission_id,
+        display_name: "Goldstone DSS-14",
+        provider: "DSN",
+        region: "California",
+        metadata: %{
+          "source_endpoint_id" => "dashboard-source-endpoint-alpha",
+          "transport_id" => "dashboard-transport-alpha"
+        }
+      })
+
+    dss_63 =
+      GroundStation.new(%{
+        ground_station_id: "dss-63",
+        mission_id: mission.mission_id,
+        display_name: "Madrid DSS-63",
+        provider: "DSN",
+        region: "Madrid",
+        metadata: %{
+          "source_endpoint_id" => "dashboard-source-endpoint-beta",
+          "transport_id" => "dashboard-transport-beta"
+        }
+      })
+
+    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+
+    alpha_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-source-endpoint-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Goldstone DSS-14",
+        metadata: %{"ground_station_id" => dss_14.ground_station_id}
+      })
+
+    beta_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-source-endpoint-beta",
+        mission_id: mission.mission_id,
+        display_name: "Madrid DSS-63",
+        metadata: %{"ground_station_id" => dss_63.ground_station_id}
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+
+    alpha_transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Alpha TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "alpha.ground.example",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
+          "ground_station_id" => dss_14.ground_station_id
+        }
+      })
+
+    beta_transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-beta",
+        mission_id: mission.mission_id,
+        display_name: "Beta TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "beta.ground.example",
+          "port" => "5001",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => beta_endpoint.source_endpoint_id,
+          "ground_station_id" => dss_63.ground_station_id
+        }
+      })
+
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+
+    observed_at = ~U[2026-06-17 12:05:00Z]
+
+    assert {:ok, _connection_event} =
+             Event.from_operational_observable_state_snapshot(%{
+               snapshot_id: "dashboard-ground-station-connection-live-dss-14",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               observable_id: "ground.station.connection_state",
+               resource_id: dss_14.ground_station_id,
+               scope_kind: :ground_station,
+               transport_id: alpha_transport.transport_id,
+               source_endpoint_id: alpha_endpoint.source_endpoint_id,
+               ground_station_id: dss_14.ground_station_id,
+               adapter_key: :tcp_socket,
+               connection_state: :connected,
+               state: :connected,
+               observed_at: observed_at
+             })
+             |> OperationalEvents.persist_event()
+
+    [ground_station_interval] =
+      Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
+        observable_id: "ground.station.connection_state",
+        resource_id: dss_14.ground_station_id
+      )
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Ground Station Connection State",
+        widgets: [
+          %{
+            type: :status_matrix,
+            title: "Connection State",
+            binding: %{
+              source: :operational_observables,
+              observables: [
+                "comms.transport.connection_state",
+                "ground.station.connection_state"
+              ]
+            }
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    matrix_widget = render_item_by_title(document, "Connection State").widget
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      dashboard: dashboard,
+      dss_14: dss_14,
+      ground_station_interval: ground_station_interval,
+      matrix_widget: matrix_widget,
+      observed_at: observed_at
+    }
+  end
+
   describe "ground station operational observable scope rendering" do
     test "filters operational observable rows and resolves setup DataLink" do
       enable_dashboard_engine_inline_resolves!()
 
       {conn, org, mission} = signed_in_org_and_mission()
 
-      dss_14 =
-        GroundStation.new(%{
-          ground_station_id: "dss-14",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone DSS-14",
-          provider: "DSN",
-          region: "California",
-          metadata: %{
-            "source_endpoint_id" => "dashboard-source-endpoint-alpha",
-            "transport_id" => "dashboard-transport-alpha"
-          }
-        })
-
-      dss_63 =
-        GroundStation.new(%{
-          ground_station_id: "dss-63",
-          mission_id: mission.mission_id,
-          display_name: "Madrid DSS-63",
-          provider: "DSN",
-          region: "Madrid",
-          metadata: %{
-            "source_endpoint_id" => "dashboard-source-endpoint-beta",
-            "transport_id" => "dashboard-transport-beta"
-          }
-        })
-
-      assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-      assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
-
-      alpha_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone DSS-14",
-          metadata: %{"ground_station_id" => dss_14.ground_station_id}
-        })
-
-      beta_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-source-endpoint-beta",
-          mission_id: mission.mission_id,
-          display_name: "Madrid DSS-63",
-          metadata: %{"ground_station_id" => dss_63.ground_station_id}
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
-
-      alpha_transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Alpha TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "alpha.ground.example",
-            "port" => "5000",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
-            "ground_station_id" => dss_14.ground_station_id
-          }
-        })
-
-      beta_transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-beta",
-          mission_id: mission.mission_id,
-          display_name: "Beta TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "beta.ground.example",
-            "port" => "5001",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => beta_endpoint.source_endpoint_id,
-            "ground_station_id" => dss_63.ground_station_id
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
-
-      observed_at = ~U[2026-06-17 12:05:00Z]
-
-      assert {:ok, _connection_event} =
-               Event.from_operational_observable_state_snapshot(%{
-                 snapshot_id: "dashboard-ground-station-connection-live-dss-14",
-                 organization_id: org.organization_id,
-                 mission_id: mission.mission_id,
-                 observable_id: "ground.station.connection_state",
-                 resource_id: dss_14.ground_station_id,
-                 scope_kind: :ground_station,
-                 transport_id: alpha_transport.transport_id,
-                 source_endpoint_id: alpha_endpoint.source_endpoint_id,
-                 ground_station_id: dss_14.ground_station_id,
-                 adapter_key: :tcp_socket,
-                 connection_state: :connected,
-                 state: :connected,
-                 observed_at: observed_at
-               })
-               |> OperationalEvents.persist_event()
-
-      [ground_station_interval] =
-        Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
-          observable_id: "ground.station.connection_state",
-          resource_id: dss_14.ground_station_id
-        )
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Ground Station Connection State",
-          widgets: [
-            %{
-              type: :status_matrix,
-              title: "Connection State",
-              binding: %{
-                source: :operational_observables,
-                observables: [
-                  "comms.transport.connection_state",
-                  "ground.station.connection_state"
-                ]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      matrix_widget = render_item_by_title(document, "Connection State").widget
+      %{
+        alpha_endpoint: alpha_endpoint,
+        alpha_transport: alpha_transport,
+        dashboard: dashboard,
+        dss_14: dss_14,
+        ground_station_interval: ground_station_interval,
+        matrix_widget: matrix_widget,
+        observed_at: observed_at
+      } = persist_ground_station_scope_fixture(org, mission)
 
       {:ok, view, _html} =
         live(

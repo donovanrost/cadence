@@ -1272,6 +1272,11 @@ related-link traversal into a 257-line target module, reducing
 `DataLinkResolver` from 1,142 to 855 lines. The facade is now below the
 1,000-line guideline, reducing production source-size pressure from 7 to 6;
 dependency ratchets are unchanged.
+Moving the 156-line persisted ground-station, endpoint, transport, event, and
+dashboard fixture phase out of its LiveView interaction test reduced overlong
+test-function pressure from 14 to 13. The authenticated route, rendered
+selectors, evidence navigation, copied-link replay, and filtering assertions
+remain in the test body.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
