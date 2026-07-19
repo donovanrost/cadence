@@ -1272,6 +1272,12 @@ related-link traversal into a 257-line target module, reducing
 `DataLinkResolver` from 1,142 to 855 lines. The facade is now below the
 1,000-line guideline, reducing production source-size pressure from 7 to 6;
 dependency ratchets are unchanged.
+Extracting historical-data workflow action eligibility, reason codes, group
+stage policy, and operator-facing explanation summaries into a 376-line
+`DataManagement.WorkflowPolicy` module reduced `DataManagement` from 3,572 to
+3,203 lines. The typed `DataManagement` public APIs remain unchanged, and
+mutation guards now consume the same extracted decisions directly; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

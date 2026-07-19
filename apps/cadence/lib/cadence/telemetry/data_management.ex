@@ -8,6 +8,7 @@ defmodule Cadence.Telemetry.DataManagement do
   """
 
   alias Cadence.Jobs
+  alias Cadence.Telemetry.DataManagement.WorkflowPolicy
   alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
@@ -243,76 +244,22 @@ defmodule Cadence.Telemetry.DataManagement do
           retry_group_failed_jobs: historical_data_workflow_action_decision(),
           correction_request: historical_data_workflow_action_decision()
         }
-  def historical_data_workflow_action_policy(context) when is_map(context) do
-    %{
-      retry_job: historical_data_workflow_retry_job_action_policy(context),
-      retry_group_failed_jobs: historical_data_workflow_retry_group_action_policy(context),
-      correction_request: historical_data_workflow_correction_request_action_policy(context)
-    }
-  end
-
-  def historical_data_workflow_action_policy(_context),
-    do: historical_data_workflow_action_policy(%{})
+  def historical_data_workflow_action_policy(context), do: WorkflowPolicy.action_policy(context)
 
   @spec historical_data_workflow_stage_action_policy(map(), atom() | binary()) ::
           historical_data_workflow_action_decision()
-  def historical_data_workflow_stage_action_policy(context, stage)
-      when is_map(context) and (is_atom(stage) or is_binary(stage)) do
-    stage = action_policy_text(stage)
-    current_stage = action_policy_text(get_attr(context, :stage))
-    eligible? = historical_data_workflow_stage_transition_eligible?(context, stage, current_stage)
-
-    %{
-      id: "stage_#{stage}",
-      kind: :stage,
-      eligible?: eligible?,
-      disabled?: not eligible?,
-      reason:
-        historical_data_workflow_stage_action_reason(context, stage, current_stage, eligible?)
-    }
-  end
-
-  def historical_data_workflow_stage_action_policy(_context, stage),
-    do: historical_data_workflow_stage_action_policy(%{}, stage)
+  def historical_data_workflow_stage_action_policy(context, stage),
+    do: WorkflowPolicy.stage_action_policy(context, stage)
 
   @spec historical_data_workflow_group_stage_action_policy(map(), atom() | binary()) ::
           historical_data_workflow_action_decision()
-  def historical_data_workflow_group_stage_action_policy(context, stage)
-      when is_map(context) and (is_atom(stage) or is_binary(stage)) do
-    stage = action_policy_text(stage)
-    eligible_count = historical_data_workflow_group_stage_eligible_count(context, stage)
-    eligible? = eligible_count > 0
-
-    %{
-      id: "group_stage_#{stage}",
-      kind: :group_stage,
-      eligible?: eligible?,
-      disabled?: not eligible?,
-      eligible_count: eligible_count,
-      reason:
-        historical_data_workflow_group_stage_action_reason(context, eligible_count, eligible?)
-    }
-  end
-
-  def historical_data_workflow_group_stage_action_policy(_context, stage),
-    do: historical_data_workflow_group_stage_action_policy(%{}, stage)
+  def historical_data_workflow_group_stage_action_policy(context, stage),
+    do: WorkflowPolicy.group_stage_action_policy(context, stage)
 
   @spec historical_data_workflow_explanation_summary(map()) ::
           historical_data_workflow_explanation_summary()
-  def historical_data_workflow_explanation_summary(context) when is_map(context) do
-    [
-      &historical_data_workflow_late_data_explanation/1,
-      &historical_data_workflow_dispatch_failure_explanation/1,
-      &historical_data_workflow_failure_explanation/1,
-      &historical_data_workflow_relationship_explanation/1,
-      &historical_data_workflow_completion_explanation/1
-    ]
-    |> Enum.find_value(& &1.(context))
-    |> Kernel.||(historical_data_workflow_default_explanation(context))
-  end
-
-  def historical_data_workflow_explanation_summary(_context),
-    do: historical_data_workflow_explanation_summary(%{})
+  def historical_data_workflow_explanation_summary(context),
+    do: WorkflowPolicy.explanation_summary(context)
 
   defp historical_data_workflow_correction_source_event(correction, attrs) do
     with {:ok, event_id} <- historical_data_workflow_correction_source_event_id(correction),
@@ -384,7 +331,7 @@ defmodule Cadence.Telemetry.DataManagement do
       decision =
         source_event
         |> historical_data_workflow_correction_request_policy_context(job)
-        |> historical_data_workflow_correction_request_action_policy()
+        |> WorkflowPolicy.correction_request_action_policy()
 
       if decision.eligible? do
         :ok
@@ -629,322 +576,6 @@ defmodule Cadence.Telemetry.DataManagement do
       {:error, _reason} ->
         %{}
     end
-  end
-
-  defp historical_data_workflow_retry_job_action_policy(context) do
-    eligible? =
-      historical_data_workflow_job_status?(context) and get_attr(context, :job_status) == "failed" and
-        action_policy_present_text?(get_attr(context, :event_id)) and
-        get_attr(context, :retryable) != "false" and
-        get_attr(context, :recovery_action) != "correct_workflow_request"
-
-    %{
-      id: "retry_job",
-      kind: :retry_job,
-      eligible?: eligible?,
-      disabled?: not eligible?,
-      reason: historical_data_workflow_retry_job_action_reason(context, eligible?)
-    }
-  end
-
-  defp historical_data_workflow_retry_group_action_policy(context) do
-    retryable_count = action_policy_integer(get_attr(context, :request_group_retryable_failed))
-
-    eligible? =
-      retryable_count > 0 and action_policy_present_text?(get_attr(context, :request_group_id))
-
-    %{
-      id: "retry_group_failed_jobs",
-      kind: :retry_group_failed_jobs,
-      eligible?: eligible?,
-      disabled?: not eligible?,
-      eligible_count: retryable_count,
-      reason:
-        historical_data_workflow_retry_group_action_reason(context, retryable_count, eligible?)
-    }
-  end
-
-  defp historical_data_workflow_correction_request_action_policy(context) do
-    eligible? =
-      historical_data_workflow_job_status?(context) and get_attr(context, :job_status) == "failed" and
-        get_attr(context, :recovery_action) == "correct_workflow_request" and
-        action_policy_present_text?(get_attr(context, :event_id))
-
-    %{
-      id: "correction_request",
-      kind: :correction_request,
-      eligible?: eligible?,
-      disabled?: not eligible?,
-      reason: historical_data_workflow_correction_request_action_reason(context, eligible?)
-    }
-  end
-
-  defp historical_data_workflow_stage_transition_eligible?(context, stage, current_stage) do
-    Storage.BackfillLifecycleGroup.stage_eligible?(stage, current_stage) and
-      not (stage == "started" and historical_data_workflow_job_status?(context))
-  end
-
-  defp historical_data_workflow_stage_action_reason(_context, _stage, _current_stage, true),
-    do: "stage_transition_available"
-
-  defp historical_data_workflow_stage_action_reason(context, stage, current_stage, false) do
-    cond do
-      stage == current_stage ->
-        "already_in_stage"
-
-      stage == "started" and historical_data_workflow_job_status?(context) ->
-        "job_already_exists"
-
-      not Storage.BackfillLifecycleGroup.stage_eligible?(stage, current_stage) ->
-        "stage_transition_out_of_order"
-
-      true ->
-        "stage_transition_ineligible"
-    end
-  end
-
-  defp historical_data_workflow_group_stage_action_reason(_context, _eligible_count, true),
-    do: "eligible_group_items"
-
-  defp historical_data_workflow_group_stage_action_reason(context, eligible_count, false) do
-    cond do
-      not action_policy_present_text?(get_attr(context, :request_group_id)) ->
-        "request_group_missing"
-
-      eligible_count <= 0 ->
-        "no_eligible_group_items"
-
-      true ->
-        "group_stage_ineligible"
-    end
-  end
-
-  defp historical_data_workflow_retry_job_action_reason(_context, true),
-    do: "failed_job_retryable"
-
-  defp historical_data_workflow_retry_job_action_reason(context, false) do
-    cond do
-      not historical_data_workflow_job_status?(context) ->
-        "job_status_missing"
-
-      get_attr(context, :job_status) != "failed" ->
-        "job_not_failed"
-
-      not action_policy_present_text?(get_attr(context, :event_id)) ->
-        "source_event_missing"
-
-      get_attr(context, :recovery_action) == "correct_workflow_request" ->
-        "correction_required"
-
-      get_attr(context, :retryable) == "false" ->
-        "retry_blocked"
-
-      true ->
-        "retry_ineligible"
-    end
-  end
-
-  defp historical_data_workflow_retry_group_action_reason(_context, _retryable_count, true),
-    do: "retryable_group_failures"
-
-  defp historical_data_workflow_retry_group_action_reason(context, retryable_count, false) do
-    cond do
-      not action_policy_present_text?(get_attr(context, :request_group_id)) ->
-        "request_group_missing"
-
-      retryable_count <= 0 ->
-        "no_retryable_group_failures"
-
-      true ->
-        "group_retry_ineligible"
-    end
-  end
-
-  defp historical_data_workflow_correction_request_action_reason(_context, true),
-    do: "correction_request_required"
-
-  defp historical_data_workflow_correction_request_action_reason(context, false) do
-    cond do
-      not historical_data_workflow_job_status?(context) ->
-        "job_status_missing"
-
-      get_attr(context, :job_status) != "failed" ->
-        "job_not_failed"
-
-      get_attr(context, :recovery_action) != "correct_workflow_request" ->
-        "correction_not_required"
-
-      not action_policy_present_text?(get_attr(context, :event_id)) ->
-        "source_event_missing"
-
-      true ->
-        "correction_ineligible"
-    end
-  end
-
-  defp historical_data_workflow_group_stage_eligible_count(context, stage) do
-    context
-    |> get_attr(historical_data_workflow_group_stage_eligible_key(stage))
-    |> action_policy_integer()
-  end
-
-  defp historical_data_workflow_group_stage_eligible_key("requested"),
-    do: :request_group_request_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key("approved"),
-    do: :request_group_approve_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key("rejected"),
-    do: :request_group_reject_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key("started"),
-    do: :request_group_start_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key("completed"),
-    do: :request_group_complete_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key("failed"),
-    do: :request_group_fail_eligible
-
-  defp historical_data_workflow_group_stage_eligible_key(_stage),
-    do: :request_group_request_eligible
-
-  defp historical_data_workflow_job_status?(context) when is_map(context) do
-    action_policy_present_text?(get_attr(context, :job_id)) and
-      action_policy_present_text?(get_attr(context, :job_status))
-  end
-
-  defp historical_data_workflow_job_status?(_context), do: false
-
-  defp action_policy_text(value) when value in [nil, ""], do: nil
-  defp action_policy_text(value) when is_atom(value), do: Atom.to_string(value)
-  defp action_policy_text(value) when is_binary(value), do: value
-  defp action_policy_text(_value), do: nil
-
-  defp action_policy_integer(value) when is_integer(value), do: value
-
-  defp action_policy_integer(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {integer, ""} -> integer
-      _other -> 0
-    end
-  end
-
-  defp action_policy_integer(_value), do: 0
-
-  defp action_policy_present_text?(value), do: is_binary(value) and value != ""
-
-  defp historical_data_workflow_late_data_explanation(context) do
-    case action_policy_text(get_attr(context, :event_type)) do
-      "late_data_accepted" ->
-        %{
-          severity: :success,
-          state: "late_data_accepted",
-          badge: "accepted",
-          reason: "late_data_accepted"
-        }
-
-      "late_data_rejected" ->
-        %{
-          severity: :warning,
-          state: "late_data_rejected",
-          badge: "rejected",
-          reason: "late_data_rejected"
-        }
-
-      _event_type ->
-        nil
-    end
-  end
-
-  defp historical_data_workflow_failure_explanation(context) do
-    case action_policy_text(get_attr(context, :stage)) do
-      "failed" ->
-        if get_attr(context, :retryable) in [false, "false", "0", 0] do
-          %{
-            severity: :error,
-            state: "failed_correction_required",
-            badge: "correction",
-            reason: "failed_correction_required"
-          }
-        else
-          %{
-            severity: :error,
-            state: "failed_retryable",
-            badge: "failed",
-            reason: "failed_retryable"
-          }
-        end
-
-      _stage ->
-        nil
-    end
-  end
-
-  defp historical_data_workflow_dispatch_failure_explanation(context) do
-    case {action_policy_text(get_attr(context, :stage)),
-          action_policy_text(get_attr(context, :job_status))} do
-      {"started", "failed"} ->
-        %{
-          severity: :warning,
-          state: "dispatch_failed",
-          badge: "degraded",
-          reason: "workflow_dispatch_failed"
-        }
-
-      _other ->
-        nil
-    end
-  end
-
-  defp historical_data_workflow_relationship_explanation(context) do
-    cond do
-      action_policy_present_text?(get_attr(context, :correction_source_event_id)) ->
-        %{
-          severity: :warning,
-          state: "correction",
-          badge: "correction",
-          reason: "correction_replacement_event"
-        }
-
-      action_policy_present_text?(get_attr(context, :retry_source_event_id)) ->
-        %{
-          severity: :info,
-          state: "retry",
-          badge: "retry",
-          reason: "retry_replacement_event"
-        }
-
-      true ->
-        nil
-    end
-  end
-
-  defp historical_data_workflow_completion_explanation(context) do
-    case action_policy_text(get_attr(context, :stage)) do
-      "completed" ->
-        %{
-          severity: :success,
-          state: "completed",
-          badge: "completed",
-          reason: "workflow_completed"
-        }
-
-      _stage ->
-        nil
-    end
-  end
-
-  defp historical_data_workflow_default_explanation(context) do
-    stage = action_policy_text(get_attr(context, :stage))
-    event_type = action_policy_text(get_attr(context, :event_type))
-
-    %{
-      severity: :info,
-      state: stage || event_type || "recorded",
-      badge: stage || "recorded",
-      reason: "historical_data_workflow_recorded"
-    }
   end
 
   defp historical_data_workflow_request_context(attrs, point_ids) do
@@ -1569,7 +1200,7 @@ defmodule Cadence.Telemetry.DataManagement do
     decision =
       source_event
       |> historical_data_workflow_retry_policy_context(job)
-      |> historical_data_workflow_retry_job_action_policy()
+      |> WorkflowPolicy.retry_job_action_policy()
 
     if decision.eligible? do
       :ok
@@ -1600,7 +1231,7 @@ defmodule Cadence.Telemetry.DataManagement do
           |> Enum.count(&historical_data_workflow_group_retry_candidate?/1)
           |> Integer.to_string()
       }
-      |> historical_data_workflow_retry_group_action_policy()
+      |> WorkflowPolicy.retry_group_action_policy()
 
     if decision.eligible? do
       :ok
