@@ -648,12 +648,7 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
-  @tag :browser
-  test "live multi-transport operational connection state timeline interval evidence passes browser smoke",
-       %{
-         conn: _conn,
-         sandbox_owner: sandbox_owner
-       } do
+  defp persist_multi_transport_connection_browser_fixture! do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
@@ -898,6 +893,43 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         )
       )
     end
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      beta_transport: beta_transport,
+      dss_14: dss_14,
+      dss_43: dss_43,
+      dss_63: dss_63,
+      from_time: from_time,
+      gamma_transport: gamma_transport,
+      mission: mission,
+      to_time: to_time,
+      user: user
+    }
+  end
+
+  @tag :browser
+  test "live multi-transport operational connection state timeline interval evidence passes browser smoke",
+       %{
+         conn: _conn,
+         sandbox_owner: sandbox_owner
+       } do
+    fixture = persist_multi_transport_connection_browser_fixture!()
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      beta_transport: beta_transport,
+      dss_14: dss_14,
+      dss_43: dss_43,
+      dss_63: dss_63,
+      from_time: from_time,
+      gamma_transport: gamma_transport,
+      mission: mission,
+      to_time: to_time,
+      user: user
+    } = fixture
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

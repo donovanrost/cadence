@@ -1343,6 +1343,12 @@ wait to use the canonical `data-data-table-row-links` and `data-overlay-open`
 contract. The authenticated dashboard route and sign-in flow are unchanged;
 multi-endpoint inclusion, exclusion, and connection-evidence outcomes remain
 covered, and all four connection-aggregation browser scenarios pass.
+Moving the 260-line multi-transport topology and observable-history fixture out
+of the adjacent browser scenario reduced that test from 344 to 115 lines and
+overlong test-function pressure from 3 to 2. The dashboard, endpoint startup,
+and browser assertions remain visible in the test; the authenticated dashboard
+route and sign-in flow are unchanged, and multi-transport inclusion, exclusion,
+timeline, data-table, and copied-evidence outcomes remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
