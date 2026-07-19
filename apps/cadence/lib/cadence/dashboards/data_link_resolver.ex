@@ -32,7 +32,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   alias Cadence.Jobs
   alias Cadence.Limits
-  alias Cadence.Limits.DefinitionInterval
+  alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.EffectiveInterval
   alias Cadence.Ops.PointCatalog
@@ -48,7 +48,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     DashboardDataBindingEventRow,
     DashboardSourceHealthEventRow,
     DashboardSourceWatermarkEventRow,
-    LimitDefinitionLifecycleEventRow,
     MissionEventRow,
     OperationalEventRow,
     RawEvidenceRow,
@@ -420,13 +419,13 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   defp resolve_limit_definition_interval(%DataLink{} = link, organization_id, mission_id) do
     with activation_key when is_binary(activation_key) <-
            limit_definition_interval_activation_key(link.target_id),
-         %LimitDefinitionLifecycleEventRow{} = event_row <-
-           fetch_limit_definition_lifecycle_event_by_activation(
+         {:ok, event} <-
+           DefinitionLifecycle.fetch_latest_definition_lifecycle_event(
              organization_id,
              mission_id,
-             activation_key
+             activation_key,
+             include_unscoped?: true
            ) do
-      event = LimitDefinitionLifecycleEventRow.to_domain(event_row)
       definition = fetch_limit_definition_for_interval(event, organization_id, mission_id)
       interval = DefinitionInterval.from_event(event, event.active_to, definition)
 
@@ -450,20 +449,13 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          organization_id,
          mission_id
        ) do
-    event_row =
-      LimitDefinitionLifecycleEventRow
-      |> where(
-        [row],
-        (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-          row.mission_id == ^mission_id and
-          row.limit_definition_lifecycle_event_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %LimitDefinitionLifecycleEventRow{} = event_row ->
-        event = LimitDefinitionLifecycleEventRow.to_domain(event_row)
-
+    case DefinitionLifecycle.fetch_definition_lifecycle_event(
+           organization_id,
+           mission_id,
+           link.target_id,
+           include_unscoped?: true
+         ) do
+      {:ok, event} ->
         {:ok,
          inspector(
            link,
@@ -473,7 +465,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
            limit_definition_lifecycle_event_related_links(link, event)
          )}
 
-      nil ->
+      {:error, :limit_definition_lifecycle_event_not_found} ->
         {:error,
          inspector(
            link,
@@ -3802,22 +3794,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       "effective_interval:limit_definition:" <> activation_key -> activation_key
       activation_key -> activation_key
     end
-  end
-
-  defp fetch_limit_definition_lifecycle_event_by_activation(
-         organization_id,
-         mission_id,
-         activation_key
-       ) do
-    LimitDefinitionLifecycleEventRow
-    |> where(
-      [row],
-      (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-        row.mission_id == ^mission_id and row.definition_activation_key == ^activation_key
-    )
-    |> order_by([row], desc: row.observed_at, desc: row.inserted_at)
-    |> limit(1)
-    |> Repo.one()
   end
 
   defp fetch_limit_definition_for_interval(event, organization_id, mission_id) do

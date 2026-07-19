@@ -763,10 +763,13 @@ baseline to 173. The notification row likewise now lives under
 `Cadence.Notifications`, reducing the baseline to 172. Spacecraft and
 spacecraft-type rows now live under their identity stores,
 reducing the baseline to 170. Limits evaluation-run and active-definition rows
-now live under `Cadence.Limits`, reducing the baseline to 168. New edges fail,
-removed edges must be deleted from the baseline in the same change, and the
-baseline has an explicit owner and review-by date. Context-owned row modules
-are also protected from new callers outside their bounded context. The initial
+now live under `Cadence.Limits`, reducing the baseline to 168. The
+limit-definition lifecycle-event row now also lives under `Cadence.Limits`;
+Dashboards resolves it through scoped domain APIs, reducing the baseline to 166.
+New edges fail, removed edges must be deleted from the baseline in the
+same change, and the baseline has an explicit owner and review-by date.
+Context-owned row modules are also protected from new callers outside their
+bounded context. The initial
 `Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
 by exposing mission ownership through the `Missions` context, leaving the
 cross-context row baseline at zero. The public root facade still exists for

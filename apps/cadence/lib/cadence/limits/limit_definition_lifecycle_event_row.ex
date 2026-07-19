@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.LimitDefinitionLifecycleEventRow do
+defmodule Cadence.Limits.LimitDefinitionLifecycleEventRow do
   @moduledoc false
 
   use Ecto.Schema

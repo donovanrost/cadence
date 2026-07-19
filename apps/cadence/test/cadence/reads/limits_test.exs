@@ -2,9 +2,9 @@ defmodule Cadence.Reads.LimitsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Limits.{Definition, Event}
+  alias Cadence.Limits.LimitDefinitionLifecycleEventRow
 
   alias Cadence.Persistence.Schemas.{
-    LimitDefinitionLifecycleEventRow,
     TelemetryLatestLimitStateRow,
     TelemetryLimitEventRow
   }

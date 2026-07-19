@@ -29,6 +29,20 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
 
     activated_event = hd(events)
 
+    assert {:ok, ^activated_event} =
+             DefinitionLifecycle.fetch_definition_lifecycle_event(
+               @organization_id,
+               @mission_id,
+               activated_event.limit_definition_lifecycle_event_id
+             )
+
+    assert {:ok, ^activated_event} =
+             DefinitionLifecycle.fetch_latest_definition_lifecycle_event(
+               @organization_id,
+               @mission_id,
+               activated_event.definition_activation_key
+             )
+
     assert [operational_event] =
              Cadence.list_operational_events(
                @organization_id,

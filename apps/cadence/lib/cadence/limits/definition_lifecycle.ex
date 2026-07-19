@@ -14,13 +14,12 @@ defmodule Cadence.Limits.DefinitionLifecycle do
     ActiveLimitDefinitionRow,
     Definition,
     DefinitionLifecycleEvent,
-    GovernedLimitDefinitionRow
+    GovernedLimitDefinitionRow,
+    LimitDefinitionLifecycleEventRow
   }
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-
-  alias Cadence.Persistence.Schemas.LimitDefinitionLifecycleEventRow
 
   alias Cadence.Repo
 
@@ -84,6 +83,57 @@ defmodule Cadence.Limits.DefinitionLifecycle do
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&LimitDefinitionLifecycleEventRow.to_domain/1)
+  end
+
+  @spec fetch_definition_lifecycle_event(binary() | nil, binary(), binary(), keyword()) ::
+          {:ok, DefinitionLifecycleEvent.t()}
+          | {:error, :limit_definition_lifecycle_event_not_found}
+  def fetch_definition_lifecycle_event(
+        organization_id,
+        mission_id,
+        lifecycle_event_id,
+        opts \\ []
+      )
+      when (is_nil(organization_id) or is_binary(organization_id)) and is_binary(mission_id) and
+             is_binary(lifecycle_event_id) and is_list(opts) do
+    LimitDefinitionLifecycleEventRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and
+        row.limit_definition_lifecycle_event_id == ^lifecycle_event_id
+    )
+    |> scope_lifecycle_organization(organization_id, opts)
+    |> Repo.one()
+    |> lifecycle_event_result()
+  end
+
+  @spec fetch_latest_definition_lifecycle_event(
+          binary() | nil,
+          binary(),
+          binary(),
+          keyword()
+        ) ::
+          {:ok, DefinitionLifecycleEvent.t()}
+          | {:error, :limit_definition_lifecycle_event_not_found}
+  def fetch_latest_definition_lifecycle_event(
+        organization_id,
+        mission_id,
+        definition_activation_key,
+        opts \\ []
+      )
+      when (is_nil(organization_id) or is_binary(organization_id)) and is_binary(mission_id) and
+             is_binary(definition_activation_key) and is_list(opts) do
+    LimitDefinitionLifecycleEventRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and
+        row.definition_activation_key == ^definition_activation_key
+    )
+    |> scope_lifecycle_organization(organization_id, opts)
+    |> order_by([row], desc: row.observed_at, desc: row.inserted_at)
+    |> limit(1)
+    |> Repo.one()
+    |> lifecycle_event_result()
   end
 
   @spec list_active_statuses(binary() | nil, binary() | nil, keyword()) :: [
@@ -287,6 +337,27 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
   defp maybe_scope_organization(query, organization_id) when is_binary(organization_id) do
     where(query, [row], row.organization_id == ^organization_id)
+  end
+
+  defp scope_lifecycle_organization(query, nil, _opts), do: query
+
+  defp scope_lifecycle_organization(query, organization_id, opts) do
+    if Keyword.get(opts, :include_unscoped?, false) do
+      where(
+        query,
+        [row],
+        is_nil(row.organization_id) or row.organization_id == ^organization_id
+      )
+    else
+      where(query, [row], row.organization_id == ^organization_id)
+    end
+  end
+
+  defp lifecycle_event_result(nil),
+    do: {:error, :limit_definition_lifecycle_event_not_found}
+
+  defp lifecycle_event_result(%LimitDefinitionLifecycleEventRow{} = row) do
+    {:ok, LimitDefinitionLifecycleEventRow.to_domain(row)}
   end
 
   defp maybe_scope_mission(query, nil), do: query
