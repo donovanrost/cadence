@@ -1,4 +1,6 @@
 defmodule CadenceWeb.CommsGroundStationShowLive do
+  alias Cadence.Comms.GroundStationStore
+
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -6,7 +8,7 @@ defmodule CadenceWeb.CommsGroundStationShowLive do
   def mount(%{"ground_station_id" => ground_station_id}, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.fetch_ground_station(
+    case GroundStationStore.fetch_ground_station(
            scope.organization_id,
            mission.mission_id,
            ground_station_id
@@ -32,7 +34,7 @@ defmodule CadenceWeb.CommsGroundStationShowLive do
     %{current_scope: scope, current_mission: mission, ground_station: ground_station} =
       socket.assigns
 
-    case Cadence.archive_ground_station(
+    case GroundStationStore.archive_ground_station(
            scope.organization_id,
            mission.mission_id,
            ground_station.ground_station_id,

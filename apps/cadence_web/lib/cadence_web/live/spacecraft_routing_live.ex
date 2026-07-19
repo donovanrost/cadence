@@ -1,4 +1,6 @@
 defmodule CadenceWeb.SpacecraftRoutingLive do
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -8,7 +10,7 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
       socket.assigns
 
     routing_rules =
-      Cadence.list_routing_rules_for_spacecraft(
+      RoutingRuleStore.list_routing_rules_for_spacecraft(
         scope.organization_id,
         mission.mission_id,
         spacecraft.spacecraft_id
@@ -16,7 +18,7 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
 
     transport_by_id =
       scope.organization_id
-      |> Cadence.list_transports(mission.mission_id)
+      |> TransportStore.list_transports(mission.mission_id)
       |> Map.new(&{&1.transport_id, &1})
 
     {:ok,

@@ -8,6 +8,8 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.GroundStationStore
+
   alias Cadence.Comms.GroundStation
   alias CadenceWeb.TestFixtures
 
@@ -82,7 +84,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
                "/missions/#{mission.mission_id}/comms/ground-stations/dss-25"
 
       assert {:ok, persisted} =
-               Cadence.fetch_ground_station(org.organization_id, mission.mission_id, "dss-25")
+               GroundStationStore.fetch_ground_station(
+                 org.organization_id,
+                 mission.mission_id,
+                 "dss-25"
+               )
 
       assert persisted.display_name == "Goldstone DSS-25"
       assert persisted.metadata["antenna_diameter_m"] == 34
@@ -105,7 +111,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
                |> render_submit()
 
       assert {:ok, updated} =
-               Cadence.fetch_ground_station(org.organization_id, mission.mission_id, "dss-25")
+               GroundStationStore.fetch_ground_station(
+                 org.organization_id,
+                 mission.mission_id,
+                 "dss-25"
+               )
 
       assert updated.display_name == "Goldstone DSS-25 Prime"
       assert updated.region == "california"
@@ -119,7 +129,12 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
                |> render_click()
 
       assert list_path == "/missions/#{mission.mission_id}/comms/ground-stations"
-      assert [] = Cadence.list_ground_stations(org.organization_id, mission.mission_id)
+
+      assert [] =
+               GroundStationStore.list_ground_stations(
+                 org.organization_id,
+                 mission.mission_id
+               )
     end
 
     test "rejects invalid metadata JSON" do
@@ -142,7 +157,12 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
         |> render_submit()
 
       assert html =~ "Metadata JSON must be an object."
-      assert [] = Cadence.list_ground_stations(org.organization_id, mission.mission_id)
+
+      assert [] =
+               GroundStationStore.list_ground_stations(
+                 org.organization_id,
+                 mission.mission_id
+               )
     end
 
     test "unauthenticated requests redirect to sign in", %{conn: conn} do
@@ -162,7 +182,12 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
         metadata: %{"antenna_diameter_m" => 70}
       })
 
-    assert {:ok, persisted} = Cadence.persist_ground_station(organization_id, ground_station)
+    assert {:ok, persisted} =
+             GroundStationStore.persist_ground_station(
+               organization_id,
+               ground_station
+             )
+
     persisted
   end
 end

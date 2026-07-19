@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsTransportNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.{Transport, TransportKind}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.GroundNetworks
@@ -37,7 +39,8 @@ defmodule CadenceWeb.CommsTransportNewLive do
     with {:ok, display_name} <- required_text(params["display_name"], "Display name is required."),
          {:ok, transport} <-
            build_transport(params, socket.assigns.providers, mission, display_name),
-         {:ok, persisted} <- Cadence.persist_transport(scope.organization_id, transport) do
+         {:ok, persisted} <-
+           TransportStore.persist_transport(scope.organization_id, transport) do
       {:noreply,
        push_navigate(socket,
          to: ~p"/missions/#{mission.mission_id}/comms/transports/#{persisted.transport_id}"

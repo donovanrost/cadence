@@ -3,6 +3,8 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
 
   import Cadence.Dashboards.DataLinkResolverFixtures
 
+  alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{GroundStation, RoutingRule, Transport}
 
   alias Cadence.Commanding.{
@@ -517,13 +519,17 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(organization_id, transport)
 
     assert {:ok, _source_endpoint} =
              Cadence.persist_source_endpoint(organization_id, source_endpoint)
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(organization_id, ground_station)
+             GroundStationStore.persist_ground_station(
+               organization_id,
+               ground_station
+             )
 
     context = %{
       source_request_id: "ops-request-1",
@@ -678,7 +684,8 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(organization_id, transport)
 
     routing_rule =
       RoutingRule.new(%{
@@ -692,7 +699,9 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         role: :primary
       })
 
-    assert {:ok, routing_rule} = Cadence.create_routing_rule(organization_id, routing_rule)
+    assert {:ok, routing_rule} =
+             RoutingRuleStore.create_routing_rule(organization_id, routing_rule)
+
     assert is_binary(routing_rule.materialized_link_assignment_id)
     link_assignment_id = routing_rule.materialized_link_assignment_id
     source_endpoint_id = "spacecraft_runtime:#{spacecraft_id}"

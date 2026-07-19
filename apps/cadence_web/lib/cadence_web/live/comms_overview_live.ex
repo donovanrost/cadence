@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsOverviewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias CadenceWeb.CommsValidation
 
   @impl true
@@ -185,14 +187,19 @@ defmodule CadenceWeb.CommsOverviewLive do
       Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
 
     source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
-    transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
+
+    transports =
+      TransportStore.list_transports(scope.organization_id, mission.mission_id)
+
     provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)
 
     transport_profiles =
       Cadence.list_transport_profiles(scope.organization_id, mission.mission_id)
 
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
-    routing_rules = Cadence.list_routing_rules(scope.organization_id, mission.mission_id)
+
+    routing_rules =
+      RoutingRuleStore.list_routing_rules(scope.organization_id, mission.mission_id)
 
     findings =
       CommsValidation.findings_for_resources(

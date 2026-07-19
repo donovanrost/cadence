@@ -7,6 +7,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
   import Ecto.Query
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.ContactPlanning.{
     ContactPlanApprovals,
     ContactPlanExecutions,
@@ -514,7 +516,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert first_provider.version == second_provider.version
 
     assert {:ok, same_transport} =
-             Cadence.fetch_transport_version(
+             TransportStore.fetch_transport_version(
                setup.organization_id,
                setup.mission_id,
                setup.transport.transport_id,

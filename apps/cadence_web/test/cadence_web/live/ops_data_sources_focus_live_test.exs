@@ -8,6 +8,8 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{GroundStation, RoutingRule, Transport}
 
   alias Cadence.Dashboards.{
@@ -119,7 +121,8 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -143,7 +146,10 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
       })
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, ground_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               ground_station
+             )
 
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
 
@@ -159,7 +165,9 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
         role: :primary
       })
 
-    assert {:ok, routing_rule} = Cadence.create_routing_rule(org.organization_id, routing_rule)
+    assert {:ok, routing_rule} =
+             RoutingRuleStore.create_routing_rule(org.organization_id, routing_rule)
+
     routing_rule
   end
 

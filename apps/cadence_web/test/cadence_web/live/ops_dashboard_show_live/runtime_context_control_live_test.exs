@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextControlLiveTest do
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.TransportStore
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -138,9 +140,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextControlLiveTest do
           metadata: %{"ground_station_id" => "dss-43"}
         })
 
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, gamma_transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(
+                 org.organization_id,
+                 alpha_transport
+               )
+
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, beta_transport)
+
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(
+                 org.organization_id,
+                 gamma_transport
+               )
 
       dashboard =
         TestFixtures.persist_dashboard_document!(mission,

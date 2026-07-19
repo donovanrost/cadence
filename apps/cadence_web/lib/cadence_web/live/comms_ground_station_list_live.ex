@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsGroundStationListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.GroundStationStore
+
   alias CadenceWeb.ListParams
 
   @page_size 50
@@ -10,7 +12,12 @@ defmodule CadenceWeb.CommsGroundStationListLive do
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    ground_stations = Cadence.list_ground_stations(scope.organization_id, mission.mission_id)
+
+    ground_stations =
+      GroundStationStore.list_ground_stations(
+        scope.organization_id,
+        mission.mission_id
+      )
 
     {:ok,
      socket

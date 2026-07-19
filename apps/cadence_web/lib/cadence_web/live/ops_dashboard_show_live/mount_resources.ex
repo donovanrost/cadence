@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   @moduledoc false
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Dashboards.DataSources
   alias Cadence.Dashboards.OperationalObservable
 
@@ -46,11 +48,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_transports(opts) do
-    Keyword.get(opts, :list_transports, &Cadence.list_transports/2)
+    Keyword.get(opts, :list_transports, &TransportStore.list_transports/2)
   end
 
   defp list_ground_stations(opts) do
-    Keyword.get(opts, :list_ground_stations, &Cadence.list_ground_stations/2)
+    Keyword.get(
+      opts,
+      :list_ground_stations,
+      &GroundStationStore.list_ground_stations/2
+    )
   end
 
   defp list_link_assignments(opts) do

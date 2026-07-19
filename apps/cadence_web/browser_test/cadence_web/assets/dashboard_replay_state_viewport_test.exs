@@ -16,6 +16,8 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -78,8 +80,11 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -155,8 +160,11 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     for {snapshot_id, observable_id, resource_id, scope_kind, state, observed_at, opts} <- [
           {"transport-live-connected", "comms.transport.connection_state",
@@ -368,7 +376,8 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -444,8 +453,11 @@ defmodule CadenceWeb.Assets.DashboardReplayStateViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     for {snapshot_id, observable_id, link_id, state, observed_at, opts} <- [
           {"rf-lock-live", "link.rf_lock_state", "link-alpha", :locked, ~U[2026-06-17 12:00:10Z],

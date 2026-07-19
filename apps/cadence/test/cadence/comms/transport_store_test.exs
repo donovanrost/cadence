@@ -1,6 +1,8 @@
 defmodule Cadence.Comms.TransportStoreTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.{Transport, TransportKind}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.GroundNetworks
@@ -87,7 +89,9 @@ defmodule Cadence.Comms.TransportStoreTest do
           }
         })
 
-      assert {:ok, persisted_v1} = Cadence.persist_transport(organization_id, transport)
+      assert {:ok, persisted_v1} =
+               TransportStore.persist_transport(organization_id, transport)
+
       assert persisted_v1.organization_id == organization_id
       assert persisted_v1.version == 1
       assert persisted_v1.origin == :direct
@@ -106,7 +110,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert provider.metadata["materialized_from_transport_id"] == persisted_v1.transport_id
 
       assert {:ok, latest} =
-               Cadence.fetch_transport(
+               TransportStore.fetch_transport(
                  organization_id,
                  mission_id,
                  persisted_v1.transport_id
@@ -115,7 +119,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert latest.version == 1
 
       assert {:ok, persisted_v2} =
-               Cadence.version_transport(
+               TransportStore.version_transport(
                  organization_id,
                  mission_id,
                  persisted_v1.transport_id,
@@ -140,11 +144,11 @@ defmodule Cadence.Comms.TransportStoreTest do
       refute persisted_v2.materialized_provider_profile_id ==
                persisted_v1.materialized_provider_profile_id
 
-      assert [listed] = Cadence.list_transports(organization_id, mission_id)
+      assert [listed] = TransportStore.list_transports(organization_id, mission_id)
       assert listed.version == 2
 
       assert [v2, v1] =
-               Cadence.list_transport_versions(
+               TransportStore.list_transport_versions(
                  organization_id,
                  mission_id,
                  persisted_v1.transport_id
@@ -177,7 +181,9 @@ defmodule Cadence.Comms.TransportStoreTest do
           delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
         })
 
-      assert {:ok, persisted} = Cadence.persist_transport(organization_id, transport)
+      assert {:ok, persisted} =
+               TransportStore.persist_transport(organization_id, transport)
+
       assert persisted.origin == :provider_managed
       assert persisted.transport_kind == :tcp_socket
       assert persisted.adapter_key == :tcp_socket
@@ -255,7 +261,7 @@ defmodule Cadence.Comms.TransportStoreTest do
         })
 
       assert {:error, :mission_provider_not_validated} =
-               Cadence.persist_transport(organization_id, transport)
+               TransportStore.persist_transport(organization_id, transport)
     end
   end
 

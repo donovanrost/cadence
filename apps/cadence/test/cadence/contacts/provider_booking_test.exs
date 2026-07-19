@@ -1,6 +1,8 @@
 defmodule Cadence.Contacts.ProviderBookingTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.Transport
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
@@ -16,7 +18,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     provider = persist_provider!(organization_id, mission_id, suffix)
 
     {:ok, transport} =
-      Cadence.persist_transport(
+      TransportStore.persist_transport(
         organization_id,
         Transport.new(%{
           transport_id: "provider-transport-#{suffix}",

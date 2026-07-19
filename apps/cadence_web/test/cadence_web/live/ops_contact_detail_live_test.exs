@@ -8,6 +8,8 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Contacts.{
     ProviderReservation,
     ProviderReservationChanges,
@@ -221,7 +223,8 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     requested = %{
       "provider_contact_ref" => nil,

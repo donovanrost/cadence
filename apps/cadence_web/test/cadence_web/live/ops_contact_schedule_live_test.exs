@@ -12,6 +12,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{RoutingRule, Transport}
   alias Cadence.Contacts.ProviderBooking
   alias Cadence.GroundNetworks
@@ -356,7 +358,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
         delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     rule =
       RoutingRule.new(%{
@@ -371,7 +374,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
         role: :primary
       })
 
-    assert {:ok, rule} = Cadence.create_routing_rule(org.organization_id, rule)
+    assert {:ok, rule} =
+             RoutingRuleStore.create_routing_rule(org.organization_id, rule)
 
     assert {:ok, %{routes: [route]}} =
              Cadence.list_ready_downlink_routes(

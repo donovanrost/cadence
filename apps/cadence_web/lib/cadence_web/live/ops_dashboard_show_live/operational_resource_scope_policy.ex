@@ -1,4 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   @moduledoc """
   Validation policy for dashboard runtime scopes backed by setup resources.
   """
@@ -48,13 +50,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
     do: {:error, :unsupported_scope_kind}
 
   defp fetch_ground_station_fn(opts),
-    do: Keyword.get(opts, :fetch_ground_station, &Cadence.fetch_ground_station/3)
+    do:
+      Keyword.get(
+        opts,
+        :fetch_ground_station,
+        &GroundStationStore.fetch_ground_station/3
+      )
 
   defp fetch_source_endpoint_fn(opts),
     do: Keyword.get(opts, :fetch_source_endpoint, &Cadence.fetch_source_endpoint/3)
 
   defp fetch_transport_fn(opts),
-    do: Keyword.get(opts, :fetch_transport, &Cadence.fetch_transport/3)
+    do: Keyword.get(opts, :fetch_transport, &TransportStore.fetch_transport/3)
 
   defp fetch_link_assignment_fn(opts),
     do: Keyword.get(opts, :fetch_link_assignment, &Cadence.fetch_link_assignment/3)
@@ -72,13 +79,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
   end
 
   defp list_transports_fn(opts),
-    do: Keyword.get(opts, :list_transports, &Cadence.list_transports/2)
+    do: Keyword.get(opts, :list_transports, &TransportStore.list_transports/2)
 
   defp list_source_endpoints_fn(opts),
     do: Keyword.get(opts, :list_source_endpoints, &Cadence.list_source_endpoints/2)
 
   defp list_ground_stations_fn(opts),
-    do: Keyword.get(opts, :list_ground_stations, &Cadence.list_ground_stations/2)
+    do:
+      Keyword.get(
+        opts,
+        :list_ground_stations,
+        &GroundStationStore.list_ground_stations/2
+      )
 
   defp resource_link_id(resource) do
     map_value(resource, :link_id) ||

@@ -1,4 +1,6 @@
 defmodule CadenceWeb.CommsRoutingShowLive do
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -6,7 +8,11 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   def mount(%{"routing_rule_id" => routing_rule_id}, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.fetch_routing_rule(scope.organization_id, mission.mission_id, routing_rule_id) do
+    case RoutingRuleStore.fetch_routing_rule(
+           scope.organization_id,
+           mission.mission_id,
+           routing_rule_id
+         ) do
       {:ok, routing_rule} ->
         {:ok,
          socket
@@ -23,7 +29,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
          )
          |> assign(
            :events,
-           Cadence.list_routing_rule_events(
+           RoutingRuleStore.list_routing_rule_events(
              scope.organization_id,
              mission.mission_id,
              routing_rule.routing_rule_id
@@ -141,7 +147,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   end
 
   defp fetch_transport(organization_id, mission_id, routing_rule) do
-    case Cadence.fetch_transport_version(
+    case TransportStore.fetch_transport_version(
            organization_id,
            mission_id,
            routing_rule.transport_id,

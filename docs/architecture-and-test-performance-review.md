@@ -1456,6 +1456,13 @@ directly to `Cadence.SpacecraftStore` and `Cadence.SpacecraftTypeStore` reduced
 root facade from 75 to 65 files. Existing spacecraft routes and authentication
 pipelines are unchanged; production source-size pressure remains 4 and
 dependency ratchets are unchanged.
+Retiring 22 transport, ground-station, and routing-rule delegates from the root
+facade and moving production, test-support, simulator, and opt-in browser
+callers directly to their owning `Cadence.Comms` stores reduced `Cadence` from
+3,804 to 3,610 lines and reduced production web callers of the root facade from
+65 to 55 files. Existing Comms routes and authentication pipelines are
+unchanged; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

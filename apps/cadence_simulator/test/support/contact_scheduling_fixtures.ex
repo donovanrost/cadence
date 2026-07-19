@@ -5,6 +5,8 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
   import ExUnit.Assertions
   import ExUnit.Callbacks, only: [start_supervised!: 1, stop_supervised: 1]
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Auth.Scope
@@ -261,7 +263,9 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(setup.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(setup.organization_id, transport)
+
     assert transport.origin == :provider_managed
     assert transport.configuration["port"] == telemetry_port
 
@@ -320,7 +324,8 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
         role: :primary
       })
 
-    assert {:ok, rule} = Cadence.create_routing_rule(setup.organization_id, rule)
+    assert {:ok, rule} =
+             RoutingRuleStore.create_routing_rule(setup.organization_id, rule)
 
     assert {:ok, %{routes: [route], findings: []}} =
              ProviderScheduling.list_ready_downlink_routes(

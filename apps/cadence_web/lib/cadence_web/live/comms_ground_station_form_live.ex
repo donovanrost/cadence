@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.GroundStationStore
+
   alias Cadence.Comms.GroundStation
   alias CadenceWeb.CommsComponents
 
@@ -23,7 +25,7 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
       :edit ->
         ground_station_id = params["ground_station_id"]
 
-        case Cadence.fetch_ground_station(
+        case GroundStationStore.fetch_ground_station(
                scope.organization_id,
                mission.mission_id,
                ground_station_id
@@ -69,7 +71,10 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
             })
           )
 
-        case Cadence.persist_ground_station(scope.organization_id, ground_station) do
+        case GroundStationStore.persist_ground_station(
+               scope.organization_id,
+               ground_station
+             ) do
           {:ok, persisted} ->
             {:noreply,
              push_navigate(socket,
@@ -93,7 +98,7 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
     case form_attrs(params, require_id?: false) do
       {:ok, attrs} ->
-        case Cadence.update_ground_station(
+        case GroundStationStore.update_ground_station(
                scope.organization_id,
                mission.mission_id,
                ground_station.ground_station_id,

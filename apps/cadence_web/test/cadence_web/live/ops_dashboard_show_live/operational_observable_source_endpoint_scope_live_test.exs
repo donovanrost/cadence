@@ -11,6 +11,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.Transport
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
@@ -91,8 +93,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
           }
         })
 
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(
+                 org.organization_id,
+                 alpha_transport
+               )
+
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, beta_transport)
 
       dashboard =
         TestFixtures.persist_dashboard_document!(mission,

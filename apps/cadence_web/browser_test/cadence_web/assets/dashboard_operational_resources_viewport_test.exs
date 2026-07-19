@@ -16,6 +16,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
   alias Cadence.Dashboards.DataSources
@@ -113,8 +115,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     persist_operational_observable_state_event!(
       org.organization_id,
@@ -243,8 +248,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -312,8 +320,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -478,8 +489,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     persist_operational_observable_state_event!(
       org.organization_id,

@@ -8,6 +8,8 @@ defmodule CadenceWeb.CommsTransportLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.Transport
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
@@ -123,7 +125,12 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                |> form("#transport-form", transport: direct_transport_params())
                |> render_submit()
 
-      [transport] = Cadence.list_transports(organization.organization_id, mission.mission_id)
+      [transport] =
+        TransportStore.list_transports(
+          organization.organization_id,
+          mission.mission_id
+        )
+
       assert transport.display_name == "AI&T TCP"
       assert transport.origin == :direct
       assert transport.direction_capability == :inbound
@@ -177,7 +184,12 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                )
                |> render_submit()
 
-      [transport] = Cadence.list_transports(organization.organization_id, mission.mission_id)
+      [transport] =
+        TransportStore.list_transports(
+          organization.organization_id,
+          mission.mission_id
+        )
+
       assert transport.origin == :provider_managed
       assert transport.mission_provider_id == provider.provider_id
       assert transport.mission_provider_version == provider.version
@@ -268,7 +280,10 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                "Port must be an integer from 1 to 65535."
              )
 
-      assert Cadence.list_transports(mission.organization_id, mission.mission_id) == []
+      assert TransportStore.list_transports(
+               mission.organization_id,
+               mission.mission_id
+             ) == []
     end
 
     test "unauthenticated requests redirect to sign in", %{conn: conn} do
@@ -312,7 +327,9 @@ defmodule CadenceWeb.CommsTransportLiveTest do
         }
       })
 
-    assert {:ok, persisted} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, persisted} =
+             TransportStore.persist_transport(organization_id, transport)
+
     persisted
   end
 

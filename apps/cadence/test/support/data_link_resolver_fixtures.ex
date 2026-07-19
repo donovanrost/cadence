@@ -4,6 +4,8 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
   import Cadence.DataCase, only: [persist_mission_scope: 2]
   import ExUnit.Assertions
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.ApplicationDispatch.{
     BindingRule,
     BindingSet,
@@ -337,7 +339,8 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
         ]
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(organization_id, transport)
 
     assert {:ok, _realized_contact} =
              Cadence.persist_realized_contact(organization_id, realized_contact)

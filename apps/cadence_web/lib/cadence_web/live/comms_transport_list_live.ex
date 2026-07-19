@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsTransportListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.TransportKind
   alias CadenceWeb.ListParams
 
@@ -15,7 +17,9 @@ defmodule CadenceWeb.CommsTransportListLive do
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
+
+    transports =
+      TransportStore.list_transports(scope.organization_id, mission.mission_id)
 
     {:ok,
      socket

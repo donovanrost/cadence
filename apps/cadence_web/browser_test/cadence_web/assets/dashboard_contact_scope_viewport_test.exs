@@ -16,6 +16,8 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.GroundStationStore
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
@@ -413,10 +415,16 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
       })
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, alpha_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               alpha_station
+             )
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, beta_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               beta_station
+             )
 
     alpha_contact_id = "browser-contact-phase-ground-station-alpha-contact"
     alpha_realized_contact_id = "browser-contact-phase-ground-station-alpha-contact-run"
@@ -783,7 +791,10 @@ defmodule CadenceWeb.Assets.DashboardContactScopeViewportTest do
 
     for station <- [alpha_station, beta_station, gamma_station] do
       assert {:ok, _ground_station} =
-               Cadence.persist_ground_station(org.organization_id, station)
+               GroundStationStore.persist_ground_station(
+                 org.organization_id,
+                 station
+               )
     end
 
     alpha_endpoint_ref = "browser-contact-phase-multi-ground-station-source-alpha"

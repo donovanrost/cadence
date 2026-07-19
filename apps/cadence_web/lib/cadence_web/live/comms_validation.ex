@@ -12,6 +12,8 @@ defmodule CadenceWeb.CommsValidation do
 
   import CadenceWeb.CommsComponents, only: [display_name: 2, human_atom: 1]
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Applications.TelemetryDecom
   alias CadenceWeb.SpacecraftCommsReadiness
 
@@ -25,8 +27,8 @@ defmodule CadenceWeb.CommsValidation do
         path_templates: Cadence.list_path_templates(organization_id, mission_id),
         provider_profiles: Cadence.list_provider_profiles(organization_id, mission_id),
         transport_profiles: Cadence.list_transport_profiles(organization_id, mission_id),
-        transports: Cadence.list_transports(organization_id, mission_id),
-        routing_rules: Cadence.list_routing_rules(organization_id, mission_id)
+        transports: TransportStore.list_transports(organization_id, mission_id),
+        routing_rules: RoutingRuleStore.list_routing_rules(organization_id, mission_id)
       }
     )
   end
@@ -49,8 +51,8 @@ defmodule CadenceWeb.CommsValidation do
         path_templates: path_templates,
         provider_profiles: provider_profiles,
         transport_profiles: transport_profiles,
-        transports: Cadence.list_transports(organization_id, mission_id),
-        routing_rules: Cadence.list_routing_rules(organization_id, mission_id)
+        transports: TransportStore.list_transports(organization_id, mission_id),
+        routing_rules: RoutingRuleStore.list_routing_rules(organization_id, mission_id)
       }
     )
   end

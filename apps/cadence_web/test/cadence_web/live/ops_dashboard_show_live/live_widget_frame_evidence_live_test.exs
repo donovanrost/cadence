@@ -5,6 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.TransportStore
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -253,7 +255,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     {source_endpoint, transport}
   end

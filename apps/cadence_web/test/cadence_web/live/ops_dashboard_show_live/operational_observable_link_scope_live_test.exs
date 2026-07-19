@@ -5,6 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.TransportStore
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -252,8 +254,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     observed_at = ~U[2026-06-17 12:01:00Z]
 
@@ -726,7 +731,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     observed_at =
       DateTime.utc_now()

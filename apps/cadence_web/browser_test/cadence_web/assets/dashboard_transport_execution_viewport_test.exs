@@ -17,6 +17,8 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
   alias Cadence.Dashboards.DataSources
@@ -79,7 +81,8 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -155,8 +158,11 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     for {record_id, transport_id, event_kind, recorded_at, opts} <- [
           {"transport-execution-live-alpha", alpha_transport.transport_id, :initialized,
@@ -299,7 +305,8 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -412,9 +419,14 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, gamma_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, gamma_transport)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

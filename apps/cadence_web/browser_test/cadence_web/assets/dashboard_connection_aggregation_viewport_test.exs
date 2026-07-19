@@ -16,6 +16,8 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
   alias Cadence.Dashboards.DataSources
@@ -90,7 +92,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     for station <- [dss_14, dss_63, dss_43] do
-      assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, station)
+      assert {:ok, _ground_station} =
+               GroundStationStore.persist_ground_station(
+                 org.organization_id,
+                 station
+               )
     end
 
     alpha_endpoint =
@@ -201,7 +207,8 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     for transport <- [alpha_transport, beta_transport, gamma_transport] do
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, transport)
     end
 
     for {snapshot_id, observable_id, resource_id, scope_kind, state, observed_at, opts} <- [
@@ -449,8 +456,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -526,8 +536,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     for {snapshot_id, observable_id, resource_id, scope_kind, state, observed_at, opts} <- [
           {"link-scope-alpha-connecting", "comms.transport.connection_state",
@@ -716,7 +729,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     for station <- [dss_14, dss_63, dss_43] do
-      assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, station)
+      assert {:ok, _ground_station} =
+               GroundStationStore.persist_ground_station(
+                 org.organization_id,
+                 station
+               )
     end
 
     alpha_endpoint =
@@ -827,7 +844,8 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     for transport <- [alpha_transport, beta_transport, gamma_transport] do
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, transport)
     end
 
     for {snapshot_id, observable_id, resource_id, scope_kind, state, observed_at, opts} <- [
@@ -1083,8 +1101,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -1160,8 +1181,11 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     for {snapshot_id, observable_id, resource_id, scope_kind, state, observed_at, opts} <- [
           {"mission-transport-alpha-connecting", "comms.transport.connection_state",

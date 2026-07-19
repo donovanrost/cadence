@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
 
   import ExUnit.Assertions
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Commanding.{
     CommandQueueEntry,
     CommandQueueEntryRow,
@@ -948,7 +950,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
       })
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, ground_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               ground_station
+             )
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -984,7 +989,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     {source_endpoint, transport}
   end

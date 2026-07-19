@@ -8,6 +8,8 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{RoutingRule, Transport}
   alias CadenceWeb.TestFixtures
 
@@ -69,7 +71,9 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
 
       assert target =~ "/missions/#{mission.mission_id}/comms/routing/"
 
-      [rule] = Cadence.list_routing_rules(org.organization_id, mission.mission_id)
+      [rule] =
+        RoutingRuleStore.list_routing_rules(org.organization_id, mission.mission_id)
+
       assert rule.display_name == "Alpha live telemetry via Lab TCP"
       assert rule.transport_id == transport.transport_id
       assert is_binary(rule.materialized_link_assignment_id)
@@ -125,7 +129,9 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
         }
       })
 
-    assert {:ok, persisted} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, persisted} =
+             TransportStore.persist_transport(organization_id, transport)
+
     persisted
   end
 
@@ -142,7 +148,9 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
         role: :primary
       })
 
-    assert {:ok, persisted} = Cadence.create_routing_rule(organization_id, routing_rule)
+    assert {:ok, persisted} =
+             RoutingRuleStore.create_routing_rule(organization_id, routing_rule)
+
     persisted
   end
 end

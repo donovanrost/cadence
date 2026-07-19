@@ -1,6 +1,8 @@
 defmodule Cadence.ContactPlanning.FleetAutomationTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth
   alias Cadence.Auth.{Scope, ServiceIdentity}
@@ -56,7 +58,7 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
              )
 
     assert {:ok, transport} =
-             Cadence.persist_transport(
+             TransportStore.persist_transport(
                @organization_id,
                Transport.new(%{
                  transport_id: "transport-fleet-automation",

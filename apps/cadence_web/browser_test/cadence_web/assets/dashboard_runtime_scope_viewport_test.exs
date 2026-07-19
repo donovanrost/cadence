@@ -16,6 +16,8 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.GroundStationStore
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Contacts.LinkAssignment
   alias Cadence.Contacts.PathTemplate
@@ -272,10 +274,16 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, alpha_ground_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               alpha_ground_station
+             )
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, beta_ground_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               beta_ground_station
+             )
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

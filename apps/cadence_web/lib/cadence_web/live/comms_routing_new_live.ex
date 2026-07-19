@@ -2,6 +2,8 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.RoutingRule
 
   @impl true
@@ -11,7 +13,8 @@ defmodule CadenceWeb.CommsRoutingNewLive do
     spacecraft =
       Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
 
-    transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
+    transports =
+      TransportStore.list_transports(scope.organization_id, mission.mission_id)
 
     {:ok,
      socket
@@ -60,7 +63,7 @@ defmodule CadenceWeb.CommsRoutingNewLive do
           enabled?: true
         })
 
-      case Cadence.create_routing_rule(scope.organization_id, routing_rule) do
+      case RoutingRuleStore.create_routing_rule(scope.organization_id, routing_rule) do
         {:ok, persisted} ->
           {:noreply,
            push_navigate(socket,

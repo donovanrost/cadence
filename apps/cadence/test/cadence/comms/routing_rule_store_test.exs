@@ -1,6 +1,8 @@
 defmodule Cadence.Comms.RoutingRuleStoreTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{RoutingRule, Transport}
   alias Cadence.Spacecraft
 
@@ -39,7 +41,8 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(organization_id, transport)
 
     %{
       organization_id: organization_id,
@@ -67,7 +70,9 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
         role: :primary
       })
 
-    assert {:ok, persisted} = Cadence.create_routing_rule(organization_id, rule)
+    assert {:ok, persisted} =
+             RoutingRuleStore.create_routing_rule(organization_id, rule)
+
     assert persisted.organization_id == organization_id
     assert persisted.enabled?
     assert persisted.direction == :inbound
@@ -85,11 +90,13 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     assert assignment.selection_role == :selected
     assert assignment.metadata["materialized_from_routing_rule_id"] == persisted.routing_rule_id
 
-    assert [listed] = Cadence.list_routing_rules(organization_id, mission_id)
+    assert [listed] =
+             RoutingRuleStore.list_routing_rules(organization_id, mission_id)
+
     assert listed.routing_rule_id == persisted.routing_rule_id
 
     assert [created, materialized] =
-             Cadence.list_routing_rule_events(
+             RoutingRuleStore.list_routing_rule_events(
                organization_id,
                mission_id,
                persisted.routing_rule_id
@@ -117,10 +124,11 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
         role: :candidate
       })
 
-    assert {:ok, persisted} = Cadence.create_routing_rule(organization_id, rule)
+    assert {:ok, persisted} =
+             RoutingRuleStore.create_routing_rule(organization_id, rule)
 
     assert {:ok, updated} =
-             Cadence.update_routing_rule(
+             RoutingRuleStore.update_routing_rule(
                organization_id,
                mission_id,
                persisted.routing_rule_id,
@@ -131,7 +139,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     assert updated.role == :primary
 
     assert {:ok, disabled} =
-             Cadence.set_routing_rule_enabled(
+             RoutingRuleStore.set_routing_rule_enabled(
                organization_id,
                mission_id,
                persisted.routing_rule_id,
@@ -141,7 +149,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     refute disabled.enabled?
 
     assert {:ok, enabled} =
-             Cadence.set_routing_rule_enabled(
+             RoutingRuleStore.set_routing_rule_enabled(
                organization_id,
                mission_id,
                persisted.routing_rule_id,
@@ -151,7 +159,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     assert enabled.enabled?
 
     assert {:ok, archived} =
-             Cadence.archive_routing_rule(
+             RoutingRuleStore.archive_routing_rule(
                organization_id,
                mission_id,
                persisted.routing_rule_id,
@@ -162,10 +170,18 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
     refute archived.enabled?
 
     assert {:error, :routing_rule_not_found} =
-             Cadence.fetch_routing_rule(organization_id, mission_id, persisted.routing_rule_id)
+             RoutingRuleStore.fetch_routing_rule(
+               organization_id,
+               mission_id,
+               persisted.routing_rule_id
+             )
 
     event_types =
-      Cadence.list_routing_rule_events(organization_id, mission_id, persisted.routing_rule_id)
+      RoutingRuleStore.list_routing_rule_events(
+        organization_id,
+        mission_id,
+        persisted.routing_rule_id
+      )
       |> Enum.map(& &1.event_type)
 
     assert :created in event_types
@@ -192,6 +208,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
         role: :primary
       })
 
-    assert {:error, :transport_not_found} = Cadence.create_routing_rule(organization_id, rule)
+    assert {:error, :transport_not_found} =
+             RoutingRuleStore.create_routing_rule(organization_id, rule)
   end
 end

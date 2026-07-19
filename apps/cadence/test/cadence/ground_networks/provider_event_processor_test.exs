@@ -1,6 +1,8 @@
 defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.Comms.Transport
@@ -308,7 +310,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
              Cadence.GroundNetworks.persist_provider(organization_id, provider)
 
     assert {:ok, transport} =
-             Cadence.persist_transport(
+             TransportStore.persist_transport(
                organization_id,
                Transport.new(%{
                  transport_id: "transport-processor-#{suffix}",

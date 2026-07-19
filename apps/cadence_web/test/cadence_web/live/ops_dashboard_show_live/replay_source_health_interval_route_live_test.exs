@@ -5,6 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -295,7 +297,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
       })
 
     assert {:ok, _ground_station} =
-             Cadence.persist_ground_station(org.organization_id, ground_station)
+             GroundStationStore.persist_ground_station(
+               org.organization_id,
+               ground_station
+             )
 
     source_endpoint =
       SourceEndpoint.new(%{
@@ -330,7 +335,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
         }
       })
 
-    assert {:ok, transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
+
     transport
   end
 

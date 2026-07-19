@@ -1,6 +1,8 @@
 defmodule Cadence.Contacts.ProviderSchedulingTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   alias Cadence.Comms.{RoutingRule, Transport}
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.GroundNetworks
@@ -146,7 +148,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
       )
 
     {:ok, transport} =
-      Cadence.persist_transport(
+      TransportStore.persist_transport(
         context.organization_id,
         Transport.new(%{
           mission_id: context.mission_id,
@@ -300,7 +302,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
         delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
       })
 
-    {:ok, transport} = Cadence.persist_transport(organization_id, transport)
+    {:ok, transport} = TransportStore.persist_transport(organization_id, transport)
     transport
   end
 
@@ -318,7 +320,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
         role: :primary
       })
 
-    {:ok, rule} = Cadence.create_routing_rule(organization_id, rule)
+    {:ok, rule} = RoutingRuleStore.create_routing_rule(organization_id, rule)
     rule
   end
 

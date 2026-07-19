@@ -2,6 +2,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
+
   alias Cadence.Dashboards.{
     DataBinding,
     DataSource,
@@ -1339,7 +1341,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp fetch_focused_transport(_organization_id, _mission_id, nil), do: nil
 
   defp fetch_focused_transport(organization_id, mission_id, transport_id) do
-    case Cadence.fetch_transport(organization_id, mission_id, transport_id) do
+    case TransportStore.fetch_transport(organization_id, mission_id, transport_id) do
       {:ok, transport} -> transport
       {:error, _reason} -> nil
     end
@@ -1366,7 +1368,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp fetch_focused_ground_station(_organization_id, _mission_id, nil), do: nil
 
   defp fetch_focused_ground_station(organization_id, mission_id, ground_station_id) do
-    case Cadence.fetch_ground_station(organization_id, mission_id, ground_station_id) do
+    case GroundStationStore.fetch_ground_station(
+           organization_id,
+           mission_id,
+           ground_station_id
+         ) do
       {:ok, ground_station} -> ground_station
       {:error, _reason} -> nil
     end
@@ -1376,7 +1382,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp focused_routing_rule_for_link_assignment(organization_id, mission_id, link_assignment_id) do
     organization_id
-    |> Cadence.list_routing_rules(mission_id)
+    |> RoutingRuleStore.list_routing_rules(mission_id)
     |> Enum.find(&routing_rule_materialized_link?(&1, link_assignment_id))
   end
 

@@ -8,6 +8,8 @@ defmodule CadenceWeb.CommsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.Transport
   alias CadenceWeb.TestFixtures
 
@@ -142,7 +144,9 @@ defmodule CadenceWeb.CommsLiveTest do
         }
       })
 
-    assert {:ok, persisted} = Cadence.persist_transport(organization_id, transport)
+    assert {:ok, persisted} =
+             TransportStore.persist_transport(organization_id, transport)
+
     persisted
   end
 end

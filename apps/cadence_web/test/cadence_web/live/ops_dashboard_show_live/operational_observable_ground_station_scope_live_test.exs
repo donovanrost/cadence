@@ -5,6 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -133,8 +135,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -202,8 +207,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     observed_at = ~U[2026-06-17 12:05:00Z]
 

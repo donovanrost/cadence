@@ -2,16 +2,22 @@ defmodule CadenceWeb.CommsTransportShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Comms.TransportStore
+
   alias Cadence.Comms.TransportKind
 
   @impl true
   def mount(%{"transport_id" => transport_id}, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.fetch_transport(scope.organization_id, mission.mission_id, transport_id) do
+    case TransportStore.fetch_transport(
+           scope.organization_id,
+           mission.mission_id,
+           transport_id
+         ) do
       {:ok, transport} ->
         versions =
-          Cadence.list_transport_versions(
+          TransportStore.list_transport_versions(
             scope.organization_id,
             mission.mission_id,
             transport.transport_id

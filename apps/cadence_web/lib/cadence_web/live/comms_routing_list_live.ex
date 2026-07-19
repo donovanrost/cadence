@@ -1,4 +1,6 @@
 defmodule CadenceWeb.CommsRoutingListLive do
+  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -6,7 +8,9 @@ defmodule CadenceWeb.CommsRoutingListLive do
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    routing_rules = Cadence.list_routing_rules(scope.organization_id, mission.mission_id)
+    routing_rules =
+      RoutingRuleStore.list_routing_rules(scope.organization_id, mission.mission_id)
+
     spacecraft_by_id = spacecraft_lookup(scope.organization_id, mission.mission_id)
     transport_by_id = transport_lookup(scope.organization_id, mission.mission_id)
 
@@ -110,7 +114,7 @@ defmodule CadenceWeb.CommsRoutingListLive do
 
   defp transport_lookup(organization_id, mission_id) do
     organization_id
-    |> Cadence.list_transports(mission_id)
+    |> TransportStore.list_transports(mission_id)
     |> Map.new(&{&1.transport_id, &1})
   end
 

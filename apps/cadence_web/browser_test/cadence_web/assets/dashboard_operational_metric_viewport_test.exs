@@ -17,6 +17,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.{GroundStationStore, TransportStore}
+
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
   alias Cadence.Dashboards.DataBinding
@@ -153,8 +155,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_63)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
+
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_63)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -247,8 +252,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
+
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, beta_transport)
 
     %{
       alpha_endpoint: alpha_endpoint,
@@ -703,7 +711,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         }
       })
 
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+    assert {:ok, _ground_station} =
+             GroundStationStore.persist_ground_station(org.organization_id, dss_14)
 
     alpha_endpoint =
       SourceEndpoint.new(%{
@@ -742,7 +751,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, alpha_transport)
 
     dashboard =
       persist_replay_operational_metric_time_series_dashboard!(

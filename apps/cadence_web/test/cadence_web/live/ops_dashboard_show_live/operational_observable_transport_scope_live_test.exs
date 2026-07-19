@@ -5,6 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Comms.TransportStore
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -141,7 +143,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
         }
       })
 
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+    assert {:ok, _transport} =
+             TransportStore.persist_transport(org.organization_id, transport)
 
     observed_at = ~U[2026-06-17 12:06:00Z]
 
@@ -273,8 +276,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
           }
         })
 
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(
+                 org.organization_id,
+                 alpha_transport
+               )
+
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, beta_transport)
 
       dashboard =
         TestFixtures.persist_dashboard_document!(mission,
@@ -652,7 +661,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
           }
         })
 
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, transport)
 
       observed_at = ~U[2026-06-17 12:07:00Z]
 
@@ -904,7 +914,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
           }
         })
 
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+      assert {:ok, _transport} =
+               TransportStore.persist_transport(org.organization_id, transport)
 
       observed_at = ~U[2026-06-17 12:08:00Z]
 

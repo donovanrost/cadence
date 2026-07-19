@@ -1,6 +1,8 @@
 defmodule Cadence.Comms.GroundStationStoreTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.GroundStationStore
+
   alias Cadence.Comms.GroundStation
 
   test "persists, fetches, lists, and archives mission ground stations" do
@@ -16,13 +18,18 @@ defmodule Cadence.Comms.GroundStationStoreTest do
         metadata: %{"antenna_diameter_m" => 70}
       })
 
-    assert {:ok, persisted} = Cadence.persist_ground_station("org-ground-station", ground_station)
+    assert {:ok, persisted} =
+             GroundStationStore.persist_ground_station(
+               "org-ground-station",
+               ground_station
+             )
+
     assert persisted.organization_id == "org-ground-station"
     assert persisted.lifecycle_state == :active
     assert persisted.metadata["antenna_diameter_m"] == 70
 
     assert {:ok, fetched} =
-             Cadence.fetch_ground_station(
+             GroundStationStore.fetch_ground_station(
                "org-ground-station",
                "mission-ground-station",
                "dss-14"
@@ -31,7 +38,7 @@ defmodule Cadence.Comms.GroundStationStoreTest do
     assert fetched.display_name == "Goldstone DSS-14"
 
     assert {:ok, updated} =
-             Cadence.update_ground_station(
+             GroundStationStore.update_ground_station(
                "org-ground-station",
                "mission-ground-station",
                "dss-14",
@@ -47,12 +54,17 @@ defmodule Cadence.Comms.GroundStationStoreTest do
     assert updated.region == "california"
     assert updated.metadata["network"] == "deep-space"
 
-    assert [listed] = Cadence.list_ground_stations("org-ground-station", "mission-ground-station")
+    assert [listed] =
+             GroundStationStore.list_ground_stations(
+               "org-ground-station",
+               "mission-ground-station"
+             )
+
     assert listed.ground_station_id == "dss-14"
     assert listed.display_name == "Goldstone DSS-14 Prime"
 
     assert {:ok, archived} =
-             Cadence.archive_ground_station(
+             GroundStationStore.archive_ground_station(
                "org-ground-station",
                "mission-ground-station",
                "dss-14",
@@ -62,10 +74,14 @@ defmodule Cadence.Comms.GroundStationStoreTest do
     assert archived.lifecycle_state == :archived
     assert archived.metadata["reason"] == "retired"
 
-    assert [] = Cadence.list_ground_stations("org-ground-station", "mission-ground-station")
+    assert [] =
+             GroundStationStore.list_ground_stations(
+               "org-ground-station",
+               "mission-ground-station"
+             )
 
     assert {:error, :ground_station_not_found} =
-             Cadence.fetch_ground_station(
+             GroundStationStore.fetch_ground_station(
                "org-ground-station",
                "mission-ground-station",
                "dss-14"
