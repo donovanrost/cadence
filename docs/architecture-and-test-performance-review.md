@@ -1234,6 +1234,12 @@ request filter on `Commanding.list_command_queue_entries/3` keeps those related
 reads behind the owning context. The facade now delegates the four targets and
 fell from 4,237 to 3,818 lines, while direct persistence-schema edges fell from
 122 to 118; production source-size pressure remains 7.
+Extracting contact, transport, link-assignment, source-endpoint, and
+ground-station resolution into a 598-line operational-resource target module
+moved context-owned reads, row projection, cross-resource links, and navigation
+actions out of `DataLinkResolver`. Contact reads now use the `Contacts` context,
+reducing direct persistence-schema edges from 118 to 116, while the facade fell
+from 3,818 to 3,214 lines; production source-size pressure remains 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
