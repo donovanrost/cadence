@@ -34,7 +34,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.RuntimeHealth
 
-  alias Cadence.Dashboards.Sources.OperationalObservables.{ProductPolicy, RevisionPolicy}
+  alias Cadence.Dashboards.Sources.OperationalObservables.{
+    ConnectionFrames,
+    ProductPolicy,
+    RevisionPolicy
+  }
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
   @connection_observable_ids [
@@ -1951,182 +1955,30 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp connection_state_frame(request, source_binding, connection_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:connection_state",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.resource_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(connection_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.link_id)
-          },
-          %Field{
-            name: "adapter_key",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.adapter_key)
-          },
-          %Field{
-            name: "connection_state",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.connection_state)
-          },
-          %Field{
-            name: "observed_at",
-            kind: :time,
-            values: Enum.map(connection_rows, & &1.observed_at)
-          },
-          %Field{
-            name: "freshness_state",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.freshness_state)
-          },
-          %Field{
-            name: "age_ms",
-            kind: :number,
-            values: Enum.map(connection_rows, & &1.age_ms)
-          }
-        ] ++ maybe_interval_identity_fields(connection_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :connection_state,
-        observable_ids: observable_ids(connection_rows),
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(connection_rows),
-        freshness_policy: latest_freshness_policy(connection_rows),
-        freshness_checked_at: latest_freshness_checked_at(connection_rows),
-        warning_codes: latest_freshness_warning_codes(connection_rows),
-        links: operational_state_links(request, connection_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(connection_rows)
-      }
+  defp frame_source_context(%PlannedSourceRequest{} = request, source_binding) do
+    %{
+      source_binding_id: source_binding_id(source_binding),
+      dataset: dataset(source_binding),
+      realm: realm(request, source_binding),
+      data_source_id: data_source_id(request, source_binding),
+      replay_run_id: replay_run_id(request)
     }
   end
 
+  defp connection_state_frame(request, source_binding, connection_rows) do
+    ConnectionFrames.latest(
+      request,
+      connection_rows,
+      frame_source_context(request, source_binding)
+    )
+  end
+
   defp connection_state_history_frame(request, source_binding, connection_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:connection_state_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "time",
-            kind: :time,
-            values: Enum.map(connection_rows, & &1.observed_at),
-            metadata: %{axis: :occurred_at}
-          },
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.resource_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(connection_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(connection_rows, & &1.link_id)
-          },
-          %Field{
-            name: "adapter_key",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.adapter_key)
-          },
-          %Field{
-            name: "connection_state",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.connection_state)
-          },
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(connection_rows, & &1.connection_state)
-          }
-        ] ++ maybe_interval_identity_fields(connection_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :connection_state_history,
-        observable_ids: observable_ids(connection_rows),
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(connection_rows),
-        warning_codes: [],
-        links: operational_history_links(request, connection_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(connection_rows)
-      }
-    }
+    ConnectionFrames.history(
+      request,
+      connection_rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp antenna_pointing_state_frame(request, source_binding, pointing_rows) do

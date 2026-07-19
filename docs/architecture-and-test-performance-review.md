@@ -1024,6 +1024,12 @@ policy reduced the operational-observables source again to 6,640 lines. Its
 existing public backing-contract API remains as delegates and resolution now
 receives an already-selected product; production source-size pressure remains
 8.
+Extracting latest and historical connection-state frame fields, freshness
+metadata, operational links, and interval evidence reduced the
+operational-observables source from 6,640 to 6,492 lines. The new 160-line
+connection frame module receives resolved rows and source identity while
+provider reads and row normalization remain in the adapter; production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
