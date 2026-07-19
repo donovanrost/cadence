@@ -1649,6 +1649,15 @@ root facade moved seven test call sites directly to
 remain at 13 files because production already used the owning services. No
 route or authentication placement is involved; production source-size pressure
 remains 4 and dependency ratchets are unchanged.
+Retiring the 16 replay execution, read, job, and diff clauses from the root
+facade moved 17 production and test call sites directly to `Cadence.Replay`,
+`Cadence.Reads.Replay`, `Cadence.Replay.Diff`, and `Cadence.Jobs`, and made one
+private scope helper removable. This reduced `Cadence` from 1,203 to 1,036
+lines; production web callers of the root facade remain at 13 files because the
+dashboard loader still uses a separate root API. Its replay path remains in the
+authenticated `:ops` LiveView session and continues using organization- and
+mission-scoped reads; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

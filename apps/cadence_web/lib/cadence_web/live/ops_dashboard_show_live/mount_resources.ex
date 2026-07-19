@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
+  alias Cadence.Reads.Replay, as: ReplayReads
   @moduledoc false
 
   alias Cadence.Comms.{GroundStationStore, TransportStore}
@@ -80,6 +81,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_replay_runs(opts) do
-    Keyword.get(opts, :list_replay_runs, &Cadence.list_replay_runs/3)
+    Keyword.get(opts, :list_replay_runs, &ReplayReads.list_runs/3)
   end
 end

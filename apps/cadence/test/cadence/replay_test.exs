@@ -1,4 +1,8 @@
 defmodule Cadence.ReplayTest do
+  alias Cadence.Jobs
+  alias Cadence.Reads.Replay, as: ReplayReads
+  alias Cadence.Replay
+  alias Cadence.Replay.Diff, as: ReplayDiff
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{
@@ -51,7 +55,7 @@ defmodule Cadence.ReplayTest do
     live_latest_count = Repo.aggregate(TelemetryLatestValueRow, :count, :id)
 
     assert {:ok, replay_run} =
-             Cadence.replay_telemetry_evidence(
+             Replay.replay_telemetry_evidence(
                "mission-alpha",
                raw_evidence.evidence_id,
                binding_set.binding_set_id,
@@ -71,14 +75,14 @@ defmodule Cadence.ReplayTest do
     assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == live_sample_count
     assert Repo.aggregate(TelemetryLatestValueRow, :count, :id) == live_latest_count
 
-    assert {:ok, fetched_run} = Cadence.fetch_replay_run(replay_run.replay_run_id)
+    assert {:ok, fetched_run} = ReplayReads.fetch_run(replay_run.replay_run_id)
     assert fetched_run.status == :completed
     assert fetched_run.replayed_sample_count == 1
 
-    replay_samples = Cadence.replay_telemetry_samples(replay_run.replay_run_id)
+    replay_samples = ReplayReads.telemetry_samples(replay_run.replay_run_id)
     assert Enum.map(replay_samples, & &1.raw_value) == [7]
 
-    diff_report = Cadence.diff_replay_run(replay_run.replay_run_id)
+    diff_report = ReplayDiff.diff_run(replay_run.replay_run_id)
     assert diff_report.compared_count == 1
     assert diff_report.matching_count == 1
     assert diff_report.mismatches == []
@@ -105,12 +109,12 @@ defmodule Cadence.ReplayTest do
 
     assert ["replay-run-newer", "replay-run-older"] =
              "org-replay-list"
-             |> Cadence.list_replay_runs("mission-replay-list")
+             |> ReplayReads.list_runs("mission-replay-list")
              |> Enum.map(& &1.replay_run_id)
 
     assert ["replay-run-older"] =
              "org-replay-list"
-             |> Cadence.list_replay_runs("mission-replay-list", order: :asc, limit: 1)
+             |> ReplayReads.list_runs("mission-replay-list", order: :asc, limit: 1)
              |> Enum.map(& &1.replay_run_id)
   end
 
@@ -154,7 +158,7 @@ defmodule Cadence.ReplayTest do
       })
 
     assert {:ok, replay_run} =
-             Cadence.start_replay_telemetry_scope(
+             Replay.start_replay_telemetry_scope(
                "mission-alpha",
                scope,
                binding_set.binding_set_id,
@@ -162,7 +166,10 @@ defmodule Cadence.ReplayTest do
              )
 
     assert replay_run.status == :running
-    assert {:ok, queued_job} = Cadence.fetch_replay_job(replay_run.replay_run_id)
+
+    assert {:ok, queued_job} =
+             Jobs.fetch_job_for_run(:replay_telemetry_scope, replay_run.replay_run_id)
+
     assert queued_job.status == :queued
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
@@ -172,13 +179,13 @@ defmodule Cadence.ReplayTest do
     assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
-    assert {:ok, completed_run} = Cadence.fetch_replay_run(replay_run.replay_run_id)
+    assert {:ok, completed_run} = ReplayReads.fetch_run(replay_run.replay_run_id)
 
     assert completed_run.replayed_evidence_count == 1
     assert completed_run.replayed_packet_count == 1
     assert completed_run.replayed_sample_count == 1
 
-    replay_samples = Cadence.replay_telemetry_samples(replay_run.replay_run_id)
+    replay_samples = ReplayReads.telemetry_samples(replay_run.replay_run_id)
     assert completed_job.job_type == :replay_telemetry_scope
     assert completed_job.attempt_count == 1
     assert Enum.map(replay_samples, & &1.raw_value) == [20]
@@ -209,14 +216,14 @@ defmodule Cadence.ReplayTest do
              )
 
     assert {:ok, replay_run} =
-             Cadence.replay_telemetry_evidence(
+             Replay.replay_telemetry_evidence(
                "mission-alpha",
                raw_evidence.evidence_id,
                binding_set.binding_set_id,
                binding_set.version
              )
 
-    diff_report = Cadence.diff_replay_run(replay_run.replay_run_id)
+    diff_report = ReplayDiff.diff_run(replay_run.replay_run_id)
 
     assert diff_report.compared_count == 1
     assert diff_report.matching_count == 0
@@ -264,7 +271,7 @@ defmodule Cadence.ReplayTest do
       Repo.aggregate(ManagedTimerEventRow, :count, :timer_event_id)
 
     assert {:ok, replay_run} =
-             Cadence.replay_telemetry_evidence(
+             Replay.replay_telemetry_evidence(
                mission_id,
                raw_evidence.evidence_id,
                binding_set.binding_set_id,
@@ -288,7 +295,7 @@ defmodule Cadence.ReplayTest do
 
     assert Repo.aggregate(ManagedTimerEventRow, :count, :timer_event_id) == live_timer_event_count
 
-    capability_records = Cadence.replay_managed_capability_records(replay_run.replay_run_id)
+    capability_records = ReplayReads.managed_capability_records(replay_run.replay_run_id)
     assert length(capability_records) == 3
 
     assert Enum.map(capability_records, & &1.family_key) == [
@@ -310,12 +317,12 @@ defmodule Cadence.ReplayTest do
     assert DateTime.compare(initialized_record.recorded_at, raw_evidence.receipt_time) == :eq
     assert DateTime.compare(handled_record.recorded_at, raw_evidence.receipt_time) == :eq
 
-    action_requests = Cadence.replay_managed_action_requests(replay_run.replay_run_id)
+    action_requests = ReplayReads.managed_action_requests(replay_run.replay_run_id)
     assert Enum.map(action_requests, & &1.action_kind) == [:schedule_timer]
     assert Enum.map(action_requests, & &1.request_document["timer_key"]) == ["flush"]
     assert DateTime.compare(hd(action_requests).requested_at, raw_evidence.receipt_time) == :eq
 
-    timer_events = Cadence.replay_managed_timer_events(replay_run.replay_run_id)
+    timer_events = ReplayReads.managed_timer_events(replay_run.replay_run_id)
     assert Enum.map(timer_events, & &1.event_kind) == [:scheduled, :fired]
     assert Enum.map(timer_events, & &1.timer_key) == ["flush", "flush"]
 

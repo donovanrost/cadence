@@ -28,10 +28,6 @@ defmodule Cadence do
 
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
-  alias Cadence.Reads.Replay, as: ReplayReads
-  alias Cadence.Replay
-  alias Cadence.Replay.Diff, as: ReplayDiff
-  alias Cadence.Replay.Scope
   alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
   alias Cadence.Telemetry.RuntimeHealth
@@ -885,160 +881,9 @@ defmodule Cadence do
     RuntimeHealth.reset()
   end
 
-  @spec replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 do
-    Replay.replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-  end
-
-  @spec replay_telemetry_evidence(
-          binary(),
-          binary(),
-          binary() | [binary()],
-          binary(),
-          pos_integer()
-        ) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def replay_telemetry_evidence(
-        organization_id,
-        mission_id,
-        evidence_ids,
-        binding_set_id,
-        version
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(binding_set_id) and is_integer(version) and version > 0 do
-    with_mission_scope(organization_id, mission_id, fn ->
-      Replay.replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-    end)
-  end
-
-  @spec replay_telemetry_scope(binary(), Scope.t(), binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def replay_telemetry_scope(mission_id, %Scope{} = scope, binding_set_id, version)
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 do
-    Replay.replay_telemetry_scope(mission_id, scope, binding_set_id, version)
-  end
-
-  @spec replay_telemetry_scope(binary(), binary(), Scope.t(), binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def replay_telemetry_scope(
-        organization_id,
-        mission_id,
-        %Scope{} = scope,
-        binding_set_id,
-        version
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(binding_set_id) and is_integer(version) and version > 0 do
-    with_mission_scope(organization_id, mission_id, fn ->
-      Replay.replay_telemetry_scope(mission_id, scope, binding_set_id, version)
-    end)
-  end
-
-  @spec start_replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def start_replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 do
-    Replay.start_replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-  end
-
-  @spec start_replay_telemetry_evidence(
-          binary(),
-          binary(),
-          binary() | [binary()],
-          binary(),
-          pos_integer()
-        ) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def start_replay_telemetry_evidence(
-        organization_id,
-        mission_id,
-        evidence_ids,
-        binding_set_id,
-        version
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(binding_set_id) and is_integer(version) and version > 0 do
-    with_mission_scope(organization_id, mission_id, fn ->
-      Replay.start_replay_telemetry_evidence(mission_id, evidence_ids, binding_set_id, version)
-    end)
-  end
-
-  @spec start_replay_telemetry_scope(binary(), Scope.t(), binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def start_replay_telemetry_scope(mission_id, %Scope{} = scope, binding_set_id, version)
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 do
-    Replay.start_replay_telemetry_scope(mission_id, scope, binding_set_id, version)
-  end
-
-  @spec start_replay_telemetry_scope(binary(), binary(), Scope.t(), binary(), pos_integer()) ::
-          {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def start_replay_telemetry_scope(
-        organization_id,
-        mission_id,
-        %Scope{} = scope,
-        binding_set_id,
-        version
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(binding_set_id) and is_integer(version) and version > 0 do
-    with_mission_scope(organization_id, mission_id, fn ->
-      Replay.start_replay_telemetry_scope(mission_id, scope, binding_set_id, version)
-    end)
-  end
-
-  @spec fetch_replay_run(binary()) :: {:ok, Cadence.Replay.Run.t()} | {:error, term()}
-  def fetch_replay_run(replay_run_id) when is_binary(replay_run_id) do
-    ReplayReads.fetch_run(replay_run_id)
-  end
-
-  @spec list_replay_runs(binary(), binary(), keyword()) :: [Cadence.Replay.Run.t()]
-  def list_replay_runs(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    ReplayReads.list_runs(organization_id, mission_id, opts)
-  end
-
-  @spec replay_telemetry_samples(binary(), keyword()) :: [Cadence.Telemetry.Sample.t()]
-  def replay_telemetry_samples(replay_run_id, opts \\ [])
-      when is_binary(replay_run_id) and is_list(opts) do
-    ReplayReads.telemetry_samples(replay_run_id, opts)
-  end
-
-  @spec replay_managed_capability_records(binary(), keyword()) ::
-          [Cadence.Runtime.ManagedCapabilityRecord.t()]
-  def replay_managed_capability_records(replay_run_id, opts \\ [])
-      when is_binary(replay_run_id) and is_list(opts) do
-    ReplayReads.managed_capability_records(replay_run_id, opts)
-  end
-
-  @spec replay_managed_action_requests(binary(), keyword()) ::
-          [Cadence.Runtime.ManagedActionRequest.t()]
-  def replay_managed_action_requests(replay_run_id, opts \\ [])
-      when is_binary(replay_run_id) and is_list(opts) do
-    ReplayReads.managed_action_requests(replay_run_id, opts)
-  end
-
-  @spec replay_managed_timer_events(binary(), keyword()) ::
-          [Cadence.Runtime.ManagedTimerEvent.t()]
-  def replay_managed_timer_events(replay_run_id, opts \\ [])
-      when is_binary(replay_run_id) and is_list(opts) do
-    ReplayReads.managed_timer_events(replay_run_id, opts)
-  end
-
   @spec fetch_background_job(binary()) :: {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
   def fetch_background_job(job_id) when is_binary(job_id) do
     Jobs.fetch_job(job_id)
-  end
-
-  @spec fetch_replay_job(binary()) :: {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_replay_job(replay_run_id) when is_binary(replay_run_id) do
-    Jobs.fetch_job_for_run(:replay_telemetry_scope, replay_run_id)
   end
 
   @spec fetch_telemetry_historical_data_workflow_job(binary()) ::
@@ -1085,18 +930,6 @@ defmodule Cadence do
       attrs,
       opts
     )
-  end
-
-  @spec diff_replay_run(binary()) :: Cadence.Replay.Diff.report()
-  def diff_replay_run(replay_run_id) when is_binary(replay_run_id) do
-    ReplayDiff.diff_run(replay_run_id)
-  end
-
-  defp with_mission_scope(organization_id, mission_id, fun)
-       when is_binary(organization_id) and is_binary(mission_id) and is_function(fun, 0) do
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
-      fun.()
-    end
   end
 
   defp decode_raw_evidence_packets(%RawEvidence{protocol_family: protocol_family} = raw_evidence)
