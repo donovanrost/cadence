@@ -1323,6 +1323,12 @@ gates, request construction, and correction-stage transitions into a 427-line
 unchanged, while generic stage and group transitions route correction events
 through the same lineage-preserving boundary; production source-size pressure
 remains 6 and dependency ratchets are unchanged.
+Extracting missing-replacement detection, stale-running-job validation,
+advisory inspection events, stale-job requeueing, and authoritative requeue
+evidence into a 396-line `DataManagement.WorkflowReplacementRecovery` module
+reduced `DataManagement` from 1,628 to 1,212 lines. The typed missing/stale
+inspection and requeue APIs remain unchanged; production source-size pressure
+remains 6 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

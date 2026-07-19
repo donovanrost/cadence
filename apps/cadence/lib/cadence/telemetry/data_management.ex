@@ -15,6 +15,7 @@ defmodule Cadence.Telemetry.DataManagement do
   alias Cadence.Telemetry.DataManagement.WorkflowEvents
   alias Cadence.Telemetry.DataManagement.WorkflowJobs
   alias Cadence.Telemetry.DataManagement.WorkflowPolicy
+  alias Cadence.Telemetry.DataManagement.WorkflowReplacementRecovery
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.ObservationIdentityState
@@ -78,8 +79,6 @@ defmodule Cadence.Telemetry.DataManagement do
           results: [map()],
           errors: [map()]
         }
-
-  @stale_historical_data_workflow_job_seconds 15 * 60
 
   @spec backfill_samples([Sample.t()], workflow_attrs(), keyword()) :: :ok | {:error, term()}
   def backfill_samples(samples, attrs, opts \\ [])
@@ -417,41 +416,14 @@ defmodule Cadence.Telemetry.DataManagement do
         replacement_run_id,
         attrs,
         opts \\ []
-      )
-
-  def record_historical_data_workflow_missing_replacement_inspection(
-        request_group_id,
-        replacement_run_id,
-        attrs,
-        opts
-      )
-      when is_binary(request_group_id) and is_binary(replacement_run_id) and is_map(attrs) and
-             is_list(opts) do
-    with {:ok, organization_id} <- required_attr(attrs, :organization_id),
-         {:ok, mission_id} <- required_attr(attrs, :mission_id),
-         {:ok, source_event} <-
-           historical_data_workflow_missing_replacement_event(
-             mission_id,
-             organization_id,
-             request_group_id,
-             replacement_run_id
-           ),
-         :ok <- require_historical_data_workflow_missing_replacement_policy(source_event) do
-      record_historical_data_workflow_missing_replacement_inspection_event(
-        source_event,
-        attrs,
-        opts
-      )
-    end
+      ) do
+    WorkflowReplacementRecovery.record_missing_inspection(
+      request_group_id,
+      replacement_run_id,
+      attrs,
+      opts
+    )
   end
-
-  def record_historical_data_workflow_missing_replacement_inspection(
-        _request_group_id,
-        _replacement_run_id,
-        _attrs,
-        _opts
-      ),
-      do: {:error, {:missing_field, :request_group_id}}
 
   @spec record_historical_data_workflow_stale_replacement_inspection(
           binary(),
@@ -467,29 +439,7 @@ defmodule Cadence.Telemetry.DataManagement do
         opts \\ []
       )
       when is_binary(job_id) and is_binary(event_id) and is_map(attrs) and is_list(opts) do
-    event_opts =
-      attrs
-      |> Map.take([:organization_id, :mission_id])
-      |> Keyword.new()
-
-    with %Storage.BackfillLifecycleEvent{} = source_event <-
-           Storage.fetch_backfill_lifecycle_event(event_id, event_opts),
-         :ok <- require_historical_data_workflow_stale_replacement_event(source_event),
-         {:ok, job} <-
-           require_historical_data_workflow_stale_replacement_job(job_id, source_event),
-         :ok <- require_historical_data_workflow_stale_replacement_policy(source_event, job),
-         {:ok, inspection_event} <-
-           record_historical_data_workflow_stale_replacement_inspection_event(
-             source_event,
-             job,
-             attrs,
-             opts
-           ) do
-      {:ok, inspection_event}
-    else
-      nil -> {:error, {:historical_workflow_event_not_found, event_id}}
-      {:error, reason} -> {:error, reason}
-    end
+    WorkflowReplacementRecovery.record_stale_inspection(job_id, event_id, attrs, opts)
   end
 
   @spec requeue_historical_data_workflow_stale_replacement_job(
@@ -506,32 +456,7 @@ defmodule Cadence.Telemetry.DataManagement do
         opts \\ []
       )
       when is_binary(job_id) and is_binary(event_id) and is_map(attrs) and is_list(opts) do
-    event_opts =
-      attrs
-      |> Map.take([:organization_id, :mission_id])
-      |> Keyword.new()
-
-    with %Storage.BackfillLifecycleEvent{} = source_event <-
-           Storage.fetch_backfill_lifecycle_event(event_id, event_opts),
-         :ok <- require_historical_data_workflow_stale_replacement_event(source_event),
-         {:ok, job} <-
-           require_historical_data_workflow_stale_replacement_job(job_id, source_event),
-         :ok <- require_historical_data_workflow_stale_replacement_policy(source_event, job),
-         {:ok, requeued_job} <-
-           Jobs.requeue_running_job(job.job_id, :dashboard_stale_replacement_requeued),
-         {:ok, requeue_event} <-
-           record_historical_data_workflow_stale_replacement_requeue_event(
-             source_event,
-             job,
-             requeued_job,
-             attrs,
-             opts
-           ) do
-      {:ok, requeued_job, requeue_event}
-    else
-      nil -> {:error, {:historical_workflow_event_not_found, event_id}}
-      {:error, reason} -> {:error, reason}
-    end
+    WorkflowReplacementRecovery.requeue_stale_job(job_id, event_id, attrs, opts)
   end
 
   defp historical_data_workflow_group_failed_events(mission_id, organization_id, request_group_id) do
@@ -623,101 +548,6 @@ defmodule Cadence.Telemetry.DataManagement do
       end
     end
   end
-
-  defp historical_data_workflow_missing_replacement_event(
-         mission_id,
-         organization_id,
-         request_group_id,
-         replacement_run_id
-       ) do
-    mission_id
-    |> Storage.list_backfill_lifecycle_events(
-      organization_id: organization_id,
-      backfill_run_id: replacement_run_id,
-      limit: 1_000
-    )
-    |> Enum.filter(fn event ->
-      WorkflowEventEvidence.correction?(event) and
-        Storage.BackfillLifecycleGroup.payload_value(event, :request_group_id) ==
-          request_group_id
-    end)
-    |> Enum.sort_by(fn event ->
-      {event.occurred_at || DateTime.from_unix!(0), event.backfill_lifecycle_event_id}
-    end)
-    |> List.last()
-    |> case do
-      %Storage.BackfillLifecycleEvent{} = event ->
-        {:ok, event}
-
-      nil ->
-        {:error,
-         {:historical_workflow_missing_replacement_inspection_blocked, replacement_run_id,
-          :replacement_event_not_found}}
-    end
-  end
-
-  defp require_historical_data_workflow_missing_replacement_policy(source_event) do
-    case Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, source_event.backfill_run_id) do
-      {:error, :job_not_found} ->
-        :ok
-
-      {:ok, %Jobs.Job{} = job} ->
-        {:error,
-         {:historical_workflow_missing_replacement_inspection_blocked,
-          source_event.backfill_run_id, {:job_exists, job.status}}}
-    end
-  end
-
-  defp require_historical_data_workflow_stale_replacement_event(source_event) do
-    if WorkflowEventEvidence.correction?(source_event) do
-      :ok
-    else
-      {:error,
-       {:historical_workflow_stale_replacement_inspection_blocked,
-        source_event.backfill_lifecycle_event_id, :not_replacement_event}}
-    end
-  end
-
-  defp require_historical_data_workflow_stale_replacement_job(job_id, source_event) do
-    with {:ok, %Jobs.Job{} = job} <- Jobs.fetch_job(job_id) do
-      cond do
-        job.job_type != :telemetry_historical_data_workflow ->
-          {:error, {:unexpected_job_type, job.job_type}}
-
-        job.run_id != source_event.backfill_run_id ->
-          {:error,
-           {:historical_workflow_stale_replacement_inspection_blocked,
-            source_event.backfill_lifecycle_event_id, :job_run_mismatch}}
-
-        true ->
-          {:ok, job}
-      end
-    end
-  end
-
-  defp require_historical_data_workflow_stale_replacement_policy(source_event, %Jobs.Job{} = job) do
-    cond do
-      job.status != :running ->
-        {:error,
-         {:historical_workflow_stale_replacement_inspection_blocked,
-          source_event.backfill_lifecycle_event_id, :job_not_running}}
-
-      not stale_historical_data_workflow_job?(job) ->
-        {:error,
-         {:historical_workflow_stale_replacement_inspection_blocked,
-          source_event.backfill_lifecycle_event_id, :job_not_stale}}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp stale_historical_data_workflow_job?(%Jobs.Job{started_at: %DateTime{} = started_at}) do
-    DateTime.diff(DateTime.utc_now(), started_at, :second) >=
-      @stale_historical_data_workflow_job_seconds
-  end
-
-  defp stale_historical_data_workflow_job?(_job), do: false
 
   defp require_historical_data_workflow_retry_policy(source_event, %Jobs.Job{} = job) do
     decision =
@@ -850,45 +680,6 @@ defmodule Cadence.Telemetry.DataManagement do
     end)
   end
 
-  defp record_historical_data_workflow_stale_replacement_inspection_event(
-         source_event,
-         job,
-         attrs,
-         opts
-       ) do
-    source_event
-    |> historical_data_workflow_stale_replacement_inspection_attrs(job, attrs)
-    |> Storage.record_backfill_lifecycle_event(
-      Keyword.take(opts, [:dashboard_runtime_invalidation?, :runtime_cache])
-    )
-  end
-
-  defp record_historical_data_workflow_missing_replacement_inspection_event(
-         source_event,
-         attrs,
-         opts
-       ) do
-    source_event
-    |> historical_data_workflow_missing_replacement_inspection_attrs(attrs)
-    |> Storage.record_backfill_lifecycle_event(
-      Keyword.take(opts, [:dashboard_runtime_invalidation?, :runtime_cache])
-    )
-  end
-
-  defp record_historical_data_workflow_stale_replacement_requeue_event(
-         source_event,
-         job,
-         requeued_job,
-         attrs,
-         opts
-       ) do
-    source_event
-    |> historical_data_workflow_stale_replacement_requeue_attrs(job, requeued_job, attrs)
-    |> Storage.record_backfill_lifecycle_event(
-      Keyword.take(opts, [:dashboard_runtime_invalidation?, :runtime_cache])
-    )
-  end
-
   defp historical_data_workflow_retry_attrs(source_event, retried_job, attrs) do
     %{
       backfill_run_id: source_event.backfill_run_id,
@@ -912,213 +703,6 @@ defmodule Cadence.Telemetry.DataManagement do
     }
     |> compact_attrs()
   end
-
-  defp historical_data_workflow_stale_replacement_inspection_attrs(source_event, job, attrs) do
-    %{
-      backfill_run_id: source_event.backfill_run_id,
-      import_run_id: source_event.backfill_run_id,
-      organization_id: source_event.organization_id,
-      mission_id: source_event.mission_id,
-      realm: source_event.realm,
-      replay_run_id: source_event.replay_run_id,
-      data_source_id: source_event.data_source_id,
-      binding_id: source_event.binding_id,
-      observable_id: source_event.observable_id,
-      point_id: source_event.point_id,
-      source_from: source_event.source_from,
-      source_to: source_event.source_to,
-      receipt_from: source_event.receipt_from,
-      receipt_to: source_event.receipt_to,
-      event_type: historical_data_workflow_stale_replacement_inspection_event_type(source_event),
-      authority: :advisory,
-      reason: "dashboard_historical_workflow_stale_replacement_inspected",
-      actor_id: get_attr(attrs, :actor_id),
-      actor_kind: get_attr(attrs, :actor_kind),
-      payload:
-        historical_data_workflow_stale_replacement_payload(
-          source_event,
-          job,
-          "inspect_stale_replacement_job"
-        )
-    }
-    |> compact_attrs()
-  end
-
-  defp historical_data_workflow_missing_replacement_inspection_attrs(source_event, attrs) do
-    %{
-      backfill_run_id: source_event.backfill_run_id,
-      import_run_id: source_event.backfill_run_id,
-      organization_id: source_event.organization_id,
-      mission_id: source_event.mission_id,
-      realm: source_event.realm,
-      replay_run_id: source_event.replay_run_id,
-      data_source_id: source_event.data_source_id,
-      binding_id: source_event.binding_id,
-      observable_id: source_event.observable_id,
-      point_id: source_event.point_id,
-      source_from: source_event.source_from,
-      source_to: source_event.source_to,
-      receipt_from: source_event.receipt_from,
-      receipt_to: source_event.receipt_to,
-      event_type:
-        historical_data_workflow_missing_replacement_inspection_event_type(source_event),
-      authority: :advisory,
-      reason: "dashboard_historical_workflow_missing_replacement_inspected",
-      actor_id: get_attr(attrs, :actor_id),
-      actor_kind: get_attr(attrs, :actor_kind),
-      payload:
-        historical_data_workflow_missing_replacement_payload(
-          source_event,
-          "inspect_missing_replacement_job"
-        )
-    }
-    |> compact_attrs()
-  end
-
-  defp historical_data_workflow_stale_replacement_requeue_attrs(
-         source_event,
-         job,
-         requeued_job,
-         attrs
-       ) do
-    %{
-      backfill_run_id: source_event.backfill_run_id,
-      import_run_id: source_event.backfill_run_id,
-      organization_id: source_event.organization_id,
-      mission_id: source_event.mission_id,
-      realm: source_event.realm,
-      replay_run_id: source_event.replay_run_id,
-      data_source_id: source_event.data_source_id,
-      binding_id: source_event.binding_id,
-      observable_id: source_event.observable_id,
-      point_id: source_event.point_id,
-      source_from: source_event.source_from,
-      source_to: source_event.source_to,
-      receipt_from: source_event.receipt_from,
-      receipt_to: source_event.receipt_to,
-      event_type: historical_data_workflow_stale_replacement_requeue_event_type(source_event),
-      authority: :authoritative,
-      reason: "dashboard_historical_workflow_stale_replacement_requeued",
-      actor_id: get_attr(attrs, :actor_id),
-      actor_kind: get_attr(attrs, :actor_kind),
-      payload:
-        source_event
-        |> historical_data_workflow_stale_replacement_payload(
-          job,
-          "requeue_stale_replacement_job"
-        )
-        |> Map.merge(%{
-          "stale_replacement_requeued_job_id" => requeued_job.job_id,
-          "stale_replacement_requeued_job_status" => Atom.to_string(requeued_job.status),
-          "stale_replacement_requeued_job_attempt_count" => requeued_job.attempt_count,
-          "stale_replacement_requeued_failure_reason" =>
-            job_failure_reason_payload(requeued_job.failure_reason)
-        })
-    }
-    |> compact_attrs()
-  end
-
-  defp historical_data_workflow_stale_replacement_inspection_event_type(source_event) do
-    case WorkflowEventEvidence.workflow(source_event) do
-      :import -> :import_stale_replacement_inspected
-      "import" -> :import_stale_replacement_inspected
-      _workflow -> :backfill_stale_replacement_inspected
-    end
-  end
-
-  defp historical_data_workflow_missing_replacement_inspection_event_type(source_event) do
-    case WorkflowEventEvidence.workflow(source_event) do
-      :import -> :import_missing_replacement_inspected
-      "import" -> :import_missing_replacement_inspected
-      _workflow -> :backfill_missing_replacement_inspected
-    end
-  end
-
-  defp historical_data_workflow_stale_replacement_requeue_event_type(source_event) do
-    case WorkflowEventEvidence.workflow(source_event) do
-      :import -> :import_stale_replacement_requeued
-      "import" -> :import_stale_replacement_requeued
-      _workflow -> :backfill_stale_replacement_requeued
-    end
-  end
-
-  defp historical_data_workflow_stale_replacement_payload(source_event, job, action) do
-    source_event.payload
-    |> Map.take([
-      "request_source",
-      "request_mode",
-      "request_group_id",
-      "request_item_index",
-      "request_item_count",
-      "request_item_run_id",
-      "correction_source",
-      "correction_source_event_type",
-      "recovery_action",
-      "corrects_run_id",
-      "corrects_event_id",
-      "corrects_job_id",
-      "dashboard_context",
-      "comparison_review_origin"
-    ])
-    |> Map.merge(%{
-      "stale_replacement_action" => action,
-      "stale_replacement_source_event_id" => source_event.backfill_lifecycle_event_id,
-      "stale_replacement_source_event_type" => Atom.to_string(source_event.event_type),
-      "stale_replacement_run_id" => source_event.backfill_run_id,
-      "stale_replacement_job_id" => job.job_id,
-      "stale_replacement_job_status" => Atom.to_string(job.status),
-      "stale_replacement_job_started_at" => datetime_payload(job.started_at),
-      "stale_replacement_job_age_seconds" => job_age_seconds(job),
-      "stale_replacement_stale_after_seconds" => @stale_historical_data_workflow_job_seconds
-    })
-    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
-    |> Map.new()
-  end
-
-  defp historical_data_workflow_missing_replacement_payload(source_event, action) do
-    source_event.payload
-    |> Map.take([
-      "request_source",
-      "request_mode",
-      "request_group_id",
-      "request_item_index",
-      "request_item_count",
-      "request_item_run_id",
-      "correction_source",
-      "correction_source_event_type",
-      "recovery_action",
-      "corrects_run_id",
-      "corrects_event_id",
-      "corrects_job_id",
-      "dashboard_context",
-      "comparison_review_origin"
-    ])
-    |> Map.merge(%{
-      "missing_replacement_action" => action,
-      "missing_replacement_source_event_id" => source_event.backfill_lifecycle_event_id,
-      "missing_replacement_source_event_type" => Atom.to_string(source_event.event_type),
-      "missing_replacement_run_id" => source_event.backfill_run_id,
-      "missing_replacement_expected_job_type" => "telemetry_historical_data_workflow"
-    })
-    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
-    |> Map.new()
-  end
-
-  defp job_failure_reason_payload(nil), do: nil
-  defp job_failure_reason_payload(%{"reason" => reason}), do: job_failure_reason_payload(reason)
-  defp job_failure_reason_payload(%{reason: reason}), do: job_failure_reason_payload(reason)
-  defp job_failure_reason_payload(reason) when is_binary(reason), do: reason
-  defp job_failure_reason_payload(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp job_failure_reason_payload(reason), do: inspect(reason)
-
-  defp datetime_payload(%DateTime{} = value), do: DateTime.to_iso8601(value)
-  defp datetime_payload(_value), do: nil
-
-  defp job_age_seconds(%Jobs.Job{started_at: %DateTime{} = started_at}) do
-    DateTime.diff(DateTime.utc_now(), started_at, :second)
-  end
-
-  defp job_age_seconds(_job), do: nil
 
   defp historical_data_workflow_retry_payload(source_event, retried_job) do
     source_event.payload
