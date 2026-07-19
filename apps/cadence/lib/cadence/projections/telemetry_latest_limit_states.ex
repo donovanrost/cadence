@@ -15,13 +15,12 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   alias Cadence.Persistence.Schemas.{
     DerivedTelemetryLatestValueRow,
-    TelemetryLatestLimitStateRebuildRunRow,
     TelemetryLatestLimitStateRow,
     TelemetryLatestValueRow,
     TelemetryLimitEventRow
   }
 
-  alias Cadence.Projections.TelemetryLatestLimitStates.Run
+  alias Cadence.Projections.TelemetryLatestLimitStates.{RebuildRunRow, Run}
   alias Cadence.Repo
   alias Cadence.Telemetry.LatestProjectionOrder
 
@@ -109,12 +108,12 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   @spec fetch_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def fetch_run(rebuild_run_id) when is_binary(rebuild_run_id) do
-    case Repo.get(TelemetryLatestLimitStateRebuildRunRow, rebuild_run_id) do
+    case Repo.get(RebuildRunRow, rebuild_run_id) do
       nil ->
         {:error, :limit_state_rebuild_run_not_found}
 
-      %TelemetryLatestLimitStateRebuildRunRow{} = run_row ->
-        {:ok, TelemetryLatestLimitStateRebuildRunRow.to_domain(run_row)}
+      %RebuildRunRow{} = run_row ->
+        {:ok, RebuildRunRow.to_domain(run_row)}
     end
   end
 
@@ -251,9 +250,9 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   end
 
   defp insert_run(%Run{} = run) do
-    case Repo.insert(TelemetryLatestLimitStateRebuildRunRow.changeset(run)) do
-      {:ok, %TelemetryLatestLimitStateRebuildRunRow{} = run_row} ->
-        {:ok, TelemetryLatestLimitStateRebuildRunRow.to_domain(run_row)}
+    case Repo.insert(RebuildRunRow.changeset(run)) do
+      {:ok, %RebuildRunRow{} = run_row} ->
+        {:ok, RebuildRunRow.to_domain(run_row)}
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}
@@ -264,14 +263,14 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   end
 
   defp update_run(%Run{} = run) do
-    case Repo.get(TelemetryLatestLimitStateRebuildRunRow, run.rebuild_run_id) do
+    case Repo.get(RebuildRunRow, run.rebuild_run_id) do
       nil ->
         {:error, :limit_state_rebuild_run_not_found}
 
-      %TelemetryLatestLimitStateRebuildRunRow{} = run_row ->
-        case Repo.update(TelemetryLatestLimitStateRebuildRunRow.changeset(run_row, run)) do
-          {:ok, %TelemetryLatestLimitStateRebuildRunRow{} = updated_row} ->
-            {:ok, TelemetryLatestLimitStateRebuildRunRow.to_domain(updated_row)}
+      %RebuildRunRow{} = run_row ->
+        case Repo.update(RebuildRunRow.changeset(run_row, run)) do
+          {:ok, %RebuildRunRow{} = updated_row} ->
+            {:ok, RebuildRunRow.to_domain(updated_row)}
 
           {:error, %Changeset{} = changeset} ->
             {:error, changeset}

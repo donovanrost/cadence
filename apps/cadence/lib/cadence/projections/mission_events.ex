@@ -20,13 +20,12 @@ defmodule Cadence.Projections.MissionEvents do
     ContactActionRow,
     DownlinkDiagnosticRow,
     ManagedActionRequestRow,
-    MissionEventRebuildRunRow,
     MissionEventRow,
     OperationalEventRow,
     TelemetryLimitEventRow
   }
 
-  alias Cadence.Projections.MissionEvents.Run
+  alias Cadence.Projections.MissionEvents.{RebuildRunRow, Run}
   alias Cadence.Repo
   alias Cadence.Runtime.ManagedActionRequest
 
@@ -350,12 +349,12 @@ defmodule Cadence.Projections.MissionEvents do
 
   @spec fetch_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def fetch_run(rebuild_run_id) when is_binary(rebuild_run_id) do
-    case Repo.get(MissionEventRebuildRunRow, rebuild_run_id) do
+    case Repo.get(RebuildRunRow, rebuild_run_id) do
       nil ->
         {:error, :mission_event_rebuild_run_not_found}
 
-      %MissionEventRebuildRunRow{} = row ->
-        {:ok, MissionEventRebuildRunRow.to_domain(row)}
+      %RebuildRunRow{} = row ->
+        {:ok, RebuildRunRow.to_domain(row)}
     end
   end
 
@@ -601,9 +600,9 @@ defmodule Cadence.Projections.MissionEvents do
     do: {:downlink_selection_changed, "Downlink Selection Changed"}
 
   defp insert_run(%Run{} = run) do
-    case Repo.insert(MissionEventRebuildRunRow.changeset(run)) do
-      {:ok, %MissionEventRebuildRunRow{} = run_row} ->
-        {:ok, MissionEventRebuildRunRow.to_domain(run_row)}
+    case Repo.insert(RebuildRunRow.changeset(run)) do
+      {:ok, %RebuildRunRow{} = run_row} ->
+        {:ok, RebuildRunRow.to_domain(run_row)}
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}
@@ -614,14 +613,14 @@ defmodule Cadence.Projections.MissionEvents do
   end
 
   defp update_run(%Run{} = run) do
-    case Repo.get(MissionEventRebuildRunRow, run.rebuild_run_id) do
+    case Repo.get(RebuildRunRow, run.rebuild_run_id) do
       nil ->
         {:error, :mission_event_rebuild_run_not_found}
 
-      %MissionEventRebuildRunRow{} = run_row ->
-        case Repo.update(MissionEventRebuildRunRow.changeset(run_row, run)) do
-          {:ok, %MissionEventRebuildRunRow{} = updated_row} ->
-            {:ok, MissionEventRebuildRunRow.to_domain(updated_row)}
+      %RebuildRunRow{} = run_row ->
+        case Repo.update(RebuildRunRow.changeset(run_row, run)) do
+          {:ok, %RebuildRunRow{} = updated_row} ->
+            {:ok, RebuildRunRow.to_domain(updated_row)}
 
           {:error, %Changeset{} = changeset} ->
             {:error, changeset}

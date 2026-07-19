@@ -95,6 +95,25 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects projection rows through the projections context" do
+    graph = %{
+      "lib/cadence/dashboards/source.ex" => %{
+        "lib/cadence/projections/telemetry_latest_values/rebuild_run_row.ex" => "export"
+      },
+      "lib/cadence/projections/telemetry_latest_values.ex" => %{
+        "lib/cadence/projections/telemetry_latest_values/rebuild_run_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/dashboards/source.ex",
+               sink: "lib/cadence/projections/telemetry_latest_values/rebuild_run_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "compares current edges with the checked-in debt baseline" do
     findings =
       DependencyBoundary.findings(%{

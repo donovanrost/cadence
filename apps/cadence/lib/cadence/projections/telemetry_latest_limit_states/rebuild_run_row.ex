@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.TelemetryLatestLimitStateRebuildRunRow do
+defmodule Cadence.Projections.TelemetryLatestLimitStates.RebuildRunRow do
   @moduledoc false
 
   use Ecto.Schema

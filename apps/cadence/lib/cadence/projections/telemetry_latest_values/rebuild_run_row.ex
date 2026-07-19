@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRebuildRunRow do
+defmodule Cadence.Projections.TelemetryLatestValues.RebuildRunRow do
   @moduledoc false
 
   use Ecto.Schema
@@ -7,12 +7,12 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRebuildRunRow d
 
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.OrganizationScope
-  alias Cadence.Projections.DerivedTelemetryLatestValues.Run
+  alias Cadence.Projections.TelemetryLatestValues.Run
 
   @primary_key {:rebuild_run_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 
-  schema "derived_telemetry_latest_value_rebuild_runs" do
+  schema "telemetry_latest_value_rebuild_runs" do
     field(:mission_id, :string)
     field(:organization_id, :string)
     field(:status, :string)
@@ -28,7 +28,9 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRebuildRunRow d
   @required_fields [:rebuild_run_id, :mission_id, :status, :rebuilt_value_count, :started_at]
 
   @spec changeset(Run.t()) :: Ecto.Changeset.t()
-  def changeset(%Run{} = run), do: changeset(%__MODULE__{}, run)
+  def changeset(%Run{} = run) do
+    changeset(%__MODULE__{}, run)
+  end
 
   @spec changeset(struct(), Run.t()) :: Ecto.Changeset.t()
   def changeset(%__MODULE__{} = rebuild_run_row, %Run{} = run) do

@@ -12,12 +12,11 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
   alias Cadence.Jobs
 
   alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryLatestValueRebuildRunRow,
     DerivedTelemetryLatestValueRow,
     DerivedTelemetrySampleRow
   }
 
-  alias Cadence.Projections.DerivedTelemetryLatestValues.Run
+  alias Cadence.Projections.DerivedTelemetryLatestValues.{RebuildRunRow, Run}
   alias Cadence.Repo
   alias Cadence.Telemetry.LatestProjectionOrder
 
@@ -62,12 +61,12 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
 
   @spec fetch_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def fetch_run(rebuild_run_id) when is_binary(rebuild_run_id) do
-    case Repo.get(DerivedTelemetryLatestValueRebuildRunRow, rebuild_run_id) do
+    case Repo.get(RebuildRunRow, rebuild_run_id) do
       nil ->
         {:error, :derived_rebuild_run_not_found}
 
-      %DerivedTelemetryLatestValueRebuildRunRow{} = rebuild_run_row ->
-        {:ok, DerivedTelemetryLatestValueRebuildRunRow.to_domain(rebuild_run_row)}
+      %RebuildRunRow{} = rebuild_run_row ->
+        {:ok, RebuildRunRow.to_domain(rebuild_run_row)}
     end
   end
 
@@ -203,9 +202,9 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
   end
 
   defp insert_run(%Run{} = run) do
-    case Repo.insert(DerivedTelemetryLatestValueRebuildRunRow.changeset(run)) do
-      {:ok, %DerivedTelemetryLatestValueRebuildRunRow{} = rebuild_run_row} ->
-        {:ok, DerivedTelemetryLatestValueRebuildRunRow.to_domain(rebuild_run_row)}
+    case Repo.insert(RebuildRunRow.changeset(run)) do
+      {:ok, %RebuildRunRow{} = rebuild_run_row} ->
+        {:ok, RebuildRunRow.to_domain(rebuild_run_row)}
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}
@@ -216,14 +215,14 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
   end
 
   defp update_run(%Run{} = run) do
-    case Repo.get(DerivedTelemetryLatestValueRebuildRunRow, run.rebuild_run_id) do
+    case Repo.get(RebuildRunRow, run.rebuild_run_id) do
       nil ->
         {:error, :derived_rebuild_run_not_found}
 
-      %DerivedTelemetryLatestValueRebuildRunRow{} = rebuild_run_row ->
-        case Repo.update(DerivedTelemetryLatestValueRebuildRunRow.changeset(rebuild_run_row, run)) do
-          {:ok, %DerivedTelemetryLatestValueRebuildRunRow{} = updated_row} ->
-            {:ok, DerivedTelemetryLatestValueRebuildRunRow.to_domain(updated_row)}
+      %RebuildRunRow{} = rebuild_run_row ->
+        case Repo.update(RebuildRunRow.changeset(rebuild_run_row, run)) do
+          {:ok, %RebuildRunRow{} = updated_row} ->
+            {:ok, RebuildRunRow.to_domain(updated_row)}
 
           {:error, %Changeset{} = changeset} ->
             {:error, changeset}
