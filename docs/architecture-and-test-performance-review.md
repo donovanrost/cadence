@@ -1393,6 +1393,13 @@ request/release verification rollups into a 325-line
 lines. The context-owned command rows make this a same-context persistence
 boundary, while transport evidence lookup remains in the facade; production
 source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting command-stage and staged-item CRUD, assignment validation, submission
+selection, request construction, and the batch submission transaction into a
+457-line `Commanding.StageStore` module reduced `Commanding` from 1,765 to
+1,426 lines. The public stage, item, and submission APIs remain unchanged, and
+the context-owned command rows keep the store within the existing dependency
+baseline; production source-size pressure remains 5 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
