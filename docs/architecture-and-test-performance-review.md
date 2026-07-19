@@ -831,6 +831,10 @@ Moving comparison-review, health-snapshot, and publish-readiness lifecycle
 audit cases out of the 1,871-line document-store test reduced test-file
 pressure to 14; the document and lifecycle files are now 1,159 and 574 lines,
 with 164 lines of shared fixtures.
+Moving latest-value and archive-bound cases out of the 1,890-line telemetry
+source test reduced test-file pressure to 13; the source-family and focused
+latest-value files are now 1,461 and 268 lines, backed by 188 lines of shared
+request, sample, and binding fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
