@@ -827,6 +827,10 @@ Moving provider, mission, routing, reconciliation, and event-processing helpers
 out of the 1,644-line simulator contact-scheduling integration test reduced
 test-file pressure to 15; the scenario file is now 912 lines and its shared
 scheduling fixture module is 759 lines.
+Moving comparison-review, health-snapshot, and publish-readiness lifecycle
+audit cases out of the 1,871-line document-store test reduced test-file
+pressure to 14; the document and lifecycle files are now 1,159 and 574 lines,
+with 164 lines of shared fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
