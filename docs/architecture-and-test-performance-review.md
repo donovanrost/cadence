@@ -1341,6 +1341,12 @@ compound criteria matching into a 327-line `Commanding.VerifierEvaluation`
 module reduced `Commanding` from 3,436 to 3,071 lines. Existing Commanding
 evaluation APIs and persistence orchestration remain unchanged; production
 source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting transport action-request and capability-record verifier signal
+normalization, phase inference, command identity, and JSON document unwrapping
+into a 147-line `Commanding.VerifierTransportSignals` module reduced
+`Commanding` from 3,071 to 2,922 lines. Existing transport-verifier APIs,
+evidence shapes, and persistence orchestration remain unchanged; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
