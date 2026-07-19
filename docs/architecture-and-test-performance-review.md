@@ -1801,6 +1801,16 @@ sampling and product mismatches, and operational-observable source-backing
 products, while the existing registry and evidence suites preserve facade
 behavior. No route or authentication placement is involved; production
 source-size pressure remains 2 and dependency ratchets are unchanged.
+Extracting effective-binding segment fact aggregation into the 202-line
+`Cadence.Dashboards.SourceRegistry.FactsAggregation` reduced
+`SourceRegistry` from 2,767 to 2,579 lines. The registry continues to collect
+facts through resolved adapters and passes its existing binding-segment
+metadata builder into the pure aggregation boundary. Direct tests cover
+watermark interval and confidence precedence, health severity, per-segment
+health and capability posture, and common revision/cursor behavior; existing
+registry and evidence suites preserve the facade contract. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
