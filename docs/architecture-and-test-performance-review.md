@@ -795,6 +795,10 @@ Extracting dedicated TSDB lifecycle transitions, active source probing,
 credential resolution, health recording, and capability materialization from
 the 1,683-line dashboard data-source context reduced the count to 14 while
 keeping the public persistence API and durable writes on the context facade.
+Extracting command-workflow parameter assembly and shared typed-value parsing
+from the 1,971-line control-plane parameter module reduced the count to 13
+while preserving `ControlPlaneParams` as the controller-facing facade for all
+parameter families.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
