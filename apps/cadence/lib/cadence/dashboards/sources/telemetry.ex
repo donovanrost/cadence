@@ -13,7 +13,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     DataContext,
     DataLinks,
     DataSource,
-    Field,
     Frame,
     PlannedSourceRequest,
     ResolveWarning,
@@ -27,6 +26,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     TelemetryActions
   }
 
+  alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext}
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
@@ -232,12 +232,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   defp metadata_value(_metadata, _key), do: nil
 
-  defp first_metadata_value(metadata, keys) when is_map(metadata) and is_list(keys) do
-    Enum.find_value(keys, &metadata_value(metadata, &1))
-  end
-
-  defp first_metadata_value(_metadata, _keys), do: nil
-
   defp resolve_frames(
          %PlannedSourceRequest{} = request,
          source_binding,
@@ -260,13 +254,13 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
             sample = latest_fun.(organization_id, mission_id, observable_id, latest_opts)
 
             {
-              latest_frame(
+              FrameBuilder.latest(
                 request,
                 source_binding,
                 observable_id,
                 sample,
                 request_warnings ++ time_warnings,
-                source_filter_context(latest_opts)
+                FrameContext.source_filter_context(latest_opts)
               ),
               List.wrap(sample)
             }
@@ -468,14 +462,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
           entry =
             {
-              history_frame(
+              FrameBuilder.history(
                 request,
                 source_binding,
                 observable_id,
                 samples,
                 warnings ++ history_warnings,
                 diagnostics,
-                source_filter_context(history_opts)
+                FrameContext.source_filter_context(history_opts)
               ),
               samples,
               history_warnings
@@ -548,14 +542,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          opts
        ) do
     frame =
-      decimated_frame(
+      FrameBuilder.decimated(
         request,
         source_binding,
         observable_id,
         buckets,
         warnings,
         diagnostics,
-        source_filter_context(opts)
+        FrameContext.source_filter_context(opts)
       )
 
     {:ok, frame}
@@ -898,7 +892,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp data_view_warnings(%PlannedSourceRequest{} = request) do
-    case requested_data_view(request) do
+    case FrameContext.data_view(request) do
       :canonical ->
         []
 
@@ -992,26 +986,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
     |> SelectionPolicy.query_opts()
-  end
-
-  defp requested_data_view(%PlannedSourceRequest{} = request) do
-    view =
-      DataContext.source_value(request.data_context, request.logical_source, :view) ||
-        first_context_value(request.data_context, [
-          :selection_view,
-          :view,
-          :data_view,
-          :data_management_view
-        ])
-
-    SelectionPolicy.view(selection_view: view)
-  end
-
-  defp analysis_basis(%PlannedSourceRequest{} = request) do
-    case requested_data_view(request) do
-      :recomputed -> :recomputed_analysis
-      _observed_view -> :observed_fact
-    end
   end
 
   defp history_opts(%PlannedSourceRequest{} = request, source_binding, source_opts) do
@@ -1272,375 +1246,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     not is_nil(to_time) and requested_axis in [nil, :receipt_time]
   end
 
-  defp latest_frame(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         sample,
-         warnings,
-         source_filter_context
-       ) do
-    value_type = value_type(request)
-    samples = List.wrap(sample)
-    values = Enum.map(samples, &sample_value(&1, value_type))
-    times = Enum.map(samples, &sample_time/1)
-    time_axis = latest_time_axis(sample)
-    evidence = telemetry_evidence_refs(source_binding, samples)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :telemetry,
-      shape: :scalar,
-      time_axis: time_axis,
-      scope: request.scope_context,
-      overlays: %{requested: request.overlays || []},
-      fields: [
-        %Field{
-          name: "time",
-          kind: :time,
-          values: times,
-          metadata: %{axis: time_axis}
-        },
-        %Field{
-          name: observable_id,
-          kind: field_kind(values),
-          values: values,
-          metadata: field_metadata(request, source_binding, observable_id, value_type, samples)
-        }
-      ],
-      meta:
-        %{
-          source_request_id: request.request_id,
-          observable_id: observable_id,
-          point_id: observable_id,
-          logical_source: :telemetry,
-          source_binding_id: source_binding_id(source_binding),
-          dataset: dataset(source_binding),
-          data_view: requested_data_view(request),
-          analysis_basis: analysis_basis(request),
-          sampling: :latest,
-          value_type: value_type,
-          latest?: true,
-          realm: realm(request, source_binding),
-          data_source_id: data_source_id(request, source_binding),
-          replay_run_id: replay_run_id(request),
-          returned_points: length(samples),
-          truncated?: false,
-          evidence: evidence,
-          links:
-            DataLinks.telemetry_links(request, observable_id, samples,
-              source: :frame,
-              source_binding: source_binding
-            ),
-          actions:
-            telemetry_explore_actions(request, source_binding, observable_id, samples, :frame),
-          warning_codes: Enum.map(warnings, & &1.code)
-        }
-        |> Map.merge(source_filter_context)
-    }
-  end
-
-  defp history_frame(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         samples,
-         warnings,
-         diagnostics,
-         source_filter_context
-       ) do
-    value_type = value_type(request)
-    values = Enum.map(samples, &sample_value(&1, value_type))
-    time_axis = bounded_history_frame_axis(request, source_filter_context)
-    times = Enum.map(samples, &sample_time(&1, time_axis))
-    evidence = telemetry_evidence_refs(source_binding, samples)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :telemetry,
-      shape: :wide,
-      time_axis: time_axis,
-      scope: request.scope_context,
-      overlays: %{requested: request.overlays || []},
-      fields: [
-        %Field{
-          name: "time",
-          kind: :time,
-          values: times,
-          metadata: %{axis: time_axis}
-        },
-        %Field{
-          name: observable_id,
-          kind: field_kind(values),
-          values: values,
-          metadata: field_metadata(request, source_binding, observable_id, value_type, samples)
-        }
-      ],
-      meta:
-        %{
-          source_request_id: request.request_id,
-          observable_id: observable_id,
-          point_id: observable_id,
-          logical_source: :telemetry,
-          source_binding_id: source_binding_id(source_binding),
-          dataset: dataset(source_binding),
-          data_view: requested_data_view(request),
-          analysis_basis: analysis_basis(request),
-          sampling: sampling_mode(request),
-          value_type: value_type,
-          realm: realm(request, source_binding),
-          data_source_id: data_source_id(request, source_binding),
-          replay_run_id: replay_run_id(request),
-          returned_points: length(samples),
-          truncated?: length(samples) >= raw_point_limit(request),
-          evidence: evidence,
-          links:
-            DataLinks.telemetry_links(request, observable_id, samples,
-              source: :frame,
-              source_binding: source_binding
-            ),
-          actions:
-            telemetry_explore_actions(request, source_binding, observable_id, samples, :frame),
-          history_diagnostics: diagnostics,
-          warning_codes: Enum.map(warnings, & &1.code)
-        }
-        |> Map.merge(source_filter_context)
-    }
-  end
-
-  defp decimated_frame(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         buckets,
-         warnings,
-         diagnostics,
-         source_filter_context
-       ) do
-    value_type = value_type(request)
-    evidence = source_binding_interval_evidence_refs(source_binding)
-
-    field_metadata =
-      decimated_field_metadata(request, source_binding, observable_id, value_type, buckets)
-
-    warning_codes = Enum.map(warnings, & &1.code)
-    time_axis = bounded_history_frame_axis(request, source_filter_context)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :telemetry,
-      shape: :wide,
-      time_axis: time_axis,
-      scope: request.scope_context,
-      overlays: %{requested: request.overlays || []},
-      fields: [
-        %Field{
-          name: "bucket_start",
-          kind: :time,
-          values: Enum.map(buckets, &bucket_value(&1, :bucket_start)),
-          metadata: %{axis: time_axis}
-        },
-        %Field{
-          name: "bucket_end",
-          kind: :time,
-          values: Enum.map(buckets, &bucket_value(&1, :bucket_end)),
-          metadata: %{axis: time_axis}
-        },
-        %Field{
-          name: "#{observable_id}_min",
-          kind: :number,
-          values: Enum.map(buckets, &bucket_value(&1, :min)),
-          metadata: field_metadata
-        },
-        %Field{
-          name: "#{observable_id}_max",
-          kind: :number,
-          values: Enum.map(buckets, &bucket_value(&1, :max)),
-          metadata: field_metadata
-        },
-        %Field{
-          name: "#{observable_id}_value",
-          kind: :number,
-          values: Enum.map(buckets, &bucket_representative_value/1),
-          metadata: field_metadata
-        },
-        %Field{
-          name: "#{observable_id}_sample_count",
-          kind: :number,
-          values: Enum.map(buckets, &bucket_value(&1, :sample_count)),
-          metadata: field_metadata
-        }
-      ],
-      meta:
-        %{
-          source_request_id: request.request_id,
-          observable_id: observable_id,
-          point_id: observable_id,
-          logical_source: :telemetry,
-          source_binding_id: source_binding_id(source_binding),
-          dataset: dataset(source_binding),
-          data_view: requested_data_view(request),
-          analysis_basis: analysis_basis(request),
-          sampling: :decimated_envelope,
-          decimation: :native_min_max_envelope,
-          canonical_mode: :physical,
-          aggregate_semantics: :physical_as_recorded,
-          bucket_width_ms: bucket_width_ms(request),
-          target_points: target_points(request),
-          value_type: value_type,
-          realm: realm(request, source_binding),
-          data_source_id: data_source_id(request, source_binding),
-          replay_run_id: replay_run_id(request),
-          returned_points: length(buckets),
-          truncated?: false,
-          evidence: evidence,
-          links:
-            DataLinks.telemetry_links(request, observable_id, [],
-              source: :frame,
-              source_binding: source_binding
-            ),
-          actions: telemetry_explore_actions(request, source_binding, observable_id, [], :frame),
-          decimated_diagnostics: diagnostics,
-          warning_codes: warning_codes
-        }
-        |> Map.merge(source_filter_context)
-    }
-  end
-
-  defp source_filter_context(opts) when is_list(opts) do
-    %{}
-    |> maybe_put_context(:time_axis, Keyword.get(opts, :time_axis))
-    |> maybe_put_context(
-      :source_endpoint_ids,
-      opts
-      |> Keyword.get(:source_endpoint_ids)
-      |> normalize_source_endpoint_ids()
-    )
-  end
-
-  defp source_filter_context(_opts), do: %{}
-
-  defp field_metadata(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         value_type,
-         samples
-       ) do
-    %{
-      observable_id: observable_id,
-      point_id: observable_id,
-      data_view: requested_data_view(request),
-      analysis_basis: analysis_basis(request),
-      value_type: value_type,
-      unit: sample_unit(samples),
-      quality_states: samples |> Enum.map(& &1.quality_state) |> Enum.uniq(),
-      sample_ids: Enum.map(samples, & &1.sample_id),
-      evidence_ids: samples |> Enum.map(& &1.evidence_id) |> Enum.reject(&is_nil/1),
-      evidence: telemetry_evidence_refs(source_binding, samples),
-      links:
-        DataLinks.telemetry_links(request, observable_id, samples,
-          source: :field,
-          source_binding: source_binding
-        ),
-      actions: telemetry_explore_actions(request, source_binding, observable_id, samples, :field)
-    }
-  end
-
-  defp telemetry_evidence_refs(source_binding, samples) do
-    (DataLinks.telemetry_sample_evidence_refs(samples) ++
-       source_binding_interval_evidence_refs(source_binding))
-    |> Enum.uniq_by(&evidence_ref_identity/1)
-  end
-
-  defp source_binding_interval_evidence_refs(%{binding_interval: interval})
-       when not is_nil(interval) do
-    DataLinks.source_binding_interval_evidence_refs([interval], source: :telemetry)
-  end
-
-  defp source_binding_interval_evidence_refs(_source_binding), do: []
-
-  defp decimated_field_metadata(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         value_type,
-         buckets
-       ) do
-    %{
-      observable_id: observable_id,
-      point_id: observable_id,
-      data_view: requested_data_view(request),
-      analysis_basis: analysis_basis(request),
-      value_type: value_type,
-      unit: bucket_unit(buckets),
-      decimated?: true,
-      decimation: :native_min_max_envelope,
-      canonical_mode: :physical,
-      aggregate_semantics: :physical_as_recorded,
-      quality_states:
-        buckets
-        |> Enum.map(&bucket_value(&1, :worst_quality_state))
-        |> Enum.reject(&is_nil/1)
-        |> Enum.uniq(),
-      validity_states:
-        buckets
-        |> Enum.map(&bucket_value(&1, :worst_validity_state))
-        |> Enum.reject(&is_nil/1)
-        |> Enum.uniq(),
-      evidence: source_binding_interval_evidence_refs(source_binding),
-      links:
-        DataLinks.telemetry_links(request, observable_id, [],
-          source: :field,
-          source_binding: source_binding
-        ),
-      actions: telemetry_explore_actions(request, source_binding, observable_id, [], :field)
-    }
-  end
-
-  defp sample_unit(samples) when is_list(samples) do
-    Enum.find_value(samples, fn sample ->
-      sample
-      |> Map.get(:provenance, %{})
-      |> first_metadata_value([:unit, :engineering_unit, :value_unit])
-    end)
-  end
-
-  defp sample_unit(_samples), do: nil
-
-  defp bucket_unit(buckets) when is_list(buckets) do
-    Enum.find_value(buckets, fn bucket ->
-      first_metadata_value(bucket, [:unit, :engineering_unit, :value_unit])
-    end)
-  end
-
-  defp bucket_unit(_buckets), do: nil
-
-  defp telemetry_explore_actions(request, source_binding, observable_id, samples, source) do
-    telemetry_actions =
-      TelemetryActions.explore_actions(request, observable_id, samples,
-        source: source,
-        source_binding: source_binding,
-        action_id: "telemetry-explore:#{request.request_id}:#{observable_id}:#{source}"
-      )
-
-    source_inventory_action =
-      SourceActions.source_inventory_action(
-        %{
-          logical_source: :telemetry,
-          realm: realm(request, source_binding),
-          data_source_id: data_source_id(request, source_binding),
-          source_binding_id: source_binding_id(source_binding),
-          dataset: dataset(source_binding)
-        },
-        source: source,
-        inventory_action_id: "source-inventory:#{request.request_id}:#{observable_id}:#{source}"
-      )
-
-    [source_inventory_action | telemetry_actions]
-    |> Enum.reject(&is_nil/1)
-  end
-
   defp resolve_revision_state(
          frames_with_samples,
          %PlannedSourceRequest{} = request,
@@ -1684,9 +1289,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     HistoricalWorkflows.annotate(frames, mission_id, query_opts, opts)
   end
 
-  defp evidence_ref_identity(%{kind: kind, id: id}), do: {kind, id}
-  defp evidence_ref_identity(ref), do: ref
-
   defp identity_state_opts(
          %PlannedSourceRequest{} = request,
          source_binding,
@@ -1706,26 +1308,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   defp warning_key(%ResolveWarning{} = warning) do
     {warning.code, warning.scope, warning.frame_id, warning.field_name}
-  end
-
-  defp latest_time_axis(%Sample{generation_time: %DateTime{}}), do: :generation_time
-  defp latest_time_axis(_sample), do: :receipt_time
-
-  defp sample_time(%Sample{generation_time: %DateTime{} = generation_time}), do: generation_time
-  defp sample_time(%Sample{receipt_time: receipt_time}), do: receipt_time
-
-  defp sample_time(%Sample{receipt_time: %DateTime{} = receipt_time}, :receipt_time),
-    do: receipt_time
-
-  defp sample_time(%Sample{} = sample, :generation_time), do: sample_time(sample)
-  defp sample_time(%Sample{} = sample, _axis), do: sample_time(sample)
-
-  defp bounded_history_frame_axis(%PlannedSourceRequest{} = request, source_filter_context) do
-    case context_value(source_filter_context, :time_axis) || time_axis(request) do
-      :generation_time -> :generation_time
-      "generation_time" -> :generation_time
-      _axis -> :receipt_time
-    end
   end
 
   defp watermark(
@@ -2107,13 +1689,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       not is_nil(first_context_value(time_context, [:to, :end, :end_time]))
   end
 
-  defp value_type(%PlannedSourceRequest{value_type: value_type}) do
-    case normalize_atom(value_type) do
-      :raw -> :raw
-      _other -> :engineering
-    end
-  end
-
   defp raw_point_limit(%PlannedSourceRequest{sampling: sampling}) do
     case context_value(sampling, :max_raw_points) || context_value(sampling, :limit) do
       limit when is_integer(limit) and limit > 0 -> min(limit, @default_limit)
@@ -2139,35 +1714,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     ScopeContext.scope_id(scope_context, :spacecraft)
   end
 
-  defp sample_value(%Sample{} = sample, :raw), do: sample.raw_value
-  defp sample_value(%Sample{} = sample, :engineering), do: sample.engineering_value
-
-  defp bucket_representative_value(bucket) do
-    bucket_value(bucket, :value) || bucket_value(bucket, :mean)
-  end
-
-  defp bucket_value(bucket, :bucket_start) do
-    first_context_value(bucket, [:bucket_start, :start, :from])
-  end
-
-  defp bucket_value(bucket, :bucket_end) do
-    first_context_value(bucket, [:bucket_end, :end, :to])
-  end
-
-  defp bucket_value(bucket, key), do: context_value(bucket, key)
-
-  defp field_kind(values) do
-    values
-    |> Enum.reject(&is_nil/1)
-    |> List.first()
-    |> value_kind()
-  end
-
-  defp value_kind(value) when is_number(value), do: :number
-  defp value_kind(value) when is_boolean(value), do: :boolean
-  defp value_kind(value) when is_atom(value), do: :enum
-  defp value_kind(_value), do: :string
-
   defp first_context_value(context, keys) do
     keys
     |> Enum.find_value(&context_value(context, &1))
@@ -2183,9 +1729,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp context_value(_context, _key), do: nil
-
-  defp maybe_put_context(context, _key, value) when value in [nil, "", []], do: context
-  defp maybe_put_context(context, key, value), do: Map.put(context, key, value)
 
   defp native_decimation?(%{data_source: %{capabilities: capabilities}}) do
     capability_value(capabilities, :native_decimation?) == true

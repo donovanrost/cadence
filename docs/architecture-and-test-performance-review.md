@@ -928,6 +928,11 @@ warnings, and cache dependency aggregation reduced the telemetry adapter to
 2,215 lines. The 230-line revision-state module receives tenant- and
 binding-scoped lookup options from the adapter and owns the full
 visualization-facing revision policy.
+Moving latest, history, and decimated frame shapes, field metadata, evidence,
+links, actions, and request-facing presentation context out of the telemetry
+source reduced the adapter to 1,758 lines. The 447-line frame builder and
+149-line frame-context module are both below the production threshold; source
+pressure remains 11 until another adapter responsibility is separated.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
