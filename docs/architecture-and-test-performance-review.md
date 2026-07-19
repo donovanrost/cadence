@@ -1018,6 +1018,12 @@ from 7,892 to 7,167 lines. The new 279-line revision-policy module preserves
 the existing product-specific fingerprint keys while the adapter retains its
 provider readers and row normalization; production source-size pressure remains
 8.
+Moving source-backed observable catalogs, sampling-to-product selection,
+capability contracts, and unsupported-request warnings into a 559-line product
+policy reduced the operational-observables source again to 6,640 lines. Its
+existing public backing-contract API remains as delegates and resolution now
+receives an already-selected product; production source-size pressure remains
+8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
