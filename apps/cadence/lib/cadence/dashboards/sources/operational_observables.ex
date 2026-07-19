@@ -8,7 +8,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   alias Cadence.Dashboards.{
     DataContext,
-    Field,
     Frame,
     OperationalObservable,
     PlannedSourceRequest,
@@ -23,12 +22,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   alias Cadence.Commanding
   alias Cadence.Comms.TransportStore
   alias Cadence.Contacts
-  alias Cadence.Limits.Event
   alias Cadence.OperationalEvents
-  alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.SourceEndpoints
-  alias Cadence.Spacecraft
-  alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.RuntimeHealth
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
@@ -37,6 +32,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     CommandQueueDepth,
     ConnectionFrames,
     ConnectionRows,
+    ConstellationHealth,
     ContactPhase,
     IngressProcessingLatencyRows,
     LinkRfMetricRows,
@@ -50,7 +46,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     TransportExecutionState
   }
 
-  @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
   @connection_observable_ids [
     "comms.transport.connection_state",
     "ground.station.connection_state"
@@ -105,15 +100,12 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   @type contact_fun :: (binary(), binary(), keyword() -> [struct()])
   @type connection_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
-  @type latest_states_fun :: (binary() | nil, binary(), keyword() -> [Event.t()])
   @type transport_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
   @type transport_execution_intervals_fun :: (binary(), binary(), keyword() ->
                                                 [
                                                   map() | struct()
                                                 ])
   @type runtime_metric_snapshots_fun :: (binary(), binary(), keyword() -> [map() | struct()])
-  @type spacecraft_fun :: (binary() | nil, binary(), keyword() -> [Spacecraft.t()])
-
   @spec backed_observable_ids() :: [binary()]
   defdelegate backed_observable_ids(), to: ProductPolicy
 
@@ -263,16 +255,15 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          mission_id,
          opts
        ) do
-    latest_states_fun = Keyword.get(opts, :latest_states_fun, &default_latest_states/3)
-    spacecraft_fun = Keyword.get(opts, :spacecraft_fun, &default_spacecraft/3)
-
-    spacecraft =
-      spacecraft_fun.(organization_id, mission_id, adapter_opts(request, source_binding))
-
-    point_states =
-      latest_states_fun.(organization_id, mission_id, adapter_opts(request, source_binding))
-
-    frame = constellation_health_frame(request, source_binding, spacecraft, point_states)
+    frame =
+      ConstellationHealth.resolve(
+        request,
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
+      )
 
     source_result(request, source_binding, :constellation_health, [frame])
   end
@@ -1751,43 +1742,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
-  defp constellation_health_frame(request, source_binding, spacecraft, point_states) do
-    rollup = rollup(spacecraft, point_states)
-
-    %Frame{
-      frame_id: "#{request.request_id}:constellation_health",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "spacecraft_id",
-          kind: :string,
-          values: Enum.map(rollup.spacecraft, & &1.spacecraft_id)
-        },
-        %Field{
-          name: "worst_state",
-          kind: :enum,
-          values: Enum.map(rollup.spacecraft, & &1.worst_state)
-        }
-      ],
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :constellation_health,
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        counts: rollup.counts,
-        returned_points: length(rollup.spacecraft),
-        warning_codes: []
-      }
-    }
-  end
-
   defp frame_source_context(%PlannedSourceRequest{} = request, source_binding) do
     %{
       source_binding_id: source_binding_id(source_binding),
@@ -2111,41 +2065,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metadata_attr(value, :materialized_link_assignment_id)
     ]
     |> Enum.find(&present_text?/1)
-  end
-
-  defp rollup(spacecraft, point_states) do
-    worst_by_spacecraft =
-      point_states
-      |> Enum.reject(&is_nil(&1.spacecraft_id))
-      |> Enum.group_by(& &1.spacecraft_id, & &1.normalized_state)
-      |> Map.new(fn {spacecraft_id, states} -> {spacecraft_id, worst_state(states)} end)
-
-    spacecraft_entries =
-      Enum.map(spacecraft, fn spacecraft ->
-        %{
-          spacecraft_id: spacecraft.spacecraft_id,
-          worst_state: Map.get(worst_by_spacecraft, spacecraft.spacecraft_id)
-        }
-      end)
-
-    counts =
-      spacecraft_entries
-      |> Enum.group_by(&(&1.worst_state || :no_data))
-      |> Map.new(fn {state, entries} -> {state, length(entries)} end)
-
-    %{counts: counts, spacecraft: spacecraft_entries}
-  end
-
-  defp worst_state(states) do
-    Enum.max_by(states, &Map.get(@state_severity, &1, -1))
-  end
-
-  defp default_latest_states(organization_id, mission_id, _opts) do
-    LimitReads.latest_states_for_mission(organization_id, mission_id, [])
-  end
-
-  defp default_spacecraft(organization_id, mission_id, _opts) do
-    SpacecraftStore.list_spacecraft(organization_id, mission_id)
   end
 
   defp default_scheduled_contacts(organization_id, mission_id, _opts) do

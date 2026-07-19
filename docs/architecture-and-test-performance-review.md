@@ -1146,6 +1146,11 @@ presentation, contact links, freshness metadata, and revision projection into a
 Contact and source-endpoint provider queries, shared freshness annotation, and
 source identity remain adapter-owned; production source-size pressure remains
 8.
+Moving constellation-health provider selection, default limit-state and
+spacecraft reads, worst-state rollup, counts, and matrix-frame presentation into
+a 115-line family module reduced the adapter from 2,972 to 2,891 lines. The
+adapter now supplies tenant and source identity and retains only product
+dispatch for this family; production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
