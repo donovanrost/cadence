@@ -22,7 +22,6 @@ defmodule Cadence.Commanding do
     CommandStage,
     CommandStageRow,
     CommandVerifierInstance,
-    CommandVerifierInstanceRow,
     Dispatcher,
     DispatchSupervisor,
     Encoder,
@@ -33,6 +32,7 @@ defmodule Cadence.Commanding do
     StagedCommandItem,
     StagedCommandItemRow,
     VerifierScheduler,
+    VerifierStore,
     VerifierWorkflow
   }
 
@@ -635,14 +635,7 @@ defmodule Cadence.Commanding do
   def fetch_command_verifier_instance(organization_id, mission_id, command_verifier_instance_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_verifier_instance_id) do
-    case Repo.get_by(CommandVerifierInstanceRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_verifier_instance_id: command_verifier_instance_id
-         ) do
-      nil -> {:error, :command_verifier_instance_not_found}
-      %CommandVerifierInstanceRow{} = row -> {:ok, CommandVerifierInstanceRow.to_domain(row)}
-    end
+    VerifierStore.fetch(organization_id, mission_id, command_verifier_instance_id)
   end
 
   @spec list_command_verifier_instances(binary(), binary(), keyword()) :: [
@@ -650,22 +643,7 @@ defmodule Cadence.Commanding do
         ]
   def list_command_verifier_instances(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CommandVerifierInstanceRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
-    |> maybe_filter_equals(
-      :command_release_attempt_id,
-      Keyword.get(opts, :command_release_attempt_id)
-    )
-    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
-    |> maybe_filter_equals(:phase, phase_filter(opts))
-    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
-    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-    |> Repo.all()
-    |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)
+    VerifierStore.list(organization_id, mission_id, opts)
   end
 
   @spec evaluate_command_verifiers([Sample.t()]) ::
@@ -691,9 +669,9 @@ defmodule Cadence.Commanding do
     VerifierWorkflow.evaluate_telemetry(
       telemetry_samples,
       fn organization_id, mission_id ->
-        pending_command_verifier_entries(repo, organization_id, mission_id)
+        VerifierStore.pending_entries(repo, organization_id, mission_id)
       end,
-      &apply_command_verifier_updates(repo, &1)
+      &VerifierStore.apply_updates(repo, &1)
     )
   end
 
@@ -742,22 +720,20 @@ defmodule Cadence.Commanding do
       transport_capability_records,
       transport_action_requests,
       fn organization_id, mission_id, command_release_attempt_ids ->
-        pending_transport_command_verifier_entries(
+        VerifierStore.pending_transport_entries(
           repo,
           organization_id,
           mission_id,
           command_release_attempt_ids
         )
       end,
-      &apply_command_verifier_updates(repo, &1)
+      &VerifierStore.apply_updates(repo, &1)
     )
   end
 
   @spec command_verifier_timeout_projection() :: [CommandVerifierInstance.t()]
   def command_verifier_timeout_projection do
-    pending_command_verifier_timeout_query()
-    |> Repo.all()
-    |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)
+    VerifierStore.timeout_projection()
   end
 
   @spec timeout_command_verifier_instances(DateTime.t()) ::
@@ -772,23 +748,7 @@ defmodule Cadence.Commanding do
   @spec timeout_command_verifier_instances(module(), DateTime.t()) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def timeout_command_verifier_instances(repo, %DateTime{} = current_time) do
-    timed_out_rows =
-      pending_command_verifier_timeout_query()
-      |> where([row], row.timeout_at <= ^current_time)
-      |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
-      |> repo.all()
-
-    apply_command_verifier_updates(
-      repo,
-      Enum.map(timed_out_rows, fn %CommandVerifierInstanceRow{} = row ->
-        command_verifier_instance =
-          CommandVerifierInstanceRow.to_domain(row)
-          |> Map.put(:lifecycle_state, :timed_out)
-          |> Map.put(:failure_reason, "timed_out")
-
-        {row, command_verifier_instance}
-      end)
-    )
+    VerifierStore.timeout(repo, current_time)
   end
 
   @spec release_command_queue_entry(binary(), binary(), binary(), binary(), map(), keyword()) ::
@@ -1399,7 +1359,7 @@ defmodule Cadence.Commanding do
         Atom.to_string(initial_verification_state)
       )
     )
-    |> add_command_verifier_instance_inserts(verifier_instances)
+    |> VerifierStore.add_inserts(verifier_instances)
     |> Multi.run(:transport_command_verifier_evaluations, fn repo, _changes ->
       evaluate_transport_command_verifiers_for_release_attempt(
         repo,
@@ -1410,13 +1370,12 @@ defmodule Cadence.Commanding do
     end)
     |> Multi.run(:pending_command_verifier_timeouts, fn repo, _changes ->
       {:ok,
-       repo
-       |> pending_command_verifier_timeout_rows(
+       VerifierStore.pending_timeout_instances(
+         repo,
          queue_entry_row.organization_id,
          queue_entry_row.mission_id,
          completed_release_attempt.command_release_attempt_id
-       )
-       |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)}
+       )}
     end)
     |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
       fetch_final_command_release_attempt_row(repo, queue_entry_row, completed_release_attempt)
@@ -1541,68 +1500,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  defp add_command_verifier_instance_inserts(%Multi{} = multi, verifier_instances)
-       when is_list(verifier_instances) do
-    Enum.reduce(verifier_instances, multi, fn %CommandVerifierInstance{} = verifier_instance,
-                                              %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:command_verifier_instance, verifier_instance.command_verifier_instance_id},
-        CommandVerifierInstanceRow.changeset(verifier_instance)
-      )
-    end)
-  end
-
-  defp pending_command_verifier_timeout_query do
-    CommandVerifierInstanceRow
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], not is_nil(row.timeout_at))
-    |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
-  end
-
-  defp pending_command_verifier_timeout_rows(
-         repo,
-         organization_id,
-         mission_id,
-         command_release_attempt_id
-       ) do
-    CommandVerifierInstanceRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> where([row], row.command_release_attempt_id == ^command_release_attempt_id)
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], not is_nil(row.timeout_at))
-    |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
-    |> repo.all()
-  end
-
-  defp pending_command_verifier_entries(repo, organization_id, mission_id) do
-    CommandVerifierInstanceRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> where([row], row.lifecycle_state == "pending")
-    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-    |> repo.all()
-    |> Enum.map(fn %CommandVerifierInstanceRow{} = row ->
-      {row, CommandVerifierInstanceRow.to_domain(row)}
-    end)
-  end
-
-  defp pending_transport_command_verifier_entries(
-         repo,
-         organization_id,
-         mission_id,
-         command_release_attempt_ids
-       ) do
-    CommandVerifierInstanceRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], row.command_release_attempt_id in ^command_release_attempt_ids)
-    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-    |> repo.all()
-    |> Enum.map(fn %CommandVerifierInstanceRow{} = row ->
-      {row, CommandVerifierInstanceRow.to_domain(row)}
-    end)
-  end
-
   defp evaluate_transport_command_verifiers_for_release_attempt(
          repo,
          organization_id,
@@ -1643,162 +1540,6 @@ defmodule Cadence.Commanding do
       transport_action_requests
     )
   end
-
-  defp apply_command_verifier_updates(_repo, []), do: {:ok, []}
-
-  defp apply_command_verifier_updates(repo, verifier_updates) when is_list(verifier_updates) do
-    affected_rollups =
-      verifier_updates
-      |> Enum.map(fn {%CommandVerifierInstanceRow{} = row, _updated_instance} ->
-        {row.organization_id, row.mission_id, row.command_request_id,
-         row.command_release_attempt_id}
-      end)
-      |> Enum.uniq()
-
-    with {:ok, updated_rows} <- update_command_verifier_rows(repo, verifier_updates),
-         {:ok, _rollups} <- recompute_command_verification_rollups(repo, affected_rollups) do
-      {:ok, Enum.map(updated_rows, &CommandVerifierInstanceRow.to_domain/1)}
-    end
-  end
-
-  defp update_command_verifier_rows(repo, verifier_updates) when is_list(verifier_updates) do
-    Enum.reduce_while(verifier_updates, {:ok, []}, fn
-      {%CommandVerifierInstanceRow{} = row, %CommandVerifierInstance{} = updated_instance},
-      {:ok, acc} ->
-        case repo.update(CommandVerifierInstanceRow.update_changeset(row, updated_instance)) do
-          {:ok, updated_row} -> {:cont, {:ok, [updated_row | acc]}}
-          {:error, %Changeset{} = changeset} -> {:halt, {:error, changeset}}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-    end)
-    |> case do
-      {:ok, updated_rows} -> {:ok, Enum.reverse(updated_rows)}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp recompute_command_verification_rollups(repo, affected_rollups)
-       when is_list(affected_rollups) do
-    Enum.reduce_while(affected_rollups, {:ok, []}, fn
-      {organization_id, mission_id, command_request_id, command_release_attempt_id}, {:ok, acc} ->
-        verifier_rows =
-          CommandVerifierInstanceRow
-          |> where(
-            [row],
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.command_request_id == ^command_request_id and
-              row.command_release_attempt_id == ^command_release_attempt_id
-          )
-          |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-          |> repo.all()
-
-        verification_state = aggregate_command_verification_state(verifier_rows)
-        verification_state_string = verification_state_to_string(verification_state)
-
-        with %CommandRequestRow{} = command_request_row <-
-               repo.get_by(CommandRequestRow,
-                 organization_id: organization_id,
-                 mission_id: mission_id,
-                 command_request_id: command_request_id
-               ),
-             %CommandReleaseAttemptRow{} = command_release_attempt_row <-
-               repo.get_by(CommandReleaseAttemptRow,
-                 organization_id: organization_id,
-                 mission_id: mission_id,
-                 command_release_attempt_id: command_release_attempt_id
-               ),
-             {:ok, updated_request_row} <-
-               maybe_update_command_request_verification_state(
-                 repo,
-                 command_request_row,
-                 verification_state_string
-               ),
-             {:ok, updated_release_attempt_row} <-
-               maybe_update_command_release_attempt_verification_state(
-                 repo,
-                 command_release_attempt_row,
-                 verification_state_string
-               ) do
-          {:cont,
-           {:ok,
-            [
-              {updated_request_row.command_request_id,
-               updated_release_attempt_row.command_release_attempt_id}
-              | acc
-            ]}}
-        else
-          nil ->
-            {:halt, {:error, :command_verification_rollup_target_not_found}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-    end)
-  end
-
-  defp maybe_update_command_request_verification_state(
-         repo,
-         %CommandRequestRow{} = command_request_row,
-         verification_state_string
-       ) do
-    if command_request_row.verification_state == verification_state_string do
-      {:ok, command_request_row}
-    else
-      command_request_row
-      |> CommandRequestRow.verification_state_changeset(
-        verification_state_string && String.to_existing_atom(verification_state_string)
-      )
-      |> repo.update()
-    end
-  rescue
-    ArgumentError ->
-      {:error, :invalid_command_request_verification_state}
-  end
-
-  defp maybe_update_command_release_attempt_verification_state(
-         repo,
-         %CommandReleaseAttemptRow{} = command_release_attempt_row,
-         verification_state_string
-       ) do
-    if command_release_attempt_row.verification_state == verification_state_string do
-      {:ok, command_release_attempt_row}
-    else
-      command_release_attempt_row
-      |> CommandReleaseAttemptRow.verification_state_changeset(
-        verification_state_string && String.to_existing_atom(verification_state_string)
-      )
-      |> repo.update()
-    end
-  rescue
-    ArgumentError ->
-      {:error, :invalid_command_release_attempt_verification_state}
-  end
-
-  defp aggregate_command_verification_state([]), do: :not_required
-
-  defp aggregate_command_verification_state(verifier_rows) when is_list(verifier_rows) do
-    lifecycle_states =
-      Enum.map(verifier_rows, fn %CommandVerifierInstanceRow{} = row ->
-        row.lifecycle_state
-      end)
-
-    cond do
-      Enum.any?(lifecycle_states, &(&1 == "failed")) ->
-        :failed
-
-      Enum.any?(lifecycle_states, &(&1 == "timed_out")) ->
-        :timed_out
-
-      Enum.all?(lifecycle_states, &(&1 == "satisfied")) ->
-        :satisfied
-
-      true ->
-        :pending
-    end
-  end
-
-  defp verification_state_to_string(verification_state) when is_atom(verification_state),
-    do: Atom.to_string(verification_state)
 
   defp maybe_schedule_queue_lane_dispatch(organization_id, mission_id, queue_lane_key)
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
@@ -1945,14 +1686,6 @@ defmodule Cadence.Commanding do
       nil -> nil
       decision when is_atom(decision) -> Atom.to_string(decision)
       decision when is_binary(decision) -> decision
-    end
-  end
-
-  defp phase_filter(opts) do
-    case Keyword.get(opts, :phase) do
-      nil -> nil
-      phase when is_atom(phase) -> Atom.to_string(phase)
-      phase when is_binary(phase) -> phase
     end
   end
 

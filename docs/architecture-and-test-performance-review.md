@@ -1386,6 +1386,13 @@ owner without changing their schemas or migrations. `Commanding` remains 2,032
 lines and production source-size pressure remains 5, while direct
 persistence-schema edges fall from 114 to 107 and the other dependency
 ratchets remain unchanged.
+Extracting verifier fetch/list persistence, timeout projection and mutation,
+pending-instance reads, release-transaction inserts, instance updates, and
+request/release verification rollups into a 325-line
+`Commanding.VerifierStore` module reduced `Commanding` from 2,032 to 1,765
+lines. The context-owned command rows make this a same-context persistence
+boundary, while transport evidence lookup remains in the facade; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
