@@ -1159,6 +1159,11 @@ policy for contact and the remaining latest families. Together these changes
 reduced the adapter from 2,891 to 2,760 lines; it now retains only contact-family
 dispatch, source identity, and the shared result envelope, while production
 source-size pressure remains 8.
+Completing command-queue ownership moved callback selection, the default
+pending-entry read, freshness annotation, frame resolution, and the default
+revision read behind the now 307-line family module. This reduced the adapter
+from 2,760 to 2,731 lines; it retains only command-queue dispatch and source
+identity for this family, while production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

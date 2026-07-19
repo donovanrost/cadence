@@ -16,7 +16,42 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.CommandQueueDepth do
     ScopeContext
   }
 
+  alias Cadence.Commanding
+  alias Cadence.Dashboards.Sources.OperationalObservables.LatestFreshness
+
   @observable_id "commanding.queue_depth"
+
+  @spec resolve(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    entries_fun =
+      Keyword.get(opts, :command_queue_entries_fun, &default_entries/3)
+
+    request
+    |> then(
+      &rows(
+        entries_fun.(organization_id, mission_id, adapter_opts),
+        &1,
+        mission_id,
+        Keyword.get(opts, :read_time, DateTime.utc_now())
+      )
+    )
+    |> LatestFreshness.annotate(request, opts)
+    |> then(&frame(request, &1, source_context))
+  end
 
   @spec rows([term()], PlannedSourceRequest.t(), term(), DateTime.t()) :: [map()]
   def rows(entries, %PlannedSourceRequest{} = request, mission_id, observed_at) do
@@ -94,6 +129,17 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.CommandQueueDepth do
           |> Enum.map(&revision_entry/1)
           |> Enum.sort_by(&(&1.command_queue_entry_id || ""))
       })
+  end
+
+  @spec default_revision(binary(), binary(), keyword()) :: binary()
+  def default_revision(organization_id, mission_id, opts) do
+    organization_id
+    |> default_entries(mission_id, opts)
+    |> revision()
+  end
+
+  defp default_entries(organization_id, mission_id, _opts) do
+    Commanding.list_command_queue_entries(organization_id, mission_id, lifecycle_state: :pending)
   end
 
   defp depth_scope(request, mission_id) do

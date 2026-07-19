@@ -210,7 +210,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       managed_runtime_activity: &default_managed_runtime_activity_revision/3,
       transport_runtime_activity: &default_transport_runtime_activity_revision/3,
       ingress_processing_latency: &default_ingress_processing_latency_revision/3,
-      command_queue_depth: &default_command_queue_revision/3
+      command_queue_depth: &CommandQueueDepth.default_revision/3
     ]
   end
 
@@ -789,10 +789,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      command_queue_depth_frame(
+      CommandQueueDepth.resolve(
         request,
-        source_binding,
-        command_queue_depth_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :command_queue_depth, [frame])
@@ -1300,10 +1303,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if "commanding.queue_depth" in request.observables do
       frame =
-        command_queue_depth_frame(
+        CommandQueueDepth.resolve(
           request,
-          source_binding,
-          command_queue_depth_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1493,23 +1499,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     snapshots = metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
 
     TransportBitrateRows.history(transports, snapshots, request)
-  end
-
-  defp command_queue_depth_rows(request, source_binding, organization_id, mission_id, opts) do
-    command_queue_entries_fun =
-      Keyword.get(opts, :command_queue_entries_fun, &default_command_queue_entries/3)
-
-    command_queue_entries_fun.(
-      organization_id,
-      mission_id,
-      adapter_opts(request, source_binding)
-    )
-    |> CommandQueueDepth.rows(
-      request,
-      mission_id,
-      Keyword.get(opts, :read_time, DateTime.utc_now())
-    )
-    |> LatestFreshness.annotate(request, opts)
   end
 
   defp ingress_processing_latency_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1806,14 +1795,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       request,
       rows,
       capability,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp command_queue_depth_frame(request, source_binding, depth_rows) do
-    CommandQueueDepth.frame(
-      request,
-      depth_rows,
       frame_source_context(request, source_binding)
     )
   end
@@ -2508,16 +2489,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
             &{&1.source_endpoint_id || "", &1.spacecraft_id || "", &1.observed_at || ""}
           )
       })
-  end
-
-  defp default_command_queue_entries(organization_id, mission_id, _opts) do
-    Commanding.list_command_queue_entries(organization_id, mission_id, lifecycle_state: :pending)
-  end
-
-  defp default_command_queue_revision(organization_id, mission_id, opts) do
-    organization_id
-    |> default_command_queue_entries(mission_id, opts)
-    |> CommandQueueDepth.revision()
   end
 
   defp transport_revision_entry(transport) do
