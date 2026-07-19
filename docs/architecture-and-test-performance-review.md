@@ -783,7 +783,11 @@ keeping GenServer callbacks, decoding, dispatch, timers, and reconciliation in
 the owner. Moving lifecycle-event persistence, comparison-review workflows,
 health snapshots, and publish-readiness history out of the 1,556-line dashboard
 document store reduced the count to 17 while leaving document/version
-transactions and runtime invalidation in the parent.
+transactions and runtime invalidation in the parent. Extracting effective-time
+historical binding resolution, range segmentation, interval diagnostics, and
+source-adapter facts execution from the 1,573-line data-source registry reduced
+the count to 16 while leaving current health-aware binding selection and
+registry loading in the parent.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
