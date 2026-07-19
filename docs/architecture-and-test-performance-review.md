@@ -1678,6 +1678,13 @@ frame-evidence selectors, operational-event navigation and patch assertions,
 copied path, reopened inspector fields, and LiveView cleanup remain covered;
 production source-size pressure remains 3 and dependency ratchets are
 unchanged.
+Extracting scheduler wakeup calculation and per-mission projection shaping into
+the persistence-free `Cadence.Contacts.SchedulerReadModel` reduced
+`Cadence.Contacts` from 3,670 to 3,599 lines. Storage-backed queries remain in
+the Contacts boundary, so the scheduler process keeps using its three narrow
+context entry points without introducing new persistence-schema callers. No
+route or authentication placement is involved; production source-size pressure
+remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

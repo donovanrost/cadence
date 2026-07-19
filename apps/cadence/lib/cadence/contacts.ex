@@ -19,6 +19,7 @@ defmodule Cadence.Contacts do
     ScheduledContact,
     ScheduledContactRevisions,
     Scheduler,
+    SchedulerReadModel,
     TransportBinding,
     TransportProfile
   }
@@ -1127,10 +1128,7 @@ defmodule Cadence.Contacts do
       when is_binary(mission_id) do
     reference_time
     |> list_contact_scheduler_wakeups(mission_id)
-    |> Enum.find_value(fn
-      %{mission_id: ^mission_id, wake_at: wake_at} -> wake_at
-      _other -> nil
-    end)
+    |> SchedulerReadModel.next_wakeup(mission_id)
   end
 
   @spec list_contact_scheduler_wakeups(DateTime.t()) :: [
@@ -1140,12 +1138,12 @@ defmodule Cadence.Contacts do
 
   def list_contact_scheduler_wakeups(%DateTime{} = reference_time, mission_id)
       when is_nil(mission_id) or is_binary(mission_id) do
-    scheduled_wakeups =
+    scheduled_contacts =
       ScheduledContactRow
       |> where([row], row.lifecycle_state in ["scheduled", "realized"])
       |> maybe_filter_scheduled_contacts_by_mission(mission_id)
       |> Repo.all()
-      |> Enum.flat_map(&scheduled_contact_scheduler_wakeups(&1, reference_time))
+      |> Enum.map(&ScheduledContactRow.to_domain/1)
 
     active_realized_wakeups =
       RealizedContactRow
@@ -1169,11 +1167,8 @@ defmodule Cadence.Contacts do
         wake_at: scheduled_contact_row.ends_at
       })
       |> Repo.all()
-      |> Enum.map(&normalize_scheduler_wakeup(&1, reference_time))
 
-    scheduled_wakeups
-    |> Kernel.++(active_realized_wakeups)
-    |> group_scheduler_wakeups()
+    SchedulerReadModel.wakeups(scheduled_contacts, active_realized_wakeups, reference_time)
   end
 
   @spec contact_scheduler_projection(binary()) :: %{
@@ -1188,9 +1183,8 @@ defmodule Cadence.Contacts do
       )
       |> Repo.all()
       |> Enum.map(&ScheduledContactRow.to_domain/1)
-      |> Map.new(&{&1.scheduled_contact_id, &1})
 
-    %{scheduled_contacts: scheduled_contacts}
+    SchedulerReadModel.projection(scheduled_contacts)
   end
 
   defp collect_reconcile_results(contacts, action)
@@ -2845,71 +2839,6 @@ defmodule Cadence.Contacts do
       realized_contact_row.mission_id == ^mission_id
     )
   end
-
-  defp scheduled_contact_scheduler_wakeups(%ScheduledContactRow{} = row, reference_time) do
-    case row.lifecycle_state do
-      "scheduled" ->
-        scheduled_contact_scheduled_wakeup(row, reference_time)
-
-      "realized" ->
-        scheduled_contact_realized_wakeup(row, reference_time)
-    end
-  end
-
-  defp scheduled_contact_scheduled_wakeup(
-         %ScheduledContactRow{ends_at: %DateTime{} = ends_at} = row,
-         reference_time
-       ) do
-    cond do
-      DateTime.compare(ends_at, reference_time) != :gt ->
-        [%{mission_id: row.mission_id, wake_at: reference_time}]
-
-      DateTime.compare(row.starts_at, reference_time) != :gt ->
-        [%{mission_id: row.mission_id, wake_at: reference_time}]
-
-      true ->
-        [%{mission_id: row.mission_id, wake_at: row.starts_at}]
-    end
-  end
-
-  defp scheduled_contact_scheduled_wakeup(%ScheduledContactRow{} = row, reference_time) do
-    if DateTime.compare(row.starts_at, reference_time) == :gt do
-      [%{mission_id: row.mission_id, wake_at: row.starts_at}]
-    else
-      [%{mission_id: row.mission_id, wake_at: reference_time}]
-    end
-  end
-
-  defp scheduled_contact_realized_wakeup(%ScheduledContactRow{ends_at: nil}, _reference_time),
-    do: []
-
-  defp scheduled_contact_realized_wakeup(
-         %ScheduledContactRow{ends_at: ends_at} = row,
-         reference_time
-       ) do
-    [%{mission_id: row.mission_id, wake_at: max_datetime(ends_at, reference_time)}]
-  end
-
-  defp normalize_scheduler_wakeup(%{wake_at: %DateTime{} = wake_at} = wakeup, reference_time) do
-    %{wakeup | wake_at: max_datetime(wake_at, reference_time)}
-  end
-
-  defp group_scheduler_wakeups(wakeups) do
-    wakeups
-    |> Enum.group_by(& &1.mission_id)
-    |> Enum.map(fn {mission_id, mission_wakeups} ->
-      %{
-        mission_id: mission_id,
-        wake_at: Enum.min_by(mission_wakeups, &datetime_sort_key(&1.wake_at)).wake_at
-      }
-    end)
-  end
-
-  defp max_datetime(%DateTime{} = datetime, %DateTime{} = minimum) do
-    if DateTime.compare(datetime, minimum) == :lt, do: minimum, else: datetime
-  end
-
-  defp datetime_sort_key(%DateTime{} = datetime), do: DateTime.to_unix(datetime, :microsecond)
 
   defp persist_contact_operational_event(%ScheduledContact{} = scheduled_contact, repo) do
     scheduled_contact
