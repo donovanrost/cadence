@@ -109,6 +109,124 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationOperatorDiagnostics
   defp runtime_invalidation_test_value(value) when is_integer(value), do: Integer.to_string(value)
   defp runtime_invalidation_test_value(value) when is_binary(value), do: value
 
+  defp seed_runtime_invalidation_diagnostics!(mission, dashboard, affected_placement_id) do
+    reset_runtime_health!()
+
+    occurred_at = ~U[2026-06-24 12:00:00Z]
+    source_watermark_measurements = %{plans: 0, source_results: 2, frames: 2, total: 4}
+
+    source_watermark_metadata = %{
+      boundary: :source_watermark_changed,
+      domain_fact: :source_watermark_changed,
+      layers: [:source_result, :frame],
+      occurred_at: occurred_at,
+      filters: %{
+        organization_id: mission.organization_id,
+        mission_id: mission.mission_id,
+        logical_source: :telemetry,
+        realm: :flight,
+        data_source_id: DataSources.default_managed_data_source().data_source_id,
+        source_binding_id: "default_flight_telemetry",
+        observable: "HK.counter"
+      }
+    }
+
+    emit_runtime_invalidation!(source_watermark_measurements, source_watermark_metadata)
+
+    source_watermark_event_id =
+      runtime_invalidation_test_event_id(
+        :source_watermark_changed,
+        mission.mission_id,
+        "HK.counter",
+        4,
+        occurred_at
+      )
+
+    source_watermark_event =
+      RuntimeInvalidation.Event.new(
+        :source_watermark_changed,
+        [:source_result, :frame],
+        source_watermark_metadata.filters,
+        %{},
+        source_watermark_measurements,
+        occurred_at: occurred_at
+      )
+
+    assert {:ok, persisted_decision_event} =
+             Cadence.record_dashboard_runtime_invalidation_decision(
+               source_watermark_event,
+               %{
+                 dashboard_id: dashboard.dashboard_id,
+                 organization_id: mission.organization_id,
+                 mission_id: mission.mission_id,
+                 affected_placement_count: 1,
+                 affected_placement_ids: [affected_placement_id],
+                 affected_widget_type_ids: ["cadence.value_tile"],
+                 affected_impact_reasons: [:primary_source],
+                 source_cache_evidence_state_summary: %{
+                   total: 2,
+                   resolved: 1,
+                   context_only: 1,
+                   missing: 0
+                 },
+                 source_cache_evidence_target_ids: [
+                   "source_watermark_event:source-watermark-event-1"
+                 ],
+                 source_cache_evidence_request_ids: ["req-telemetry"],
+                 source_execution_retryable_count: 3,
+                 source_execution_actionable_count: 2,
+                 source_execution_degraded_count: 2,
+                 source_execution_status_summary: %{
+                   cache_stale: 1,
+                   source_unavailable: 1,
+                   source_degraded: 1
+                 },
+                 source_execution_severity_summary: %{warning: 2, error: 1},
+                 source_execution_runtime_action_summary: %{
+                   refresh_source_result: 1,
+                   wait_for_source_health: 2
+                 },
+                 source_execution_operator_action_summary: %{
+                   wait_for_refresh: 1,
+                   inspect_source_health: 2
+                 },
+                 source_execution_degraded_identities: [
+                   "telemetry:req-circuit:source_degraded",
+                   "telemetry:req-unavailable:source_unavailable"
+                 ],
+                 source_execution_degraded_actions: [
+                   "telemetry:req-circuit:wait_for_source_health:inspect_source_health",
+                   "telemetry:req-unavailable:wait_for_source_health:inspect_source_health"
+                 ],
+                 matches?: true,
+                 dashboard_matches?: true,
+                 context_matches?: true,
+                 context_reason: :matched,
+                 refresh_allowed?: false,
+                 refresh_reason: :stale_for_context,
+                 decision_status: :refresh_suppressed
+               },
+               invalidation_event_id: source_watermark_event_id,
+               decision_observed_at: ~U[2026-06-24 12:00:05Z]
+             )
+
+    emit_runtime_invalidation!(
+      %{plans: 0, source_results: 5, frames: 5, total: 10},
+      %{
+        boundary: :source_watermark_changed,
+        domain_fact: :source_watermark_changed,
+        layers: [:source_result, :frame],
+        filters: %{
+          organization_id: mission.organization_id,
+          mission_id: "other-mission",
+          logical_source: :telemetry
+        }
+      }
+    )
+
+    persisted_decision_event
+  end
+
   describe "runtime invalidation operator diagnostics" do
     test "operator surface exposes scoped runtime invalidation diagnostics" do
       {conn, _org, mission} = signed_in_org_and_mission()
@@ -121,122 +239,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationOperatorDiagnostics
 
       assert [%{placement_id: affected_placement_id}] = dashboard.placements
 
-      reset_runtime_health!()
-
-      occurred_at = ~U[2026-06-24 12:00:00Z]
-      source_watermark_measurements = %{plans: 0, source_results: 2, frames: 2, total: 4}
-
-      source_watermark_metadata = %{
-        boundary: :source_watermark_changed,
-        domain_fact: :source_watermark_changed,
-        layers: [:source_result, :frame],
-        occurred_at: occurred_at,
-        filters: %{
-          organization_id: mission.organization_id,
-          mission_id: mission.mission_id,
-          logical_source: :telemetry,
-          realm: :flight,
-          data_source_id: DataSources.default_managed_data_source().data_source_id,
-          source_binding_id: "default_flight_telemetry",
-          observable: "HK.counter"
-        }
-      }
-
-      emit_runtime_invalidation!(
-        source_watermark_measurements,
-        source_watermark_metadata
-      )
-
-      source_watermark_event_id =
-        runtime_invalidation_test_event_id(
-          :source_watermark_changed,
-          mission.mission_id,
-          "HK.counter",
-          4,
-          occurred_at
-        )
-
-      source_watermark_event =
-        RuntimeInvalidation.Event.new(
-          :source_watermark_changed,
-          [:source_result, :frame],
-          source_watermark_metadata.filters,
-          %{},
-          source_watermark_measurements,
-          occurred_at: occurred_at
-        )
-
-      assert {:ok, persisted_decision_event} =
-               Cadence.record_dashboard_runtime_invalidation_decision(
-                 source_watermark_event,
-                 %{
-                   dashboard_id: dashboard.dashboard_id,
-                   organization_id: mission.organization_id,
-                   mission_id: mission.mission_id,
-                   affected_placement_count: 1,
-                   affected_placement_ids: [affected_placement_id],
-                   affected_widget_type_ids: ["cadence.value_tile"],
-                   affected_impact_reasons: [:primary_source],
-                   source_cache_evidence_state_summary: %{
-                     total: 2,
-                     resolved: 1,
-                     context_only: 1,
-                     missing: 0
-                   },
-                   source_cache_evidence_target_ids: [
-                     "source_watermark_event:source-watermark-event-1"
-                   ],
-                   source_cache_evidence_request_ids: ["req-telemetry"],
-                   source_execution_retryable_count: 3,
-                   source_execution_actionable_count: 2,
-                   source_execution_degraded_count: 2,
-                   source_execution_status_summary: %{
-                     cache_stale: 1,
-                     source_unavailable: 1,
-                     source_degraded: 1
-                   },
-                   source_execution_severity_summary: %{warning: 2, error: 1},
-                   source_execution_runtime_action_summary: %{
-                     refresh_source_result: 1,
-                     wait_for_source_health: 2
-                   },
-                   source_execution_operator_action_summary: %{
-                     wait_for_refresh: 1,
-                     inspect_source_health: 2
-                   },
-                   source_execution_degraded_identities: [
-                     "telemetry:req-circuit:source_degraded",
-                     "telemetry:req-unavailable:source_unavailable"
-                   ],
-                   source_execution_degraded_actions: [
-                     "telemetry:req-circuit:wait_for_source_health:inspect_source_health",
-                     "telemetry:req-unavailable:wait_for_source_health:inspect_source_health"
-                   ],
-                   matches?: true,
-                   dashboard_matches?: true,
-                   context_matches?: true,
-                   context_reason: :matched,
-                   refresh_allowed?: false,
-                   refresh_reason: :stale_for_context,
-                   decision_status: :refresh_suppressed
-                 },
-                 invalidation_event_id: source_watermark_event_id,
-                 decision_observed_at: ~U[2026-06-24 12:00:05Z]
-               )
-
-      emit_runtime_invalidation!(
-        %{plans: 0, source_results: 5, frames: 5, total: 10},
-        %{
-          boundary: :source_watermark_changed,
-          domain_fact: :source_watermark_changed,
-          layers: [:source_result, :frame],
-          filters: %{
-            organization_id: mission.organization_id,
-            mission_id: "other-mission",
-            logical_source: :telemetry
-          }
-        }
-      )
+      persisted_decision_event =
+        seed_runtime_invalidation_diagnostics!(mission, dashboard, affected_placement_id)
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
