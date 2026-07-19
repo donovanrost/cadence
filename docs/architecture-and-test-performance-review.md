@@ -939,6 +939,11 @@ latest/history/decimated/watermark query options reduced the telemetry adapter
 again to 1,342 lines. The 486-line query-options module keeps those backend
 scope rules consistent; production pressure remains 11 while the adapter is
 above the 1,000-line limit.
+Extracting coverage detection, frame warning annotation, watermark and source
+failure detail, data-view notices, linked actions, and degraded-state policy
+reduced the telemetry adapter to 936 lines. The 447-line warnings module keeps
+that presentation policy together, and production source-size pressure drops
+from 11 to 10 with the telemetry adapter now below the 1,000-line limit.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

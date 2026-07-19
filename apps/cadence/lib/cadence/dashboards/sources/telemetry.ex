@@ -9,21 +9,17 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   alias Cadence.Dashboards.{
     DataContext,
-    DataLinks,
     DataSource,
-    Frame,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceActions,
     SourceCapabilities,
     SourceFacts,
     SourceProbe,
     SourceResult,
-    SourceWatermark,
-    TelemetryActions
+    SourceWatermark
   }
 
-  alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext, QueryOptions}
+  alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext, QueryOptions, Warnings}
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
@@ -108,7 +104,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   @spec resolve(PlannedSourceRequest.t(), keyword()) :: SourceResult.t()
   def resolve(%PlannedSourceRequest{} = request, opts \\ []) when is_list(opts) do
     source_binding = Keyword.get(opts, :source_binding)
-    overlay_warnings = overlay_warnings(request)
+    overlay_warnings = Warnings.overlay(request)
 
     with :ok <- ensure_telemetry_source(request),
          :ok <- ensure_supported_sampling(request, source_binding),
@@ -118,7 +114,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       watermark = watermark(request, source_binding, organization_id, mission_id, opts)
 
       request_warnings =
-        overlay_warnings ++ watermark_warnings(request, source_binding, watermark)
+        overlay_warnings ++ Warnings.watermark(request, source_binding, watermark)
 
       {frames, mode_warnings, supported_capability} =
         resolve_frames(
@@ -144,12 +140,12 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
           supported_capability: supported_capability,
           returned_frame_count: length(frames),
           telemetry_revision_dependency: RevisionState.dependency(frames),
-          degraded?: degraded?(warnings)
+          degraded?: Warnings.degraded?(warnings)
         }
       })
     else
       {:warning, warning} ->
-        request_warnings = overlay_warnings ++ unknown_watermark_warnings(request)
+        request_warnings = overlay_warnings ++ Warnings.unknown_watermark(request)
 
         SourceResult.new(%{
           request_id: request.request_id,
@@ -171,7 +167,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   defp ensure_telemetry_source(%PlannedSourceRequest{} = request) do
     {:warning,
-     warning(
+     Warnings.warning(
        request,
        :unsupported_logical_source,
        :error,
@@ -189,7 +185,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       :ok
     else
       {:warning,
-       warning(
+       Warnings.warning(
          request,
          :unsupported_sampling,
          :warning,
@@ -236,7 +232,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          opts,
          request_warnings
        ) do
-    data_view_warnings = data_view_warnings(request)
+    data_view_warnings = Warnings.data_view(request)
     request_warnings = request_warnings ++ data_view_warnings
 
     case sampling_mode(request) do
@@ -274,10 +270,10 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
           )
 
         partial_warnings =
-          partial_coverage_warnings(request, source_binding, frames)
+          Warnings.partial_coverage(request, source_binding, frames)
 
         frames =
-          annotate_frame_warning_codes(frames, partial_warnings)
+          Warnings.annotate_frames(frames, partial_warnings)
 
         {frames, data_view_warnings ++ time_warnings ++ revision_warnings ++ partial_warnings,
          :latest_value}
@@ -321,7 +317,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
       :decimated_envelope ->
         {decimated_opts, time_warnings} = QueryOptions.decimated(request, source_binding, opts)
-        aggregate_warnings = native_aggregate_semantics_warnings(request)
+        aggregate_warnings = Warnings.native_aggregate_semantics(request)
 
         decimated_history_fun =
           Keyword.get(opts, :decimated_history_fun, &default_decimated_history/4)
@@ -337,7 +333,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
              ) do
           {:ok, frames} ->
             partial_warnings =
-              partial_coverage_warnings(request, source_binding, frames)
+              Warnings.partial_coverage(request, source_binding, frames)
 
             frames =
               annotate_active_historical_workflows(
@@ -355,7 +351,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
           {:error, reason} ->
             source_warning =
-              source_query_failure_warning(
+              Warnings.source_query_failure(
                 request,
                 source_binding,
                 nil,
@@ -402,10 +398,10 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     history_warnings =
       entries
       |> Enum.flat_map(fn {_frame, _samples, history_warnings} -> history_warnings end)
-      |> Enum.uniq_by(&warning_key/1)
+      |> Enum.uniq_by(&Warnings.key/1)
 
     partial_warnings =
-      partial_coverage_warnings(request, source_binding, frames)
+      Warnings.partial_coverage(request, source_binding, frames)
 
     {frames,
      data_view_warnings ++
@@ -425,7 +421,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          time_warnings
        ) do
     source_warning =
-      source_query_failure_warning(
+      Warnings.source_query_failure(
         request,
         source_binding,
         observable_id,
@@ -454,7 +450,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
       case normalize_history_result(history_result) do
         {:ok, samples, diagnostics} ->
-          history_warnings = history_diagnostics_warnings(request, observable_id, diagnostics)
+          history_warnings = Warnings.history_diagnostics(request, observable_id, diagnostics)
 
           entry =
             {
@@ -597,345 +593,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   defp normalize_decimated_history_result(other),
     do: {:error, {:invalid_decimated_history_result, other}}
 
-  defp history_diagnostics_warnings(
-         %PlannedSourceRequest{} = request,
-         observable_id,
-         %{candidate_window_exhausted?: true} = diagnostics
-       ) do
-    [
-      %ResolveWarning{
-        code: :candidate_window_exhausted,
-        severity: :warning,
-        scope: :frame,
-        frame_id: "#{request.request_id}:#{observable_id}",
-        message: "Telemetry history candidate window was exhausted before selection completed",
-        details:
-          diagnostics
-          |> Map.merge(%{
-            source_request_id: request.request_id,
-            observable_id: observable_id,
-            point_id: observable_id
-          })
-          |> put_telemetry_warning_actions(request, observable_id),
-        links: DataLinks.request_observable_links(request, source: :warning)
-      }
-    ]
-  end
-
-  defp history_diagnostics_warnings(%PlannedSourceRequest{}, _observable_id, _diagnostics),
-    do: []
-
-  defp partial_coverage_warnings(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         frames
-       )
-       when is_list(frames) do
-    empty_observables =
-      frames
-      |> Enum.filter(&empty_frame?/1)
-      |> Enum.map(&frame_observable_id/1)
-      |> Enum.reject(&is_nil/1)
-
-    returned_observables =
-      frames
-      |> Enum.reject(&empty_frame?/1)
-      |> Enum.map(&frame_observable_id/1)
-      |> Enum.reject(&is_nil/1)
-
-    if empty_observables != [] and returned_observables != [] do
-      [
-        warning(
-          request,
-          :partial_data,
-          :warning,
-          "Telemetry range source returned partial data",
-          %{
-            logical_source: :telemetry,
-            requested_observables: request.observables,
-            returned_observables: returned_observables,
-            empty_observables: empty_observables,
-            source_binding_id: source_binding_id(source_binding),
-            data_source_id: data_source_id(request, source_binding),
-            realm: realm(request, source_binding),
-            time_mode: time_mode(request),
-            time_axis: :receipt_time
-          }
-        )
-      ]
-    else
-      []
-    end
-  end
-
-  defp partial_coverage_warnings(%PlannedSourceRequest{}, _source_binding, _frames),
-    do: []
-
-  defp annotate_frame_warning_codes(frames, []), do: frames
-
-  defp annotate_frame_warning_codes(frames, warnings)
-       when is_list(frames) and is_list(warnings) do
-    warning_codes =
-      warnings
-      |> Enum.map(& &1.code)
-      |> Enum.reject(&is_nil/1)
-
-    Enum.map(frames, &annotate_frame_warning_codes(&1, warning_codes))
-  end
-
-  defp annotate_frame_warning_codes(%Frame{meta: meta} = frame, warning_codes)
-       when is_map(meta) do
-    existing_codes =
-      meta
-      |> Map.get(:warning_codes, Map.get(meta, "warning_codes", []))
-      |> List.wrap()
-
-    %Frame{
-      frame
-      | meta: Map.put(meta, :warning_codes, Enum.uniq(existing_codes ++ warning_codes))
-    }
-  end
-
-  defp annotate_frame_warning_codes(frame, _warning_codes), do: frame
-
-  defp empty_frame?(%Frame{meta: meta}) when is_map(meta) do
-    Map.get(meta, :returned_points, Map.get(meta, "returned_points", 0)) == 0
-  end
-
-  defp empty_frame?(%Frame{}), do: true
-
-  defp frame_observable_id(%Frame{meta: meta}) when is_map(meta) do
-    Map.get(meta, :observable_id, Map.get(meta, "observable_id"))
-  end
-
-  defp frame_observable_id(%Frame{}), do: nil
-
-  defp overlay_warnings(%PlannedSourceRequest{overlays: []}), do: []
-  defp overlay_warnings(%PlannedSourceRequest{overlays: nil}), do: []
-
-  defp overlay_warnings(%PlannedSourceRequest{} = request) do
-    [
-      warning(
-        request,
-        :capability_fallback,
-        :info,
-        "Telemetry source does not resolve overlays yet",
-        %{
-          requested_overlays: request.overlays,
-          unresolved_capability: :overlays
-        }
-      )
-    ]
-  end
-
-  defp watermark_warnings(
-         %PlannedSourceRequest{},
-         _source_binding,
-         %SourceWatermark{confidence: confidence}
-       )
-       when confidence in [:authoritative, :best_effort],
-       do: []
-
-  defp watermark_warnings(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         %SourceWatermark{} = watermark
-       ) do
-    unknown_watermark_warnings(request, source_binding, watermark)
-  end
-
-  defp unknown_watermark_warnings(%PlannedSourceRequest{} = request) do
-    unknown_watermark_warnings(request, nil, nil)
-  end
-
-  defp unknown_watermark_warnings(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         %SourceWatermark{} = watermark
-       ) do
-    details =
-      case watermark_errors(watermark) do
-        [{observable_id, reason} | _rest] ->
-          source_query_failure_details(
-            request,
-            source_binding,
-            observable_id,
-            :watermark,
-            :source_watermark,
-            reason
-          )
-
-        [] ->
-          %{unresolved_capability: :source_watermark}
-      end
-
-    [
-      warning(
-        request,
-        :watermark_unknown,
-        :info,
-        "Telemetry source watermark confidence is unknown",
-        details
-      )
-    ]
-  end
-
-  defp unknown_watermark_warnings(%PlannedSourceRequest{} = request, _source_binding, _watermark) do
-    [
-      warning(
-        request,
-        :watermark_unknown,
-        :info,
-        "Telemetry source watermark confidence is unknown",
-        %{unresolved_capability: :source_watermark}
-      )
-    ]
-  end
-
-  defp watermark_errors(%SourceWatermark{meta: %{point_watermarks: point_watermarks}})
-       when is_map(point_watermarks) do
-    point_watermarks
-    |> Enum.flat_map(fn {observable_id, result} ->
-      case watermark_error(result) do
-        nil -> []
-        reason -> [{observable_id, reason}]
-      end
-    end)
-  end
-
-  defp watermark_errors(%SourceWatermark{}), do: []
-
-  defp watermark_error(result) when is_map(result) do
-    context_value(result, :error)
-  end
-
-  defp watermark_error(_result), do: nil
-
-  defp native_aggregate_semantics_warnings(%PlannedSourceRequest{} = request) do
-    [
-      warning(
-        request,
-        :physical_aggregate_semantics,
-        :info,
-        "Native telemetry aggregates use physical storage semantics",
-        %{
-          canonical_mode: :physical,
-          aggregate_semantics: :physical_as_recorded,
-          affected_products: [:native_decimated_envelope, :source_watermark],
-          future_mode: :effective_canonical
-        }
-      )
-    ]
-  end
-
-  defp source_query_failure_warning(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         query_kind,
-         unresolved_capability,
-         reason
-       ) do
-    warning(
-      request,
-      :source_unavailable,
-      :error,
-      source_query_failure_message(query_kind),
-      source_query_failure_details(
-        request,
-        source_binding,
-        observable_id,
-        query_kind,
-        unresolved_capability,
-        reason
-      )
-    )
-  end
-
-  defp source_query_failure_message(:native_decimated_history),
-    do: "Telemetry data source cannot execute native decimated history"
-
-  defp source_query_failure_message(:watermark),
-    do: "Telemetry data source cannot read source watermark"
-
-  defp source_query_failure_message(_query_kind),
-    do: "Telemetry data source cannot execute bounded history"
-
-  defp source_query_failure_details(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         observable_id,
-         query_kind,
-         unresolved_capability,
-         reason
-       ) do
-    %{
-      logical_source: :telemetry,
-      source_empty_reason: :source_query_failed,
-      source_query_kind: query_kind,
-      unresolved_capability: unresolved_capability,
-      reason: format_reason(reason),
-      observable_id: observable_id || List.first(List.wrap(request.observables)),
-      point_id: observable_id || List.first(List.wrap(request.observables)),
-      data_source_id: data_source_id(request, source_binding),
-      source_binding_id: source_binding_id(source_binding),
-      realm: realm(request, source_binding),
-      dataset: dataset(source_binding),
-      requested_sampling: sampling_mode(request)
-    }
-    |> SourceActions.put_source_request_context(request, :telemetry)
-    |> SourceActions.put_source_warning_actions()
-  end
-
-  defp data_view_warnings(%PlannedSourceRequest{} = request) do
-    case FrameContext.data_view(request) do
-      :canonical ->
-        []
-
-      :as_recorded ->
-        [
-          warning(
-            request,
-            :as_recorded_view,
-            :info,
-            "Telemetry source is using as-recorded data view",
-            data_view_warning_details(request, :as_recorded)
-          )
-        ]
-
-      :all_revisions ->
-        [
-          warning(
-            request,
-            :all_revisions_view,
-            :warning,
-            "Telemetry source is showing all observation revisions",
-            data_view_warning_details(request, :all_revisions)
-          )
-        ]
-
-      :recomputed ->
-        [
-          warning(
-            request,
-            :recomputed_values,
-            :warning,
-            "Telemetry source is using recomputed data view semantics",
-            data_view_warning_details(request, :recomputed)
-          )
-        ]
-    end
-  end
-
-  defp data_view_warning_details(%PlannedSourceRequest{} = request, data_view) do
-    %{
-      data_view: data_view,
-      canonical_default?: false,
-      point_id: List.first(List.wrap(request.observables)),
-      observable_id: List.first(List.wrap(request.observables))
-    }
-  end
-
   defp required_request_context(%PlannedSourceRequest{} = request, key) do
     case request_context_value(request, key) do
       value when is_binary(value) and value != "" ->
@@ -1026,10 +683,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       binding_id: source_binding_id(source_binding)
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-  end
-
-  defp warning_key(%ResolveWarning{} = warning) do
-    {warning.code, warning.scope, warning.frame_id, warning.field_name}
   end
 
   defp watermark(
@@ -1217,59 +870,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     TelemetryReads.latest_value(organization_id, mission_id, point_id, opts)
   end
 
-  defp warning(%PlannedSourceRequest{} = request, code, severity, message, details) do
-    %ResolveWarning{
-      code: code,
-      severity: severity,
-      scope: :dashboard,
-      message: message,
-      details:
-        details
-        |> Map.put(:source_request_id, request.request_id)
-        |> put_telemetry_warning_actions(request, warning_observable_id(request, details)),
-      links: DataLinks.request_observable_links(request, source: :warning)
-    }
-  end
-
-  defp put_telemetry_warning_actions(details, %PlannedSourceRequest{} = request, observable_id) do
-    actions =
-      TelemetryActions.explore_actions(request, observable_id, [],
-        source: :warning,
-        action_id: "telemetry-warning-explore:#{request.request_id}:#{observable_id || "unknown"}"
-      )
-
-    existing_actions = List.wrap(Map.get(details, :actions))
-
-    if existing_actions == [] and actions == [] do
-      details
-    else
-      Map.put(details, :actions, merge_warning_actions(existing_actions, actions))
-    end
-  end
-
-  defp merge_warning_actions(existing_actions, new_actions) do
-    existing_actions
-    |> Kernel.++(new_actions)
-    |> Enum.uniq_by(fn
-      %{action_id: action_id} when is_binary(action_id) -> action_id
-      %{target: target, query: query} -> {target, query}
-      action -> action
-    end)
-  end
-
-  defp warning_observable_id(%PlannedSourceRequest{} = request, details) do
-    details[:observable_id] || details["observable_id"] || details[:point_id] ||
-      details["point_id"] ||
-      List.first(List.wrap(request.observables))
-  end
-
-  defp degraded?(warnings) do
-    Enum.any?(warnings, &(&1.severity != :info))
-  end
-
-  defp format_reason(reason) when is_binary(reason), do: reason
-  defp format_reason(reason), do: inspect(reason)
-
   defp supported_capability(%PlannedSourceRequest{} = request) do
     case sampling_mode(request) do
       :latest -> :latest_value
@@ -1294,12 +894,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   defp time_axis(%PlannedSourceRequest{time_context: time_context}) do
     time_context
     |> context_value(:axis)
-    |> normalize_atom()
-  end
-
-  defp time_mode(%PlannedSourceRequest{time_context: time_context}) do
-    time_context
-    |> context_value(:mode)
     |> normalize_atom()
   end
 
