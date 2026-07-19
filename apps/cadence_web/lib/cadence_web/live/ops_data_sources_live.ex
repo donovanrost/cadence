@@ -17,7 +17,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     TSDBDeploymentStatus
   }
 
-  alias CadenceWeb.OpsDataSourcesLive.{SourceContract, SourceFocus}
+  alias CadenceWeb.OpsDataSourcesLive.{
+    SourceContract,
+    SourceFocus,
+    SourceFocusPresentation
+  }
 
   @impl true
   def mount(_params, _session, socket) do
@@ -1652,7 +1656,10 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp source_focus_remediation_panel(assigns) do
     assigns =
       assigns
-      |> assign(:remediation, source_focus_remediation(assigns.focus, assigns.data_sources))
+      |> assign(
+        :remediation,
+        SourceFocusPresentation.remediation(assigns.focus, assigns.data_sources)
+      )
       |> assign(:return_href, source_focus_return_href(assigns.focus, assigns.mission_id))
 
     ~H"""
@@ -1895,7 +1902,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp source_focus_evidence_panel(assigns) do
     assigns =
       assigns
-      |> assign(:evidence, source_focus_evidence(assigns.focus))
+      |> assign(:evidence, SourceFocusPresentation.evidence(assigns.focus))
       |> assign(:return_href, source_focus_return_href(assigns.focus, assigns.mission_id))
 
     ~H"""
@@ -1929,320 +1936,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     </div>
     """
   end
-
-  defp source_focus_evidence(%{selected_evidence_kind: nil, selected_source_evidence_mode: nil}) do
-    nil
-  end
-
-  defp source_focus_evidence(focus) do
-    kind = focus.selected_evidence_kind || "source"
-    mode = focus.selected_source_evidence_mode || "health"
-    state = focus.selected_source_evidence_state || source_focus_evidence_state(focus)
-    reason = focus.source_empty_reason || "source_evidence"
-
-    %{
-      kind: kind,
-      mode: mode,
-      state: state || "unknown",
-      reason: reason,
-      title: source_focus_evidence_title(mode, state),
-      detail: source_focus_evidence_detail(focus, mode, state, reason)
-    }
-  end
-
-  defp source_focus_evidence_state(%{source_empty_reason: "stale_data"}), do: "stale"
-  defp source_focus_evidence_state(%{source_empty_reason: "retention_gap"}), do: "retention_gap"
-  defp source_focus_evidence_state(%{source_empty_reason: "watermark_unknown"}), do: "unknown"
-  defp source_focus_evidence_state(%{source_empty_reason: "unknown_watermark"}), do: "unknown"
-  defp source_focus_evidence_state(_focus), do: nil
-
-  defp source_focus_evidence_title("execution", _state), do: "Source execution evidence"
-  defp source_focus_evidence_title(_mode, "stale"), do: "Source freshness evidence is stale"
-
-  defp source_focus_evidence_title(_mode, "retention_gap"),
-    do: "Source freshness has a retention gap"
-
-  defp source_focus_evidence_title(_mode, "unknown"), do: "Source freshness evidence is unknown"
-  defp source_focus_evidence_title(_mode, _state), do: "Source evidence"
-
-  defp source_focus_evidence_detail(focus, mode, state, reason) do
-    [
-      "kind=#{focus.selected_evidence_kind || "source"}",
-      "mode=#{mode || "health"}",
-      "state=#{state || "unknown"}",
-      "reason=#{reason}",
-      source_focus_evidence_identity(focus)
-    ]
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join(" ")
-  end
-
-  defp source_focus_evidence_identity(focus) do
-    cond do
-      is_binary(focus.source_binding_id) and is_binary(focus.data_source_id) ->
-        "source=#{focus.source_binding_id}->#{focus.data_source_id}"
-
-      is_binary(focus.source_binding_id) ->
-        "source_binding_id=#{focus.source_binding_id}"
-
-      is_binary(focus.data_source_id) ->
-        "data_source_id=#{focus.data_source_id}"
-
-      true ->
-        nil
-    end
-  end
-
-  defp source_focus_remediation(focus, data_sources)
-  defp source_focus_remediation(%{source_empty_reason: nil}, _data_sources), do: nil
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "missing_source_binding"} = focus,
-         _data_sources
-       ) do
-    %{
-      kind: "missing_source_binding",
-      title: "Publish blocker: no source binding resolves",
-      detail:
-        "Register a compatible source if needed, then bind #{focus_text(focus.logical_source)} / #{focus_text(focus.realm)} for this mission context.",
-      action: :register_source,
-      target: "source_registration",
-      target_id: nil,
-      capability_rows: [],
-      candidate_rows: []
-    }
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "missing_data_source"} = focus,
-         _data_sources
-       ) do
-    source_remediation(
-      focus,
-      "missing_data_source",
-      "Publish blocker: binding points at a missing source",
-      "Register the missing data source or change the highlighted binding to an active source."
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "disabled_data_source"} = focus,
-         _data_sources
-       ) do
-    source_review_remediation(
-      focus,
-      "disabled_data_source",
-      "Publish blocker: source is disabled",
-      "Review the highlighted source and enable it or move the binding to an active source."
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "unsupported_source_capability"} = focus,
-         data_sources
-       ) do
-    source_remediation(
-      focus,
-      "unsupported_source_capability",
-      "Publish blocker: source capability mismatch",
-      "Use the highlighted binding's Change action to select a source whose capabilities match the planned widget request.",
-      capability_rows: source_capability_mismatch_rows(focus),
-      candidate_rows: source_capability_candidate_rows(focus, data_sources)
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "source_unavailable"} = focus,
-         _data_sources
-       ) do
-    source_review_remediation(
-      focus,
-      "source_unavailable",
-      "Publish blocker: source unavailable",
-      "Probe or repair the highlighted source, then refresh publish readiness."
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "source_degraded"} = focus,
-         _data_sources
-       ) do
-    source_review_remediation(
-      focus,
-      "source_degraded",
-      "Publish blocker: source health degraded",
-      "Review the highlighted source health and restore it or change the binding to a healthier source."
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "invalid_data_source_configuration"} = focus,
-         _data_sources
-       ) do
-    source_review_remediation(
-      focus,
-      "invalid_data_source_configuration",
-      "Publish blocker: source configuration is invalid",
-      "Review the highlighted source adapter, credentials, dataset, and endpoint configuration."
-    )
-  end
-
-  defp source_focus_remediation(
-         %{source_empty_reason: "source_binding_interval_ambiguous"} = focus,
-         _data_sources
-       ) do
-    source_remediation(
-      focus,
-      "source_binding_interval_ambiguous",
-      "Publish blocker: binding interval is ambiguous",
-      "Adjust binding activation intervals so this publish context resolves to exactly one active binding."
-    )
-  end
-
-  defp source_focus_remediation(_focus, _data_sources), do: nil
-
-  defp source_remediation(focus, kind, title, detail, opts \\ []) do
-    %{
-      kind: kind,
-      title: title,
-      detail: detail,
-      action: source_remediation_action(focus),
-      target: source_remediation_target(focus),
-      target_id: source_remediation_target_id(focus),
-      capability_rows: Keyword.get(opts, :capability_rows, []),
-      candidate_rows: Keyword.get(opts, :candidate_rows, [])
-    }
-  end
-
-  defp source_review_remediation(focus, kind, title, detail) do
-    %{
-      kind: kind,
-      title: title,
-      detail: detail,
-      action: source_review_action(focus),
-      target: source_review_target(focus),
-      target_id: source_review_target_id(focus),
-      capability_rows: [],
-      candidate_rows: []
-    }
-  end
-
-  defp source_capability_mismatch_rows(focus) do
-    [
-      capability_row("sampling", "sampling", focus.requested_sampling, focus.supported_sampling),
-      capability_row("products", "products", focus.requested_products, focus.supported_products),
-      capability_row(
-        "source_products",
-        "source products",
-        focus.requested_source_products,
-        focus.supported_products
-      ),
-      capability_row(
-        "product_families",
-        "product families",
-        focus.requested_product_families,
-        focus.supported_product_families
-      ),
-      capability_row(
-        "value_kinds",
-        "value kinds",
-        focus.requested_value_kinds,
-        focus.supported_value_kinds
-      ),
-      capability_row("shapes", "shapes", focus.requested_shapes, focus.supported_shapes),
-      capability_row(
-        "time_axes",
-        "time axes",
-        focus.requested_time_axes,
-        focus.supported_time_axes
-      )
-    ]
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp capability_row(_key, _label, nil, nil), do: nil
-
-  defp capability_row(key, label, requested, supported) do
-    %{
-      key: key,
-      label: label,
-      requested: focus_text(requested),
-      supported: focus_text(supported)
-    }
-  end
-
-  defp source_capability_candidate_rows(focus, sources) do
-    sources
-    |> Enum.filter(&candidate_source_for_focus?(&1, focus))
-    |> Enum.map(&source_capability_candidate_row(&1, focus))
-    |> Enum.sort_by(fn candidate -> {not candidate.compatible?, candidate.data_source_id} end)
-  end
-
-  defp candidate_source_for_focus?(%DataSource{} = source, focus) do
-    DataSource.active?(source) and
-      SourceContract.logical_source_text(source) == focus.logical_source
-  end
-
-  defp source_capability_candidate_row(%DataSource{} = source, focus) do
-    missing = SourceContract.missing_requirements(source, focus)
-    compatible? = missing == []
-
-    %{
-      data_source_id: source.data_source_id,
-      compatible?: compatible?,
-      status_text: if(compatible?, do: "compatible", else: "blocked"),
-      missing_text: missing_requirements_text(missing),
-      reason_text: candidate_reason_text(missing)
-    }
-  end
-
-  defp candidate_reason_text([]), do: "matches requested contract"
-  defp candidate_reason_text(missing), do: "missing #{missing_requirements_text(missing)}"
-
-  defp missing_requirements_text([]), do: "none"
-
-  defp missing_requirements_text(missing) do
-    Enum.map_join(missing, ";", fn {field, values} -> "#{field}=#{Enum.join(values, ",")}" end)
-  end
-
-  defp source_remediation_action(%{matched_source_binding_id: binding_id})
-       when is_binary(binding_id),
-       do: :review_binding
-
-  defp source_remediation_action(_focus), do: :register_source
-
-  defp source_remediation_target(%{matched_source_binding_id: binding_id})
-       when is_binary(binding_id),
-       do: "binding"
-
-  defp source_remediation_target(_focus), do: "source_registration"
-
-  defp source_remediation_target_id(%{matched_source_binding_id: binding_id})
-       when is_binary(binding_id),
-       do: binding_id
-
-  defp source_remediation_target_id(_focus), do: nil
-
-  defp source_review_action(%{matched_data_source_id: data_source_id})
-       when is_binary(data_source_id),
-       do: :review_source
-
-  defp source_review_action(focus), do: source_remediation_action(focus)
-
-  defp source_review_target(%{matched_data_source_id: data_source_id})
-       when is_binary(data_source_id),
-       do: "source"
-
-  defp source_review_target(focus), do: source_remediation_target(focus)
-
-  defp source_review_target_id(%{matched_data_source_id: data_source_id})
-       when is_binary(data_source_id),
-       do: data_source_id
-
-  defp source_review_target_id(focus), do: source_remediation_target_id(focus)
-
-  defp focus_text(nil), do: "unknown"
-  defp focus_text(value), do: value
 
   defp binding_groups(bindings, sources, credentials, health_statuses, readiness_policy) do
     sources_by_id = Map.new(sources, &{&1.data_source_id, &1})

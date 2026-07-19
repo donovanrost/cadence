@@ -1711,6 +1711,15 @@ products. The data-sources page remains in its authenticated `:ops` LiveView
 session because it is mission-operations UI; persistence, events, forms, and
 route placement are unchanged. Production source-size pressure remains 3 and
 dependency ratchets are unchanged.
+Extracting source evidence and remediation presentation models into the
+persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocusPresentation` reduced
+`OpsDataSourcesLive` from 3,275 to 2,968 lines. Evidence labels and identity,
+publish-blocker actions, capability mismatch rows, and compatible-source
+candidates now compose the extracted source-contract model behind direct
+tests. The HEEx components, stable DOM contracts, dashboard-return navigation,
+and authenticated `:ops` route remain in the LiveView. Production source-size
+pressure remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
