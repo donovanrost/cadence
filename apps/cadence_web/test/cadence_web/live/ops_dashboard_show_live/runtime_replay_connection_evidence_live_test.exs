@@ -14,6 +14,347 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
   alias Cadence.OperationalEvents
   alias CadenceWeb.TestFixtures
 
+  defp assert_replay_connection_event_route(
+         conn,
+         evidence_path,
+         connection_interval,
+         observed_at,
+         replay_run_id,
+         source_health_event,
+         transport
+       ) do
+    {:ok, view, _html} = live(conn, evidence_path)
+
+    connection_event_selector =
+      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{connection_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
+
+    connection_operational_event_id = connection_interval.source_event_id
+    connection_operational_event_route_id = URI.encode_www_form(connection_operational_event_id)
+    connection_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
+
+    connection_operational_event_evidence =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(connection_event_selector)
+
+    assert ["operational_event"] =
+             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-target")
+
+    assert [^connection_operational_event_id] =
+             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-target-id")
+
+    assert ["evidence-ref:operational_event:" <> _] =
+             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-link-id")
+
+    view
+    |> element(connection_event_selector)
+    |> render_click(%{
+      "link-id" => "evidence-ref:operational_event:#{connection_operational_event_id}",
+      "target" => "operational_event",
+      "target-id" => connection_operational_event_id,
+      "timestamp-ms" => connection_event_at_ms,
+      "realm" => "replay",
+      "time-mode" => "replay_run",
+      "replay-run-id" => replay_run_id,
+      "data-source-id" => source_health_event.data_source_id,
+      "source-binding-id" => source_health_event.source_binding_id
+    })
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{connection_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
+           )
+
+    connection_event_path = assert_patch(view)
+    assert connection_event_path =~ "panel=data_link"
+    assert connection_event_path =~ "selected_target=operational_event"
+    assert connection_event_path =~ "selected_id=#{connection_operational_event_route_id}"
+    assert connection_event_path =~ "selected_time=#{connection_event_at_ms}"
+    assert connection_event_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{connection_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{source_health_event.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_health_event.source_binding_id}"])
+           )
+
+    connection_event_copied_path =
+      view
+      |> render()
+      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
+
+    assert connection_event_copied_path =~ "panel=data_link"
+    assert connection_event_copied_path =~ "selected_target=operational_event"
+    assert connection_event_copied_path =~ "selected_id=#{connection_operational_event_route_id}"
+    assert connection_event_copied_path =~ "selected_time=#{connection_event_at_ms}"
+    assert connection_event_copied_path =~ "replay_run_id=#{replay_run_id}"
+    assert connection_event_copied_path =~ "data_source_id=#{source_health_event.data_source_id}"
+
+    assert connection_event_copied_path =~
+             "source_binding_id=#{source_health_event.source_binding_id}"
+
+    {:ok, reopened_connection_event_view, _html} = live(conn, connection_event_copied_path)
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{connection_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{connection_operational_event_route_id}"][data-clipboard-text*="selected_time=#{connection_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state snapshot"]),
+             "connection-replay-source-health-1"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state"]),
+             "degraded"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
+             "comms.transport.connection_state"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
+             transport.transport_id
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
+             "transport"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
+             transport.transport_id
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
+             "replay-source-health-endpoint"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
+             "dss-14"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Adapter"]),
+             "tcp_socket"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="State"]),
+             "degraded"
+           )
+
+    assert has_element?(
+             reopened_connection_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
+             replay_run_id
+           )
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state snapshot"]),
+             "connection-replay-source-health-1"
+           )
+
+    stop_dashboard_view(reopened_connection_event_view)
+    stop_dashboard_view(view)
+  end
+
+  defp assert_replay_source_health_event_route(
+         conn,
+         evidence_path,
+         source_health_interval,
+         observed_at,
+         replay_run_id,
+         source_health_event
+       ) do
+    {:ok, view, _html} = live(conn, evidence_path)
+
+    source_health_event_selector =
+      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
+
+    source_health_operational_event_id = source_health_interval.source_event_id
+
+    source_health_operational_event_route_id =
+      URI.encode_www_form(source_health_operational_event_id)
+
+    source_health_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
+
+    source_health_operational_event_evidence =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(source_health_event_selector)
+
+    assert ["operational_event"] =
+             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-target")
+
+    assert [^source_health_operational_event_id] =
+             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-target-id")
+
+    assert ["evidence-ref:operational_event:" <> _] =
+             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-link-id")
+
+    view
+    |> element(source_health_event_selector)
+    |> render_click(%{
+      "link-id" => "evidence-ref:operational_event:#{source_health_operational_event_id}",
+      "target" => "operational_event",
+      "target-id" => source_health_operational_event_id,
+      "timestamp-ms" => source_health_event_at_ms,
+      "realm" => "replay",
+      "time-mode" => "replay_run",
+      "replay-run-id" => replay_run_id,
+      "data-source-id" => source_health_event.data_source_id,
+      "source-binding-id" => source_health_event.source_binding_id
+    })
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{source_health_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
+           )
+
+    source_health_event_path = assert_patch(view)
+    assert source_health_event_path =~ "panel=data_link"
+    assert source_health_event_path =~ "selected_target=operational_event"
+    assert source_health_event_path =~ "selected_id=#{source_health_operational_event_route_id}"
+    assert source_health_event_path =~ "selected_time=#{source_health_event_at_ms}"
+    assert source_health_event_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{source_health_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{source_health_event.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_health_event.source_binding_id}"])
+           )
+
+    source_health_event_copied_path =
+      view
+      |> render()
+      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
+
+    assert source_health_event_copied_path =~ "panel=data_link"
+    assert source_health_event_copied_path =~ "selected_target=operational_event"
+
+    assert source_health_event_copied_path =~
+             "selected_id=#{source_health_operational_event_route_id}"
+
+    assert source_health_event_copied_path =~ "selected_time=#{source_health_event_at_ms}"
+    assert source_health_event_copied_path =~ "replay_run_id=#{replay_run_id}"
+
+    assert source_health_event_copied_path =~
+             "data_source_id=#{source_health_event.data_source_id}"
+
+    assert source_health_event_copied_path =~
+             "source_binding_id=#{source_health_event.source_binding_id}"
+
+    {:ok, reopened_source_health_event_view, _html} = live(conn, source_health_event_copied_path)
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{source_health_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{source_health_operational_event_route_id}"][data-clipboard-text*="selected_time=#{source_health_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health event"]),
+             source_health_event.source_health_event_id
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Logical source"]),
+             "operational_observables"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Data source"]),
+             source_health_event.data_source_id
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source binding"]),
+             source_health_event.source_binding_id
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Realm"]),
+             "replay"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Dataset"]),
+             "operational_observables_replay"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Event type"]),
+             "degraded"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health"]),
+             "degraded"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Reason"]),
+             "source_probe_failed"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source payload"]),
+             "Replay operational observables source probe degraded"
+           )
+
+    assert has_element?(
+             reopened_source_health_event_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
+             replay_run_id
+           )
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health event"]),
+             source_health_event.source_health_event_id
+           )
+
+    stop_dashboard_view(reopened_source_health_event_view)
+    stop_dashboard_view(view)
+  end
+
   test "opens replay source-health and connection interval evidence from rendered operational observable frame panel" do
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_source_health_ops"
@@ -214,327 +555,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     stop_dashboard_view(reopened_source_health_interval_view)
     stop_dashboard_view(view)
 
-    {:ok, view, _html} = live(conn, evidence_path)
-
-    connection_event_selector =
-      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{connection_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
-
-    connection_operational_event_id = connection_interval.source_event_id
-    connection_operational_event_route_id = URI.encode_www_form(connection_operational_event_id)
-    connection_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
-
-    connection_operational_event_evidence =
-      view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(connection_event_selector)
-
-    assert ["operational_event"] =
-             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-target")
-
-    assert [^connection_operational_event_id] =
-             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-target-id")
-
-    assert ["evidence-ref:operational_event:" <> _] =
-             LazyHTML.attribute(connection_operational_event_evidence, "phx-value-link-id")
-
-    view
-    |> element(connection_event_selector)
-    |> render_click(%{
-      "link-id" => "evidence-ref:operational_event:#{connection_operational_event_id}",
-      "target" => "operational_event",
-      "target-id" => connection_operational_event_id,
-      "timestamp-ms" => connection_event_at_ms,
-      "realm" => "replay",
-      "time-mode" => "replay_run",
-      "replay-run-id" => replay_run_id,
-      "data-source-id" => source_health_event.data_source_id,
-      "source-binding-id" => source_health_event.source_binding_id
-    })
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{connection_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
-           )
-
-    connection_event_path = assert_patch(view)
-    assert connection_event_path =~ "panel=data_link"
-    assert connection_event_path =~ "selected_target=operational_event"
-    assert connection_event_path =~ "selected_id=#{connection_operational_event_route_id}"
-    assert connection_event_path =~ "selected_time=#{connection_event_at_ms}"
-    assert connection_event_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{connection_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{source_health_event.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_health_event.source_binding_id}"])
-           )
-
-    connection_event_copied_path =
-      view
-      |> render()
-      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
-
-    assert connection_event_copied_path =~ "panel=data_link"
-    assert connection_event_copied_path =~ "selected_target=operational_event"
-    assert connection_event_copied_path =~ "selected_id=#{connection_operational_event_route_id}"
-    assert connection_event_copied_path =~ "selected_time=#{connection_event_at_ms}"
-    assert connection_event_copied_path =~ "replay_run_id=#{replay_run_id}"
-    assert connection_event_copied_path =~ "data_source_id=#{source_health_event.data_source_id}"
-
-    assert connection_event_copied_path =~
-             "source_binding_id=#{source_health_event.source_binding_id}"
-
-    {:ok, reopened_connection_event_view, _html} = live(conn, connection_event_copied_path)
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{connection_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{connection_operational_event_route_id}"][data-clipboard-text*="selected_time=#{connection_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state snapshot"]),
-             "connection-replay-source-health-1"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state"]),
-             "degraded"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-             "comms.transport.connection_state"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-             transport.transport_id
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-             "transport"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-             transport.transport_id
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-             "replay-source-health-endpoint"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-             "dss-14"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Adapter"]),
-             "tcp_socket"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="State"]),
-             "degraded"
-           )
-
-    assert has_element?(
-             reopened_connection_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
-             replay_run_id
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Connection state snapshot"]),
-             "connection-replay-source-health-1"
-           )
-
-    stop_dashboard_view(reopened_connection_event_view)
-    stop_dashboard_view(view)
-
-    {:ok, view, _html} = live(conn, evidence_path)
-
-    source_health_event_selector =
-      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
-
-    source_health_operational_event_id = source_health_interval.source_event_id
-
-    source_health_operational_event_route_id =
-      URI.encode_www_form(source_health_operational_event_id)
-
-    source_health_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
-
-    source_health_operational_event_evidence =
-      view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(source_health_event_selector)
-
-    assert ["operational_event"] =
-             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-target")
-
-    assert [^source_health_operational_event_id] =
-             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-target-id")
-
-    assert ["evidence-ref:operational_event:" <> _] =
-             LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-link-id")
-
-    view
-    |> element(source_health_event_selector)
-    |> render_click(%{
-      "link-id" => "evidence-ref:operational_event:#{source_health_operational_event_id}",
-      "target" => "operational_event",
-      "target-id" => source_health_operational_event_id,
-      "timestamp-ms" => source_health_event_at_ms,
-      "realm" => "replay",
-      "time-mode" => "replay_run",
-      "replay-run-id" => replay_run_id,
-      "data-source-id" => source_health_event.data_source_id,
-      "source-binding-id" => source_health_event.source_binding_id
-    })
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{source_health_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
-           )
-
-    source_health_event_path = assert_patch(view)
-    assert source_health_event_path =~ "panel=data_link"
-    assert source_health_event_path =~ "selected_target=operational_event"
-    assert source_health_event_path =~ "selected_id=#{source_health_operational_event_route_id}"
-    assert source_health_event_path =~ "selected_time=#{source_health_event_at_ms}"
-    assert source_health_event_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{source_health_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{source_health_event.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_health_event.source_binding_id}"])
-           )
-
-    source_health_event_copied_path =
-      view
-      |> render()
-      |> element_attribute("#dashboard-data-link-copy-link", "data-clipboard-text")
-
-    assert source_health_event_copied_path =~ "panel=data_link"
-    assert source_health_event_copied_path =~ "selected_target=operational_event"
-
-    assert source_health_event_copied_path =~
-             "selected_id=#{source_health_operational_event_route_id}"
-
-    assert source_health_event_copied_path =~ "selected_time=#{source_health_event_at_ms}"
-    assert source_health_event_copied_path =~ "replay_run_id=#{replay_run_id}"
-
-    assert source_health_event_copied_path =~
-             "data_source_id=#{source_health_event.data_source_id}"
-
-    assert source_health_event_copied_path =~
-             "source_binding_id=#{source_health_event.source_binding_id}"
-
-    {:ok, reopened_source_health_event_view, _html} = live(conn, source_health_event_copied_path)
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{source_health_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{source_health_event.data_source_id}"][data-data-link-selected-source-binding-id="#{source_health_event.source_binding_id}"])
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{source_health_operational_event_route_id}"][data-clipboard-text*="selected_time=#{source_health_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health event"]),
-             source_health_event.source_health_event_id
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Logical source"]),
-             "operational_observables"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Data source"]),
-             source_health_event.data_source_id
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source binding"]),
-             source_health_event.source_binding_id
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Realm"]),
-             "replay"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Dataset"]),
-             "operational_observables_replay"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Event type"]),
-             "degraded"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health"]),
-             "degraded"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Reason"]),
-             "source_probe_failed"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source payload"]),
-             "Replay operational observables source probe degraded"
-           )
-
-    assert has_element?(
-             reopened_source_health_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Replay run"]),
-             replay_run_id
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Source health event"]),
-             source_health_event.source_health_event_id
-           )
-
-    stop_dashboard_view(reopened_source_health_event_view)
-    stop_dashboard_view(view)
+    assert_replay_connection_event_route(
+      conn,
+      evidence_path,
+      connection_interval,
+      observed_at,
+      replay_run_id,
+      source_health_event,
+      transport
+    )
+
+    assert_replay_source_health_event_route(
+      conn,
+      evidence_path,
+      source_health_interval,
+      observed_at,
+      replay_run_id,
+      source_health_event
+    )
   end
 
   test "reopens replay source-health interval copied from rendered frame evidence" do

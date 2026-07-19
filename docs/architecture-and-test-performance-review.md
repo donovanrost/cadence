@@ -1290,6 +1290,12 @@ and overlong test-function pressure from 12 to 11. The existing authenticated
 route and LiveView session are unchanged, while action target metadata,
 DataLink navigation, copied-link replay, runtime context fields, and the
 companion timer proof remain covered.
+Extracting the replay connection-event and source-health-event copied-route
+proofs into 166-line and 173-line assertion helpers reduced their shared
+LiveView scenario from 522 to 219 lines and overlong test-function pressure
+from 11 to 10. The existing authenticated route and LiveView session are
+unchanged; interval evidence, target metadata, DataLink navigation, copied-link
+replay, and source-health context fields remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
