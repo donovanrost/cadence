@@ -20,6 +20,7 @@ defmodule Cadence.Commanding do
     Dispatcher,
     DispatchSupervisor,
     Encoder,
+    LifecyclePolicy,
     ReleaseArtifacts,
     ReleaseTargetSelection,
     RequestValidation,
@@ -165,7 +166,7 @@ defmodule Cadence.Commanding do
              scoped_item.mission_id,
              scoped_item.staged_command_item_id
            ),
-         :ok <- ensure_staged_command_item_editable(row),
+         :ok <- LifecyclePolicy.ensure_staged_item_editable(row),
          {:ok, _stage} <- validate_stage_assignment(scoped_item),
          {:ok, _source_endpoint} <-
            SourceEndpoints.fetch_source_endpoint(
@@ -358,8 +359,8 @@ defmodule Cadence.Commanding do
              is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
     with {:ok, %CommandRequestRow{} = request_row} <-
            fetch_command_request_row(organization_id, mission_id, command_request_id),
-         :ok <- ensure_request_queueable(request_row),
-         :ok <- ensure_request_not_expired(request_row),
+         :ok <- LifecyclePolicy.ensure_request_queueable(request_row),
+         :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
          :ok <- ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
       queue_entry =
         CommandQueueEntry.new(%{
@@ -813,7 +814,7 @@ defmodule Cadence.Commanding do
 
     with {:ok, %CommandQueueEntryRow{} = queue_entry_row} <-
            fetch_command_queue_entry_row(organization_id, mission_id, command_queue_entry_id),
-         :ok <- ensure_queue_entry_releaseable(queue_entry_row, attempted_at),
+         :ok <- LifecyclePolicy.ensure_queue_entry_releaseable(queue_entry_row, attempted_at),
          :ok <-
            ensure_queue_lane_not_in_flight(
              organization_id,
@@ -827,7 +828,7 @@ defmodule Cadence.Commanding do
              mission_id,
              queue_entry_row.command_request_id
            ),
-         :ok <- ensure_request_releasable(request_row),
+         :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
            ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
@@ -979,7 +980,7 @@ defmodule Cadence.Commanding do
              is_list(staged_command_item_ids) and is_map(requested_by) do
     with {:ok, stage_row} <-
            fetch_command_stage_row(organization_id, mission_id, command_stage_id),
-         :ok <- ensure_stage_editable(stage_row),
+         :ok <- LifecyclePolicy.ensure_stage_editable(stage_row),
          {:ok, item_rows} <-
            fetch_submission_item_rows(
              organization_id,
@@ -1104,9 +1105,9 @@ defmodule Cadence.Commanding do
        when decision in [:approved, :rejected] do
     with {:ok, %CommandRequestRow{} = request_row} <-
            fetch_command_request_row(organization_id, mission_id, command_request_id),
-         :ok <- ensure_request_pending_approval(request_row),
-         :ok <- ensure_human_approval_actor(decided_by, command_request_id),
-         :ok <- ensure_not_self_approval(request_row, decided_by) do
+         :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
+         :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
+         :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by) do
       approval =
         CommandApproval.new(%{
           organization_id: organization_id,
@@ -1150,82 +1151,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  defp ensure_request_pending_approval(%CommandRequestRow{
-         lifecycle_state: "approval_pending"
-       }),
-       do: :ok
-
-  defp ensure_request_pending_approval(%CommandRequestRow{} = request_row) do
-    {:error,
-     {:command_request_not_pending_approval, request_row.command_request_id,
-      request_row.lifecycle_state}}
-  end
-
-  defp ensure_human_approval_actor(decided_by, command_request_id) when is_map(decided_by) do
-    case Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id) do
-      user_id when is_binary(user_id) and user_id != "" ->
-        :ok
-
-      _other ->
-        {:error, {:command_request_approval_requires_user_actor, command_request_id}}
-    end
-  end
-
-  defp ensure_not_self_approval(%CommandRequestRow{} = request_row, decided_by) do
-    requester_user_id =
-      request_row.requested_by_document
-      |> JsonDocument.unwrap_value()
-      |> case do
-        requested_by when is_map(requested_by) ->
-          Map.get(requested_by, "user_id") || Map.get(requested_by, :user_id)
-
-        _other ->
-          nil
-      end
-
-    approver_user_id = Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id)
-
-    if is_binary(requester_user_id) and requester_user_id != "" and
-         requester_user_id == approver_user_id do
-      {:error, {:command_request_self_approval_not_allowed, request_row.command_request_id}}
-    else
-      :ok
-    end
-  end
-
-  defp ensure_request_queueable(%CommandRequestRow{lifecycle_state: lifecycle_state})
-       when lifecycle_state in ["validated", "approved"],
-       do: :ok
-
-  defp ensure_request_queueable(
-         %CommandRequestRow{lifecycle_state: "approval_pending"} = request_row
-       ) do
-    {:error, {:command_request_requires_approval, request_row.command_request_id}}
-  end
-
-  defp ensure_request_queueable(%CommandRequestRow{} = request_row) do
-    {:error,
-     {:command_request_not_queueable, request_row.command_request_id, request_row.lifecycle_state}}
-  end
-
-  defp ensure_request_releasable(%CommandRequestRow{lifecycle_state: "queued"}), do: :ok
-
-  defp ensure_request_releasable(%CommandRequestRow{} = request_row) do
-    {:error,
-     {:command_request_not_releasable, request_row.command_request_id,
-      request_row.lifecycle_state}}
-  end
-
-  defp ensure_request_not_expired(%CommandRequestRow{expires_at: nil}), do: :ok
-
-  defp ensure_request_not_expired(%CommandRequestRow{} = request_row) do
-    if DateTime.compare(request_row.expires_at, DateTime.utc_now()) == :lt do
-      {:error, {:command_request_expired, request_row.command_request_id}}
-    else
-      :ok
-    end
-  end
-
   defp ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
     case Repo.get_by(CommandQueueEntryRow,
            organization_id: organization_id,
@@ -1235,21 +1160,6 @@ defmodule Cadence.Commanding do
       nil -> :ok
       %CommandQueueEntryRow{} -> {:error, {:command_request_already_queued, command_request_id}}
     end
-  end
-
-  defp ensure_queue_entry_releaseable(
-         %CommandQueueEntryRow{lifecycle_state: "pending"} = queue_entry_row,
-         %DateTime{} = attempted_at
-       ) do
-    with :ok <- ensure_queue_entry_not_before_elapsed(queue_entry_row, attempted_at) do
-      ensure_queue_entry_not_expired(queue_entry_row, attempted_at)
-    end
-  end
-
-  defp ensure_queue_entry_releaseable(%CommandQueueEntryRow{} = queue_entry_row, %DateTime{}) do
-    {:error,
-     {:command_queue_entry_not_releasable, queue_entry_row.command_queue_entry_id,
-      queue_entry_row.lifecycle_state}}
   end
 
   defp ensure_queue_lane_not_in_flight(organization_id, mission_id, queue_lane_key)
@@ -1265,39 +1175,6 @@ defmodule Cadence.Commanding do
 
       %CommandQueueEntryRow{} ->
         {:error, {:command_queue_lane_release_pending, queue_lane_key}}
-    end
-  end
-
-  defp ensure_queue_entry_not_before_elapsed(
-         %CommandQueueEntryRow{not_before: nil},
-         _attempted_at
-       ),
-       do: :ok
-
-  defp ensure_queue_entry_not_before_elapsed(
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %DateTime{} = attempted_at
-       ) do
-    if DateTime.compare(queue_entry_row.not_before, attempted_at) in [:lt, :eq] do
-      :ok
-    else
-      {:error,
-       {:command_queue_entry_not_ready, queue_entry_row.command_queue_entry_id,
-        queue_entry_row.not_before}}
-    end
-  end
-
-  defp ensure_queue_entry_not_expired(%CommandQueueEntryRow{expires_at: nil}, _attempted_at),
-    do: :ok
-
-  defp ensure_queue_entry_not_expired(
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %DateTime{} = attempted_at
-       ) do
-    if DateTime.compare(queue_entry_row.expires_at, attempted_at) == :lt do
-      {:error, {:command_queue_entry_expired, queue_entry_row.command_queue_entry_id}}
-    else
-      :ok
     end
   end
 
@@ -1944,44 +1821,9 @@ defmodule Cadence.Commanding do
              staged_command_item.mission_id,
              staged_command_item.command_stage_id
            ),
-         :ok <- ensure_stage_editable(command_stage) do
+         :ok <- LifecyclePolicy.ensure_stage_editable(command_stage) do
       {:ok, command_stage}
     end
-  end
-
-  defp ensure_stage_editable(%CommandStage{} = command_stage) do
-    ensure_stage_editable(command_stage.lifecycle_state, command_stage.command_stage_id)
-  end
-
-  defp ensure_stage_editable(%CommandStageRow{} = command_stage_row) do
-    ensure_stage_editable(command_stage_row.lifecycle_state, command_stage_row.command_stage_id)
-  end
-
-  defp ensure_stage_editable(lifecycle_state, _command_stage_id)
-       when lifecycle_state in [:draft, :in_review, :ready_to_submit] do
-    :ok
-  end
-
-  defp ensure_stage_editable(lifecycle_state, command_stage_id) when is_binary(lifecycle_state) do
-    normalized_lifecycle_state =
-      CommandStage.new(%{
-        mission_id: "normalize",
-        stage_name: "normalize",
-        lifecycle_state: lifecycle_state
-      }).lifecycle_state
-
-    ensure_stage_editable(normalized_lifecycle_state, command_stage_id)
-  end
-
-  defp ensure_stage_editable(lifecycle_state, command_stage_id) do
-    {:error, {:command_stage_not_editable, command_stage_id, lifecycle_state}}
-  end
-
-  defp ensure_staged_command_item_editable(%StagedCommandItemRow{lifecycle_state: "draft"}),
-    do: :ok
-
-  defp ensure_staged_command_item_editable(%StagedCommandItemRow{} = row) do
-    {:error, {:staged_command_item_not_editable, row.staged_command_item_id, row.lifecycle_state}}
   end
 
   defp fetch_command_stage_row(organization_id, mission_id, command_stage_id) do

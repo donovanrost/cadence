@@ -1373,6 +1373,12 @@ timestamps into a 142-line `Commanding.ReleaseArtifacts` module reduced
 request rows to their existing domain values before construction, while
 persistence and runtime dispatch remain unchanged; production source-size
 pressure remains 5 and dependency ratchets are unchanged.
+Extracting stage and staged-item editability, approval actor and self-approval
+rules, request queue/release eligibility, and queue-entry timing/expiry guards
+into a 193-line `Commanding.LifecyclePolicy` module reduced `Commanding` from
+2,190 to 2,032 lines. Generic map contracts preserve the persisted rows'
+string-valued lifecycle errors without making the policy a schema caller;
+production source-size pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
