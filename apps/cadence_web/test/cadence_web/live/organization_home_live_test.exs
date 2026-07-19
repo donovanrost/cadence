@@ -47,7 +47,7 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
           display_name: "Alpha"
         })
 
-      assert {:ok, _} = Cadence.persist_mission(mission)
+      assert {:ok, _} = Cadence.Missions.persist_mission(mission)
 
       {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
 
@@ -68,7 +68,7 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
           display_name: "Alpha Mission"
         })
 
-      assert {:ok, _} = Cadence.persist_mission(mission)
+      assert {:ok, _} = Cadence.Missions.persist_mission(mission)
 
       {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
 

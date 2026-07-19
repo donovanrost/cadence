@@ -51,7 +51,7 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
           display_name: "Integration Mission"
         })
 
-      assert {:ok, persisted} = Cadence.persist_mission(mission)
+      assert {:ok, persisted} = Cadence.Missions.persist_mission(mission)
 
       conn = TestFixtures.member_conn(user)
 

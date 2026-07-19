@@ -64,7 +64,7 @@ defmodule CadenceWeb.MissionNewLive do
             display_name: display_name
           })
 
-        case Cadence.persist_mission(mission) do
+        case Cadence.Missions.persist_mission(mission) do
           {:ok, persisted} ->
             {:noreply, push_navigate(socket, to: ~p"/missions/#{persisted.mission_id}")}
 

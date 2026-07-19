@@ -261,22 +261,6 @@ defmodule Cadence do
     Accounts.count_users()
   end
 
-  @spec persist_mission(Mission.t()) :: {:ok, Mission.t()} | {:error, term()}
-  def persist_mission(%Mission{} = mission) do
-    Missions.persist_mission(mission)
-  end
-
-  @spec fetch_mission(binary(), binary()) :: {:ok, Mission.t()} | {:error, term()}
-  def fetch_mission(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    Missions.fetch_mission(organization_id, mission_id)
-  end
-
-  @spec list_missions(binary()) :: [Mission.t()]
-  def list_missions(organization_id) when is_binary(organization_id) do
-    Missions.list_missions(organization_id)
-  end
-
   @spec persist_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def persist_spacecraft(organization_id, %Spacecraft{} = spacecraft)
       when is_binary(organization_id) do

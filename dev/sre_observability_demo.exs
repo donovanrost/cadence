@@ -143,7 +143,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         display_name: "SRE Telemetry Exercise"
       })
     end)
-    |> Cadence.persist_mission()
+    |> Cadence.Missions.persist_mission()
   end
 
   defp ensure_browser_access(ids) do

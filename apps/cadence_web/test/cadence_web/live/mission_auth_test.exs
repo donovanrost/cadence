@@ -23,7 +23,7 @@ defmodule CadenceWeb.MissionAuthTest do
         display_name: "Mission #{slug}"
       })
 
-    assert {:ok, persisted} = Cadence.persist_mission(mission)
+    assert {:ok, persisted} = Cadence.Missions.persist_mission(mission)
     persisted
   end
 

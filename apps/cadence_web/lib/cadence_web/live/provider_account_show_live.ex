@@ -345,7 +345,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
              version.credential_ref
            ),
          {:ok, grants} <- ProviderAccountGrants.list(scope, account.provider_account_id) do
-      missions = Cadence.list_missions(scope.organization_id)
+      missions = Cadence.Missions.list_missions(scope.organization_id)
       mission_names = Map.new(missions, &{&1.mission_id, &1.display_name})
       granted_missions = MapSet.new(grants, & &1.mission_id)
 

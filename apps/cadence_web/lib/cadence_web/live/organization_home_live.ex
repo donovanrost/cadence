@@ -89,7 +89,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
   end
 
   defp load_summary(organization_id) do
-    missions = Cadence.list_missions(organization_id)
+    missions = Cadence.Missions.list_missions(organization_id)
     members = Cadence.list_organization_members(organization_id)
 
     mission_summaries =

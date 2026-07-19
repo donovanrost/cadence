@@ -75,7 +75,7 @@ defmodule CadenceWeb.MissionNewLiveTest do
       {redirect_path, _flash} = assert_redirect(view)
       assert redirect_path =~ ~r|^/missions/mission_|
 
-      assert [mission] = Cadence.list_missions(org.organization_id)
+      assert [mission] = Cadence.Missions.list_missions(org.organization_id)
       assert mission.slug == "alpha"
       assert mission.display_name == "Alpha"
     end
@@ -103,7 +103,7 @@ defmodule CadenceWeb.MissionNewLiveTest do
           display_name: "Alpha"
         })
 
-      assert {:ok, _} = Cadence.persist_mission(existing)
+      assert {:ok, _} = Cadence.Missions.persist_mission(existing)
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 

@@ -15,7 +15,7 @@ defmodule CadenceWeb.MissionController do
            ) do
       missions =
         organization_id
-        |> Cadence.list_missions()
+        |> Cadence.Missions.list_missions()
         |> Enum.map(&ControlPlaneJSON.mission/1)
 
       json(conn, %{data: missions})
@@ -31,7 +31,7 @@ defmodule CadenceWeb.MissionController do
            ),
          {:ok, %Mission{} = mission} <-
            ControlPlaneParams.mission(organization_id, mission_params),
-         {:ok, %Mission{} = persisted_mission} <- Cadence.persist_mission(mission) do
+         {:ok, %Mission{} = persisted_mission} <- Cadence.Missions.persist_mission(mission) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.mission(persisted_mission)})

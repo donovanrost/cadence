@@ -20,7 +20,7 @@ defmodule CadenceWeb.ControlPlaneAccess do
              organization_id: organization_id,
              mission_id: mission_id
            }) do
-      Cadence.fetch_mission(organization_id, mission_id)
+      Cadence.Missions.fetch_mission(organization_id, mission_id)
     end
   end
 

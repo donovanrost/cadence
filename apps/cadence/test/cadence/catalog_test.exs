@@ -196,7 +196,7 @@ defmodule Cadence.CatalogTest do
 
       # Persist the other mission under the same org.
       {:ok, _} =
-        Cadence.persist_mission(
+        Cadence.Missions.persist_mission(
           Mission.new(%{
             mission_id: other_mission_id,
             organization_id: organization_id(),

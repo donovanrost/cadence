@@ -120,7 +120,7 @@ defmodule Cadence.DataCase do
 
     wait_for_repo_ready!()
 
-    {:ok, persisted_mission} = Cadence.persist_mission(mission)
+    {:ok, persisted_mission} = Cadence.Missions.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}
   end

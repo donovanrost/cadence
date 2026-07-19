@@ -1426,6 +1426,12 @@ to `Cadence.Notifications` reduced `Cadence` from 4,089 to 4,066 lines and
 reduced production web callers of the root facade from 95 to 94 files.
 Notification routes and authentication scopes are unchanged; production
 source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the three mission delegates from the root facade and moving mission
+controllers, LiveViews, access helpers, shared fixtures, and the SRE demo
+directly to `Cadence.Missions` reduced `Cadence` from 4,066 to 4,050 lines and
+reduced production web callers of the root facade from 94 to 90 files. Existing
+mission routes and authentication pipelines are unchanged; production
+source-size pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

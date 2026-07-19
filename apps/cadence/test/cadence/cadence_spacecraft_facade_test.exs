@@ -21,7 +21,7 @@ defmodule Cadence.SpacecraftFacadeTest do
         display_name: "Mission One"
       })
 
-    {:ok, mission} = Cadence.persist_mission(mission)
+    {:ok, mission} = Cadence.Missions.persist_mission(mission)
     {org, mission}
   end
 

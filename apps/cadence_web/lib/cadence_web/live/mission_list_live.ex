@@ -65,7 +65,7 @@ defmodule CadenceWeb.MissionListLive do
 
   defp load_mission_rows(organization_id) do
     organization_id
-    |> Cadence.list_missions()
+    |> Cadence.Missions.list_missions()
     |> Enum.map(fn mission ->
       spacecraft = Cadence.list_spacecraft(organization_id, mission.mission_id)
       Map.put(mission_status(spacecraft), :mission, mission)

@@ -26,7 +26,7 @@ defmodule CadenceWeb.MissionListLiveTest do
         display_name: display_name
       })
 
-    assert {:ok, persisted} = Cadence.persist_mission(mission)
+    assert {:ok, persisted} = Cadence.Missions.persist_mission(mission)
     persisted
   end
 

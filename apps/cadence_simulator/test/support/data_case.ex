@@ -73,7 +73,7 @@ defmodule CadenceSimulator.DataCase do
       })
 
     {:ok, persisted_organization} = Cadence.persist_organization(organization)
-    {:ok, persisted_mission} = Cadence.persist_mission(mission)
+    {:ok, persisted_mission} = Cadence.Missions.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}
   end
