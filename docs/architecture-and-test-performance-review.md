@@ -1841,6 +1841,17 @@ string-keyed warning cleanup, frame warning codes, and unknown-confidence
 preservation; existing registry and evidence tests preserve facade behavior.
 No route or authentication placement is involved; production source-size
 pressure remains 2 and dependency ratchets are unchanged.
+Extracting binding-set, application-binding, catalog-revision, and source-
+health effective-interval selection into the 315-line
+`Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance` reduced
+`SourceRegistry` from 2,227 to 1,958 lines. The registry delegates result
+provenance and reuses the extracted reader for health-interval lookup, while
+adapter execution and persisted health/status ownership remain unchanged.
+Direct tests cover frame-derived and binding-segment selection times, injected
+readers and query options, endpoint and catalog context, and non-persisted
+omission; existing registry and evidence tests preserve facade behavior. No
+route or authentication placement is involved; production source-size
+pressure remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
