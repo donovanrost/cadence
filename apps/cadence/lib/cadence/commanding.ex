@@ -10,9 +10,6 @@ defmodule Cadence.Commanding do
   alias Ecto.Changeset
   alias Ecto.Multi
 
-  alias Cadence.ActionRequests.UplinkRequest
-  alias Cadence.Catalog.Command.Compiler.VerifierPlan
-
   alias Cadence.Commanding.{
     CommandApproval,
     CommandQueueEntry,
@@ -23,6 +20,7 @@ defmodule Cadence.Commanding do
     Dispatcher,
     DispatchSupervisor,
     Encoder,
+    ReleaseArtifacts,
     ReleaseTargetSelection,
     RequestValidation,
     StagedCommandItem,
@@ -890,7 +888,7 @@ defmodule Cadence.Commanding do
          release_attempt_context =
            release_attempt_context(claimed_release_context),
          pending_attempt <-
-           build_release_attempt(
+           ReleaseArtifacts.build_attempt(
              release_attempt_context,
              claimed_release_context.encoded_command,
              claimed_release_context.released_by,
@@ -910,8 +908,8 @@ defmodule Cadence.Commanding do
   defp release_attempt_context(release_context) when is_map(release_context) do
     %{
       organization_id: release_context.organization_id,
-      queue_entry_row: release_context.queue_entry_row,
-      request_row: release_context.request_row,
+      queue_entry: CommandQueueEntryRow.to_domain(release_context.queue_entry_row),
+      command_request: CommandRequestRow.to_domain(release_context.request_row),
       realized_contact: release_context.realized_contact,
       path: release_context.path,
       transport_binding: release_context.transport_binding,
@@ -943,7 +941,7 @@ defmodule Cadence.Commanding do
 
   defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
        when is_map(release_context) do
-    uplink_request = build_uplink_request(persisted_attempt)
+    uplink_request = ReleaseArtifacts.uplink_request(persisted_attempt)
 
     case Runtime.handle_path_control_input(
            release_context.mission_id,
@@ -1433,73 +1431,6 @@ defmodule Cadence.Commanding do
     :ok
   end
 
-  defp build_release_attempt(
-         release_attempt_context,
-         encoded_command,
-         released_by,
-         attempted_at,
-         metadata
-       )
-       when is_map(release_attempt_context) do
-    queue_entry_row = release_attempt_context.queue_entry_row
-    request_row = release_attempt_context.request_row
-    realized_contact = release_attempt_context.realized_contact
-    path = release_attempt_context.path
-    transport_binding = release_attempt_context.transport_binding
-    runtime_definition = release_attempt_context.runtime_definition
-
-    CommandReleaseAttempt.new(%{
-      organization_id: release_attempt_context.organization_id,
-      mission_id: queue_entry_row.mission_id,
-      command_queue_entry_id: queue_entry_row.command_queue_entry_id,
-      command_request_id: request_row.command_request_id,
-      source_endpoint_ref: queue_entry_row.source_endpoint_ref,
-      realized_contact_id: realized_contact.realized_contact_id,
-      path_id: path.path_id,
-      transport_binding_id: transport_binding.transport_binding_id,
-      command_snapshot_id: request_row.command_snapshot_id,
-      command_id: request_row.command_id,
-      command_name: request_row.command_name,
-      layout_kind: runtime_definition.layout_kind,
-      preferred_uplink_service: request_row.preferred_uplink_service,
-      apid: runtime_definition.apid,
-      service_type: runtime_definition.service_type,
-      service_subtype: runtime_definition.service_subtype,
-      opcode: runtime_definition.opcode,
-      encoded_binary_base64: encoded_command.base64,
-      encoded_size_bytes: encoded_command.size_bytes,
-      lifecycle_state: :release_pending,
-      verification_state: nil,
-      released_by: released_by,
-      attempted_at: attempted_at,
-      metadata: metadata
-    })
-  end
-
-  defp initial_verification_state([]), do: :not_required
-  defp initial_verification_state(_verifier_plans), do: :pending
-
-  defp build_uplink_request(%CommandReleaseAttempt{} = command_release_attempt) do
-    UplinkRequest.new(%{
-      command_release_attempt_id: command_release_attempt.command_release_attempt_id,
-      command_queue_entry_id: command_release_attempt.command_queue_entry_id,
-      command_request_id: command_release_attempt.command_request_id,
-      source_endpoint_ref: command_release_attempt.source_endpoint_ref,
-      command_snapshot_id: command_release_attempt.command_snapshot_id,
-      command_id: command_release_attempt.command_id,
-      command_name: command_release_attempt.command_name,
-      layout_kind: command_release_attempt.layout_kind,
-      preferred_uplink_service: command_release_attempt.preferred_uplink_service,
-      apid: command_release_attempt.apid,
-      service_type: command_release_attempt.service_type,
-      service_subtype: command_release_attempt.service_subtype,
-      opcode: command_release_attempt.opcode,
-      encoded_binary_base64: command_release_attempt.encoded_binary_base64,
-      encoded_size_bytes: command_release_attempt.encoded_size_bytes || 0,
-      metadata: command_release_attempt.metadata
-    })
-  end
-
   defp persist_command_release_attempt(
          organization_id,
          %CommandReleaseAttempt{} = command_release_attempt
@@ -1532,7 +1463,7 @@ defmodule Cadence.Commanding do
              command_release_attempt.mission_id,
              command_release_attempt.command_release_attempt_id
            ) do
-      initial_verification_state = initial_verification_state(verifier_plans)
+      initial_verification_state = ReleaseArtifacts.initial_verification_state(verifier_plans)
 
       completed_release_attempt =
         %CommandReleaseAttempt{
@@ -1544,9 +1475,9 @@ defmodule Cadence.Commanding do
         }
 
       verifier_instances =
-        build_command_verifier_instances(
-          queue_entry_row,
-          request_row,
+        ReleaseArtifacts.verifier_instances(
+          CommandQueueEntryRow.to_domain(queue_entry_row),
+          CommandRequestRow.to_domain(request_row),
           completed_release_attempt,
           verifier_plans,
           attempted_at
@@ -1742,37 +1673,6 @@ defmodule Cadence.Commanding do
         {:command_verifier_instance, verifier_instance.command_verifier_instance_id},
         CommandVerifierInstanceRow.changeset(verifier_instance)
       )
-    end)
-  end
-
-  defp build_command_verifier_instances(
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %CommandRequestRow{} = request_row,
-         %CommandReleaseAttempt{} = command_release_attempt,
-         verifier_plans,
-         %DateTime{} = released_at
-       )
-       when is_list(verifier_plans) do
-    Enum.map(verifier_plans, fn %VerifierPlan{} = verifier_plan ->
-      CommandVerifierInstance.new(%{
-        organization_id: queue_entry_row.organization_id,
-        mission_id: queue_entry_row.mission_id,
-        command_request_id: request_row.command_request_id,
-        command_release_attempt_id: command_release_attempt.command_release_attempt_id,
-        source_endpoint_ref: queue_entry_row.source_endpoint_ref,
-        command_snapshot_id: request_row.command_snapshot_id,
-        command_id: request_row.command_id,
-        command_name: request_row.command_name,
-        verifier_id: verifier_plan.verifier_id,
-        verifier_name: verifier_plan.name,
-        phase: verifier_plan.phase,
-        severity: verifier_plan.severity,
-        success_criteria: verifier_plan.success_criteria,
-        failure_criteria: verifier_plan.failure_criteria,
-        delay_until: shift_time(released_at, verifier_plan.delay_ms),
-        timeout_at: shift_time(released_at, verifier_plan.timeout_ms),
-        metadata: verifier_plan.metadata
-      })
     end)
   end
 
@@ -2022,11 +1922,6 @@ defmodule Cadence.Commanding do
 
   defp verification_state_to_string(verification_state) when is_atom(verification_state),
     do: Atom.to_string(verification_state)
-
-  defp shift_time(%DateTime{} = _datetime, nil), do: nil
-
-  defp shift_time(%DateTime{} = datetime, milliseconds) when is_integer(milliseconds),
-    do: DateTime.add(datetime, milliseconds, :millisecond)
 
   defp maybe_schedule_queue_lane_dispatch(organization_id, mission_id, queue_lane_key)
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do

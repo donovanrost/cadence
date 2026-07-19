@@ -1366,6 +1366,13 @@ into a 299-line `Commanding.ReleaseTargetSelection` module reduced `Commanding`
 from 2,558 to 2,295 lines. Queue and release persistence now pass the existing
 `CommandRequest` domain value into this boundary, avoiding a new schema caller;
 production source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting pending release-attempt construction, uplink control-input payloads,
+initial verification state, verifier-instance construction, and delay/timeout
+timestamps into a 142-line `Commanding.ReleaseArtifacts` module reduced
+`Commanding` from 2,295 to 2,190 lines. The facade converts claimed queue and
+request rows to their existing domain values before construction, while
+persistence and runtime dispatch remain unchanged; production source-size
+pressure remains 5 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
