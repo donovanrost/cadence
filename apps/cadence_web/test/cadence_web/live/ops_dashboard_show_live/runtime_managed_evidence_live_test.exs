@@ -28,6 +28,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
            )
   end
 
+  defp persist_live_managed_runtime_dashboard!(org, mission) do
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Live Managed Runtime Evidence",
+        widgets: [
+          %{
+            type: :state_timeline,
+            title: "Live Managed Runtime",
+            binding: %{
+              source: :operational_observables,
+              observables: ["runtime.managed_activity"]
+            }
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    timeline_widget = render_item_by_title(document, "Live Managed Runtime").widget
+
+    {dashboard, timeline_widget.widget_id}
+  end
+
   test "opens replay managed runtime action and timer evidence from rendered operational observable frame panel" do
     replay_run_id = "replay_run_managed_runtime_ops"
     action_at = ~U[2026-06-17 12:01:30Z]
@@ -472,24 +494,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     {action_event, timer_event} =
       persist_live_managed_runtime_events!(org, mission, action_at, timer_at)
 
-    dashboard =
-      TestFixtures.persist_dashboard_document!(mission,
-        name: "Live Managed Runtime Evidence",
-        widgets: [
-          %{
-            type: :state_timeline,
-            title: "Live Managed Runtime",
-            binding: %{
-              source: :operational_observables,
-              observables: ["runtime.managed_activity"]
-            }
-          }
-        ]
-      )
-
-    document = fetch_dashboard_document!(org, mission, dashboard)
-    timeline_widget = render_item_by_title(document, "Live Managed Runtime").widget
-    timeline_widget_id = timeline_widget.widget_id
+    {dashboard, timeline_widget_id} =
+      persist_live_managed_runtime_dashboard!(org, mission)
 
     {:ok, view, _html} =
       live(
@@ -730,82 +736,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"])
            )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Managed action request"]),
-             "managed-action-request-live-1"
-           )
+    assert_data_link_field(
+      reopened_action_event_view,
+      "Managed action request",
+      "managed-action-request-live-1"
+    )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Action kind"]),
-             "schedule_timer"
-           )
+    assert_data_link_field(reopened_action_event_view, "Action kind", "schedule_timer")
+    assert_data_link_field(reopened_action_event_view, "Request document", "timer_key")
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Request document"]),
-             "timer_key"
-           )
+    assert_data_link_field(
+      reopened_action_event_view,
+      "Capability instance",
+      "managed-capability-live-alpha"
+    )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Capability instance"]),
-             "managed-capability-live-alpha"
-           )
+    assert_data_link_field(reopened_action_event_view, "Family", "packet_counter")
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Family"]),
-             "packet_counter"
-           )
+    assert_data_link_field(
+      reopened_action_event_view,
+      "Binding set",
+      "managed-binding-set-live-alpha"
+    )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set"]),
-             "managed-binding-set-live-alpha"
-           )
+    assert_data_link_field(reopened_action_event_view, "Binding set version", "1")
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Binding set version"]),
-             "1"
-           )
+    assert_data_link_field(
+      reopened_action_event_view,
+      "Activation",
+      "managed-activation-live-alpha"
+    )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Activation"]),
-             "managed-activation-live-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition affinity"]),
-             "spacecraft"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Partition value"]),
-             "spacecraft-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Packet"]),
-             "managed-packet-live-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Evidence"]),
-             "managed-evidence-live-alpha"
-           )
-
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-inspector [data-data-link-field="Requested"])
-           )
+    assert_data_link_field(reopened_action_event_view, "Partition affinity", "spacecraft")
+    assert_data_link_field(reopened_action_event_view, "Partition value", "spacecraft-alpha")
+    assert_data_link_field(reopened_action_event_view, "Packet", "managed-packet-live-alpha")
+    assert_data_link_field(reopened_action_event_view, "Evidence", "managed-evidence-live-alpha")
+    assert_data_link_field(reopened_action_event_view, "Requested")
 
     stop_dashboard_view(action_evidence_view)
     stop_dashboard_view(reopened_action_event_view)
