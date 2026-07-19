@@ -12,7 +12,6 @@ defmodule Cadence.Commanding do
 
   alias Cadence.Commanding.{
     CommandApproval,
-    CommandApprovalRow,
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
@@ -27,6 +26,7 @@ defmodule Cadence.Commanding do
     LifecyclePolicy,
     ReleaseArtifacts,
     ReleaseTargetSelection,
+    RequestQueueStore,
     RequestValidation,
     StagedCommandItem,
     StageStore,
@@ -108,48 +108,20 @@ defmodule Cadence.Commanding do
           {:ok, CommandRequest.t()} | {:error, term()}
   def persist_command_request(organization_id, %CommandRequest{} = command_request)
       when is_binary(organization_id) do
-    with {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
-         {:ok, validated_request} <- RequestValidation.validate_and_enrich(scoped_request),
-         {:ok, %CommandRequestRow{} = row} <-
-           Repo.insert(CommandRequestRow.changeset(validated_request),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :command_request_id]
-           ) do
-      {:ok, CommandRequestRow.to_domain(row)}
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
+    RequestQueueStore.persist_request(organization_id, command_request)
   end
 
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
   def fetch_command_request(organization_id, mission_id, command_request_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_request_id) do
-    case Repo.get_by(CommandRequestRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_request_id: command_request_id
-         ) do
-      nil -> {:error, :command_request_not_found}
-      %CommandRequestRow{} = row -> {:ok, CommandRequestRow.to_domain(row)}
-    end
+    RequestQueueStore.fetch_request(organization_id, mission_id, command_request_id)
   end
 
   @spec list_command_requests(binary(), binary(), keyword()) :: [CommandRequest.t()]
   def list_command_requests(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CommandRequestRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
-    |> maybe_filter_equals(:source_command_stage_id, Keyword.get(opts, :command_stage_id))
-    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
-    |> order_by([row], asc: row.requested_at, asc: row.command_request_id)
-    |> Repo.all()
-    |> Enum.map(&CommandRequestRow.to_domain/1)
+    RequestQueueStore.list_requests(organization_id, mission_id, opts)
   end
 
   @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
@@ -164,7 +136,7 @@ defmodule Cadence.Commanding do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_request_id) and is_map(approved_by) and is_list(opts) do
-    decide_command_request(
+    RequestQueueStore.decide_request(
       organization_id,
       mission_id,
       command_request_id,
@@ -186,7 +158,7 @@ defmodule Cadence.Commanding do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_request_id) and is_map(rejected_by) and is_list(opts) do
-    decide_command_request(
+    RequestQueueStore.decide_request(
       organization_id,
       mission_id,
       command_request_id,
@@ -201,29 +173,13 @@ defmodule Cadence.Commanding do
   def fetch_command_approval(organization_id, mission_id, command_approval_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_approval_id) do
-    case Repo.get_by(CommandApprovalRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_approval_id: command_approval_id
-         ) do
-      nil -> {:error, :command_approval_not_found}
-      %CommandApprovalRow{} = row -> {:ok, CommandApprovalRow.to_domain(row)}
-    end
+    RequestQueueStore.fetch_approval(organization_id, mission_id, command_approval_id)
   end
 
   @spec list_command_approvals(binary(), binary(), keyword()) :: [CommandApproval.t()]
   def list_command_approvals(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CommandApprovalRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
-    |> maybe_filter_equals(:decision, decision_filter(opts))
-    |> order_by([row], asc: row.decided_at, asc: row.command_approval_id)
-    |> Repo.all()
-    |> Enum.map(&CommandApprovalRow.to_domain/1)
+    RequestQueueStore.list_approvals(organization_id, mission_id, opts)
   end
 
   @spec enqueue_command_request(binary(), binary(), binary(), map(), keyword()) ::
@@ -238,56 +194,24 @@ defmodule Cadence.Commanding do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
-    with {:ok, %CommandRequestRow{} = request_row} <-
-           fetch_command_request_row(organization_id, mission_id, command_request_id),
-         :ok <- LifecyclePolicy.ensure_request_queueable(request_row),
-         :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
-         :ok <- ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
-      queue_entry =
-        CommandQueueEntry.new(%{
-          organization_id: organization_id,
-          mission_id: mission_id,
-          command_request_id: command_request_id,
-          source_endpoint_ref: request_row.source_endpoint_ref,
-          queue_lane_key: request_row.source_endpoint_ref,
-          priority: request_row.priority,
-          queue_sequence: System.unique_integer([:positive, :monotonic]),
-          not_before: request_row.not_before,
-          expires_at: request_row.expires_at,
-          lifecycle_state: :pending,
-          enqueued_by: enqueued_by,
-          enqueued_at: Keyword.get(opts, :enqueued_at, DateTime.utc_now()),
-          metadata: Keyword.get(opts, :metadata, %{})
-        })
-
-      multi =
-        Multi.new()
-        |> Multi.insert(:queue_entry, CommandQueueEntryRow.changeset(queue_entry))
-        |> Multi.update(
-          :command_request,
-          CommandRequestRow.lifecycle_changeset(request_row, :queued)
+    case RequestQueueStore.enqueue_request(
+           organization_id,
+           mission_id,
+           command_request_id,
+           enqueued_by,
+           opts
+         ) do
+      {:ok, %{queue_entry: queue_entry} = result} ->
+        maybe_schedule_queue_lane_dispatch(
+          queue_entry.organization_id,
+          queue_entry.mission_id,
+          queue_entry.queue_lane_key
         )
 
-      case Repo.transaction(multi) do
-        {:ok, %{queue_entry: queue_entry_row, command_request: updated_request_row}} ->
-          maybe_schedule_queue_lane_dispatch(
-            queue_entry_row.organization_id,
-            queue_entry_row.mission_id,
-            queue_entry_row.queue_lane_key
-          )
+        {:ok, result}
 
-          {:ok,
-           %{
-             queue_entry: CommandQueueEntryRow.to_domain(queue_entry_row),
-             command_request: CommandRequestRow.to_domain(updated_request_row)
-           }}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -296,54 +220,20 @@ defmodule Cadence.Commanding do
   def fetch_command_queue_entry(organization_id, mission_id, command_queue_entry_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_queue_entry_id) do
-    case Repo.get_by(CommandQueueEntryRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_queue_entry_id: command_queue_entry_id
-         ) do
-      nil -> {:error, :command_queue_entry_not_found}
-      %CommandQueueEntryRow{} = row -> {:ok, CommandQueueEntryRow.to_domain(row)}
-    end
+    RequestQueueStore.fetch_queue_entry(organization_id, mission_id, command_queue_entry_id)
   end
 
   @spec list_command_queue_entries(binary(), binary(), keyword()) :: [CommandQueueEntry.t()]
   def list_command_queue_entries(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CommandQueueEntryRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
-    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
-    |> maybe_filter_equals(:queue_lane_key, Keyword.get(opts, :queue_lane_key))
-    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
-    |> order_by([row],
-      asc: row.queue_lane_key,
-      asc: row.priority,
-      asc: row.queue_sequence,
-      asc: row.command_queue_entry_id
-    )
-    |> Repo.all()
-    |> Enum.map(&CommandQueueEntryRow.to_domain/1)
+    RequestQueueStore.list_queue_entries(organization_id, mission_id, opts)
   end
 
   @spec list_pending_queue_lanes(keyword()) :: [
           %{organization_id: binary(), mission_id: binary(), queue_lane_key: binary()}
         ]
   def list_pending_queue_lanes(opts \\ []) when is_list(opts) do
-    CommandQueueEntryRow
-    |> where([row], row.lifecycle_state == "pending")
-    |> maybe_filter_equals(:organization_id, Keyword.get(opts, :organization_id))
-    |> maybe_filter_equals(:mission_id, Keyword.get(opts, :mission_id))
-    |> distinct([row], [row.organization_id, row.mission_id, row.queue_lane_key])
-    |> order_by([row], asc: row.organization_id, asc: row.mission_id, asc: row.queue_lane_key)
-    |> select([row], %{
-      organization_id: row.organization_id,
-      mission_id: row.mission_id,
-      queue_lane_key: row.queue_lane_key
-    })
-    |> Repo.all()
+    RequestQueueStore.list_pending_lanes(opts)
   end
 
   @spec notify_release_target_available(RealizedContact.t()) :: :ok
@@ -355,7 +245,7 @@ defmodule Cadence.Commanding do
       :ok
     else
       realized_contact.organization_id
-      |> pending_release_target_lanes(realized_contact.mission_id, lane_keys)
+      |> RequestQueueStore.pending_target_lanes(realized_contact.mission_id, lane_keys)
       |> Enum.each(fn lane ->
         maybe_schedule_queue_lane_dispatch(
           lane.organization_id,
@@ -369,33 +259,6 @@ defmodule Cadence.Commanding do
   end
 
   def notify_release_target_available(%RealizedContact{}), do: :ok
-
-  defp pending_release_target_lanes(nil, mission_id, lane_keys) do
-    CommandQueueEntryRow
-    |> where([row], row.mission_id == ^mission_id)
-    |> pending_release_target_lanes_query(lane_keys)
-  end
-
-  defp pending_release_target_lanes(organization_id, mission_id, lane_keys)
-       when is_binary(organization_id) do
-    CommandQueueEntryRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> pending_release_target_lanes_query(lane_keys)
-  end
-
-  defp pending_release_target_lanes_query(query, lane_keys) when is_list(lane_keys) do
-    query
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], row.queue_lane_key in ^lane_keys)
-    |> distinct([row], [row.organization_id, row.mission_id, row.queue_lane_key])
-    |> order_by([row], asc: row.organization_id, asc: row.mission_id, asc: row.queue_lane_key)
-    |> select([row], %{
-      organization_id: row.organization_id,
-      mission_id: row.mission_id,
-      queue_lane_key: row.queue_lane_key
-    })
-    |> Repo.all()
-  end
 
   defp release_target_lane_keys(%RealizedContact{} = realized_contact) do
     realized_contact.paths
@@ -412,12 +275,7 @@ defmodule Cadence.Commanding do
 
   @spec requeue_release_pending_queue_entries() :: non_neg_integer()
   def requeue_release_pending_queue_entries do
-    {updated_count, _rows} =
-      CommandQueueEntryRow
-      |> where([row], row.lifecycle_state == "release_pending")
-      |> Repo.update_all(set: [lifecycle_state: "pending"])
-
-    updated_count
+    RequestQueueStore.requeue_release_pending()
   end
 
   @spec dispatch_queue_lane(binary(), binary(), binary(), map(), keyword()) ::
@@ -439,16 +297,21 @@ defmodule Cadence.Commanding do
              is_map(released_by) and is_list(opts) do
     attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
 
-    with :ok <- ensure_queue_lane_not_in_flight(organization_id, mission_id, queue_lane_key),
+    with :ok <-
+           RequestQueueStore.ensure_lane_not_in_flight(
+             organization_id,
+             mission_id,
+             queue_lane_key
+           ),
          {:ok, %CommandQueueEntryRow{} = queue_entry_row} <-
-           next_dispatch_candidate(
+           RequestQueueStore.next_dispatch_candidate(
              organization_id,
              mission_id,
              queue_lane_key,
              attempted_at
            ),
          {:ok, %CommandRequestRow{} = request_row} <-
-           fetch_command_request_row(
+           RequestQueueStore.fetch_request_row(
              organization_id,
              mission_id,
              queue_entry_row.command_request_id
@@ -654,17 +517,25 @@ defmodule Cadence.Commanding do
     attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
 
     with {:ok, %CommandQueueEntryRow{} = queue_entry_row} <-
-           fetch_command_queue_entry_row(organization_id, mission_id, command_queue_entry_id),
+           RequestQueueStore.fetch_queue_entry_row(
+             organization_id,
+             mission_id,
+             command_queue_entry_id
+           ),
          :ok <- LifecyclePolicy.ensure_queue_entry_releaseable(queue_entry_row, attempted_at),
          :ok <-
-           ensure_queue_lane_not_in_flight(
+           RequestQueueStore.ensure_lane_not_in_flight(
              organization_id,
              mission_id,
              queue_entry_row.queue_lane_key
            ),
-         :ok <- ensure_queue_entry_is_next_release_candidate(queue_entry_row, attempted_at),
+         :ok <-
+           RequestQueueStore.ensure_entry_is_next_release_candidate(
+             queue_entry_row,
+             attempted_at
+           ),
          {:ok, %CommandRequestRow{} = request_row} <-
-           fetch_command_request_row(
+           RequestQueueStore.fetch_request_row(
              organization_id,
              mission_id,
              queue_entry_row.command_request_id
@@ -725,7 +596,7 @@ defmodule Cadence.Commanding do
 
   defp execute_release_attempt(release_context) when is_map(release_context) do
     with {:ok, %CommandQueueEntryRow{} = claimed_queue_entry_row} <-
-           claim_queue_entry_for_release(release_context.queue_entry_row),
+           RequestQueueStore.claim_for_release(release_context.queue_entry_row),
          claimed_release_context = %{release_context | queue_entry_row: claimed_queue_entry_row},
          release_attempt_context =
            release_attempt_context(claimed_release_context),
@@ -769,7 +640,7 @@ defmodule Cadence.Commanding do
         {:ok, persisted_attempt}
 
       {:error, reason} ->
-        restore_queue_entry_pending(claimed_queue_entry_row)
+        RequestQueueStore.restore_pending(claimed_queue_entry_row)
 
         maybe_schedule_queue_lane_dispatch(
           claimed_queue_entry_row.organization_id,
@@ -826,220 +697,6 @@ defmodule Cadence.Commanding do
       staged_command_item_ids,
       requested_by
     )
-  end
-
-  defp decide_command_request(
-         organization_id,
-         mission_id,
-         command_request_id,
-         decision,
-         decided_by,
-         opts
-       )
-       when decision in [:approved, :rejected] do
-    with {:ok, %CommandRequestRow{} = request_row} <-
-           fetch_command_request_row(organization_id, mission_id, command_request_id),
-         :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
-         :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
-         :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by) do
-      approval =
-        CommandApproval.new(%{
-          organization_id: organization_id,
-          mission_id: mission_id,
-          command_request_id: command_request_id,
-          decision: decision,
-          decided_by: decided_by,
-          decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
-          reason: Keyword.get(opts, :reason),
-          metadata: Keyword.get(opts, :metadata, %{})
-        })
-
-      request_lifecycle_state =
-        case decision do
-          :approved -> :approved
-          :rejected -> :rejected
-        end
-
-      multi =
-        Multi.new()
-        |> Multi.insert(:approval, CommandApprovalRow.changeset(approval))
-        |> Multi.update(
-          :command_request,
-          CommandRequestRow.lifecycle_changeset(request_row, request_lifecycle_state)
-        )
-
-      case Repo.transaction(multi) do
-        {:ok, %{approval: approval_row, command_request: updated_request_row}} ->
-          {:ok,
-           %{
-             approval: CommandApprovalRow.to_domain(approval_row),
-             command_request: CommandRequestRow.to_domain(updated_request_row)
-           }}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
-    end
-  end
-
-  defp ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
-    case Repo.get_by(CommandQueueEntryRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_request_id: command_request_id
-         ) do
-      nil -> :ok
-      %CommandQueueEntryRow{} -> {:error, {:command_request_already_queued, command_request_id}}
-    end
-  end
-
-  defp ensure_queue_lane_not_in_flight(organization_id, mission_id, queue_lane_key)
-       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
-    case Repo.get_by(CommandQueueEntryRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           queue_lane_key: queue_lane_key,
-           lifecycle_state: "release_pending"
-         ) do
-      nil ->
-        :ok
-
-      %CommandQueueEntryRow{} ->
-        {:error, {:command_queue_lane_release_pending, queue_lane_key}}
-    end
-  end
-
-  defp ensure_queue_entry_is_next_release_candidate(
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %DateTime{} = attempted_at
-       ) do
-    case next_release_candidate(
-           queue_entry_row.organization_id,
-           queue_entry_row.mission_id,
-           queue_entry_row.queue_lane_key,
-           attempted_at
-         ) do
-      nil ->
-        {:error, {:command_queue_lane_empty, queue_entry_row.queue_lane_key}}
-
-      %CommandQueueEntryRow{command_queue_entry_id: queue_entry_id}
-      when queue_entry_id == queue_entry_row.command_queue_entry_id ->
-        :ok
-
-      %CommandQueueEntryRow{} = next_queue_entry_row ->
-        {:error,
-         {:command_queue_entry_not_next_for_release, queue_entry_row.command_queue_entry_id,
-          next_queue_entry_row.command_queue_entry_id}}
-    end
-  end
-
-  defp next_release_candidate(
-         organization_id,
-         mission_id,
-         queue_lane_key,
-         %DateTime{} = attempted_at
-       )
-       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
-    pending_release_candidates_query(organization_id, mission_id, queue_lane_key, attempted_at)
-    |> order_by([row],
-      asc: row.priority,
-      asc: row.queue_sequence,
-      asc: row.command_queue_entry_id
-    )
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  defp next_dispatch_candidate(
-         organization_id,
-         mission_id,
-         queue_lane_key,
-         %DateTime{} = attempted_at
-       ) do
-    case next_release_candidate(organization_id, mission_id, queue_lane_key, attempted_at) do
-      %CommandQueueEntryRow{} = queue_entry_row ->
-        {:ok, queue_entry_row}
-
-      nil ->
-        case next_pending_not_before(organization_id, mission_id, queue_lane_key, attempted_at) do
-          %DateTime{} = not_before ->
-            {:error, {:command_queue_lane_waiting_for_not_before, queue_lane_key, not_before}}
-
-          nil ->
-            {:error, :command_queue_lane_empty}
-        end
-    end
-  end
-
-  defp pending_release_candidates_query(
-         organization_id,
-         mission_id,
-         queue_lane_key,
-         %DateTime{} = attempted_at
-       ) do
-    CommandQueueEntryRow
-    |> where([row], row.organization_id == ^organization_id)
-    |> where([row], row.mission_id == ^mission_id)
-    |> where([row], row.queue_lane_key == ^queue_lane_key)
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], is_nil(row.not_before) or row.not_before <= ^attempted_at)
-    |> where([row], is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
-  end
-
-  defp next_pending_not_before(
-         organization_id,
-         mission_id,
-         queue_lane_key,
-         %DateTime{} = attempted_at
-       ) do
-    CommandQueueEntryRow
-    |> where([row], row.organization_id == ^organization_id)
-    |> where([row], row.mission_id == ^mission_id)
-    |> where([row], row.queue_lane_key == ^queue_lane_key)
-    |> where([row], row.lifecycle_state == "pending")
-    |> where([row], not is_nil(row.not_before) and row.not_before > ^attempted_at)
-    |> where([row], is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
-    |> order_by([row], asc: row.not_before, asc: row.queue_sequence)
-    |> select([row], row.not_before)
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  defp claim_queue_entry_for_release(%CommandQueueEntryRow{} = queue_entry_row) do
-    {updated_count, _rows} =
-      CommandQueueEntryRow
-      |> where(
-        [row],
-        row.organization_id == ^queue_entry_row.organization_id and
-          row.mission_id == ^queue_entry_row.mission_id and
-          row.command_queue_entry_id == ^queue_entry_row.command_queue_entry_id and
-          row.lifecycle_state == "pending"
-      )
-      |> Repo.update_all(set: [lifecycle_state: "release_pending"])
-
-    if updated_count == 1 do
-      fetch_command_queue_entry_row(
-        queue_entry_row.organization_id,
-        queue_entry_row.mission_id,
-        queue_entry_row.command_queue_entry_id
-      )
-    else
-      {:error,
-       {:command_queue_entry_not_releasable, queue_entry_row.command_queue_entry_id,
-        queue_entry_row.lifecycle_state}}
-    end
-  end
-
-  defp restore_queue_entry_pending(%CommandQueueEntryRow{} = queue_entry_row) do
-    _ =
-      queue_entry_row
-      |> CommandQueueEntryRow.lifecycle_changeset(:pending)
-      |> Repo.update()
-
-    :ok
   end
 
   defp persist_command_release_attempt(
@@ -1329,28 +986,6 @@ defmodule Cadence.Commanding do
     :ok
   end
 
-  defp fetch_command_request_row(organization_id, mission_id, command_request_id) do
-    case Repo.get_by(CommandRequestRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_request_id: command_request_id
-         ) do
-      nil -> {:error, :command_request_not_found}
-      %CommandRequestRow{} = row -> {:ok, row}
-    end
-  end
-
-  defp fetch_command_queue_entry_row(organization_id, mission_id, command_queue_entry_id) do
-    case Repo.get_by(CommandQueueEntryRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_queue_entry_id: command_queue_entry_id
-         ) do
-      nil -> {:error, :command_queue_entry_not_found}
-      %CommandQueueEntryRow{} = row -> {:ok, row}
-    end
-  end
-
   defp fetch_command_release_attempt_row(
          organization_id,
          mission_id,
@@ -1374,14 +1009,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  defp decision_filter(opts) do
-    case Keyword.get(opts, :decision) do
-      nil -> nil
-      decision when is_atom(decision) -> Atom.to_string(decision)
-      decision when is_binary(decision) -> decision
-    end
-  end
-
   defp maybe_filter_equals(query, _field, nil), do: query
 
   defp maybe_filter_equals(query, field, value) when is_atom(value) do
@@ -1390,22 +1017,6 @@ defmodule Cadence.Commanding do
 
   defp maybe_filter_equals(query, field, value) when is_binary(value) do
     where(query, [row], field(row, ^field) == ^value)
-  end
-
-  defp put_organization_scope(%CommandRequest{} = command_request, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case command_request.organization_id do
-      nil ->
-        {:ok, %CommandRequest{command_request | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, command_request}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          command_request.mission_id}}
-    end
   end
 
   defp put_organization_scope(%CommandReleaseAttempt{} = command_release_attempt, organization_id)
