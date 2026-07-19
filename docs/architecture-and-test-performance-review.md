@@ -916,6 +916,9 @@ Extracting runtime invalidation event and durable decision setup from the
 operator-diagnostics LiveView case reduced that test from 305 to 191 lines and
 overlong-test pressure from 32 to 31 while preserving the rendered diagnostic
 and no-refresh blocker assertions.
+Extracting the data-source binding change interaction and persisted audit
+assertions reduced the mission data-sources listing test from 307 to 280 lines
+and overlong-test pressure from 31 to 30.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

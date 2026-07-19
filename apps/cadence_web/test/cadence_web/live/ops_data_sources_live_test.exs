@@ -28,6 +28,37 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     {TestFixtures.member_conn(user), user, org, mission}
   end
 
+  defp change_binding_to_managed!(view, user) do
+    view
+    |> element("#change-binding-rehearsal-telemetry-binding")
+    |> render_click()
+
+    assert has_element?(view, "#change-binding-form-rehearsal-telemetry-binding")
+
+    view
+    |> form("#change-binding-form-rehearsal-telemetry-binding",
+      binding: %{data_source_id: "managed-rehearsal-telemetry"}
+    )
+    |> render_submit()
+
+    assert has_element?(
+             view,
+             ~s(#source-binding-rehearsal-telemetry-binding[data-data-source-id="managed-rehearsal-telemetry"])
+           )
+
+    assert {:ok, updated_binding} = DataSources.fetch_data_binding("rehearsal-telemetry-binding")
+    assert updated_binding.data_source_id == "managed-rehearsal-telemetry"
+
+    assert [changed_event | _events] =
+             DataSources.list_data_binding_events("rehearsal-telemetry-binding")
+
+    assert changed_event.event_type == :changed
+    assert changed_event.actor_id == user.user_id
+    assert changed_event.previous_data_source_id == "rehearsal-questdb"
+    assert changed_event.current_data_source_id == "managed-rehearsal-telemetry"
+    assert changed_event.payload["source"] == "ops_data_sources_live"
+  end
+
   test "lists mission data sources, bindings, credentials, and source health" do
     {conn, user, org, mission} = signed_in_org_and_mission()
 
@@ -299,34 +330,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              ~s(#dashboard-source-health-events [data-event-probe-diagnostic-kind="connection_unreachable"][data-event-probe-diagnostic-stage="connection_test"][data-event-probe-remediation="check_questdb_endpoint"])
            )
 
-    view
-    |> element("#change-binding-rehearsal-telemetry-binding")
-    |> render_click()
-
-    assert has_element?(view, "#change-binding-form-rehearsal-telemetry-binding")
-
-    view
-    |> form("#change-binding-form-rehearsal-telemetry-binding",
-      binding: %{data_source_id: "managed-rehearsal-telemetry"}
-    )
-    |> render_submit()
-
-    assert has_element?(
-             view,
-             ~s(#source-binding-rehearsal-telemetry-binding[data-data-source-id="managed-rehearsal-telemetry"])
-           )
-
-    assert {:ok, updated_binding} = DataSources.fetch_data_binding("rehearsal-telemetry-binding")
-    assert updated_binding.data_source_id == "managed-rehearsal-telemetry"
-
-    assert [changed_event | _events] =
-             DataSources.list_data_binding_events("rehearsal-telemetry-binding")
-
-    assert changed_event.event_type == :changed
-    assert changed_event.actor_id == user.user_id
-    assert changed_event.previous_data_source_id == "rehearsal-questdb"
-    assert changed_event.current_data_source_id == "managed-rehearsal-telemetry"
-    assert changed_event.payload["source"] == "ops_data_sources_live"
+    change_binding_to_managed!(view, user)
 
     render_async(dashboard_view, 1_000)
 
