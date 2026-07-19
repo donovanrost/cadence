@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.{ContactRequirements, Planner}
+  alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
 
   @impl true
   def mount(%{"contact_requirement_id" => requirement_id}, _session, socket) do
@@ -41,7 +41,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
      |> assign(:planning?, true)
      |> assign(:planning_error, nil)
      |> start_async(:plan_contact_requirement, fn ->
-       Cadence.plan_contact_requirement(
+       Planner.run(
          scope,
          mission.mission_id,
          requirement.contact_requirement_id,
@@ -75,7 +75,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
     run_ids = snapshots |> Enum.map(& &1.contact_planning_run_id) |> Enum.uniq()
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case Cadence.create_contact_plan(scope, mission.mission_id, %{
+    case ContactPlans.create(scope, mission.mission_id, %{
            planning_run_ids: run_ids,
            selected_snapshot_ids: Enum.map(snapshots, & &1.contact_opportunity_snapshot_id),
            rationale:
@@ -386,7 +386,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
         |> MapSet.intersection(opportunity_ids)
 
       plans =
-        Cadence.list_contact_plans(scope.organization_id, mission.mission_id)
+        ContactPlans.list(scope.organization_id, mission.mission_id)
         |> Enum.filter(fn {_plan, plan_version} ->
           Enum.any?(
             plan_version.requirement_refs_document["requirements"] || [],

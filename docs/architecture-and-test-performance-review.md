@@ -1582,6 +1582,15 @@ reduced production web callers of the root facade from 25 to 23 files.
 Automation controls remain in the authenticated `:ops` LiveView session, and
 direct grant and automation mutations continue passing `current_scope`;
 production source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the eleven requirement-planning, contact-plan lifecycle, approval, and
+execution clauses from the root facade moved 12 production call sites directly
+to `Cadence.ContactPlanning.Planner`, `ContactPlans`, `ContactPlanApprovals`,
+and `ContactPlanExecutions`. This reduced `Cadence` from 1,944 to 1,766 lines
+and reduced production web callers of the root facade from 23 to 19 files.
+Contact-plan routes remain in the authenticated `:ops` LiveView session, and
+direct planning, submission, decision, and execution calls continue passing
+`current_scope`; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

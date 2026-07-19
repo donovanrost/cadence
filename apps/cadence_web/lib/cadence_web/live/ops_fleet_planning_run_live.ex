@@ -583,7 +583,7 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
        do: {nil, nil, snapshots}
 
   defp candidate_plan(organization_id, mission_id, run, snapshots) do
-    case Cadence.fetch_contact_plan(organization_id, mission_id, run.candidate_contact_plan_id) do
+    case ContactPlans.fetch(organization_id, mission_id, run.candidate_contact_plan_id) do
       {:ok, plan, version} ->
         plan_snapshots =
           ContactPlans.selected_snapshots(

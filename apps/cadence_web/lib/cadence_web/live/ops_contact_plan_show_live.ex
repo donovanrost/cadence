@@ -3,7 +3,12 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements}
+  alias Cadence.ContactPlanning.{
+    ContactPlanApprovals,
+    ContactPlanExecutions,
+    ContactPlans,
+    ContactRequirements
+  }
 
   @impl true
   def mount(%{"contact_plan_id" => plan_id}, _session, socket) do
@@ -38,7 +43,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
   def handle_event("submit-plan", %{"submission" => %{"reason" => reason}}, socket) do
     %{current_scope: scope, current_mission: mission, plan: plan} = socket.assigns
 
-    case Cadence.submit_contact_plan(
+    case ContactPlans.submit(
            scope,
            mission.mission_id,
            plan.contact_plan_id,
@@ -68,7 +73,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
      socket
      |> assign(:executing?, true)
      |> start_async(:execute_contact_plan, fn ->
-       Cadence.execute_contact_plan(scope, mission.mission_id, plan.contact_plan_id)
+       ContactPlanExecutions.execute(scope, mission.mission_id, plan.contact_plan_id)
      end)}
   end
 
@@ -330,7 +335,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
     result =
       case decision do
         :approve ->
-          Cadence.approve_contact_plan(
+          ContactPlanApprovals.approve(
             scope,
             mission.mission_id,
             plan.contact_plan_id,
@@ -340,7 +345,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
           )
 
         :reject ->
-          Cadence.reject_contact_plan(
+          ContactPlanApprovals.reject(
             scope,
             mission.mission_id,
             plan.contact_plan_id,
@@ -371,7 +376,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
     plan_id = socket.assigns.contact_plan_id
 
     with {:ok, plan, version} <-
-           Cadence.fetch_contact_plan(scope.organization_id, mission.mission_id, plan_id) do
+           ContactPlans.fetch(scope.organization_id, mission.mission_id, plan_id) do
       requirements =
         Enum.map(version.requirement_refs_document["requirements"] || [], fn ref ->
           {:ok, requirement} =
@@ -394,7 +399,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
         )
 
       approvals =
-        Cadence.list_contact_plan_approvals(
+        ContactPlanApprovals.list(
           scope.organization_id,
           mission.mission_id,
           plan.contact_plan_id
@@ -403,7 +408,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
       execution_version = plan.approved_version || version.version
 
       execution_items =
-        Cadence.list_contact_plan_execution_items(
+        ContactPlanExecutions.list(
           scope.organization_id,
           mission.mission_id,
           plan.contact_plan_id,
