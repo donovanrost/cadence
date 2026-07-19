@@ -38,6 +38,206 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     :ok
   end
 
+  defp assert_dev_telemetry_ingress(
+         conn,
+         api_token,
+         organization_id,
+         mission_id,
+         binding_set_id
+       ) do
+    packet_hex =
+      build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
+      |> Base.encode16(case: :lower)
+
+    dev_ingress_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/space_packets", %{
+        "space_packet" => %{
+          "source_ref" => "station-a",
+          "packet_hex" => packet_hex
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "raw_evidence" => %{
+                 "mission_id" => ^mission_id,
+                 "protocol_family" => "space_packet",
+                 "direction" => "downlink",
+                 "source_ref" => "station-a",
+                 "raw_hex" => ^packet_hex
+               },
+               "packet_records" => [
+                 %{
+                   "mission_id" => ^mission_id,
+                   "packet_kind" => "space_packet",
+                   "apid" => 42,
+                   "sequence_count" => 3,
+                   "secondary_header" => false
+                 }
+               ],
+               "dispatch_decisions" => [
+                 %{
+                   "binding_set_id" => ^binding_set_id,
+                   "binding_set_version" => 2,
+                   "status" => "matched"
+                 }
+               ],
+               "outputs" => [
+                 %{
+                   "output_kind" => "telemetry_sample",
+                   "point_name" => "THERM.temperature_c",
+                   "raw_value" => 12.5,
+                   "engineering_value" => 12.5
+                 },
+                 %{
+                   "output_kind" => "telemetry_sample",
+                   "point_name" => "THERM.heater_enabled",
+                   "raw_value" => true,
+                   "engineering_value" => true
+                 }
+               ]
+             }
+           } = json_response(dev_ingress_conn, 200)
+
+    frame_size = 17
+
+    tm_frame_hex =
+      build_tm_single_frame(
+        42,
+        4,
+        <<12.5::float-32, 1::size(1), 0::size(7)>>,
+        frame_size
+      )
+      |> Base.encode16(case: :lower)
+
+    dev_tm_ingress_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/tm_frames", %{
+        "tm_frame" => %{
+          "source_ref" => "station-b",
+          "frame_hex" => tm_frame_hex,
+          "frame_size" => frame_size,
+          "ocf_length" => 0
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "raw_evidence" => %{
+                 "mission_id" => ^mission_id,
+                 "protocol_family" => "tm_transfer_frame",
+                 "direction" => "downlink",
+                 "source_ref" => "station-b",
+                 "raw_hex" => ^tm_frame_hex
+               },
+               "transfer_frame_records" => [
+                 %{
+                   "mission_id" => ^mission_id,
+                   "protocol_family" => "tm_transfer_frame",
+                   "scid" => 11,
+                   "vcid" => 2,
+                   "frame_seq" => 0,
+                   "raw_frame_length_bytes" => ^frame_size
+                 }
+               ],
+               "protocol_anomalies" => [],
+               "packet_records" => [
+                 %{
+                   "mission_id" => ^mission_id,
+                   "packet_kind" => "space_packet",
+                   "apid" => 42,
+                   "sequence_count" => 4,
+                   "secondary_header" => false
+                 }
+               ],
+               "dispatch_decisions" => [
+                 %{
+                   "binding_set_id" => ^binding_set_id,
+                   "binding_set_version" => 2,
+                   "status" => "matched"
+                 }
+               ],
+               "outputs" => [
+                 %{
+                   "output_kind" => "telemetry_sample",
+                   "point_name" => "THERM.temperature_c",
+                   "raw_value" => 12.5,
+                   "engineering_value" => 12.5
+                 },
+                 %{
+                   "output_kind" => "telemetry_sample",
+                   "point_name" => "THERM.heater_enabled",
+                   "raw_value" => true,
+                   "engineering_value" => true
+                 }
+               ]
+             }
+           } = json_response(dev_tm_ingress_conn, 200)
+
+    latest_values_conn =
+      conn
+      |> authorize(api_token)
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/latest")
+
+    assert %{
+             "data" => [
+               %{
+                 "point_id" => "THERM.heater_enabled",
+                 "point_name" => "THERM.heater_enabled",
+                 "engineering_value" => true
+               },
+               %{
+                 "point_id" => "THERM.temperature_c",
+                 "point_name" => "THERM.temperature_c",
+                 "engineering_value" => 12.5
+               }
+             ]
+           } = json_response(latest_values_conn, 200)
+
+    latest_value_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/latest"
+      )
+
+    assert %{
+             "data" => %{
+               "point_id" => "THERM.temperature_c",
+               "point_name" => "THERM.temperature_c",
+               "raw_value" => 12.5,
+               "engineering_value" => 12.5
+             }
+           } = json_response(latest_value_conn, 200)
+
+    history_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history?limit=10&order=desc"
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "point_id" => "THERM.temperature_c",
+                 "point_name" => "THERM.temperature_c",
+                 "raw_value" => 12.5,
+                 "engineering_value" => 12.5
+               },
+               %{
+                 "point_id" => "THERM.temperature_c",
+                 "point_name" => "THERM.temperature_c",
+                 "raw_value" => 12.5,
+                 "engineering_value" => 12.5
+               }
+             ]
+           } = json_response(history_conn, 200)
+  end
+
   test "authenticated mission API manages catalog artifacts and import runs", %{conn: conn} do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
@@ -479,197 +679,13 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              }
            } = json_response(activation_conn, 201)
 
-    packet_hex =
-      build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
-      |> Base.encode16(case: :lower)
-
-    dev_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/space_packets", %{
-        "space_packet" => %{
-          "source_ref" => "station-a",
-          "packet_hex" => packet_hex
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "raw_evidence" => %{
-                 "mission_id" => ^mission_id,
-                 "protocol_family" => "space_packet",
-                 "direction" => "downlink",
-                 "source_ref" => "station-a",
-                 "raw_hex" => ^packet_hex
-               },
-               "packet_records" => [
-                 %{
-                   "mission_id" => ^mission_id,
-                   "packet_kind" => "space_packet",
-                   "apid" => 42,
-                   "sequence_count" => 3,
-                   "secondary_header" => false
-                 }
-               ],
-               "dispatch_decisions" => [
-                 %{
-                   "binding_set_id" => ^binding_set_id,
-                   "binding_set_version" => 2,
-                   "status" => "matched"
-                 }
-               ],
-               "outputs" => [
-                 %{
-                   "output_kind" => "telemetry_sample",
-                   "point_name" => "THERM.temperature_c",
-                   "raw_value" => 12.5,
-                   "engineering_value" => 12.5
-                 },
-                 %{
-                   "output_kind" => "telemetry_sample",
-                   "point_name" => "THERM.heater_enabled",
-                   "raw_value" => true,
-                   "engineering_value" => true
-                 }
-               ]
-             }
-           } = json_response(dev_ingress_conn, 200)
-
-    frame_size = 17
-
-    tm_frame_hex =
-      build_tm_single_frame(
-        42,
-        4,
-        <<12.5::float-32, 1::size(1), 0::size(7)>>,
-        frame_size
-      )
-      |> Base.encode16(case: :lower)
-
-    dev_tm_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/tm_frames", %{
-        "tm_frame" => %{
-          "source_ref" => "station-b",
-          "frame_hex" => tm_frame_hex,
-          "frame_size" => frame_size,
-          "ocf_length" => 0
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "raw_evidence" => %{
-                 "mission_id" => ^mission_id,
-                 "protocol_family" => "tm_transfer_frame",
-                 "direction" => "downlink",
-                 "source_ref" => "station-b",
-                 "raw_hex" => ^tm_frame_hex
-               },
-               "transfer_frame_records" => [
-                 %{
-                   "mission_id" => ^mission_id,
-                   "protocol_family" => "tm_transfer_frame",
-                   "scid" => 11,
-                   "vcid" => 2,
-                   "frame_seq" => 0,
-                   "raw_frame_length_bytes" => ^frame_size
-                 }
-               ],
-               "protocol_anomalies" => [],
-               "packet_records" => [
-                 %{
-                   "mission_id" => ^mission_id,
-                   "packet_kind" => "space_packet",
-                   "apid" => 42,
-                   "sequence_count" => 4,
-                   "secondary_header" => false
-                 }
-               ],
-               "dispatch_decisions" => [
-                 %{
-                   "binding_set_id" => ^binding_set_id,
-                   "binding_set_version" => 2,
-                   "status" => "matched"
-                 }
-               ],
-               "outputs" => [
-                 %{
-                   "output_kind" => "telemetry_sample",
-                   "point_name" => "THERM.temperature_c",
-                   "raw_value" => 12.5,
-                   "engineering_value" => 12.5
-                 },
-                 %{
-                   "output_kind" => "telemetry_sample",
-                   "point_name" => "THERM.heater_enabled",
-                   "raw_value" => true,
-                   "engineering_value" => true
-                 }
-               ]
-             }
-           } = json_response(dev_tm_ingress_conn, 200)
-
-    latest_values_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/latest")
-
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.heater_enabled",
-                 "point_name" => "THERM.heater_enabled",
-                 "engineering_value" => true
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(latest_values_conn, 200)
-
-    latest_value_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/latest"
-      )
-
-    assert %{
-             "data" => %{
-               "point_id" => "THERM.temperature_c",
-               "point_name" => "THERM.temperature_c",
-               "raw_value" => 12.5,
-               "engineering_value" => 12.5
-             }
-           } = json_response(latest_value_conn, 200)
-
-    history_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history?limit=10&order=desc"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(history_conn, 200)
+    assert_dev_telemetry_ingress(
+      conn,
+      api_token,
+      organization_id,
+      mission_id,
+      binding_set_id
+    )
   end
 
   test "authenticated mission API manages command stages, requests, approvals, and queue entries",

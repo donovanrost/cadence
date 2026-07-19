@@ -1302,6 +1302,11 @@ test-function pressure from 10 to 9. The existing authenticated route and
 LiveView session are unchanged; frame evidence, queue-entry inspection,
 queue-to-request navigation, copied routes, navigation trails, and the return
 to the queue entry remain covered.
+Extracting the 199-line dev space-packet, TM-frame, latest-value, and history
+HTTP proof reduced its mission-data controller test from 440 to 256 lines and
+overlong test-function pressure from 9 to 8. The control-plane API routes and
+authentication plugs are unchanged; raw evidence, protocol records, dispatch,
+telemetry outputs, and read-back response contracts remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
