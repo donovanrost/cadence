@@ -867,6 +867,10 @@ Separating dedicated TSDB lifecycle, binding history, and cache/policy cases
 from the 3,625-line dashboard data-sources test reduced test-file pressure to
 8. The source/probe, backend, binding-history, and cache/policy files are now
 1,051, 557, 849, and 838 lines, backed by 403 lines of shared source fixtures.
+Separating runtime planning, frame resolution, cache/execution policy, and live
+resolution from the 3,642-line dashboard engine test reduced test-file pressure
+to 7. Those five engine test files are now 1,001, 673, 355, 657, and 758 lines,
+backed by 277 lines of shared engine fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
