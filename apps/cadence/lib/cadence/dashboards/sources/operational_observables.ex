@@ -43,7 +43,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     LinkRfStateFrames,
     LinkRfStateRows,
     ProductPolicy,
-    RevisionPolicy
+    RevisionPolicy,
+    TransportBitrateRows
   }
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
@@ -1495,7 +1496,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    bitrate_rows(
+    TransportBitrateRows.latest(
       transports_fun.(organization_id, mission_id, adapter_opts),
       metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1514,7 +1515,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     transports = transports_fun.(organization_id, mission_id, adapter_opts)
     snapshots = metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
 
-    transport_bitrate_history_rows(transports, snapshots, request)
+    TransportBitrateRows.history(transports, snapshots, request)
   end
 
   defp command_queue_depth_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -2733,37 +2734,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp bitrate_rows(transports, snapshots, request) do
-    snapshots = Enum.flat_map(snapshots, &normalize_transport_metric_snapshots/1)
-
-    transports
-    |> Enum.flat_map(&transport_bitrate_rows(&1, snapshots, request))
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp transport_bitrate_history_rows(transports, snapshots, request) do
-    rows =
-      snapshots
-      |> Enum.flat_map(&normalize_transport_metric_snapshots/1)
-      |> Enum.map(&transport_bitrate_history_row(transports, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&metric_history_row_in_request?(&1, request))
-      |> Enum.sort_by(&metric_history_sort_key/1)
-      |> apply_request_limit(request)
-
-    rows ++ empty_transport_bitrate_history_rows(transports, rows, request)
-  end
-
-  defp empty_transport_bitrate_history_rows(transports, rows, request) do
-    present_series = MapSet.new(Enum.map(rows, &metric_history_series_key/1))
-
-    transports
-    |> Enum.flat_map(&transport_bitrate_rows(&1, [], request))
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-    |> Enum.reject(&(metric_history_series_key(&1) in present_series))
-    |> Enum.map(&Map.put(&1, :empty_series?, true))
-  end
-
   defp observable_ids(rows) do
     rows
     |> Enum.map(& &1.observable_id)
@@ -2774,72 +2744,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     case observable_ids(rows) do
       [observable_id] -> observable_id
       _observable_ids -> nil
-    end
-  end
-
-  defp transport_bitrate_rows(transport, snapshots, request) do
-    request.observables
-    |> Enum.filter(&(&1 in @bitrate_observable_ids))
-    |> Enum.map(&transport_bitrate_row(transport, snapshots, &1))
-  end
-
-  defp transport_bitrate_row(transport, snapshots, observable_id) do
-    transport_id = attr(transport, :transport_id)
-
-    source_endpoint_id =
-      metadata_attr(transport, :source_endpoint_id) ||
-        metadata_attr(transport, :source_endpoint_ref)
-
-    ground_station_id =
-      metadata_attr(transport, :ground_station_id) || metadata_attr(transport, :antenna_id)
-
-    snapshot = transport_metric_snapshot(snapshots, transport_id, observable_id)
-    link_id = link_id_for([snapshot, transport])
-
-    %{
-      observable_id: observable_id,
-      resource_id: transport_id,
-      label: attr(transport, :display_name) || transport_id,
-      scope_kind: :transport,
-      transport_id: transport_id,
-      source_endpoint_id: source_endpoint_id,
-      ground_station_id: ground_station_id,
-      link_id: link_id,
-      adapter_key: attr(transport, :adapter_key),
-      value: attr(snapshot, :value),
-      unit: attr(snapshot, :unit) || "bit/s",
-      observed_at: attr(snapshot, :observed_at),
-      source_event_id: attr(snapshot, :source_event_id),
-      source: transport
-    }
-  end
-
-  defp transport_bitrate_history_row(transports, snapshot) do
-    with transport when not is_nil(transport) <-
-           find_transport_for_metric_snapshot(transports, snapshot),
-         value when is_number(value) <- attr(snapshot, :value),
-         %DateTime{} = observed_at <- attr(snapshot, :observed_at) do
-      transport_id = attr(transport, :transport_id)
-      link_id = link_id_for([snapshot, transport])
-
-      %{
-        observable_id: attr(snapshot, :observable_id),
-        resource_id: transport_id,
-        label: attr(transport, :display_name) || transport_id,
-        scope_kind: :transport,
-        transport_id: transport_id,
-        source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-        ground_station_id: transport_ground_station_id(transport, snapshot),
-        link_id: link_id,
-        adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-        value: value,
-        unit: attr(snapshot, :unit) || "bit/s",
-        observed_at: observed_at,
-        source_event_id: attr(snapshot, :source_event_id),
-        source: transport
-      }
-    else
-      _missing -> nil
     end
   end
 
@@ -3061,85 +2965,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp ingress_processing_latency_label(_source_endpoint_id, _mission_id), do: "Ingress latency"
-
-  defp normalize_transport_metric_snapshots(snapshot) do
-    base = %{
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
-      observed_at: attr(snapshot, :observed_at),
-      source_event_id: attr(snapshot, :source_event_id)
-    }
-
-    snapshot
-    |> transport_metric_observable_ids()
-    |> Enum.map(fn observable_id ->
-      base
-      |> Map.put(:observable_id, observable_id)
-      |> Map.put(:value, transport_metric_value(snapshot, observable_id))
-    end)
-  end
-
-  defp transport_metric_snapshot(snapshots, transport_id, observable_id)
-       when is_binary(transport_id) and transport_id != "" do
-    Enum.find(
-      snapshots,
-      &((attr(&1, :transport_id) == transport_id or attr(&1, :resource_id) == transport_id) and
-          attr(&1, :observable_id) == observable_id)
-    )
-  end
-
-  defp transport_metric_snapshot(_snapshots, _transport_id, _observable_id), do: nil
-
-  defp transport_metric_observable_ids(snapshot) do
-    case attr(snapshot, :observable_id) do
-      observable_id when observable_id in @bitrate_observable_ids ->
-        [observable_id]
-
-      _observable_id ->
-        inferred =
-          [
-            {"comms.transport.downlink_bitrate",
-             transport_metric_value(snapshot, "comms.transport.downlink_bitrate")},
-            {"comms.transport.uplink_bitrate",
-             transport_metric_value(snapshot, "comms.transport.uplink_bitrate")}
-          ]
-          |> Enum.filter(fn {_observable_id, value} -> is_number(value) end)
-          |> Enum.map(fn {observable_id, _value} -> observable_id end)
-
-        case inferred do
-          [] -> ["comms.transport.downlink_bitrate"]
-          observable_ids -> observable_ids
-        end
-    end
-  end
-
-  defp transport_metric_value(snapshot, "comms.transport.uplink_bitrate") do
-    [
-      attr(snapshot, :uplink_bitrate),
-      attr(snapshot, :uplink_bitrate_bps),
-      attr(snapshot, :bitrate),
-      attr(snapshot, :bit_rate),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp transport_metric_value(snapshot, _observable_id) do
-    [
-      attr(snapshot, :downlink_bitrate),
-      attr(snapshot, :downlink_bitrate_bps),
-      attr(snapshot, :bitrate),
-      attr(snapshot, :bit_rate),
-      attr(snapshot, :value)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
 
   defp normalize_number(value) when is_integer(value), do: value * 1.0
   defp normalize_number(value) when is_float(value), do: value
@@ -3690,28 +3515,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     |> Enum.map(& &1.runtime_fact_id)
     |> Enum.filter(&(is_binary(&1) and &1 != ""))
     |> Enum.uniq()
-  end
-
-  defp transport_source_endpoint_id(transport, snapshot) do
-    attr(snapshot, :source_endpoint_id) ||
-      metadata_attr(transport, :source_endpoint_id) ||
-      metadata_attr(transport, :source_endpoint_ref)
-  end
-
-  defp transport_ground_station_id(transport, snapshot) do
-    attr(snapshot, :ground_station_id) ||
-      metadata_attr(transport, :ground_station_id) ||
-      metadata_attr(transport, :antenna_id)
-  end
-
-  defp find_transport_for_metric_snapshot(transports, snapshot) do
-    transport_id = attr(snapshot, :transport_id)
-    link_id = attr(snapshot, :link_id) || attr(snapshot, :resource_id)
-
-    Enum.find(transports, fn transport ->
-      attr(transport, :transport_id) == transport_id or
-        (present_text?(link_id) and link_id_for([transport]) == link_id)
-    end)
   end
 
   defp connection_state(value) do
@@ -4821,7 +4624,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      value: transport_metric_value(snapshot, attr(snapshot, :observable_id)),
+      value: TransportBitrateRows.value(snapshot, attr(snapshot, :observable_id)),
       unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
       observed_at: attr(snapshot, :observed_at),
       source_event_id: attr(snapshot, :source_event_id)

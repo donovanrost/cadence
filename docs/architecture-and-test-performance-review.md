@@ -1104,6 +1104,12 @@ materialization into a 382-line row module reduced the adapter from 5,339 to
 5,100 lines. Revision fingerprints reuse the same normalization API while
 provider callbacks and frame construction remain adapter-owned; production
 source-size pressure remains 8.
+Moving transport bitrate snapshot expansion, latest/history row joins,
+scope/time filtering, ordering, limits, and empty-series materialization into
+a 329-line row module reduced the adapter from 5,100 to 4,903 lines. Revision
+fingerprints reuse its bitrate normalizer; provider callbacks, freshness
+annotation, and frame construction remain adapter-owned, so production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
