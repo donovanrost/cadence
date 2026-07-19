@@ -1821,6 +1821,16 @@ preservation, segment summaries, and structured incompatible-frame warnings,
 while existing registry and evidence tests preserve facade behavior. No route
 or authentication placement is involved; production source-size pressure
 remains 2 and dependency ratchets are unchanged.
+Extracting classified source-health application into the 126-line
+`Cadence.Dashboards.SourceRegistry.HealthMerge` reduced `SourceRegistry` from
+2,414 to 2,308 lines. The registry retains persisted status and effective-
+interval lookup plus health-policy classification; facts and results now share
+one transformation for durable diagnostics, interval metadata, and watermark
+decoration. Direct tests cover probe and connection-test evidence, interval
+provenance, watermark propagation, and missing-status fallback, while existing
+registry and evidence tests preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

@@ -41,6 +41,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   alias Cadence.Dashboards.SourceRegistry.{
     CapabilityPosture,
     FactsAggregation,
+    HealthMerge,
     SegmentResultMerge
   }
 
@@ -599,125 +600,18 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
           interval = source_health_interval(request, resolved_binding, status, opts)
 
-          merge_source_health_classification(facts, classification, interval)
+          HealthMerge.merge_facts(facts, classification, interval)
 
         {:error, :source_health_status_not_found} ->
           classification =
             SourceHealth.classify_status(nil, resolved_binding.data_source, opts)
 
-          merge_source_health_classification(facts, classification, nil)
+          HealthMerge.merge_facts(facts, classification, nil)
       end
     else
       facts
     end
   end
-
-  defp merge_source_health_classification(%SourceFacts{} = facts, classification, interval) do
-    meta =
-      facts.meta
-      |> source_health_classification_meta(classification, interval)
-
-    facts =
-      SourceFacts.new(%{
-        facts
-        | source_health: classification.source_health,
-          meta: meta,
-          watermark: put_source_health_meta(facts.watermark, meta),
-          watermarks: Enum.map(facts.watermarks, &put_source_health_meta(&1, meta))
-      })
-
-    facts
-  end
-
-  defp source_health_classification_meta(meta, classification, interval) do
-    status = Map.get(classification, :status)
-
-    meta
-    |> ensure_map()
-    |> Map.put(:source_health, classification.source_health)
-    |> Map.put(:source_health_freshness, classification.freshness)
-    |> Map.put(:source_health_reason, classification.reason)
-    |> Map.put(:source_health_observed_at, classification.observed_at)
-    |> Map.put(:source_health_last_seen_at, classification.last_seen_at)
-    |> Map.put(:source_health_age_ms, classification.age_ms)
-    |> Map.put(:source_health_max_age_ms, classification.max_age_ms)
-    |> Map.put(:source_health_raw_source_health, classification.raw_source_health)
-    |> Map.put(:source_health_raw_reason, classification.raw_reason)
-    |> maybe_put(:source_health_probe_kind, source_health_payload_value(status, :probe_kind))
-    |> maybe_put(
-      :source_health_probe_message,
-      source_health_payload_value(status, :probe_message)
-    )
-    |> maybe_put(
-      :source_health_probe_metadata,
-      source_health_payload_value(status, :probe_metadata)
-    )
-    |> maybe_put(
-      :source_health_connection_test_result,
-      source_health_payload_value(status, :connection_test_result)
-    )
-    |> maybe_put(
-      :source_health_connection_test_kind,
-      source_health_payload_value(status, :connection_test_kind)
-    )
-    |> maybe_put(
-      :source_health_connection_test_message,
-      source_health_payload_value(status, :connection_test_message)
-    )
-    |> maybe_put(:durable_source_health?, not is_nil(status))
-    |> maybe_put(:source_health_event_id, status && status.source_health_event_id)
-    |> put_source_health_interval_meta(interval)
-  end
-
-  defp put_source_health_interval_meta(meta, %EffectiveInterval{} = interval) do
-    interval_metadata = EffectiveInterval.metadata(interval)
-
-    meta
-    |> Map.put(:source_health_interval_id, interval.interval_id)
-    |> Map.put(:source_health_interval_source_event_id, interval.source_event_id)
-    |> Map.put(:source_health_interval, interval_metadata)
-  end
-
-  defp put_source_health_interval_meta(meta, _interval), do: meta
-
-  defp source_health_payload_value(%{payload: payload}, key) when is_map(payload) do
-    Map.get(payload, Atom.to_string(key), Map.get(payload, key))
-  end
-
-  defp source_health_payload_value(_status, _key), do: nil
-
-  defp put_source_health_meta(nil, _meta), do: nil
-
-  defp put_source_health_meta(%SourceWatermark{} = watermark, meta) when is_map(meta) do
-    %SourceWatermark{
-      watermark
-      | meta:
-          watermark.meta
-          |> ensure_map()
-          |> maybe_put(:source_health_event_id, Map.get(meta, :source_health_event_id))
-          |> maybe_put(:source_health_reason, Map.get(meta, :source_health_reason))
-          |> maybe_put(:source_health_probe_kind, Map.get(meta, :source_health_probe_kind))
-          |> maybe_put(:source_health_probe_message, Map.get(meta, :source_health_probe_message))
-          |> maybe_put(
-            :source_health_probe_metadata,
-            Map.get(meta, :source_health_probe_metadata)
-          )
-          |> maybe_put(
-            :source_health_connection_test_result,
-            Map.get(meta, :source_health_connection_test_result)
-          )
-          |> maybe_put(
-            :source_health_connection_test_kind,
-            Map.get(meta, :source_health_connection_test_kind)
-          )
-          |> maybe_put(
-            :source_health_connection_test_message,
-            Map.get(meta, :source_health_connection_test_message)
-          )
-    }
-  end
-
-  defp put_source_health_meta(watermark, _meta), do: watermark
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
@@ -1568,7 +1462,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
           meta =
             result.meta
-            |> source_health_classification_meta(classification, interval)
+            |> HealthMerge.classification_meta(classification, interval)
 
           evidence =
             DataLinks.source_health_event_evidence_refs([status_metadata(meta)]) ++
@@ -1582,7 +1476,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
                 meta
                 |> maybe_mark_source_health_degraded()
                 |> merge_evidence_refs(evidence),
-              watermarks: Enum.map(result.watermarks, &put_source_health_meta(&1, meta)),
+              watermarks: Enum.map(result.watermarks, &HealthMerge.put_watermark(&1, meta)),
               frames:
                 Enum.map(
                   result.frames,
