@@ -23,6 +23,7 @@ defmodule Cadence.Commanding do
     Dispatcher,
     DispatchSupervisor,
     Encoder,
+    ReleaseTargetSelection,
     RequestValidation,
     StagedCommandItem,
     VerifierScheduler,
@@ -578,10 +579,10 @@ defmodule Cadence.Commanding do
             path: %Path{} = path,
             transport_binding: %TransportBinding{} = transport_binding
           }} <-
-           resolve_dispatch_release_target(
+           ReleaseTargetSelection.resolve_dispatch(
              organization_id,
              mission_id,
-             request_row
+             CommandRequestRow.to_domain(request_row)
            ) do
       release_command_queue_entry(
         organization_id,
@@ -830,7 +831,7 @@ defmodule Cadence.Commanding do
            ),
          :ok <- ensure_request_releasable(request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
-           fetch_realized_contact_for_release(
+           ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
              mission_id,
              realized_contact_id
@@ -839,7 +840,11 @@ defmodule Cadence.Commanding do
            Contacts.start_realized_contact(organization_id, mission_id, realized_contact_id),
          {:ok,
           %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} <-
-           resolve_release_target(realized_contact, request_row, opts),
+           ReleaseTargetSelection.resolve(
+             realized_contact,
+             CommandRequestRow.to_domain(request_row),
+             opts
+           ),
          {:ok, request_basis} <-
            RequestValidation.resolve_basis(
              organization_id,
@@ -1392,274 +1397,6 @@ defmodule Cadence.Commanding do
     |> select([row], row.not_before)
     |> limit(1)
     |> Repo.one()
-  end
-
-  defp fetch_realized_contact_for_release(organization_id, mission_id, realized_contact_id) do
-    with {:ok, %RealizedContact{} = realized_contact} <-
-           Contacts.fetch_realized_contact(organization_id, mission_id, realized_contact_id),
-         :ok <- ensure_realized_contact_releasable(realized_contact) do
-      {:ok, realized_contact}
-    end
-  end
-
-  defp ensure_realized_contact_releasable(%RealizedContact{lifecycle_state: lifecycle_state})
-       when lifecycle_state in [:defined, :active],
-       do: :ok
-
-  defp ensure_realized_contact_releasable(%RealizedContact{} = realized_contact) do
-    {:error,
-     {:realized_contact_not_releasable, realized_contact.realized_contact_id,
-      realized_contact.lifecycle_state}}
-  end
-
-  defp resolve_dispatch_release_target(
-         organization_id,
-         mission_id,
-         %CommandRequestRow{} = request_row
-       ) do
-    organization_id
-    |> Contacts.list_realized_contacts(mission_id)
-    |> Enum.filter(fn %RealizedContact{} = realized_contact ->
-      ensure_realized_contact_releasable(realized_contact) == :ok
-    end)
-    |> Enum.sort_by(&dispatch_contact_sort_key/1)
-    |> Enum.reduce_while(
-      {:error,
-       {:command_queue_lane_no_release_target, request_row.source_endpoint_ref, mission_id}},
-      fn %RealizedContact{} = realized_contact, _acc ->
-        case resolve_release_target(realized_contact, request_row, []) do
-          {:ok,
-           %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} ->
-            {:halt,
-             {:ok,
-              %{
-                realized_contact: realized_contact,
-                path: path,
-                transport_binding: transport_binding
-              }}}
-
-          {:error, _reason} ->
-            {:cont,
-             {:error,
-              {:command_queue_lane_no_release_target, request_row.source_endpoint_ref, mission_id}}}
-        end
-      end
-    )
-  end
-
-  defp dispatch_contact_sort_key(%RealizedContact{} = realized_contact) do
-    lifecycle_rank =
-      case realized_contact.lifecycle_state do
-        :active -> 0
-        :defined -> 1
-        _other -> 2
-      end
-
-    {lifecycle_rank, realized_contact.realized_at || realized_contact.initial_time,
-     realized_contact.realized_contact_id}
-  end
-
-  defp resolve_release_target(
-         %RealizedContact{} = realized_contact,
-         %CommandRequestRow{} = request_row,
-         opts
-       ) do
-    with {:ok, %Path{} = path} <- resolve_release_path(realized_contact, request_row, opts),
-         {:ok, %TransportBinding{} = transport_binding} <-
-           resolve_release_transport_binding(path, request_row, opts) do
-      {:ok, %{path: path, transport_binding: transport_binding}}
-    end
-  end
-
-  defp resolve_release_path(
-         %RealizedContact{} = realized_contact,
-         %CommandRequestRow{} = request_row,
-         opts
-       ) do
-    case Keyword.get(opts, :path_id) do
-      path_id when is_binary(path_id) ->
-        with {:ok, %Path{} = path} <- fetch_contact_path(realized_contact, path_id),
-             :ok <- ensure_uplink_path(path),
-             :ok <- ensure_selected_uplink_path(path),
-             :ok <- ensure_path_matches_source_endpoint(path, request_row.source_endpoint_ref) do
-          {:ok, path}
-        end
-
-      _other ->
-        select_release_path(realized_contact, request_row.source_endpoint_ref)
-    end
-  end
-
-  defp fetch_contact_path(%RealizedContact{} = realized_contact, path_id) do
-    case Enum.find(realized_contact.paths, &(&1.path_id == path_id)) do
-      nil ->
-        {:error,
-         {:realized_contact_path_not_found, realized_contact.realized_contact_id, path_id}}
-
-      %Path{} = path ->
-        {:ok, path}
-    end
-  end
-
-  defp ensure_uplink_path(%Path{direction: :uplink}), do: :ok
-
-  defp ensure_uplink_path(%Path{} = path),
-    do: {:error, {:realized_contact_path_not_uplink, path.path_id}}
-
-  defp ensure_selected_uplink_path(%Path{selection_role: :selected}), do: :ok
-
-  defp ensure_selected_uplink_path(%Path{} = path) do
-    {:error, {:realized_contact_path_not_selected_for_uplink, path.path_id}}
-  end
-
-  defp ensure_path_matches_source_endpoint(%Path{source_endpoint_ref: nil}, _source_endpoint_ref),
-    do: :ok
-
-  defp ensure_path_matches_source_endpoint(
-         %Path{source_endpoint_ref: source_endpoint_ref},
-         source_endpoint_ref
-       ),
-       do: :ok
-
-  defp ensure_path_matches_source_endpoint(%Path{} = path, source_endpoint_ref) do
-    {:error, {:realized_contact_path_source_endpoint_mismatch, path.path_id, source_endpoint_ref}}
-  end
-
-  defp select_release_path(%RealizedContact{} = realized_contact, source_endpoint_ref) do
-    matching_paths =
-      Enum.filter(realized_contact.paths, fn %Path{} = path ->
-        path.direction == :uplink and path.selection_role == :selected and
-          (is_nil(path.source_endpoint_ref) or path.source_endpoint_ref == source_endpoint_ref)
-      end)
-
-    case matching_paths do
-      [%Path{} = path] ->
-        {:ok, path}
-
-      [] ->
-        {:error,
-         {:selected_uplink_path_not_found, realized_contact.realized_contact_id,
-          source_endpoint_ref}}
-
-      _multiple ->
-        {:error,
-         {:realized_contact_has_multiple_matching_selected_uplink_paths,
-          realized_contact.realized_contact_id, source_endpoint_ref}}
-    end
-  end
-
-  defp resolve_release_transport_binding(%Path{} = path, %CommandRequestRow{} = request_row, opts) do
-    case Keyword.get(opts, :transport_binding_id) do
-      transport_binding_id when is_binary(transport_binding_id) ->
-        with {:ok, %TransportBinding{} = transport_binding} <-
-               fetch_transport_binding(path, transport_binding_id),
-             :ok <-
-               ensure_transport_binding_matches_preferred_service(transport_binding, request_row) do
-          {:ok, transport_binding}
-        end
-
-      _other ->
-        select_transport_binding(path, request_row)
-    end
-  end
-
-  defp fetch_transport_binding(%Path{} = path, transport_binding_id) do
-    case Enum.find(path.transport_bindings, &(&1.transport_binding_id == transport_binding_id)) do
-      nil -> {:error, {:uplink_transport_binding_not_found, path.path_id, transport_binding_id}}
-      %TransportBinding{} = transport_binding -> {:ok, transport_binding}
-    end
-  end
-
-  defp select_transport_binding(%Path{transport_bindings: []} = path, _request_row) do
-    {:error, {:uplink_transport_binding_not_configured, path.path_id}}
-  end
-
-  defp select_transport_binding(
-         %Path{transport_bindings: [transport_binding]},
-         %CommandRequestRow{} = request_row
-       ) do
-    with :ok <- ensure_transport_binding_matches_preferred_service(transport_binding, request_row) do
-      {:ok, transport_binding}
-    end
-  end
-
-  defp select_transport_binding(%Path{} = path, %CommandRequestRow{} = request_row) do
-    preferred_uplink_service = request_row.preferred_uplink_service
-
-    matching_transport_bindings =
-      Enum.filter(path.transport_bindings, fn %TransportBinding{} = transport_binding ->
-        transport_binding_matches_preferred_service?(transport_binding, preferred_uplink_service)
-      end)
-
-    case {preferred_uplink_service, matching_transport_bindings} do
-      {preferred_uplink_service, [%TransportBinding{} = transport_binding]}
-      when is_binary(preferred_uplink_service) and preferred_uplink_service != "" ->
-        {:ok, transport_binding}
-
-      {preferred_uplink_service, []}
-      when is_binary(preferred_uplink_service) and preferred_uplink_service != "" ->
-        {:error,
-         {:preferred_uplink_transport_binding_not_found, path.path_id, preferred_uplink_service}}
-
-      {nil, _matching_transport_bindings} ->
-        {:error, {:multiple_uplink_transport_bindings_require_explicit_selection, path.path_id}}
-
-      {_preferred_uplink_service, _matching_transport_bindings} ->
-        {:error, {:multiple_uplink_transport_bindings_match_preferred_service, path.path_id}}
-    end
-  end
-
-  defp ensure_transport_binding_matches_preferred_service(
-         %TransportBinding{} = transport_binding,
-         %CommandRequestRow{} = request_row
-       ) do
-    if transport_binding_matches_preferred_service?(
-         transport_binding,
-         request_row.preferred_uplink_service
-       ) do
-      :ok
-    else
-      {:error,
-       {:preferred_uplink_transport_binding_not_found, transport_binding.transport_binding_id,
-        request_row.preferred_uplink_service}}
-    end
-  end
-
-  defp transport_binding_matches_preferred_service?(
-         %TransportBinding{},
-         preferred_uplink_service
-       )
-       when not is_binary(preferred_uplink_service) or preferred_uplink_service == "",
-       do: true
-
-  defp transport_binding_matches_preferred_service?(
-         %TransportBinding{} = transport_binding,
-         preferred_uplink_service
-       ) do
-    preferred_uplink_service in transport_binding_service_names(transport_binding)
-  end
-
-  defp transport_binding_service_names(%TransportBinding{} = transport_binding) do
-    configuration_service_name =
-      case transport_binding.configuration do
-        configuration when is_map(configuration) ->
-          Map.get(configuration, :service_name) || Map.get(configuration, "service_name")
-
-        _other ->
-          nil
-      end
-
-    metadata_service_name =
-      Map.get(transport_binding.metadata, :service_name) ||
-        Map.get(transport_binding.metadata, "service_name")
-
-    [
-      configuration_service_name,
-      metadata_service_name,
-      Atom.to_string(transport_binding.family_key)
-    ]
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
   end
 
   defp claim_queue_entry_for_release(%CommandQueueEntryRow{} = queue_entry_row) do
