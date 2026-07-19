@@ -5,10 +5,10 @@ defmodule Cadence.GroundNetworks.ProviderAudit do
 
   alias Ecto.Multi
 
+  alias Cadence.GroundNetworks.ProviderAudit.EntryRow, as: ProviderAuditEntryRow
   alias Cadence.GroundNetworks.ProviderAuditEntry
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Persistence.Schemas.ProviderAuditEntryRow
   alias Cadence.Repo
 
   @spec append(ProviderAuditEntry.t()) :: {:ok, ProviderAuditEntry.t()} | {:error, term()}

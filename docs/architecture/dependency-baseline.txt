@@ -57,7 +57,6 @@ persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/conta
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/realized_contact_row.ex
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/scheduled_contact_row.ex
 persistence_schema|lib/cadence/contacts/provider_change_approvals.ex|lib/cadence/persistence/schemas/provider_change_approval_row.ex
-persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cadence/persistence/schemas/provider_audit_entry_row.ex
 persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cadence/persistence/schemas/provider_change_approval_row.ex
 persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cadence/persistence/schemas/provider_reservation_change_row.ex
 persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex
@@ -81,7 +80,6 @@ persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/sche
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex
-persistence_schema|lib/cadence/ground_networks/provider_audit.ex|lib/cadence/persistence/schemas/provider_audit_entry_row.ex
 persistence_schema|lib/cadence/ingress_archive/filesystem.ex|lib/cadence/persistence/schemas/ingress_archive_evidence_entry_row.ex
 persistence_schema|lib/cadence/ingress_archive/postgres.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/limits.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex

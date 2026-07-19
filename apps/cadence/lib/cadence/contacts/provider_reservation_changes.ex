@@ -15,6 +15,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     DeliveryPolicyEvaluator,
     MissionProviders,
     ProviderAccountGrants,
+    ProviderAudit,
     ProviderAuditEntry,
     Validation
   }
@@ -22,7 +23,6 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   alias Cadence.Persistence.JsonDocument
 
   alias Cadence.Persistence.Schemas.{
-    ProviderAuditEntryRow,
     ProviderChangeApprovalRow,
     ProviderReservationChangeRow,
     ProviderReservationRow,
@@ -660,9 +660,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
         policy_document: JsonDocument.unwrap_value(change.policy_document)
       })
 
-    entry
-    |> ProviderAuditEntryRow.changeset()
-    |> Repo.insert()
+    ProviderAudit.append(entry)
   end
 
   defp supersede_pending(reservation_id, incoming_revision) do

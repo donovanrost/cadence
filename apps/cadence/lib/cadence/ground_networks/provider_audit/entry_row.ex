@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderAuditEntryRow do
+defmodule Cadence.GroundNetworks.ProviderAudit.EntryRow do
   @moduledoc false
 
   use Ecto.Schema
