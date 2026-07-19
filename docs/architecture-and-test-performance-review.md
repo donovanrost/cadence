@@ -1035,6 +1035,11 @@ joins, request-scope filtering, time windows, ordering, and limits into a
 391-line connection-row module reduced the operational-observables source from
 6,492 to 6,235 lines. Shared transport helpers still used by RF and metric
 products remain in the adapter; production source-size pressure remains 8.
+Extracting ground-station antenna-pointing snapshot joins, state normalization,
+scope and time filtering, plus latest and historical frame presentation reduced
+the operational-observables source from 6,235 to 5,915 lines. The new 255-line
+row module and 160-line frame module own that product family while the adapter
+retains provider selection; production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

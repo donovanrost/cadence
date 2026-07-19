@@ -35,6 +35,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   alias Cadence.Telemetry.RuntimeHealth
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
+    AntennaPointingFrames,
+    AntennaPointingRows,
     ConnectionFrames,
     ConnectionRows,
     ProductPolicy,
@@ -64,7 +66,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @managed_runtime_observable_ids ["runtime.managed_activity"]
   @transport_runtime_observable_ids ["runtime.transport_activity"]
   @connection_states [:connected, :connecting, :degraded, :disconnected, :unknown]
-  @antenna_pointing_states [:idle, :slewing, :acquiring, :tracking, :stowed, :degraded, :unknown]
   @rf_lock_states [:locked, :acquiring, :degraded, :unlocked, :unknown]
   @frame_sync_states [:synchronized, :acquiring, :degraded, :lost, :unknown]
   @managed_runtime_event_kinds [
@@ -1391,7 +1392,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    antenna_pointing_rows(
+    AntennaPointingRows.latest(
       source_endpoints_fun.(organization_id, mission_id, adapter_opts),
       antenna_pointing_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1458,7 +1459,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    antenna_pointing_history_rows(
+    AntennaPointingRows.history(
       source_endpoints_fun.(organization_id, mission_id, adapter_opts),
       antenna_pointing_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1983,185 +1984,19 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   end
 
   defp antenna_pointing_state_frame(request, source_binding, pointing_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:ground_station_antenna_pointing_state",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.resource_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(pointing_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.link_id)
-          },
-          %Field{
-            name: "adapter_key",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.adapter_key)
-          },
-          %Field{name: "state", kind: :enum, values: Enum.map(pointing_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.normalized_state)
-          },
-          %Field{
-            name: "observed_at",
-            kind: :time,
-            values: Enum.map(pointing_rows, & &1.observed_at)
-          },
-          %Field{
-            name: "freshness_state",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.freshness_state)
-          },
-          %Field{name: "age_ms", kind: :number, values: Enum.map(pointing_rows, & &1.age_ms)}
-        ] ++ maybe_interval_identity_fields(pointing_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :ground_station_antenna_pointing_state,
-        product_family: :ground_station,
-        state_color_policy: :antenna_pointing_state,
-        observable_ids: observable_ids(pointing_rows),
-        observable_id: "ground.station.antenna_pointing_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(pointing_rows),
-        freshness_policy: latest_freshness_policy(pointing_rows),
-        freshness_checked_at: latest_freshness_checked_at(pointing_rows),
-        warning_codes: latest_freshness_warning_codes(pointing_rows),
-        links: operational_state_links(request, pointing_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(pointing_rows)
-      }
-    }
+    AntennaPointingFrames.latest(
+      request,
+      pointing_rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp antenna_pointing_state_history_frame(request, source_binding, pointing_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:ground_station_antenna_pointing_state_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "time",
-            kind: :time,
-            values: Enum.map(pointing_rows, & &1.observed_at),
-            metadata: %{axis: :occurred_at}
-          },
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.resource_id)
-          },
-          %Field{
-            name: "lane_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.ground_station_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(pointing_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(pointing_rows, & &1.link_id)
-          },
-          %Field{
-            name: "adapter_key",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.adapter_key)
-          },
-          %Field{name: "state", kind: :enum, values: Enum.map(pointing_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(pointing_rows, & &1.normalized_state)
-          }
-        ] ++ maybe_interval_identity_fields(pointing_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :ground_station_antenna_pointing_state_history,
-        product_family: :ground_station,
-        state_color_policy: :antenna_pointing_state,
-        observable_ids: observable_ids(pointing_rows),
-        observable_id: "ground.station.antenna_pointing_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(pointing_rows),
-        warning_codes: [],
-        links: operational_history_links(request, pointing_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(pointing_rows)
-      }
-    }
+    AntennaPointingFrames.history(
+      request,
+      pointing_rows,
+      frame_source_context(request, source_binding)
+    )
   end
 
   defp transport_execution_state_history_frame(request, source_binding, rows) do
@@ -4696,161 +4531,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end)
   end
 
-  defp find_source_endpoint(source_endpoints, source_endpoint_id, ground_station_id) do
-    Enum.find(source_endpoints, fn source_endpoint ->
-      attr(source_endpoint, :source_endpoint_id) == source_endpoint_id or
-        metadata_attr(source_endpoint, :ground_station_id) == ground_station_id or
-        metadata_attr(source_endpoint, :antenna_id) == ground_station_id
-    end)
-  end
-
-  defp antenna_pointing_rows(source_endpoints, snapshots, request) do
-    snapshots = Enum.map(snapshots, &normalize_antenna_pointing_snapshot/1)
-
-    source_endpoints
-    |> Enum.map(&antenna_pointing_row(&1, snapshots))
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp antenna_pointing_history_rows(source_endpoints, snapshots, request) do
-    snapshots
-    |> Enum.map(&normalize_antenna_pointing_snapshot/1)
-    |> Enum.map(&antenna_pointing_history_row(source_endpoints, &1))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.filter(
-      &(match?(%DateTime{}, &1.observed_at) and matches_connection_scope?(&1, request) and
-          time_in_request_window?(&1.observed_at, request))
-    )
-    |> Enum.sort_by(&datetime_sort_key(&1.observed_at))
-    |> apply_request_limit(request)
-  end
-
-  defp antenna_pointing_row(source_endpoint, snapshots) do
-    source_endpoint_id = attr(source_endpoint, :source_endpoint_id)
-
-    ground_station_id =
-      metadata_attr(source_endpoint, :ground_station_id) ||
-        metadata_attr(source_endpoint, :antenna_id)
-
-    snapshot =
-      antenna_pointing_snapshot(
-        snapshots,
-        source_endpoint_id,
-        ground_station_id
-      )
-
-    build_antenna_pointing_row(source_endpoint, snapshot)
-  end
-
-  defp antenna_pointing_history_row(source_endpoints, snapshot) do
-    source_endpoint =
-      find_source_endpoint(
-        source_endpoints,
-        attr(snapshot, :source_endpoint_id),
-        attr(snapshot, :ground_station_id) || attr(snapshot, :resource_id)
-      )
-
-    if source_endpoint do
-      build_antenna_pointing_row(source_endpoint, snapshot)
-    end
-  end
-
-  defp build_antenna_pointing_row(source_endpoint, snapshot) do
-    source_endpoint_id = attr(source_endpoint, :source_endpoint_id)
-
-    ground_station_id =
-      attr(snapshot, :ground_station_id) ||
-        metadata_attr(source_endpoint, :ground_station_id) ||
-        metadata_attr(source_endpoint, :antenna_id)
-
-    resource_id = ground_station_id || source_endpoint_id
-
-    state =
-      antenna_pointing_state(snapshot) || antenna_pointing_state(attr(source_endpoint, :metadata)) ||
-        :unknown
-
-    link_id = link_id_for([snapshot, source_endpoint])
-
-    %{
-      observable_id: "ground.station.antenna_pointing_state",
-      resource_id: resource_id,
-      label: "Antenna pointing / #{attr(source_endpoint, :display_name) || resource_id}",
-      scope_kind: :ground_station,
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id: source_endpoint_id,
-      ground_station_id: ground_station_id,
-      link_id: link_id,
-      adapter_key: attr(snapshot, :adapter_key) || attr(source_endpoint, :adapter_key),
-      state: state,
-      normalized_state: antenna_pointing_normalized_state(state),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: source_endpoint
-    }
-  end
-
-  defp normalize_antenna_pointing_snapshot(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      state: antenna_pointing_state(snapshot),
-      normalized_state: attr(snapshot, :normalized_state),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval)
-    }
-  end
-
-  defp antenna_pointing_snapshot(snapshots, source_endpoint_id, ground_station_id) do
-    Enum.find(snapshots, fn snapshot ->
-      attr(snapshot, :observable_id) in [nil, "ground.station.antenna_pointing_state"] and
-        ((present_text?(source_endpoint_id) and
-            (attr(snapshot, :source_endpoint_id) == source_endpoint_id or
-               attr(snapshot, :resource_id) == source_endpoint_id)) or
-           (present_text?(ground_station_id) and
-              (attr(snapshot, :ground_station_id) == ground_station_id or
-                 attr(snapshot, :resource_id) == ground_station_id)))
-    end)
-  end
-
-  defp antenna_pointing_state(value) do
-    [
-      attr(value, :antenna_pointing_state),
-      attr(value, :pointing_state),
-      attr(value, :acquisition_state),
-      attr(value, :state),
-      attr(value, :value)
-    ]
-    |> Enum.find_value(&normalize_antenna_pointing_state/1)
-  end
-
-  defp normalize_antenna_pointing_state(value) when value in @antenna_pointing_states,
-    do: value
-
-  defp normalize_antenna_pointing_state(value) when is_binary(value) do
-    normalized = value |> String.downcase() |> String.replace("-", "_")
-    Enum.find(@antenna_pointing_states, &(Atom.to_string(&1) == normalized))
-  end
-
-  defp normalize_antenna_pointing_state(_value), do: nil
-
-  defp antenna_pointing_normalized_state(:tracking), do: :green
-  defp antenna_pointing_normalized_state(:acquiring), do: :blue
-  defp antenna_pointing_normalized_state(:slewing), do: :blue
-  defp antenna_pointing_normalized_state(:idle), do: :unknown
-  defp antenna_pointing_normalized_state(:stowed), do: :unknown
-  defp antenna_pointing_normalized_state(:degraded), do: :yellow
-  defp antenna_pointing_normalized_state(_state), do: :unknown
-
   defp connection_state(value) do
     value
     |> attr(:connection_state)
@@ -6021,7 +5701,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      state: antenna_pointing_state(snapshot),
+      state: AntennaPointingRows.state(snapshot),
       observed_at: attr(snapshot, :observed_at)
     }
   end
