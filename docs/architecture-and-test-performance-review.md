@@ -1312,6 +1312,12 @@ HTTP workflow reduced its controller test from 551 to 297 lines and overlong
 test-function pressure from 8 to 7. The control-plane API routes and
 authentication plugs are unchanged; stage/item updates, approval records,
 queue priority, release attempts, and verifier outcomes remain covered.
+Extracting the 188-line contact-runtime lifecycle and 84-line binding-set
+activation HTTP proofs reduced the org-scoped controller test from 497 to 231
+lines and overlong test-function pressure from 7 to 6. The control-plane API
+routes and authentication plugs are unchanged; mission-resource setup, runtime
+materialization, early termination, audit actions, and active binding lookup
+remain covered. All remaining overlong tests are in the opt-in browser matrix.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

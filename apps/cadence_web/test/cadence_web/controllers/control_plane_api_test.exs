@@ -144,6 +144,280 @@ defmodule CadenceWeb.ControlPlaneApiTest do
            } = json_response(path_template_patch_conn, 200)
   end
 
+  defp assert_contact_runtime_lifecycle(conn, api_token, organization_id, mission_id) do
+    starts_at = DateTime.from_unix!(1_700_080_000, :second)
+    ends_at = DateTime.add(starts_at, 600, :second)
+
+    scheduled_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
+        %{
+          "scheduled_contact" => %{
+            "scheduled_contact_id" => "contact-alpha",
+            "contact_intents" => ["command_window", "telemetry_downlink"],
+            "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
+            "starts_at" => DateTime.to_iso8601(starts_at),
+            "ends_at" => DateTime.to_iso8601(ends_at),
+            "provider_contact_ref" => "provider-contact-001"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "scheduled_contact_id" => "contact-alpha",
+               "organization_id" => ^organization_id,
+               "mission_id" => ^mission_id,
+               "lifecycle_state" => "scheduled",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
+               "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
+               "paths" => []
+             }
+           } = json_response(scheduled_contact_conn, 201)
+
+    scheduled_contacts_conn =
+      conn
+      |> authorize(api_token)
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts")
+
+    assert %{
+             "data" => [
+               %{
+                 "scheduled_contact_id" => "contact-alpha",
+                 "organization_id" => ^organization_id,
+                 "lifecycle_state" => "scheduled"
+               }
+             ]
+           } = json_response(scheduled_contacts_conn, 200)
+
+    realized_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts/contact-alpha/realize",
+        %{
+          "realization" => %{
+            "clock_mode" => "replay",
+            "initial_time" => DateTime.to_iso8601(starts_at),
+            "transition_time" => DateTime.to_iso8601(starts_at)
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "realized_contact_id" => "contact-alpha_run",
+               "organization_id" => ^organization_id,
+               "mission_id" => ^mission_id,
+               "lifecycle_state" => "active",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
+               "clock_mode" => "replay"
+             }
+           } = json_response(realized_contact_conn, 200)
+
+    realized_contact_runtime_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/runtime"
+      )
+
+    assert %{
+             "data" => %{
+               "realized_contact_id" => "contact-alpha_run",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
+               "path_count" => 2,
+               "paths" => [
+                 %{"path_id" => "uplink-path-alpha"},
+                 %{"path_id" => "downlink-path-alpha"}
+               ]
+             }
+           } = json_response(realized_contact_runtime_conn, 200)
+
+    path_runtime_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/paths/downlink-path-alpha/runtime"
+      )
+
+    assert %{
+             "data" => %{
+               "path_id" => "downlink-path-alpha",
+               "provider_runtime_count" => 1,
+               "provider_runtimes" => [
+                 %{
+                   "provider_binding_id" => "tcp-downlink-profile",
+                   "adapter_key" => "tcp_socket",
+                   "mode" => "listen",
+                   "ingress_protocol_family" => "tm",
+                   "fixed_message_bytes" => 1115,
+                   "port" => runtime_port
+                 }
+               ]
+             }
+           } = json_response(path_runtime_conn, 200)
+
+    assert is_integer(runtime_port)
+    assert runtime_port > 0
+
+    realized_contacts_conn =
+      conn
+      |> authorize(api_token)
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts")
+
+    assert %{
+             "data" => [
+               %{
+                 "realized_contact_id" => "contact-alpha_run",
+                 "organization_id" => ^organization_id,
+                 "lifecycle_state" => "active"
+               }
+             ]
+           } = json_response(realized_contacts_conn, 200)
+
+    ended_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/end_early",
+        %{
+          "termination" => %{
+            "reason" => "operator stop"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "realized_contact_id" => "contact-alpha_run",
+               "organization_id" => ^organization_id,
+               "lifecycle_state" => "stopped",
+               "metadata" => %{"reason" => "operator stop"}
+             }
+           } = json_response(ended_contact_conn, 200)
+
+    scheduled_contact_show_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts/contact-alpha"
+      )
+
+    assert %{
+             "data" => %{
+               "scheduled_contact_id" => "contact-alpha",
+               "organization_id" => ^organization_id,
+               "lifecycle_state" => "canceled",
+               "realized_contact_id" => "contact-alpha_run",
+               "metadata" => %{"reason" => "operator stop"}
+             }
+           } = json_response(scheduled_contact_show_conn, 200)
+
+    contact_actions_conn =
+      conn
+      |> authorize(api_token)
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/contact_actions")
+
+    assert %{
+             "data" => [
+               %{
+                 "action_kind" => "realized_contact_ended_early",
+                 "organization_id" => ^organization_id,
+                 "realized_contact_id" => "contact-alpha_run",
+                 "reason" => "operator stop"
+               }
+             ]
+           } = json_response(contact_actions_conn, 200)
+  end
+
+  defp assert_binding_set_activation(conn, api_token, organization_id, mission_id) do
+    binding_set_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/binding_sets", %{
+        "binding_set" => %{
+          "binding_set_id" => "ops",
+          "version" => 1,
+          "capability_instances" => [
+            %{
+              "capability_instance_id" => "telemetry-default",
+              "family_key" => "definition_bound_telemetry",
+              "target_scope" => "mission",
+              "capability_config" => %{
+                "config_type" => "governed_packet_definition",
+                "document" => %{
+                  "mission_id" => mission_id,
+                  "packet_definition_id" => "packet-def-hk",
+                  "version" => 1
+                }
+              }
+            }
+          ],
+          "rules" => [
+            %{
+              "binding_rule_id" => "tm-apid-42",
+              "capability_instance_id" => "telemetry-default",
+              "selector" => %{
+                "scope" => %{"target_scope" => "mission"},
+                "match" => %{"packet_kind" => "space_packet", "apid" => 42}
+              }
+            }
+          ]
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "binding_set_id" => "ops",
+               "organization_id" => ^organization_id,
+               "mission_id" => ^mission_id
+             }
+           } = json_response(binding_set_conn, 201)
+
+    activation_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/activations", %{
+        "activation" => %{
+          "binding_set_id" => "ops",
+          "version" => 1,
+          "metadata" => %{"reason" => "bootstrap"}
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "organization_id" => ^organization_id,
+               "mission_id" => ^mission_id,
+               "binding_set_id" => "ops",
+               "binding_set_version" => 1
+             }
+           } = json_response(activation_conn, 201)
+
+    active_conn =
+      conn
+      |> authorize(api_token)
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/activations/active")
+
+    assert %{
+             "data" => %{
+               "activation" => %{
+                 "organization_id" => ^organization_id,
+                 "binding_set_id" => "ops",
+                 "binding_set_version" => 1
+               },
+               "binding_set" => %{
+                 "organization_id" => ^organization_id,
+                 "binding_set_id" => "ops",
+                 "version" => 1
+               }
+             }
+           } = json_response(active_conn, 200)
+  end
+
   test "bootstrap admin logs in and can bootstrap the first organization", %{conn: conn} do
     bootstrap_admin_token = bootstrap_admin_login(conn)
 
@@ -471,275 +745,9 @@ defmodule CadenceWeb.ControlPlaneApiTest do
              }
            } = json_response(uplink_path_template_conn, 201)
 
-    starts_at = DateTime.from_unix!(1_700_080_000, :second)
-    ends_at = DateTime.add(starts_at, 600, :second)
+    assert_contact_runtime_lifecycle(conn, api_token, organization_id, mission_id)
 
-    scheduled_contact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
-        %{
-          "scheduled_contact" => %{
-            "scheduled_contact_id" => "contact-alpha",
-            "contact_intents" => ["command_window", "telemetry_downlink"],
-            "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
-            "starts_at" => DateTime.to_iso8601(starts_at),
-            "ends_at" => DateTime.to_iso8601(ends_at),
-            "provider_contact_ref" => "provider-contact-001"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "scheduled_contact_id" => "contact-alpha",
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "lifecycle_state" => "scheduled",
-               "contact_intents" => ["command_window", "telemetry_downlink"],
-               "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
-               "paths" => []
-             }
-           } = json_response(scheduled_contact_conn, 201)
-
-    scheduled_contacts_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts")
-
-    assert %{
-             "data" => [
-               %{
-                 "scheduled_contact_id" => "contact-alpha",
-                 "organization_id" => ^organization_id,
-                 "lifecycle_state" => "scheduled"
-               }
-             ]
-           } = json_response(scheduled_contacts_conn, 200)
-
-    realized_contact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts/contact-alpha/realize",
-        %{
-          "realization" => %{
-            "clock_mode" => "replay",
-            "initial_time" => DateTime.to_iso8601(starts_at),
-            "transition_time" => DateTime.to_iso8601(starts_at)
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "realized_contact_id" => "contact-alpha_run",
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "lifecycle_state" => "active",
-               "contact_intents" => ["command_window", "telemetry_downlink"],
-               "clock_mode" => "replay"
-             }
-           } = json_response(realized_contact_conn, 200)
-
-    realized_contact_runtime_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/runtime"
-      )
-
-    assert %{
-             "data" => %{
-               "realized_contact_id" => "contact-alpha_run",
-               "contact_intents" => ["command_window", "telemetry_downlink"],
-               "path_count" => 2,
-               "paths" => [
-                 %{"path_id" => "uplink-path-alpha"},
-                 %{"path_id" => "downlink-path-alpha"}
-               ]
-             }
-           } = json_response(realized_contact_runtime_conn, 200)
-
-    path_runtime_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/paths/downlink-path-alpha/runtime"
-      )
-
-    assert %{
-             "data" => %{
-               "path_id" => "downlink-path-alpha",
-               "provider_runtime_count" => 1,
-               "provider_runtimes" => [
-                 %{
-                   "provider_binding_id" => "tcp-downlink-profile",
-                   "adapter_key" => "tcp_socket",
-                   "mode" => "listen",
-                   "ingress_protocol_family" => "tm",
-                   "fixed_message_bytes" => 1115,
-                   "port" => runtime_port
-                 }
-               ]
-             }
-           } = json_response(path_runtime_conn, 200)
-
-    assert is_integer(runtime_port)
-    assert runtime_port > 0
-
-    realized_contacts_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts")
-
-    assert %{
-             "data" => [
-               %{
-                 "realized_contact_id" => "contact-alpha_run",
-                 "organization_id" => ^organization_id,
-                 "lifecycle_state" => "active"
-               }
-             ]
-           } = json_response(realized_contacts_conn, 200)
-
-    ended_contact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts/contact-alpha_run/end_early",
-        %{
-          "termination" => %{
-            "reason" => "operator stop"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "realized_contact_id" => "contact-alpha_run",
-               "organization_id" => ^organization_id,
-               "lifecycle_state" => "stopped",
-               "metadata" => %{"reason" => "operator stop"}
-             }
-           } = json_response(ended_contact_conn, 200)
-
-    scheduled_contact_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts/contact-alpha"
-      )
-
-    assert %{
-             "data" => %{
-               "scheduled_contact_id" => "contact-alpha",
-               "organization_id" => ^organization_id,
-               "lifecycle_state" => "canceled",
-               "realized_contact_id" => "contact-alpha_run",
-               "metadata" => %{"reason" => "operator stop"}
-             }
-           } = json_response(scheduled_contact_show_conn, 200)
-
-    contact_actions_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/contact_actions")
-
-    assert %{
-             "data" => [
-               %{
-                 "action_kind" => "realized_contact_ended_early",
-                 "organization_id" => ^organization_id,
-                 "realized_contact_id" => "contact-alpha_run",
-                 "reason" => "operator stop"
-               }
-             ]
-           } = json_response(contact_actions_conn, 200)
-
-    binding_set_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/binding_sets", %{
-        "binding_set" => %{
-          "binding_set_id" => "ops",
-          "version" => 1,
-          "capability_instances" => [
-            %{
-              "capability_instance_id" => "telemetry-default",
-              "family_key" => "definition_bound_telemetry",
-              "target_scope" => "mission",
-              "capability_config" => %{
-                "config_type" => "governed_packet_definition",
-                "document" => %{
-                  "mission_id" => mission_id,
-                  "packet_definition_id" => "packet-def-hk",
-                  "version" => 1
-                }
-              }
-            }
-          ],
-          "rules" => [
-            %{
-              "binding_rule_id" => "tm-apid-42",
-              "capability_instance_id" => "telemetry-default",
-              "selector" => %{
-                "scope" => %{"target_scope" => "mission"},
-                "match" => %{"packet_kind" => "space_packet", "apid" => 42}
-              }
-            }
-          ]
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "binding_set_id" => "ops",
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id
-             }
-           } = json_response(binding_set_conn, 201)
-
-    activation_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/activations", %{
-        "activation" => %{
-          "binding_set_id" => "ops",
-          "version" => 1,
-          "metadata" => %{"reason" => "bootstrap"}
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "binding_set_id" => "ops",
-               "binding_set_version" => 1
-             }
-           } = json_response(activation_conn, 201)
-
-    active_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/activations/active")
-
-    assert %{
-             "data" => %{
-               "activation" => %{
-                 "organization_id" => ^organization_id,
-                 "binding_set_id" => "ops",
-                 "binding_set_version" => 1
-               },
-               "binding_set" => %{
-                 "organization_id" => ^organization_id,
-                 "binding_set_id" => "ops",
-                 "version" => 1
-               }
-             }
-           } = json_response(active_conn, 200)
+    assert_binding_set_activation(conn, api_token, organization_id, mission_id)
   end
 
   test "contact runtime config APIs expose versions and pin scheduled contact refs", %{
