@@ -1267,6 +1267,11 @@ recovery presentation into a 656-line row module reduced `DataLinkResolver`
 from 1,889 to 1,142 lines. Target resolution and related-link traversal remain
 in the facade for the next bounded extraction; production source-size pressure
 remains 7 and dependency ratchets are unchanged.
+Completing backfill lifecycle ownership moved scoped resolution and workflow
+related-link traversal into a 257-line target module, reducing
+`DataLinkResolver` from 1,142 to 855 lines. The facade is now below the
+1,000-line guideline, reducing production source-size pressure from 7 to 6;
+dependency ratchets are unchanged.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

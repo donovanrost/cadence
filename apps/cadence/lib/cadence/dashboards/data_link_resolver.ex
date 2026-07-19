@@ -15,7 +15,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     LifecycleEvent
   }
 
-  alias Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows
+  alias Cadence.Dashboards.DataLinkResolver.BackfillLifecycleTargets
   alias Cadence.Dashboards.DataLinkResolver.CommandTargets
   alias Cadence.Dashboards.DataLinkResolver.EventTargets
   alias Cadence.Dashboards.DataLinkResolver.LimitTargets
@@ -226,7 +226,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          organization_id,
          mission_id
        ),
-       do: resolve_telemetry_backfill_lifecycle_event(link, organization_id, mission_id)
+       do: BackfillLifecycleTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :dashboard_lifecycle_event} = link,
@@ -378,39 +378,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
            nil,
            telemetry_revision_decision_event_rows(event),
            telemetry_revision_decision_event_related_links(link, event)
-         )}
-    end
-  end
-
-  defp resolve_telemetry_backfill_lifecycle_event(%DataLink{} = link, organization_id, mission_id) do
-    link.target_id
-    |> TelemetryStorage.fetch_backfill_lifecycle_event(
-      organization_id: organization_id,
-      mission_id: mission_id
-    )
-    |> case do
-      nil ->
-        {:error,
-         inspector(
-           link,
-           :missing,
-           "Telemetry backfill lifecycle event was not found in this mission.",
-           []
-         )}
-
-      event ->
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           BackfillLifecycleRows.rows(event, organization_id, mission_id),
-           telemetry_backfill_lifecycle_event_related_links(
-             link,
-             event,
-             organization_id,
-             mission_id
-           )
          )}
     end
   end
@@ -673,14 +640,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     |> state_value(key)
   end
 
-  defp backfill_lifecycle_payload_value(payload, key), do: state_value(payload, key)
-
-  defp comparison_review_origin_value(payload, key) do
-    payload
-    |> state_value(:comparison_review_origin)
-    |> state_value(key)
-  end
-
   defp comparison_review_request_kind(payload) do
     state_value(payload, :review_kind) || state_value(payload, :request_kind)
   end
@@ -846,73 +805,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     end
   end
 
-  defp telemetry_backfill_lifecycle_event_related_links(
-         %DataLink{} = link,
-         event,
-         organization_id,
-         mission_id
-       ) do
-    [
-      related_link(
-        link,
-        :telemetry_point,
-        event.point_id || event.observable_id,
-        "Telemetry point"
-      ),
-      telemetry_backfill_lifecycle_late_data_source_link(link, event),
-      telemetry_backfill_lifecycle_retry_source_link(link, event),
-      telemetry_backfill_lifecycle_correction_source_link(link, event),
-      telemetry_backfill_lifecycle_comparison_review_origin_link(link, event)
-    ] ++
-      telemetry_backfill_lifecycle_group_failure_links(link, event, organization_id, mission_id) ++
-      telemetry_backfill_lifecycle_referencing_event_links(
-        link,
-        event,
-        organization_id,
-        mission_id
-      )
-  end
-
-  defp telemetry_backfill_lifecycle_retry_source_link(%DataLink{} = link, event) do
-    related_link(
-      link,
-      :telemetry_backfill_lifecycle_event,
-      backfill_lifecycle_payload_value(event.payload, :retry_source_event_id),
-      "Retry source event",
-      :source_event
-    )
-  end
-
-  defp telemetry_backfill_lifecycle_late_data_source_link(%DataLink{} = link, event) do
-    related_link(
-      link,
-      :telemetry_backfill_lifecycle_event,
-      backfill_lifecycle_payload_value(event.payload, :source_event_id),
-      "Late data source event",
-      :source_event
-    )
-  end
-
-  defp telemetry_backfill_lifecycle_correction_source_link(%DataLink{} = link, event) do
-    related_link(
-      link,
-      :telemetry_backfill_lifecycle_event,
-      backfill_lifecycle_payload_value(event.payload, :corrects_event_id),
-      "Correction source event",
-      :source_event
-    )
-  end
-
-  defp telemetry_backfill_lifecycle_comparison_review_origin_link(%DataLink{} = link, event) do
-    related_link(
-      link,
-      :dashboard_lifecycle_event,
-      comparison_review_origin_value(event.payload, :request_event_id),
-      "Comparison review request",
-      :comparison_review_origin
-    )
-  end
-
   defp dashboard_lifecycle_event_related_links(%DataLink{} = link, %LifecycleEvent{} = event) do
     [
       related_link(
@@ -923,185 +815,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
         :source_event
       )
     ]
-  end
-
-  defp telemetry_backfill_lifecycle_referencing_event_links(
-         %DataLink{} = link,
-         event,
-         organization_id,
-         mission_id
-       ) do
-    mission_id
-    |> TelemetryStorage.list_backfill_lifecycle_events(
-      organization_id: organization_id,
-      limit: 1_000
-    )
-    |> Enum.reject(&(&1.backfill_lifecycle_event_id == event.backfill_lifecycle_event_id))
-    |> Enum.flat_map(fn related_event ->
-      related_event
-      |> telemetry_backfill_lifecycle_reference_links(event.backfill_lifecycle_event_id)
-      |> Enum.map(fn {label, relationship_kind} ->
-        related_link(
-          link,
-          :telemetry_backfill_lifecycle_event,
-          related_event.backfill_lifecycle_event_id,
-          label,
-          relationship_kind
-        )
-      end)
-    end)
-  end
-
-  defp telemetry_backfill_lifecycle_reference_links(related_event, source_event_id) do
-    [
-      telemetry_backfill_lifecycle_reference_link(
-        related_event,
-        source_event_id,
-        :retry_source_event_id,
-        "Retry event",
-        :retry_event
-      ),
-      telemetry_backfill_lifecycle_reference_link(
-        related_event,
-        source_event_id,
-        :corrects_event_id,
-        telemetry_backfill_lifecycle_correction_reference_label(related_event),
-        telemetry_backfill_lifecycle_correction_reference_kind(related_event)
-      ),
-      telemetry_backfill_lifecycle_reference_link(
-        related_event,
-        source_event_id,
-        :correction_transition_source_event_id,
-        "Correction transition event",
-        :correction_transition
-      ),
-      telemetry_backfill_lifecycle_reference_link(
-        related_event,
-        source_event_id,
-        :source_event_id,
-        telemetry_backfill_lifecycle_source_reference_label(related_event),
-        telemetry_backfill_lifecycle_source_reference_kind(related_event)
-      )
-    ]
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp telemetry_backfill_lifecycle_reference_link(
-         related_event,
-         source_event_id,
-         payload_key,
-         label,
-         relationship_kind
-       ) do
-    case backfill_lifecycle_payload_value(related_event.payload, payload_key) do
-      ^source_event_id ->
-        {"#{label} #{telemetry_backfill_lifecycle_reference_text(related_event)}",
-         relationship_kind}
-
-      _other ->
-        nil
-    end
-  end
-
-  defp telemetry_backfill_lifecycle_source_reference_label(related_event) do
-    cond do
-      backfill_lifecycle_payload_value(related_event.payload, :kind) ==
-          "late_data_policy_decision" ->
-        "Late data policy event"
-
-      backfill_lifecycle_payload_value(related_event.payload, :stage_transition_source) ->
-        "Stage transition event"
-
-      true ->
-        "Follow-up event"
-    end
-  end
-
-  defp telemetry_backfill_lifecycle_source_reference_kind(related_event) do
-    cond do
-      backfill_lifecycle_payload_value(related_event.payload, :kind) ==
-          "late_data_policy_decision" ->
-        :late_data_policy_event
-
-      backfill_lifecycle_payload_value(related_event.payload, :stage_transition_source) ->
-        :stage_transition_event
-
-      true ->
-        :follow_up_event
-    end
-  end
-
-  defp telemetry_backfill_lifecycle_correction_reference_label(related_event) do
-    case backfill_lifecycle_payload_value(
-           related_event.payload,
-           :correction_transition_source_event_id
-         ) do
-      source_event_id when is_binary(source_event_id) and source_event_id != "" ->
-        "Correction transition event"
-
-      _other ->
-        "Correction request"
-    end
-  end
-
-  defp telemetry_backfill_lifecycle_correction_reference_kind(related_event) do
-    case backfill_lifecycle_payload_value(
-           related_event.payload,
-           :correction_transition_source_event_id
-         ) do
-      source_event_id when is_binary(source_event_id) and source_event_id != "" ->
-        :correction_transition
-
-      _other ->
-        :correction_request
-    end
-  end
-
-  defp telemetry_backfill_lifecycle_reference_text(related_event) do
-    related_event.point_id || related_event.observable_id ||
-      backfill_lifecycle_payload_value(related_event.payload, :stage) ||
-      related_event.backfill_run_id ||
-      related_event.backfill_lifecycle_event_id
-  end
-
-  defp telemetry_backfill_lifecycle_group_failure_links(
-         %DataLink{} = link,
-         event,
-         organization_id,
-         mission_id
-       ) do
-    case backfill_lifecycle_payload_value(event.payload, :request_group_id) do
-      group_id when is_binary(group_id) and group_id != "" ->
-        mission_id
-        |> TelemetryStorage.list_backfill_lifecycle_events(
-          organization_id: organization_id,
-          event_type: :backfill_failed,
-          limit: 1_000
-        )
-        |> Enum.filter(
-          &(backfill_lifecycle_payload_value(&1.payload, :request_group_id) == group_id)
-        )
-        |> Enum.sort_by(&backfill_lifecycle_failed_group_link_sort_key/1)
-        |> Enum.map(fn failed_event ->
-          failed_item_label =
-            failed_event.point_id || failed_event.observable_id || failed_event.backfill_run_id
-
-          related_link(
-            link,
-            :telemetry_backfill_lifecycle_event,
-            failed_event.backfill_lifecycle_event_id,
-            "Failed item #{failed_item_label}"
-          )
-        end)
-
-      _other ->
-        []
-    end
-  end
-
-  defp backfill_lifecycle_failed_group_link_sort_key(event) do
-    {backfill_lifecycle_payload_value(event.payload, :request_item_index) || 0,
-     event.backfill_run_id}
   end
 
   defp scope_context(%DataLink{} = link, organization_id, mission_id) do
