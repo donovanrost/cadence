@@ -938,6 +938,10 @@ Moving the resolvable evidence-inspector fixture out of its component test body
 reduced that handoff test from 345 to 196 lines while preserving every rendered
 detail and data-link attribute assertion, reducing overlong-test pressure from
 25 to 24.
+Extracting the repeated bulk-request and request-group stage submissions from
+the grouped historical backfill proof reduced that test from 333 to 282 lines
+while retaining its storage-event, rendered-state, no-op, and queued-job
+assertions, reducing overlong-test pressure from 24 to 23.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

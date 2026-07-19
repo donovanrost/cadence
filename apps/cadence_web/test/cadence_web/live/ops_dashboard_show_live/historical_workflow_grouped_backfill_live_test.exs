@@ -73,6 +73,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
     :exit, _reason -> :ok
   end
 
+  defp submit_bulk_request(view) do
+    view
+    |> element("#dashboard-historical-workflow-request-form")
+    |> render_submit(%{
+      "historical_workflow_request" => %{
+        "workflow" => "backfill",
+        "run_id" => "dashboard-workflow-run-bulk",
+        "realm" => "backfill",
+        "data_source_id" => "managed_questdb_backfill",
+        "source_binding_id" => "backfill_telemetry",
+        "point_ids" => "HK.counter, HK.voltage\nHK.current",
+        "source_from" => "2026-06-22T10:00:00Z",
+        "source_to" => "2026-06-22T11:00:00Z",
+        "reason" => "operator_requested_bulk_backfill_from_dashboard",
+        "confirmed" => "confirmed"
+      }
+    })
+  end
+
+  defp submit_group_stage(view, stage, reason) do
+    view
+    |> element("#dashboard-historical-workflow-group-form")
+    |> render_submit(%{
+      "historical_workflow_group" => %{
+        "workflow" => "backfill",
+        "request_group_id" => "dashboard-workflow-run-bulk",
+        "realm" => "backfill",
+        "data_source_id" => "managed_questdb_backfill",
+        "source_binding_id" => "backfill_telemetry",
+        "stage" => stage,
+        "reason" => reason,
+        "confirmed" => "confirmed"
+      }
+    })
+  end
+
   describe "historical workflow grouped backfill surfaces" do
     test "records grouped historical workflow requests for multiple points" do
       {conn, org, mission} = signed_in_org_and_mission()
@@ -85,22 +121,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
       |> element("#dashboard-historical-workflow-request-button")
       |> render_click()
 
-      view
-      |> element("#dashboard-historical-workflow-request-form")
-      |> render_submit(%{
-        "historical_workflow_request" => %{
-          "workflow" => "backfill",
-          "run_id" => "dashboard-workflow-run-bulk",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "point_ids" => "HK.counter, HK.voltage\nHK.current",
-          "source_from" => "2026-06-22T10:00:00Z",
-          "source_to" => "2026-06-22T11:00:00Z",
-          "reason" => "operator_requested_bulk_backfill_from_dashboard",
-          "confirmed" => "confirmed"
-        }
-      })
+      submit_bulk_request(view)
 
       assert_patch(view)
 
@@ -168,20 +189,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
                ~s|#dashboard-historical-workflow-group-approved[data-historical-workflow-group-action-eligible="3"][data-workflow-action-id="group_stage_approved"][data-workflow-action-eligible="true"][data-workflow-action-reason="eligible_group_items"]:not([disabled])|
              )
 
-      view
-      |> element("#dashboard-historical-workflow-group-form")
-      |> render_submit(%{
-        "historical_workflow_group" => %{
-          "workflow" => "backfill",
-          "request_group_id" => "dashboard-workflow-run-bulk",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "stage" => "approved",
-          "reason" => "operator_approved_bulk_backfill_from_dashboard",
-          "confirmed" => "confirmed"
-        }
-      })
+      submit_group_stage(
+        view,
+        "approved",
+        "operator_approved_bulk_backfill_from_dashboard"
+      )
 
       assert_patch(view)
 
@@ -206,20 +218,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
              )
 
       duplicate_submit_html =
-        view
-        |> element("#dashboard-historical-workflow-group-form")
-        |> render_submit(%{
-          "historical_workflow_group" => %{
-            "workflow" => "backfill",
-            "request_group_id" => "dashboard-workflow-run-bulk",
-            "realm" => "backfill",
-            "data_source_id" => "managed_questdb_backfill",
-            "source_binding_id" => "backfill_telemetry",
-            "stage" => "approved",
-            "reason" => "operator_duplicate_approved_bulk_backfill_from_dashboard",
-            "confirmed" => "confirmed"
-          }
-        })
+        submit_group_stage(
+          view,
+          "approved",
+          "operator_duplicate_approved_bulk_backfill_from_dashboard"
+        )
 
       assert duplicate_submit_html =~
                "No approve items are eligible in request group dashboard-workflow-run-bulk"
@@ -266,20 +269,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
                ~s|#dashboard-historical-workflow-group-started[data-historical-workflow-group-action-eligible="3"]:not([disabled])|
              )
 
-      view
-      |> element("#dashboard-historical-workflow-group-form")
-      |> render_submit(%{
-        "historical_workflow_group" => %{
-          "workflow" => "backfill",
-          "request_group_id" => "dashboard-workflow-run-bulk",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "stage" => "started",
-          "reason" => "operator_started_bulk_backfill_from_dashboard",
-          "confirmed" => "confirmed"
-        }
-      })
+      submit_group_stage(
+        view,
+        "started",
+        "operator_started_bulk_backfill_from_dashboard"
+      )
 
       assert_patch(view)
 
@@ -304,20 +298,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedBackfillLiveT
              )
 
       regressive_submit_html =
-        view
-        |> element("#dashboard-historical-workflow-group-form")
-        |> render_submit(%{
-          "historical_workflow_group" => %{
-            "workflow" => "backfill",
-            "request_group_id" => "dashboard-workflow-run-bulk",
-            "realm" => "backfill",
-            "data_source_id" => "managed_questdb_backfill",
-            "source_binding_id" => "backfill_telemetry",
-            "stage" => "approved",
-            "reason" => "operator_regressed_started_bulk_backfill_from_dashboard",
-            "confirmed" => "confirmed"
-          }
-        })
+        submit_group_stage(
+          view,
+          "approved",
+          "operator_regressed_started_bulk_backfill_from_dashboard"
+        )
 
       assert regressive_submit_html =~
                "No approve items are eligible in request group dashboard-workflow-run-bulk"
