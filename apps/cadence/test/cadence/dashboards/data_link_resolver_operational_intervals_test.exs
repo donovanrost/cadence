@@ -93,7 +93,8 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
         metric_name: "packets_v1"
       )
 
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(organization_id, binding_set)
+    assert {:ok, _binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(

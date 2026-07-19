@@ -162,7 +162,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         ]
       })
 
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, _binding_set} = Cadence.Governance.persist_binding_set(binding_set)
     assert count_for_mission(BindingSetRow, :id, "mission-alpha") == 1
 
     raw_evidence =
@@ -223,7 +223,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         ]
       })
 
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, _binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     raw_evidence =
       RawEvidence.new(%{
@@ -442,7 +442,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         ]
       })
 
-    assert {:ok, persisted_binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
@@ -644,7 +644,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       })
 
     assert {:ok, persisted_binding_set} =
-             Cadence.persist_binding_set(organization_id, binding_set)
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
@@ -819,7 +819,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         ]
       })
 
-    assert {:ok, persisted_binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
@@ -932,7 +932,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         ]
       })
 
-    assert {:ok, persisted_binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(

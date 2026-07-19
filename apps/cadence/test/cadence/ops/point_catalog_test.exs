@@ -101,7 +101,7 @@ defmodule Cadence.Ops.PointCatalogTest do
         ]
       })
 
-    {:ok, persisted} = Cadence.persist_binding_set(organization_id, binding_set)
+    {:ok, persisted} = Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     {:ok, _activation} =
       Cadence.activate_binding_set(

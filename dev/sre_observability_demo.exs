@@ -250,7 +250,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       })
 
     with {:ok, persisted_binding_set} <-
-           Cadence.persist_binding_set(ids.organization_id, binding_set),
+           Cadence.Governance.persist_binding_set(ids.organization_id, binding_set),
          {:ok, _activation} <-
            Cadence.activate_binding_set(
              ids.organization_id,

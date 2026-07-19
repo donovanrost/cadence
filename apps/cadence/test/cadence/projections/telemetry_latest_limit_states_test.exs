@@ -199,7 +199,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
         ]
       })
 
-    assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
     binding_set
   end
 

@@ -44,7 +44,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
         flush_interval_ms: 250
       )
 
-    assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
@@ -137,9 +137,10 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
     telemetry_binding_set = telemetry_binding_set(mission_id, 2)
 
     assert {:ok, ^packet_counter_binding_set} =
-             Cadence.persist_binding_set(packet_counter_binding_set)
+             Cadence.Governance.persist_binding_set(packet_counter_binding_set)
 
-    assert {:ok, ^telemetry_binding_set} = Cadence.persist_binding_set(telemetry_binding_set)
+    assert {:ok, ^telemetry_binding_set} =
+             Cadence.Governance.persist_binding_set(telemetry_binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(

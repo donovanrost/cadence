@@ -81,7 +81,7 @@ defmodule Cadence.Reads.MissionEventsTest do
       })
 
     assert {:ok, persisted_binding_set} =
-             Cadence.persist_binding_set(organization_id, binding_set)
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert persisted_binding_set.binding_set_id == binding_set.binding_set_id
     assert persisted_binding_set.organization_id == organization_id
@@ -147,7 +147,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     binding_set = packet_counter_binding_set(mission_id, source_endpoint.source_endpoint_id)
 
     assert {:ok, persisted_binding_set} =
-             Cadence.persist_binding_set(organization_id, binding_set)
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert persisted_binding_set.binding_set_id == binding_set.binding_set_id
     assert persisted_binding_set.organization_id == organization_id
@@ -193,7 +193,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     binding_set = telemetry_binding_set(mission_id, "runtime-activation-basis")
 
     assert {:ok, _persisted_binding_set} =
-             Cadence.persist_binding_set(organization_id, binding_set)
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, activation} =
              Cadence.activate_binding_set(

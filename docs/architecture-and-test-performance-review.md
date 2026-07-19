@@ -1488,6 +1488,14 @@ pipeline, while operations and spacecraft pages remain in their existing
 authenticated LiveView sessions. The narrower context return type also exposed
 and removed two unreachable generic-error branches; production source-size
 pressure remains 4 and dependency ratchets are unchanged.
+Retiring the ten governed packet-definition and binding-set persistence/read
+clauses from the root facade moved 97 production, test-support, simulator,
+opt-in browser, and demo call sites directly to `Cadence.Governance`. This
+reduced `Cadence` from 3,365 to 3,302 lines and reduced production web callers
+of the root facade from 47 to 45 files. Binding-set and packet-definition API
+routes remain in the authenticated API pipeline, and spacecraft telemetry pages
+remain in their existing authenticated LiveView session; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

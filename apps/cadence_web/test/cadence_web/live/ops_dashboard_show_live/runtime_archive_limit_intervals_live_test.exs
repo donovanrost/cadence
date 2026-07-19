@@ -65,7 +65,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLimitIntervalsLiveTest d
         ]
       })
 
-    {:ok, persisted} = Cadence.persist_binding_set(org.organization_id, binding_set)
+    {:ok, persisted} = Cadence.Governance.persist_binding_set(org.organization_id, binding_set)
     persisted
   end
 

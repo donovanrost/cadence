@@ -20,9 +20,9 @@ defmodule CadenceWeb.BindingSetController do
          {:ok, %BindingSet{} = binding_set} <-
            ControlPlaneParams.binding_set(organization_id, mission_id, binding_set_params),
          {:ok, %BindingSet{} = persisted_binding_set} <-
-           Cadence.persist_binding_set(organization_id, binding_set),
+           Cadence.Governance.persist_binding_set(organization_id, binding_set),
          {:ok, %BindingSet{} = hydrated_binding_set} <-
-           Cadence.fetch_binding_set(
+           Cadence.Governance.fetch_binding_set(
              organization_id,
              mission_id,
              persisted_binding_set.binding_set_id,
@@ -48,7 +48,12 @@ defmodule CadenceWeb.BindingSetController do
            ),
          {version, ""} <- Integer.parse(version),
          {:ok, %BindingSet{} = binding_set} <-
-           Cadence.fetch_binding_set(organization_id, mission_id, binding_set_id, version) do
+           Cadence.Governance.fetch_binding_set(
+             organization_id,
+             mission_id,
+             binding_set_id,
+             version
+           ) do
       json(conn, %{data: ControlPlaneJSON.binding_set(binding_set)})
     else
       :error -> {:error, {:invalid_param, "version", :integer}}

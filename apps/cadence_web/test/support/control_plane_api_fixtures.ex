@@ -180,7 +180,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
              Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
 
     assert {:ok, persisted_binding_set} =
-             Cadence.persist_binding_set(organization_id, binding_set)
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, ^counter_limit} = Cadence.persist_limit_definition(counter_limit)
     assert {:ok, ^voltage_limit} = Cadence.persist_limit_definition(voltage_limit)

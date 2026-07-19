@@ -194,7 +194,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert Enum.map(materialization.compiler_result.packet_definitions, & &1.version) == [2]
 
     assert {:ok, %BindingSet{} = materialized_binding_set} =
-             Cadence.fetch_binding_set(
+             Cadence.Governance.fetch_binding_set(
                @organization_id,
                @mission_id,
                "catalog_import:" <> completed_run.import_run_id,
@@ -218,7 +218,9 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert runtime_diff_after_materialization.binding_rules.matching_count == 1
     assert runtime_diff_after_materialization.binding_rules.mismatches == []
 
-    [packet_definition] = Cadence.list_packet_definitions(@organization_id, @mission_id)
+    [packet_definition] =
+      Cadence.Governance.list_packet_definitions(@organization_id, @mission_id)
+
     assert packet_definition.packet_name == "THERM"
 
     assert Enum.map(packet_definition.fields, &{&1.name, &1.data_type}) == [
@@ -231,7 +233,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert is_map(binding_set_document)
 
     assert {:ok, %BindingSet{} = binding_set} =
-             Cadence.fetch_binding_set(
+             Cadence.Governance.fetch_binding_set(
                @organization_id,
                @mission_id,
                binding_set_document["binding_set_id"],

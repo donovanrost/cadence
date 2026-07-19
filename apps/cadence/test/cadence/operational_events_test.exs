@@ -597,8 +597,11 @@ defmodule Cadence.OperationalEventsTest do
     first_binding_set = telemetry_binding_set(mission_id, "runtime-basis-a", 42)
     second_binding_set = telemetry_binding_set(mission_id, "runtime-basis-b", 43)
 
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(organization_id, first_binding_set)
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(organization_id, second_binding_set)
+    assert {:ok, _binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, first_binding_set)
+
+    assert {:ok, _binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
@@ -683,8 +686,11 @@ defmodule Cadence.OperationalEventsTest do
         metric_name: "packets_v2"
       )
 
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(organization_id, first_binding_set)
-    assert {:ok, _binding_set} = Cadence.persist_binding_set(organization_id, second_binding_set)
+    assert {:ok, _binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, first_binding_set)
+
+    assert {:ok, _binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(

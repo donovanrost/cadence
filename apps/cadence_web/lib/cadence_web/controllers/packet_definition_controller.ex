@@ -14,7 +14,7 @@ defmodule CadenceWeb.PacketDefinitionController do
              mission_id
            ) do
       packet_definitions =
-        Cadence.list_packet_definitions(organization_id, mission_id)
+        Cadence.Governance.list_packet_definitions(organization_id, mission_id)
         |> Enum.map(&ControlPlaneJSON.packet_definition/1)
 
       json(conn, %{data: packet_definitions})
@@ -39,7 +39,7 @@ defmodule CadenceWeb.PacketDefinitionController do
              packet_definition_params
            ),
          {:ok, %PacketDefinition{} = persisted_packet_definition} <-
-           Cadence.persist_packet_definition(organization_id, packet_definition) do
+           Cadence.Governance.persist_packet_definition(organization_id, packet_definition) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.packet_definition(persisted_packet_definition)})

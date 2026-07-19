@@ -174,7 +174,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         ]
       })
 
-    {:ok, persisted} = Cadence.persist_binding_set(org.organization_id, binding_set)
+    {:ok, persisted} = Cadence.Governance.persist_binding_set(org.organization_id, binding_set)
 
     assert {:ok, _events_source} =
              DataSources.persist_data_source(DataSources.default_events_data_source())
@@ -221,7 +221,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         ]
       })
 
-    {:ok, persisted} = Cadence.persist_binding_set(org.organization_id, binding_set)
+    {:ok, persisted} = Cadence.Governance.persist_binding_set(org.organization_id, binding_set)
 
     persisted
   end

@@ -116,7 +116,7 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
         ]
       })
 
-    assert {:ok, persisted} = Cadence.persist_binding_set(organization_id, binding_set)
+    assert {:ok, persisted} = Cadence.Governance.persist_binding_set(organization_id, binding_set)
     persisted
   end
 

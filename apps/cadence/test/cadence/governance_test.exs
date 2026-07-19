@@ -88,10 +88,16 @@ defmodule Cadence.GovernanceTest do
         ]
       })
 
-    assert {:ok, ^binding_set} = Cadence.persist_binding_set(@organization_id, binding_set)
+    assert {:ok, ^binding_set} =
+             Cadence.Governance.persist_binding_set(@organization_id, binding_set)
 
     assert {:ok, fetched_binding_set} =
-             Cadence.fetch_binding_set(@organization_id, "mission-alpha", "default-telemetry", 4)
+             Cadence.Governance.fetch_binding_set(
+               @organization_id,
+               "mission-alpha",
+               "default-telemetry",
+               4
+             )
 
     assert fetched_binding_set.binding_set_id == binding_set.binding_set_id
     assert fetched_binding_set.organization_id == @organization_id
@@ -122,7 +128,7 @@ defmodule Cadence.GovernanceTest do
     assert Enum.map(packet_definition.fields, & &1.byte_order) == [:little_endian, :big_endian]
 
     assert {:ok, latest_binding_set} =
-             Cadence.fetch_latest_binding_set(
+             Cadence.Governance.fetch_latest_binding_set(
                @organization_id,
                "mission-alpha",
                "default-telemetry"
@@ -166,7 +172,7 @@ defmodule Cadence.GovernanceTest do
         ]
       })
 
-    assert {:ok, ^seed_binding_set} = Cadence.persist_binding_set(seed_binding_set)
+    assert {:ok, ^seed_binding_set} = Cadence.Governance.persist_binding_set(seed_binding_set)
 
     referenced_binding_set =
       BindingSet.new(%{
@@ -184,10 +190,15 @@ defmodule Cadence.GovernanceTest do
         ]
       })
 
-    assert {:ok, ^referenced_binding_set} = Cadence.persist_binding_set(referenced_binding_set)
+    assert {:ok, ^referenced_binding_set} =
+             Cadence.Governance.persist_binding_set(referenced_binding_set)
 
     assert {:ok, fetched_binding_set} =
-             Cadence.fetch_binding_set("mission-alpha", "capability-config-reference", 1)
+             Cadence.Governance.fetch_binding_set(
+               "mission-alpha",
+               "capability-config-reference",
+               1
+             )
 
     [rule] = fetched_binding_set.rules
     assert rule.capability_config.config_type == :governed_packet_definition
@@ -237,10 +248,14 @@ defmodule Cadence.GovernanceTest do
         ]
       })
 
-    assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, fetched_binding_set} =
-             Cadence.fetch_binding_set("mission-alpha", "explicit-capability-instances", 1)
+             Cadence.Governance.fetch_binding_set(
+               "mission-alpha",
+               "explicit-capability-instances",
+               1
+             )
 
     assert length(fetched_binding_set.capability_instances) == 1
 
@@ -284,10 +299,14 @@ defmodule Cadence.GovernanceTest do
         ]
       })
 
-    assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, fetched_binding_set} =
-             Cadence.fetch_binding_set("mission-alpha", "inline-managed-application", 1)
+             Cadence.Governance.fetch_binding_set(
+               "mission-alpha",
+               "inline-managed-application",
+               1
+             )
 
     [capability_instance] = fetched_binding_set.capability_instances
     [rule] = fetched_binding_set.rules
@@ -325,7 +344,7 @@ defmodule Cadence.GovernanceTest do
       })
 
     assert {:error, {:unknown_capability_family, :unknown_capability_family}} =
-             Cadence.persist_binding_set(binding_set)
+             Cadence.Governance.persist_binding_set(binding_set)
   end
 
   test "rejects a governed binding set whose input stage is incompatible with the capability family" do
@@ -365,7 +384,7 @@ defmodule Cadence.GovernanceTest do
 
     assert {:error,
             {:unsupported_capability_input_stage, :definition_bound_telemetry,
-             :encapsulation_packet}} = Cadence.persist_binding_set(binding_set)
+             :encapsulation_packet}} = Cadence.Governance.persist_binding_set(binding_set)
   end
 
   test "rejects a governed binding rule scoped to an unknown source endpoint" do
@@ -406,6 +425,7 @@ defmodule Cadence.GovernanceTest do
 
     assert {:error,
             {:source_endpoint_not_found, "mission-alpha", "missing-endpoint",
-             "invalid-endpoint-rule_instance"}} = Cadence.persist_binding_set(binding_set)
+             "invalid-endpoint-rule_instance"}} =
+             Cadence.Governance.persist_binding_set(binding_set)
   end
 end

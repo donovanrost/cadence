@@ -81,7 +81,6 @@ defmodule Cadence do
   alias Cadence.Replay.Diff, as: ReplayDiff
   alias Cadence.Replay.Scope
   alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
-  alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
   alias Cadence.Telemetry.RuntimeHealth
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
@@ -2045,55 +2044,6 @@ defmodule Cadence do
     end
   end
 
-  @spec persist_packet_definition(binary(), PacketDefinition.t()) ::
-          {:ok, PacketDefinition.t()} | {:error, term()}
-  def persist_packet_definition(organization_id, %PacketDefinition{} = packet_definition)
-      when is_binary(organization_id) do
-    Governance.persist_packet_definition(organization_id, packet_definition)
-  end
-
-  @spec persist_packet_definition(PacketDefinition.t()) ::
-          {:ok, PacketDefinition.t()} | {:error, term()}
-  def persist_packet_definition(%PacketDefinition{} = packet_definition) do
-    Governance.persist_packet_definition(packet_definition)
-  end
-
-  @spec list_packet_definitions(binary(), binary()) :: [PacketDefinition.t()]
-  def list_packet_definitions(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    Governance.list_packet_definitions(organization_id, mission_id)
-  end
-
-  @spec list_packet_definitions(binary()) :: [PacketDefinition.t()]
-  def list_packet_definitions(mission_id) when is_binary(mission_id) do
-    Governance.list_packet_definitions(mission_id)
-  end
-
-  @spec persist_binding_set(binary(), BindingSet.t()) :: {:ok, BindingSet.t()} | {:error, term()}
-  def persist_binding_set(organization_id, %BindingSet{} = binding_set)
-      when is_binary(organization_id),
-      do: Governance.persist_binding_set(organization_id, binding_set)
-
-  @spec persist_binding_set(BindingSet.t()) :: {:ok, BindingSet.t()} | {:error, term()}
-  def persist_binding_set(%BindingSet{} = binding_set),
-    do: Governance.persist_binding_set(binding_set)
-
-  @spec fetch_binding_set(binary(), binary(), binary(), pos_integer()) ::
-          {:ok, BindingSet.t()} | {:error, term()}
-  def fetch_binding_set(organization_id, mission_id, binding_set_id, version)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
-             is_integer(version) and version > 0 do
-    Governance.fetch_binding_set(organization_id, mission_id, binding_set_id, version)
-  end
-
-  @spec fetch_binding_set(binary(), binary(), pos_integer()) ::
-          {:ok, BindingSet.t()} | {:error, term()}
-  def fetch_binding_set(mission_id, binding_set_id, version)
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 do
-    Governance.fetch_binding_set(mission_id, binding_set_id, version)
-  end
-
   defp resolve_raw_evidence(%RawEvidence{} = raw_evidence) do
     SourceEndpoints.resolve_raw_evidence(raw_evidence)
   end
@@ -2102,19 +2052,6 @@ defmodule Cadence do
     System.monotonic_time()
     |> Kernel.-(started_at)
     |> System.convert_time_unit(:native, :microsecond)
-  end
-
-  @spec fetch_latest_binding_set(binary(), binary(), binary()) ::
-          {:ok, BindingSet.t()} | {:error, term()}
-  def fetch_latest_binding_set(organization_id, mission_id, binding_set_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) do
-    Governance.fetch_latest_binding_set(organization_id, mission_id, binding_set_id)
-  end
-
-  @spec fetch_latest_binding_set(binary(), binary()) :: {:ok, BindingSet.t()} | {:error, term()}
-  def fetch_latest_binding_set(mission_id, binding_set_id)
-      when is_binary(mission_id) and is_binary(binding_set_id) do
-    Governance.fetch_latest_binding_set(mission_id, binding_set_id)
   end
 
   @spec persist_derived_definition(DerivedTelemetryDefinition.t()) ::

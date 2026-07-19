@@ -57,7 +57,7 @@ defmodule Cadence.Telemetry.ProfilerTest do
         ]
       })
 
-    assert {:ok, persisted_binding_set} = Cadence.persist_binding_set(binding_set)
+    assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
              Cadence.activate_binding_set(
