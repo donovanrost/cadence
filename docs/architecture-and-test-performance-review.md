@@ -1278,6 +1278,12 @@ stage policy, and operator-facing explanation summaries into a 376-line
 3,203 lines. The typed `DataManagement` public APIs remain unchanged, and
 mutation guards now consume the same extracted decisions directly; production
 source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting observation-identity decision normalization, context validation,
+evidence construction, single and bulk persistence, per-item errors, and batch
+summaries into a 283-line `DataManagement.ObservationIdentityDecisions` module
+reduced `DataManagement` from 3,203 to 2,930 lines. Its typed public APIs and
+result contracts remain unchanged; production source-size pressure remains 6
+and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
