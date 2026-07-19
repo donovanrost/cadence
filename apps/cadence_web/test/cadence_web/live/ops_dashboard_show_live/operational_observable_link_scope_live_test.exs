@@ -19,6 +19,77 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
+  @metric_route_scenarios [
+    %{
+      label: "metric sample",
+      source_endpoint_id: "metric-live-source-endpoint-alpha",
+      source_endpoint_name: "Goldstone metric endpoint",
+      transport_id: "metric-live-transport-alpha",
+      transport_name: "Metric Link TCP",
+      transport_host: "metric-link.ground.example",
+      sample_id: "metric-sample-live-rendered-1",
+      observable_id: "link.snr_db",
+      value: 13.75,
+      metric_fields: %{snr_db: 13.75},
+      unit: "dB",
+      dashboard_name: "Live Metric Sample Evidence",
+      widget_title: "Live SNR Metric",
+      expected_value: "13.750"
+    },
+    %{
+      label: "RF symbol-rate",
+      source_endpoint_id: "symbol-rate-live-source-endpoint-alpha",
+      source_endpoint_name: "Goldstone symbol-rate endpoint",
+      transport_id: "symbol-rate-live-transport-alpha",
+      transport_name: "Symbol Rate Link TCP",
+      transport_host: "symbol-rate-link.ground.example",
+      sample_id: "rf-symbol-rate-live-rendered-alpha",
+      observable_id: "link.symbol_rate_sps",
+      value: 1_048_000.0,
+      metric_fields: %{
+        symbol_rate_sps: 1_048_000.0,
+        symbol_rate: 1_048_000.0,
+        symbols_per_second: 1_048_000.0
+      },
+      unit: "sym/s",
+      dashboard_name: "Live RF Symbol Rate Evidence",
+      widget_title: "Live Symbol Rate Metric",
+      expected_value: "1048000"
+    },
+    %{
+      label: "RF Doppler",
+      source_endpoint_id: "doppler-live-source-endpoint-alpha",
+      source_endpoint_name: "Goldstone Doppler endpoint",
+      transport_id: "doppler-live-transport-alpha",
+      transport_name: "Doppler Link TCP",
+      transport_host: "doppler-link.ground.example",
+      sample_id: "rf-doppler-live-rendered-alpha",
+      observable_id: "link.doppler_hz",
+      value: -42.5,
+      metric_fields: %{doppler_hz: -42.5},
+      unit: "Hz",
+      dashboard_name: "Live RF Doppler Evidence",
+      widget_title: "Live Doppler Metric",
+      expected_value: "-42.500"
+    },
+    %{
+      label: "RF Eb/N0",
+      source_endpoint_id: "ebn0-live-source-endpoint-alpha",
+      source_endpoint_name: "Goldstone Eb/N0 endpoint",
+      transport_id: "ebn0-live-transport-alpha",
+      transport_name: "Eb/N0 Link TCP",
+      transport_host: "ebn0-link.ground.example",
+      sample_id: "rf-ebn0-live-rendered-alpha",
+      observable_id: "link.eb_n0_db",
+      value: 9.25,
+      metric_fields: %{eb_n0_db: 9.25},
+      unit: "dB",
+      dashboard_name: "Live RF Eb/N0 Evidence",
+      widget_title: "Live Eb/N0 Metric",
+      expected_value: "9.250"
+    }
+  ]
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -577,1125 +648,262 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
       stop_dashboard_view(view)
     end
 
-    test "opens live metric sample operational-event copied route from metric-history frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
+    for scenario <- @metric_route_scenarios do
+      @scenario scenario
 
-      {conn, org, mission} = signed_in_org_and_mission()
+      test "opens live #{scenario.label} operational-event copied route from metric-history frame evidence" do
+        assert_metric_operational_event_route(@scenario)
+      end
+    end
+  end
 
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "metric-live-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone metric endpoint",
-          metadata: %{
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
+  defp assert_metric_operational_event_route(scenario) do
+    enable_dashboard_engine_inline_resolves!()
 
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+    {conn, org, mission} = signed_in_org_and_mission()
 
-      transport =
-        Transport.new(%{
-          transport_id: "metric-live-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Metric Link TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "metric-link.ground.example",
-            "port" => "5011",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at =
-        DateTime.utc_now()
-        |> DateTime.truncate(:second)
-
-      metric_event =
-        %{
-          sample_id: "metric-sample-live-rendered-1",
-          organization_id: org.organization_id,
-          mission_id: mission.mission_id,
-          observable_id: "link.snr_db",
-          resource_id: "link-alpha",
-          scope_kind: :link,
-          transport_id: transport.transport_id,
-          source_endpoint_id: source_endpoint.source_endpoint_id,
-          ground_station_id: "dss-14",
-          link_id: "link-alpha",
-          adapter_key: :tcp_socket,
-          value: 13.75,
-          snr_db: 13.75,
-          unit: "dB",
-          observed_at: observed_at
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: scenario.source_endpoint_id,
+        mission_id: mission.mission_id,
+        display_name: scenario.source_endpoint_name,
+        metadata: %{
+          "ground_station_id" => "dss-14",
+          "link_assignment_id" => "link-alpha"
         }
-        |> Event.from_operational_observable_metric_sample()
-        |> OperationalEvents.persist_event()
-        |> then(fn {:ok, event} -> event end)
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Live Metric Sample Evidence",
-          widgets: [
-            %{
-              type: :time_series,
-              title: "Live SNR Metric",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.snr_db"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      metric_widget = render_item_by_title(document, "Live SNR Metric").widget
-      metric_widget_id = metric_widget.widget_id
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
-        )
-
-      render_dashboard_async(view)
-
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
-             )
-
-      frame_button_selector =
-        ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.snr_db"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
-
-      assert has_element?(view, frame_button_selector)
-
-      view
-      |> element(frame_button_selector)
-      |> render_click()
-
-      evidence_path = assert_patch(view)
-      assert evidence_path =~ "panel=evidence"
-      assert evidence_path =~ "selected_evidence_kind=frame"
-      assert evidence_path =~ "selected_placement=#{URI.encode_www_form(metric_widget_id)}"
-      assert evidence_path =~ "selected_observable=#{URI.encode_www_form("link.snr_db")}"
-      assert evidence_path =~ "selected_data_source=managed_operational_observables"
-      assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
-      assert evidence_path =~ "selected_realm=flight"
-      assert evidence_path =~ "scope_kind=link"
-      assert evidence_path =~ "scope_id=link-alpha"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
-             )
-
-      metric_event_id = metric_event.event_id
-      metric_event_route_id = URI.encode_www_form(metric_event_id)
-      metric_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
-
-      metric_event_selector =
-        ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
-
-      assert has_element?(view, metric_event_selector)
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.snr_db")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
-
-      metric_operational_event_evidence =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query(metric_event_selector)
-
-      assert ["operational_event"] =
-               LazyHTML.attribute(metric_operational_event_evidence, "phx-value-target")
-
-      assert [^metric_event_id] =
-               LazyHTML.attribute(metric_operational_event_evidence, "phx-value-target-id")
-
-      assert ["evidence-ref:operational_event:" <> _] =
-               LazyHTML.attribute(metric_operational_event_evidence, "phx-value-link-id")
-
-      view
-      |> element(metric_event_selector)
-      |> render_click(%{
-        "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
-        "target" => "operational_event",
-        "target-id" => metric_event_id,
-        "timestamp-ms" => metric_event_at_ms,
-        "realm" => "flight",
-        "time-mode" => "live",
-        "data-source-id" => "managed_operational_observables",
-        "source-binding-id" => "default_flight_operational_observables",
-        "scope-kind" => "link",
-        "scope-id" => "link-alpha",
-        "resource-id" => "link-alpha",
-        "transport-id" => transport.transport_id,
-        "source-endpoint-id" => source_endpoint.source_endpoint_id,
-        "ground-station-id" => "dss-14",
-        "scope-link-id" => "link-alpha"
       })
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
 
-      metric_event_path = assert_patch(view)
-      assert metric_event_path =~ "panel=data_link"
-      assert metric_event_path =~ "selected_target=operational_event"
-      assert metric_event_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_path =~ "time_mode=live"
-      assert metric_event_path =~ "scope_kind=link"
-      assert metric_event_path =~ "scope_id=link-alpha"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
-
-      metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
-
-      assert metric_event_copied_path =~ "panel=data_link"
-      assert metric_event_copied_path =~ "selected_target=operational_event"
-      assert metric_event_copied_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_copied_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_copied_path =~ "data_source_id=managed_operational_observables"
-
-      assert metric_event_copied_path =~
-               "source_binding_id=default_flight_operational_observables"
-
-      assert metric_event_copied_path =~ "scope_kind=link"
-      assert metric_event_copied_path =~ "scope_id=link-alpha"
-
-      {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Operational metric sample"]),
-               "metric-sample-live-rendered-1"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-               "link.snr_db"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-               "link"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-               transport.transport_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-               source_endpoint.source_endpoint_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Link"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Value"]),
-               "13.750"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Unit"]),
-               "dB"
-             )
-
-      stop_dashboard_view(reopened_metric_event_view)
-      stop_dashboard_view(view)
-    end
-
-    test "opens live RF symbol-rate operational-event copied route from metric-history frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "symbol-rate-live-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone symbol-rate endpoint",
-          metadata: %{
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
-
-      transport =
-        Transport.new(%{
-          transport_id: "symbol-rate-live-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Symbol Rate Link TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "symbol-rate-link.ground.example",
-            "port" => "5011",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at =
-        DateTime.utc_now()
-        |> DateTime.truncate(:second)
-
-      metric_event =
-        %{
-          sample_id: "rf-symbol-rate-live-rendered-alpha",
-          organization_id: org.organization_id,
-          mission_id: mission.mission_id,
-          observable_id: "link.symbol_rate_sps",
-          resource_id: "link-alpha",
-          scope_kind: :link,
-          transport_id: transport.transport_id,
-          source_endpoint_id: source_endpoint.source_endpoint_id,
-          ground_station_id: "dss-14",
-          link_id: "link-alpha",
-          adapter_key: :tcp_socket,
-          value: 1_048_000.0,
-          symbol_rate_sps: 1_048_000.0,
-          symbol_rate: 1_048_000.0,
-          symbols_per_second: 1_048_000.0,
-          unit: "sym/s",
-          observed_at: observed_at
+    transport =
+      Transport.new(%{
+        transport_id: scenario.transport_id,
+        mission_id: mission.mission_id,
+        display_name: scenario.transport_name,
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => scenario.transport_host,
+          "port" => "5011",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => source_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-14",
+          "link_assignment_id" => "link-alpha"
         }
-        |> Event.from_operational_observable_metric_sample()
-        |> OperationalEvents.persist_event()
-        |> then(fn {:ok, event} -> event end)
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Live RF Symbol Rate Evidence",
-          widgets: [
-            %{
-              type: :time_series,
-              title: "Live Symbol Rate Metric",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.symbol_rate_sps"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      metric_widget = render_item_by_title(document, "Live Symbol Rate Metric").widget
-      metric_widget_id = metric_widget.widget_id
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
-        )
-
-      render_dashboard_async(view)
-
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
-             )
-
-      frame_button_selector =
-        ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.symbol_rate_sps"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
-
-      assert has_element?(view, frame_button_selector)
-
-      view
-      |> element(frame_button_selector)
-      |> render_click()
-
-      evidence_path = assert_patch(view)
-      assert evidence_path =~ "panel=evidence"
-      assert evidence_path =~ "selected_evidence_kind=frame"
-      assert evidence_path =~ "selected_placement=#{URI.encode_www_form(metric_widget_id)}"
-      assert evidence_path =~ "selected_observable=#{URI.encode_www_form("link.symbol_rate_sps")}"
-      assert evidence_path =~ "selected_data_source=managed_operational_observables"
-      assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
-      assert evidence_path =~ "selected_realm=flight"
-      assert evidence_path =~ "scope_kind=link"
-      assert evidence_path =~ "scope_id=link-alpha"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
-             )
-
-      metric_event_id = metric_event.event_id
-      metric_event_route_id = URI.encode_www_form(metric_event_id)
-      metric_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
-
-      metric_event_selector =
-        ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
-
-      assert has_element?(view, metric_event_selector)
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.symbol_rate_sps")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
-
-      view
-      |> element(metric_event_selector)
-      |> render_click(%{
-        "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
-        "target" => "operational_event",
-        "target-id" => metric_event_id,
-        "timestamp-ms" => metric_event_at_ms,
-        "realm" => "flight",
-        "time-mode" => "live",
-        "data-source-id" => "managed_operational_observables",
-        "source-binding-id" => "default_flight_operational_observables",
-        "scope-kind" => "link",
-        "scope-id" => "link-alpha",
-        "resource-id" => "link-alpha",
-        "transport-id" => transport.transport_id,
-        "source-endpoint-id" => source_endpoint.source_endpoint_id,
-        "ground-station-id" => "dss-14",
-        "scope-link-id" => "link-alpha"
       })
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
 
-      metric_event_path = assert_patch(view)
-      assert metric_event_path =~ "panel=data_link"
-      assert metric_event_path =~ "selected_target=operational_event"
-      assert metric_event_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_path =~ "time_mode=live"
-      assert metric_event_path =~ "scope_kind=link"
-      assert metric_event_path =~ "scope_id=link-alpha"
+    observed_at =
+      DateTime.utc_now()
+      |> DateTime.truncate(:second)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+    metric_event =
+      %{
+        sample_id: scenario.sample_id,
+        organization_id: org.organization_id,
+        mission_id: mission.mission_id,
+        observable_id: scenario.observable_id,
+        resource_id: "link-alpha",
+        scope_kind: :link,
+        transport_id: transport.transport_id,
+        source_endpoint_id: source_endpoint.source_endpoint_id,
+        ground_station_id: "dss-14",
+        link_id: "link-alpha",
+        adapter_key: :tcp_socket,
+        value: scenario.value,
+        unit: scenario.unit,
+        observed_at: observed_at
+      }
+      |> Map.merge(scenario.metric_fields)
+      |> Event.from_operational_observable_metric_sample()
+      |> OperationalEvents.persist_event()
+      |> then(fn {:ok, event} -> event end)
 
-      metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
-
-      assert metric_event_copied_path =~ "panel=data_link"
-      assert metric_event_copied_path =~ "selected_target=operational_event"
-      assert metric_event_copied_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_copied_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_copied_path =~ "data_source_id=managed_operational_observables"
-
-      assert metric_event_copied_path =~
-               "source_binding_id=default_flight_operational_observables"
-
-      assert metric_event_copied_path =~ "scope_kind=link"
-      assert metric_event_copied_path =~ "scope_id=link-alpha"
-
-      {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Operational metric sample"]),
-               "rf-symbol-rate-live-rendered-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-               "link.symbol_rate_sps"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-               "link"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-               transport.transport_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-               source_endpoint.source_endpoint_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Link"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Value"]),
-               "1048000"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Unit"]),
-               "sym/s"
-             )
-
-      stop_dashboard_view(reopened_metric_event_view)
-      stop_dashboard_view(view)
-    end
-
-    test "opens live RF Doppler operational-event copied route from metric-history frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "doppler-live-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone Doppler endpoint",
-          metadata: %{
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
-
-      transport =
-        Transport.new(%{
-          transport_id: "doppler-live-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Doppler Link TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "doppler-link.ground.example",
-            "port" => "5011",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at =
-        DateTime.utc_now()
-        |> DateTime.truncate(:second)
-
-      metric_event =
-        %{
-          sample_id: "rf-doppler-live-rendered-alpha",
-          organization_id: org.organization_id,
-          mission_id: mission.mission_id,
-          observable_id: "link.doppler_hz",
-          resource_id: "link-alpha",
-          scope_kind: :link,
-          transport_id: transport.transport_id,
-          source_endpoint_id: source_endpoint.source_endpoint_id,
-          ground_station_id: "dss-14",
-          link_id: "link-alpha",
-          adapter_key: :tcp_socket,
-          value: -42.5,
-          doppler_hz: -42.5,
-          unit: "Hz",
-          observed_at: observed_at
-        }
-        |> Event.from_operational_observable_metric_sample()
-        |> OperationalEvents.persist_event()
-        |> then(fn {:ok, event} -> event end)
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Live RF Doppler Evidence",
-          widgets: [
-            %{
-              type: :time_series,
-              title: "Live Doppler Metric",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.doppler_hz"]
-              }
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: scenario.dashboard_name,
+        widgets: [
+          %{
+            type: :time_series,
+            title: scenario.widget_title,
+            binding: %{
+              source: :operational_observables,
+              observables: [scenario.observable_id]
             }
-          ]
-        )
+          }
+        ]
+      )
 
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      metric_widget = render_item_by_title(document, "Live Doppler Metric").widget
-      metric_widget_id = metric_widget.widget_id
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    metric_widget = render_item_by_title(document, scenario.widget_title).widget
+    metric_widget_id = metric_widget.widget_id
 
-      {:ok, view, _html} =
-        live(
-          conn,
-          show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
-        )
+    {:ok, view, _html} =
+      live(
+        conn,
+        show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
+      )
 
-      render_dashboard_async(view)
+    render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
-             )
+    assert has_element?(
+             view,
+             ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
+           )
 
-      frame_button_selector =
-        ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.doppler_hz"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
+    frame_button_selector =
+      ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="#{scenario.observable_id}"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
 
-      assert has_element?(view, frame_button_selector)
+    assert has_element?(view, frame_button_selector)
 
+    view
+    |> element(frame_button_selector)
+    |> render_click()
+
+    evidence_path = assert_patch(view)
+    assert evidence_path =~ "panel=evidence"
+    assert evidence_path =~ "selected_evidence_kind=frame"
+    assert evidence_path =~ "selected_placement=#{URI.encode_www_form(metric_widget_id)}"
+    assert evidence_path =~ "selected_observable=#{URI.encode_www_form(scenario.observable_id)}"
+    assert evidence_path =~ "selected_data_source=managed_operational_observables"
+    assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
+    assert evidence_path =~ "selected_realm=flight"
+    assert evidence_path =~ "scope_kind=link"
+    assert evidence_path =~ "scope_id=link-alpha"
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
+           )
+
+    metric_event_id = metric_event.event_id
+    metric_event_route_id = URI.encode_www_form(metric_event_id)
+    metric_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
+
+    metric_event_selector =
+      ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
+
+    assert has_element?(view, metric_event_selector)
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form(scenario.observable_id)}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+           )
+
+    metric_operational_event_evidence =
       view
-      |> element(frame_button_selector)
-      |> render_click()
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(metric_event_selector)
 
-      evidence_path = assert_patch(view)
-      assert evidence_path =~ "panel=evidence"
-      assert evidence_path =~ "selected_evidence_kind=frame"
-      assert evidence_path =~ "selected_placement=#{URI.encode_www_form(metric_widget_id)}"
-      assert evidence_path =~ "selected_observable=#{URI.encode_www_form("link.doppler_hz")}"
-      assert evidence_path =~ "selected_data_source=managed_operational_observables"
-      assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
-      assert evidence_path =~ "selected_realm=flight"
-      assert evidence_path =~ "scope_kind=link"
-      assert evidence_path =~ "scope_id=link-alpha"
+    assert ["operational_event"] =
+             LazyHTML.attribute(metric_operational_event_evidence, "phx-value-target")
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
-             )
+    assert [^metric_event_id] =
+             LazyHTML.attribute(metric_operational_event_evidence, "phx-value-target-id")
 
-      metric_event_id = metric_event.event_id
-      metric_event_route_id = URI.encode_www_form(metric_event_id)
-      metric_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
+    assert ["evidence-ref:operational_event:" <> _] =
+             LazyHTML.attribute(metric_operational_event_evidence, "phx-value-link-id")
 
-      metric_event_selector =
-        ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
+    view
+    |> element(metric_event_selector)
+    |> render_click(%{
+      "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
+      "target" => "operational_event",
+      "target-id" => metric_event_id,
+      "timestamp-ms" => metric_event_at_ms,
+      "realm" => "flight",
+      "time-mode" => "live",
+      "data-source-id" => "managed_operational_observables",
+      "source-binding-id" => "default_flight_operational_observables",
+      "scope-kind" => "link",
+      "scope-id" => "link-alpha",
+      "resource-id" => "link-alpha",
+      "transport-id" => transport.transport_id,
+      "source-endpoint-id" => source_endpoint.source_endpoint_id,
+      "ground-station-id" => "dss-14",
+      "scope-link-id" => "link-alpha"
+    })
 
-      assert has_element?(view, metric_event_selector)
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
+           )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.doppler_hz")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+    metric_event_path = assert_patch(view)
+    assert metric_event_path =~ "panel=data_link"
+    assert metric_event_path =~ "selected_target=operational_event"
+    assert metric_event_path =~ "selected_id=#{metric_event_route_id}"
+    assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
+    assert metric_event_path =~ "time_mode=live"
+    assert metric_event_path =~ "scope_kind=link"
+    assert metric_event_path =~ "scope_id=link-alpha"
 
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+           )
+
+    metric_event_copied_path =
       view
-      |> element(metric_event_selector)
-      |> render_click(%{
-        "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
-        "target" => "operational_event",
-        "target-id" => metric_event_id,
-        "timestamp-ms" => metric_event_at_ms,
-        "realm" => "flight",
-        "time-mode" => "live",
-        "data-source-id" => "managed_operational_observables",
-        "source-binding-id" => "default_flight_operational_observables",
-        "scope-kind" => "link",
-        "scope-id" => "link-alpha",
-        "resource-id" => "link-alpha",
-        "transport-id" => transport.transport_id,
-        "source-endpoint-id" => source_endpoint.source_endpoint_id,
-        "ground-station-id" => "dss-14",
-        "scope-link-id" => "link-alpha"
-      })
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#dashboard-data-link-copy-link")
+      |> LazyHTML.attribute("data-clipboard-text")
+      |> List.first()
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
+    assert metric_event_copied_path =~ "panel=data_link"
+    assert metric_event_copied_path =~ "selected_target=operational_event"
+    assert metric_event_copied_path =~ "selected_id=#{metric_event_route_id}"
+    assert metric_event_copied_path =~ "selected_time=#{metric_event_at_ms}"
+    assert metric_event_copied_path =~ "data_source_id=managed_operational_observables"
 
-      metric_event_path = assert_patch(view)
-      assert metric_event_path =~ "panel=data_link"
-      assert metric_event_path =~ "selected_target=operational_event"
-      assert metric_event_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_path =~ "time_mode=live"
-      assert metric_event_path =~ "scope_kind=link"
-      assert metric_event_path =~ "scope_id=link-alpha"
+    assert metric_event_copied_path =~
+             "source_binding_id=default_flight_operational_observables"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+    assert metric_event_copied_path =~ "scope_kind=link"
+    assert metric_event_copied_path =~ "scope_id=link-alpha"
 
-      metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+    {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
 
-      assert metric_event_copied_path =~ "panel=data_link"
-      assert metric_event_copied_path =~ "selected_target=operational_event"
-      assert metric_event_copied_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_copied_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_copied_path =~ "data_source_id=managed_operational_observables"
+    assert has_element?(
+             reopened_metric_event_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
+           )
 
-      assert metric_event_copied_path =~
-               "source_binding_id=default_flight_operational_observables"
+    assert has_element?(
+             reopened_metric_event_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
+           )
 
-      assert metric_event_copied_path =~ "scope_kind=link"
-      assert metric_event_copied_path =~ "scope_id=link-alpha"
-
-      {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
-
+    for {field, expected} <- [
+          {"Operational metric sample", scenario.sample_id},
+          {"Observable", scenario.observable_id},
+          {"Resource", "link-alpha"},
+          {"Scope kind", "link"},
+          {"Transport", transport.transport_id},
+          {"Source endpoint", source_endpoint.source_endpoint_id},
+          {"Ground station", "dss-14"},
+          {"Link", "link-alpha"},
+          {"Value", scenario.expected_value},
+          {"Unit", scenario.unit}
+        ] do
       assert has_element?(
                reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
+               ~s(#dashboard-data-link-inspector [data-data-link-field="#{field}"]),
+               expected
              )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Operational metric sample"]),
-               "rf-doppler-live-rendered-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-               "link.doppler_hz"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-               "link"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-               transport.transport_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-               source_endpoint.source_endpoint_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Link"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Value"]),
-               "-42.500"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Unit"]),
-               "Hz"
-             )
-
-      stop_dashboard_view(reopened_metric_event_view)
-      stop_dashboard_view(view)
     end
 
-    test "opens live RF Eb/N0 operational-event copied route from metric-history frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "ebn0-live-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone Eb/N0 endpoint",
-          metadata: %{
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
-
-      transport =
-        Transport.new(%{
-          transport_id: "ebn0-live-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Eb/N0 Link TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "ebn0-link.ground.example",
-            "port" => "5011",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at =
-        DateTime.utc_now()
-        |> DateTime.truncate(:second)
-
-      metric_event =
-        %{
-          sample_id: "rf-ebn0-live-rendered-alpha",
-          organization_id: org.organization_id,
-          mission_id: mission.mission_id,
-          observable_id: "link.eb_n0_db",
-          resource_id: "link-alpha",
-          scope_kind: :link,
-          transport_id: transport.transport_id,
-          source_endpoint_id: source_endpoint.source_endpoint_id,
-          ground_station_id: "dss-14",
-          link_id: "link-alpha",
-          adapter_key: :tcp_socket,
-          value: 9.25,
-          eb_n0_db: 9.25,
-          unit: "dB",
-          observed_at: observed_at
-        }
-        |> Event.from_operational_observable_metric_sample()
-        |> OperationalEvents.persist_event()
-        |> then(fn {:ok, event} -> event end)
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Live RF Eb/N0 Evidence",
-          widgets: [
-            %{
-              type: :time_series,
-              title: "Live Eb/N0 Metric",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.eb_n0_db"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      metric_widget = render_item_by_title(document, "Live Eb/N0 Metric").widget
-      metric_widget_id = metric_widget.widget_id
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
-        )
-
-      render_dashboard_async(view)
-
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
-             )
-
-      frame_button_selector =
-        ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.eb_n0_db"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
-
-      assert has_element?(view, frame_button_selector)
-
-      view
-      |> element(frame_button_selector)
-      |> render_click()
-
-      evidence_path = assert_patch(view)
-      assert evidence_path =~ "panel=evidence"
-      assert evidence_path =~ "selected_evidence_kind=frame"
-      assert evidence_path =~ "selected_placement=#{URI.encode_www_form(metric_widget_id)}"
-      assert evidence_path =~ "selected_observable=#{URI.encode_www_form("link.eb_n0_db")}"
-      assert evidence_path =~ "selected_data_source=managed_operational_observables"
-      assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
-      assert evidence_path =~ "selected_realm=flight"
-      assert evidence_path =~ "scope_kind=link"
-      assert evidence_path =~ "scope_id=link-alpha"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
-             )
-
-      metric_event_id = metric_event.event_id
-      metric_event_route_id = URI.encode_www_form(metric_event_id)
-      metric_event_at_ms = DateTime.to_unix(observed_at, :millisecond)
-
-      metric_event_selector =
-        ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
-
-      assert has_element?(view, metric_event_selector)
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.eb_n0_db")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
-
-      view
-      |> element(metric_event_selector)
-      |> render_click(%{
-        "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
-        "target" => "operational_event",
-        "target-id" => metric_event_id,
-        "timestamp-ms" => metric_event_at_ms,
-        "realm" => "flight",
-        "time-mode" => "live",
-        "data-source-id" => "managed_operational_observables",
-        "source-binding-id" => "default_flight_operational_observables",
-        "scope-kind" => "link",
-        "scope-id" => "link-alpha",
-        "resource-id" => "link-alpha",
-        "transport-id" => transport.transport_id,
-        "source-endpoint-id" => source_endpoint.source_endpoint_id,
-        "ground-station-id" => "dss-14",
-        "scope-link-id" => "link-alpha"
-      })
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
-
-      metric_event_path = assert_patch(view)
-      assert metric_event_path =~ "panel=data_link"
-      assert metric_event_path =~ "selected_target=operational_event"
-      assert metric_event_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_path =~ "time_mode=live"
-      assert metric_event_path =~ "scope_kind=link"
-      assert metric_event_path =~ "scope_id=link-alpha"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
-
-      metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
-
-      assert metric_event_copied_path =~ "panel=data_link"
-      assert metric_event_copied_path =~ "selected_target=operational_event"
-      assert metric_event_copied_path =~ "selected_id=#{metric_event_route_id}"
-      assert metric_event_copied_path =~ "selected_time=#{metric_event_at_ms}"
-      assert metric_event_copied_path =~ "data_source_id=managed_operational_observables"
-
-      assert metric_event_copied_path =~
-               "source_binding_id=default_flight_operational_observables"
-
-      assert metric_event_copied_path =~ "scope_kind=link"
-      assert metric_event_copied_path =~ "scope_id=link-alpha"
-
-      {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Operational metric sample"]),
-               "rf-ebn0-live-rendered-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-               "link.eb_n0_db"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-               "link"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-               transport.transport_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-               source_endpoint.source_endpoint_id
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Link"]),
-               "link-alpha"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Value"]),
-               "9.250"
-             )
-
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Unit"]),
-               "dB"
-             )
-
-      stop_dashboard_view(reopened_metric_event_view)
-      stop_dashboard_view(view)
-    end
+    stop_dashboard_view(reopened_metric_event_view)
+    stop_dashboard_view(view)
   end
 end
