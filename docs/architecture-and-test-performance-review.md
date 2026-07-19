@@ -1658,6 +1658,13 @@ dashboard loader still uses a separate root API. Its replay path remains in the
 authenticated `:ops` LiveView session and continues using organization- and
 mission-scoped reads; production source-size pressure remains 4 and dependency
 ratchets are unchanged.
+Retiring the six mission-event projection rebuild clauses from the root facade
+moved five test call sites directly to `Cadence.Projections.MissionEvents` and
+`Cadence.Jobs`, with explicit mission ownership checks retained before rebuild
+execution. This reduced `Cadence` from 1,036 to 995 lines and reduced
+production source-size pressure from 4 oversized files to 3; production web
+callers of the root facade remain at 13 files. No route or authentication
+placement is involved, and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

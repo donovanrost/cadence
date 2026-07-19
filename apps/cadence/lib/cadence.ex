@@ -22,7 +22,6 @@ defmodule Cadence do
   alias Cadence.Missions
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
   alias Cadence.Persistence
-  alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
 
@@ -259,46 +258,6 @@ defmodule Cadence do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  @spec rebuild_mission_events(binary()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_mission_events(mission_id) when is_binary(mission_id) do
-    MissionEventProjection.rebuild(mission_id)
-  end
-
-  @spec rebuild_mission_events(binary(), binary()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_mission_events(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
-      MissionEventProjection.rebuild(mission_id)
-    end
-  end
-
-  @spec start_rebuild_mission_events(binary()) ::
-          {:ok, Cadence.Projections.MissionEvents.Run.t()} | {:error, term()}
-  def start_rebuild_mission_events(mission_id) when is_binary(mission_id) do
-    MissionEventProjection.start_rebuild(mission_id)
-  end
-
-  @spec start_rebuild_mission_events(binary(), binary()) ::
-          {:ok, Cadence.Projections.MissionEvents.Run.t()} | {:error, term()}
-  def start_rebuild_mission_events(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
-      MissionEventProjection.start_rebuild(mission_id)
-    end
-  end
-
-  @spec fetch_mission_event_rebuild_run(binary()) ::
-          {:ok, Cadence.Projections.MissionEvents.Run.t()} | {:error, term()}
-  def fetch_mission_event_rebuild_run(rebuild_run_id) when is_binary(rebuild_run_id) do
-    MissionEventProjection.fetch_run(rebuild_run_id)
-  end
-
-  @spec fetch_mission_event_rebuild_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_mission_event_rebuild_job(rebuild_run_id) when is_binary(rebuild_run_id) do
-    Jobs.fetch_job_for_run(:mission_event_rebuild, rebuild_run_id)
-  end
 
   @spec realized_contact_snapshot(binary(), binary()) :: {:ok, map()} | {:error, term()}
   def realized_contact_snapshot(mission_id, realized_contact_id)

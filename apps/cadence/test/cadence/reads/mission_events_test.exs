@@ -12,6 +12,7 @@ defmodule Cadence.Reads.MissionEventsTest do
 
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Jobs
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
@@ -136,7 +137,8 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert mission_event_count(mission_id) == 2
     assert {2, _rows} = delete_mission_events(mission_id)
 
-    assert {:ok, 2} = Cadence.rebuild_mission_events(organization_id, mission_id)
+    assert {:ok, _mission} = Cadence.Missions.fetch_mission(organization_id, mission_id)
+    assert {:ok, 2} = MissionEvents.rebuild(mission_id)
 
     rebuilt_events = MissionEventReads.list_for_mission(organization_id, mission_id, limit: 10)
 
@@ -256,7 +258,8 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert {1, _rows} = delete_mission_events(mission_id)
     assert {1, _rows} = delete_binding_set_activations(mission_id)
 
-    assert {:ok, 1} = Cadence.rebuild_mission_events(organization_id, mission_id)
+    assert {:ok, _mission} = Cadence.Missions.fetch_mission(organization_id, mission_id)
+    assert {:ok, 1} = MissionEvents.rebuild(mission_id)
 
     [rebuilt_event] =
       MissionEventReads.list_for_mission(
@@ -536,10 +539,13 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert mission_event_count(mission_id) == 1
     assert {1, _rows} = delete_mission_events(mission_id)
 
-    assert {:ok, rebuild_run} = Cadence.start_rebuild_mission_events(organization_id, mission_id)
+    assert {:ok, _mission} = Cadence.Missions.fetch_mission(organization_id, mission_id)
+    assert {:ok, rebuild_run} = MissionEvents.start_rebuild(mission_id)
     assert rebuild_run.status == :running
 
-    assert {:ok, queued_job} = Cadence.fetch_mission_event_rebuild_job(rebuild_run.rebuild_run_id)
+    assert {:ok, queued_job} =
+             Jobs.fetch_job_for_run(:mission_event_rebuild, rebuild_run.rebuild_run_id)
+
     assert queued_job.status == :queued
     assert queued_job.job_type == :mission_event_rebuild
 
@@ -549,8 +555,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
-    assert {:ok, completed_run} =
-             Cadence.fetch_mission_event_rebuild_run(rebuild_run.rebuild_run_id)
+    assert {:ok, completed_run} = MissionEvents.fetch_run(rebuild_run.rebuild_run_id)
 
     assert completed_run.status == :completed
     assert completed_run.rebuilt_event_count == 1
