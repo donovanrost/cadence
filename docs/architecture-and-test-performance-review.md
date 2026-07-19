@@ -1749,6 +1749,15 @@ atom- and string-keyed secret redaction alongside event and deployment
 formatting. The LiveView retains scoped reads and event orchestration in its
 authenticated `:ops` route; production source-size pressure remains 3 and
 dependency ratchets are unchanged.
+Extracting binding grouping, source and credential labels, source-health
+classification, and binding-level readiness presentation into the
+persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceBindingPresentation` reduced
+`OpsDataSourcesLive` from 2,375 to 2,241 lines. Direct tests cover stable group
+identity, active-first ordering, missing-source state, credential labels, and
+readiness-policy metadata. Source-level inventory rollups and all scoped reads
+remain in the LiveView on its authenticated `:ops` route; production
+source-size pressure remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
