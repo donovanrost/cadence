@@ -1001,6 +1001,12 @@ limit-definition activation details out of the limits adapter reduced it to
 1,685 lines. The 400-line metadata module receives the adapter's resolved source
 identity rather than selecting providers itself; production source-size
 pressure remains 9.
+Extracting provider query options, telemetry-source context resolution,
+time-range warnings, selected definition intervals, and watermark aggregation
+reduced the limits adapter to 1,234 lines. The new 561-line query-context module
+owns the translation from planned dashboard requests to bounded provider
+queries; production source-size pressure remains 9 while the adapter is still
+above the 1,000-line limit.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
