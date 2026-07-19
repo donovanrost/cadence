@@ -1227,6 +1227,13 @@ context and navigation projection, and shared row/value formatting into a
 4,471 to 4,237 lines. This establishes a common contract for the planned
 target-specific resolver modules without duplicating inspector behavior;
 production source-size pressure remains 7.
+Extracting command request, queue-entry, release-attempt, and verifier-instance
+resolution into a 406-line target module moved their context-owned reads, row
+projection, and lifecycle related-link graph out of `DataLinkResolver`. A
+request filter on `Commanding.list_command_queue_entries/3` keeps those related
+reads behind the owning context. The facade now delegates the four targets and
+fell from 4,237 to 3,818 lines, while direct persistence-schema edges fell from
+122 to 118; production source-size pressure remains 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

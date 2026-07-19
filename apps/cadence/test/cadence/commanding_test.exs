@@ -340,6 +340,16 @@ defmodule Cadence.CommandingTest do
 
     assert Enum.filter(listed_queue_entry_ids, &(&1 in expected_queue_entry_ids)) ==
              expected_queue_entry_ids
+
+    assert [filtered_queue_entry] =
+             Cadence.list_command_queue_entries(
+               @organization_id,
+               @mission_id,
+               command_request_id: first_high_priority_request.command_request_id
+             )
+
+    assert filtered_queue_entry.command_queue_entry_id ==
+             first_high_priority_queue_entry.command_queue_entry_id
   end
 
   test "rejects invalid direct command requests", %{

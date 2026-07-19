@@ -444,6 +444,7 @@ defmodule Cadence.Commanding do
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
+    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
     |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
     |> maybe_filter_equals(:queue_lane_key, Keyword.get(opts, :queue_lane_key))
     |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))

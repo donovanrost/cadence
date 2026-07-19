@@ -64,10 +64,6 @@ persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cade
 persistence_schema|lib/cadence/contacts/provider_reservation_changes.ex|lib/cadence/persistence/schemas/scheduled_contact_row.ex
 persistence_schema|lib/cadence/contacts/provider_reservations.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex
 persistence_schema|lib/cadence/contacts/scheduled_contact_revisions.ex|lib/cadence/persistence/schemas/scheduled_contact_revision_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_queue_entry_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_release_attempt_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_request_row.ex
-persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/command_verifier_instance_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/mission_event_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/raw_evidence_row.ex
 persistence_schema|lib/cadence/dashboards/data_link_resolver.ex|lib/cadence/persistence/schemas/realized_contact_row.ex

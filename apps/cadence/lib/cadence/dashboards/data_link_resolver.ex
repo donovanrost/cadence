@@ -30,6 +30,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     LifecycleEvent
   }
 
+  alias Cadence.Dashboards.DataLinkResolver.CommandTargets
   alias Cadence.Dashboards.DataSources.DataBindingEventRow
   alias Cadence.Dashboards.SourceHealth.EventRow, as: SourceHealthEventRow
   alias Cadence.Dashboards.SourceWatermarks.EventRow, as: SourceWatermarkEventRow
@@ -45,10 +46,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   alias Cadence.Persistence.Schemas.{
-    CommandQueueEntryRow,
-    CommandReleaseAttemptRow,
-    CommandRequestRow,
-    CommandVerifierInstanceRow,
     MissionEventRow,
     RawEvidenceRow,
     RealizedContactRow,
@@ -161,28 +158,28 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          organization_id,
          mission_id
        ),
-       do: resolve_command_release_attempt(link, organization_id, mission_id)
+       do: CommandTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :command_request} = link,
          organization_id,
          mission_id
        ),
-       do: resolve_command_request(link, organization_id, mission_id)
+       do: CommandTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :command_queue_entry} = link,
          organization_id,
          mission_id
        ),
-       do: resolve_command_queue_entry(link, organization_id, mission_id)
+       do: CommandTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :command_verifier_instance} = link,
          organization_id,
          mission_id
        ),
-       do: resolve_command_verifier_instance(link, organization_id, mission_id)
+       do: CommandTargets.resolve(link, organization_id, mission_id)
 
   defp resolve_scoped_link(
          %DataLink{target: :transport_capability_record} = link,
@@ -546,40 +543,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       {:error, :not_found} ->
         {:error,
          inspector(link, :missing, "Operational event was not found in this mission.", [])}
-    end
-  end
-
-  defp resolve_command_verifier_instance(%DataLink{} = link, organization_id, mission_id) do
-    verifier_row =
-      CommandVerifierInstanceRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_verifier_instance_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case verifier_row do
-      %CommandVerifierInstanceRow{} = verifier_row ->
-        verifier_instance = CommandVerifierInstanceRow.to_domain(verifier_row)
-
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           command_verifier_instance_rows(verifier_instance),
-           command_verifier_instance_related_links(link, verifier_instance)
-         )}
-
-      nil ->
-        {:error,
-         inspector(
-           link,
-           :missing,
-           "Command verifier instance was not found in this mission.",
-           []
-         )}
     end
   end
 
@@ -1586,272 +1549,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     ]
   end
 
-  defp resolve_command_release_attempt(%DataLink{} = link, organization_id, mission_id) do
-    release_attempt_row =
-      CommandReleaseAttemptRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_release_attempt_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case release_attempt_row do
-      %CommandReleaseAttemptRow{} = release_attempt_row ->
-        release_attempt = CommandReleaseAttemptRow.to_domain(release_attempt_row)
-
-        transport_action_event =
-          command_release_attempt_transport_action_event(
-            release_attempt,
-            organization_id,
-            mission_id
-          )
-
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           command_release_attempt_rows(release_attempt, transport_action_event),
-           command_release_attempt_related_links(
-             link,
-             release_attempt,
-             organization_id,
-             mission_id
-           )
-         )}
-
-      nil ->
-        {:error,
-         inspector(
-           link,
-           :missing,
-           "Command release attempt was not found in this mission.",
-           []
-         )}
-    end
-  end
-
-  defp resolve_command_queue_entry(%DataLink{} = link, organization_id, mission_id) do
-    queue_entry_row =
-      CommandQueueEntryRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_queue_entry_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case queue_entry_row do
-      %CommandQueueEntryRow{} = queue_entry_row ->
-        queue_entry = CommandQueueEntryRow.to_domain(queue_entry_row)
-
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           command_queue_entry_rows(queue_entry),
-           command_queue_entry_related_links(link, queue_entry)
-         )}
-
-      nil ->
-        {:error,
-         inspector(link, :missing, "Command queue entry was not found in this mission.", [])}
-    end
-  end
-
-  defp command_queue_entry_rows(queue_entry) do
-    [
-      row("Command queue entry", queue_entry.command_queue_entry_id),
-      row("Lifecycle state", queue_entry.lifecycle_state),
-      row("Command request", queue_entry.command_request_id),
-      row("Source endpoint", queue_entry.source_endpoint_ref),
-      row("Queue lane", queue_entry.queue_lane_key),
-      row("Priority", queue_entry.priority),
-      row("Queue sequence", queue_entry.queue_sequence),
-      row("Not before", queue_entry.not_before),
-      row("Expires at", queue_entry.expires_at),
-      row("Enqueued at", queue_entry.enqueued_at),
-      row("Enqueued by", queue_entry.enqueued_by),
-      row("Metadata", queue_entry.metadata)
-    ]
-  end
-
-  defp command_queue_entry_related_links(%DataLink{} = link, queue_entry) do
-    [
-      related_link(
-        link,
-        :command_request,
-        queue_entry.command_request_id,
-        "Command request"
-      )
-    ]
-  end
-
-  defp resolve_command_request(%DataLink{} = link, organization_id, mission_id) do
-    request_row =
-      CommandRequestRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_request_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case request_row do
-      %CommandRequestRow{} = request_row ->
-        request = CommandRequestRow.to_domain(request_row)
-
-        {:ok,
-         inspector(
-           link,
-           :resolved,
-           nil,
-           command_request_rows(request),
-           command_request_related_links(link, request, organization_id, mission_id)
-         )}
-
-      nil ->
-        {:error, inspector(link, :missing, "Command request was not found in this mission.", [])}
-    end
-  end
-
-  defp command_request_rows(request) do
-    [
-      row("Command request", request.command_request_id),
-      row("Lifecycle state", request.lifecycle_state),
-      row("Verification state", request.verification_state),
-      row("Source endpoint", request.source_endpoint_ref),
-      row("Command", request.command_name),
-      row("Command display name", request.command_display_name),
-      row("Command id", request.command_id),
-      row("Command snapshot", request.command_snapshot_id),
-      row("Priority", request.priority),
-      row("Not before", request.not_before),
-      row("Expires at", request.expires_at),
-      row("Requested at", request.requested_at),
-      row("Requested by", request.requested_by),
-      row("Source command stage", request.source_command_stage_id),
-      row("Source staged command item", request.source_staged_command_item_id),
-      row("Argument values", request.argument_values),
-      row("Resolved argument values", request.resolved_argument_values),
-      row("Significance", request.significance),
-      row("Critical", request.critical),
-      row("Hazardous", request.hazardous),
-      row("Subsystem", request.subsystem),
-      row("Group", request.group_name),
-      row("Preferred uplink service", request.preferred_uplink_service),
-      row("Release policy hint", request.release_policy_hint),
-      row("APID", request.apid),
-      row("Service type", request.service_type),
-      row("Service subtype", request.service_subtype),
-      row("Opcode", request.opcode),
-      row("Metadata", request.metadata)
-    ]
-  end
-
-  defp command_request_related_links(%DataLink{} = link, request, organization_id, mission_id) do
-    queue_entry_links =
-      CommandQueueEntryRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_request_id == ^request.command_request_id
-      )
-      |> order_by([row], asc: row.enqueued_at, asc: row.command_queue_entry_id)
-      |> Repo.all()
-      |> Enum.map(fn queue_entry_row ->
-        related_link(
-          link,
-          :command_queue_entry,
-          queue_entry_row.command_queue_entry_id,
-          "Command queue entry"
-        )
-      end)
-
-    release_attempt_links =
-      CommandReleaseAttemptRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_request_id == ^request.command_request_id
-      )
-      |> order_by([row], asc: row.attempted_at, asc: row.command_release_attempt_id)
-      |> Repo.all()
-      |> Enum.map(fn release_attempt_row ->
-        related_link(
-          link,
-          :command_release_attempt,
-          release_attempt_row.command_release_attempt_id,
-          "Command release attempt"
-        )
-      end)
-
-    queue_entry_links ++ release_attempt_links
-  end
-
-  defp command_release_attempt_rows(release_attempt, transport_action_event) do
-    transport_action_payload =
-      case transport_action_event do
-        nil -> %{}
-        event -> event.payload || %{}
-      end
-
-    [
-      row("Command release attempt", release_attempt.command_release_attempt_id),
-      row("Lifecycle state", release_attempt.lifecycle_state),
-      row("Verification state", release_attempt.verification_state),
-      row("Failure reason", release_attempt.failure_reason),
-      row("Command request", release_attempt.command_request_id),
-      row("Command queue entry", release_attempt.command_queue_entry_id),
-      row("Command", release_attempt.command_name),
-      row("Command id", release_attempt.command_id),
-      row("Command snapshot", release_attempt.command_snapshot_id),
-      row("Source endpoint", release_attempt.source_endpoint_ref),
-      row("Transport action request", state_value(transport_action_payload, :action_request_id)),
-      row("Signal phase", state_value(transport_action_payload, :signal_phase)),
-      row("Action kind", state_value(transport_action_payload, :action_kind)),
-      row(
-        "Transport operational event",
-        transport_action_event && transport_action_event.event_id
-      ),
-      row("Realized contact", release_attempt.realized_contact_id),
-      row("Path", release_attempt.path_id),
-      row("Transport binding", release_attempt.transport_binding_id),
-      row("Layout kind", release_attempt.layout_kind),
-      row("Preferred uplink service", release_attempt.preferred_uplink_service),
-      row("APID", release_attempt.apid),
-      row("Service type", release_attempt.service_type),
-      row("Service subtype", release_attempt.service_subtype),
-      row("Opcode", release_attempt.opcode),
-      row("Encoded size bytes", release_attempt.encoded_size_bytes),
-      row("Attempted at", release_attempt.attempted_at),
-      row("Released at", release_attempt.released_at),
-      row("Released by", release_attempt.released_by),
-      row("Metadata", release_attempt.metadata)
-    ]
-  end
-
-  defp command_release_attempt_transport_action_event(
-         release_attempt,
-         organization_id,
-         mission_id
-       ) do
-    case state_value(release_attempt.metadata, :transport_action_request_id) do
-      action_request_id when is_binary(action_request_id) and action_request_id != "" ->
-        first_operational_event_for_source_record(
-          organization_id,
-          mission_id,
-          "transport_action_request",
-          action_request_id
-        )
-
-      _missing ->
-        nil
-    end
-  end
-
   defp first_operational_event_for_source_record(
          organization_id,
          mission_id,
@@ -1867,122 +1564,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       limit: 1
     )
     |> List.first()
-  end
-
-  defp command_release_attempt_related_links(
-         %DataLink{} = link,
-         release_attempt,
-         organization_id,
-         mission_id
-       ) do
-    verifier_links =
-      CommandVerifierInstanceRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_release_attempt_id == ^release_attempt.command_release_attempt_id
-      )
-      |> order_by([row], asc: row.matched_at, asc: row.command_verifier_instance_id)
-      |> Repo.all()
-      |> Enum.map(fn verifier_row ->
-        related_link(
-          link,
-          :command_verifier_instance,
-          verifier_row.command_verifier_instance_id,
-          "Command verifier instance"
-        )
-      end)
-
-    [
-      related_link(
-        link,
-        :command_request,
-        release_attempt.command_request_id,
-        "Command request"
-      ),
-      related_link(
-        link,
-        :command_queue_entry,
-        release_attempt.command_queue_entry_id,
-        "Command queue entry"
-      ),
-      related_link(
-        link,
-        :source_endpoint,
-        release_attempt.source_endpoint_ref,
-        "Source endpoint"
-      ),
-      related_link(
-        link,
-        :contact,
-        release_attempt.realized_contact_id,
-        "Contact"
-      ),
-      related_link(
-        link,
-        :transport_action_request,
-        state_value(release_attempt.metadata, :transport_action_request_id),
-        "Transport action request"
-      )
-      | verifier_links
-    ]
-  end
-
-  defp command_verifier_instance_rows(verifier_instance) do
-    [
-      row("Command verifier instance", verifier_instance.command_verifier_instance_id),
-      row("Verifier", verifier_instance.verifier_id),
-      row("Verifier name", verifier_instance.verifier_name),
-      row("Lifecycle state", verifier_instance.lifecycle_state),
-      row("Severity", verifier_instance.severity),
-      row("Phase", verifier_instance.phase),
-      row("Command release attempt", verifier_instance.command_release_attempt_id),
-      row("Command request", verifier_instance.command_request_id),
-      row("Command", verifier_instance.command_name),
-      row("Command id", verifier_instance.command_id),
-      row("Command snapshot", verifier_instance.command_snapshot_id),
-      row("Source endpoint", verifier_instance.source_endpoint_ref),
-      row("Matched record kind", verifier_instance.matched_record_kind),
-      row("Matched record", verifier_instance.matched_record_id),
-      row("Matched at", verifier_instance.matched_at),
-      row("Failure reason", verifier_instance.failure_reason),
-      row("Delay until", verifier_instance.delay_until),
-      row("Timeout at", verifier_instance.timeout_at),
-      row("Success criteria", verifier_instance.success_criteria),
-      row("Failure criteria", verifier_instance.failure_criteria),
-      row("Metadata", verifier_instance.metadata)
-    ]
-  end
-
-  defp command_verifier_instance_related_links(%DataLink{} = link, verifier_instance) do
-    [
-      related_link(
-        link,
-        :command_release_attempt,
-        verifier_instance.command_release_attempt_id,
-        "Command release attempt"
-      ),
-      related_link(
-        link,
-        :command_request,
-        verifier_instance.command_request_id,
-        "Command request"
-      ),
-      matched_record_related_link(
-        link,
-        verifier_instance.matched_record_kind,
-        verifier_instance.matched_record_id
-      )
-    ]
-  end
-
-  defp matched_record_related_link(%DataLink{} = link, matched_record_kind, matched_record_id) do
-    with target when is_atom(target) <- DataLink.parse_resolvable_target(matched_record_kind),
-         id when is_binary(id) and id != "" <- string_id(matched_record_id) do
-      related_link(link, target, id, target_text(target))
-    else
-      _missing -> nil
-    end
   end
 
   defp source_health_event_rows(event) do
