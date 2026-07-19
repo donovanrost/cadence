@@ -101,7 +101,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     refute has_element?(view, "#fleet-policy-approval-form")
 
     assert {:ok, policy, version} =
-             Cadence.fetch_active_fleet_planning_policy(
+             FleetPlanningPolicies.fetch_active(
                org.organization_id,
                mission.mission_id
              )

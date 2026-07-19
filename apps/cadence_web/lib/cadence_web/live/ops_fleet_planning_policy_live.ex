@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ContactPlanning.FleetPlanningPolicies
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -50,7 +52,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
     %{current_scope: scope, current_mission: mission, policy: policy, policy_version: version} =
       socket.assigns
 
-    case Cadence.approve_fleet_planning_policy(
+    case FleetPlanningPolicies.approve(
            scope,
            mission.mission_id,
            policy.fleet_planning_policy_id,
@@ -454,13 +456,13 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
     {policy, version} =
-      case Cadence.fetch_fleet_planning_policy(scope.organization_id, mission.mission_id) do
+      case FleetPlanningPolicies.fetch(scope.organization_id, mission.mission_id) do
         {:ok, policy, version} -> {policy, version}
         {:error, _reason} -> {nil, nil}
       end
 
     active_version =
-      case Cadence.fetch_active_fleet_planning_policy(
+      case FleetPlanningPolicies.fetch_active(
              scope.organization_id,
              mission.mission_id
            ) do
@@ -499,10 +501,10 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
   end
 
   defp save_policy(scope, mission_id, nil, attrs),
-    do: Cadence.create_fleet_planning_policy(scope, mission_id, attrs)
+    do: FleetPlanningPolicies.create(scope, mission_id, attrs)
 
   defp save_policy(scope, mission_id, policy, attrs) do
-    Cadence.version_fleet_planning_policy(
+    FleetPlanningPolicies.version(
       scope,
       mission_id,
       policy.fleet_planning_policy_id,

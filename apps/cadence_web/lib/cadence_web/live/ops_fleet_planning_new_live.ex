@@ -3,12 +3,14 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ContactPlanning.FleetPlanningPolicies
+
   @impl true
   def mount(_params, _session, socket) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     policy =
-      case Cadence.fetch_active_fleet_planning_policy(
+      case FleetPlanningPolicies.fetch_active(
              socket.assigns.current_scope.organization_id,
              socket.assigns.current_mission.mission_id
            ) do
