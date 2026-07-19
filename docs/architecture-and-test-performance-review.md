@@ -996,6 +996,11 @@ Extracting scalar, event, analysis-bucket, and definition-interval frame shapes
 and field columns reduced the limits adapter again to 1,953 lines. The 375-line
 frame builder receives already-assembled evidence metadata, so source-binding
 policy remains in the adapter; production source-size pressure remains 9.
+Moving frame evidence, links, source counts, divergence metadata, and selected
+limit-definition activation details out of the limits adapter reduced it to
+1,685 lines. The 400-line metadata module receives the adapter's resolved source
+identity rather than selecting providers itself; production source-size
+pressure remains 9.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
