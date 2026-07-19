@@ -823,6 +823,10 @@ Moving selected-interval evidence enrichment cases out of the 2,054-line
 source-registry test and sharing its request/binding/evidence fixtures reduced
 test-file pressure to 16; the registry files are now 813 and 865 lines, backed
 by a 399-line support module.
+Moving provider, mission, routing, reconciliation, and event-processing helpers
+out of the 1,644-line simulator contact-scheduling integration test reduced
+test-file pressure to 15; the scenario file is now 912 lines and its shared
+scheduling fixture module is 759 lines.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
