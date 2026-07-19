@@ -966,6 +966,12 @@ failure detail, data-view notices, linked actions, and degraded-state policy
 reduced the telemetry adapter to 936 lines. The 447-line warnings module keeps
 that presentation policy together, and production source-size pressure drops
 from 11 to 10 with the telemetry adapter now below the 1,000-line limit.
+Moving planned-request scope checks, source-capability matching, capability
+provenance, and placement warning construction out of the dashboard engine
+reduced the engine from 2,662 to 2,340 lines. The new 387-line validation module
+owns that policy while the engine retains request assembly and orchestration;
+production source-size pressure remains 10 until another engine responsibility
+is separated.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
