@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceScenario
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
 
+  import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
 
   alias Cadence.Dashboards.Document

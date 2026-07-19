@@ -881,6 +881,12 @@ and history, transport and queue metrics, and ingress latency from the
 6,541-line operational-observables source test reduced test-file pressure to
 5. The seven source-family files are now 1,164, 980, 596, 724, 944, 798, and
 1,024 lines, backed by 367 lines of shared operational-observable fixtures.
+Separating replay source-family LiveView proofs by metric, ingress/transport,
+managed runtime, transport runtime, connection, and interval evidence reduced
+test-file pressure to 3. The original 6,323-line test is now seven files of
+634, 1,051, 769, 1,137, 1,019, 951, and 858 lines; its 2,150-line support
+module is now two fixture modules of 1,075 and 1,078 lines. All 23 copied-route
+and rendered-evidence proofs remain in the focused app-local run.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
