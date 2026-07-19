@@ -40,6 +40,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     ConnectionFrames,
     ConnectionRows,
     LinkRfStateFrames,
+    LinkRfStateRows,
     ProductPolicy,
     RevisionPolicy
   }
@@ -67,8 +68,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
   @managed_runtime_observable_ids ["runtime.managed_activity"]
   @transport_runtime_observable_ids ["runtime.transport_activity"]
   @connection_states [:connected, :connecting, :degraded, :disconnected, :unknown]
-  @rf_lock_states [:locked, :acquiring, :degraded, :unlocked, :unknown]
-  @frame_sync_states [:synchronized, :acquiring, :degraded, :lost, :unknown]
   @managed_runtime_event_kinds [
     :managed_capability_initialized,
     :managed_capability_record_handled,
@@ -1409,7 +1408,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    link_rf_lock_rows(
+    LinkRfStateRows.lock_latest(
       transports_fun.(organization_id, mission_id, adapter_opts),
       link_rf_lock_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1479,7 +1478,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    link_rf_frame_sync_rows(
+    LinkRfStateRows.frame_sync_latest(
       transports_fun.(organization_id, mission_id, adapter_opts),
       link_rf_frame_sync_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1755,7 +1754,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    link_rf_lock_history_rows(
+    LinkRfStateRows.lock_history(
       transports_fun.(organization_id, mission_id, adapter_opts),
       link_rf_lock_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -1774,7 +1773,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    link_rf_frame_sync_history_rows(
+    LinkRfStateRows.frame_sync_history(
       transports_fun.(organization_id, mission_id, adapter_opts),
       link_rf_frame_sync_snapshots_fun.(organization_id, mission_id, adapter_opts),
       request
@@ -2843,259 +2842,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp link_rf_lock_rows(transports, snapshots, request) do
-    snapshots = Enum.map(snapshots, &normalize_link_rf_lock_snapshot/1)
-
-    transports
-    |> Enum.map(&link_rf_lock_row(&1, snapshots))
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp link_rf_lock_history_rows(transports, snapshots, request) do
-    snapshots
-    |> Enum.map(&normalize_link_rf_lock_snapshot/1)
-    |> Enum.map(&link_rf_lock_history_row(transports, &1))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.filter(
-      &(match?(%DateTime{}, &1.observed_at) and matches_connection_scope?(&1, request) and
-          time_in_request_window?(&1.observed_at, request))
-    )
-    |> Enum.sort_by(&datetime_sort_key(&1.observed_at))
-    |> apply_request_limit(request)
-  end
-
-  defp link_rf_lock_row(transport, snapshots) do
-    transport_id = attr(transport, :transport_id)
-    link_id = link_id_for([transport])
-    snapshot = link_rf_lock_snapshot(snapshots, transport_id, link_id)
-
-    build_link_rf_lock_row(transport, snapshot)
-  end
-
-  defp link_rf_lock_history_row(transports, snapshot) do
-    with transport <- find_transport_for_link_rf_snapshot(transports, snapshot),
-         true <- not is_nil(transport) do
-      build_link_rf_lock_row(transport, snapshot)
-    else
-      _missing -> nil
-    end
-  end
-
-  defp build_link_rf_lock_row(transport, snapshot) do
-    transport_id = attr(transport, :transport_id)
-    link_id = link_id_for([snapshot, transport])
-    state = rf_lock_state(snapshot) || rf_lock_state(attr(transport, :metadata)) || :unknown
-
-    %{
-      observable_id: "link.rf_lock_state",
-      resource_id: link_id || transport_id,
-      label: link_rf_lock_label(transport, link_id),
-      scope_kind: :link,
-      transport_id: transport_id,
-      source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-      ground_station_id: transport_ground_station_id(transport, snapshot),
-      link_id: link_id,
-      adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-      state: state,
-      normalized_state: rf_lock_normalized_state(state),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: transport
-    }
-  end
-
-  defp link_rf_lock_label(transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "RF lock / #{resource_label}"
-  end
-
-  defp normalize_link_rf_lock_snapshot(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      state: rf_lock_state(snapshot),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval)
-    }
-  end
-
-  defp link_rf_lock_snapshot(snapshots, transport_id, link_id) do
-    Enum.find(snapshots, fn snapshot ->
-      (present_text?(transport_id) and
-         (attr(snapshot, :transport_id) == transport_id or
-            attr(snapshot, :resource_id) == transport_id)) or
-        (present_text?(link_id) and
-           (attr(snapshot, :link_id) == link_id or attr(snapshot, :resource_id) == link_id))
-    end)
-  end
-
-  defp find_transport_for_link_rf_snapshot(transports, snapshot) do
-    transport_id = attr(snapshot, :transport_id)
-    link_id = attr(snapshot, :link_id) || attr(snapshot, :resource_id)
-
-    Enum.find(transports, fn transport ->
-      attr(transport, :transport_id) == transport_id or link_id_for([transport]) == link_id
-    end)
-  end
-
-  defp rf_lock_state(value) do
-    [
-      attr(value, :rf_lock_state),
-      attr(value, :lock_state),
-      attr(value, :state),
-      attr(value, :value)
-    ]
-    |> Enum.find_value(&normalize_rf_lock_state/1)
-  end
-
-  defp normalize_rf_lock_state(value) when value in @rf_lock_states, do: value
-
-  defp normalize_rf_lock_state(value) when is_binary(value) do
-    normalized = value |> String.downcase() |> String.replace("-", "_")
-    Enum.find(@rf_lock_states, &(Atom.to_string(&1) == normalized))
-  end
-
-  defp normalize_rf_lock_state(_value), do: nil
-
-  defp rf_lock_normalized_state(:locked), do: :green
-  defp rf_lock_normalized_state(:acquiring), do: :blue
-  defp rf_lock_normalized_state(:degraded), do: :yellow
-  defp rf_lock_normalized_state(:unlocked), do: :red
-  defp rf_lock_normalized_state(_state), do: :unknown
-
-  defp link_rf_frame_sync_rows(transports, snapshots, request) do
-    snapshots = Enum.map(snapshots, &normalize_link_rf_frame_sync_snapshot/1)
-
-    transports
-    |> Enum.map(&link_rf_frame_sync_row(&1, snapshots))
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp link_rf_frame_sync_history_rows(transports, snapshots, request) do
-    snapshots
-    |> Enum.map(&normalize_link_rf_frame_sync_snapshot/1)
-    |> Enum.map(&link_rf_frame_sync_history_row(transports, &1))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.filter(
-      &(match?(%DateTime{}, &1.observed_at) and matches_connection_scope?(&1, request) and
-          time_in_request_window?(&1.observed_at, request))
-    )
-    |> Enum.sort_by(&datetime_sort_key(&1.observed_at))
-    |> apply_request_limit(request)
-  end
-
-  defp link_rf_frame_sync_row(transport, snapshots) do
-    transport_id = attr(transport, :transport_id)
-    link_id = link_id_for([transport])
-    snapshot = link_rf_frame_sync_snapshot(snapshots, transport_id, link_id)
-
-    build_link_rf_frame_sync_row(transport, snapshot)
-  end
-
-  defp link_rf_frame_sync_history_row(transports, snapshot) do
-    with transport <- find_transport_for_link_rf_snapshot(transports, snapshot),
-         true <- not is_nil(transport) do
-      build_link_rf_frame_sync_row(transport, snapshot)
-    else
-      _missing -> nil
-    end
-  end
-
-  defp build_link_rf_frame_sync_row(transport, snapshot) do
-    transport_id = attr(transport, :transport_id)
-    link_id = link_id_for([snapshot, transport])
-
-    state =
-      frame_sync_state(snapshot) || frame_sync_state(attr(transport, :metadata)) || :unknown
-
-    %{
-      observable_id: "link.frame_sync_state",
-      resource_id: link_id || transport_id,
-      label: link_rf_frame_sync_label(transport, link_id),
-      scope_kind: :link,
-      transport_id: transport_id,
-      source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-      ground_station_id: transport_ground_station_id(transport, snapshot),
-      link_id: link_id,
-      adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-      state: state,
-      normalized_state: frame_sync_normalized_state(state),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: transport
-    }
-  end
-
-  defp link_rf_frame_sync_label(transport, link_id) do
-    resource_label = link_id || attr(transport, :display_name) || attr(transport, :transport_id)
-    "Frame sync / #{resource_label}"
-  end
-
-  defp normalize_link_rf_frame_sync_snapshot(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      state: frame_sync_state(snapshot),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval)
-    }
-  end
-
-  defp link_rf_frame_sync_snapshot(snapshots, transport_id, link_id) do
-    Enum.find(snapshots, fn snapshot ->
-      (present_text?(transport_id) and
-         (attr(snapshot, :transport_id) == transport_id or
-            attr(snapshot, :resource_id) == transport_id)) or
-        (present_text?(link_id) and
-           (attr(snapshot, :link_id) == link_id or attr(snapshot, :resource_id) == link_id))
-    end)
-  end
-
-  defp frame_sync_state(value) do
-    [
-      attr(value, :frame_sync_state),
-      attr(value, :sync_state),
-      attr(value, :state),
-      attr(value, :value)
-    ]
-    |> Enum.find_value(&normalize_frame_sync_state/1)
-  end
-
-  defp normalize_frame_sync_state(value) when value in @frame_sync_states, do: value
-
-  defp normalize_frame_sync_state(value) when is_binary(value) do
-    normalized = value |> String.downcase() |> String.replace("-", "_")
-    Enum.find(@frame_sync_states, &(Atom.to_string(&1) == normalized))
-  end
-
-  defp normalize_frame_sync_state(_value), do: nil
-
-  defp frame_sync_normalized_state(:synchronized), do: :green
-  defp frame_sync_normalized_state(:acquiring), do: :blue
-  defp frame_sync_normalized_state(:degraded), do: :yellow
-  defp frame_sync_normalized_state(:lost), do: :red
-  defp frame_sync_normalized_state(_state), do: :unknown
-
   defp link_rf_metric_rows(observables, transports, snapshots, request) do
     snapshots = Enum.map(snapshots, &normalize_link_rf_metric_snapshot/1)
 
@@ -3162,7 +2908,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     observable_id = attr(snapshot, :observable_id)
 
     with transport when not is_nil(transport) <-
-           find_transport_for_link_rf_snapshot(transports, snapshot),
+           LinkRfStateRows.find_transport(transports, snapshot),
          value when is_number(value) <- link_rf_metric_value(snapshot, observable_id),
          %DateTime{} = observed_at <- attr(snapshot, :observed_at) do
       transport_id = attr(transport, :transport_id)
@@ -5349,7 +5095,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      state: rf_lock_state(snapshot),
+      state: LinkRfStateRows.lock_state(snapshot),
       observed_at: attr(snapshot, :observed_at)
     }
   end
@@ -5364,7 +5110,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      state: frame_sync_state(snapshot),
+      state: LinkRfStateRows.frame_sync_state(snapshot),
       observed_at: attr(snapshot, :observed_at)
     }
   end

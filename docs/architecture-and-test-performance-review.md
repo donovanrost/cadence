@@ -1093,6 +1093,11 @@ freshness metadata, operational links, and interval evidence into a 206-line
 frame module reduced the operational-observables source from 5,915 to 5,593
 lines. The adapter still owns provider selection and row normalization;
 production source-size pressure remains 8.
+Moving RF lock/frame-sync snapshot normalization, transport matching, state
+classification, request-scope filtering, time windows, ordering, and limits
+into a 304-line row module reduced the adapter from 5,593 to 5,339 lines.
+Provider callbacks and freshness annotation remain adapter-owned; production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
