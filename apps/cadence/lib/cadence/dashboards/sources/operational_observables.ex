@@ -39,6 +39,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     AntennaPointingRows,
     ConnectionFrames,
     ConnectionRows,
+    LinkRfStateFrames,
     ProductPolicy,
     RevisionPolicy
   }
@@ -1999,6 +2000,30 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
+  defp link_rf_lock_state_frame(request, source_binding, rows) do
+    LinkRfStateFrames.lock_latest(request, rows, frame_source_context(request, source_binding))
+  end
+
+  defp link_rf_lock_state_history_frame(request, source_binding, rows) do
+    LinkRfStateFrames.lock_history(request, rows, frame_source_context(request, source_binding))
+  end
+
+  defp link_rf_frame_sync_state_frame(request, source_binding, rows) do
+    LinkRfStateFrames.frame_sync_latest(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
+  end
+
+  defp link_rf_frame_sync_state_history_frame(request, source_binding, rows) do
+    LinkRfStateFrames.frame_sync_history(
+      request,
+      rows,
+      frame_source_context(request, source_binding)
+    )
+  end
+
   defp transport_execution_state_history_frame(request, source_binding, rows) do
     %Frame{
       frame_id: "#{request.request_id}:transport_execution_state_history",
@@ -2197,356 +2222,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp link_rf_lock_state_frame(request, source_binding, lock_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:link_rf_lock_state",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.resource_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(lock_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(lock_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.link_id)
-          },
-          %Field{name: "adapter_key", kind: :enum, values: Enum.map(lock_rows, & &1.adapter_key)},
-          %Field{name: "state", kind: :enum, values: Enum.map(lock_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(lock_rows, & &1.normalized_state)
-          },
-          %Field{
-            name: "observed_at",
-            kind: :time,
-            values: Enum.map(lock_rows, & &1.observed_at)
-          },
-          %Field{
-            name: "freshness_state",
-            kind: :enum,
-            values: Enum.map(lock_rows, & &1.freshness_state)
-          },
-          %Field{name: "age_ms", kind: :number, values: Enum.map(lock_rows, & &1.age_ms)}
-        ] ++ maybe_interval_identity_fields(lock_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :link_rf_lock_state,
-        product_family: :link_rf,
-        state_color_policy: :lock_state,
-        observable_ids: observable_ids(lock_rows),
-        observable_id: "link.rf_lock_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(lock_rows),
-        freshness_policy: latest_freshness_policy(lock_rows),
-        freshness_checked_at: latest_freshness_checked_at(lock_rows),
-        warning_codes: latest_freshness_warning_codes(lock_rows),
-        links: operational_state_links(request, lock_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(lock_rows)
-      }
-    }
-  end
-
-  defp link_rf_lock_state_history_frame(request, source_binding, lock_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:link_rf_lock_state_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "time",
-            kind: :time,
-            values: Enum.map(lock_rows, & &1.observed_at),
-            metadata: %{axis: :occurred_at}
-          },
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.resource_id)
-          },
-          %Field{name: "lane_id", kind: :string, values: Enum.map(lock_rows, & &1.link_id)},
-          %Field{name: "label", kind: :string, values: Enum.map(lock_rows, & &1.label)},
-          %Field{
-            name: "scope_kind",
-            kind: :enum,
-            values: Enum.map(lock_rows, & &1.scope_kind)
-          },
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.ground_station_id)
-          },
-          %Field{
-            name: "link_id",
-            kind: :string,
-            values: Enum.map(lock_rows, & &1.link_id)
-          },
-          %Field{name: "adapter_key", kind: :enum, values: Enum.map(lock_rows, & &1.adapter_key)},
-          %Field{name: "state", kind: :enum, values: Enum.map(lock_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(lock_rows, & &1.normalized_state)
-          }
-        ] ++ maybe_interval_identity_fields(lock_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :link_rf_lock_state_history,
-        product_family: :link_rf,
-        state_color_policy: :lock_state,
-        observable_ids: observable_ids(lock_rows),
-        observable_id: "link.rf_lock_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(lock_rows),
-        warning_codes: [],
-        links: operational_history_links(request, lock_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(lock_rows)
-      }
-    }
-  end
-
-  defp link_rf_frame_sync_state_frame(request, source_binding, sync_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:link_rf_frame_sync_state",
-      source: :operational_observables,
-      shape: :matrix,
-      time_axis: nil,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.resource_id)
-          },
-          %Field{name: "label", kind: :string, values: Enum.map(sync_rows, & &1.label)},
-          %Field{name: "scope_kind", kind: :enum, values: Enum.map(sync_rows, & &1.scope_kind)},
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.ground_station_id)
-          },
-          %Field{name: "link_id", kind: :string, values: Enum.map(sync_rows, & &1.link_id)},
-          %Field{name: "adapter_key", kind: :enum, values: Enum.map(sync_rows, & &1.adapter_key)},
-          %Field{name: "state", kind: :enum, values: Enum.map(sync_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(sync_rows, & &1.normalized_state)
-          },
-          %Field{name: "observed_at", kind: :time, values: Enum.map(sync_rows, & &1.observed_at)},
-          %Field{
-            name: "freshness_state",
-            kind: :enum,
-            values: Enum.map(sync_rows, & &1.freshness_state)
-          },
-          %Field{name: "age_ms", kind: :number, values: Enum.map(sync_rows, & &1.age_ms)}
-        ] ++ maybe_interval_identity_fields(sync_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :latest,
-        supported_capability: :link_rf_frame_sync_state,
-        product_family: :link_rf,
-        state_color_policy: :frame_sync_state,
-        observable_ids: observable_ids(sync_rows),
-        observable_id: "link.frame_sync_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(sync_rows),
-        freshness_policy: latest_freshness_policy(sync_rows),
-        freshness_checked_at: latest_freshness_checked_at(sync_rows),
-        warning_codes: latest_freshness_warning_codes(sync_rows),
-        links: operational_state_links(request, sync_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(sync_rows)
-      }
-    }
-  end
-
-  defp link_rf_frame_sync_state_history_frame(request, source_binding, sync_rows) do
-    %Frame{
-      frame_id: "#{request.request_id}:link_rf_frame_sync_state_history",
-      source: :operational_observables,
-      shape: :events,
-      time_axis: :occurred_at,
-      scope: request.scope_context,
-      fields:
-        [
-          %Field{
-            name: "time",
-            kind: :time,
-            values: Enum.map(sync_rows, & &1.observed_at),
-            metadata: %{axis: :occurred_at}
-          },
-          %Field{
-            name: "observable_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.observable_id)
-          },
-          %Field{
-            name: "resource_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.resource_id)
-          },
-          %Field{name: "lane_id", kind: :string, values: Enum.map(sync_rows, & &1.link_id)},
-          %Field{name: "label", kind: :string, values: Enum.map(sync_rows, & &1.label)},
-          %Field{name: "scope_kind", kind: :enum, values: Enum.map(sync_rows, & &1.scope_kind)},
-          %Field{
-            name: "transport_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.transport_id)
-          },
-          %Field{
-            name: "source_endpoint_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.source_endpoint_id)
-          },
-          %Field{
-            name: "ground_station_id",
-            kind: :string,
-            values: Enum.map(sync_rows, & &1.ground_station_id)
-          },
-          %Field{name: "link_id", kind: :string, values: Enum.map(sync_rows, & &1.link_id)},
-          %Field{name: "adapter_key", kind: :enum, values: Enum.map(sync_rows, & &1.adapter_key)},
-          %Field{name: "state", kind: :enum, values: Enum.map(sync_rows, & &1.state)},
-          %Field{
-            name: "normalized_state",
-            kind: :enum,
-            values: Enum.map(sync_rows, & &1.normalized_state)
-          }
-        ] ++ maybe_interval_identity_fields(sync_rows),
-      meta: %{
-        source_request_id: request.request_id,
-        logical_source: :operational_observables,
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        sampling: :event_history,
-        supported_capability: :link_rf_frame_sync_state_history,
-        product_family: :link_rf,
-        state_color_policy: :frame_sync_state,
-        observable_ids: observable_ids(sync_rows),
-        observable_id: "link.frame_sync_state",
-        realm: realm(request, source_binding),
-        data_source_id: data_source_id(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        returned_points: length(sync_rows),
-        warning_codes: [],
-        links: operational_history_links(request, sync_rows),
-        evidence_refs: operational_interval_evidence_refs_from_rows(sync_rows)
-      }
-    }
-  end
-
   defp operational_history_links(request, rows) do
     DataLinks.operational_resource_links(request, rows, source: :frame) ++
       DataLinks.operational_event_links(request, rows, source: :frame)
-  end
-
-  defp operational_state_links(request, rows), do: operational_history_links(request, rows)
-
-  defp maybe_interval_identity_fields(rows) do
-    if Enum.any?(rows, &(attr(&1, :interval_id) || attr(&1, :source_event_id))) do
-      [
-        %Field{
-          name: "interval_id",
-          kind: :string,
-          values: Enum.map(rows, &attr(&1, :interval_id))
-        },
-        %Field{
-          name: "source_event_id",
-          kind: :string,
-          values: Enum.map(rows, &attr(&1, :source_event_id))
-        }
-      ]
-    else
-      []
-    end
-  end
-
-  defp operational_interval_evidence_refs_from_rows(rows) do
-    rows
-    |> Enum.map(&attr(&1, :interval))
-    |> DataLinks.operational_interval_evidence_refs(source: :operational_observables)
   end
 
   defp link_rf_metric_frame(request, source_binding, metric_rows) do

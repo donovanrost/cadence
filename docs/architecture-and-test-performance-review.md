@@ -1088,6 +1088,11 @@ scope and time filtering, plus latest and historical frame presentation reduced
 the operational-observables source from 6,235 to 5,915 lines. The new 255-line
 row module and 160-line frame module own that product family while the adapter
 retains provider selection; production source-size pressure remains 8.
+Consolidating latest and historical RF lock and frame-synchronization fields,
+freshness metadata, operational links, and interval evidence into a 206-line
+frame module reduced the operational-observables source from 5,915 to 5,593
+lines. The adapter still owns provider selection and row normalization;
+production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
