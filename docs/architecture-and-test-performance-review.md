@@ -1329,6 +1329,12 @@ evidence into a 396-line `DataManagement.WorkflowReplacementRecovery` module
 reduced `DataManagement` from 1,628 to 1,212 lines. The typed missing/stale
 inspection and requeue APIs remain unchanged; production source-size pressure
 remains 6 and dependency ratchets are unchanged.
+Extracting single-job retry eligibility, failed-group filtering and policy
+gates, retry execution, lifecycle audit events, and structured summaries into a
+412-line `DataManagement.WorkflowRetries` module reduced `DataManagement` from
+1,212 to 808 lines. The typed single and group retry APIs remain unchanged.
+Crossing the 1,000-line guideline reduces production source-size pressure from
+6 to 5; dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
