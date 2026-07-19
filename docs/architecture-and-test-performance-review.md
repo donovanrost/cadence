@@ -1811,6 +1811,16 @@ health and capability posture, and common revision/cursor behavior; existing
 registry and evidence suites preserve the facade contract. No route or
 authentication placement is involved; production source-size pressure remains
 2 and dependency ratchets are unchanged.
+Extracting compatible effective-binding segment result and frame merging into
+the 196-line `Cadence.Dashboards.SourceRegistry.SegmentResultMerge` reduced
+`SourceRegistry` from 2,579 to 2,414 lines. The registry still decides when a
+request is segmentable, resolves binding ranges, and executes each adapter; it
+passes the existing binding-segment metadata builder into the pure merger.
+Direct tests cover field and metadata concatenation, warning and watermark
+preservation, segment summaries, and structured incompatible-frame warnings,
+while existing registry and evidence tests preserve facade behavior. No route
+or authentication placement is involved; production source-size pressure
+remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
