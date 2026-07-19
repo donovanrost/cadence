@@ -755,7 +755,10 @@ of the 1,164-line Governance context reduced the count to 26 while preserving
 the context-owned transaction, validation, and hydration boundaries. Extracting
 correction-task and replacement-job parsing plus derived summaries from the
 1,203-line historical-workflow recovery module reduced the count to 25 while
-leaving action selection and closure-readiness policy in the parent.
+leaving action selection and closure-readiness policy in the parent. Moving
+spacecraft, contact, mission-event, and mission-health response shaping out of
+the 1,297-line control-plane JSON module reduced the count to 24 while
+preserving its public serializer functions as delegates.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
