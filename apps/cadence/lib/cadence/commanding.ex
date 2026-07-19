@@ -35,16 +35,14 @@ defmodule Cadence.Commanding do
     DispatchSupervisor,
     Encoder,
     StagedCommandItem,
-    VerifierEvaluation,
     VerifierScheduler,
-    VerifierTransportSignals
+    VerifierWorkflow
   }
 
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
   alias Cadence.Telemetry.Sample
 
@@ -700,17 +698,13 @@ defmodule Cadence.Commanding do
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def evaluate_command_verifiers(repo, telemetry_samples)
       when is_list(telemetry_samples) do
-    telemetry_samples
-    |> Enum.group_by(& &1.mission_id)
-    |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_samples}, {:ok, acc} ->
-      case evaluate_command_verifiers_for_mission(repo, mission_id, mission_samples) do
-        {:ok, verifier_instances} ->
-          {:cont, {:ok, acc ++ verifier_instances}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
+    VerifierWorkflow.evaluate_telemetry(
+      telemetry_samples,
+      fn organization_id, mission_id ->
+        pending_command_verifier_entries(repo, organization_id, mission_id)
+      end,
+      &apply_command_verifier_updates(repo, &1)
+    )
   end
 
   @spec evaluate_transport_command_verifiers(
@@ -754,24 +748,19 @@ defmodule Cadence.Commanding do
         transport_action_requests
       )
       when is_list(transport_capability_records) and is_list(transport_action_requests) do
-    transport_signals =
-      VerifierTransportSignals.build(transport_capability_records, transport_action_requests)
-
-    transport_signals
-    |> Enum.group_by(& &1.mission_id)
-    |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_transport_signals}, {:ok, acc} ->
-      case evaluate_transport_command_verifiers_for_mission(
-             repo,
-             mission_id,
-             mission_transport_signals
-           ) do
-        {:ok, verifier_instances} ->
-          {:cont, {:ok, acc ++ verifier_instances}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
+    VerifierWorkflow.evaluate_transport(
+      transport_capability_records,
+      transport_action_requests,
+      fn organization_id, mission_id, command_release_attempt_ids ->
+        pending_transport_command_verifier_entries(
+          repo,
+          organization_id,
+          mission_id,
+          command_release_attempt_ids
+        )
+      end,
+      &apply_command_verifier_updates(repo, &1)
+    )
   end
 
   @spec command_verifier_timeout_projection() :: [CommandVerifierInstance.t()]
@@ -2296,101 +2285,6 @@ defmodule Cadence.Commanding do
     end)
   end
 
-  defp evaluate_command_verifiers_for_mission(repo, mission_id, telemetry_samples)
-       when is_binary(mission_id) and is_list(telemetry_samples) do
-    case OrganizationScope.organization_id_for_mission(mission_id) do
-      nil ->
-        {:ok, []}
-
-      organization_id ->
-        do_evaluate_command_verifiers_for_mission(
-          repo,
-          organization_id,
-          mission_id,
-          telemetry_samples
-        )
-    end
-  end
-
-  defp do_evaluate_command_verifiers_for_mission(
-         repo,
-         organization_id,
-         mission_id,
-         telemetry_samples
-       ) do
-    pending_rows = pending_command_verifier_rows(repo, organization_id, mission_id)
-
-    sorted_samples =
-      Enum.sort_by(telemetry_samples, &VerifierEvaluation.sample_sort_key/1, DateTime)
-
-    updates =
-      build_verifier_updates(pending_rows, fn %CommandVerifierInstanceRow{} = verifier_row ->
-        verifier_row
-        |> CommandVerifierInstanceRow.to_domain()
-        |> VerifierEvaluation.evaluate_samples(sorted_samples)
-      end)
-
-    apply_command_verifier_updates(repo, updates)
-  end
-
-  defp evaluate_transport_command_verifiers_for_mission(repo, mission_id, transport_signals)
-       when is_binary(mission_id) and is_list(transport_signals) do
-    case OrganizationScope.organization_id_for_mission(mission_id) do
-      nil ->
-        {:ok, []}
-
-      organization_id ->
-        do_evaluate_transport_command_verifiers_for_mission(
-          repo,
-          organization_id,
-          mission_id,
-          transport_signals
-        )
-    end
-  end
-
-  defp do_evaluate_transport_command_verifiers_for_mission(
-         repo,
-         organization_id,
-         mission_id,
-         transport_signals
-       ) do
-    command_release_attempt_ids = transport_command_release_attempt_ids(transport_signals)
-
-    if command_release_attempt_ids == [] do
-      {:ok, []}
-    else
-      pending_rows =
-        pending_transport_command_verifier_rows(
-          repo,
-          organization_id,
-          mission_id,
-          command_release_attempt_ids
-        )
-
-      transport_signals_by_release_attempt_id =
-        transport_signals
-        |> Enum.sort_by(&VerifierEvaluation.transport_signal_sort_key/1)
-        |> Enum.group_by(& &1.command_release_attempt_id)
-
-      updates =
-        build_verifier_updates(pending_rows, fn %CommandVerifierInstanceRow{} = verifier_row ->
-          relevant_signals =
-            Map.get(
-              transport_signals_by_release_attempt_id,
-              verifier_row.command_release_attempt_id,
-              []
-            )
-
-          verifier_row
-          |> CommandVerifierInstanceRow.to_domain()
-          |> VerifierEvaluation.evaluate_transport_signals(relevant_signals)
-        end)
-
-      apply_command_verifier_updates(repo, updates)
-    end
-  end
-
   defp pending_command_verifier_timeout_query do
     CommandVerifierInstanceRow
     |> where([row], row.lifecycle_state == "pending")
@@ -2413,15 +2307,18 @@ defmodule Cadence.Commanding do
     |> repo.all()
   end
 
-  defp pending_command_verifier_rows(repo, organization_id, mission_id) do
+  defp pending_command_verifier_entries(repo, organization_id, mission_id) do
     CommandVerifierInstanceRow
     |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
     |> where([row], row.lifecycle_state == "pending")
     |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
     |> repo.all()
+    |> Enum.map(fn %CommandVerifierInstanceRow{} = row ->
+      {row, CommandVerifierInstanceRow.to_domain(row)}
+    end)
   end
 
-  defp pending_transport_command_verifier_rows(
+  defp pending_transport_command_verifier_entries(
          repo,
          organization_id,
          mission_id,
@@ -2433,24 +2330,9 @@ defmodule Cadence.Commanding do
     |> where([row], row.command_release_attempt_id in ^command_release_attempt_ids)
     |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
     |> repo.all()
-  end
-
-  defp transport_command_release_attempt_ids(transport_signals) when is_list(transport_signals) do
-    transport_signals
-    |> Enum.map(& &1.command_release_attempt_id)
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-  end
-
-  defp build_verifier_updates(rows, evaluator) when is_list(rows) and is_function(evaluator, 1) do
-    rows
-    |> Enum.reduce([], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
-      case evaluator.(verifier_row) do
-        nil -> acc
-        %CommandVerifierInstance{} = updated_instance -> [{verifier_row, updated_instance} | acc]
-      end
+    |> Enum.map(fn %CommandVerifierInstanceRow{} = row ->
+      {row, CommandVerifierInstanceRow.to_domain(row)}
     end)
-    |> Enum.reverse()
   end
 
   defp evaluate_transport_command_verifiers_for_release_attempt(
