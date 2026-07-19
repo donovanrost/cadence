@@ -776,6 +776,8 @@ Canonical dashboard, version, lifecycle-event, and investigation-preset rows
 now live under their owning dashboard stores, reducing the baseline to 152.
 Dashboard source-health and source-watermark event/status rows now live under
 their owning stores, reducing the baseline to 146.
+Source-credential reference/event and runtime-invalidation decision-event rows
+now live under their owning dashboard stores, reducing the baseline to 143.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their

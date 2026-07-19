@@ -6,8 +6,8 @@ defmodule Cadence.Dashboards.RuntimeInvalidation.DecisionEvents do
   import Ecto.Query
 
   alias Cadence.Dashboards.RuntimeInvalidation.DecisionEvent
+  alias Cadence.Dashboards.RuntimeInvalidation.DecisionEvents.DecisionEventRow
   alias Cadence.Dashboards.RuntimeInvalidation.Event
-  alias Cadence.Persistence.Schemas.DashboardRuntimeInvalidationDecisionEventRow
   alias Cadence.Repo
 
   @filter_keys [
@@ -26,17 +26,17 @@ defmodule Cadence.Dashboards.RuntimeInvalidation.DecisionEvents do
   def record(%Event{} = event, decision, opts \\ []) when is_map(decision) and is_list(opts) do
     event
     |> DecisionEvent.new(decision, opts)
-    |> DashboardRuntimeInvalidationDecisionEventRow.changeset()
+    |> DecisionEventRow.changeset()
     |> Repo.insert()
     |> case do
-      {:ok, row} -> {:ok, DashboardRuntimeInvalidationDecisionEventRow.to_domain(row)}
+      {:ok, row} -> {:ok, DecisionEventRow.to_domain(row)}
       {:error, changeset} -> {:error, changeset}
     end
   end
 
   @spec list(keyword()) :: [DecisionEvent.t()]
   def list(opts \\ []) when is_list(opts) do
-    DashboardRuntimeInvalidationDecisionEventRow
+    DecisionEventRow
     |> apply_filters(opts)
     |> maybe_replay_run_id(Keyword.get(opts, :replay_run_id))
     |> maybe_affected_placement_id(Keyword.get(opts, :affected_placement_id))
@@ -50,7 +50,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidation.DecisionEvents do
     |> order_by([row], desc: row.decision_observed_at, desc: row.inserted_at)
     |> limit(^result_limit(opts))
     |> Repo.all()
-    |> Enum.map(&DashboardRuntimeInvalidationDecisionEventRow.to_domain/1)
+    |> Enum.map(&DecisionEventRow.to_domain/1)
   end
 
   @spec list_decision_rows(keyword()) :: [map()]

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardRuntimeInvalidationDecisionEventRow do
+defmodule Cadence.Dashboards.RuntimeInvalidation.DecisionEvents.DecisionEventRow do
   @moduledoc false
 
   use Ecto.Schema

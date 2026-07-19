@@ -18,14 +18,14 @@ defmodule Cadence.Dashboards.SourceCredentials do
     SourceCredentialReference
   }
 
+  alias Cadence.Dashboards.SourceCredentials.EventRow, as: DashboardSourceCredentialEventRow
+
+  alias Cadence.Dashboards.SourceCredentials.ReferenceRow,
+    as: DashboardSourceCredentialReferenceRow
+
   alias Cadence.Dashboards.SourceCredentials.SecretMaterialResolver
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-
-  alias Cadence.Persistence.Schemas.{
-    DashboardSourceCredentialEventRow,
-    DashboardSourceCredentialReferenceRow
-  }
 
   alias Cadence.Repo
 

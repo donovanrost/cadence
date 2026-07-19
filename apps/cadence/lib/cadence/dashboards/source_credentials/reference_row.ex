@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DashboardSourceCredentialReferenceRow do
+defmodule Cadence.Dashboards.SourceCredentials.ReferenceRow do
   @moduledoc false
 
   use Ecto.Schema
