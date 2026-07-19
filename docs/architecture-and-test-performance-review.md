@@ -964,6 +964,11 @@ stage submissions reduced that historical workflow proof from 356 to 290 lines
 while retaining its prefilled form, lifecycle navigation, review-origin,
 orchestration, and queued-job assertions, reducing overlong-test pressure from
 19 to 18.
+Extracting BYO probe configuration, managed seed source/binding setup, and the
+customer-source registration submission reduced that lifecycle proof from 358
+to 294 lines while retaining credential rotation, probe/drift, health,
+disable/enable, and binding-option assertions, reducing overlong-test pressure
+from 18 to 17.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

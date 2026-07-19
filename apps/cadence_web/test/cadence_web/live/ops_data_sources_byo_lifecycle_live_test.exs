@@ -30,8 +30,7 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     {TestFixtures.member_conn(user), user, org, mission}
   end
 
-  test "registers a BYO mission data source and exposes it to binding changes" do
-    {conn, user, org, mission} = signed_in_org_and_mission()
+  defp configure_customer_questdb_probe! do
     test_pid = self()
     previous_credential_config = Application.get_env(:cadence, :dashboard_source_credentials, [])
     previous_probe_config = Application.get_env(:cadence, :dashboard_source_probe, [])
@@ -59,7 +58,9 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
       Application.put_env(:cadence, :dashboard_source_probe, previous_probe_config)
       System.delete_env("OPS_CUSTOMER_QUESTDB_HTTP")
     end)
+  end
 
+  defp persist_seed_telemetry!(org, mission) do
     assert {:ok, _source} =
              DataSources.persist_data_source(%DataSource{
                data_source_id: "seed-telemetry",
@@ -84,15 +85,9 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
                dataset: "flight",
                priority: 0
              })
+  end
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
-
-    view
-    |> element("#register-source-button")
-    |> render_click()
-
-    assert has_element?(view, "#register-source-panel")
-
+  defp register_customer_source(view) do
     view
     |> form("#register-source-form",
       source: %{
@@ -109,6 +104,22 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
       }
     )
     |> render_submit()
+  end
+
+  test "registers a BYO mission data source and exposes it to binding changes" do
+    {conn, user, org, mission} = signed_in_org_and_mission()
+    configure_customer_questdb_probe!()
+    persist_seed_telemetry!(org, mission)
+
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+
+    view
+    |> element("#register-source-button")
+    |> render_click()
+
+    assert has_element?(view, "#register-source-panel")
+
+    register_customer_source(view)
 
     assert has_element?(
              view,
