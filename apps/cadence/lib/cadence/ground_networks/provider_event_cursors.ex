@@ -6,8 +6,8 @@ defmodule Cadence.GroundNetworks.ProviderEventCursors do
   alias Ecto.Multi
 
   alias Cadence.GroundNetworks.{ProviderAccountVersion, ProviderEventCursor, Validation}
+  alias Cadence.GroundNetworks.ProviderEventCursors.CursorRow, as: ProviderEventCursorRow
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.ProviderEventCursorRow
   alias Cadence.Repo
 
   @default_lease_ms 30_000

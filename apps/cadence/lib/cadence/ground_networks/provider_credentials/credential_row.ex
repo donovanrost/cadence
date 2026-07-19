@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderCredentialRow do
+defmodule Cadence.GroundNetworks.ProviderCredentials.CredentialRow do
   @moduledoc false
 
   use Ecto.Schema

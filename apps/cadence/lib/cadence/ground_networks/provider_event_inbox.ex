@@ -19,8 +19,8 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
     Validation
   }
 
+  alias Cadence.GroundNetworks.ProviderEventInbox.InboxRow, as: ProviderEventInboxRow
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.ProviderEventInboxRow
   alias Cadence.Repo
 
   @known_event_types MapSet.new([

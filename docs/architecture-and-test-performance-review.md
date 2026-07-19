@@ -782,6 +782,8 @@ The application-binding row now lives under its owning Applications store,
 reducing the baseline to 141.
 Provider-account, account-version, and account-grant rows now live under their
 owning Ground Networks stores, reducing the baseline to 138.
+Provider-credential, event-cursor, event-inbox, and evidence rows now also live
+under their owning Ground Networks stores, reducing the baseline to 134.
 New edges fail, removed edges must be deleted from the baseline in the
 same change, and the baseline has an explicit owner and review-by date.
 Context-owned row modules are also protected from new callers outside their

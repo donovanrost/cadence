@@ -4,8 +4,8 @@ defmodule Cadence.GroundNetworks.ProviderEvidenceStore do
   import Ecto.Query
 
   alias Cadence.GroundNetworks.{ProviderEvidence, Validation}
+  alias Cadence.GroundNetworks.ProviderEvidenceStore.EvidenceRow, as: ProviderEvidenceRow
   alias Cadence.Ids
-  alias Cadence.Persistence.Schemas.ProviderEvidenceRow
   alias Cadence.Repo
 
   @inline_byte_limit 262_144

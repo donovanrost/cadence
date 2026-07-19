@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderEventCursorRow do
+defmodule Cadence.GroundNetworks.ProviderEventCursors.CursorRow do
   @moduledoc false
 
   use Ecto.Schema

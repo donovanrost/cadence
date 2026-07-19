@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderEvidenceRow do
+defmodule Cadence.GroundNetworks.ProviderEvidenceStore.EvidenceRow do
   @moduledoc false
 
   use Ecto.Schema

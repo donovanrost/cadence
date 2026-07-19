@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderEventInboxRow do
+defmodule Cadence.GroundNetworks.ProviderEventInbox.InboxRow do
   @moduledoc false
 
   use Ecto.Schema

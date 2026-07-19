@@ -4,12 +4,9 @@ defmodule Cadence.GroundNetworks.ProviderAuditTest do
   alias Ecto.Multi
 
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderAuditEntry, ProviderEvidence}
+  alias Cadence.GroundNetworks.ProviderEvidenceStore.EvidenceRow, as: ProviderEvidenceRow
   alias Cadence.OperationalEvents
-
-  alias Cadence.Persistence.Schemas.{
-    ProviderAuditEntryRow,
-    ProviderEvidenceRow
-  }
+  alias Cadence.Persistence.Schemas.ProviderAuditEntryRow
 
   @recorded_at ~U[2026-07-15 13:00:00.000000Z]
 

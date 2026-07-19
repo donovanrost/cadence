@@ -7,7 +7,7 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderAuditEntry, ProviderCredential}
-  alias Cadence.Persistence.Schemas.ProviderCredentialRow
+  alias Cadence.GroundNetworks.ProviderCredentials.CredentialRow, as: ProviderCredentialRow
   alias Cadence.Repo
   alias Cadence.Secrets.{EnvBackend, ExternalBackend, ResolvedSecret, Resolver}
 
