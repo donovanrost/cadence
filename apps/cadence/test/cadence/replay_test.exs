@@ -482,7 +482,9 @@ defmodule Cadence.ReplayTest do
         source_ref: "provider/" <> mission_id
       })
 
-    assert {:ok, ^source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, ^source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+
     source_endpoint
   end
 

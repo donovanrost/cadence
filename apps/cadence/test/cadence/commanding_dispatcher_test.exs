@@ -303,7 +303,10 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(dispatcher_scope.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(
+               dispatcher_scope.organization_id,
+               source_endpoint
+             )
 
     persisted_source_endpoint
   end

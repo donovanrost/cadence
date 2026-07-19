@@ -308,7 +308,7 @@ defmodule Cadence.Dashboards.DataSourcesFixtures do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint("org-dash-source", source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint("org-dash-source", source_endpoint)
   end
 
   def metadata_errors(%Ecto.Changeset{} = changeset) do

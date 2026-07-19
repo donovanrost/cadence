@@ -90,7 +90,9 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
       assert persisted.scid == 42
 
       assert [endpoint] =
-               Cadence.list_source_endpoints(org.organization_id, mission.mission_id,
+               Cadence.SourceEndpoints.list_source_endpoints(
+                 org.organization_id,
+                 mission.mission_id,
                  spacecraft_id: persisted.spacecraft_id
                )
 

@@ -33,10 +33,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, source_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     queue_entry =
       persist_command_queue_entry!(

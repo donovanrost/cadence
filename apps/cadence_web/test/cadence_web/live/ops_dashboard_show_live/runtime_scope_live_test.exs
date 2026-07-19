@@ -266,7 +266,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, source_endpoint)
 
     ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100,
       source_endpoint_id: "source-endpoint-beta"

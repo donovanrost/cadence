@@ -72,7 +72,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert config.handled_apids == [42]
 
       assert {:ok, endpoint} =
-               Cadence.fetch_source_endpoint(
+               Cadence.SourceEndpoints.fetch_source_endpoint(
                  @organization_id,
                  @mission_id,
                  config.source_endpoint_id
@@ -537,7 +537,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         display_name: Keyword.fetch!(opts, :display_name)
       })
 
-    {:ok, persisted} = Cadence.persist_source_endpoint(@organization_id, endpoint)
+    {:ok, persisted} = Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, endpoint)
     persisted
   end
 

@@ -342,7 +342,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
         display_name: "Asteria provider identity"
       })
 
-    assert {:ok, endpoint} = Cadence.persist_source_endpoint(org.organization_id, endpoint)
+    assert {:ok, endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, endpoint)
 
     provider = persist_provider!(org.organization_id, mission.mission_id, suffix)
 

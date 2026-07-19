@@ -35,7 +35,7 @@ defmodule Cadence.SourceEndpointsTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(@organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
 
     raw_evidence =
       RawEvidence.new(%{
@@ -87,7 +87,7 @@ defmodule Cadence.SourceEndpointsTest do
              Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft_beta)
 
     assert {:ok, _endpoint_alpha} =
-             Cadence.persist_source_endpoint(
+             Cadence.SourceEndpoints.persist_source_endpoint(
                @organization_id,
                SourceEndpoint.new(%{
                  source_endpoint_id: "endpoint-sc-001-primary",
@@ -99,7 +99,7 @@ defmodule Cadence.SourceEndpointsTest do
              )
 
     assert {:ok, _endpoint_beta} =
-             Cadence.persist_source_endpoint(
+             Cadence.SourceEndpoints.persist_source_endpoint(
                @organization_id,
                SourceEndpoint.new(%{
                  source_endpoint_id: "endpoint-sc-002-primary",
@@ -111,7 +111,9 @@ defmodule Cadence.SourceEndpointsTest do
              )
 
     filtered_source_endpoints =
-      Cadence.list_source_endpoints(@organization_id, @mission_id, spacecraft_id: "sc-001")
+      Cadence.SourceEndpoints.list_source_endpoints(@organization_id, @mission_id,
+        spacecraft_id: "sc-001"
+      )
 
     assert Enum.map(filtered_source_endpoints, & &1.source_endpoint_id) == [
              "endpoint-sc-001-primary"
@@ -146,7 +148,7 @@ defmodule Cadence.SourceEndpointsTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(@organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
 
     raw_evidence =
       RawEvidence.new(%{

@@ -39,7 +39,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{
@@ -240,7 +240,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{

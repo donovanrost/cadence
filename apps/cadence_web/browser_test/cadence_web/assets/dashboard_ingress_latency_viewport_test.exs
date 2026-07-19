@@ -70,10 +70,10 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     binding_set = persist_binding_set!(org, mission)
 
@@ -214,10 +214,10 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_contact =
       ScheduledContact.new(%{
@@ -416,13 +416,13 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, gamma_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, gamma_endpoint)
 
     binding_set = persist_binding_set!(org, mission)
 
@@ -600,13 +600,13 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, empty_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, empty_endpoint)
 
     binding_set = persist_binding_set!(org, mission)
 
@@ -844,7 +844,7 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, source_endpoint)
 
     binding_set = persist_binding_set!(org, mission)
 

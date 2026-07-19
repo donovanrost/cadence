@@ -134,7 +134,7 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, source_endpoint)
 
     ground_station =
       GroundStation.new(%{

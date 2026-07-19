@@ -58,7 +58,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
       )
 
   defp fetch_source_endpoint_fn(opts),
-    do: Keyword.get(opts, :fetch_source_endpoint, &Cadence.fetch_source_endpoint/3)
+    do:
+      Keyword.get(opts, :fetch_source_endpoint, &Cadence.SourceEndpoints.fetch_source_endpoint/3)
 
   defp fetch_transport_fn(opts),
     do: Keyword.get(opts, :fetch_transport, &TransportStore.fetch_transport/3)
@@ -82,7 +83,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy do
     do: Keyword.get(opts, :list_transports, &TransportStore.list_transports/2)
 
   defp list_source_endpoints_fn(opts),
-    do: Keyword.get(opts, :list_source_endpoints, &Cadence.list_source_endpoints/2)
+    do:
+      Keyword.get(opts, :list_source_endpoints, &Cadence.SourceEndpoints.list_source_endpoints/2)
 
   defp list_ground_stations_fn(opts),
     do:

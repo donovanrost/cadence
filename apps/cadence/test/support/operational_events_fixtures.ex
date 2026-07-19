@@ -403,6 +403,6 @@ defmodule Cadence.OperationalEventsFixtures do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
   end
 end

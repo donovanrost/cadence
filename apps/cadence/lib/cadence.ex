@@ -63,7 +63,6 @@ defmodule Cadence do
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
-  alias Cadence.SourceEndpoints.SourceEndpoint
 
   alias Cadence.Projections.DerivedTelemetryLatestValues,
     as: DerivedTelemetryLatestValueProjection
@@ -2044,55 +2043,6 @@ defmodule Cadence do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
       Runtime.advance_realized_contact_time(mission_id, realized_contact_id, target_time)
     end
-  end
-
-  @spec persist_source_endpoint(binary(), SourceEndpoint.t()) ::
-          {:ok, SourceEndpoint.t()} | {:error, term()}
-  def persist_source_endpoint(organization_id, %SourceEndpoint{} = source_endpoint)
-      when is_binary(organization_id) do
-    SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
-  end
-
-  @spec persist_source_endpoint(SourceEndpoint.t()) ::
-          {:ok, SourceEndpoint.t()} | {:error, term()}
-  def persist_source_endpoint(%SourceEndpoint{} = source_endpoint) do
-    SourceEndpoints.persist_source_endpoint(source_endpoint)
-  end
-
-  @spec fetch_source_endpoint(binary(), binary(), binary()) ::
-          {:ok, SourceEndpoint.t()} | {:error, term()}
-  def fetch_source_endpoint(organization_id, mission_id, source_endpoint_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(source_endpoint_id) do
-    SourceEndpoints.fetch_source_endpoint(organization_id, mission_id, source_endpoint_id)
-  end
-
-  @spec fetch_source_endpoint(binary(), binary()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
-  def fetch_source_endpoint(mission_id, source_endpoint_id)
-      when is_binary(mission_id) and is_binary(source_endpoint_id) do
-    SourceEndpoints.fetch_source_endpoint(mission_id, source_endpoint_id)
-  end
-
-  @spec list_source_endpoints(binary(), binary()) :: [SourceEndpoint.t()]
-  def list_source_endpoints(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    SourceEndpoints.list_source_endpoints(organization_id, mission_id)
-  end
-
-  @spec list_source_endpoints(binary(), keyword()) :: [SourceEndpoint.t()]
-  def list_source_endpoints(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
-    SourceEndpoints.list_source_endpoints(mission_id, opts)
-  end
-
-  @spec list_source_endpoints(binary(), binary(), keyword()) :: [SourceEndpoint.t()]
-  def list_source_endpoints(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    SourceEndpoints.list_source_endpoints(organization_id, mission_id, opts)
-  end
-
-  @spec list_source_endpoints(binary()) :: [SourceEndpoint.t()]
-  def list_source_endpoints(mission_id) when is_binary(mission_id) do
-    SourceEndpoints.list_source_endpoints(mission_id)
   end
 
   @spec persist_packet_definition(binary(), PacketDefinition.t()) ::

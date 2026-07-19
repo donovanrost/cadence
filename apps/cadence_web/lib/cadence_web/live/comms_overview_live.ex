@@ -186,7 +186,8 @@ defmodule CadenceWeb.CommsOverviewLive do
     spacecraft =
       Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
 
-    source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
+    source_endpoints =
+      Cadence.SourceEndpoints.list_source_endpoints(scope.organization_id, mission.mission_id)
 
     transports =
       TransportStore.list_transports(scope.organization_id, mission.mission_id)

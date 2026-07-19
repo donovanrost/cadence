@@ -134,7 +134,7 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
 
     for endpoint <- [alpha_endpoint, beta_endpoint, gamma_endpoint] do
       assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, endpoint)
+               Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, endpoint)
     end
 
     alpha_transport =
@@ -485,10 +485,10 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_transport =
       Transport.new(%{
@@ -771,7 +771,7 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
 
     for endpoint <- [alpha_endpoint, beta_endpoint, gamma_endpoint] do
       assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, endpoint)
+               Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, endpoint)
     end
 
     alpha_transport =
@@ -1130,10 +1130,10 @@ defmodule CadenceWeb.Assets.DashboardConnectionAggregationViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_transport =
       Transport.new(%{

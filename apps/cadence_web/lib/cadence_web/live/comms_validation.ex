@@ -23,7 +23,8 @@ defmodule CadenceWeb.CommsValidation do
       mission_id,
       %{
         spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
-        source_endpoints: Cadence.list_source_endpoints(organization_id, mission_id),
+        source_endpoints:
+          Cadence.SourceEndpoints.list_source_endpoints(organization_id, mission_id),
         path_templates: Cadence.list_path_templates(organization_id, mission_id),
         provider_profiles: Cadence.list_provider_profiles(organization_id, mission_id),
         transport_profiles: Cadence.list_transport_profiles(organization_id, mission_id),

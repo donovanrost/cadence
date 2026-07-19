@@ -44,7 +44,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_source_endpoints(opts) do
-    Keyword.get(opts, :list_source_endpoints, &Cadence.list_source_endpoints/2)
+    Keyword.get(opts, :list_source_endpoints, &Cadence.SourceEndpoints.list_source_endpoints/2)
   end
 
   defp list_transports(opts) do

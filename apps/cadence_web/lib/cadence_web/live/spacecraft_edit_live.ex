@@ -159,7 +159,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
   defp maybe_sync_managed_source_endpoint(organization_id, %Spacecraft{} = spacecraft) do
     source_endpoint_id = "spacecraft_runtime:" <> spacecraft.spacecraft_id
 
-    case Cadence.fetch_source_endpoint(
+    case Cadence.SourceEndpoints.fetch_source_endpoint(
            organization_id,
            spacecraft.mission_id,
            source_endpoint_id
@@ -172,9 +172,6 @@ defmodule CadenceWeb.SpacecraftEditLive do
 
       {:error, :source_endpoint_not_found} ->
         :ok
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 

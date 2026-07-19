@@ -167,10 +167,10 @@ defmodule CadenceWeb.Assets.DashboardOperationalQueueViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     persist_command_queue_entry!(
       org,
@@ -444,10 +444,10 @@ defmodule CadenceWeb.Assets.DashboardOperationalQueueViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     persist_command_queue_entry!(
       org,

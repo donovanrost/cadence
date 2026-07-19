@@ -29,7 +29,8 @@ defmodule Cadence.Telemetry.ProfilerTest do
         source_ref: "station-profile"
       })
 
-    assert {:ok, _source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     binding_set =
       BindingSet.new(%{

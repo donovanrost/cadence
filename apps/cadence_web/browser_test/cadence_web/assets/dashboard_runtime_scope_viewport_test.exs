@@ -66,10 +66,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -387,10 +387,10 @@ defmodule CadenceWeb.Assets.DashboardRuntimeScopeViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_template =
       PathTemplate.new(%{

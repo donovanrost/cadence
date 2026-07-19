@@ -276,7 +276,9 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
         source_ref: "provider/station-a"
       })
 
-    assert {:ok, persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+
     persisted_source_endpoint
   end
 

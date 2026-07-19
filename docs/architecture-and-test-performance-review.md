@@ -1479,6 +1479,15 @@ production web callers of the root facade from 54 to 49 files. Catalog API
 routes remain in the authenticated API pipeline, and browser catalog routes
 remain in the authenticated `:catalog` LiveView session; production source-size
 pressure remains 4 and dependency ratchets are unchanged.
+Retiring the eight source-endpoint persistence and read clauses from the root
+facade moved 162 production, test-support, simulator, opt-in browser, and demo
+call sites directly to `Cadence.SourceEndpoints`. This reduced `Cadence` from
+3,415 to 3,365 lines and reduced production web callers of the root facade from
+49 to 47 files. Source-endpoint API routes remain in the authenticated API
+pipeline, while operations and spacecraft pages remain in their existing
+authenticated LiveView sessions. The narrower context return type also exposed
+and removed two unreachable generic-error branches; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

@@ -27,7 +27,8 @@ defmodule Cadence.SharedSchemaBackfillTest do
         display_name: "SC-001 Downlink"
       })
 
-    assert {:ok, persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     assert [[organization_id]] =
              query_rows!(

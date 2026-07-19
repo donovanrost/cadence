@@ -66,10 +66,10 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_transport =
       Transport.new(%{
@@ -271,10 +271,10 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_transport =
       Transport.new(%{
@@ -438,10 +438,10 @@ defmodule CadenceWeb.Assets.DashboardOperationalResourcesViewportTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, alpha_endpoint)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, beta_endpoint)
 
     alpha_transport =
       Transport.new(%{

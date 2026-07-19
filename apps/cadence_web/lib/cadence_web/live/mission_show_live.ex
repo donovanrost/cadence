@@ -145,7 +145,9 @@ defmodule CadenceWeb.MissionShowLive do
     spacecraft =
       Cadence.SpacecraftStore.list_spacecraft(scope.organization_id, mission.mission_id)
 
-    source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
+    source_endpoints =
+      Cadence.SourceEndpoints.list_source_endpoints(scope.organization_id, mission.mission_id)
+
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
     link_assignments = Cadence.list_link_assignments(scope.organization_id, mission.mission_id)
 

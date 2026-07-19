@@ -203,7 +203,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         display_name: "SRE demo telemetry endpoint"
       })
 
-    Cadence.persist_source_endpoint(ids.organization_id, source_endpoint)
+    Cadence.SourceEndpoints.persist_source_endpoint(ids.organization_id, source_endpoint)
   end
 
   defp activate_packet_binding(ids) do

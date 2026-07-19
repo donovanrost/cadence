@@ -261,7 +261,8 @@ defmodule Cadence.ProcessTelemetryIngressTest do
         source_ref: "station-a"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     raw_evidence =
       RawEvidence.new(%{

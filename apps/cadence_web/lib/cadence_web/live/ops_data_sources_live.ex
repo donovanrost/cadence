@@ -1350,7 +1350,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp fetch_focused_source_endpoint(_organization_id, _mission_id, nil), do: nil
 
   defp fetch_focused_source_endpoint(organization_id, mission_id, source_endpoint_id) do
-    case Cadence.fetch_source_endpoint(organization_id, mission_id, source_endpoint_id) do
+    case Cadence.SourceEndpoints.fetch_source_endpoint(
+           organization_id,
+           mission_id,
+           source_endpoint_id
+         ) do
       {:ok, source_endpoint} -> source_endpoint
       {:error, _reason} -> nil
     end

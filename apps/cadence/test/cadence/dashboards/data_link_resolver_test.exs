@@ -523,7 +523,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
              TransportStore.persist_transport(organization_id, transport)
 
     assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
 
     assert {:ok, _ground_station} =
              GroundStationStore.persist_ground_station(

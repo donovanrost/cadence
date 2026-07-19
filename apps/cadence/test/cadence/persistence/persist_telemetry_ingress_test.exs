@@ -44,7 +44,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         source_ref: "station-a"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     source_time = DateTime.from_unix!(1_700_000_000, :second)
     receipt_time = DateTime.from_unix!(1_700_000_005, :second)
@@ -415,7 +416,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         source_ref: "station-archived-gap"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{
@@ -616,7 +618,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       })
 
     assert {:ok, _persisted_source_endpoint} =
-             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{
@@ -712,7 +714,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         source_ref: "station-batch"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{
@@ -792,7 +795,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         source_ref: "station-tm"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     binding_set =
       BindingSet.new(%{
@@ -902,7 +906,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         source_ref: "station-gap"
       })
 
-    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{

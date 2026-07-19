@@ -19,7 +19,7 @@ defmodule CadenceWeb.SourceEndpointController do
              spacecraft_id
            ) do
       source_endpoints =
-        Cadence.list_source_endpoints(
+        Cadence.SourceEndpoints.list_source_endpoints(
           organization_id,
           mission_id,
           spacecraft_id: spacecraft_id
@@ -38,7 +38,7 @@ defmodule CadenceWeb.SourceEndpointController do
              mission_id
            ) do
       source_endpoints =
-        Cadence.list_source_endpoints(organization_id, mission_id)
+        Cadence.SourceEndpoints.list_source_endpoints(organization_id, mission_id)
         |> Enum.map(&ControlPlaneJSON.source_endpoint/1)
 
       json(conn, %{data: source_endpoints})
@@ -57,7 +57,11 @@ defmodule CadenceWeb.SourceEndpointController do
              mission_id
            ),
          {:ok, %SourceEndpoint{} = source_endpoint} <-
-           Cadence.fetch_source_endpoint(organization_id, mission_id, source_endpoint_id) do
+           Cadence.SourceEndpoints.fetch_source_endpoint(
+             organization_id,
+             mission_id,
+             source_endpoint_id
+           ) do
       json(conn, %{data: ControlPlaneJSON.source_endpoint(source_endpoint)})
     end
   end
@@ -83,7 +87,7 @@ defmodule CadenceWeb.SourceEndpointController do
              scoped_source_endpoint_params(source_endpoint_params, spacecraft_id)
            ),
          {:ok, %SourceEndpoint{} = persisted_source_endpoint} <-
-           Cadence.persist_source_endpoint(organization_id, source_endpoint) do
+           Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.source_endpoint(persisted_source_endpoint)})
@@ -104,7 +108,7 @@ defmodule CadenceWeb.SourceEndpointController do
          {:ok, %SourceEndpoint{} = source_endpoint} <-
            ControlPlaneParams.source_endpoint(organization_id, mission_id, source_endpoint_params),
          {:ok, %SourceEndpoint{} = persisted_source_endpoint} <-
-           Cadence.persist_source_endpoint(organization_id, source_endpoint) do
+           Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.source_endpoint(persisted_source_endpoint)})

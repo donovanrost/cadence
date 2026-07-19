@@ -87,7 +87,9 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       assert updated_spacecraft.scid == 51
 
       assert [endpoint] =
-               Cadence.list_source_endpoints(org.organization_id, mission.mission_id,
+               Cadence.SourceEndpoints.list_source_endpoints(
+                 org.organization_id,
+                 mission.mission_id,
                  spacecraft_id: spacecraft.spacecraft_id
                )
 
@@ -130,7 +132,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       assert updated_spacecraft.scid == nil
 
       assert {:ok, endpoint} =
-               Cadence.fetch_source_endpoint(
+               Cadence.SourceEndpoints.fetch_source_endpoint(
                  org.organization_id,
                  mission.mission_id,
                  "spacecraft_runtime:" <> spacecraft.spacecraft_id

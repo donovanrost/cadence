@@ -187,7 +187,7 @@ defmodule Cadence.SpacecraftStoreTest do
       })
 
     assert {:error, :spacecraft_not_found} =
-             Cadence.persist_source_endpoint("org-spacecraft", source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint("org-spacecraft", source_endpoint)
   end
 
   describe "list_spacecraft_page/3" do

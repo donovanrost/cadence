@@ -311,7 +311,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
       })
 
     assert {:ok, source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+             Cadence.SourceEndpoints.persist_source_endpoint(org.organization_id, source_endpoint)
 
     transport =
       Transport.new(%{

@@ -7,7 +7,7 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
   def runtime_identity(organization_id, mission_id, %Spacecraft{} = spacecraft) do
     managed_id = managed_source_endpoint_id(spacecraft.spacecraft_id)
 
-    case Cadence.fetch_source_endpoint(organization_id, mission_id, managed_id) do
+    case Cadence.SourceEndpoints.fetch_source_endpoint(organization_id, mission_id, managed_id) do
       {:ok, endpoint} ->
         endpoint
 
@@ -15,9 +15,6 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
         spacecraft
         |> matching_runtime_identity_candidates(organization_id, mission_id)
         |> List.first()
-
-      {:error, _reason} ->
-        nil
     end
   end
 
@@ -140,7 +137,9 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
 
   defp matching_runtime_identity_candidates(spacecraft, organization_id, mission_id) do
     organization_id
-    |> Cadence.list_source_endpoints(mission_id, spacecraft_id: spacecraft.spacecraft_id)
+    |> Cadence.SourceEndpoints.list_source_endpoints(mission_id,
+      spacecraft_id: spacecraft.spacecraft_id
+    )
   end
 
   defp empty_link_assignment,
