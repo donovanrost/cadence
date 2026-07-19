@@ -1240,6 +1240,11 @@ moved context-owned reads, row projection, cross-resource links, and navigation
 actions out of `DataLinkResolver`. Contact reads now use the `Contacts` context,
 reducing direct persistence-schema edges from 118 to 116, while the facade fell
 from 3,818 to 3,214 lines; production source-size pressure remains 7.
+Extracting effective operational intervals plus source health, watermark, and
+binding-event inspection into a 427-line source-state target module reduced
+`DataLinkResolver` from 3,214 to 2,813 lines. Interval target routing, replay
+scoping, rows, and evidence links now live with those source-state reads;
+production source-size pressure remains 7 and dependency ratchets are unchanged.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
