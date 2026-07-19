@@ -1110,6 +1110,13 @@ a 329-line row module reduced the adapter from 5,100 to 4,903 lines. Revision
 fingerprints reuse its bitrate normalizer; provider callbacks, freshness
 annotation, and frame construction remain adapter-owned, so production
 source-size pressure remains 8.
+Extracting ingress processing latency normalization, replay/scope filtering,
+latest/history row materialization, time windows, ordering, limits, and
+source-endpoint empty series into a 314-line row module reduced the adapter from
+4,903 to 4,701 lines. Revision fingerprints and durable/runtime overlay reuse
+the same normalization API while provider callbacks, overlay selection,
+freshness annotation, and frame construction remain adapter-owned; production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

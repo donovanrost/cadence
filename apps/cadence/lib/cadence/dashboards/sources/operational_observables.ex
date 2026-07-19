@@ -39,6 +39,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     AntennaPointingRows,
     ConnectionFrames,
     ConnectionRows,
+    IngressProcessingLatencyRows,
     LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
@@ -1565,13 +1566,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       adapter_opts(request, source_binding),
       opts
     )
-    |> Enum.map(&normalize_ingress_processing_latency_snapshot/1)
-    |> Enum.filter(
-      &(attr(&1, :mission_id) == mission_id and
-          matches_request_replay_context?(&1, request) and
-          matches_ingress_processing_latency_scope?(&1, request))
-    )
-    |> Enum.map(&ingress_processing_latency_row(&1, request, opts))
+    |> IngressProcessingLatencyRows.latest(request, mission_id)
+    |> annotate_latest_freshness(request, opts)
   end
 
   defp ingress_processing_latency_history_rows(
@@ -1592,21 +1588,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         )
       )
 
-    rows =
-      metric_snapshots_fun.(organization_id, mission_id, adapter_opts(request, source_binding))
-      |> Enum.map(&normalize_ingress_processing_latency_snapshot/1)
-      |> Enum.filter(
-        &(attr(&1, :mission_id) == mission_id and
-            matches_request_replay_context?(&1, request) and
-            matches_ingress_processing_latency_scope?(&1, request))
-      )
-      |> Enum.map(&ingress_processing_latency_history_row/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&metric_history_row_in_request?(&1, request))
-      |> Enum.sort_by(&metric_history_sort_key/1)
-      |> apply_request_limit(request)
-
-    rows ++ empty_ingress_processing_latency_history_rows(rows, request, mission_id)
+    organization_id
+    |> metric_snapshots_fun.(mission_id, adapter_opts(request, source_binding))
+    |> IngressProcessingLatencyRows.history(request, mission_id)
   end
 
   defp maybe_add_contact_phase_history_frame(
@@ -2747,124 +2731,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp normalize_ingress_processing_latency_snapshot(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id) || "ingress.processing_latency_ms",
-      mission_id: attr(snapshot, :mission_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) ||
-          attr(snapshot, :source_endpoint_ref) ||
-          attr(snapshot, :source_ref),
-      spacecraft_id: attr(snapshot, :spacecraft_id),
-      contact_id:
-        attr(snapshot, :contact_id) ||
-          attr(snapshot, :scheduled_contact_id) ||
-          attr(snapshot, :realized_contact_id),
-      transport_id: attr(snapshot, :transport_id),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      value: ingress_processing_latency_value(snapshot),
-      unit: attr(snapshot, :unit) || "ms",
-      observed_at: attr(snapshot, :observed_at),
-      error?: attr(snapshot, :error?) || false,
-      replay_run_id: attr(snapshot, :replay_run_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      source: snapshot
-    }
-  end
-
-  defp ingress_processing_latency_row(snapshot, request, opts) do
-    source_endpoint_id = attr(snapshot, :source_endpoint_id)
-    resource_id = source_endpoint_id || attr(snapshot, :mission_id)
-    freshness = row_freshness(attr(snapshot, :observed_at), request, opts)
-
-    %{
-      observable_id: "ingress.processing_latency_ms",
-      resource_id: resource_id,
-      label: ingress_processing_latency_label(source_endpoint_id, attr(snapshot, :mission_id)),
-      scope_kind: ingress_processing_latency_scope_kind(source_endpoint_id),
-      source_endpoint_id: source_endpoint_id,
-      transport_id: attr(snapshot, :transport_id),
-      ground_station_id: attr(snapshot, :ground_station_id),
-      link_id: attr(snapshot, :link_id),
-      contact_id: attr(snapshot, :contact_id),
-      adapter_key: attr(snapshot, :adapter_key),
-      spacecraft_id: attr(snapshot, :spacecraft_id),
-      value: attr(snapshot, :value),
-      unit: attr(snapshot, :unit) || "ms",
-      observed_at: attr(snapshot, :observed_at),
-      freshness_state: freshness.state,
-      age_ms: freshness.age_ms,
-      freshness_policy: freshness.policy,
-      freshness_checked_at: freshness.checked_at,
-      error?: attr(snapshot, :error?) || false,
-      source_event_id: attr(snapshot, :source_event_id),
-      source: attr(snapshot, :source) || snapshot
-    }
-  end
-
-  defp ingress_processing_latency_history_row(snapshot) do
-    with value when is_number(value) <- attr(snapshot, :value),
-         %DateTime{} = observed_at <- attr(snapshot, :observed_at) do
-      source_endpoint_id = attr(snapshot, :source_endpoint_id)
-      resource_id = source_endpoint_id || attr(snapshot, :mission_id)
-
-      %{
-        observable_id: "ingress.processing_latency_ms",
-        resource_id: resource_id,
-        label: ingress_processing_latency_label(source_endpoint_id, attr(snapshot, :mission_id)),
-        scope_kind: ingress_processing_latency_scope_kind(source_endpoint_id),
-        source_endpoint_id: source_endpoint_id,
-        transport_id: attr(snapshot, :transport_id),
-        ground_station_id: attr(snapshot, :ground_station_id),
-        link_id: attr(snapshot, :link_id),
-        contact_id: attr(snapshot, :contact_id),
-        adapter_key: attr(snapshot, :adapter_key),
-        spacecraft_id: attr(snapshot, :spacecraft_id),
-        value: value,
-        unit: attr(snapshot, :unit) || "ms",
-        observed_at: observed_at,
-        source_event_id: attr(snapshot, :source_event_id),
-        source: attr(snapshot, :source) || snapshot
-      }
-    else
-      _missing -> nil
-    end
-  end
-
-  defp empty_ingress_processing_latency_history_rows(rows, request, mission_id) do
-    present_series = MapSet.new(Enum.map(rows, &metric_history_series_key/1))
-
-    request
-    |> ingress_processing_latency_empty_series_candidates(mission_id)
-    |> Enum.reject(&(metric_history_series_key(&1) in present_series))
-    |> Enum.map(&Map.put(&1, :empty_series?, true))
-  end
-
-  defp ingress_processing_latency_empty_series_candidates(request, mission_id) do
-    request
-    |> scope_ids(:source_endpoint)
-    |> Enum.map(fn source_endpoint_id ->
-      %{
-        observable_id: "ingress.processing_latency_ms",
-        resource_id: source_endpoint_id,
-        label: ingress_processing_latency_label(source_endpoint_id, mission_id),
-        scope_kind: :source_endpoint,
-        source_endpoint_id: source_endpoint_id,
-        transport_id: nil,
-        ground_station_id: nil,
-        link_id: nil,
-        contact_id: nil,
-        adapter_key: nil,
-        spacecraft_id: nil,
-        value: nil,
-        unit: "ms",
-        observed_at: nil
-      }
-    end)
-  end
-
   defp annotate_latest_freshness(rows, request, opts) do
     Enum.map(rows, &put_latest_freshness(&1, request, opts))
   end
@@ -2942,41 +2808,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        do: :stale
 
   defp metric_freshness_state(_observed_at, _age_ms, _policy), do: :fresh
-
-  defp ingress_processing_latency_value(snapshot) do
-    [
-      attr(snapshot, :value),
-      attr(snapshot, :latency_ms),
-      attr(snapshot, :processing_latency_ms),
-      attr(snapshot, :end_to_end_ms)
-    ]
-    |> Enum.find_value(&normalize_number/1)
-  end
-
-  defp ingress_processing_latency_scope_kind(source_endpoint_id)
-       when is_binary(source_endpoint_id) and source_endpoint_id != "",
-       do: :source_endpoint
-
-  defp ingress_processing_latency_scope_kind(_source_endpoint_id), do: :mission
-
-  defp ingress_processing_latency_label(source_endpoint_id, _mission_id)
-       when is_binary(source_endpoint_id) and source_endpoint_id != "" do
-    "Ingress latency / #{source_endpoint_id}"
-  end
-
-  defp ingress_processing_latency_label(_source_endpoint_id, _mission_id), do: "Ingress latency"
-
-  defp normalize_number(value) when is_integer(value), do: value * 1.0
-  defp normalize_number(value) when is_float(value), do: value
-
-  defp normalize_number(value) when is_binary(value) do
-    case Float.parse(value) do
-      {number, ""} -> number
-      _other -> nil
-    end
-  end
-
-  defp normalize_number(_value), do: nil
 
   defp transport_execution_history_rows(
          request,
@@ -3551,13 +3382,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp transport_execution_state(_value), do: :unknown
 
-  defp matches_connection_scope?(row, request) do
-    matches_scope?(row.transport_id, scope_ids(request, :transport)) and
-      matches_scope?(row.source_endpoint_id, scope_ids(request, :source_endpoint)) and
-      matches_scope?(row.ground_station_id, scope_ids(request, :ground_station)) and
-      matches_scope?(row.link_id, scope_ids(request, :link))
-  end
-
   defp matches_transport_execution_scope?(row, request) do
     matches_scope?(row.transport_id, scope_ids(request, :transport)) and
       matches_scope?(row.source_endpoint_id, scope_ids(request, :source_endpoint)) and
@@ -3601,21 +3425,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     starts_before_to? and ends_after_from?
   end
 
-  defp metric_history_row_in_request?(row, request) do
-    match?(%DateTime{}, row.observed_at) and is_number(row.value) and
-      row.observable_id in request.observables and
-      matches_connection_scope?(row, request) and
-      time_in_request_window?(row.observed_at, request)
-  end
-
-  defp metric_history_sort_key(row),
-    do: {metric_history_series_key(row), datetime_sort_key(row.observed_at)}
-
-  defp metric_history_series_key(row), do: {row.observable_id, row.resource_id}
-
   defp metric_history_product_family(observable_id) do
     ProductPolicy.metric_history_product_family(observable_id)
   end
+
+  defp metric_history_series_key(row), do: {row.observable_id, row.resource_id}
 
   defp ingress_processing_latency_snapshots(
          nil,
@@ -3652,22 +3466,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     matches_scope?(command_queue_source_endpoint_id(entry), scope_ids(request, :source_endpoint)) and
       matches_scope?(metadata_attr(entry, :spacecraft_id), scope_ids(request, :spacecraft)) and
       matches_scope?(command_queue_contact_id(entry), scope_ids(request, :contact))
-  end
-
-  defp matches_ingress_processing_latency_scope?(sample, request) do
-    matches_scope?(attr(sample, :source_endpoint_id), scope_ids(request, :source_endpoint)) and
-      matches_scope?(attr(sample, :spacecraft_id), scope_ids(request, :spacecraft)) and
-      matches_scope?(attr(sample, :contact_id), scope_ids(request, :contact)) and
-      matches_scope?(attr(sample, :transport_id), scope_ids(request, :transport)) and
-      matches_scope?(attr(sample, :ground_station_id), scope_ids(request, :ground_station)) and
-      matches_scope?(attr(sample, :link_id), scope_ids(request, :link))
-  end
-
-  defp matches_request_replay_context?(sample, request) do
-    case replay_run_id(request) do
-      nil -> is_nil(attr(sample, :replay_run_id))
-      replay_run_id -> attr(sample, :replay_run_id) == replay_run_id
-    end
   end
 
   defp pending_command_queue_entry?(entry),
@@ -4376,11 +4174,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp overlay_ingress_processing_latency_snapshots(durable_snapshots, runtime_snapshots) do
     durable_snapshots
-    |> Enum.map(&normalize_ingress_processing_latency_snapshot/1)
+    |> Enum.map(&IngressProcessingLatencyRows.normalize_snapshot/1)
     |> Enum.map(&{&1, 0})
     |> Kernel.++(
       runtime_snapshots
-      |> Enum.map(&normalize_ingress_processing_latency_snapshot/1)
+      |> Enum.map(&IngressProcessingLatencyRows.normalize_snapshot/1)
       |> Enum.map(&{&1, 1})
     )
     |> Enum.reduce(%{}, fn {snapshot, source_rank}, acc ->
@@ -4727,7 +4525,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
       link_id: link_id_for([snapshot]),
       adapter_key: attr(snapshot, :adapter_key),
-      value: ingress_processing_latency_value(snapshot),
+      value: IngressProcessingLatencyRows.value(snapshot),
       unit: attr(snapshot, :unit) || "ms",
       observed_at: attr(snapshot, :observed_at),
       error?: attr(snapshot, :error?) || false,
