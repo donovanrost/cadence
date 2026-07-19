@@ -22,7 +22,8 @@ defmodule Cadence.Dashboards.Sources.Limits do
     SourceWatermark
   }
 
-  alias Cadence.Limits.{DefinitionInterval, Evaluator, Event}
+  alias Cadence.Dashboards.Sources.Limits.RecomputedAnalysis
+  alias Cadence.Limits.{DefinitionInterval, Event}
   alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Sample
@@ -186,7 +187,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
   end
 
   defp ensure_supported_semantics(%PlannedSourceRequest{} = request) do
-    case limit_semantics_mode(request) do
+    case RecomputedAnalysis.semantics_mode(request) do
       semantics_mode when semantics_mode in [:observed, :current, :recomputed, :compare] ->
         :ok
 
@@ -205,8 +206,8 @@ defmodule Cadence.Dashboards.Sources.Limits do
   defp unsupported_limit_semantics_details(%PlannedSourceRequest{} = request, semantics_mode) do
     %{
       requested_semantics_mode: semantics_mode,
-      requested_analysis_basis: analysis_basis_for_semantics(semantics_mode),
-      selected_limit_clock: limit_clock_policy(request),
+      requested_analysis_basis: RecomputedAnalysis.analysis_basis(semantics_mode),
+      selected_limit_clock: RecomputedAnalysis.limit_clock_policy(request),
       supported_semantics_modes: [:observed, :current, :recomputed, :compare],
       supported_analysis_basis: [
         :observed_fact,
@@ -218,11 +219,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
       future_capability: future_capability_for_semantics(semantics_mode)
     }
   end
-
-  defp analysis_basis_for_semantics(:current), do: :current_definition_analysis
-  defp analysis_basis_for_semantics(:recomputed), do: :recomputed_analysis
-  defp analysis_basis_for_semantics(:compare), do: :limit_comparison_analysis
-  defp analysis_basis_for_semantics(_semantics_mode), do: :unsupported_analysis
 
   defp required_inputs_for_semantics(:current) do
     [
@@ -261,16 +257,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
   defp recomputed_capability(:current), do: :current_limit_analysis
   defp recomputed_capability(:recomputed), do: :recomputed_limit_analysis
   defp recomputed_capability(_semantics_mode), do: :limit_event_history
-
-  defp limit_clock_policy(%PlannedSourceRequest{} = request) do
-    %{
-      observed: :limit_event_receipt_time,
-      requested_time_axis: time_axis(request),
-      requested_time_mode: context_value(request.time_context, :mode)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
 
   defp watermark_warnings(%PlannedSourceRequest{}, %SourceWatermark{confidence: confidence})
        when confidence in [:authoritative, :best_effort],
@@ -360,7 +346,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
          request_warnings,
          :latest_state
        ) do
-    case limit_semantics_mode(request) do
+    case RecomputedAnalysis.semantics_mode(request) do
       :observed ->
         resolve_observed_latest_state(
           request,
@@ -393,7 +379,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
          request_warnings,
          :event_history
        ) do
-    case limit_semantics_mode(request) do
+    case RecomputedAnalysis.semantics_mode(request) do
       :observed ->
         resolve_observed_event_history(
           request,
@@ -426,7 +412,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
          request_warnings,
          :analysis_buckets
        ) do
-    case limit_semantics_mode(request) do
+    case RecomputedAnalysis.semantics_mode(request) do
       :observed ->
         resolve_observed_analysis_buckets(
           request,
@@ -543,10 +529,14 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         selected_intervals =
-          selected_intervals_for_recomputed_samples(semantics_mode, samples, target_intervals)
+          RecomputedAnalysis.selected_intervals_for_samples(
+            semantics_mode,
+            samples,
+            target_intervals
+          )
 
         observed_events =
-          observed_latest_for_compare(
+          RecomputedAnalysis.observed_latest_for_compare(
             semantics_mode,
             latest_fun,
             organization_id,
@@ -556,7 +546,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         {events, divergence_warnings} =
-          recomputed_limit_events(
+          RecomputedAnalysis.recomputed_events(
             request,
             observable_id,
             samples,
@@ -566,7 +556,13 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         point_warnings =
-          recomputed_limit_warnings(request, observable_id, samples, selected_intervals, events) ++
+          RecomputedAnalysis.warnings(
+            request,
+            observable_id,
+            samples,
+            selected_intervals,
+            events
+          ) ++
             divergence_warnings
 
         warnings = request_warnings ++ time_warnings ++ point_warnings
@@ -650,7 +646,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
         samples =
           organization_id
           |> then(&sample_history_fun.(&1, mission_id, observable_id, sample_history_opts))
-          |> normalize_sample_history_result()
+          |> RecomputedAnalysis.normalize_sample_history_result()
 
         target_intervals =
           selected_recompute_intervals(
@@ -663,10 +659,14 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         selected_intervals =
-          selected_intervals_for_recomputed_samples(semantics_mode, samples, target_intervals)
+          RecomputedAnalysis.selected_intervals_for_samples(
+            semantics_mode,
+            samples,
+            target_intervals
+          )
 
         observed_events =
-          observed_events_for_compare(
+          RecomputedAnalysis.observed_events_for_compare(
             semantics_mode,
             history_fun,
             organization_id,
@@ -676,7 +676,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         {events, divergence_warnings} =
-          recomputed_limit_events(
+          RecomputedAnalysis.recomputed_events(
             request,
             observable_id,
             samples,
@@ -686,7 +686,13 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         point_warnings =
-          recomputed_limit_warnings(request, observable_id, samples, selected_intervals, events) ++
+          RecomputedAnalysis.warnings(
+            request,
+            observable_id,
+            samples,
+            selected_intervals,
+            events
+          ) ++
             divergence_warnings
 
         warnings =
@@ -775,7 +781,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
         samples =
           organization_id
           |> then(&sample_history_fun.(&1, mission_id, observable_id, sample_history_opts))
-          |> normalize_sample_history_result()
+          |> RecomputedAnalysis.normalize_sample_history_result()
 
         target_intervals =
           selected_recompute_intervals(
@@ -788,10 +794,14 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         selected_intervals =
-          selected_intervals_for_recomputed_samples(semantics_mode, samples, target_intervals)
+          RecomputedAnalysis.selected_intervals_for_samples(
+            semantics_mode,
+            samples,
+            target_intervals
+          )
 
         observed_events =
-          observed_events_for_compare(
+          RecomputedAnalysis.observed_events_for_compare(
             semantics_mode,
             history_fun,
             organization_id,
@@ -801,7 +811,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         {events, divergence_warnings} =
-          recomputed_limit_events(
+          RecomputedAnalysis.recomputed_events(
             request,
             observable_id,
             samples,
@@ -811,7 +821,13 @@ defmodule Cadence.Dashboards.Sources.Limits do
           )
 
         point_warnings =
-          recomputed_limit_warnings(request, observable_id, samples, selected_intervals, events) ++
+          RecomputedAnalysis.warnings(
+            request,
+            observable_id,
+            samples,
+            selected_intervals,
+            events
+          ) ++
             divergence_warnings
 
         warnings =
@@ -906,7 +922,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
       replay_run_id: replay_run_id(request),
       data_source_id: data_source_id(request, source_binding),
       dataset: dataset(source_binding),
-      semantics_mode: limit_semantics_mode(request),
+      semantics_mode: RecomputedAnalysis.semantics_mode(request),
       spacecraft_id: spacecraft_id(request.scope_context),
       to_receipt_time: latest_as_of_receipt_time(request)
     ]
@@ -929,7 +945,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
         replay_run_id: replay_run_id(request),
         data_source_id: data_source_id(request, source_binding),
         dataset: dataset(source_binding),
-        semantics_mode: limit_semantics_mode(request),
+        semantics_mode: RecomputedAnalysis.semantics_mode(request),
         spacecraft_id: spacecraft_id(request.scope_context),
         from_receipt_time: from_receipt_time,
         to_receipt_time: to_receipt_time,
@@ -957,7 +973,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
         replay_run_id: replay_run_id(request),
         data_source_id: data_source_id(request, source_binding),
         dataset: dataset(source_binding),
-        semantics_mode: limit_semantics_mode(request),
+        semantics_mode: RecomputedAnalysis.semantics_mode(request),
         from_receipt_time: from_receipt_time,
         to_receipt_time: to_receipt_time
       ]
@@ -1013,22 +1029,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
   end
 
   defp interval_selected_for_times?(%DefinitionInterval{} = interval, event_times) do
-    Enum.any?(event_times, &interval_contains_time?(interval, &1))
-  end
-
-  defp interval_contains_time?(
-         %DefinitionInterval{active_from: %DateTime{} = active_from, active_to: active_to},
-         time
-       ) do
-    DateTime.compare(active_from, time) != :gt and interval_ends_after?(active_to, time)
-  end
-
-  defp interval_contains_time?(%DefinitionInterval{}, %DateTime{}), do: false
-
-  defp interval_ends_after?(nil, %DateTime{}), do: true
-
-  defp interval_ends_after?(%DateTime{} = active_to, %DateTime{} = time) do
-    DateTime.compare(active_to, time) == :gt
+    Enum.any?(event_times, &RecomputedAnalysis.interval_contains_time?(interval, &1))
   end
 
   defp selected_recompute_intervals(
@@ -1050,395 +1051,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
     do: active_from
 
   defp interval_sort_key(%DefinitionInterval{}), do: DateTime.from_unix!(0)
-
-  defp selected_intervals_for_recomputed_samples(_semantics_mode, [], _intervals), do: []
-
-  defp selected_intervals_for_recomputed_samples(:current, _samples, intervals) do
-    intervals
-    |> List.first()
-    |> List.wrap()
-  end
-
-  defp selected_intervals_for_recomputed_samples(_semantics_mode, samples, intervals) do
-    samples
-    |> Enum.map(&interval_for_sample(&1, intervals))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq_by(& &1.definition_activation_key)
-  end
-
-  defp interval_for_sample(%Sample{} = sample, intervals) do
-    Enum.find(intervals, &interval_selected_for_sample(&1, sample))
-  end
-
-  defp interval_selected_for_sample(%DefinitionInterval{} = interval, %Sample{
-         receipt_time: %DateTime{} = receipt_time
-       }) do
-    interval_contains_time?(interval, receipt_time)
-  end
-
-  defp interval_selected_for_sample(%DefinitionInterval{}, %Sample{}), do: false
-
-  defp recompute_interval_for_sample(:current, intervals, %Sample{}), do: List.first(intervals)
-
-  defp recompute_interval_for_sample(_semantics_mode, intervals, %Sample{} = sample),
-    do: interval_for_sample(sample, intervals)
-
-  defp observed_events_for_compare(
-         :compare,
-         history_fun,
-         organization_id,
-         mission_id,
-         observable_id,
-         opts
-       ) do
-    history_fun.(organization_id, mission_id, observable_id, opts)
-  end
-
-  defp observed_events_for_compare(
-         _semantics_mode,
-         _history_fun,
-         _organization_id,
-         _mission_id,
-         _observable_id,
-         _opts
-       ) do
-    []
-  end
-
-  defp observed_latest_for_compare(
-         :compare,
-         latest_fun,
-         organization_id,
-         mission_id,
-         observable_id,
-         opts
-       ) do
-    opts = Keyword.put(opts, :semantics_mode, :observed)
-    latest_fun.(organization_id, mission_id, observable_id, opts) |> List.wrap()
-  end
-
-  defp observed_latest_for_compare(
-         _semantics_mode,
-         _latest_fun,
-         _organization_id,
-         _mission_id,
-         _observable_id,
-         _opts
-       ) do
-    []
-  end
-
-  defp normalize_sample_history_result({:ok, %{samples: samples}}) when is_list(samples),
-    do: samples
-
-  defp normalize_sample_history_result(samples) when is_list(samples), do: samples
-  defp normalize_sample_history_result(_other), do: []
-
-  defp recomputed_limit_events(
-         %PlannedSourceRequest{} = request,
-         observable_id,
-         samples,
-         intervals,
-         observed_events,
-         semantics_mode
-       ) do
-    observed_by_sample_id = Map.new(observed_events, &{&1.sample_id, &1})
-
-    events =
-      Enum.flat_map(samples, fn %Sample{} = sample ->
-        case recompute_interval_for_sample(semantics_mode, intervals, sample) do
-          %DefinitionInterval{} = interval ->
-            observed_event = Map.get(observed_by_sample_id, sample.sample_id)
-
-            [
-              recomputed_limit_event(
-                request,
-                observable_id,
-                sample,
-                interval,
-                observed_event,
-                semantics_mode
-              )
-            ]
-
-          nil ->
-            []
-        end
-      end)
-
-    {events, divergence_warnings(request, observable_id, events, semantics_mode)}
-  end
-
-  defp recomputed_limit_event(
-         %PlannedSourceRequest{} = request,
-         observable_id,
-         %Sample{} = sample,
-         %DefinitionInterval{} = interval,
-         observed_event,
-         semantics_mode
-       ) do
-    limit_state = Evaluator.evaluate(sample.engineering_value, interval.thresholds || %{})
-    normalized_state = Evaluator.normalize_state(limit_state)
-    observed_normalized_state = observed_event && observed_event.normalized_state
-
-    diverged? =
-      not is_nil(observed_normalized_state) and observed_normalized_state != normalized_state
-
-    %Event{
-      limit_event_id:
-        synthetic_limit_event_id(
-          request,
-          semantics_mode,
-          sample.sample_id,
-          interval.definition_activation_key
-        ),
-      mission_id: sample.mission_id,
-      spacecraft_id: sample.spacecraft_id,
-      point_id: sample.point_id || observable_id,
-      point_name: sample.point_name || observable_id,
-      source_sample_type: :telemetry_sample,
-      sample_id: sample.sample_id,
-      limit_definition_id: interval.limit_definition_id,
-      limit_definition_version: interval.limit_definition_version,
-      limit_set_name: interval.limit_set_name,
-      evaluated_value: sample.engineering_value,
-      limit_state: limit_state,
-      normalized_state: normalized_state,
-      violation: Evaluator.violation?(limit_state),
-      generation_time: sample.generation_time,
-      receipt_time: sample.receipt_time,
-      provenance:
-        recomputed_event_provenance(
-          semantics_mode,
-          interval,
-          sample,
-          observed_event,
-          diverged?
-        )
-    }
-  end
-
-  defp synthetic_limit_event_id(request, semantics_mode, sample_id, activation_key) do
-    [
-      "synthetic_limit_analysis",
-      request.request_id,
-      semantics_mode,
-      sample_id,
-      activation_key
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(":")
-  end
-
-  defp recomputed_event_provenance(semantics_mode, interval, sample, observed_event, diverged?) do
-    %{
-      "synthetic?" => true,
-      "semantics_mode" => semantics_mode,
-      "analysis_basis" => analysis_basis_for_semantics(semantics_mode),
-      "telemetry_sample_id" => sample.sample_id,
-      "definition_activation_key" => interval.definition_activation_key,
-      "limit_definition_lifecycle_event_id" => interval.limit_definition_lifecycle_event_id,
-      "active_from" => interval.active_from,
-      "active_to" => interval.active_to,
-      "observed_limit_event_id" => observed_event && observed_event.limit_event_id,
-      "observed_normalized_state" => observed_event && observed_event.normalized_state,
-      "observed_limit_state" => observed_event && observed_event.limit_state,
-      "limit_state_diverged?" => diverged?
-    }
-  end
-
-  defp limit_analysis_buckets(%PlannedSourceRequest{} = request, events) do
-    bucket_width_ms = limit_analysis_bucket_width_ms(request)
-
-    events
-    |> Enum.filter(&match?(%Event{receipt_time: %DateTime{}}, &1))
-    |> Enum.group_by(&bucket_group_key(&1, request, bucket_width_ms))
-    |> Enum.map(fn {{bucket_start, _definition_key}, bucket_events} ->
-      bucket_end =
-        DateTime.from_unix!(
-          DateTime.to_unix(bucket_start, :millisecond) + bucket_width_ms,
-          :millisecond
-        )
-
-      sorted_events =
-        Enum.sort_by(bucket_events, &DateTime.to_unix(&1.receipt_time, :millisecond))
-
-      worst_event = Enum.max_by(sorted_events, &Evaluator.severity(&1.limit_state))
-
-      %{
-        bucket_start: bucket_start,
-        bucket_end: bucket_end,
-        event_count: length(sorted_events),
-        limit_event_id: worst_event.limit_event_id,
-        sample_id: worst_event.sample_id,
-        limit_event_ids: sorted_events |> Enum.map(& &1.limit_event_id) |> Enum.reject(&is_nil/1),
-        sample_ids: sorted_events |> Enum.map(& &1.sample_id) |> Enum.reject(&is_nil/1),
-        limit_definition_id: worst_event.limit_definition_id,
-        limit_definition_version: worst_event.limit_definition_version,
-        limit_set_name: worst_event.limit_set_name,
-        normalized_state: worst_event.normalized_state,
-        limit_state: worst_event.limit_state,
-        violation: worst_event.violation,
-        observed_normalized_state:
-          Map.get(worst_event.provenance || %{}, "observed_normalized_state"),
-        limit_state_diverged: Map.get(worst_event.provenance || %{}, "limit_state_diverged?"),
-        limit_divergence_count: divergence_count(sorted_events)
-      }
-    end)
-    |> Enum.sort_by(&bucket_sort_key/1)
-  end
-
-  defp bucket_sort_key(bucket) do
-    {
-      DateTime.to_unix(bucket.bucket_start, :millisecond),
-      bucket.limit_definition_id || "",
-      bucket.limit_definition_version || 0,
-      bucket.limit_set_name || ""
-    }
-  end
-
-  defp bucket_group_key(%Event{} = event, %PlannedSourceRequest{} = request, bucket_width_ms) do
-    {
-      bucket_start(event.receipt_time, request, bucket_width_ms),
-      limit_definition_key(event)
-    }
-  end
-
-  defp limit_definition_key(%Event{} = event) do
-    {
-      event.limit_definition_id,
-      event.limit_definition_version,
-      event.limit_set_name,
-      Map.get(event.provenance || %{}, "definition_activation_key")
-    }
-  end
-
-  defp bucket_start(%DateTime{} = time, %PlannedSourceRequest{} = request, bucket_width_ms) do
-    origin_ms =
-      case first_context_value(request.time_context, [:from, :start, :start_time]) do
-        %DateTime{} = from_time -> DateTime.to_unix(from_time, :millisecond)
-        _other -> 0
-      end
-
-    time_ms = DateTime.to_unix(time, :millisecond)
-    bucket_ms = origin_ms + div(time_ms - origin_ms, bucket_width_ms) * bucket_width_ms
-    DateTime.from_unix!(bucket_ms, :millisecond)
-  end
-
-  defp limit_analysis_bucket_width_ms(%PlannedSourceRequest{} = request) do
-    case context_value(request.sampling, :bucket_width_ms) do
-      value when is_integer(value) and value > 0 ->
-        value
-
-      _other ->
-        derived_bucket_width_ms(request) || 60_000
-    end
-  end
-
-  defp derived_bucket_width_ms(%PlannedSourceRequest{} = request) do
-    with %DateTime{} = from_time <-
-           first_context_value(request.time_context, [:from, :start, :start_time]),
-         %DateTime{} = to_time <-
-           first_context_value(request.time_context, [:to, :end, :end_time]),
-         target_points when is_integer(target_points) and target_points > 0 <-
-           context_value(request.sampling, :target_points) do
-      diff_ms = max(DateTime.diff(to_time, from_time, :millisecond), 1)
-      max(div(diff_ms + target_points - 1, target_points), 1)
-    else
-      _other -> nil
-    end
-  end
-
-  defp recomputed_limit_warnings(request, observable_id, [], _selected_intervals, _events) do
-    [
-      warning(
-        request,
-        :missing_telemetry_samples,
-        :info,
-        "No telemetry samples are available for limit recomputation",
-        %{observable_id: observable_id, unresolved_capability: :telemetry_sample_read_path}
-      )
-    ]
-  end
-
-  defp recomputed_limit_warnings(request, observable_id, _samples, [], _events) do
-    [
-      warning(
-        request,
-        :unknown_limit_definition,
-        :warning,
-        "No complete target limit definition is available for recomputation",
-        %{
-          observable_id: observable_id,
-          requested_semantics_mode: limit_semantics_mode(request),
-          unresolved_capability: :target_limit_definition_intervals
-        }
-      )
-    ]
-  end
-
-  defp recomputed_limit_warnings(request, observable_id, samples, _selected_intervals, events) do
-    missing_samples = missing_recomputed_sample_ids(samples, events)
-
-    if missing_samples == [] do
-      []
-    else
-      [
-        warning(
-          request,
-          :incomplete_limit_evaluation,
-          :warning,
-          "Some telemetry samples have no active complete limit definition for recomputation",
-          %{
-            observable_id: observable_id,
-            requested_semantics_mode: limit_semantics_mode(request),
-            selected_limit_clock: limit_clock_policy(request),
-            missing_sample_ids: missing_samples,
-            unresolved_capability: :target_limit_definition_intervals
-          }
-        )
-      ]
-    end
-  end
-
-  defp missing_recomputed_sample_ids(samples, events) do
-    event_sample_ids =
-      events
-      |> Enum.map(& &1.sample_id)
-      |> MapSet.new()
-
-    samples
-    |> Enum.map(& &1.sample_id)
-    |> Enum.reject(&MapSet.member?(event_sample_ids, &1))
-  end
-
-  defp divergence_warnings(request, observable_id, events, :compare) do
-    divergent_events =
-      Enum.filter(events, fn %Event{provenance: provenance} ->
-        Map.get(provenance, "limit_state_diverged?") == true
-      end)
-
-    if divergent_events == [] do
-      []
-    else
-      [
-        warning(
-          request,
-          :limit_analysis_diverged,
-          :warning,
-          "Recomputed limit analysis differs from observed limit events",
-          %{
-            observable_id: observable_id,
-            divergent_sample_ids: Enum.map(divergent_events, & &1.sample_id),
-            divergent_count: length(divergent_events),
-            requested_semantics_mode: :compare
-          }
-        )
-      ]
-    end
-  end
-
-  defp divergence_warnings(_request, _observable_id, _events, _semantics_mode), do: []
 
   defp event_history_time_options(%PlannedSourceRequest{} = request) do
     requested_axis = time_axis(request)
@@ -1754,7 +1366,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
          observable_id,
          analysis
        ) do
-    buckets = limit_analysis_buckets(request, analysis.events)
+    buckets = RecomputedAnalysis.buckets(request, analysis.events)
     semantics_mode = analysis.semantics_mode
 
     %Frame{
@@ -1953,16 +1565,16 @@ defmodule Cadence.Dashboards.Sources.Limits do
       dataset: dataset(source_binding),
       sampling: :latest_state,
       semantics_mode: semantics_mode,
-      analysis_basis: analysis_basis_for_semantics(semantics_mode),
+      analysis_basis: RecomputedAnalysis.analysis_basis(semantics_mode),
       synthetic_limit_analysis?: true,
-      selected_limit_clock: limit_clock_policy(request),
+      selected_limit_clock: RecomputedAnalysis.limit_clock_policy(request),
       realm: realm(request, source_binding),
       data_source_id: data_source_id(request, source_binding),
       replay_run_id: replay_run_id(request),
       returned_points: event_count(event),
       source_sample_count: length(samples),
       observed_event_count: length(observed_events),
-      divergence_count: divergence_count(events),
+      divergence_count: RecomputedAnalysis.divergence_count(events),
       evidence:
         DataLinks.telemetry_sample_evidence_refs(samples) ++
           DataLinks.limit_definition_interval_evidence_refs(selected_intervals) ++
@@ -2073,16 +1685,16 @@ defmodule Cadence.Dashboards.Sources.Limits do
       dataset: dataset(source_binding),
       sampling: :event_history,
       semantics_mode: semantics_mode,
-      analysis_basis: analysis_basis_for_semantics(semantics_mode),
+      analysis_basis: RecomputedAnalysis.analysis_basis(semantics_mode),
       synthetic_limit_analysis?: true,
-      selected_limit_clock: limit_clock_policy(request),
+      selected_limit_clock: RecomputedAnalysis.limit_clock_policy(request),
       realm: realm(request, source_binding),
       data_source_id: data_source_id(request, source_binding),
       replay_run_id: replay_run_id(request),
       returned_events: length(events),
       source_sample_count: length(samples),
       observed_event_count: length(observed_events),
-      divergence_count: divergence_count(events),
+      divergence_count: RecomputedAnalysis.divergence_count(events),
       truncated?: length(events) >= event_limit(request),
       evidence:
         DataLinks.telemetry_sample_evidence_refs(samples) ++
@@ -2125,17 +1737,17 @@ defmodule Cadence.Dashboards.Sources.Limits do
       dataset: dataset(source_binding),
       sampling: :analysis_buckets,
       semantics_mode: semantics_mode,
-      analysis_basis: analysis_basis_for_semantics(semantics_mode),
-      selected_limit_clock: limit_clock_policy(request),
+      analysis_basis: RecomputedAnalysis.analysis_basis(semantics_mode),
+      selected_limit_clock: RecomputedAnalysis.limit_clock_policy(request),
       realm: realm(request, source_binding),
       data_source_id: data_source_id(request, source_binding),
       replay_run_id: replay_run_id(request),
-      bucket_width_ms: limit_analysis_bucket_width_ms(request),
+      bucket_width_ms: RecomputedAnalysis.bucket_width_ms(request),
       returned_buckets: length(buckets),
       returned_events: length(events),
       source_sample_count: length(samples),
       observed_event_count: length(observed_events),
-      divergence_count: divergence_count(events),
+      divergence_count: RecomputedAnalysis.divergence_count(events),
       truncated?: length(events) >= event_limit(request),
       evidence:
         DataLinks.telemetry_sample_evidence_refs(samples) ++
@@ -2160,12 +1772,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
 
   defp maybe_put_synthetic_limit_analysis(meta, _semantics_mode) do
     Map.put(meta, :synthetic_limit_analysis?, true)
-  end
-
-  defp divergence_count(events) do
-    Enum.count(events, fn %Event{provenance: provenance} ->
-      Map.get(provenance, "limit_state_diverged?") == true
-    end)
   end
 
   defp definition_interval_meta(request, source_binding, observable_id, intervals, warnings) do
@@ -2246,7 +1852,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
          mission_id,
          opts
        ) do
-    case limit_semantics_mode(request) do
+    case RecomputedAnalysis.semantics_mode(request) do
       :observed -> watermark(request, source_binding, organization_id, mission_id, opts)
       _semantics_mode -> unknown_watermark(request, source_binding)
     end
@@ -2362,7 +1968,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
       replay_run_id: replay_run_id(request),
       data_source_id: data_source_id(request, source_binding),
       dataset: dataset(source_binding),
-      semantics_mode: limit_semantics_mode(request),
+      semantics_mode: RecomputedAnalysis.semantics_mode(request),
       spacecraft_id: spacecraft_id(request.scope_context)
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
@@ -2480,22 +2086,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
 
   defp data_source_id(request, _source_binding),
     do: context_value(request.data_context, :data_source_id)
-
-  defp limit_semantics_mode(%PlannedSourceRequest{} = request) do
-    mode =
-      context_value(request.limit_context, :semantics_mode) ||
-        context_value(request.data_context, :semantics_mode)
-
-    normalize_limit_semantics_mode(mode)
-  end
-
-  defp normalize_limit_semantics_mode(nil), do: :observed
-  defp normalize_limit_semantics_mode("observed"), do: :observed
-  defp normalize_limit_semantics_mode("current"), do: :current
-  defp normalize_limit_semantics_mode("recomputed"), do: :recomputed
-  defp normalize_limit_semantics_mode("compare"), do: :compare
-  defp normalize_limit_semantics_mode(mode) when is_atom(mode), do: mode
-  defp normalize_limit_semantics_mode(mode), do: mode
 
   defp dataset(%{dataset: dataset}), do: dataset
   defp dataset(_source_binding), do: nil
