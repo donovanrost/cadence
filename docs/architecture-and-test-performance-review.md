@@ -791,6 +791,10 @@ registry loading in the parent. Extracting artifact validation and parsing,
 compiled snapshot and runtime-artifact persistence, and result-document
 summarization from the 1,626-line Cadence YAML database importer reduced the
 count to 15 while keeping telemetry and command model conversion in the parent.
+Extracting dedicated TSDB lifecycle transitions, active source probing,
+credential resolution, health recording, and capability materialization from
+the 1,683-line dashboard data-source context reduced the count to 14 while
+keeping the public persistence API and durable writes on the context facade.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
