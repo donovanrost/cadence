@@ -15,7 +15,7 @@ defmodule CadenceWeb.ServiceIdentityController do
            ) do
       service_identities =
         organization_id
-        |> Cadence.list_service_identities(mission_id: Map.get(params, "mission_id"))
+        |> Cadence.Auth.list_service_identities(mission_id: Map.get(params, "mission_id"))
         |> Enum.map(&ControlPlaneJSON.service_identity/1)
 
       json(conn, %{data: service_identities})
@@ -35,7 +35,7 @@ defmodule CadenceWeb.ServiceIdentityController do
          {:ok, %ServiceIdentity{} = service_identity} <-
            ControlPlaneParams.service_identity(organization_id, service_identity_params),
          {:ok, %{service_identity: issued_service_identity, api_token: api_token}} <-
-           Cadence.issue_service_identity(service_identity) do
+           Cadence.Auth.issue_service_identity(service_identity) do
       conn
       |> put_status(:created)
       |> json(%{

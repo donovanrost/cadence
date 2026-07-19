@@ -1463,6 +1463,14 @@ callers directly to their owning `Cadence.Comms` stores reduced `Cadence` from
 65 to 55 files. Existing Comms routes and authentication pipelines are
 unchanged; production source-size pressure remains 4 and dependency ratchets
 are unchanged.
+Retiring the three remaining service-identity delegates from the root facade
+and moving the control-plane controller and fleet-planning policy LiveView
+directly to `Cadence.Auth` reduced `Cadence` from 3,610 to 3,589 lines and
+reduced production web callers of the root facade from 55 to 54 files. The
+service-identity API remains in the authenticated API pipeline, and the
+fleet-planning policy route remains in the authenticated `:ops` LiveView
+session; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

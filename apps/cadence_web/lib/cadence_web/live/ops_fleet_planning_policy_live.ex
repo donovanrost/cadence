@@ -473,7 +473,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
 
     service_identities =
       scope.organization_id
-      |> Cadence.list_service_identities(lifecycle_state: :active)
+      |> Cadence.Auth.list_service_identities(lifecycle_state: :active)
       |> Enum.filter(&(&1.mission_id == mission.mission_id))
 
     policy_form = to_form(policy_form_params(version), as: :policy)

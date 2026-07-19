@@ -15,9 +15,7 @@ defmodule Cadence do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.ApplicationDispatch.DispatchDecision
   alias Cadence.ApplicationDispatch.Dispatcher
-  alias Cadence.Auth
   alias Cadence.Auth.Scope, as: CurrentScope
-  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Database, ImporterDescriptor, ImportRun, Revision}
   alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
@@ -126,12 +124,6 @@ defmodule Cadence do
   def list_dashboard_data_realms(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
     DashboardDataSources.list_data_realms(organization_id, mission_id)
-  end
-
-  @spec issue_service_identity(ServiceIdentity.t()) ::
-          {:ok, %{service_identity: ServiceIdentity.t(), api_token: binary()}} | {:error, term()}
-  def issue_service_identity(%ServiceIdentity{} = service_identity) do
-    Auth.issue_service_identity(service_identity)
   end
 
   @spec list_catalog_importers(keyword()) :: [
@@ -297,19 +289,6 @@ defmodule Cadence do
       )
       when is_list(opts) do
     CommandCatalogCompiler.compile(command_catalog_snapshot, opts)
-  end
-
-  @spec fetch_service_identity(binary(), binary()) ::
-          {:ok, ServiceIdentity.t()} | {:error, term()}
-  def fetch_service_identity(organization_id, service_identity_id)
-      when is_binary(organization_id) and is_binary(service_identity_id) do
-    Auth.fetch_service_identity(organization_id, service_identity_id)
-  end
-
-  @spec list_service_identities(binary(), keyword()) :: [ServiceIdentity.t()]
-  def list_service_identities(organization_id, opts \\ [])
-      when is_binary(organization_id) and is_list(opts) do
-    Auth.list_service_identities(organization_id, opts)
   end
 
   @spec process_telemetry_ingress(RawEvidence.t(), BindingSet.t()) ::
