@@ -238,6 +238,293 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
            } = json_response(history_conn, 200)
   end
 
+  defp assert_command_stage_queue_workflow(context) do
+    %{
+      conn: conn,
+      api_token: api_token,
+      organization_id: organization_id,
+      mission_id: mission_id,
+      command_snapshot_id: command_snapshot_id,
+      noop_command_id: noop_command_id,
+      set_mode_command_id: set_mode_command_id
+    } = context
+
+    command_stage_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages", %{
+        "command_stage" => %{
+          "command_stage_id" => "command-stage-alpha",
+          "stage_name" => "Pass Review",
+          "description" => "Review before uplink",
+          "visibility" => "shared"
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "command_stage_id" => "command-stage-alpha",
+               "lifecycle_state" => "draft",
+               "visibility" => "shared"
+             }
+           } = json_response(command_stage_conn, 201)
+
+    updated_command_stage_conn =
+      conn
+      |> authorize(api_token)
+      |> patch(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha",
+        %{
+          "command_stage" => %{
+            "lifecycle_state" => "in_review"
+          }
+        }
+      )
+
+    assert %{"data" => %{"lifecycle_state" => "in_review"}} =
+             json_response(updated_command_stage_conn, 200)
+
+    staged_command_item_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/items",
+        %{
+          "staged_command_item" => %{
+            "staged_command_item_id" => "staged-command-item-alpha",
+            "source_endpoint_ref" => "source-endpoint-commanding-001",
+            "command_snapshot_id" => command_snapshot_id,
+            "command_id" => set_mode_command_id,
+            "argument_values" => %{"mode" => 2},
+            "priority" => 2,
+            "item_order" => 0,
+            "notes" => "Initial draft"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "staged_command_item_id" => "staged-command-item-alpha",
+               "lifecycle_state" => "draft",
+               "argument_values" => %{"mode" => 2}
+             }
+           } = json_response(staged_command_item_conn, 201)
+
+    updated_staged_command_item_conn =
+      conn
+      |> authorize(api_token)
+      |> patch(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/staged_command_items/staged-command-item-alpha",
+        %{
+          "staged_command_item" => %{
+            "argument_values" => %{"mode" => 3},
+            "notes" => "Reviewed by FDO"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "argument_values" => %{"mode" => 3},
+               "notes" => "Reviewed by FDO"
+             }
+           } = json_response(updated_staged_command_item_conn, 200)
+
+    staged_command_items_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/items"
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "staged_command_item_id" => "staged-command-item-alpha",
+                 "argument_values" => %{"mode" => 3}
+               }
+             ]
+           } = json_response(staged_command_items_conn, 200)
+
+    submitted_command_requests_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/submit",
+        %{
+          "submission" => %{
+            "staged_command_item_ids" => ["staged-command-item-alpha"],
+            "requested_by" => %{"user_id" => "requester-1"}
+          }
+        }
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "command_request_id" => staged_command_request_id,
+                 "lifecycle_state" => "approval_pending",
+                 "source_command_stage_id" => "command-stage-alpha",
+                 "source_staged_command_item_id" => "staged-command-item-alpha"
+               }
+             ]
+           } = json_response(submitted_command_requests_conn, 200)
+
+    command_requests_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests",
+        %{"command_stage_id" => "command-stage-alpha"}
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "command_request_id" => ^staged_command_request_id,
+                 "lifecycle_state" => "approval_pending"
+               }
+             ]
+           } = json_response(command_requests_conn, 200)
+
+    approved_command_request_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/approve",
+        %{
+          "approval" => %{
+            "decided_by" => %{"user_id" => "reviewer-1"},
+            "reason" => "Reviewed for uplink"
+          }
+        }
+      )
+
+    approved_command_request_response = json_response(approved_command_request_conn, 200)
+
+    assert %{
+             "data" => %{
+               "approval" => %{
+                 "command_approval_id" => command_approval_id,
+                 "command_request_id" => ^staged_command_request_id,
+                 "decision" => "approved",
+                 "reason" => "Reviewed for uplink"
+               },
+               "command_request" => %{
+                 "command_request_id" => ^staged_command_request_id,
+                 "lifecycle_state" => "approved"
+               }
+             }
+           } = approved_command_request_response
+
+    command_approvals_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
+        %{"command_request_id" => staged_command_request_id}
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "command_approval_id" => ^command_approval_id,
+                 "decision" => "approved"
+               }
+             ]
+           } = json_response(command_approvals_conn, 200)
+
+    command_queue_entry_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/enqueue",
+        %{
+          "queue_entry" => %{
+            "enqueued_by" => %{"user_id" => "queue-operator"}
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "queue_entry" => %{
+                 "command_queue_entry_id" => staged_queue_entry_id,
+                 "queue_lane_key" => "source-endpoint-commanding-001",
+                 "priority" => 2
+               },
+               "command_request" => %{
+                 "command_request_id" => ^staged_command_request_id,
+                 "lifecycle_state" => "queued"
+               }
+             }
+           } = json_response(command_queue_entry_conn, 200)
+
+    direct_command_request_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests", %{
+        "command_request" => %{
+          "command_request_id" => "command-request-noop",
+          "source_endpoint_ref" => "source-endpoint-commanding-001",
+          "command_snapshot_id" => command_snapshot_id,
+          "command_id" => noop_command_id,
+          "priority" => 1,
+          "requested_by" => %{"user_id" => "requester-2"}
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "command_request_id" => "command-request-noop",
+               "lifecycle_state" => "validated"
+             }
+           } = json_response(direct_command_request_conn, 201)
+
+    noop_queue_entry_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/command-request-noop/enqueue",
+        %{
+          "queue_entry" => %{
+            "enqueued_by" => %{"user_id" => "queue-operator"}
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "queue_entry" => %{
+                 "command_queue_entry_id" => noop_queue_entry_id,
+                 "priority" => 1
+               }
+             }
+           } = json_response(noop_queue_entry_conn, 200)
+
+    command_queue_entries_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries",
+        %{"queue_lane_key" => "source-endpoint-commanding-001"}
+      )
+
+    assert %{
+             "data" => [
+               %{"command_queue_entry_id" => ^noop_queue_entry_id, "priority" => 1},
+               %{"command_queue_entry_id" => ^staged_queue_entry_id, "priority" => 2}
+             ]
+           } = json_response(command_queue_entries_conn, 200)
+
+    %{
+      noop_queue_entry_id: noop_queue_entry_id,
+      staged_command_request_id: staged_command_request_id,
+      staged_queue_entry_id: staged_queue_entry_id
+    }
+  end
+
   test "authenticated mission API manages catalog artifacts and import runs", %{conn: conn} do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
@@ -834,274 +1121,20 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     noop_command_id = fetch_command_id(command_snapshot, "NOOP")
     set_mode_command_id = fetch_command_id(command_snapshot, "SET_MODE")
 
-    command_stage_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages", %{
-        "command_stage" => %{
-          "command_stage_id" => "command-stage-alpha",
-          "stage_name" => "Pass Review",
-          "description" => "Review before uplink",
-          "visibility" => "shared"
-        }
+    %{
+      noop_queue_entry_id: noop_queue_entry_id,
+      staged_command_request_id: staged_command_request_id,
+      staged_queue_entry_id: staged_queue_entry_id
+    } =
+      assert_command_stage_queue_workflow(%{
+        conn: conn,
+        api_token: api_token,
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_snapshot_id: command_snapshot_id,
+        noop_command_id: noop_command_id,
+        set_mode_command_id: set_mode_command_id
       })
-
-    assert %{
-             "data" => %{
-               "command_stage_id" => "command-stage-alpha",
-               "lifecycle_state" => "draft",
-               "visibility" => "shared"
-             }
-           } = json_response(command_stage_conn, 201)
-
-    updated_command_stage_conn =
-      conn
-      |> authorize(api_token)
-      |> patch(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha",
-        %{
-          "command_stage" => %{
-            "lifecycle_state" => "in_review"
-          }
-        }
-      )
-
-    assert %{"data" => %{"lifecycle_state" => "in_review"}} =
-             json_response(updated_command_stage_conn, 200)
-
-    staged_command_item_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/items",
-        %{
-          "staged_command_item" => %{
-            "staged_command_item_id" => "staged-command-item-alpha",
-            "source_endpoint_ref" => "source-endpoint-commanding-001",
-            "command_snapshot_id" => command_snapshot_id,
-            "command_id" => set_mode_command_id,
-            "argument_values" => %{"mode" => 2},
-            "priority" => 2,
-            "item_order" => 0,
-            "notes" => "Initial draft"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "staged_command_item_id" => "staged-command-item-alpha",
-               "lifecycle_state" => "draft",
-               "argument_values" => %{"mode" => 2}
-             }
-           } = json_response(staged_command_item_conn, 201)
-
-    updated_staged_command_item_conn =
-      conn
-      |> authorize(api_token)
-      |> patch(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/staged_command_items/staged-command-item-alpha",
-        %{
-          "staged_command_item" => %{
-            "argument_values" => %{"mode" => 3},
-            "notes" => "Reviewed by FDO"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "argument_values" => %{"mode" => 3},
-               "notes" => "Reviewed by FDO"
-             }
-           } = json_response(updated_staged_command_item_conn, 200)
-
-    staged_command_items_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/items"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "staged_command_item_id" => "staged-command-item-alpha",
-                 "argument_values" => %{"mode" => 3}
-               }
-             ]
-           } = json_response(staged_command_items_conn, 200)
-
-    submitted_command_requests_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/submit",
-        %{
-          "submission" => %{
-            "staged_command_item_ids" => ["staged-command-item-alpha"],
-            "requested_by" => %{"user_id" => "requester-1"}
-          }
-        }
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_request_id" => staged_command_request_id,
-                 "lifecycle_state" => "approval_pending",
-                 "source_command_stage_id" => "command-stage-alpha",
-                 "source_staged_command_item_id" => "staged-command-item-alpha"
-               }
-             ]
-           } = json_response(submitted_command_requests_conn, 200)
-
-    command_requests_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests",
-        %{"command_stage_id" => "command-stage-alpha"}
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "approval_pending"
-               }
-             ]
-           } = json_response(command_requests_conn, 200)
-
-    approved_command_request_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/approve",
-        %{
-          "approval" => %{
-            "decided_by" => %{"user_id" => "reviewer-1"},
-            "reason" => "Reviewed for uplink"
-          }
-        }
-      )
-
-    approved_command_request_response = json_response(approved_command_request_conn, 200)
-
-    assert %{
-             "data" => %{
-               "approval" => %{
-                 "command_approval_id" => command_approval_id,
-                 "command_request_id" => ^staged_command_request_id,
-                 "decision" => "approved",
-                 "reason" => "Reviewed for uplink"
-               },
-               "command_request" => %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "approved"
-               }
-             }
-           } = approved_command_request_response
-
-    command_approvals_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
-        %{"command_request_id" => staged_command_request_id}
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_approval_id" => ^command_approval_id,
-                 "decision" => "approved"
-               }
-             ]
-           } = json_response(command_approvals_conn, 200)
-
-    command_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/enqueue",
-        %{
-          "queue_entry" => %{
-            "enqueued_by" => %{"user_id" => "queue-operator"}
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "queue_entry" => %{
-                 "command_queue_entry_id" => staged_queue_entry_id,
-                 "queue_lane_key" => "source-endpoint-commanding-001",
-                 "priority" => 2
-               },
-               "command_request" => %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "queued"
-               }
-             }
-           } = json_response(command_queue_entry_conn, 200)
-
-    direct_command_request_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests", %{
-        "command_request" => %{
-          "command_request_id" => "command-request-noop",
-          "source_endpoint_ref" => "source-endpoint-commanding-001",
-          "command_snapshot_id" => command_snapshot_id,
-          "command_id" => noop_command_id,
-          "priority" => 1,
-          "requested_by" => %{"user_id" => "requester-2"}
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "command_request_id" => "command-request-noop",
-               "lifecycle_state" => "validated"
-             }
-           } = json_response(direct_command_request_conn, 201)
-
-    noop_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/command-request-noop/enqueue",
-        %{
-          "queue_entry" => %{
-            "enqueued_by" => %{"user_id" => "queue-operator"}
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "queue_entry" => %{
-                 "command_queue_entry_id" => noop_queue_entry_id,
-                 "priority" => 1
-               }
-             }
-           } = json_response(noop_queue_entry_conn, 200)
-
-    command_queue_entries_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries",
-        %{"queue_lane_key" => "source-endpoint-commanding-001"}
-      )
-
-    assert %{
-             "data" => [
-               %{"command_queue_entry_id" => ^noop_queue_entry_id, "priority" => 1},
-               %{"command_queue_entry_id" => ^staged_queue_entry_id, "priority" => 2}
-             ]
-           } = json_response(command_queue_entries_conn, 200)
 
     realized_contact =
       persist_active_uplink_contact_for_command_release(
