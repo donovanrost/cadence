@@ -746,7 +746,10 @@ test-function counts. Extracting evidence-panel metadata parsing from the
 1,052-line dashboard data-link selection module reduced the production-file
 pressure again to 29. Extracting provider-ingress tracing, telemetry emission,
 and error logging from the 1,165-line executor reduced that count to 28 while
-keeping queue ownership and processing order in the GenServer.
+keeping queue ownership and processing order in the GenServer. Extracting
+provider, frame, scheduling, and parallel-mode configuration from the
+1,165-line simulator coordinator reduced the count to 27 while leaving
+generation and ordered emission coordinator-owned.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

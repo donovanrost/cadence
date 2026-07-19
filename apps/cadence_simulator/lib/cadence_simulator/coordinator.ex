@@ -22,6 +22,7 @@ defmodule CadenceSimulator.Coordinator do
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
+  alias CadenceSimulator.Coordinator.Configuration
 
   alias CadenceSimulator.{
     GeneratorWorker,
@@ -32,15 +33,10 @@ defmodule CadenceSimulator.Coordinator do
     TMFramePlan
   }
 
-  alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
-
   @default_rate_hz 1.0
   @default_target_id "SIM-1"
-  @default_generator_count System.schedulers_online()
   @default_send_batch_timeout 10
   @default_send_batch_size 65_536
-  @default_metrics_sample_rate 100
-  @default_in_flight_multiplier 4
   @default_dispatch_batch_floor 4
   @default_dispatch_batch_ceiling 32
 
@@ -111,28 +107,31 @@ defmodule CadenceSimulator.Coordinator do
     target_id = Keyword.get(opts, :target_id, @default_target_id)
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
-    frame = normalize_frame(Keyword.get(opts, :frame))
+    frame = Configuration.normalize_frame(Keyword.get(opts, :frame))
     requested_parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
-    {provider_module, provider_config} = determine_provider(opts)
+    {provider_module, provider_config} = Configuration.determine_provider(opts)
     send_batch_timeout = Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout)
     send_batch_size = Keyword.get(opts, :send_batch_size, @default_send_batch_size)
 
-    generator_count = normalize_generator_count(opts[:generator_count])
+    generator_count = Configuration.normalize_generator_count(opts[:generator_count])
 
     with {:ok, provider_state} <- provider_module.init(provider_config),
-         {:ok, encoder} <- require_encoder(opts),
-         {:ok, frame_state} <- init_frame_state(frame) do
+         {:ok, encoder} <- Configuration.require_encoder(opts),
+         {:ok, frame_state} <- Configuration.init_frame_state(frame) do
       parallel_mode =
-        normalize_parallel_mode(
+        Configuration.normalize_parallel_mode(
           requested_parallel_mode,
           provider_module,
           provider_config,
           generator_count
         )
 
-      parallel_delivery_mode = parallel_delivery_mode(parallel_mode, frame, opts)
+      parallel_delivery_mode = Configuration.parallel_delivery_mode(parallel_mode, frame, opts)
       metrics_id = make_ref()
-      metrics_sample_rate = normalize_metrics_sample_rate(opts[:metrics_sample_rate])
+
+      metrics_sample_rate =
+        Configuration.normalize_metrics_sample_rate(opts[:metrics_sample_rate])
+
       :ok = SimulatorMetrics.init(metrics_id)
 
       send_buffer_opts =
@@ -149,14 +148,14 @@ defmodule CadenceSimulator.Coordinator do
 
       {:ok, send_buffer} = SendBuffer.start_link(send_buffer_opts)
       sequence_allocator = SequenceAllocator.new(PacketEncoder.apids(encoder))
-      {interval_ms, steps_per_tick} = schedule_config(rate_hz)
+      {interval_ms, steps_per_tick} = Configuration.schedule_config(rate_hz)
 
       base_state =
         %__MODULE__{
           target_id: target_id,
           provider_module: provider_module,
           provider_state: provider_state,
-          packet_value_provider?: packet_value_provider?(provider_module),
+          packet_value_provider?: Configuration.packet_value_provider?(provider_module),
           encoder: encoder,
           sequence_allocator: sequence_allocator,
           output: output,
@@ -297,7 +296,7 @@ defmodule CadenceSimulator.Coordinator do
     if rate_hz > 0 do
       if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
-      {interval_ms, steps_per_tick} = schedule_config(rate_hz * 1.0)
+      {interval_ms, steps_per_tick} = Configuration.schedule_config(rate_hz * 1.0)
       timer_ref = Process.send_after(self(), :generate, interval_ms)
 
       {:reply, :ok,
@@ -394,15 +393,23 @@ defmodule CadenceSimulator.Coordinator do
          generator_count
        ) do
     max_in_flight_steps =
-      normalize_max_in_flight_steps(opts, generator_count, state.steps_per_tick)
+      Configuration.normalize_max_in_flight_steps(opts, generator_count, state.steps_per_tick)
 
     {send_buffer_backpressure_mode, max_send_buffer_queue, max_send_buffer_backlog_bytes} =
-      normalize_send_buffer_backpressure(opts, generator_count, state.send_batch_size)
+      Configuration.normalize_send_buffer_backpressure(
+        opts,
+        generator_count,
+        state.send_batch_size
+      )
 
-    dispatch_batch_floor = normalize_dispatch_batch_floor(opts)
+    dispatch_batch_floor = Configuration.normalize_dispatch_batch_floor(opts)
 
     dispatch_batch_ceiling =
-      normalize_dispatch_batch_ceiling(opts, dispatch_batch_floor, state.steps_per_tick)
+      Configuration.normalize_dispatch_batch_ceiling(
+        opts,
+        dispatch_batch_floor,
+        state.steps_per_tick
+      )
 
     generator_pool =
       for worker_id <- 0..(generator_count - 1) do
@@ -606,128 +613,6 @@ defmodule CadenceSimulator.Coordinator do
       )
 
     {framed_output, %{state | frame_state: next_frame_state}}
-  end
-
-  defp determine_provider(opts) do
-    cond do
-      scenario_path = Keyword.get(opts, :scenario_path) ->
-        {ScenarioProvider, %{scenario_path: scenario_path}}
-
-      scenario = Keyword.get(opts, :scenario) ->
-        {ScenarioProvider, %{scenario: scenario}}
-
-      provider = Keyword.get(opts, :provider) ->
-        {provider, provider_config(provider, opts)}
-
-      true ->
-        {BasicDynamics, Keyword.get(opts, :provider_config, %{})}
-    end
-  end
-
-  defp provider_config(DatabaseDynamics, opts) do
-    %{
-      definitions_path: Keyword.get(opts, :definitions_path),
-      definitions_content: Keyword.get(opts, :definitions_content),
-      noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)
-    }
-  end
-
-  defp provider_config(ScenarioProvider, opts) do
-    cond do
-      scenario_path = Keyword.get(opts, :scenario_path) ->
-        %{scenario_path: scenario_path}
-
-      scenario = Keyword.get(opts, :scenario) ->
-        %{scenario: scenario}
-
-      true ->
-        Keyword.get(opts, :provider_config, %{})
-    end
-  end
-
-  defp provider_config(_provider, opts), do: Keyword.get(opts, :provider_config, %{})
-
-  defp require_encoder(opts) do
-    cond do
-      definitions_content = Keyword.get(opts, :definitions_content) ->
-        PacketEncoder.load_string(definitions_content)
-
-      definitions_path = Keyword.get(opts, :definitions_path) ->
-        PacketEncoder.load(definitions_path)
-
-      true ->
-        {:error, :missing_definitions}
-    end
-  end
-
-  defp normalize_frame(nil), do: nil
-
-  defp normalize_frame(%{format: :tm, frame_size: frame_size} = frame)
-       when is_integer(frame_size) do
-    %{
-      format: :tm,
-      frame_size: frame_size,
-      scid: Map.get(frame, :scid, 0),
-      vcid: Map.get(frame, :vcid, 0)
-    }
-  end
-
-  defp normalize_frame(%{"format" => "tm", "frame_size" => frame_size} = frame)
-       when is_integer(frame_size) do
-    %{
-      format: :tm,
-      frame_size: frame_size,
-      scid: Map.get(frame, "scid", 0),
-      vcid: Map.get(frame, "vcid", 0)
-    }
-  end
-
-  defp normalize_frame(other) do
-    raise ArgumentError, "unsupported simulator frame config: #{inspect(other)}"
-  end
-
-  defp init_frame_state(nil), do: {:ok, nil}
-  defp init_frame_state(%{format: :tm}), do: Segmentation.init([])
-
-  defp normalize_parallel_mode(:parallel, _provider_module, _provider_config, generator_count)
-       when generator_count <= 1 do
-    :sequential
-  end
-
-  defp normalize_parallel_mode(:parallel, provider_module, provider_config, _generator_count) do
-    if provider_parallel_safe?(provider_module, provider_config) do
-      :parallel
-    else
-      Logger.warning(
-        "Provider #{inspect(provider_module)} is not parallel-safe; falling back to sequential mode"
-      )
-
-      :sequential
-    end
-  end
-
-  defp normalize_parallel_mode(mode, _provider_module, _provider_config, _generator_count),
-    do: mode
-
-  defp parallel_delivery_mode(:parallel, %{format: :tm}, opts) do
-    if Keyword.get(opts, :tm_parallel_framing, false),
-      do: :ordered_frame_plan,
-      else: :ordered_framer
-  end
-
-  defp parallel_delivery_mode(:parallel, _frame, _opts), do: :send_buffer
-  defp parallel_delivery_mode(_mode, _frame, _opts), do: nil
-
-  defp packet_value_provider?(provider_module) do
-    function_exported?(provider_module, :generate_packet_values, 2)
-  end
-
-  defp provider_parallel_safe?(provider_module, provider_config) do
-    if function_exported?(provider_module, :parallel_safe?, 1) do
-      provider_module.parallel_safe?(provider_config)
-    else
-      provider_module != ScenarioProvider
-    end
   end
 
   defp dispatch_parallel_batches(%{parallel_mode: :parallel} = state) do
@@ -1099,63 +984,6 @@ defmodule CadenceSimulator.Coordinator do
       }
     else
       state
-    end
-  end
-
-  defp schedule_config(rate_hz) when rate_hz <= 1000 do
-    {max(1, trunc(1000 / rate_hz)), 1}
-  end
-
-  defp schedule_config(rate_hz), do: {1, ceil(rate_hz / 1000)}
-
-  defp normalize_generator_count(nil), do: @default_generator_count
-  defp normalize_generator_count(count) when is_integer(count) and count > 0, do: count
-  defp normalize_generator_count(_count), do: 1
-
-  defp normalize_metrics_sample_rate(nil), do: @default_metrics_sample_rate
-  defp normalize_metrics_sample_rate(rate) when is_integer(rate) and rate >= 0, do: rate
-  defp normalize_metrics_sample_rate(_rate), do: @default_metrics_sample_rate
-
-  defp normalize_max_in_flight_steps(opts, generator_count, steps_per_tick) do
-    case Keyword.get(opts, :max_in_flight_steps) do
-      value when is_integer(value) and value > 0 ->
-        value
-
-      _ ->
-        max(steps_per_tick * @default_in_flight_multiplier, generator_count * 2)
-    end
-  end
-
-  defp normalize_send_buffer_backpressure(opts, generator_count, send_batch_size) do
-    case Keyword.get(opts, :max_send_buffer_queue) do
-      value when is_integer(value) and value > 0 ->
-        {:queue, value, nil}
-
-      _ ->
-        max_backlog_bytes =
-          max(
-            send_batch_size * max(generator_count, 1),
-            send_batch_size * @default_in_flight_multiplier
-          )
-
-        {:bytes, nil, max_backlog_bytes}
-    end
-  end
-
-  defp normalize_dispatch_batch_floor(opts) do
-    case Keyword.get(opts, :dispatch_batch_floor) do
-      value when is_integer(value) and value > 0 -> value
-      _ -> @default_dispatch_batch_floor
-    end
-  end
-
-  defp normalize_dispatch_batch_ceiling(opts, dispatch_batch_floor, steps_per_tick) do
-    case Keyword.get(opts, :dispatch_batch_ceiling) do
-      value when is_integer(value) and value >= dispatch_batch_floor ->
-        value
-
-      _ ->
-        max(@default_dispatch_batch_ceiling, max(dispatch_batch_floor, steps_per_tick * 2))
     end
   end
 
