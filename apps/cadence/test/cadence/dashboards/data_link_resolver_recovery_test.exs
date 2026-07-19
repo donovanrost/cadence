@@ -5,6 +5,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
 
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Dashboards.{DataLink, DataLinkInspector, DataLinkResolver}
+  alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Telemetry.Storage
 
   test "resolves late-data policy lifecycle source relationships" do
@@ -441,7 +442,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
                reason: "weather"
              )
 
-    [mission_event] = Cadence.list_mission_events(organization_id, mission_id, order: :asc)
+    [mission_event] = MissionEventReads.list_for_mission(organization_id, mission_id, order: :asc)
     persist_mission_scope("org-resolver-events-scope-b", "mission-resolver-events-scope-b")
 
     assert {:error, event_inspector} =

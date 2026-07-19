@@ -13,7 +13,7 @@ defmodule CadenceWeb.ContactActionController do
              mission_id
            ) do
       contact_actions =
-        Cadence.list_contact_actions(
+        Cadence.Contacts.list_contact_actions(
           organization_id,
           mission_id,
           scheduled_contact_id: string_param(params, "scheduled_contact_id"),

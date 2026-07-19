@@ -8,6 +8,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalEventsTest do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
   alias Cadence.Projections.MissionEvents
+  alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Repo
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord}
 
@@ -37,7 +38,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalEventsTest do
                reason: "weather"
              )
 
-    [mission_event] = Cadence.list_mission_events(organization_id, mission_id, order: :asc)
+    [mission_event] = MissionEventReads.list_for_mission(organization_id, mission_id, order: :asc)
 
     mission_event_link = %DataLink{
       label: "Mission event",
@@ -133,7 +134,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalEventsTest do
     assert {:ok, 1} =
              MissionEvents.persist_entries(Repo, MissionEvents.project_many([persisted_event]))
 
-    [mission_event] = Cadence.list_mission_events(organization_id, mission_id, order: :asc)
+    [mission_event] = MissionEventReads.list_for_mission(organization_id, mission_id, order: :asc)
 
     operational_event_link = %DataLink{
       label: "Operational event",

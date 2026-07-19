@@ -3,6 +3,7 @@ defmodule CadenceWeb.MissionEventController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -14,7 +15,7 @@ defmodule CadenceWeb.MissionEventController do
            ),
          {:ok, opts} <- ControlPlaneParams.mission_event_filters(params) do
       mission_events =
-        Cadence.list_mission_events(organization_id, mission_id, opts)
+        MissionEventReads.list_for_mission(organization_id, mission_id, opts)
         |> Enum.map(&ControlPlaneJSON.mission_event(organization_id, &1))
 
       json(conn, %{data: mission_events})

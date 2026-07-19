@@ -1591,6 +1591,14 @@ Contact-plan routes remain in the authenticated `:ops` LiveView session, and
 direct planning, submission, decision, and execution calls continue passing
 `current_scope`; production source-size pressure remains 4 and dependency
 ratchets are unchanged.
+Retiring the four contact-action and mission-event listing clauses from the
+root facade moved 18 production and test call sites directly to
+`Cadence.Contacts` and `Cadence.Reads.MissionEvents`. This reduced `Cadence`
+from 1,766 to 1,738 lines and reduced production web callers of the root facade
+from 19 to 17 files. Contact-action and mission-event controller routes remain
+in the authenticated API pipeline, and controller mission authorization still
+runs before the owner reads; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

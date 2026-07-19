@@ -16,11 +16,6 @@ defmodule Cadence do
   alias Cadence.ApplicationDispatch.Dispatcher
   alias Cadence.Dashboards
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
-
-  alias Cadence.Contacts, as: ContactsService
-
-  alias Cadence.Contacts.ContactAction
-
   alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Governance
@@ -44,7 +39,6 @@ defmodule Cadence do
   alias Cadence.Protocol.SpacePacketDecoder
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   alias Cadence.Reads.Limits, as: LimitReads
-  alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   alias Cadence.Reads.Replay, as: ReplayReads
   alias Cadence.Reads.Telemetry, as: TelemetryReads
@@ -282,28 +276,6 @@ defmodule Cadence do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  @spec list_contact_actions(binary(), keyword()) :: [ContactAction.t()]
-  def list_contact_actions(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    ContactsService.list_contact_actions(mission_id, opts)
-  end
-
-  @spec list_contact_actions(binary(), binary(), keyword()) :: [ContactAction.t()]
-  def list_contact_actions(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    ContactsService.list_contact_actions(organization_id, mission_id, opts)
-  end
-
-  @spec list_mission_events(binary(), keyword()) :: [Cadence.MissionEvents.Entry.t()]
-  def list_mission_events(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    MissionEventReads.list_for_mission(mission_id, opts)
-  end
-
-  @spec list_mission_events(binary(), binary(), keyword()) :: [Cadence.MissionEvents.Entry.t()]
-  def list_mission_events(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    MissionEventReads.list_for_mission(organization_id, mission_id, opts)
-  end
 
   @spec rebuild_mission_events(binary()) :: {:ok, non_neg_integer()} | {:error, term()}
   def rebuild_mission_events(mission_id) when is_binary(mission_id) do

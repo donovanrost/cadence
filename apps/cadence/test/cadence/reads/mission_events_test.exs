@@ -102,7 +102,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(mission_id)
     assert limit_run.status == :completed
 
-    mission_events = Cadence.list_mission_events(organization_id, mission_id, limit: 10)
+    mission_events = MissionEventReads.list_for_mission(organization_id, mission_id, limit: 10)
 
     assert MapSet.new(Enum.map(mission_events, & &1.kind)) ==
              MapSet.new([:limit_violation, :scheduled_contact_canceled])
@@ -138,7 +138,7 @@ defmodule Cadence.Reads.MissionEventsTest do
 
     assert {:ok, 2} = Cadence.rebuild_mission_events(organization_id, mission_id)
 
-    rebuilt_events = Cadence.list_mission_events(organization_id, mission_id, limit: 10)
+    rebuilt_events = MissionEventReads.list_for_mission(organization_id, mission_id, limit: 10)
 
     assert MapSet.new(Enum.map(rebuilt_events, & &1.kind)) ==
              MapSet.new([:limit_violation, :scheduled_contact_canceled])
@@ -176,7 +176,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert {:ok, _result} = Cadence.process_telemetry_ingress(raw_evidence)
 
     [runtime_event] =
-      Cadence.list_mission_events(
+      MissionEventReads.list_for_mission(
         organization_id,
         mission_id,
         category: :runtime,
@@ -211,7 +211,7 @@ defmodule Cadence.Reads.MissionEventsTest do
              )
 
     [activation_event] =
-      Cadence.list_mission_events(
+      MissionEventReads.list_for_mission(
         organization_id,
         mission_id,
         category: :runtime,
@@ -259,7 +259,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert {:ok, 1} = Cadence.rebuild_mission_events(organization_id, mission_id)
 
     [rebuilt_event] =
-      Cadence.list_mission_events(
+      MissionEventReads.list_for_mission(
         organization_id,
         mission_id,
         category: :runtime,
@@ -313,7 +313,7 @@ defmodule Cadence.Reads.MissionEventsTest do
              MissionEvents.persist_entries(Repo, MissionEvents.project_many([persisted_event]))
 
     assert [scoped_event] =
-             Cadence.list_mission_events(
+             MissionEventReads.list_for_mission(
                organization_id,
                mission_id,
                category: :runtime,
@@ -328,7 +328,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert scoped_event.source_endpoint_ref == "endpoint-alpha"
 
     assert [] =
-             Cadence.list_mission_events(
+             MissionEventReads.list_for_mission(
                organization_id,
                mission_id,
                category: :runtime,
@@ -375,7 +375,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     end
 
     events =
-      Cadence.list_mission_events(
+      MissionEventReads.list_for_mission(
         organization_id,
         mission_id,
         from_occurred_at: first_in_window,
@@ -491,7 +491,10 @@ defmodule Cadence.Reads.MissionEventsTest do
              )
 
     transport_events =
-      Cadence.list_mission_events(organization_id, mission_id, category: :transport, limit: 10)
+      MissionEventReads.list_for_mission(organization_id, mission_id,
+        category: :transport,
+        limit: 10
+      )
 
     assert Enum.map(transport_events, & &1.kind) == [
              :downlink_selection_changed,
@@ -552,7 +555,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     assert completed_run.status == :completed
     assert completed_run.rebuilt_event_count == 1
 
-    [rebuilt_event] = Cadence.list_mission_events(organization_id, mission_id, [])
+    [rebuilt_event] = MissionEventReads.list_for_mission(organization_id, mission_id, [])
     assert rebuilt_event.kind == :scheduled_contact_canceled
     assert rebuilt_event.summary == "antenna maintenance"
   end

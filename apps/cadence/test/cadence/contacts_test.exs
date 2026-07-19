@@ -501,7 +501,7 @@ defmodule Cadence.ContactsTest do
     assert canceled_scheduled_contact.metadata["reason"] == "weather"
 
     [contact_action] =
-      Cadence.list_contact_actions(
+      Cadence.Contacts.list_contact_actions(
         organization_id,
         mission_id,
         scheduled_contact_id: scheduled_contact.scheduled_contact_id
@@ -597,7 +597,7 @@ defmodule Cadence.ContactsTest do
     assert canceled_scheduled_contact.metadata["reason"] == "operator stop"
 
     [contact_action] =
-      Cadence.list_contact_actions(
+      Cadence.Contacts.list_contact_actions(
         organization_id,
         mission_id,
         realized_contact_id: realized_contact.realized_contact_id
@@ -688,7 +688,7 @@ defmodule Cadence.ContactsTest do
     assert stopped_realized_contact.metadata["reason"] == "provider abort"
 
     [contact_action] =
-      Cadence.list_contact_actions(
+      Cadence.Contacts.list_contact_actions(
         organization_id,
         mission_id,
         scheduled_contact_id: scheduled_contact.scheduled_contact_id
