@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.FleetPlanningPolicies
+  alias Cadence.ContactPlanning.{FleetPlanner, FleetPlanningPolicies}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -47,7 +47,7 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
     with {:ok, horizon_start} <- parse_datetime(params["horizon_start"]),
          {:ok, horizon_end} <- parse_datetime(params["horizon_end"]),
          {:ok, run, _refs} <-
-           Cadence.start_fleet_planning_run(
+           FleetPlanner.start(
              scope,
              mission.mission_id,
              %{

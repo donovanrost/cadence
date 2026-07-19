@@ -3,7 +3,11 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.{ContactRequirementTemplates, FleetPlanningPolicies}
+  alias Cadence.ContactPlanning.{
+    ContactRequirementTemplates,
+    FleetPlanningPolicies,
+    FleetPlanningRuns
+  }
 
   @impl true
   def mount(_params, _session, socket) do
@@ -262,7 +266,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
   defp load_workspace(socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    runs = Cadence.list_fleet_planning_runs(scope.organization_id, mission.mission_id, limit: 100)
+    runs = FleetPlanningRuns.list(scope.organization_id, mission.mission_id, limit: 100)
 
     active_policy =
       case FleetPlanningPolicies.fetch_active(

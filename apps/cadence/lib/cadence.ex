@@ -21,9 +21,6 @@ defmodule Cadence do
   alias Cadence.ContactPlanning.ContactPlans
   alias Cadence.ContactPlanning.FleetAutomation
   alias Cadence.ContactPlanning.FleetAutomationActions
-  alias Cadence.ContactPlanning.FleetPlanner
-  alias Cadence.ContactPlanning.FleetPlanningRuns
-  alias Cadence.ContactPlanning.FleetRepairs
   alias Cadence.ContactPlanning.Planner, as: ContactPlanner
   alias Cadence.Dashboards
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
@@ -293,80 +290,6 @@ defmodule Cadence do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  @spec create_fleet_planning_run(CurrentScope.t(), binary(), map(), keyword()) ::
-          {:ok, struct(), [struct()]} | {:error, term()}
-  def create_fleet_planning_run(current_scope, mission_id, attrs, opts \\ []) do
-    FleetPlanningRuns.create(current_scope, mission_id, attrs, opts)
-  end
-
-  @spec fetch_fleet_planning_run(binary(), binary(), binary()) ::
-          {:ok, struct()} | {:error, term()}
-  def fetch_fleet_planning_run(organization_id, mission_id, run_id) do
-    FleetPlanningRuns.fetch(organization_id, mission_id, run_id)
-  end
-
-  @spec list_fleet_planning_runs(binary(), binary(), keyword()) :: [struct()]
-  def list_fleet_planning_runs(organization_id, mission_id, opts \\ []) do
-    FleetPlanningRuns.list(organization_id, mission_id, opts)
-  end
-
-  @spec list_fleet_planning_run_requirement_refs(binary(), binary(), binary()) :: [struct()]
-  def list_fleet_planning_run_requirement_refs(organization_id, mission_id, run_id) do
-    FleetPlanningRuns.list_requirement_refs(organization_id, mission_id, run_id)
-  end
-
-  @spec list_fleet_planning_decisions(binary(), binary(), binary()) :: [struct()]
-  def list_fleet_planning_decisions(organization_id, mission_id, run_id) do
-    FleetPlanningRuns.list_decisions(organization_id, mission_id, run_id)
-  end
-
-  @spec start_fleet_planning_run(CurrentScope.t(), binary(), map(), keyword()) ::
-          {:ok, struct(), [struct()]} | {:error, term()}
-  def start_fleet_planning_run(current_scope, mission_id, attrs, opts \\ []) do
-    FleetPlanner.start(current_scope, mission_id, attrs, opts)
-  end
-
-  @spec run_fleet_planning(CurrentScope.t(), binary(), binary(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def run_fleet_planning(current_scope, mission_id, run_id, opts \\ []) do
-    FleetPlanner.run(current_scope, mission_id, run_id, opts)
-  end
-
-  @spec plan_fleet_contacts(CurrentScope.t(), binary(), map(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def plan_fleet_contacts(current_scope, mission_id, attrs, opts \\ []) do
-    FleetPlanner.plan(current_scope, mission_id, attrs, opts)
-  end
-
-  @spec repair_fleet_contacts(
-          CurrentScope.t(),
-          binary(),
-          binary(),
-          binary(),
-          pos_integer(),
-          map(),
-          keyword()
-        ) :: {:ok, map()} | {:error, term()}
-  def repair_fleet_contacts(
-        current_scope,
-        mission_id,
-        source_run_id,
-        source_plan_id,
-        source_plan_version,
-        attrs,
-        opts \\ []
-      ) do
-    FleetRepairs.repair(
-      current_scope,
-      mission_id,
-      source_run_id,
-      source_plan_id,
-      source_plan_version,
-      attrs,
-      opts
-    )
-  end
 
   @spec issue_automation_grant(CurrentScope.t(), binary(), map(), keyword()) ::
           {:ok, struct()} | {:error, term()}

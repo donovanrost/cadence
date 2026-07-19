@@ -3,7 +3,14 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, FleetRepairs, Planner}
+  alias Cadence.ContactPlanning.{
+    ContactPlans,
+    ContactRequirements,
+    FleetPlanner,
+    FleetPlanningRuns,
+    FleetRepairs,
+    Planner
+  }
 
   @phases [:queued, :materializing, :searching, :optimizing, :materializing_plan, :finished]
 
@@ -456,16 +463,16 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
       socket.assigns
 
     with {:ok, run} <-
-           Cadence.fetch_fleet_planning_run(scope.organization_id, mission.mission_id, run_id) do
+           FleetPlanningRuns.fetch(scope.organization_id, mission.mission_id, run_id) do
       refs =
-        Cadence.list_fleet_planning_run_requirement_refs(
+        FleetPlanningRuns.list_requirement_refs(
           scope.organization_id,
           mission.mission_id,
           run_id
         )
 
       decisions =
-        Cadence.list_fleet_planning_decisions(
+        FleetPlanningRuns.list_decisions(
           scope.organization_id,
           mission.mission_id,
           run_id
@@ -555,7 +562,7 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
       socket
       |> assign(:planning?, true)
       |> start_async(:run_fleet_planning, fn ->
-        Cadence.run_fleet_planning(
+        FleetPlanner.run(
           scope,
           mission.mission_id,
           run.fleet_planning_run_id

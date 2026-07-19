@@ -13,7 +13,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     ContactRequirementTemplates,
-    FleetPlanningPolicies
+    FleetPlanningPolicies,
+    FleetPlanningRuns
   }
 
   alias CadenceWeb.TestFixtures
@@ -205,7 +206,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     )
     |> render_submit()
 
-    [run] = Cadence.list_fleet_planning_runs(org.organization_id, mission.mission_id)
+    [run] = FleetPlanningRuns.list(org.organization_id, mission.mission_id)
 
     assert_redirect(
       view,
@@ -227,7 +228,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     render_async(run_view, 5_000)
 
     assert {:ok, finished} =
-             Cadence.fetch_fleet_planning_run(
+             FleetPlanningRuns.fetch(
                org.organization_id,
                mission.mission_id,
                run.fleet_planning_run_id
