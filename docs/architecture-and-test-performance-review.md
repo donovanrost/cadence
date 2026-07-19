@@ -762,7 +762,11 @@ preserving its public serializer functions as delegates. Extracting credential
 verification, bootstrap administration, durable-user lookup, and browser-session
 persistence from the 1,334-line Accounts context reduced the count to 23 while
 keeping its public authentication API on the context facade and leaving
-membership and invitation workflows context-owned.
+membership and invitation workflows context-owned. Extracting corrected
+replacement work, job diagnostics, and closure-readiness rendering from the
+1,340-line historical workflow group-status component reduced the count to 22
+while preserving the existing LiveView events, form IDs, and evidence
+attributes.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
