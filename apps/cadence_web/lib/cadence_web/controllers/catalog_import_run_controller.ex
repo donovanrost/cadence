@@ -15,7 +15,7 @@ defmodule CadenceWeb.CatalogImportRunController do
            ),
          {:ok, filters} <- ControlPlaneParams.catalog_import_run_filters(params) do
       import_runs =
-        Cadence.list_catalog_import_runs(organization_id, mission_id, filters)
+        Cadence.Catalog.list_import_runs(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.catalog_import_run/1)
 
       json(conn, %{data: import_runs})
@@ -39,7 +39,7 @@ defmodule CadenceWeb.CatalogImportRunController do
              requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, %ImportRun{} = import_run} <-
-           Cadence.start_catalog_import_run(
+           Cadence.Catalog.start_import_run(
              organization_id,
              mission_id,
              artifact_id,
@@ -64,7 +64,7 @@ defmodule CadenceWeb.CatalogImportRunController do
              mission_id
            ),
          {:ok, %ImportRun{} = import_run} <-
-           Cadence.fetch_catalog_import_run(organization_id, mission_id, import_run_id) do
+           Cadence.Catalog.fetch_import_run(organization_id, mission_id, import_run_id) do
       json(conn, %{data: ControlPlaneJSON.catalog_import_run(import_run)})
     end
   end

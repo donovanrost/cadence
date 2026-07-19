@@ -129,10 +129,10 @@ defmodule Cadence.Ops.PointCatalogTest do
         uploaded_by: %{"service_identity_id" => "svc-test"}
       })
 
-    {:ok, _artifact} = Cadence.persist_catalog_artifact(organization_id, artifact)
+    {:ok, _artifact} = Cadence.Catalog.persist_artifact(organization_id, artifact)
 
     {:ok, import_run} =
-      Cadence.start_catalog_import_run(
+      Cadence.Catalog.start_import_run(
         organization_id,
         mission_id,
         "artifact-point-catalog",

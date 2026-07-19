@@ -1471,6 +1471,14 @@ service-identity API remains in the authenticated API pipeline, and the
 fleet-planning policy route remains in the authenticated `:ops` LiveView
 session; production source-size pressure remains 4 and dependency ratchets are
 unchanged.
+Retiring 21 catalog database, artifact, import-run, snapshot, runtime-artifact,
+and compiler delegates from the root facade moved control-plane controllers,
+core tests, and simulator integration directly to `Cadence.Catalog` and its
+owning compiler. This reduced `Cadence` from 3,589 to 3,415 lines and reduced
+production web callers of the root facade from 54 to 49 files. Catalog API
+routes remain in the authenticated API pipeline, and browser catalog routes
+remain in the authenticated `:catalog` LiveView session; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

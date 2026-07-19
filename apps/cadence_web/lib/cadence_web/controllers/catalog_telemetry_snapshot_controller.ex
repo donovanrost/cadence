@@ -15,7 +15,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
            ),
          {:ok, filters} <- ControlPlaneParams.catalog_telemetry_snapshot_filters(params) do
       snapshots =
-        Cadence.list_catalog_telemetry_snapshots(organization_id, mission_id, filters)
+        Cadence.Catalog.list_telemetry_snapshots(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.catalog_telemetry_snapshot_summary/1)
 
       json(conn, %{data: snapshots})
@@ -34,7 +34,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              mission_id
            ),
          {:ok, %TelemetryCatalogSnapshot{} = snapshot} <-
-           Cadence.fetch_catalog_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
+           Cadence.Catalog.fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
       json(conn, %{data: ControlPlaneJSON.catalog_telemetry_snapshot(snapshot)})
     end
   end
@@ -51,7 +51,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              mission_id
            ),
          {:ok, compilation} <-
-           Cadence.recompile_catalog_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
+           Cadence.Catalog.recompile_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
       json(conn, %{data: ControlPlaneJSON.catalog_telemetry_recompile_result(compilation)})
     end
   end
@@ -68,7 +68,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              mission_id
            ),
          {:ok, diff_report} <-
-           Cadence.diff_catalog_telemetry_snapshot_runtime(
+           Cadence.Catalog.diff_telemetry_snapshot_runtime(
              organization_id,
              mission_id,
              snapshot_id
@@ -89,7 +89,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              mission_id
            ),
          {:ok, materialization} <-
-           Cadence.materialize_catalog_telemetry_snapshot_runtime(
+           Cadence.Catalog.materialize_telemetry_snapshot_runtime(
              organization_id,
              mission_id,
              snapshot_id

@@ -35,7 +35,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
         uploaded_by: %{"service_identity_id" => "svc-bootstrap"}
       })
 
-    {:ok, persisted} = Cadence.persist_catalog_artifact(@organization_id, artifact)
+    {:ok, persisted} = Cadence.Catalog.persist_artifact(@organization_id, artifact)
     persisted
   end
 
@@ -55,7 +55,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
     :ok = Events.subscribe_import_runs(@mission_id)
 
     {:ok, run} =
-      Cadence.start_catalog_import_run(
+      Cadence.Catalog.start_import_run(
         @organization_id,
         @mission_id,
         artifact.artifact_id,
@@ -76,7 +76,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
     :ok = Events.subscribe_import_runs(@mission_id)
 
     {:ok, run} =
-      Cadence.start_catalog_import_run(
+      Cadence.Catalog.start_import_run(
         @organization_id,
         @mission_id,
         artifact.artifact_id,
@@ -98,7 +98,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
     :ok = Events.subscribe_import_runs(@mission_id)
 
     {:ok, run} =
-      Cadence.start_catalog_import_run(
+      Cadence.Catalog.start_import_run(
         @organization_id,
         @mission_id,
         artifact.artifact_id,

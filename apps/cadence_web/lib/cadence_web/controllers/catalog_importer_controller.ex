@@ -14,7 +14,7 @@ defmodule CadenceWeb.CatalogImporterController do
            ),
          {:ok, filters} <- ControlPlaneParams.catalog_importer_filters(params) do
       importers =
-        Cadence.list_catalog_importers(filters)
+        Cadence.Catalog.list_importers(filters)
         |> Enum.map(&ControlPlaneJSON.catalog_importer/1)
 
       json(conn, %{data: importers})

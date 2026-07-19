@@ -3,6 +3,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Ingress.RawEvidence
@@ -77,10 +78,10 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
       })
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.Catalog.persist_artifact(@organization_id, artifact)
 
     assert {:ok, queued_run} =
-             Cadence.start_catalog_import_run(
+             Cadence.Catalog.start_import_run(
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
@@ -97,7 +98,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
-             Cadence.fetch_catalog_import_run(
+             Cadence.Catalog.fetch_import_run(
                @organization_id,
                @mission_id,
                queued_run.import_run_id
@@ -113,7 +114,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     refute "cadence_yaml_telemetry.commands_ignored" in diagnostic_codes
 
     assert {:ok, telemetry_snapshot} =
-             Cadence.fetch_catalog_telemetry_snapshot(
+             Cadence.Catalog.fetch_telemetry_snapshot(
                @organization_id,
                @mission_id,
                completed_run.snapshot_id
@@ -127,7 +128,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
 
     assert {:ok, %CommandCatalogSnapshot{} = command_snapshot} =
-             Cadence.fetch_catalog_command_snapshot(
+             Cadence.Catalog.fetch_command_snapshot(
                @organization_id,
                @mission_id,
                command_snapshot_id
@@ -139,7 +140,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              "SET_MODE"
            ]
 
-    command_compilation = Cadence.compile_command_catalog_snapshot(command_snapshot)
+    command_compilation = CommandCatalogCompiler.compile(command_snapshot)
 
     assert length(command_compilation.runtime_definitions) == 3
 
@@ -150,7 +151,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
            ]
 
     assert {:ok, recompilation} =
-             Cadence.recompile_catalog_telemetry_snapshot(
+             Cadence.Catalog.recompile_telemetry_snapshot(
                @organization_id,
                @mission_id,
                completed_run.snapshot_id
@@ -164,7 +165,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert recompilation.compiler_result.diagnostics == []
 
     assert {:ok, runtime_diff} =
-             Cadence.diff_catalog_telemetry_snapshot_runtime(
+             Cadence.Catalog.diff_telemetry_snapshot_runtime(
                @organization_id,
                @mission_id,
                completed_run.snapshot_id
@@ -180,7 +181,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert runtime_diff.binding_rules.mismatches == []
 
     assert {:ok, materialization} =
-             Cadence.materialize_catalog_telemetry_snapshot_runtime(
+             Cadence.Catalog.materialize_telemetry_snapshot_runtime(
                @organization_id,
                @mission_id,
                completed_run.snapshot_id
@@ -203,7 +204,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert materialized_binding_set.version == 2
 
     assert {:ok, runtime_diff_after_materialization} =
-             Cadence.diff_catalog_telemetry_snapshot_runtime(
+             Cadence.Catalog.diff_telemetry_snapshot_runtime(
                @organization_id,
                @mission_id,
                completed_run.snapshot_id
@@ -274,10 +275,10 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
       })
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.Catalog.persist_artifact(@organization_id, artifact)
 
     assert {:ok, queued_run} =
-             Cadence.start_catalog_import_run(
+             Cadence.Catalog.start_import_run(
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
@@ -293,7 +294,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
-             Cadence.fetch_catalog_import_run(
+             Cadence.Catalog.fetch_import_run(
                @organization_id,
                @mission_id,
                queued_run.import_run_id
@@ -307,14 +308,14 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert completed_run.result_document["command_runtime"]["runtime_definition_count"] > 10
 
     assert {:ok, command_snapshot} =
-             Cadence.fetch_catalog_command_snapshot(
+             Cadence.Catalog.fetch_command_snapshot(
                @organization_id,
                @mission_id,
                completed_run.result_document["command_snapshot"]["snapshot_id"]
              )
 
     assert {:ok, telemetry_snapshot} =
-             Cadence.fetch_catalog_telemetry_snapshot(
+             Cadence.Catalog.fetch_telemetry_snapshot(
                @organization_id,
                @mission_id,
                completed_run.result_document["telemetry_snapshot"]["snapshot_id"]
@@ -350,10 +351,10 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
       })
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.Catalog.persist_artifact(@organization_id, artifact)
 
     assert {:ok, queued_run} =
-             Cadence.start_catalog_import_run(
+             Cadence.Catalog.start_import_run(
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
@@ -369,7 +370,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
-             Cadence.fetch_catalog_import_run(
+             Cadence.Catalog.fetch_import_run(
                @organization_id,
                @mission_id,
                queued_run.import_run_id

@@ -1150,10 +1150,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(@organization_id, artifact)
+             Cadence.Catalog.persist_artifact(@organization_id, artifact)
 
     assert {:ok, queued_run} =
-             Cadence.start_catalog_import_run(
+             Cadence.Catalog.start_import_run(
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
@@ -1170,7 +1170,7 @@ defmodule Cadence.CommandingTest do
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
-             Cadence.fetch_catalog_import_run(
+             Cadence.Catalog.fetch_import_run(
                @organization_id,
                @mission_id,
                queued_run.import_run_id
@@ -1179,7 +1179,7 @@ defmodule Cadence.CommandingTest do
     command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
 
     assert {:ok, %CommandSnapshot{} = command_snapshot} =
-             Cadence.fetch_catalog_command_snapshot(
+             Cadence.Catalog.fetch_command_snapshot(
                @organization_id,
                @mission_id,
                command_snapshot_id

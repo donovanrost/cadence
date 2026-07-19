@@ -3,6 +3,7 @@ defmodule CadenceWeb.CatalogCommandSnapshotController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
 
@@ -15,7 +16,7 @@ defmodule CadenceWeb.CatalogCommandSnapshotController do
            ),
          {:ok, filters} <- ControlPlaneParams.catalog_command_snapshot_filters(params) do
       snapshots =
-        Cadence.list_catalog_command_snapshots(organization_id, mission_id, filters)
+        Cadence.Catalog.list_command_snapshots(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.catalog_command_snapshot_summary/1)
 
       json(conn, %{data: snapshots})
@@ -34,7 +35,7 @@ defmodule CadenceWeb.CatalogCommandSnapshotController do
              mission_id
            ),
          {:ok, %CommandCatalogSnapshot{} = snapshot} <-
-           Cadence.fetch_catalog_command_snapshot(organization_id, mission_id, snapshot_id) do
+           Cadence.Catalog.fetch_command_snapshot(organization_id, mission_id, snapshot_id) do
       json(conn, %{data: ControlPlaneJSON.catalog_command_snapshot(snapshot)})
     end
   end
@@ -51,8 +52,8 @@ defmodule CadenceWeb.CatalogCommandSnapshotController do
              mission_id
            ),
          {:ok, %CommandCatalogSnapshot{} = snapshot} <-
-           Cadence.fetch_catalog_command_snapshot(organization_id, mission_id, snapshot_id) do
-      compilation = Cadence.compile_command_catalog_snapshot(snapshot)
+           Cadence.Catalog.fetch_command_snapshot(organization_id, mission_id, snapshot_id) do
+      compilation = CommandCatalogCompiler.compile(snapshot)
       json(conn, %{data: ControlPlaneJSON.catalog_command_compile_result(snapshot, compilation)})
     end
   end

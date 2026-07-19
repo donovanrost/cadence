@@ -15,7 +15,7 @@ defmodule CadenceWeb.CatalogArtifactController do
            ),
          {:ok, filters} <- ControlPlaneParams.catalog_artifact_filters(params) do
       artifacts =
-        Cadence.list_catalog_artifacts(organization_id, mission_id, filters)
+        Cadence.Catalog.list_artifacts(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.catalog_artifact/1)
 
       json(conn, %{data: artifacts})
@@ -41,7 +41,7 @@ defmodule CadenceWeb.CatalogArtifactController do
              uploaded_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, %Artifact{} = persisted_artifact} <-
-           Cadence.persist_catalog_artifact(organization_id, artifact) do
+           Cadence.Catalog.persist_artifact(organization_id, artifact) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.catalog_artifact(persisted_artifact)})
@@ -60,7 +60,7 @@ defmodule CadenceWeb.CatalogArtifactController do
              mission_id
            ),
          {:ok, %Artifact{} = artifact} <-
-           Cadence.fetch_catalog_artifact(organization_id, mission_id, artifact_id) do
+           Cadence.Catalog.fetch_artifact(organization_id, mission_id, artifact_id) do
       json(conn, %{data: ControlPlaneJSON.catalog_artifact(artifact)})
     end
   end

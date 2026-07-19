@@ -68,15 +68,15 @@ defmodule Cadence.CatalogTest do
         uploaded_by: %{"service_identity_id" => "svc-bootstrap"}
       })
 
-    assert [%{descriptor: %{importer_key: "fake_tm_json"}}] = Cadence.list_catalog_importers()
+    assert [%{descriptor: %{importer_key: "fake_tm_json"}}] = Cadence.Catalog.list_importers()
 
     assert {:ok, persisted_artifact} =
-             Cadence.persist_catalog_artifact(organization_id(), artifact)
+             Cadence.Catalog.persist_artifact(organization_id(), artifact)
 
     assert persisted_artifact.content_sha256 != ""
 
     assert {:ok, fetched_artifact} =
-             Cadence.fetch_catalog_artifact(
+             Cadence.Catalog.fetch_artifact(
                organization_id(),
                mission_id(),
                persisted_artifact.artifact_id
@@ -85,7 +85,7 @@ defmodule Cadence.CatalogTest do
     assert fetched_artifact.source_artifact == artifact.source_artifact
 
     assert [listed_artifact] =
-             Cadence.list_catalog_artifacts(
+             Cadence.Catalog.list_artifacts(
                organization_id(),
                mission_id(),
                catalog_family: :telemetry
@@ -94,7 +94,7 @@ defmodule Cadence.CatalogTest do
     assert listed_artifact.artifact_id == persisted_artifact.artifact_id
 
     assert {:ok, queued_run} =
-             Cadence.start_catalog_import_run(
+             Cadence.Catalog.start_import_run(
                organization_id(),
                mission_id(),
                persisted_artifact.artifact_id,
@@ -114,7 +114,7 @@ defmodule Cadence.CatalogTest do
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
-             Cadence.fetch_catalog_import_run(
+             Cadence.Catalog.fetch_import_run(
                organization_id(),
                mission_id(),
                queued_run.import_run_id
@@ -127,7 +127,7 @@ defmodule Cadence.CatalogTest do
     assert [%{code: "fake_tm_json.warning", severity: :warning}] = completed_run.diagnostics
 
     assert {:ok, telemetry_snapshot} =
-             Cadence.fetch_catalog_telemetry_snapshot(
+             Cadence.Catalog.fetch_telemetry_snapshot(
                organization_id(),
                mission_id(),
                completed_run.snapshot_id
@@ -137,7 +137,7 @@ defmodule Cadence.CatalogTest do
     assert Enum.map(telemetry_snapshot.packets, & &1.name) == ["HK_PACKET", "EVENT_PACKET"]
 
     assert [listed_snapshot] =
-             Cadence.list_catalog_telemetry_snapshots(
+             Cadence.Catalog.list_telemetry_snapshots(
                organization_id(),
                mission_id(),
                import_run_id: completed_run.import_run_id
@@ -146,7 +146,7 @@ defmodule Cadence.CatalogTest do
     assert listed_snapshot.snapshot_id == telemetry_snapshot.snapshot_id
 
     assert [listed_run] =
-             Cadence.list_catalog_import_runs(
+             Cadence.Catalog.list_import_runs(
                organization_id(),
                mission_id(),
                artifact_id: persisted_artifact.artifact_id,
@@ -257,7 +257,7 @@ defmodule Cadence.CatalogTest do
       assert {:ok, _completed_job} = Cadence.Jobs.run_job(job.job_id)
 
       assert {:ok, completed_run} =
-               Cadence.fetch_catalog_import_run(
+               Cadence.Catalog.fetch_import_run(
                  organization_id(),
                  mission_id(),
                  run.import_run_id
@@ -446,12 +446,12 @@ defmodule Cadence.CatalogTest do
         uploaded_by: %{"service_identity_id" => "svc-test"}
       })
 
-    {:ok, persisted} = Cadence.persist_catalog_artifact(organization_id(), artifact)
+    {:ok, persisted} = Cadence.Catalog.persist_artifact(organization_id(), artifact)
     persisted
   end
 
   defp start_import_run!(artifact_id) do
-    Cadence.start_catalog_import_run(
+    Cadence.Catalog.start_import_run(
       organization_id(),
       mission_id(),
       artifact_id,

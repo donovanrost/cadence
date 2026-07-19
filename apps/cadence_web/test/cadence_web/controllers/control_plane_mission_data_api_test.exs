@@ -1112,7 +1112,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
            } = json_response(import_run_show_conn, 200)
 
     assert {:ok, command_snapshot} =
-             Cadence.fetch_catalog_command_snapshot(
+             Cadence.Catalog.fetch_command_snapshot(
                organization_id,
                mission_id,
                command_snapshot_id
