@@ -34,15 +34,15 @@ defmodule Cadence.Dashboards.SourceRegistry do
     SourceHealthStatus,
     SourceResult,
     SourceWatermark,
-    SourceWatermarks,
-    SourceWatermarkStatus
+    SourceWatermarks
   }
 
   alias Cadence.Dashboards.SourceRegistry.{
     CapabilityPosture,
     FactsAggregation,
     HealthMerge,
-    SegmentResultMerge
+    SegmentResultMerge,
+    WatermarkMerge
   }
 
   alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}
@@ -625,21 +625,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     if SourceWatermarks.enabled?(opts) do
       case SourceWatermarks.fetch_status_for_source(request, resolved_binding) do
         {:ok, status} ->
-          watermark =
-            SourceWatermarkStatus.to_source_watermark(status,
-              request_id: request.request_id,
-              scope: request.scope_context
-            )
-
-          meta =
-            facts.meta
-            |> Map.put(:durable_source_watermark?, true)
-            |> Map.put(:source_watermark_event_id, status.source_watermark_event_id)
-            |> Map.put(:source_watermark_observed_at, status.observed_at)
-            |> Map.put(:source_watermark_last_seen_at, status.last_seen_at)
-            |> Map.put(:source_watermark_reason, status.reason)
-
-          SourceFacts.new(%{facts | watermark: watermark, watermarks: [watermark], meta: meta})
+          WatermarkMerge.merge_facts(facts, status, request)
 
         {:error, :source_watermark_status_not_found} ->
           facts
@@ -1369,24 +1355,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     if SourceWatermarks.enabled?(opts) do
       case SourceWatermarks.fetch_status_for_source(request, resolved_binding) do
         {:ok, status} ->
-          watermark =
-            SourceWatermarkStatus.to_source_watermark(status,
-              request_id: request.request_id,
-              scope: request.scope_context
-            )
-
-          meta =
-            result.meta
-            |> ensure_map()
-            |> Map.put(:durable_source_watermark?, true)
-            |> Map.put(:source_watermark_event_id, status.source_watermark_event_id)
-            |> Map.put(:source_watermark_observed_at, status.observed_at)
-            |> Map.put(:source_watermark_last_seen_at, status.last_seen_at)
-            |> Map.put(:source_watermark_reason, status.reason)
-
-          result
-          |> clear_unknown_watermark_warnings(watermark)
-          |> then(&SourceResult.new(%{&1 | watermarks: [watermark], meta: meta}))
+          WatermarkMerge.merge_result(result, status, request)
 
         {:error, :source_watermark_status_not_found} ->
           result
@@ -1394,56 +1363,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     else
       result
     end
-  end
-
-  defp clear_unknown_watermark_warnings(
-         %SourceResult{} = result,
-         %SourceWatermark{confidence: confidence}
-       )
-       when confidence in [:authoritative, :best_effort] do
-    %SourceResult{
-      result
-      | warnings: Enum.reject(result.warnings, &watermark_unknown_warning?/1),
-        frames: Enum.map(result.frames, &clear_frame_warning_code(&1, :watermark_unknown))
-    }
-  end
-
-  defp clear_unknown_watermark_warnings(%SourceResult{} = result, _watermark), do: result
-
-  defp watermark_unknown_warning?(%ResolveWarning{code: code}),
-    do: normalize_warning_code(code) == :watermark_unknown
-
-  defp watermark_unknown_warning?(warning) when is_map(warning),
-    do: warning |> map_value(:code) |> normalize_warning_code() == :watermark_unknown
-
-  defp watermark_unknown_warning?(_warning), do: false
-
-  defp clear_frame_warning_code(%Frame{meta: meta} = frame, code) when is_map(meta) do
-    warning_codes =
-      meta
-      |> Map.get(:warning_codes, Map.get(meta, "warning_codes", []))
-      |> List.wrap()
-      |> Enum.reject(&(normalize_warning_code(&1) == code))
-
-    %Frame{frame | meta: Map.put(meta, :warning_codes, warning_codes)}
-  end
-
-  defp clear_frame_warning_code(frame, _code), do: frame
-
-  defp normalize_warning_code(code) when is_atom(code), do: code
-
-  defp normalize_warning_code(code) when is_binary(code) do
-    code
-    |> String.replace("-", "_")
-    |> String.to_existing_atom()
-  rescue
-    ArgumentError -> nil
-  end
-
-  defp normalize_warning_code(_code), do: nil
-
-  defp map_value(map, key) when is_map(map) and is_atom(key) do
-    Map.get(map, key, Map.get(map, Atom.to_string(key)))
   end
 
   defp merge_persisted_source_result_health(
@@ -1633,7 +1552,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
        ) do
     payload = interval.payload || %{}
 
-    map_value(payload, :source_health_event_id) == status.source_health_event_id or
+    get_attr(payload, :source_health_event_id) == status.source_health_event_id or
       interval.source_event_id == source_health_operational_event_id(status)
   end
 

@@ -1831,6 +1831,16 @@ provenance, watermark propagation, and missing-status fallback, while existing
 registry and evidence tests preserve facade behavior. No route or
 authentication placement is involved; production source-size pressure remains
 2 and dependency ratchets are unchanged.
+Extracting durable source-watermark application into the 122-line
+`Cadence.Dashboards.SourceRegistry.WatermarkMerge` reduced `SourceRegistry`
+from 2,308 to 2,227 lines. The registry retains watermark enablement and
+persisted-status lookup, while facts and results share status conversion,
+durable metadata, and authoritative or best-effort unknown-warning cleanup.
+Direct tests cover facts replacement, metadata preservation, atom- and
+string-keyed warning cleanup, frame warning codes, and unknown-confidence
+preservation; existing registry and evidence tests preserve facade behavior.
+No route or authentication placement is involved; production source-size
+pressure remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
