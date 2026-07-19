@@ -839,6 +839,13 @@ Moving operational-observable state, RF-state, connection-state, and metric
 projection cases out of the 2,323-line operational-events context test reduced
 test-file pressure to 12; the context and observable-family files are now
 1,161 and 782 lines, backed by 407 lines of shared event and scope builders.
+Moving catalog, telemetry-ingress, and commanding workflows out of the
+2,857-line control-plane API test reduced test-file pressure to 11; the
+resource-management and mission-data API files are now 1,358 and 1,226 lines,
+backed by 325 lines of shared authenticated API fixtures. Running the split
+files alone also exposed and removed an atom-loading order dependency:
+provider adapter keys now resolve through the provider-adapter registry instead
+of succeeding only when another test happened to load the atom first.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

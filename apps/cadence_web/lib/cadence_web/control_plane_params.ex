@@ -19,6 +19,7 @@ defmodule CadenceWeb.ControlPlaneParams do
   }
 
   alias Cadence.Contacts.{
+    KnownAtom,
     LinkAssignment,
     Path,
     PathTemplate,
@@ -330,7 +331,7 @@ defmodule CadenceWeb.ControlPlaneParams do
           {:ok, ProviderProfile.t()} | {:error, term()}
   def provider_profile(organization_id, mission_id, params)
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
-    with {:ok, adapter_key} <- existing_atom(params, "adapter_key", nil),
+    with {:ok, adapter_key} <- provider_adapter_key(params),
          {:ok, configuration} <- optional_map(params, "configuration", %{}) do
       {:ok,
        ProviderProfile.new(%{
@@ -346,7 +347,7 @@ defmodule CadenceWeb.ControlPlaneParams do
 
   @spec provider_profile_patch(map()) :: {:ok, map()} | {:error, term()}
   def provider_profile_patch(params) when is_map(params) do
-    with {:ok, adapter_key} <- maybe_existing_atom(params, "adapter_key"),
+    with {:ok, adapter_key} <- provider_adapter_key(params),
          {:ok, configuration} <- optional_patch_map(params, "configuration"),
          {:ok, metadata} <- optional_patch_map(params, "metadata") do
       {:ok,
@@ -801,7 +802,7 @@ defmodule CadenceWeb.ControlPlaneParams do
   end
 
   defp provider_binding(params) when is_map(params) do
-    with {:ok, adapter_key} <- existing_atom(params, "adapter_key", nil),
+    with {:ok, adapter_key} <- provider_adapter_key(params),
          {:ok, configuration} <- optional_map(params, "configuration", %{}) do
       {:ok,
        ProviderBinding.new(%{
@@ -810,6 +811,20 @@ defmodule CadenceWeb.ControlPlaneParams do
          configuration: configuration,
          metadata: map_value(params, "metadata")
        })}
+    end
+  end
+
+  defp provider_adapter_key(params) do
+    case Map.get(params, "adapter_key") do
+      nil ->
+        {:ok, nil}
+
+      value ->
+        try do
+          {:ok, KnownAtom.provider_adapter_key!(value)}
+        rescue
+          ArgumentError -> {:error, {:invalid_param, "adapter_key", :unknown_atom}}
+        end
     end
   end
 
