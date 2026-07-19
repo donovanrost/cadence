@@ -1671,6 +1671,13 @@ reduced overlong test-function pressure from 2 to 1. The authenticated `:ops`
 dashboard route, replay and scope query, viewport-script arguments, evidence
 expectations, and final browser success assertion remain covered; production
 source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting the antenna-pointing operational-event copied-route reopening proof
+into a named helper reduced its LiveView test from 308 to 240 lines and reduced
+overlong test-function pressure from 1 to 0. The authenticated `:ops` route,
+frame-evidence selectors, operational-event navigation and patch assertions,
+copied path, reopened inspector fields, and LiveView cleanup remain covered;
+production source-size pressure remains 3 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

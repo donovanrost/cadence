@@ -137,6 +137,85 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     assert path =~ "scope_id=dss-14"
   end
 
+  defp assert_reopened_antenna_pointing_event!(context) do
+    copied_path =
+      context.view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#dashboard-data-link-copy-link")
+      |> LazyHTML.attribute("data-clipboard-text")
+      |> List.first()
+
+    assert_antenna_pointing_copied_path(
+      copied_path,
+      context.event_route_id,
+      context.event_at_ms
+    )
+
+    {:ok, reopened_view, _html} = live(context.conn, copied_path)
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{context.event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{context.event_route_id}"][data-clipboard-text*="selected_time=#{context.event_at_ms}"])
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Operational observable snapshot"]),
+             "dashboard-antenna-pointing-live-dss-14"
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
+             "ground.station.antenna_pointing_state"
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
+             "dss-14"
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
+             "ground_station"
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
+             context.transport.transport_id
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
+             context.source_endpoint.source_endpoint_id
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
+             "dss-14"
+           )
+
+    assert has_element?(
+             reopened_view,
+             ~s(#dashboard-data-link-inspector [data-data-link-field="State"]),
+             "tracking"
+           )
+
+    stop_dashboard_view(context.view)
+    stop_dashboard_view(reopened_view)
+  end
+
   defp persist_connection_state_rendering_fixture!(org, mission) do
     source_endpoint =
       SourceEndpoint.new(%{
@@ -807,83 +886,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{antenna_pointing_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"])
              )
 
-      antenna_pointing_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
-
-      assert_antenna_pointing_copied_path(
-        antenna_pointing_event_copied_path,
-        antenna_pointing_event_route_id,
-        antenna_pointing_event_at_ms
-      )
-
-      {:ok, reopened_antenna_pointing_event_view, _html} =
-        live(conn, antenna_pointing_event_copied_path)
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{antenna_pointing_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{antenna_pointing_event_route_id}"][data-clipboard-text*="selected_time=#{antenna_pointing_event_at_ms}"])
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Operational observable snapshot"]),
-               "dashboard-antenna-pointing-live-dss-14"
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Observable"]),
-               "ground.station.antenna_pointing_state"
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Resource"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Scope kind"]),
-               "ground_station"
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Transport"]),
-               transport.transport_id
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Source endpoint"]),
-               source_endpoint.source_endpoint_id
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="Ground station"]),
-               "dss-14"
-             )
-
-      assert has_element?(
-               reopened_antenna_pointing_event_view,
-               ~s(#dashboard-data-link-inspector [data-data-link-field="State"]),
-               "tracking"
-             )
-
-      stop_dashboard_view(view)
-      stop_dashboard_view(reopened_antenna_pointing_event_view)
+      assert_reopened_antenna_pointing_event!(%{
+        conn: conn,
+        event_at_ms: antenna_pointing_event_at_ms,
+        event_id: antenna_pointing_event_id,
+        event_route_id: antenna_pointing_event_route_id,
+        source_endpoint: source_endpoint,
+        transport: transport,
+        view: view
+      })
     end
   end
 end
