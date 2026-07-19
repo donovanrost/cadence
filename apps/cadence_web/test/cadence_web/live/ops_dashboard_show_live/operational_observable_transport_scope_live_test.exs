@@ -107,6 +107,100 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
     end)
   end
 
+  defp persist_transport_execution_fixture!(org, mission) do
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-transport-execution-source-endpoint",
+        mission_id: mission.mission_id,
+        display_name: "Transport execution endpoint",
+        metadata: %{"ground_station_id" => "dss-14"}
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+
+    transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-execution-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Transport Execution TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "transport-execution.ground.example",
+          "port" => "5010",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => source_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-14"
+        }
+      })
+
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+
+    observed_at = ~U[2026-06-17 12:06:00Z]
+
+    transport_record =
+      %TransportCapabilityRecord{
+        transport_record_id: "transport-execution-live-alpha-1",
+        mission_id: mission.mission_id,
+        realized_contact_id: "live-contact-alpha",
+        path_id: "live-uplink-path",
+        capability_instance_id: transport.transport_id,
+        family_key: :heartbeat_monitor,
+        activation_id: "live-activation-1",
+        binding_set_id: "live-binding-set-1",
+        binding_set_version: 1,
+        partition_affinity: :source_endpoint,
+        partition_value: source_endpoint.source_endpoint_id,
+        event_kind: :initialized,
+        timer_key: nil,
+        emitted_record_kinds: [:transport_status],
+        emitted_record_count: 1,
+        action_request_count: 0,
+        state_snapshot: %{active?: true, heartbeat_count: 1},
+        recorded_at: observed_at,
+        metadata: %{"source" => "live-transport-execution-test"}
+      }
+
+    assert {:ok, _transport_execution_event} =
+             transport_record
+             |> Event.from_transport_capability_record()
+             |> OperationalEvents.persist_event()
+
+    [transport_execution_interval] =
+      Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
+        capability_instance_id: transport.transport_id,
+        order: :asc
+      )
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Live Transport Execution Evidence",
+        widgets: [
+          %{
+            type: :state_timeline,
+            title: "Live Transport Execution",
+            binding: %{
+              source: :operational_observables,
+              observables: ["comms.transport.execution_state"]
+            }
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    timeline_widget = render_item_by_title(document, "Live Transport Execution").widget
+
+    {source_endpoint, transport, observed_at, transport_execution_interval, dashboard,
+     timeline_widget.widget_id}
+  end
+
   describe "transport operational observable scope rendering" do
     test "filters operational observable rows and resolves setup DataLink" do
       enable_dashboard_engine_inline_resolves!()
@@ -283,95 +377,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
       {conn, org, mission} = signed_in_org_and_mission()
 
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-transport-execution-source-endpoint",
-          mission_id: mission.mission_id,
-          display_name: "Transport execution endpoint",
-          metadata: %{"ground_station_id" => "dss-14"}
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
-
-      transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-execution-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Transport Execution TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "transport-execution.ground.example",
-            "port" => "5010",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at = ~U[2026-06-17 12:06:00Z]
-
-      transport_record =
-        %TransportCapabilityRecord{
-          transport_record_id: "transport-execution-live-alpha-1",
-          mission_id: mission.mission_id,
-          realized_contact_id: "live-contact-alpha",
-          path_id: "live-uplink-path",
-          capability_instance_id: transport.transport_id,
-          family_key: :heartbeat_monitor,
-          activation_id: "live-activation-1",
-          binding_set_id: "live-binding-set-1",
-          binding_set_version: 1,
-          partition_affinity: :source_endpoint,
-          partition_value: source_endpoint.source_endpoint_id,
-          event_kind: :initialized,
-          timer_key: nil,
-          emitted_record_kinds: [:transport_status],
-          emitted_record_count: 1,
-          action_request_count: 0,
-          state_snapshot: %{active?: true, heartbeat_count: 1},
-          recorded_at: observed_at,
-          metadata: %{"source" => "live-transport-execution-test"}
-        }
-
-      assert {:ok, _transport_execution_event} =
-               transport_record
-               |> Event.from_transport_capability_record()
-               |> OperationalEvents.persist_event()
-
-      [transport_execution_interval] =
-        Cadence.operational_transport_execution_intervals(org.organization_id, mission.mission_id,
-          capability_instance_id: transport.transport_id,
-          order: :asc
-        )
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Live Transport Execution Evidence",
-          widgets: [
-            %{
-              type: :state_timeline,
-              title: "Live Transport Execution",
-              binding: %{
-                source: :operational_observables,
-                observables: ["comms.transport.execution_state"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      timeline_widget = render_item_by_title(document, "Live Transport Execution").widget
-      timeline_widget_id = timeline_widget.widget_id
+      {source_endpoint, transport, observed_at, transport_execution_interval, dashboard,
+       timeline_widget_id} = persist_transport_execution_fixture!(org, mission)
 
       {:ok, view, _html} =
         live(

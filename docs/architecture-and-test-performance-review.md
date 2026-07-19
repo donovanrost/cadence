@@ -942,6 +942,11 @@ Extracting the repeated bulk-request and request-group stage submissions from
 the grouped historical backfill proof reduced that test from 333 to 282 lines
 while retaining its storage-event, rendered-state, no-op, and queued-job
 assertions, reducing overlong-test pressure from 24 to 23.
+Moving live transport-execution endpoint, transport, capability-record,
+interval, and dashboard setup into a fixture helper reduced that copied-route
+proof from 328 to 242 lines while retaining its evidence navigation, route
+reopen, and inspector-detail assertions, reducing overlong-test pressure from
+23 to 22.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
