@@ -12,11 +12,17 @@ defmodule Cadence.Commanding do
 
   alias Cadence.Commanding.{
     CommandApproval,
+    CommandApprovalRow,
     CommandQueueEntry,
+    CommandQueueEntryRow,
     CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
     CommandRequest,
+    CommandRequestRow,
     CommandStage,
+    CommandStageRow,
     CommandVerifierInstance,
+    CommandVerifierInstanceRow,
     Dispatcher,
     DispatchSupervisor,
     Encoder,
@@ -25,6 +31,7 @@ defmodule Cadence.Commanding do
     ReleaseTargetSelection,
     RequestValidation,
     StagedCommandItem,
+    StagedCommandItemRow,
     VerifierScheduler,
     VerifierWorkflow
   }
@@ -37,13 +44,6 @@ defmodule Cadence.Commanding do
   alias Cadence.Telemetry.Sample
 
   alias Cadence.Persistence.Schemas.{
-    CommandApprovalRow,
-    CommandQueueEntryRow,
-    CommandReleaseAttemptRow,
-    CommandRequestRow,
-    CommandStageRow,
-    CommandVerifierInstanceRow,
-    StagedCommandItemRow,
     TransportActionRequestRow,
     TransportCapabilityRecordRow
   }

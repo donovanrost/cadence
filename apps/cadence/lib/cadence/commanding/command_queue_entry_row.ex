@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommandQueueEntryRow do
+defmodule Cadence.Commanding.CommandQueueEntryRow do
   @moduledoc false
 
   use Ecto.Schema

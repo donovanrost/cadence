@@ -24,8 +24,8 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Persistence.Schemas.CommandQueueEntryRow
-  alias Cadence.Persistence.Schemas.CommandRequestRow
+  alias Cadence.Commanding.CommandQueueEntryRow
+  alias Cadence.Commanding.CommandRequestRow
   alias Cadence.Persistence.Schemas.ReplayRunRow
   alias Cadence.Persistence.Schemas.ReplayTelemetrySampleRow
   alias Cadence.Persistence.Schemas.TelemetryLimitEventRow

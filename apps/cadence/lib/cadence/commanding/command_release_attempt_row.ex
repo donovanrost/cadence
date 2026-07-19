@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommandReleaseAttemptRow do
+defmodule Cadence.Commanding.CommandReleaseAttemptRow do
   @moduledoc false
 
   use Ecto.Schema

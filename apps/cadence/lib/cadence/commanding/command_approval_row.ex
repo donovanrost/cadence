@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommandApprovalRow do
+defmodule Cadence.Commanding.CommandApprovalRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -5,15 +5,12 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
 
   alias Cadence.Commanding.{
     CommandReleaseAttempt,
-    CommandRequest,
-    CommandVerifierInstance,
-    VerifierScheduler
-  }
-
-  alias Cadence.Persistence.Schemas.{
     CommandReleaseAttemptRow,
+    CommandRequest,
     CommandRequestRow,
-    CommandVerifierInstanceRow
+    CommandVerifierInstance,
+    CommandVerifierInstanceRow,
+    VerifierScheduler
   }
 
   @scheduler_event_prefix [:cadence, :commanding, :verifier_scheduler]

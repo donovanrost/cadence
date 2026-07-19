@@ -14,22 +14,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
 
   alias Cadence.Commanding.{
     CommandQueueEntry,
+    CommandQueueEntryRow,
     CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
     CommandRequest,
-    CommandVerifierInstance
+    CommandRequestRow,
+    CommandVerifierInstance,
+    CommandVerifierInstanceRow
   }
 
   alias Cadence.Contacts.{Path, RealizedContact}
   alias Cadence.Dashboards.{Document, RenderItem}
   alias Cadence.OperationalEvents.Event
   alias Cadence.OperationalEvents.EventRow, as: OperationalEventRow
-
-  alias Cadence.Persistence.Schemas.{
-    CommandQueueEntryRow,
-    CommandReleaseAttemptRow,
-    CommandRequestRow,
-    CommandVerifierInstanceRow
-  }
 
   alias Cadence.Repo
   alias Cadence.Runtime.TransportActionRequest

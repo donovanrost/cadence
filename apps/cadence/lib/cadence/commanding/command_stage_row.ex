@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommandStageRow do
+defmodule Cadence.Commanding.CommandStageRow do
   @moduledoc false
 
   use Ecto.Schema

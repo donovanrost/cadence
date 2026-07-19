@@ -11,6 +11,7 @@ defmodule Cadence.CommandingTest do
   alias Cadence.Commanding.{
     CommandApproval,
     CommandQueueEntry,
+    CommandQueueEntryRow,
     CommandReleaseAttempt,
     CommandRequest,
     CommandStage,
@@ -20,7 +21,7 @@ defmodule Cadence.CommandingTest do
 
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
   alias Cadence.OperationalEvents
-  alias Cadence.Persistence.Schemas.{CommandQueueEntryRow, TransportActionRequestRow}
+  alias Cadence.Persistence.Schemas.TransportActionRequestRow
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft

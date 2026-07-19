@@ -3,15 +3,16 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
 
   import Cadence.Dashboards.DataLinkResolverFixtures
 
-  alias Cadence.Commanding.{CommandReleaseAttempt, CommandVerifierInstance}
+  alias Cadence.Commanding.{
+    CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
+    CommandVerifierInstance,
+    CommandVerifierInstanceRow
+  }
+
   alias Cadence.Dashboards.{DataLink, DataLinkResolver}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-
-  alias Cadence.Persistence.Schemas.{
-    CommandReleaseAttemptRow,
-    CommandVerifierInstanceRow
-  }
 
   alias Cadence.Repo
 

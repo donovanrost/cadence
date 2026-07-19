@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.CommandVerifierInstanceRow do
+defmodule Cadence.Commanding.CommandVerifierInstanceRow do
   @moduledoc false
 
   use Ecto.Schema

@@ -7,8 +7,11 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
 
   alias Cadence.Commanding.{
     CommandQueueEntry,
+    CommandQueueEntryRow,
     CommandReleaseAttempt,
-    CommandRequest
+    CommandReleaseAttemptRow,
+    CommandRequest,
+    CommandRequestRow
   }
 
   alias Cadence.Dashboards.{
@@ -20,12 +23,6 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
 
   alias Cadence.Limits
   alias Cadence.Limits.{Definition, DefinitionLifecycle}
-
-  alias Cadence.Persistence.Schemas.{
-    CommandQueueEntryRow,
-    CommandReleaseAttemptRow,
-    CommandRequestRow
-  }
 
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint

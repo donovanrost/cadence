@@ -5,9 +5,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
 
   alias Cadence.Commanding.{
     CommandQueueEntry,
+    CommandQueueEntryRow,
     CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
     CommandRequest,
-    CommandVerifierInstance
+    CommandRequestRow,
+    CommandVerifierInstance,
+    CommandVerifierInstanceRow
   }
 
   alias Cadence.Comms.{GroundStation, Transport}
@@ -19,10 +23,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
   alias Cadence.OperationalEvents.Event
 
   alias Cadence.Persistence.Schemas.{
-    CommandQueueEntryRow,
-    CommandReleaseAttemptRow,
-    CommandRequestRow,
-    CommandVerifierInstanceRow,
     PacketRecordRow,
     RawEvidenceRow,
     ReplayRunRow

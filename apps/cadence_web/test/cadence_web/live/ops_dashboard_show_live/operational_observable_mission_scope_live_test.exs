@@ -12,13 +12,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Commanding.{CommandQueueEntry, CommandRequest}
-  alias Cadence.Dashboards.{Document, RenderItem}
-
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Commanding.{
+    CommandQueueEntry,
     CommandQueueEntryRow,
+    CommandRequest,
     CommandRequestRow
   }
+
+  alias Cadence.Dashboards.{Document, RenderItem}
 
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
