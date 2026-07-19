@@ -887,6 +887,12 @@ test-file pressure to 3. The original 6,323-line test is now seven files of
 634, 1,051, 769, 1,137, 1,019, 951, and 858 lines; its 2,150-line support
 module is now two fixture modules of 1,075 and 1,078 lines. All 23 copied-route
 and rendered-evidence proofs remain in the focused app-local run.
+Decomposing the 6,587-line replay transport-evidence scenario into setup,
+release, failed-verifier cycles, verifier evidence, and transport-record phases
+reduced test-file pressure to 2. Its public scenario is now a 25-line
+orchestrator over eight phase modules of 388, 1,222, 889, 653, 654, 685,
+1,093, and 1,238 lines; all five transport-evidence LiveView tests remain
+green in the focused app-local run.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
