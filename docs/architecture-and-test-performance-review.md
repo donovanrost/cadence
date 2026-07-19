@@ -933,6 +933,12 @@ links, actions, and request-facing presentation context out of the telemetry
 source reduced the adapter to 1,758 lines. The 447-line frame builder and
 149-line frame-context module are both below the production threshold; source
 pressure remains 11 until another adapter responsibility is separated.
+Consolidating selection policy, live and archive time windows, backend
+connection material, contact-derived source-endpoint scope, and all
+latest/history/decimated/watermark query options reduced the telemetry adapter
+again to 1,342 lines. The 486-line query-options module keeps those backend
+scope rules consistent; production pressure remains 11 while the adapter is
+above the 1,000-line limit.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

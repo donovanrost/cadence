@@ -7,8 +7,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   planner execute IO; callers pass a `PlannedSourceRequest` here after planning.
   """
 
-  alias Cadence.Contacts
-
   alias Cadence.Dashboards.{
     DataContext,
     DataLinks,
@@ -16,7 +14,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     Frame,
     PlannedSourceRequest,
     ResolveWarning,
-    ScopeContext,
     SourceActions,
     SourceCapabilities,
     SourceFacts,
@@ -26,17 +23,16 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     TelemetryActions
   }
 
-  alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext}
+  alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext, QueryOptions}
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.Reads.Telemetry, as: TelemetryReads
-  alias Cadence.Telemetry.{Sample, SelectionPolicy}
+  alias Cadence.Telemetry.Sample
 
   @history_sampling_modes [:raw_series, :bounded_history, :bounded_raw_series]
   @native_decimated_sampling_modes [:decimated_envelope]
   @supported_sampling_modes [:latest | @history_sampling_modes]
-  @default_limit 10_000
   @type decimated_history_fun :: (binary() | nil, binary(), binary(), keyword() ->
                                     [map()] | {:ok, map()} | map() | {:error, term()})
   @type history_fun :: (binary() | nil, binary(), binary(), keyword() ->
@@ -245,8 +241,8 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
     case sampling_mode(request) do
       :latest ->
-        latest_opts = latest_opts(request, source_binding, opts)
-        time_warnings = latest_time_warnings(request)
+        latest_opts = QueryOptions.latest(request, source_binding, opts)
+        time_warnings = QueryOptions.latest_warnings(request)
         latest_fun = Keyword.get(opts, :latest_fun, &default_latest/4)
 
         {frames, revision_warnings} =
@@ -287,7 +283,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          :latest_value}
 
       mode when mode in @history_sampling_modes ->
-        {history_opts, time_warnings} = history_opts(request, source_binding, opts)
+        {history_opts, time_warnings} = QueryOptions.history(request, source_binding, opts)
         history_fun = Keyword.get(opts, :history_fun, &default_history/4)
 
         case resolve_history_entries(
@@ -324,7 +320,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
         end
 
       :decimated_envelope ->
-        {decimated_opts, time_warnings} = decimated_history_opts(request, source_binding, opts)
+        {decimated_opts, time_warnings} = QueryOptions.decimated(request, source_binding, opts)
         aggregate_warnings = native_aggregate_semantics_warnings(request)
 
         decimated_history_fun =
@@ -972,280 +968,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     context_value(request.scope_context, key)
   end
 
-  defp selection_policy_opts(%PlannedSourceRequest{} = request) do
-    [
-      selection_view:
-        DataContext.source_value(request.data_context, request.logical_source, :view) ||
-          first_context_value(request.data_context, [
-            :selection_view,
-            :view,
-            :data_view,
-            :data_management_view
-          ]),
-      validity_state: context_value(request.data_context, :validity_state)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-    |> SelectionPolicy.query_opts()
-  end
-
-  defp history_opts(%PlannedSourceRequest{} = request, source_binding, source_opts) do
-    {time_opts, time_warnings} = bounded_history_time_opts(request, source_opts)
-
-    opts =
-      [
-        realm: realm(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        data_source_id: data_source_id(request, source_binding),
-        source_binding_id: source_binding_id(source_binding),
-        dataset: dataset(source_binding),
-        spacecraft_id: spacecraft_id(request.scope_context),
-        source_endpoint_ids: source_endpoint_ids(request, source_opts),
-        limit: raw_point_limit(request),
-        order: :asc
-      ]
-      |> Kernel.++(time_opts)
-      |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-
-    {opts ++ selection_policy_opts(request) ++ connection_opts(source_opts), time_warnings}
-  end
-
-  defp decimated_history_opts(%PlannedSourceRequest{} = request, source_binding, source_opts) do
-    {opts, time_warnings} = history_opts(request, source_binding, source_opts)
-
-    decimation_opts =
-      [
-        target_points: target_points(request),
-        bucket_width_ms: bucket_width_ms(request),
-        decimation: :native_min_max_envelope
-      ]
-      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-
-    {opts ++ decimation_opts, time_warnings}
-  end
-
-  defp latest_opts(%PlannedSourceRequest{} = request, source_binding, opts) do
-    [
-      realm: realm(request, source_binding),
-      replay_run_id: replay_run_id(request),
-      data_source_id: data_source_id(request, source_binding),
-      source_binding_id: source_binding_id(source_binding),
-      dataset: dataset(source_binding),
-      spacecraft_id: spacecraft_id(request.scope_context),
-      source_endpoint_ids: source_endpoint_ids(request, opts),
-      to_receipt_time: latest_as_of_receipt_time(request)
-    ]
-    |> Kernel.++(selection_policy_opts(request))
-    |> Kernel.++(connection_opts(opts))
-    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-  end
-
-  defp connection_opts(opts) when is_list(opts) do
-    opts
-    |> Keyword.take([
-      :http_endpoint,
-      :headers,
-      :source_connection_profile,
-      :source_connection_material
-    ])
-    |> Enum.reject(fn
-      {_key, nil} -> true
-      {_key, ""} -> true
-      {_key, []} -> true
-      _entry -> false
-    end)
-  end
-
-  defp connection_opts(_opts), do: []
-
-  defp receipt_time_bounds(%PlannedSourceRequest{} = request) do
-    {time_bounds, warnings} = bounded_history_time_opts(request)
-
-    {
-      Keyword.get(time_bounds, :from_receipt_time),
-      Keyword.get(time_bounds, :to_receipt_time),
-      warnings
-    }
-  end
-
-  defp bounded_history_time_opts(%PlannedSourceRequest{} = request) do
-    requested_axis = time_axis(request)
-    effective_axis = effective_bounded_history_time_axis(request, [])
-    {from_time, to_time} = bounded_history_time_range(request, [])
-
-    bounded_history_time_opts_for_axis(
-      request,
-      requested_axis,
-      effective_axis,
-      from_time,
-      to_time,
-      []
-    )
-  end
-
-  defp bounded_history_time_opts(%PlannedSourceRequest{} = request, source_opts) do
-    requested_axis = time_axis(request)
-    effective_axis = effective_bounded_history_time_axis(request, source_opts)
-    {from_time, to_time} = bounded_history_time_range(request, source_opts)
-
-    bounded_history_time_opts_for_axis(
-      request,
-      requested_axis,
-      effective_axis,
-      from_time,
-      to_time,
-      source_opts
-    )
-  end
-
-  defp bounded_history_time_range(%PlannedSourceRequest{} = request, source_opts) do
-    from_time = first_context_value(request.time_context, [:from, :start, :start_time])
-    to_time = first_context_value(request.time_context, [:to, :end, :end_time])
-
-    case {from_time, to_time, live_time_context?(request.time_context),
-          live_window_seconds(request.time_context)} do
-      {nil, nil, true, window_seconds} when is_integer(window_seconds) ->
-        to_time = live_window_now(source_opts)
-        {DateTime.add(to_time, -window_seconds, :second), to_time}
-
-      _explicit_or_unbounded ->
-        {from_time, to_time}
-    end
-  end
-
-  defp live_time_context?(time_context) do
-    first_context_value(time_context, [:mode]) in [:live, "live"]
-  end
-
-  defp live_window_seconds(time_context) do
-    case first_context_value(time_context, [:window_seconds]) do
-      window_seconds when is_integer(window_seconds) and window_seconds > 0 -> window_seconds
-      _invalid_or_missing -> nil
-    end
-  end
-
-  defp live_window_now(source_opts) do
-    case Keyword.get(source_opts, :now) do
-      %DateTime{} = now -> DateTime.truncate(now, :microsecond)
-      _missing -> DateTime.utc_now()
-    end
-  end
-
-  defp effective_bounded_history_time_axis(%PlannedSourceRequest{} = request, source_opts) do
-    requested_axis = time_axis(request)
-    supported_axes = supported_time_axes(source_opts)
-
-    cond do
-      requested_axis in [nil, :receipt_time] ->
-        :receipt_time
-
-      requested_axis == :generation_time and supported_axes == [] ->
-        :generation_time
-
-      requested_axis == :generation_time and :generation_time in supported_axes ->
-        :generation_time
-
-      true ->
-        :unsupported
-    end
-  end
-
-  defp supported_time_axes(source_opts) when is_list(source_opts) do
-    source_opts
-    |> Keyword.get(:supported_time_axes, [])
-    |> List.wrap()
-    |> Enum.map(&normalize_atom/1)
-    |> Enum.filter(&(&1 in [:generation_time, :receipt_time]))
-    |> Enum.uniq()
-  end
-
-  defp supported_time_axes(_source_opts), do: []
-
-  defp bounded_history_time_opts_for_axis(
-         request,
-         requested_axis,
-         effective_axis,
-         from_time,
-         to_time,
-         source_opts
-       ) do
-    case effective_axis do
-      axis when axis in [nil, :receipt_time] ->
-        {[
-           time_axis: :receipt_time,
-           from_receipt_time: from_time,
-           to_receipt_time: to_time
-         ], []}
-
-      :generation_time ->
-        {[
-           time_axis: :generation_time,
-           from_observed_at: from_time,
-           to_observed_at: to_time
-         ], []}
-
-      :unsupported ->
-        warning =
-          warning(
-            request,
-            :unsupported_time_axis,
-            :warning,
-            "Telemetry source cannot serve the requested dashboard time axis",
-            %{
-              requested_axis: requested_axis,
-              requested_time_axis: requested_axis,
-              fallback_axis: :receipt_time,
-              executed_time_axis: :receipt_time,
-              supported_time_axes: supported_time_axes(source_opts),
-              unsupported_capability: :time_axis
-            }
-          )
-
-        {[
-           time_axis: :receipt_time,
-           from_receipt_time: from_time,
-           to_receipt_time: to_time
-         ], [warning]}
-    end
-  end
-
-  defp latest_time_warnings(%PlannedSourceRequest{} = request) do
-    cond do
-      not time_range_requested?(request.time_context) ->
-        []
-
-      latest_as_of_supported?(request) ->
-        []
-
-      true ->
-        [
-          warning(
-            request,
-            :time_range_ignored,
-            :warning,
-            "Latest telemetry archive requests require a receipt-time upper bound for as-of resolution",
-            %{
-              requested_time_mode: context_value(request.time_context, :mode),
-              requested_axis: time_axis(request),
-              fallback: :latest_projection
-            }
-          )
-        ]
-    end
-  end
-
-  defp latest_as_of_receipt_time(%PlannedSourceRequest{} = request) do
-    if latest_as_of_supported?(request) do
-      first_context_value(request.time_context, [:to, :end, :end_time])
-    end
-  end
-
-  defp latest_as_of_supported?(%PlannedSourceRequest{} = request) do
-    requested_axis = time_axis(request)
-    to_time = first_context_value(request.time_context, [:to, :end, :end_time])
-
-    not is_nil(to_time) and requested_axis in [nil, :receipt_time]
-  end
-
   defp resolve_revision_state(
          frames_with_samples,
          %PlannedSourceRequest{} = request,
@@ -1271,7 +993,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          opts
        )
        when is_list(frames) do
-    {source_from, source_to, _warnings} = receipt_time_bounds(request)
+    {source_from, source_to, _warnings} = QueryOptions.receipt_time_bounds(request)
 
     query_opts =
       [
@@ -1319,7 +1041,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
        ) do
     if watermarks_supported?(source_binding) do
       watermark_fun = Keyword.get(opts, :watermark_fun, &default_watermark/4)
-      watermark_opts = watermark_opts(request, source_binding, opts)
+      watermark_opts = QueryOptions.watermark(request, source_binding, opts)
 
       request.observables
       |> Enum.map(fn observable_id ->
@@ -1428,25 +1150,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     if DateTime.compare(datetime, other) == comparison, do: datetime, else: other
   end
 
-  defp watermark_opts(%PlannedSourceRequest{} = request, source_binding, opts) do
-    {from_receipt_time, to_receipt_time, _warnings} = receipt_time_bounds(request)
-
-    [
-      realm: realm(request, source_binding),
-      data_source_id: data_source_id(request, source_binding),
-      source_binding_id: source_binding_id(source_binding),
-      dataset: dataset(source_binding),
-      replay_run_id: replay_run_id(request),
-      spacecraft_id: spacecraft_id(request.scope_context),
-      source_endpoint_ids: source_endpoint_ids(request, opts),
-      from_receipt_time: from_receipt_time,
-      to_receipt_time: to_receipt_time
-    ]
-    |> Kernel.++(selection_policy_opts(request))
-    |> Kernel.++(connection_opts(opts))
-    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-  end
-
   defp watermarks_supported?(%{data_source: %{capabilities: capabilities}})
        when is_map(capabilities) do
     Map.get(capabilities, :watermarks?, Map.get(capabilities, "watermarks?")) == true
@@ -1473,87 +1176,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     DataContext.source_value(request.data_context, request.logical_source, :replay_run_id) ||
       context_value(request.time_context, :replay_run_id)
   end
-
-  defp source_endpoint_ids(%PlannedSourceRequest{} = request, opts) do
-    request.scope_context
-    |> direct_source_endpoint_ids()
-    |> Kernel.++(contact_source_endpoint_ids(request, opts))
-    |> normalize_source_endpoint_ids()
-  end
-
-  defp direct_source_endpoint_ids(scope_context) do
-    primary_ids =
-      if ScopeContext.primary_kind(scope_context) in [:source_endpoint, "source_endpoint"] do
-        ScopeContext.primary_ids(scope_context)
-      else
-        []
-      end
-
-    typed_id =
-      scope_context
-      |> ScopeContext.scope_id(:source_endpoint)
-      |> List.wrap()
-
-    primary_ids ++ typed_id
-  end
-
-  defp contact_source_endpoint_ids(%PlannedSourceRequest{} = request, opts) do
-    request.scope_context
-    |> ScopeContext.scope_ids(:contact)
-    |> Enum.flat_map(fn contact_id ->
-      organization_id = request.organization_id
-      mission_id = request.mission_id
-
-      fetch_contact_source_endpoint_ids(organization_id, mission_id, contact_id, opts)
-    end)
-  end
-
-  defp fetch_contact_source_endpoint_ids(organization_id, mission_id, contact_id, opts) do
-    case fetch_scheduled_contact(organization_id, mission_id, contact_id, opts) do
-      {:ok, contact} ->
-        contact_source_endpoint_refs(contact)
-
-      {:error, :scheduled_contact_not_found} ->
-        case fetch_realized_contact(organization_id, mission_id, contact_id, opts) do
-          {:ok, contact} -> contact_source_endpoint_refs(contact)
-          {:error, _reason} -> []
-        end
-
-      {:error, _reason} ->
-        []
-    end
-  end
-
-  defp fetch_scheduled_contact(organization_id, mission_id, contact_id, opts) do
-    fetch_scheduled_contact =
-      Keyword.get(opts, :fetch_scheduled_contact, &Contacts.fetch_scheduled_contact/3)
-
-    fetch_scheduled_contact.(organization_id, mission_id, contact_id)
-  end
-
-  defp fetch_realized_contact(organization_id, mission_id, contact_id, opts) do
-    fetch_realized_contact =
-      Keyword.get(opts, :fetch_realized_contact, &Contacts.fetch_realized_contact/3)
-
-    fetch_realized_contact.(organization_id, mission_id, contact_id)
-  end
-
-  defp contact_source_endpoint_refs(contact) when is_map(contact) do
-    contact
-    |> context_value(:source_endpoint_refs)
-    |> normalize_source_endpoint_ids()
-  end
-
-  defp contact_source_endpoint_refs(_contact), do: []
-
-  defp normalize_source_endpoint_ids(ids) when is_list(ids) do
-    ids
-    |> Enum.filter(&(is_binary(&1) and &1 != ""))
-    |> Enum.uniq()
-  end
-
-  defp normalize_source_endpoint_ids(id) when is_binary(id) and id != "", do: [id]
-  defp normalize_source_endpoint_ids(_ids), do: []
 
   defp default_decimated_history(nil, _mission_id, _point_id, _opts) do
     {:error, :missing_tenant_context}
@@ -1679,44 +1301,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     time_context
     |> context_value(:mode)
     |> normalize_atom()
-  end
-
-  defp time_range_requested?(time_context) do
-    mode = time_context |> context_value(:mode) |> normalize_atom()
-
-    mode in [:archive, :range] or
-      not is_nil(first_context_value(time_context, [:from, :start, :start_time])) or
-      not is_nil(first_context_value(time_context, [:to, :end, :end_time]))
-  end
-
-  defp raw_point_limit(%PlannedSourceRequest{sampling: sampling}) do
-    case context_value(sampling, :max_raw_points) || context_value(sampling, :limit) do
-      limit when is_integer(limit) and limit > 0 -> min(limit, @default_limit)
-      _other -> @default_limit
-    end
-  end
-
-  defp target_points(%PlannedSourceRequest{sampling: sampling}) do
-    case context_value(sampling, :target_points) do
-      target when is_integer(target) and target > 0 -> target
-      _other -> nil
-    end
-  end
-
-  defp bucket_width_ms(%PlannedSourceRequest{sampling: sampling}) do
-    case context_value(sampling, :bucket_width_ms) do
-      width when is_integer(width) and width > 0 -> width
-      _other -> nil
-    end
-  end
-
-  defp spacecraft_id(scope_context) do
-    ScopeContext.scope_id(scope_context, :spacecraft)
-  end
-
-  defp first_context_value(context, keys) do
-    keys
-    |> Enum.find_value(&context_value(context, &1))
   end
 
   defp context_value(context, key) when is_map(context) and is_atom(key) do
