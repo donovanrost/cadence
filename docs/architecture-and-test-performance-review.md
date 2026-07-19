@@ -1318,6 +1318,11 @@ lines and overlong test-function pressure from 7 to 6. The control-plane API
 routes and authentication plugs are unchanged; mission-resource setup, runtime
 materialization, early termination, audit actions, and active binding lookup
 remain covered. All remaining overlong tests are in the opt-in browser matrix.
+Running the opt-in transport-execution browser file exposed 15 stale
+state-timeline menu waits left behind by the shared overlay migration. The smoke
+runner now waits for the canonical `data-overlay-open` state and preserves
+toggle-safe behavior when an overlay survives a LiveView patch; both live and
+replay transport-execution browser scenarios pass again.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

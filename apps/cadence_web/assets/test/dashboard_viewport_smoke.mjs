@@ -14367,7 +14367,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${lockRowSelector} details[open]`,
+    `${lockRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "operational RF state timeline row link menu"
   )
 
@@ -14488,7 +14488,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
     await clickAndWaitForSelector(
       client,
       rowMenuSelector,
-      `${lockRowSelector} details[open]`,
+      `${lockRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       "operational RF state timeline row link menu for operational event"
     )
 
@@ -14776,7 +14776,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
     await clickAndWaitForSelector(
       client,
       frameSyncRowMenuSelector,
-      `${frameSyncRowSelector} details[open]`,
+      `${frameSyncRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       "operational frame-sync state timeline row link menu"
     )
 
@@ -15239,7 +15239,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${trackingRowSelector} details[open]`,
+    `${trackingRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "antenna pointing state timeline row link menu"
   )
 
@@ -15318,7 +15318,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${trackingRowSelector} details[open]`,
+    `${trackingRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "antenna pointing state timeline row link menu for evidence"
   )
 
@@ -16297,7 +16297,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
 	    await clickAndWaitForSelector(
 	      client,
       betaTransportRowMenuSelector,
-      `${betaTransportConnectedRowSelector} details[open]`,
+      `${betaTransportConnectedRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       "multi-scope beta transport row link menu"
     )
 
@@ -16541,7 +16541,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
 	      await clickAndWaitForSelector(
 	        client,
 	        betaTransportTableRowMenuSelector,
-	        `${betaTransportTableRowSelector} details[open]`,
+	        `${betaTransportTableRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
 	        "multi-scope beta transport data-table row link menu"
 	      )
 
@@ -16618,7 +16618,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
     await clickAndWaitForSelector(
       client,
       transportRowMenuSelector,
-      `${transportConnectedRowSelector} details[open]`,
+      `${transportConnectedRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       "transport connection state row link menu for operational event"
     )
 
@@ -16767,7 +16767,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
     await clickAndWaitForSelector(
       client,
       menuSelector,
-      `${rowSelector} details[open]`,
+      `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       `${description} row link menu`
     )
 
@@ -17231,7 +17231,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
   await clickAndWaitForSelector(
     client,
     betaGroundMenuSelector,
-    `${betaGroundConnectedSelector} details[open]`,
+    `${betaGroundConnectedSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "mission aggregate beta ground connection row link menu"
   )
 
@@ -21216,7 +21216,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${initializedRowSelector} details[open]`,
+    `${initializedRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "operational transport execution timeline row link menu"
   )
 
@@ -21520,7 +21520,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
     await clickAndWaitForSelector(
       client,
       betaRowMenuSelector,
-      `${betaRowSelector} details[open]`,
+      `${betaRowSelector} [data-state-timeline-row-links][data-overlay-open]`,
       "multi-link transport execution beta row link menu"
     )
 
@@ -24078,7 +24078,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} details[open]`,
+    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "replay managed runtime row link menu"
   )
 
@@ -24467,7 +24467,7 @@ async function runReplayContactIntervalInspection(client, profile) {
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} details[open]`,
+    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "replay contact interval row link menu"
   )
 
@@ -24569,7 +24569,7 @@ async function runReplayContactIntervalInspection(client, profile) {
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} details[open]`,
+    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
     "replay contact interval row link menu for operational event"
   )
 
@@ -24701,12 +24701,11 @@ async function runReplayContactIntervalInspection(client, profile) {
 }
 
 async function clickAndWaitForSelector(client, clickSelector, waitSelector, label, timeoutMs = 10_000) {
-  // Toggle-safe semantics for <details> menus: patches no longer reset
-  // client-only open state, so a menu opened by an earlier step stays open —
-  // clicking its summary again would toggle it closed and the wait would
-  // never succeed. Skip the click only when the awaited open-state already
-  // holds; non-toggle waits keep click-then-wait semantics.
-  if (waitSelector.includes("details[open]")) {
+  // Toggle-safe semantics for client-owned overlays: patches preserve open
+  // state, so clicking an already-open trigger would close it and the wait
+  // would never succeed. Skip the click only when the awaited open state
+  // already holds; non-toggle waits keep click-then-wait semantics.
+  if (waitSelector.includes("[data-overlay-open]")) {
     const alreadyOpen = await client.send("Runtime.evaluate", {
       expression: `Boolean(document.querySelector(${JSON.stringify(waitSelector)}))`,
       returnByValue: true,
