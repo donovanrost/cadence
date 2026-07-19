@@ -135,6 +135,90 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     assert path =~ "scope_id=dss-14"
   end
 
+  defp persist_connection_state_rendering_fixture!(org, mission) do
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-source-endpoint-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Goldstone DSS-14",
+        metadata: %{"ground_station_id" => "dss-14"}
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
+
+    transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Lab TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "ground.example",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => source_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-14"
+        }
+      })
+
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
+
+    observed_at = ~U[2026-06-17 12:03:00Z]
+
+    assert {:ok, _connection_event} =
+             Event.from_operational_observable_state_snapshot(%{
+               snapshot_id: "dashboard-connection-state-live-alpha",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               observable_id: "comms.transport.connection_state",
+               resource_id: transport.transport_id,
+               scope_kind: :transport,
+               transport_id: transport.transport_id,
+               source_endpoint_id: source_endpoint.source_endpoint_id,
+               ground_station_id: "dss-14",
+               adapter_key: :tcp_socket,
+               connection_state: :connected,
+               state: :connected,
+               observed_at: observed_at
+             })
+             |> OperationalEvents.persist_event()
+
+    [connection_interval] =
+      Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
+        observable_id: "comms.transport.connection_state",
+        resource_id: transport.transport_id
+      )
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Connection State",
+        widgets: [
+          %{
+            type: :status_matrix,
+            title: "Connection State",
+            binding: %{
+              source: :operational_observables,
+              observables: ["comms.transport.connection_state"]
+            }
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    matrix_widget = render_item_by_title(document, "Connection State").widget
+
+    {source_endpoint, transport, observed_at, connection_interval, dashboard,
+     matrix_widget.widget_id}
+  end
+
   describe "operational observable rendering" do
     test "renders contact phase operational observable rows with phase presentation" do
       enable_dashboard_engine_inline_resolves!()
@@ -222,90 +306,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
 
       {conn, org, mission} = signed_in_org_and_mission()
 
-      source_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone DSS-14",
-          metadata: %{"ground_station_id" => "dss-14"}
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, source_endpoint)
-
-      transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Lab TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "ground.example",
-            "port" => "5000",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => source_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, transport)
-
-      observed_at = ~U[2026-06-17 12:03:00Z]
-
-      assert {:ok, _connection_event} =
-               Event.from_operational_observable_state_snapshot(%{
-                 snapshot_id: "dashboard-connection-state-live-alpha",
-                 organization_id: org.organization_id,
-                 mission_id: mission.mission_id,
-                 observable_id: "comms.transport.connection_state",
-                 resource_id: transport.transport_id,
-                 scope_kind: :transport,
-                 transport_id: transport.transport_id,
-                 source_endpoint_id: source_endpoint.source_endpoint_id,
-                 ground_station_id: "dss-14",
-                 adapter_key: :tcp_socket,
-                 connection_state: :connected,
-                 state: :connected,
-                 observed_at: observed_at
-               })
-               |> OperationalEvents.persist_event()
-
-      [connection_interval] =
-        Cadence.operational_connection_state_intervals(org.organization_id, mission.mission_id,
-          observable_id: "comms.transport.connection_state",
-          resource_id: transport.transport_id
-        )
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Connection State",
-          widgets: [
-            %{
-              type: :status_matrix,
-              title: "Connection State",
-              binding: %{
-                source: :operational_observables,
-                observables: ["comms.transport.connection_state"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      matrix_widget = render_item_by_title(document, "Connection State").widget
+      {source_endpoint, transport, observed_at, connection_interval, dashboard, matrix_widget_id} =
+        persist_connection_state_rendering_fixture!(org, mission)
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
       row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
+        ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
 
       assert has_element?(
                view,

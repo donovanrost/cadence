@@ -951,6 +951,10 @@ Centralizing the managed-runtime inspector field selector reduced the live
 capability-record copied-route proof from 336 to 264 lines while keeping its
 explicit field-value, route, and reopen assertions, reducing overlong-test
 pressure from 22 to 21.
+Moving connection-state endpoint, transport, snapshot, interval, and dashboard
+setup into a fixture helper reduced that rendering proof from 346 to 271 lines
+while retaining its row presentation, evidence, copied-route, reopened-event,
+and transport-link assertions, reducing overlong-test pressure from 21 to 20.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
