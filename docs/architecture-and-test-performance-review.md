@@ -1284,6 +1284,12 @@ summaries into a 283-line `DataManagement.ObservationIdentityDecisions` module
 reduced `DataManagement` from 3,203 to 2,930 lines. Its typed public APIs and
 result contracts remain unchanged; production source-size pressure remains 6
 and dependency ratchets are unchanged.
+Extracting historical source-window parsing, source identity and query options,
+sample-history lookup, and diagnostics into a 135-line
+`DataManagement.HistoricalSourceSamples` module reduced `DataManagement` from
+2,930 to 2,844 lines. Background historical jobs and late-data policy execution
+now share that boundary; production source-size pressure remains 6 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
