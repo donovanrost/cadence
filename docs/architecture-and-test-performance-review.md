@@ -922,6 +922,9 @@ and overlong-test pressure from 31 to 30.
 Extracting antenna-pointing copied-route assertions reduced that operational
 observable rendering test from 310 to 299 lines and overlong-test pressure from
 30 to 29.
+Extracting failed historical-workflow lifecycle and job setup reduced the
+non-retryable correction LiveView test from 315 to 264 lines and overlong-test
+pressure from 29 to 28.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps

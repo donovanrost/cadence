@@ -73,63 +73,69 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowNonretryableCorrecti
     :exit, _reason -> :ok
   end
 
+  defp seed_nonretryable_workflow!(org, mission, dashboard) do
+    assert {:ok, event} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "failed",
+               %{
+                 backfill_run_id: "dashboard-workflow-run-nonretryable",
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 authority: :advisory,
+                 reason: "historical_data_job_failed",
+                 actor_id: "system",
+                 actor_kind: "system",
+                 payload: %{
+                   "dashboard_context" => %{
+                     "dashboard_id" => dashboard.dashboard_id,
+                     "dashboard_version" => "1",
+                     "dashboard_time_mode" => "replay_run",
+                     "dashboard_replay_run_id" => "replay-correction-1",
+                     "dashboard_data_view" => "all_revisions",
+                     "dashboard_limit_mode" => "observed"
+                   },
+                   "source" => %{
+                     "failure" => %{
+                       "code" => "missing_field:point_id",
+                       "retryable" => false,
+                       "retry_blockers" => ["missing point_id"],
+                       "recovery_action" => "correct_workflow_request"
+                     }
+                   }
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert {:ok, job} =
+             Cadence.Jobs.enqueue(
+               :telemetry_historical_data_workflow,
+               mission.mission_id,
+               "dashboard-workflow-run-nonretryable",
+               %{
+                 "workflow" => "backfill",
+                 "attrs" => %{"backfill_run_id" => "dashboard-workflow-run-nonretryable"}
+               }
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == job.job_id
+    assert {:ok, failed_job} = Cadence.Jobs.fail_worker_start(job.job_id, :missing_point_id)
+    assert failed_job.status == :failed
+
+    {event, job}
+  end
+
   describe "historical workflow non-retryable correction surfaces" do
     test "does not offer retry for non-retryable historical workflow failures" do
       {conn, org, mission} = signed_in_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-      assert {:ok, event} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "failed",
-                 %{
-                   backfill_run_id: "dashboard-workflow-run-nonretryable",
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   authority: :advisory,
-                   reason: "historical_data_job_failed",
-                   actor_id: "system",
-                   actor_kind: "system",
-                   payload: %{
-                     "dashboard_context" => %{
-                       "dashboard_id" => dashboard.dashboard_id,
-                       "dashboard_version" => "1",
-                       "dashboard_time_mode" => "replay_run",
-                       "dashboard_replay_run_id" => "replay-correction-1",
-                       "dashboard_data_view" => "all_revisions",
-                       "dashboard_limit_mode" => "observed"
-                     },
-                     "source" => %{
-                       "failure" => %{
-                         "code" => "missing_field:point_id",
-                         "retryable" => false,
-                         "retry_blockers" => ["missing point_id"],
-                         "recovery_action" => "correct_workflow_request"
-                       }
-                     }
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
-
-      assert {:ok, job} =
-               Cadence.Jobs.enqueue(
-                 :telemetry_historical_data_workflow,
-                 mission.mission_id,
-                 "dashboard-workflow-run-nonretryable",
-                 %{
-                   "workflow" => "backfill",
-                   "attrs" => %{"backfill_run_id" => "dashboard-workflow-run-nonretryable"}
-                 }
-               )
-
-      assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-      assert claimed_job.job_id == job.job_id
-      assert {:ok, failed_job} = Cadence.Jobs.fail_worker_start(job.job_id, :missing_point_id)
-      assert failed_job.status == :failed
+      {event, job} = seed_nonretryable_workflow!(org, mission, dashboard)
 
       path =
         show_path(mission, dashboard) <>
