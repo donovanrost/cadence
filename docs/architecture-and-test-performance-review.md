@@ -739,7 +739,10 @@ browser source; reports files and individual `test` blocks over the thresholds;
 and emits a compact summary from `mix precommit`. `--strict` is available once
 the current pressure has been reduced or explicitly baselined. The initial
 diagnostic reports 31 production files, 21 test files, and 35 test functions
-over their respective limits.
+over their respective limits. Extracting uplink-gateway configuration
+normalization and validation from the 1,016-line transport extension reduced
+the current production-file pressure to 30 without changing the test-file or
+test-function counts.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
