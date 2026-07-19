@@ -8,13 +8,10 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   alias Cadence.Dashboards.{
     DashboardContract,
-    DataBindingInterval,
     DataContext,
-    DataLink,
     DataLinks,
     DataSourceRegistry,
     DataSources,
-    Field,
     Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
@@ -32,7 +29,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     SourceHealthEvent,
     SourceHealthStatus,
     SourceResult,
-    SourceWatermark,
     SourceWatermarks
   }
 
@@ -41,6 +37,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     FactsAggregation,
     HealthMerge,
     OperationalIntervalProvenance,
+    Provenance,
     SegmentResultMerge,
     WatermarkMerge
   }
@@ -189,8 +186,8 @@ defmodule Cadence.Dashboards.SourceRegistry do
         dataset: resolved_binding.dataset,
         source_binding_version: Map.get(binding, :binding_version),
         source_binding_event_id: Map.get(binding, :current_event_id),
-        source_binding_interval: source_binding_interval_metadata(resolved_binding),
-        source_selection: non_empty_source_selection(resolved_binding),
+        source_binding_interval: Provenance.interval(resolved_binding),
+        source_selection: Provenance.selection(resolved_binding),
         adapter: adapter,
         supported_sampling: capabilities.supported_sampling,
         supported_products: capabilities.supported_products,
@@ -219,7 +216,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
          adapter,
          %SourceCapabilities{} = capabilities
        ) do
-    segments = Enum.map(resolved_bindings, &source_binding_segment_metadata/1)
+    segments = Enum.map(resolved_bindings, &Provenance.segment/1)
 
     provenance =
       %{
@@ -229,7 +226,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
         source_binding_segments: segments,
         source_selections:
           resolved_bindings
-          |> Enum.map(&non_empty_source_selection/1)
+          |> Enum.map(&Provenance.selection/1)
           |> Enum.reject(&is_nil/1),
         adapter: adapter,
         supported_sampling: capabilities.supported_sampling,
@@ -411,7 +408,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     end)
     |> case do
       {:ok, segment_facts} ->
-        {:ok, FactsAggregation.merge(request, segment_facts, &source_binding_segment_metadata/1)}
+        {:ok, FactsAggregation.merge(request, segment_facts, &Provenance.segment/1)}
 
       {:error, warning} ->
         {:error, warning}
@@ -431,7 +428,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
        facts
        |> merge_persisted_source_watermark(request, resolved_binding, opts)
        |> merge_persisted_source_health(request, resolved_binding, opts)
-       |> put_source_facts_provenance(resolved_binding, capability_provenance)
+       |> Provenance.put_facts(resolved_binding, capability_provenance)
        |> validate_source_facts_contract!(opts)}
     else
       {:error, %ResolveWarning{} = warning} -> {:error, warning}
@@ -611,9 +608,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
       facts
     end
   end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp merge_persisted_source_watermark(
          %SourceFacts{} = facts,
@@ -888,7 +882,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       severity: :error,
       scope: :dashboard,
       message: "Source binding resolved to a data source without a dashboard adapter",
-      details: source_details(request, resolved_binding),
+      details: Provenance.details(request, resolved_binding),
       links: DataLinks.request_observable_links(request, source: :warning)
     }
   end
@@ -912,7 +906,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     case SegmentResultMerge.merge(
            request,
            segment_results,
-           &source_binding_segment_metadata/1
+           &Provenance.segment/1
          ) do
       {:ok, %SourceResult{} = result} ->
         result
@@ -937,7 +931,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
         metadata:
           request.metadata
           |> ensure_map()
-          |> Map.put(:source_binding_segment, source_binding_segment_metadata(resolved_binding))
+          |> Map.put(:source_binding_segment, Provenance.segment(resolved_binding))
     }
   end
 
@@ -1008,7 +1002,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
         |> adapter.resolve(adapter_opts)
         |> SourceResult.normalize()
         |> merge_persisted_source_result_watermark(request, resolved_binding, opts)
-        |> put_source_result_provenance(resolved_binding, request, opts)
+        |> Provenance.put_result(resolved_binding, request, opts)
 
       {:error, reason} ->
         source_unavailable(request, resolved_binding, reason, opts)
@@ -1183,7 +1177,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       request,
       source_degraded_warning(request, resolved_binding, status)
     )
-    |> put_source_result_provenance(resolved_binding, request, opts)
+    |> Provenance.put_result(resolved_binding, request, opts)
   end
 
   defp source_unavailable(%PlannedSourceRequest{} = request, resolved_binding, reason) do
@@ -1191,7 +1185,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       request,
       source_unavailable_warning(request, resolved_binding, reason)
     )
-    |> put_source_result_provenance(resolved_binding, request, [])
+    |> Provenance.put_result(resolved_binding, request, [])
   end
 
   defp source_unavailable(%PlannedSourceRequest{} = request, resolved_binding, reason, opts) do
@@ -1199,7 +1193,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       request,
       source_unavailable_warning(request, resolved_binding, reason)
     )
-    |> put_source_result_provenance(resolved_binding, request, opts)
+    |> Provenance.put_result(resolved_binding, request, opts)
   end
 
   defp source_degraded_warning(%PlannedSourceRequest{} = request, resolved_binding, status) do
@@ -1209,7 +1203,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       scope: :dashboard,
       message: "Source circuit is open after repeated failures",
       details:
-        source_details(request, resolved_binding)
+        Provenance.details(request, resolved_binding)
         |> Map.merge(%{
           circuit_state: Map.get(status, :state),
           failure_count: Map.get(status, :failure_count),
@@ -1229,120 +1223,10 @@ defmodule Cadence.Dashboards.SourceRegistry do
       scope: :dashboard,
       message: "Source adapter failed while resolving dashboard data",
       details:
-        source_details(request, resolved_binding)
+        Provenance.details(request, resolved_binding)
         |> Map.put(:reason, inspect_source_failure(reason)),
       links: DataLinks.request_observable_links(request, source: :warning)
     }
-  end
-
-  defp source_details(%PlannedSourceRequest{} = request, resolved_binding) do
-    details = %{
-      source_request_id: request.request_id,
-      logical_source: request.logical_source,
-      binding_id: resolved_binding.binding.binding_id,
-      data_source_id: resolved_binding.data_source.data_source_id,
-      realm: resolved_binding.realm,
-      dataset: resolved_binding.dataset
-    }
-
-    details
-    |> Map.merge(source_binding_provenance(resolved_binding))
-    |> SourceActions.put_source_request_context(request)
-    |> SourceActions.put_source_warning_actions()
-  end
-
-  defp put_source_facts_provenance(
-         %SourceFacts{} = facts,
-         resolved_binding,
-         capability_provenance
-       ) do
-    facts = SourceFacts.normalize(facts)
-
-    SourceFacts.new(%{
-      facts
-      | meta:
-          facts.meta
-          |> ensure_map()
-          |> Map.merge(source_binding_provenance(resolved_binding))
-          |> maybe_put(:capability_provenance, capability_provenance)
-          |> maybe_put(:capability_posture, Map.get(capability_provenance, :capability_posture))
-    })
-  end
-
-  defp put_source_result_provenance(
-         %SourceResult{} = result,
-         resolved_binding,
-         request,
-         opts
-       ) do
-    result = SourceResult.normalize(result)
-
-    interval_provenance =
-      OperationalIntervalProvenance.build(request, resolved_binding, opts, result)
-
-    provenance =
-      resolved_binding
-      |> source_binding_provenance()
-      |> Map.merge(interval_provenance)
-
-    link_context = source_link_context(request, resolved_binding)
-
-    evidence =
-      source_binding_evidence_refs(resolved_binding, request) ++
-        OperationalIntervalProvenance.evidence_refs(interval_provenance, request) ++
-        source_status_evidence_refs(result)
-
-    SourceResult.new(%{
-      result
-      | meta:
-          result.meta
-          |> ensure_map()
-          |> Map.merge(provenance)
-          |> merge_evidence_refs(evidence),
-        warnings:
-          Enum.map(result.warnings, fn warning ->
-            put_warning_provenance(warning, resolved_binding, request)
-          end),
-        frames:
-          Enum.map(result.frames, &put_frame_provenance(&1, provenance, link_context, evidence))
-    })
-  end
-
-  defp put_warning_provenance(
-         %ResolveWarning{} = warning,
-         %ResolvedSourceBinding{} = resolved_binding,
-         %PlannedSourceRequest{} = request
-       ) do
-    details =
-      warning.details
-      |> ensure_map()
-      |> Map.merge(source_warning_provenance_details(request, resolved_binding))
-      |> SourceActions.put_source_warning_actions()
-
-    links =
-      warning
-      |> warning_links_or_request_links(request, resolved_binding)
-      |> enrich_data_links(source_link_context(request, resolved_binding))
-
-    %ResolveWarning{warning | details: details, links: links}
-  end
-
-  defp put_warning_provenance(warning, _resolved_binding, _request), do: warning
-
-  defp source_warning_provenance_details(
-         %PlannedSourceRequest{} = request,
-         %ResolvedSourceBinding{} = resolved_binding
-       ) do
-    %{
-      source_request_id: request.request_id,
-      logical_source: request.logical_source,
-      binding_id: resolved_binding.binding.binding_id,
-      data_source_id: resolved_binding.data_source.data_source_id,
-      realm: resolved_binding.realm,
-      dataset: resolved_binding.dataset
-    }
-    |> Map.merge(source_binding_provenance(resolved_binding))
-    |> SourceActions.put_source_request_context(request)
   end
 
   defp merge_persisted_source_result_watermark(
@@ -1383,7 +1267,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
             |> HealthMerge.classification_meta(classification, interval)
 
           evidence =
-            DataLinks.source_health_event_evidence_refs([status_metadata(meta)]) ++
+            DataLinks.source_health_event_evidence_refs([Provenance.status_metadata(meta)]) ++
               DataLinks.operational_interval_evidence_refs([interval],
                 source: request.logical_source
               )
@@ -1393,7 +1277,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
             | meta:
                 meta
                 |> maybe_mark_source_health_degraded()
-                |> merge_evidence_refs(evidence),
+                |> Provenance.merge_evidence(evidence),
               watermarks: Enum.map(result.watermarks, &HealthMerge.put_watermark(&1, meta)),
               frames:
                 Enum.map(
@@ -1416,7 +1300,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       |> ensure_map()
       |> Map.merge(source_health_meta)
       |> maybe_mark_source_health_degraded()
-      |> merge_evidence_refs(evidence)
+      |> Provenance.merge_evidence(evidence)
 
     Frame.new(%{frame | meta: meta})
   end
@@ -1577,242 +1461,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
         nil
     end
   end
-
-  defp put_frame_provenance(%Frame{} = frame, provenance, link_context, evidence) do
-    meta =
-      frame.meta
-      |> ensure_map()
-      |> Map.merge(provenance)
-      |> merge_evidence_refs(evidence)
-      |> enrich_link_container(link_context)
-
-    fields = Enum.map(frame.fields, &put_field_link_provenance(&1, link_context))
-
-    Frame.new(%{frame | meta: meta, fields: fields})
-  end
-
-  defp put_frame_provenance(frame, _provenance, _link_context, _evidence), do: frame
-
-  defp put_field_link_provenance(%Field{} = field, link_context) do
-    Field.new(%{field | metadata: enrich_link_container(field.metadata, link_context)})
-  end
-
-  defp put_field_link_provenance(field, _link_context), do: field
-
-  defp warning_links_or_request_links(
-         %ResolveWarning{links: links},
-         %PlannedSourceRequest{} = request,
-         %ResolvedSourceBinding{} = resolved_binding
-       )
-       when links in [nil, []] do
-    DataLinks.request_observable_links(request,
-      source: :warning,
-      source_binding: resolved_binding
-    )
-  end
-
-  defp warning_links_or_request_links(%ResolveWarning{links: links}, _request, _resolved_binding),
-    do: links
-
-  defp enrich_link_container(container, link_context) when is_map(container) do
-    cond do
-      Map.has_key?(container, :links) ->
-        Map.put(container, :links, enrich_data_links(Map.get(container, :links), link_context))
-
-      Map.has_key?(container, "links") ->
-        Map.put(container, "links", enrich_data_links(Map.get(container, "links"), link_context))
-
-      true ->
-        container
-    end
-  end
-
-  defp enrich_link_container(container, _link_context), do: container
-
-  defp enrich_data_links(links, link_context) when is_list(links) do
-    Enum.map(links, &enrich_data_link(&1, link_context))
-  end
-
-  defp enrich_data_links(links, _link_context), do: links
-
-  defp enrich_data_link(%DataLink{} = link, link_context) do
-    %DataLink{link | context: merge_data_link_context(link.context, link_context)}
-  end
-
-  defp enrich_data_link(link, _link_context), do: link
-
-  defp merge_data_link_context(context, link_context) do
-    context = ensure_map(context)
-
-    Map.merge(context, link_context, fn
-      :data, left, right -> Map.merge(ensure_map(left), ensure_map(right))
-      _key, _left, right -> right
-    end)
-  end
-
-  defp source_link_context(
-         %PlannedSourceRequest{} = request,
-         %ResolvedSourceBinding{} = resolved_binding
-       ) do
-    %{
-      source_request_id: request.request_id,
-      logical_source: request.logical_source,
-      data: %{
-        realm: resolved_binding.realm,
-        data_source_id: resolved_binding.data_source.data_source_id,
-        source_binding_id: resolved_binding.binding.binding_id,
-        dataset: resolved_binding.dataset
-      }
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
-
-  defp source_binding_provenance(%ResolvedSourceBinding{} = resolved_binding) do
-    binding = resolved_binding.binding
-
-    %{
-      source_binding_id: binding.binding_id,
-      source_binding_version: binding.binding_version,
-      source_binding_event_id: binding.current_event_id,
-      source_binding_interval: source_binding_interval_metadata(resolved_binding),
-      source_binding_segment: source_binding_segment_metadata(resolved_binding),
-      source_selection: non_empty_source_selection(resolved_binding)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
-
-  defp non_empty_source_selection(%ResolvedSourceBinding{source_selection: selection})
-       when is_map(selection) and map_size(selection) > 0,
-       do: selection
-
-  defp non_empty_source_selection(%ResolvedSourceBinding{}), do: nil
-
-  defp source_binding_segment_metadata(
-         %ResolvedSourceBinding{
-           segment_from: %DateTime{} = from,
-           segment_to: %DateTime{} = to
-         } = resolved_binding
-       ) do
-    binding = resolved_binding.binding
-
-    %{
-      from: from,
-      to: to,
-      binding_id: binding.binding_id,
-      binding_version: binding.binding_version,
-      data_binding_event_id: binding.current_event_id,
-      data_source_id: resolved_binding.data_source.data_source_id,
-      dataset: resolved_binding.dataset,
-      realm: resolved_binding.realm,
-      interval: source_binding_interval_metadata(resolved_binding)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
-
-  defp source_binding_segment_metadata(%ResolvedSourceBinding{}), do: nil
-
-  defp source_binding_interval_metadata(%ResolvedSourceBinding{
-         binding_interval: %DataBindingInterval{} = interval
-       }) do
-    DataBindingInterval.metadata(interval)
-  end
-
-  defp source_binding_interval_metadata(%ResolvedSourceBinding{}), do: nil
-
-  defp source_binding_evidence_refs(
-         %ResolvedSourceBinding{} = resolved_binding,
-         %PlannedSourceRequest{} = request
-       ) do
-    resolved_binding
-    |> source_binding_evidence_metadata()
-    |> List.wrap()
-    |> DataLinks.source_binding_interval_evidence_refs(source: request.logical_source)
-  end
-
-  defp source_binding_evidence_metadata(%ResolvedSourceBinding{} = resolved_binding) do
-    case source_binding_interval_metadata(resolved_binding) do
-      nil ->
-        binding = resolved_binding.binding
-
-        %{
-          binding_id: binding.binding_id,
-          data_binding_event_id: binding.current_event_id,
-          started_at: binding.active_from,
-          active_from: binding.active_from
-        }
-        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-        |> Map.new()
-
-      metadata ->
-        metadata
-    end
-  end
-
-  defp source_status_evidence_refs(%SourceResult{} = result) do
-    result
-    |> source_status_evidence_metadata()
-    |> then(fn metadata ->
-      DataLinks.source_watermark_event_evidence_refs(metadata) ++
-        DataLinks.source_health_event_evidence_refs(metadata)
-    end)
-    |> dedupe_evidence_refs()
-  end
-
-  defp source_status_evidence_metadata(%SourceResult{} = result) do
-    [
-      status_metadata(result.meta)
-      | Enum.map(List.wrap(result.watermarks), &watermark_status_metadata/1)
-    ]
-  end
-
-  defp watermark_status_metadata(%SourceWatermark{} = watermark) do
-    status_metadata(watermark.meta)
-  end
-
-  defp watermark_status_metadata(_watermark), do: %{}
-
-  defp status_metadata(metadata) do
-    metadata = ensure_map(metadata)
-
-    Map.put_new(
-      metadata,
-      :observed_at,
-      Map.get(metadata, :source_watermark_observed_at) ||
-        Map.get(metadata, :source_health_observed_at)
-    )
-  end
-
-  defp merge_evidence_refs(meta, []), do: meta
-
-  defp merge_evidence_refs(meta, evidence) when is_map(meta) and is_list(evidence) do
-    Map.put(
-      meta,
-      :evidence,
-      dedupe_evidence_refs(existing_evidence_refs(meta) ++ evidence)
-    )
-  end
-
-  defp existing_evidence_refs(meta) when is_map(meta) do
-    List.wrap(Map.get(meta, :evidence)) ++
-      List.wrap(Map.get(meta, "evidence")) ++
-      List.wrap(Map.get(meta, :evidence_refs)) ++
-      List.wrap(Map.get(meta, "evidence_refs"))
-  end
-
-  defp dedupe_evidence_refs(evidence) do
-    Enum.uniq_by(evidence, &evidence_ref_identity/1)
-  end
-
-  defp evidence_ref_identity(%{kind: kind, id: id}), do: {kind, id}
-
-  defp evidence_ref_identity(%{} = ref) do
-    {Map.get(ref, :kind, Map.get(ref, "kind")), Map.get(ref, :id, Map.get(ref, "id"))}
-  end
-
-  defp evidence_ref_identity(ref), do: ref
 
   defp source_health_attrs(
          %PlannedSourceRequest{} = request,

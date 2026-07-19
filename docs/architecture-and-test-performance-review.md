@@ -1852,6 +1852,17 @@ readers and query options, endpoint and catalog context, and non-persisted
 omission; existing registry and evidence tests preserve facade behavior. No
 route or authentication placement is involved; production source-size
 pressure remains 2 and dependency ratchets are unchanged.
+Extracting source-binding identity, result and fact provenance, warning and
+frame link context, and evidence de-duplication into the 388-line
+`Cadence.Dashboards.SourceRegistry.Provenance` reduced `SourceRegistry` from
+1,958 to 1,606 lines. The registry retains capability policy, adapter
+resolution and execution, persistence, and source-health orchestration while
+delegating the shared provenance contract used by both segmented and
+single-binding paths. Direct tests cover interval and segment metadata, source
+selection, fact enrichment, nested warning/frame/field link context, and
+evidence de-duplication; existing registry and evidence suites preserve facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
