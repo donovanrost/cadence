@@ -1123,6 +1123,11 @@ warnings, resource links, and event evidence into a 323-line presentation
 module reduced the adapter from 4,701 to 4,312 lines. The adapter supplies
 resolved rows and source identity while the frame module owns only numeric
 operational-metric presentation; production source-size pressure remains 8.
+Moving command-queue pending filtering, request-scope aggregation, row and frame
+presentation, queue-entry evidence, and revision fingerprint projection into a
+261-line family module reduced the adapter from 4,312 to 4,126 lines. Provider
+callbacks and shared freshness annotation remain adapter-owned; production
+source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
