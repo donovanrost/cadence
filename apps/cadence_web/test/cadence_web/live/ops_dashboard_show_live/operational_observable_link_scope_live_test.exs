@@ -177,201 +177,228 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
     end)
   end
 
+  defp mount_link_scope_fixture(conn, org, mission) do
+    alpha_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-source-endpoint-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Goldstone DSS-14",
+        metadata: %{
+          "ground_station_id" => "dss-14",
+          "link_assignment_id" => "link-alpha"
+        }
+      })
+
+    beta_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "dashboard-source-endpoint-beta",
+        mission_id: mission.mission_id,
+        display_name: "Madrid DSS-63",
+        metadata: %{
+          "ground_station_id" => "dss-63",
+          "link_assignment_id" => "link-beta"
+        }
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+
+    alpha_transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Alpha TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "alpha.ground.example",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-14",
+          "link_assignment_id" => "link-alpha"
+        }
+      })
+
+    beta_transport =
+      Transport.new(%{
+        transport_id: "dashboard-transport-beta",
+        mission_id: mission.mission_id,
+        display_name: "Beta TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "beta.ground.example",
+          "port" => "5001",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => beta_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-63",
+          "link_assignment_id" => "link-beta"
+        }
+      })
+
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+
+    observed_at = ~U[2026-06-17 12:01:00Z]
+
+    assert {:ok, _rf_lock_event} =
+             Event.from_operational_observable_state_snapshot(%{
+               snapshot_id: "link-rf-lock-live-alpha",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               observable_id: "link.rf_lock_state",
+               resource_id: "link-alpha",
+               scope_kind: :link,
+               transport_id: alpha_transport.transport_id,
+               source_endpoint_id: alpha_endpoint.source_endpoint_id,
+               ground_station_id: "dss-14",
+               link_id: "link-alpha",
+               adapter_key: :tcp_socket,
+               rf_lock_state: :locked,
+               state: :locked,
+               observed_at: observed_at
+             })
+             |> OperationalEvents.persist_event()
+
+    assert {:ok, _frame_sync_event} =
+             Event.from_operational_observable_state_snapshot(%{
+               snapshot_id: "link-frame-sync-live-alpha",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               observable_id: "link.frame_sync_state",
+               resource_id: "link-alpha",
+               scope_kind: :link,
+               transport_id: alpha_transport.transport_id,
+               source_endpoint_id: alpha_endpoint.source_endpoint_id,
+               ground_station_id: "dss-14",
+               link_id: "link-alpha",
+               adapter_key: :tcp_socket,
+               frame_sync_state: :synchronized,
+               state: :synchronized,
+               observed_at: DateTime.add(observed_at, 1, :second)
+             })
+             |> OperationalEvents.persist_event()
+
+    [rf_lock_interval] =
+      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+        observable_id: "link.rf_lock_state",
+        resource_id: "link-alpha"
+      )
+
+    [frame_sync_interval] =
+      Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
+        observable_id: "link.frame_sync_state",
+        resource_id: "link-alpha"
+      )
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Link RF State",
+        widgets: [
+          %{
+            type: :status_matrix,
+            title: "RF Lock",
+            binding: %{
+              source: :operational_observables,
+              observables: ["link.rf_lock_state"]
+            }
+          },
+          %{
+            type: :status_matrix,
+            title: "Frame Sync",
+            binding: %{
+              source: :operational_observables,
+              observables: ["link.frame_sync_state"]
+            }
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    rf_lock_widget = render_item_by_title(document, "RF Lock").widget
+    frame_sync_widget = render_item_by_title(document, "Frame Sync").widget
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
+      )
+
+    render_dashboard_async(view)
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_row_selector:
+        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-alpha"]),
+      alpha_transport: alpha_transport,
+      beta_row_selector:
+        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-beta"]),
+      conn: conn,
+      frame_sync_interval: frame_sync_interval,
+      frame_sync_row_selector:
+        ~s(#widget-#{frame_sync_widget.widget_id} [data-status-matrix-row="link.frame_sync_state:link-alpha"]),
+      observed_at: observed_at,
+      rf_lock_interval: rf_lock_interval,
+      view: view
+    }
+  end
+
+  defp assert_initial_link_scope_render(fixture) do
+    assert has_element?(
+             fixture.view,
+             ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
+           )
+
+    assert has_element?(
+             fixture.view,
+             fixture.alpha_row_selector <>
+               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="lock_state"][data-status-matrix-resource-id="link-alpha"][data-status-matrix-scope-kind="link"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="dashboard-transport-alpha"][data-status-matrix-source-endpoint-id="#{fixture.alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
+           )
+
+    assert has_element?(
+             fixture.view,
+             fixture.alpha_row_selector <>
+               ~s([data-status-matrix-frame-observable-id="link.rf_lock_state"][data-status-matrix-product-family="link_rf"][data-status-matrix-supported-capability="link_rf_lock_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
+           )
+  end
+
   describe "link operational observable scope rendering" do
     test "filters operational observable rows and preserves setup DataLink context" do
       enable_dashboard_engine_inline_resolves!()
 
       {conn, org, mission} = signed_in_org_and_mission()
 
-      alpha_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-source-endpoint-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Goldstone DSS-14",
-          metadata: %{
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
+      fixture = mount_link_scope_fixture(conn, org, mission)
+      assert_initial_link_scope_render(fixture)
 
-      beta_endpoint =
-        SourceEndpoint.new(%{
-          source_endpoint_id: "dashboard-source-endpoint-beta",
-          mission_id: mission.mission_id,
-          display_name: "Madrid DSS-63",
-          metadata: %{
-            "ground_station_id" => "dss-63",
-            "link_assignment_id" => "link-beta"
-          }
-        })
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
-
-      assert {:ok, _source_endpoint} =
-               Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
-
-      alpha_transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-alpha",
-          mission_id: mission.mission_id,
-          display_name: "Alpha TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "alpha.ground.example",
-            "port" => "5000",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-14",
-            "link_assignment_id" => "link-alpha"
-          }
-        })
-
-      beta_transport =
-        Transport.new(%{
-          transport_id: "dashboard-transport-beta",
-          mission_id: mission.mission_id,
-          display_name: "Beta TCP",
-          transport_kind: :tcp_socket,
-          direction_capability: :bidirectional,
-          adapter_key: :tcp_socket,
-          configuration: %{
-            "mode" => "connect",
-            "direction_capability" => "bidirectional",
-            "host" => "beta.ground.example",
-            "port" => "5001",
-            "framing_mode" => "raw",
-            "tls_enabled" => "false"
-          },
-          metadata: %{
-            "source_endpoint_id" => beta_endpoint.source_endpoint_id,
-            "ground_station_id" => "dss-63",
-            "link_assignment_id" => "link-beta"
-          }
-        })
-
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-      assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
-
-      observed_at = ~U[2026-06-17 12:01:00Z]
-
-      assert {:ok, _rf_lock_event} =
-               Event.from_operational_observable_state_snapshot(%{
-                 snapshot_id: "link-rf-lock-live-alpha",
-                 organization_id: org.organization_id,
-                 mission_id: mission.mission_id,
-                 observable_id: "link.rf_lock_state",
-                 resource_id: "link-alpha",
-                 scope_kind: :link,
-                 transport_id: alpha_transport.transport_id,
-                 source_endpoint_id: alpha_endpoint.source_endpoint_id,
-                 ground_station_id: "dss-14",
-                 link_id: "link-alpha",
-                 adapter_key: :tcp_socket,
-                 rf_lock_state: :locked,
-                 state: :locked,
-                 observed_at: observed_at
-               })
-               |> OperationalEvents.persist_event()
-
-      assert {:ok, _frame_sync_event} =
-               Event.from_operational_observable_state_snapshot(%{
-                 snapshot_id: "link-frame-sync-live-alpha",
-                 organization_id: org.organization_id,
-                 mission_id: mission.mission_id,
-                 observable_id: "link.frame_sync_state",
-                 resource_id: "link-alpha",
-                 scope_kind: :link,
-                 transport_id: alpha_transport.transport_id,
-                 source_endpoint_id: alpha_endpoint.source_endpoint_id,
-                 ground_station_id: "dss-14",
-                 link_id: "link-alpha",
-                 adapter_key: :tcp_socket,
-                 frame_sync_state: :synchronized,
-                 state: :synchronized,
-                 observed_at: DateTime.add(observed_at, 1, :second)
-               })
-               |> OperationalEvents.persist_event()
-
-      [rf_lock_interval] =
-        Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
-          observable_id: "link.rf_lock_state",
-          resource_id: "link-alpha"
-        )
-
-      [frame_sync_interval] =
-        Cadence.operational_link_rf_state_intervals(org.organization_id, mission.mission_id,
-          observable_id: "link.frame_sync_state",
-          resource_id: "link-alpha"
-        )
-
-      dashboard =
-        TestFixtures.persist_dashboard_document!(mission,
-          name: "Link RF State",
-          widgets: [
-            %{
-              type: :status_matrix,
-              title: "RF Lock",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.rf_lock_state"]
-              }
-            },
-            %{
-              type: :status_matrix,
-              title: "Frame Sync",
-              binding: %{
-                source: :operational_observables,
-                observables: ["link.frame_sync_state"]
-              }
-            }
-          ]
-        )
-
-      document = fetch_dashboard_document!(org, mission, dashboard)
-      rf_lock_widget = render_item_by_title(document, "RF Lock").widget
-      frame_sync_widget = render_item_by_title(document, "Frame Sync").widget
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
-        )
-
-      render_dashboard_async(view)
-
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
-             )
-
-      alpha_row_selector =
-        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-alpha"])
-
-      beta_row_selector =
-        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-beta"])
-
-      frame_sync_row_selector =
-        ~s(#widget-#{frame_sync_widget.widget_id} [data-status-matrix-row="link.frame_sync_state:link-alpha"])
-
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="lock_state"][data-status-matrix-resource-id="link-alpha"][data-status-matrix-scope-kind="link"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="dashboard-transport-alpha"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
-
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-frame-observable-id="link.rf_lock_state"][data-status-matrix-product-family="link_rf"][data-status-matrix-supported-capability="link_rf_lock_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-             )
+      %{
+        alpha_endpoint: alpha_endpoint,
+        alpha_row_selector: alpha_row_selector,
+        alpha_transport: alpha_transport,
+        beta_row_selector: beta_row_selector,
+        conn: conn,
+        frame_sync_interval: frame_sync_interval,
+        frame_sync_row_selector: frame_sync_row_selector,
+        observed_at: observed_at,
+        rf_lock_interval: rf_lock_interval,
+        view: view
+      } = fixture
 
       view
       |> element(alpha_row_selector <> ~s( [data-status-matrix-row-evidence]))

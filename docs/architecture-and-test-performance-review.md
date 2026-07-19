@@ -1277,6 +1277,13 @@ dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
 selectors, evidence navigation, copied-link replay, and filtering assertions
 remain in the test body.
+Moving the 181-line persisted endpoint, transport, operational-event,
+dashboard, and LiveView mount fixture phase out of the adjacent link-scope test,
+with its initial scoped-render contract in a focused assertion helper, reduced
+that test from 469 to 295 lines and overlong test-function pressure from 13 to
+12. The existing authenticated route and LiveView session are unchanged, and
+the row selectors, evidence navigation, copied-link replay, DataLink
+inspection, and filtering outcomes remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
