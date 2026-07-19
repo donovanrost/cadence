@@ -1349,6 +1349,14 @@ overlong test-function pressure from 3 to 2. The dashboard, endpoint startup,
 and browser assertions remain visible in the test; the authenticated dashboard
 route and sign-in flow are unchanged, and multi-transport inclusion, exclusion,
 timeline, data-table, and copied-evidence outcomes remain covered.
+Splitting the replay operational-metric setup into 241-line topology and
+162-line metric-history/dashboard helpers reduced its browser test from 537 to
+199 lines and overlong test-function pressure from 2 to 1. The authenticated
+dashboard route and sign-in flow are unchanged; complete, partial RF, partial
+bitrate, empty-replay, frame-evidence, and DataLink outcomes remain covered.
+The browser proof now waits for chart/data readiness before making precise
+semantic assertions and follows the current compact partial-lifecycle indicator
+contract instead of expecting the intentionally removed body notice.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

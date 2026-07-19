@@ -19385,8 +19385,6 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
       (() => {
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
-        const notice = widget?.querySelector("[data-widget-body-notice='partial']")
-        const badge = widget?.querySelector("[data-widget-source-badge='partial']")
         let backfill = {}
         try {
           backfill = JSON.parse(chart?.dataset.backfill || "{}")
@@ -19402,15 +19400,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
           document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
-          widget?.dataset.widgetLifecycleState === "partial" &&
-          widget?.dataset.widgetLifecycleSeverity === "warning" &&
-          widget?.dataset.widgetLifecycleWarningCodes?.split(",").includes("partial_data") &&
-          widget?.dataset.widgetSourceState === "partial" &&
-          widget?.dataset.widgetSourceSeverity === "warning" &&
-          widget?.dataset.widgetSourceDataState === "ready" &&
-          widget?.dataset.widgetSourceWarningCodes?.split(",").includes("partial_data") &&
-          badge?.dataset.widgetSourceBadge === "partial" &&
-          notice?.textContent?.includes("partial data") &&
+          widget &&
           chart &&
           returnedSeries?.points?.length > 0 &&
           !missingSeries
@@ -19426,7 +19416,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
       (() => {
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
-        const notice = widget?.querySelector("[data-widget-body-notice='partial']")
+        const indicator = widget?.querySelector("[data-widget-lifecycle-indicator='partial']")
         const badge = widget?.querySelector("[data-widget-source-badge='partial']")
         let backfill = {}
         try {
@@ -19452,8 +19442,9 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
           replayRunIds: widget?.dataset.widgetSourceReplayRunIds || "",
           sourceBadgeState: badge?.dataset.widgetSourceBadge || "",
           sourceBadgeSeverity: badge?.dataset.widgetSourceBadgeSeverity || "",
-          noticePresent: Boolean(notice),
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          indicatorPresent: Boolean(indicator),
+          indicatorState: indicator?.dataset.widgetLifecycleIndicator || "",
+          indicatorText: indicator?.getAttribute("aria-label") || indicator?.getAttribute("title") || "",
           chartPresent: Boolean(chart),
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
@@ -19489,8 +19480,9 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
   assert.equal(initial.replayRunIds, replayRunId, "partial widget should preserve replay run id")
   assert.equal(initial.sourceBadgeState, "partial", "partial widget should render a source badge")
   assert.equal(initial.sourceBadgeSeverity, "warning", "partial source badge should warn")
-  assert.equal(initial.noticePresent, true, "partial widget should render a body notice")
-  assert.match(initial.noticeText, /partial data/, "partial notice should explain degraded coverage")
+  assert.equal(initial.indicatorPresent, true, "partial widget should render a lifecycle indicator")
+  assert.equal(initial.indicatorState, "partial", "partial lifecycle indicator should preserve state")
+  assert.match(initial.indicatorText, /partial data/i, "partial indicator should explain degraded coverage")
   assert.equal(initial.chartPresent, true, "partial operational metric should still render a chart")
   assert.equal(initial.chartDataSourceId, expectedDataSourceId, "partial chart should preserve data source")
   assert.equal(initial.chartSourceBindingId, expectedSourceBindingId, "partial chart should preserve source binding")

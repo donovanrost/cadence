@@ -27,12 +27,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
-  @tag :browser_smoke
-  test "live replay operational metric time-series charts use default event-backed readers in browser",
-       %{
-         conn: _conn,
-         sandbox_owner: sandbox_owner
-       } do
+  defp persist_replay_operational_metric_browser_topology! do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
@@ -255,6 +250,41 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
     assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
     assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
 
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      beta_endpoint: beta_endpoint,
+      beta_transport: beta_transport,
+      dss_14: dss_14,
+      dss_63: dss_63,
+      empty_replay_run_id: empty_replay_run_id,
+      from_time: from_time,
+      mission: mission,
+      org: org,
+      other_replay_run_id: other_replay_run_id,
+      partial_replay_run_id: partial_replay_run_id,
+      replay_run_id: replay_run_id,
+      to_time: to_time,
+      user: user
+    }
+  end
+
+  defp persist_replay_operational_metric_browser_data!(fixture, sandbox_owner) do
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      beta_endpoint: beta_endpoint,
+      beta_transport: beta_transport,
+      dss_63: dss_63,
+      from_time: from_time,
+      mission: mission,
+      org: org,
+      other_replay_run_id: other_replay_run_id,
+      partial_replay_run_id: partial_replay_run_id,
+      replay_run_id: replay_run_id,
+      to_time: to_time
+    } = fixture
+
     for {sample_id, observable_id, resource_id, value, observed_at, opts} <- [
           {"rf-live", "link.snr_db", "link-alpha", 9.0, ~U[2026-06-17 12:00:10Z], []},
           {"rf-replay-acquired", "link.snr_db", "link-alpha", 12.25, ~U[2026-06-17 12:00:30Z],
@@ -392,6 +422,43 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_id: "link-alpha", time_mode: "replay_run", replay_run_id: replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    Map.merge(fixture, %{
+      app_root: app_root,
+      base_url: base_url,
+      dashboard: dashboard,
+      dashboard_url: dashboard_url,
+      script: script
+    })
+  end
+
+  @tag :browser_smoke
+  test "live replay operational metric time-series charts use default event-backed readers in browser",
+       %{
+         conn: _conn,
+         sandbox_owner: sandbox_owner
+       } do
+    fixture =
+      persist_replay_operational_metric_browser_topology!()
+      |> persist_replay_operational_metric_browser_data!(sandbox_owner)
+
+    %{
+      alpha_endpoint: alpha_endpoint,
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      dashboard: dashboard,
+      dashboard_url: dashboard_url,
+      dss_14: dss_14,
+      empty_replay_run_id: empty_replay_run_id,
+      from_time: from_time,
+      mission: mission,
+      partial_replay_run_id: partial_replay_run_id,
+      replay_run_id: replay_run_id,
+      script: script,
+      to_time: to_time,
+      user: user
+    } = fixture
 
     assert {output, 0} =
              run_dashboard_viewport_smoke(
