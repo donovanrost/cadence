@@ -807,6 +807,11 @@ Moving telemetry-backfill lifecycle source cases and their local fixtures out
 of the 1,580-line events-source test reduced test-file pressure from 21 to 20;
 the original source-family test is now 1,339 lines and the focused backfill
 test is 319 lines, with the test-function count unchanged.
+Moving replay request, event, and frame builders out of the 1,511-line
+operational-observables replay integration test reduced test-file pressure to
+19. Replacing its inline metric seed matrix with one fixture call also reduced
+the overlong-test count from 35 to 34; the test file is now 913 lines and its
+shared support module is 617 lines.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
