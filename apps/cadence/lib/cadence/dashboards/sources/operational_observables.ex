@@ -29,9 +29,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     ContactPhase,
     IngressProcessingLatencyRows,
     LatestFreshness,
-    LinkRfMetricRows,
-    LinkRfStateFrames,
-    LinkRfStateRows,
+    LinkRf,
     OperationalEventSnapshots,
     OperationalMetricFrames,
     ProductPolicy,
@@ -162,9 +160,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       contacts_phase: &ContactPhase.default_revision/3,
       connection_state: &Connection.default_revision/3,
       ground_station_antenna_pointing_state: &AntennaPointing.default_revision/3,
-      link_rf_lock_state: &default_link_rf_lock_state_revision/3,
-      link_rf_frame_sync_state: &default_link_rf_frame_sync_state_revision/3,
-      link_rf_metric: &default_link_rf_metric_revision/3,
+      link_rf_lock_state: &LinkRf.default_lock_revision/3,
+      link_rf_frame_sync_state: &LinkRf.default_frame_sync_revision/3,
+      link_rf_metric: &LinkRf.default_metric_revision/3,
       transport_bitrate: &default_transport_bitrate_revision/3,
       transport_execution_state: &TransportExecutionState.default_revision/3,
       managed_runtime_activity: &RuntimeActivity.default_managed_revision/3,
@@ -367,10 +365,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      link_rf_lock_state_frame(
+      LinkRf.resolve_lock_latest(
         request,
-        source_binding,
-        link_rf_lock_latest_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :link_rf_lock_state, [frame])
@@ -385,10 +386,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      link_rf_lock_state_history_frame(
+      LinkRf.resolve_lock_history(
         request,
-        source_binding,
-        link_rf_lock_history_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :link_rf_lock_state_history, [frame])
@@ -403,10 +407,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      link_rf_frame_sync_state_frame(
+      LinkRf.resolve_frame_sync_latest(
         request,
-        source_binding,
-        link_rf_frame_sync_latest_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :link_rf_frame_sync_state, [frame])
@@ -421,16 +428,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      link_rf_frame_sync_state_history_frame(
+      LinkRf.resolve_frame_sync_history(
         request,
-        source_binding,
-        link_rf_frame_sync_history_rows(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :link_rf_frame_sync_state_history, [frame])
@@ -508,10 +512,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      link_rf_metric_frame(
+      LinkRf.resolve_metric_latest(
         request,
-        source_binding,
-        link_rf_metric_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :link_rf_metric, [frame])
@@ -526,9 +533,14 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frames =
-      request
-      |> link_rf_metric_history_rows(source_binding, organization_id, mission_id, opts)
-      |> operational_metric_history_frames(request, source_binding, :link_rf_metric_history)
+      LinkRf.resolve_metric_history(
+        request,
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
+      )
 
     source_result(request, source_binding, :link_rf_metric_history, frames)
   end
@@ -1068,10 +1080,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_lock_observable_ids)) do
       frame =
-        link_rf_lock_state_frame(
+        LinkRf.resolve_lock_latest(
           request,
-          source_binding,
-          link_rf_lock_latest_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1115,10 +1130,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_metric_observable_ids)) do
       frame =
-        link_rf_metric_frame(
+        LinkRf.resolve_metric_latest(
           request,
-          source_binding,
-          link_rf_metric_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1137,9 +1155,14 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_metric_observable_ids)) do
       history_frames =
-        request
-        |> link_rf_metric_history_rows(source_binding, organization_id, mission_id, opts)
-        |> operational_metric_history_frames(request, source_binding, :link_rf_metric_history)
+        LinkRf.resolve_metric_history(
+          request,
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
+        )
 
       frames ++ history_frames
     else
@@ -1157,16 +1180,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_frame_sync_observable_ids)) do
       frame =
-        link_rf_frame_sync_state_frame(
+        LinkRf.resolve_frame_sync_latest(
           request,
-          source_binding,
-          link_rf_frame_sync_latest_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1301,81 +1321,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     else
       frames
     end
-  end
-
-  defp link_rf_lock_latest_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_lock_snapshots_fun =
-      Keyword.get(opts, :link_rf_lock_snapshots_fun, &OperationalEventSnapshots.link_rf_lock/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    LinkRfStateRows.lock_latest(
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      link_rf_lock_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-    |> LatestFreshness.annotate(request, opts)
-  end
-
-  defp link_rf_metric_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :link_rf_metric_snapshots_fun,
-        &OperationalEventSnapshots.link_rf_metric/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    LinkRfMetricRows.latest(
-      request.observables,
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      link_rf_metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-    |> LatestFreshness.annotate(request, opts)
-  end
-
-  defp link_rf_metric_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :link_rf_metric_snapshots_fun,
-        &OperationalEventSnapshots.link_rf_metric/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    transports = transports_fun.(organization_id, mission_id, adapter_opts)
-    snapshots = link_rf_metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
-
-    LinkRfMetricRows.history(request.observables, transports, snapshots, request)
-  end
-
-  defp link_rf_frame_sync_latest_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_frame_sync_snapshots_fun =
-      Keyword.get(
-        opts,
-        :link_rf_frame_sync_snapshots_fun,
-        &OperationalEventSnapshots.link_rf_frame_sync/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    LinkRfStateRows.frame_sync_latest(
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      link_rf_frame_sync_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-    |> LatestFreshness.annotate(request, opts)
   end
 
   defp transport_bitrate_rows(request, source_binding, organization_id, mission_id, opts) do
@@ -1518,10 +1463,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_lock_observable_ids)) do
       frame =
-        link_rf_lock_state_history_frame(
+        LinkRf.resolve_lock_history(
           request,
-          source_binding,
-          link_rf_lock_history_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1540,56 +1488,19 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @link_rf_frame_sync_observable_ids)) do
       frame =
-        link_rf_frame_sync_state_history_frame(
+        LinkRf.resolve_frame_sync_history(
           request,
-          source_binding,
-          link_rf_frame_sync_history_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
     else
       frames
     end
-  end
-
-  defp link_rf_lock_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_lock_snapshots_fun =
-      Keyword.get(opts, :link_rf_lock_snapshots_fun, &OperationalEventSnapshots.link_rf_lock/3)
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    LinkRfStateRows.lock_history(
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      link_rf_lock_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-  end
-
-  defp link_rf_frame_sync_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    link_rf_frame_sync_snapshots_fun =
-      Keyword.get(
-        opts,
-        :link_rf_frame_sync_snapshots_fun,
-        &OperationalEventSnapshots.link_rf_frame_sync/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    LinkRfStateRows.frame_sync_history(
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      link_rf_frame_sync_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
   end
 
   defp frame_source_context(%PlannedSourceRequest{} = request, source_binding) do
@@ -1600,38 +1511,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       data_source_id: data_source_id(request, source_binding),
       replay_run_id: replay_run_id(request)
     }
-  end
-
-  defp link_rf_lock_state_frame(request, source_binding, rows) do
-    LinkRfStateFrames.lock_latest(request, rows, frame_source_context(request, source_binding))
-  end
-
-  defp link_rf_lock_state_history_frame(request, source_binding, rows) do
-    LinkRfStateFrames.lock_history(request, rows, frame_source_context(request, source_binding))
-  end
-
-  defp link_rf_frame_sync_state_frame(request, source_binding, rows) do
-    LinkRfStateFrames.frame_sync_latest(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp link_rf_frame_sync_state_history_frame(request, source_binding, rows) do
-    LinkRfStateFrames.frame_sync_history(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
-  defp link_rf_metric_frame(request, source_binding, rows) do
-    OperationalMetricFrames.link_rf_latest(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
   end
 
   defp transport_bitrate_frame(request, source_binding, rows) do
@@ -1726,57 +1605,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> OperationalEventSnapshots.transport_bitrate(mission_id, opts)
           |> Enum.map(&transport_metric_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
-      })
-  end
-
-  defp default_link_rf_lock_state_revision(organization_id, mission_id, opts) do
-    "link_rf_lock_state:" <>
-      RuntimeCacheKey.fingerprint(%{
-        transports:
-          organization_id
-          |> default_transports(mission_id, opts)
-          |> Enum.map(&transport_revision_entry/1)
-          |> Enum.sort_by(&(&1.transport_id || "")),
-        snapshots:
-          organization_id
-          |> OperationalEventSnapshots.link_rf_lock(mission_id, opts)
-          |> Enum.map(&link_rf_lock_revision_entry/1)
-          |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
-      })
-  end
-
-  defp default_link_rf_frame_sync_state_revision(organization_id, mission_id, opts) do
-    "link_rf_frame_sync_state:" <>
-      RuntimeCacheKey.fingerprint(%{
-        transports:
-          organization_id
-          |> default_transports(mission_id, opts)
-          |> Enum.map(&transport_revision_entry/1)
-          |> Enum.sort_by(&(&1.transport_id || "")),
-        snapshots:
-          organization_id
-          |> OperationalEventSnapshots.link_rf_frame_sync(mission_id, opts)
-          |> Enum.map(&link_rf_frame_sync_revision_entry/1)
-          |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
-      })
-  end
-
-  defp default_link_rf_metric_revision(organization_id, mission_id, opts) do
-    "link_rf_metric:" <>
-      RuntimeCacheKey.fingerprint(%{
-        transports:
-          organization_id
-          |> default_transports(mission_id, opts)
-          |> Enum.map(&transport_revision_entry/1)
-          |> Enum.sort_by(&(&1.transport_id || "")),
-        snapshots:
-          organization_id
-          |> OperationalEventSnapshots.link_rf_metric(mission_id, opts)
-          |> Enum.map(&link_rf_metric_revision_entry/1)
-          |> Enum.sort_by(
-            &{&1.observable_id || "", &1.transport_id || &1.resource_id || "",
-             &1.observed_at || ""}
-          )
       })
   end
 
@@ -1918,54 +1746,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
       observed_at: attr(snapshot, :observed_at),
       source_event_id: attr(snapshot, :source_event_id)
-    }
-  end
-
-  defp link_rf_lock_revision_entry(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      state: LinkRfStateRows.lock_state(snapshot),
-      observed_at: attr(snapshot, :observed_at)
-    }
-  end
-
-  defp link_rf_frame_sync_revision_entry(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      state: LinkRfStateRows.frame_sync_state(snapshot),
-      observed_at: attr(snapshot, :observed_at)
-    }
-  end
-
-  defp link_rf_metric_revision_entry(snapshot) do
-    observable_id = LinkRfMetricRows.observable_id(snapshot)
-
-    %{
-      observable_id: observable_id,
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      value: LinkRfMetricRows.value(snapshot, observable_id),
-      unit: LinkRfMetricRows.unit(snapshot, observable_id),
-      observed_at: attr(snapshot, :observed_at)
     }
   end
 

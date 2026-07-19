@@ -1194,6 +1194,13 @@ source-endpoint and projected snapshot reads, freshness annotation, and
 revision projection. This reduced the adapter from 2,191 to 2,096 lines and
 removed its direct SourceEndpoints dependency; it retains only pointing-family
 dispatch and source identity, while production source-size pressure remains 8.
+Completing Link RF ownership added a 362-line family resolver over the existing
+state-row, metric-row, state-frame, and shared metric-frame modules. It owns
+transport and projected snapshot callback selection, default reads, freshness,
+latest/history frame resolution, and revisions for lock, frame synchronization,
+and numeric RF metrics. This reduced the adapter from 2,096 to 1,876 lines; it
+retains only Link RF dispatch and source identity, while production source-size
+pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
