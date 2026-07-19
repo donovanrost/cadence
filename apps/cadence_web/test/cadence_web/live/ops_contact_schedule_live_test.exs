@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsContactScheduleLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  @async_timeout 1_000
+
   @moduletag :config
 
   import Phoenix.LiveViewTest
@@ -103,13 +105,13 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#opportunity-opportunity-alpha")
     assert has_element?(view, "#reserve-opportunity-opportunity-alpha")
 
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert_received :provider_mutation
     assert has_element?(view, "#provider-reservations article")
@@ -127,7 +129,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert has_element?(view, "#reservation-transport-#{reservation.provider_reservation_id}")
 
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     refute_received :provider_mutation
 
@@ -166,9 +168,9 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#provider-reservations article", "pending")
     [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
@@ -242,16 +244,16 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     view |> element("#reserve-opportunity-opportunity-alpha") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     [reservation] = Cadence.list_provider_reservations(org.organization_id, mission.mission_id)
     cancel_selector = "#cancel-reservation-#{reservation.provider_reservation_id}"
     assert has_element?(view, cancel_selector)
 
     view |> element(cancel_selector) |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#provider-reservations article", "canceled")
 
@@ -290,7 +292,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#contact-opportunity-count", "0")
 
     configure_live_deps(
@@ -303,7 +305,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#contact-search-error")
 
     render_click(view, "reserve", %{"token" => "tampered"})
