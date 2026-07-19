@@ -923,6 +923,11 @@ badge metadata, and evidence merging out of the telemetry source reduced the
 adapter again to 2,376 lines. The 204-line historical-workflow module consumes
 the scoped lookup options assembled by the source and owns only
 visualization-facing workflow annotation.
+Extracting observation-identity loading, revision summaries, evidence,
+warnings, and cache dependency aggregation reduced the telemetry adapter to
+2,215 lines. The 230-line revision-state module receives tenant- and
+binding-scoped lookup options from the adapter and owns the full
+visualization-facing revision policy.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

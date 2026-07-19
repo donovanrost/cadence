@@ -17,7 +17,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     Frame,
     PlannedSourceRequest,
     ResolveWarning,
-    RuntimeCacheKey,
     ScopeContext,
     SourceActions,
     SourceCapabilities,
@@ -25,15 +24,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     SourceProbe,
     SourceResult,
     SourceWatermark,
-    TelemetryActions,
-    TelemetryRevisionSummary
+    TelemetryActions
   }
 
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
+  alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.{Sample, SelectionPolicy}
-  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @history_sampling_modes [:raw_series, :bounded_history, :bounded_raw_series]
   @native_decimated_sampling_modes [:decimated_envelope]
@@ -149,7 +147,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
           data_source_id: data_source_id(request, source_binding),
           supported_capability: supported_capability,
           returned_frame_count: length(frames),
-          telemetry_revision_dependency: telemetry_revision_dependency(frames),
+          telemetry_revision_dependency: RevisionState.dependency(frames),
           degraded?: degraded?(warnings)
         }
       })
@@ -1651,55 +1649,12 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          mission_id,
          opts
        ) do
-    identity_ids =
-      frames_with_samples
-      |> Enum.flat_map(fn {_frame, samples} -> Enum.flat_map(samples, &sample_identity_ids/1) end)
-      |> Enum.uniq()
-
-    case identity_ids do
-      [] ->
-        {Enum.map(frames_with_samples, &elem(&1, 0)), []}
-
-      ids ->
-        states_by_id =
-          ids
-          |> fetch_identity_states(
-            identity_state_opts(request, source_binding, organization_id, mission_id),
-            opts
-          )
-          |> Map.new(&{&1.observation_identity_id, &1})
-
-        frames_with_samples
-        |> Enum.map(fn {%Frame{} = frame, samples} ->
-          states =
-            samples
-            |> Enum.flat_map(&sample_identity_ids/1)
-            |> Enum.uniq()
-            |> Enum.map(&Map.get(states_by_id, &1))
-            |> Enum.reject(&is_nil/1)
-
-          summary = TelemetryRevisionSummary.from_identity_states(states)
-          frame = put_revision_summary(frame, summary)
-          {frame, revision_warnings(request, frame, summary)}
-        end)
-        |> then(fn annotated ->
-          {
-            Enum.map(annotated, &elem(&1, 0)),
-            annotated |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq_by(&warning_key/1)
-          }
-        end)
-    end
-  end
-
-  defp fetch_identity_states(identity_ids, identity_state_opts, opts) do
-    opts
-    |> Keyword.get(:identity_states_fun, &TelemetryStorage.fetch_observation_identity_states/2)
-    |> then(fn fetch_fun -> fetch_fun.(identity_ids, identity_state_opts) end)
-    |> case do
-      states when is_list(states) -> states
-      {:ok, states} when is_list(states) -> states
-      _other -> []
-    end
+    RevisionState.resolve(
+      frames_with_samples,
+      request,
+      identity_state_opts(request, source_binding, organization_id, mission_id),
+      opts
+    )
   end
 
   defp annotate_active_historical_workflows(
@@ -1729,17 +1684,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     HistoricalWorkflows.annotate(frames, mission_id, query_opts, opts)
   end
 
-  defp merge_frame_evidence(meta, []), do: meta
-
-  defp merge_frame_evidence(meta, evidence) when is_map(meta) and is_list(evidence) do
-    Map.put(
-      meta,
-      :evidence,
-      (List.wrap(Map.get(meta, :evidence)) ++ evidence)
-      |> Enum.uniq_by(&evidence_ref_identity/1)
-    )
-  end
-
   defp evidence_ref_identity(%{kind: kind, id: id}), do: {kind, id}
   defp evidence_ref_identity(ref), do: ref
 
@@ -1760,114 +1704,9 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
   end
 
-  defp put_revision_summary(%Frame{} = frame, %{identity_count: 0}), do: frame
-
-  defp put_revision_summary(%Frame{} = frame, summary) do
-    warning_codes =
-      frame.meta
-      |> Map.get(:warning_codes, [])
-      |> Kernel.++(summary.warning_codes)
-      |> Enum.uniq()
-
-    %Frame{
-      frame
-      | meta:
-          frame.meta
-          |> Map.put(:revision_state, summary)
-          |> Map.put(:telemetry_revision_dependency, summary.dependency)
-          |> merge_frame_evidence(Map.get(summary, :evidence, []))
-          |> Map.put(:warning_codes, warning_codes)
-    }
-  end
-
-  defp telemetry_revision_dependency(frames) do
-    dependencies =
-      frames
-      |> Enum.map(fn
-        %Frame{meta: %{telemetry_revision_dependency: dependency}} when is_map(dependency) ->
-          dependency
-
-        _frame ->
-          nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    case dependencies do
-      [] ->
-        nil
-
-      [dependency] ->
-        dependency
-
-      dependencies ->
-        %{
-          kind: :telemetry_observation_identity_state_set,
-          fingerprint:
-            "telemetry-revision-set:" <>
-              RuntimeCacheKey.fingerprint(dependencies),
-          dependencies: dependencies
-        }
-    end
-  end
-
-  defp revision_warnings(_request, _frame, %{identity_count: 0}), do: []
-
-  defp revision_warnings(%PlannedSourceRequest{} = request, %Frame{} = frame, summary) do
-    Enum.map(summary.warning_codes, fn code ->
-      %ResolveWarning{
-        code: code,
-        severity: :warning,
-        scope: :frame,
-        frame_id: frame.frame_id,
-        message: revision_warning_message(code),
-        details:
-          summary
-          |> Map.drop([:warning_codes])
-          |> Map.merge(%{
-            source_request_id: request.request_id,
-            observable_id: frame.meta[:observable_id],
-            point_id: frame.meta[:point_id]
-          })
-          |> put_telemetry_warning_actions(request, frame.meta[:observable_id]),
-        links: DataLinks.request_observable_links(request, source: :warning)
-      }
-    end)
-  end
-
   defp warning_key(%ResolveWarning{} = warning) do
     {warning.code, warning.scope, warning.frame_id, warning.field_name}
   end
-
-  defp revision_warning_message(:conflicting_observations),
-    do: "Telemetry range contains unresolved observation conflicts"
-
-  defp revision_warning_message(:corrected_range),
-    do: "Telemetry range contains corrected observations"
-
-  defp revision_warning_message(:advisory_backfill),
-    do: "Telemetry range contains advisory or backfilled observations"
-
-  defp revision_warning_message(:mixed_revisions),
-    do: "Telemetry range contains multiple observation revision states"
-
-  defp revision_warning_message(code), do: "Telemetry range contains #{code}"
-
-  defp sample_identity_ids(%Sample{} = sample) do
-    [
-      storage_value(sample.provenance, :observation_identity_id),
-      metadata_value(sample.provenance, :observation_identity_id)
-    ]
-    |> Enum.filter(&(is_binary(&1) and &1 != ""))
-    |> Enum.uniq()
-  end
-
-  defp storage_value(provenance, key) when is_map(provenance) do
-    provenance
-    |> metadata_value(:storage)
-    |> metadata_value(key)
-  end
-
-  defp storage_value(_provenance, _key), do: nil
 
   defp latest_time_axis(%Sample{generation_time: %DateTime{}}), do: :generation_time
   defp latest_time_axis(_sample), do: :receipt_time
