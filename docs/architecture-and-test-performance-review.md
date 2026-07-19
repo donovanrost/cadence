@@ -1720,6 +1720,16 @@ candidates now compose the extracted source-contract model behind direct
 tests. The HEEx components, stable DOM contracts, dashboard-return navigation,
 and authenticated `:ops` route remain in the LiveView. Production source-size
 pressure remains 3 and dependency ratchets are unchanged.
+Extracting operational-resource fallback inference, resolved labels, statuses,
+and row shaping into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocusResources` reduced
+`OpsDataSourcesLive` from 2,968 to 2,712 lines. The LiveView retains
+organization- and mission-scoped store fetches, routing-rule lookup, and
+verified route construction, which it injects into the presentation model.
+Direct tests cover resolved endpoint labels, inferred and unverified ground
+stations, fetched-station precedence, and navigation values. The authenticated
+`:ops` route remains unchanged; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

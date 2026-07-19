@@ -20,7 +20,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   alias CadenceWeb.OpsDataSourcesLive.{
     SourceContract,
     SourceFocus,
-    SourceFocusPresentation
+    SourceFocusPresentation,
+    SourceFocusResources
   }
 
   @impl true
@@ -38,7 +39,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
      |> assign(:register_source_form, to_form(register_source_defaults(), as: :source))
      |> assign(:register_source_error, nil)
      |> assign(:source_focus, SourceFocus.default())
-     |> assign(:source_focus_resources, empty_source_focus_resources())
+     |> assign(:source_focus_resources, SourceFocusResources.default())
      |> assign_source_inventory()}
   end
 
@@ -1169,16 +1170,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     |> assign_source_focus_state()
   end
 
-  defp empty_source_focus_resources do
-    %{
-      transport: nil,
-      source_endpoint: nil,
-      link_assignment: nil,
-      routing_rule: nil,
-      ground_station: nil
-    }
-  end
-
   defp assign_source_focus_resources(socket) do
     %{
       current_scope: scope,
@@ -1210,11 +1201,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
           focused_routing_rule_for_link_assignment(organization_id, mission_id, focus.link_id)
     }
 
-    %{
-      resources
-      | ground_station:
-          resources.ground_station || inferred_ground_station(focus.ground_station_id, resources)
-    }
+    SourceFocusResources.put_inferred_ground_station(resources, focus.ground_station_id)
   end
 
   defp fetch_focused_transport(_organization_id, _mission_id, nil), do: nil
@@ -1286,41 +1273,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp materialized_link_assignment_ids(_metadata), do: []
 
-  defp inferred_ground_station(nil, _resources), do: nil
-
-  defp inferred_ground_station(ground_station_id, resources) do
-    source_label =
-      [
-        ground_station_source(resources.source_endpoint, ground_station_id),
-        ground_station_source(resources.transport, ground_station_id),
-        ground_station_source(resources.link_assignment, ground_station_id)
-      ]
-      |> Enum.find(&is_binary/1)
-
-    %{
-      id: ground_station_id,
-      label: ground_station_label(ground_station_id, source_label),
-      status: if(source_label, do: :inferred, else: :unverified)
-    }
-  end
-
-  defp ground_station_source(nil, _ground_station_id), do: nil
-
-  defp ground_station_source(resource, ground_station_id) do
-    metadata = resource_value(resource, :metadata) || %{}
-    configuration = resource_value(resource, :configuration) || %{}
-
-    candidate =
-      metadata_value(metadata, "ground_station_id") ||
-        metadata_value(metadata, "antenna_id") ||
-        metadata_value(configuration, "ground_station_id") ||
-        metadata_value(configuration, "antenna_id")
-
-    if candidate == ground_station_id do
-      resource_label(resource)
-    end
-  end
-
   defp assign_source_focus_state(socket) do
     focus = Map.get(socket.assigns, :source_focus, SourceFocus.default())
     sources = Map.get(socket.assigns, :data_sources, [])
@@ -1338,7 +1290,15 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       assigns
       |> assign(
         :resource,
-        source_focus_resource(assigns.focus, assigns.resources, assigns.mission_id)
+        SourceFocusResources.build(assigns.focus, assigns.resources, fn key, value ->
+          source_focus_resource_href(
+            assigns.focus,
+            assigns.resources,
+            assigns.mission_id,
+            key,
+            value
+          )
+        end)
       )
 
     ~H"""
@@ -1383,227 +1343,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     """
   end
 
-  defp source_focus_resource(focus, resources, mission_id) do
-    rows =
-      [
-        source_focus_resource_row(
-          focus,
-          resources,
-          mission_id,
-          :selected_target,
-          "target",
-          focus.selected_target
-        ),
-        source_focus_resource_row(
-          focus,
-          resources,
-          mission_id,
-          :selected_id,
-          "selected",
-          focus.selected_id
-        ),
-        source_focus_resource_row(
-          focus,
-          resources,
-          mission_id,
-          :transport_id,
-          "transport",
-          focus.transport_id
-        ),
-        source_focus_resource_row(
-          focus,
-          resources,
-          mission_id,
-          :source_endpoint_id,
-          "endpoint",
-          focus.source_endpoint_id
-        ),
-        source_focus_resource_row(
-          focus,
-          resources,
-          mission_id,
-          :ground_station_id,
-          "station",
-          focus.ground_station_id
-        ),
-        source_focus_resource_row(focus, resources, mission_id, :link_id, "link", focus.link_id)
-      ]
-      |> Enum.reject(&is_nil/1)
-
-    if rows == [] do
-      nil
-    else
-      %{
-        selected_target: focus.selected_target,
-        selected_id: focus.selected_id,
-        transport_id: focus.transport_id,
-        source_endpoint_id: focus.source_endpoint_id,
-        ground_station_id: focus.ground_station_id,
-        link_id: focus.link_id,
-        rows: rows
-      }
-    end
-  end
-
-  defp source_focus_resource_row(_focus, _resources, _mission_id, _key, _label, nil), do: nil
-
-  defp source_focus_resource_row(focus, resources, mission_id, key, label, value) do
-    resolution = source_focus_resource_resolution(resources, key)
-
-    %{
-      key: Atom.to_string(key),
-      label: label,
-      value: value,
-      display_value: source_focus_resource_display_value(key, value, resolution),
-      status: source_focus_resource_status(key, resolution),
-      status_text: source_focus_resource_status_text(key, resolution),
-      href: source_focus_resource_href(focus, resources, mission_id, key, value)
-    }
-  end
-
-  defp source_focus_resource_resolution(resources, :transport_id), do: resources.transport
-
-  defp source_focus_resource_resolution(resources, :source_endpoint_id),
-    do: resources.source_endpoint
-
-  defp source_focus_resource_resolution(resources, :ground_station_id),
-    do: resources.ground_station
-
-  defp source_focus_resource_resolution(resources, :link_id), do: resources.link_assignment
-  defp source_focus_resource_resolution(_resources, _key), do: nil
-
-  defp source_focus_resource_display_value(:selected_target, value, _resolution), do: value
-  defp source_focus_resource_display_value(:selected_id, value, _resolution), do: value
-
-  defp source_focus_resource_display_value(:ground_station_id, _value, %{label: label})
-       when is_binary(label) and label != "",
-       do: label
-
-  defp source_focus_resource_display_value(_key, value, resolution) do
-    case resource_label(resolution) do
-      nil -> value
-      label -> label
-    end
-  end
-
-  defp source_focus_resource_status(key, _resolution)
-       when key in [:selected_target, :selected_id],
-       do: "context"
-
-  defp source_focus_resource_status(:ground_station_id, %{status: status}),
-    do: Atom.to_string(status)
-
-  defp source_focus_resource_status(_key, nil), do: "missing"
-  defp source_focus_resource_status(_key, _resolution), do: "resolved"
-
-  defp source_focus_resource_status_text(key, _resolution)
-       when key in [:selected_target, :selected_id],
-       do: "context"
-
-  defp source_focus_resource_status_text(:ground_station_id, %{status: :inferred}), do: "inferred"
-
-  defp source_focus_resource_status_text(:ground_station_id, %{status: :unverified}),
-    do: "unverified"
-
-  defp source_focus_resource_status_text(_key, nil), do: "missing"
-  defp source_focus_resource_status_text(_key, _resolution), do: "resolved"
-
-  defp present_text?(value) do
-    case resource_text(value) do
-      value when is_binary(value) -> String.trim(value) != ""
-      _value -> false
-    end
-  end
-
-  defp resource_label(nil), do: nil
-
-  defp resource_label(%{ground_station_id: ground_station_id} = ground_station)
-       when is_binary(ground_station_id) do
-    display_name = resource_value(ground_station, :display_name)
-
-    if present_text?(display_name), do: display_name, else: ground_station_id
-  end
-
-  defp resource_label(%{transport_id: transport_id} = transport) when is_binary(transport_id) do
-    display_name = resource_value(transport, :display_name)
-    kind = resource_value(transport, :transport_kind)
-
-    cond do
-      present_text?(display_name) and not is_nil(kind) -> "#{display_name} / #{kind}"
-      present_text?(display_name) -> display_name
-      not is_nil(kind) -> "#{transport_id} / #{kind}"
-      true -> transport_id
-    end
-  end
-
-  defp resource_label(%{source_endpoint_id: source_endpoint_id} = source_endpoint)
-       when is_binary(source_endpoint_id) do
-    display_name = resource_value(source_endpoint, :display_name)
-    source_ref = resource_value(source_endpoint, :source_ref)
-
-    cond do
-      present_text?(display_name) and present_text?(source_ref) ->
-        "#{display_name} / #{source_ref}"
-
-      present_text?(display_name) ->
-        display_name
-
-      present_text?(source_ref) ->
-        "#{source_ref} / #{source_endpoint_id}"
-
-      true ->
-        source_endpoint_id
-    end
-  end
-
-  defp resource_label(%{link_assignment_id: link_assignment_id} = link_assignment)
-       when is_binary(link_assignment_id) do
-    [
-      resource_value(link_assignment, :spacecraft_id),
-      resource_value(link_assignment, :source_endpoint_ref),
-      resource_value(link_assignment, :direction)
-    ]
-    |> Enum.map(&resource_text/1)
-    |> Enum.filter(&present_text?/1)
-    |> case do
-      [] -> link_assignment_id
-      parts -> Enum.join(parts, " / ")
-    end
-  end
-
-  defp resource_label(%{label: label}) when is_binary(label), do: label
-  defp resource_label(_resource), do: nil
-
-  defp ground_station_label(ground_station_id, nil), do: ground_station_id
-
-  defp ground_station_label(ground_station_id, source_label),
-    do: "#{ground_station_id} / #{source_label}"
-
-  defp resource_value(resource, key) when is_map(resource),
-    do: Map.get(resource, key, Map.get(resource, to_string(key)))
-
-  defp resource_value(_resource, _key), do: nil
-
-  defp resource_text(value) when is_atom(value), do: Atom.to_string(value)
-  defp resource_text(value), do: value
-
-  defp metadata_value(metadata, key) when is_map(metadata) and is_binary(key) do
-    Map.get(metadata, key, Map.get(metadata, metadata_atom_key(key)))
-  end
-
   defp metadata_value(metadata, key) when is_map(metadata) and is_atom(key) do
     Map.get(metadata, key, Map.get(metadata, Atom.to_string(key)))
   end
 
   defp metadata_value(_metadata, _key), do: nil
-
-  defp metadata_atom_key("antenna_id"), do: :antenna_id
-  defp metadata_atom_key("ground_station_id"), do: :ground_station_id
-  defp metadata_atom_key("http_endpoint"), do: :http_endpoint
-  defp metadata_atom_key("source_connection_profile"), do: :source_connection_profile
-  defp metadata_atom_key("secret_material?"), do: :secret_material?
-  defp metadata_atom_key("secret_material_fields"), do: :secret_material_fields
-  defp metadata_atom_key(_key), do: nil
 
   defp source_focus_resource_href(_focus, _resources, mission_id, :transport_id, transport_id)
        when is_binary(mission_id) and mission_id != "" and is_binary(transport_id) and
