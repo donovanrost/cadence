@@ -1,4 +1,6 @@
 defmodule Cadence.DerivedTelemetryTest do
+  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Jobs
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   use Cadence.DataCase, async: false
 
@@ -53,10 +55,12 @@ defmodule Cadence.DerivedTelemetryTest do
                binding_set.version
              )
 
-    assert {:ok, run} = Cadence.start_evaluate_derived_telemetry("mission-alpha")
+    assert {:ok, run} = DerivedTelemetryService.start_evaluate("mission-alpha")
     assert run.status == :running
 
-    assert {:ok, queued_job} = Cadence.fetch_derived_telemetry_job(run.derived_run_id)
+    assert {:ok, queued_job} =
+             Jobs.fetch_job_for_run(:derived_telemetry_evaluation, run.derived_run_id)
+
     assert queued_job.status == :queued
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
@@ -68,7 +72,7 @@ defmodule Cadence.DerivedTelemetryTest do
     assert completed_job.job_type == :derived_telemetry_evaluation
     assert completed_job.attempt_count == 1
 
-    assert {:ok, completed_run} = Cadence.fetch_derived_telemetry_run(run.derived_run_id)
+    assert {:ok, completed_run} = DerivedTelemetryService.fetch_run(run.derived_run_id)
     assert completed_run.status == :completed
     assert completed_run.evaluated_sample_count == 2
     assert completed_run.emitted_sample_count == 4

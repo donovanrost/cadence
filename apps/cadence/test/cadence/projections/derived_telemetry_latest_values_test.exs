@@ -1,4 +1,7 @@
 defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
+  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Jobs
+  alias Cadence.Projections.DerivedTelemetryLatestValues
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   use Cadence.DataCase, async: false
 
@@ -36,7 +39,7 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
                binding_set.version
              )
 
-    assert {:ok, derived_run} = Cadence.evaluate_derived_telemetry("mission-alpha")
+    assert {:ok, derived_run} = DerivedTelemetryService.evaluate("mission-alpha")
     assert derived_run.status == :completed
 
     assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==
@@ -50,12 +53,15 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
     assert DerivedTelemetryReads.latest_values_for_mission("mission-alpha") == []
 
     assert {:ok, rebuild_run} =
-             Cadence.start_rebuild_latest_derived_telemetry_values("mission-alpha")
+             DerivedTelemetryLatestValues.start_rebuild("mission-alpha")
 
     assert rebuild_run.status == :running
 
     assert {:ok, queued_job} =
-             Cadence.fetch_latest_derived_telemetry_value_rebuild_job(rebuild_run.rebuild_run_id)
+             Jobs.fetch_job_for_run(
+               :derived_telemetry_latest_value_rebuild,
+               rebuild_run.rebuild_run_id
+             )
 
     assert queued_job.status == :queued
 
@@ -69,7 +75,7 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
     assert completed_job.attempt_count == 1
 
     assert {:ok, completed_run} =
-             Cadence.fetch_latest_derived_telemetry_value_rebuild_run(rebuild_run.rebuild_run_id)
+             DerivedTelemetryLatestValues.fetch_run(rebuild_run.rebuild_run_id)
 
     assert completed_run.status == :completed
     assert completed_run.rebuilt_value_count == 1

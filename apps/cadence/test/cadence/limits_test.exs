@@ -1,4 +1,5 @@
 defmodule Cadence.LimitsTest do
+  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.ConfigCase, async: false
@@ -123,7 +124,7 @@ defmodule Cadence.LimitsTest do
                binding_set.version
              )
 
-    assert {:ok, derived_run} = Cadence.evaluate_derived_telemetry("mission-alpha")
+    assert {:ok, derived_run} = DerivedTelemetryService.evaluate("mission-alpha")
     assert derived_run.status == :completed
 
     assert DerivedTelemetryReads.latest_value("mission-alpha", "DERIVED.counter_double").value ==

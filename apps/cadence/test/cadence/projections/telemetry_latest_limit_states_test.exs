@@ -1,4 +1,5 @@
 defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
+  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.DataCase, async: false
 
@@ -127,7 +128,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
                binding_set.version
              )
 
-    assert {:ok, derived_run} = Cadence.evaluate_derived_telemetry("mission-alpha")
+    assert {:ok, derived_run} = DerivedTelemetryService.evaluate("mission-alpha")
     assert derived_run.status == :completed
 
     assert Repo.aggregate(TelemetryLimitEventRow, :count, :limit_event_id) == 0

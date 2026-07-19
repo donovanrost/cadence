@@ -16,7 +16,6 @@ defmodule Cadence do
   alias Cadence.ApplicationDispatch.Dispatcher
   alias Cadence.Dashboards
   alias Cadence.Dashboards.DataSources, as: DashboardDataSources
-  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Governance
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
@@ -27,9 +26,6 @@ defmodule Cadence do
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
-
-  alias Cadence.Projections.DerivedTelemetryLatestValues,
-    as: DerivedTelemetryLatestValueProjection
 
   alias Cadence.Projections.TelemetryLatestLimitStates, as: TelemetryLatestLimitStateProjection
   alias Cadence.Projections.TelemetryLatestValues, as: TelemetryLatestValueProjection
@@ -1092,96 +1088,6 @@ defmodule Cadence do
       attrs,
       opts
     )
-  end
-
-  @spec evaluate_derived_telemetry(binary(), keyword()) ::
-          {:ok, Cadence.DerivedTelemetry.Run.t()} | {:error, term()}
-  def evaluate_derived_telemetry(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    DerivedTelemetryService.evaluate(mission_id, opts)
-  end
-
-  @spec evaluate_derived_telemetry(binary(), binary(), keyword()) ::
-          {:ok, Cadence.DerivedTelemetry.Run.t()} | {:error, term()}
-  def evaluate_derived_telemetry(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      DerivedTelemetryService.evaluate(mission_id, opts)
-    end)
-  end
-
-  @spec start_evaluate_derived_telemetry(binary(), keyword()) ::
-          {:ok, Cadence.DerivedTelemetry.Run.t()} | {:error, term()}
-  def start_evaluate_derived_telemetry(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    DerivedTelemetryService.start_evaluate(mission_id, opts)
-  end
-
-  @spec start_evaluate_derived_telemetry(binary(), binary(), keyword()) ::
-          {:ok, Cadence.DerivedTelemetry.Run.t()} | {:error, term()}
-  def start_evaluate_derived_telemetry(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      DerivedTelemetryService.start_evaluate(mission_id, opts)
-    end)
-  end
-
-  @spec fetch_derived_telemetry_run(binary()) ::
-          {:ok, Cadence.DerivedTelemetry.Run.t()} | {:error, term()}
-  def fetch_derived_telemetry_run(derived_run_id) when is_binary(derived_run_id) do
-    DerivedTelemetryService.fetch_run(derived_run_id)
-  end
-
-  @spec fetch_derived_telemetry_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_derived_telemetry_job(derived_run_id) when is_binary(derived_run_id) do
-    Jobs.fetch_job_for_run(:derived_telemetry_evaluation, derived_run_id)
-  end
-
-  @spec rebuild_latest_derived_telemetry_values(binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_derived_telemetry_values(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    DerivedTelemetryLatestValueProjection.rebuild(mission_id, opts)
-  end
-
-  @spec rebuild_latest_derived_telemetry_values(binary(), binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_derived_telemetry_values(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      DerivedTelemetryLatestValueProjection.rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec start_rebuild_latest_derived_telemetry_values(binary(), keyword()) ::
-          {:ok, Cadence.Projections.DerivedTelemetryLatestValues.Run.t()} | {:error, term()}
-  def start_rebuild_latest_derived_telemetry_values(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    DerivedTelemetryLatestValueProjection.start_rebuild(mission_id, opts)
-  end
-
-  @spec start_rebuild_latest_derived_telemetry_values(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Projections.DerivedTelemetryLatestValues.Run.t()} | {:error, term()}
-  def start_rebuild_latest_derived_telemetry_values(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      DerivedTelemetryLatestValueProjection.start_rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec fetch_latest_derived_telemetry_value_rebuild_run(binary()) ::
-          {:ok, Cadence.Projections.DerivedTelemetryLatestValues.Run.t()} | {:error, term()}
-  def fetch_latest_derived_telemetry_value_rebuild_run(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    DerivedTelemetryLatestValueProjection.fetch_run(rebuild_run_id)
-  end
-
-  @spec fetch_latest_derived_telemetry_value_rebuild_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_latest_derived_telemetry_value_rebuild_job(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    Jobs.fetch_job_for_run(:derived_telemetry_latest_value_rebuild, rebuild_run_id)
   end
 
   @spec diff_replay_run(binary()) :: Cadence.Replay.Diff.report()
