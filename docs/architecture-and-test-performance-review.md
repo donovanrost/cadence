@@ -1303,6 +1303,13 @@ single-event recording, and grouped request-item construction into a 245-line
 correction, transition, group, and job paths consume the shared normalization
 and validation boundary directly; production source-size pressure remains 6
 and dependency ratchets are unchanged.
+Extracting historical workflow job enqueueing, payload decoding, source reads,
+sample persistence, lifecycle outcomes, and structured failure diagnostics into
+a 264-line `DataManagement.WorkflowJobs` module reduced `DataManagement` from
+2,341 to 2,105 lines. The typed start and background-execution APIs remain
+unchanged, and group transitions now start jobs through the same execution
+boundary directly; production source-size pressure remains 6 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
