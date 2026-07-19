@@ -29,6 +29,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
     TelemetryRevisionSummary
   }
 
+  alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.{Sample, SelectionPolicy}
@@ -37,26 +38,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   @history_sampling_modes [:raw_series, :bounded_history, :bounded_raw_series]
   @native_decimated_sampling_modes [:decimated_envelope]
   @supported_sampling_modes [:latest | @history_sampling_modes]
-  @active_backfill_lifecycle_event_types [
-    :backfill_requested,
-    :backfill_approved,
-    :backfill_started,
-    :backfill_failed,
-    :backfill_retried,
-    :import_requested,
-    :import_approved,
-    :import_started,
-    :import_failed,
-    :import_retried
-  ]
-  @terminal_backfill_lifecycle_event_types [
-    :backfill_rejected,
-    :backfill_completed,
-    :import_rejected,
-    :import_completed,
-    :late_data_accepted,
-    :late_data_rejected
-  ]
   @default_limit 10_000
   @type decimated_history_fun :: (binary() | nil, binary(), binary(), keyword() ->
                                     [map()] | {:ok, map()} | map() | {:error, term()})
@@ -1730,36 +1711,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
          opts
        )
        when is_list(frames) do
-    events =
-      active_historical_workflow_events(
-        request,
-        source_binding,
-        organization_id,
-        mission_id,
-        opts
-      )
-
-    active_workflows = latest_active_historical_workflows(events)
-    terminal_outcomes = terminal_historical_workflow_outcomes(events)
-
-    if active_workflows == [] and terminal_outcomes == [] do
-      frames
-    else
-      Enum.map(frames, fn frame ->
-        frame
-        |> put_frame_active_historical_workflows(active_workflows)
-        |> put_frame_historical_workflow_outcomes(terminal_outcomes)
-      end)
-    end
-  end
-
-  defp active_historical_workflow_events(
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       ) do
     {source_from, source_to, _warnings} = receipt_time_bounds(request)
 
     query_opts =
@@ -1775,140 +1726,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       ]
       |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
 
-    case Keyword.fetch(opts, :backfill_lifecycle_events_fun) do
-      {:ok, list_fun} when is_function(list_fun, 2) ->
-        list_fun
-        |> then(fn list_fun -> list_fun.(mission_id, query_opts) end)
-        |> case do
-          events when is_list(events) -> events
-          {:ok, events} when is_list(events) -> events
-          _other -> []
-        end
-
-      :error ->
-        []
-    end
-  end
-
-  defp latest_active_historical_workflows(events) when is_list(events) do
-    events
-    |> Enum.group_by(&backfill_run_id/1)
-    |> Enum.flat_map(fn
-      {nil, run_events} -> active_workflow_events(run_events)
-      {_run_id, run_events} -> run_events |> latest_workflow_event() |> List.wrap()
-    end)
-    |> Enum.filter(&active_historical_workflow_event?/1)
-    |> Enum.map(&historical_workflow_badge_context/1)
-  end
-
-  defp active_workflow_events(events) do
-    Enum.filter(events, &active_historical_workflow_event?/1)
-  end
-
-  defp latest_workflow_event(events) do
-    events
-    |> Enum.sort_by(&{event_occurred_at_us(&1), event_id(&1)}, :desc)
-    |> List.first()
-  end
-
-  defp active_historical_workflow_event?(event) do
-    event_type(event) in @active_backfill_lifecycle_event_types and
-      event_type(event) not in @terminal_backfill_lifecycle_event_types
-  end
-
-  defp terminal_historical_workflow_outcomes(events) when is_list(events) do
-    events
-    |> Enum.group_by(&backfill_run_id/1)
-    |> Enum.flat_map(fn
-      {nil, run_events} -> terminal_workflow_events(run_events)
-      {_run_id, run_events} -> run_events |> latest_workflow_event() |> List.wrap()
-    end)
-    |> Enum.filter(&terminal_historical_workflow_event?/1)
-    |> Enum.map(&historical_workflow_badge_context/1)
-  end
-
-  defp terminal_workflow_events(events) do
-    Enum.filter(events, &terminal_historical_workflow_event?/1)
-  end
-
-  defp terminal_historical_workflow_event?(event) do
-    event_type(event) in @terminal_backfill_lifecycle_event_types
-  end
-
-  defp put_frame_active_historical_workflows(%Frame{} = frame, workflows) do
-    frame_workflows =
-      workflows
-      |> Enum.filter(&historical_workflow_matches_frame?(&1, frame))
-      |> Enum.uniq_by(&{Map.get(&1, :source_record_id), Map.get(&1, :run_id), Map.get(&1, :kind)})
-
-    case frame_workflows do
-      [] ->
-        frame
-
-      [_workflow | _rest] ->
-        evidence =
-          frame_workflows
-          |> Enum.map(&historical_workflow_evidence_event/1)
-          |> DataLinks.telemetry_backfill_lifecycle_event_evidence_refs()
-
-        meta =
-          frame.meta
-          |> Map.put(:active_historical_workflows, frame_workflows)
-          |> merge_frame_evidence(evidence)
-
-        %Frame{frame | meta: meta}
-    end
-  end
-
-  defp put_frame_historical_workflow_outcomes(%Frame{} = frame, outcomes) do
-    frame_outcomes =
-      outcomes
-      |> Enum.filter(&historical_workflow_matches_frame?(&1, frame))
-      |> Enum.uniq_by(&{Map.get(&1, :source_record_id), Map.get(&1, :run_id), Map.get(&1, :kind)})
-
-    case frame_outcomes do
-      [] ->
-        frame
-
-      [_outcome | _rest] ->
-        evidence =
-          frame_outcomes
-          |> Enum.map(&historical_workflow_evidence_event/1)
-          |> DataLinks.telemetry_backfill_lifecycle_event_evidence_refs()
-
-        meta =
-          frame.meta
-          |> Map.put(:historical_workflow_outcomes, frame_outcomes)
-          |> merge_frame_evidence(evidence)
-
-        %Frame{frame | meta: meta}
-    end
-  end
-
-  defp historical_workflow_matches_frame?(workflow, %Frame{} = frame) do
-    workflow_point = Map.get(workflow, :point_id) || Map.get(workflow, :observable_id)
-    frame_point = frame.meta[:point_id] || frame.meta[:observable_id]
-
-    workflow_point in [nil, ""] or workflow_point == frame_point
-  end
-
-  defp historical_workflow_badge_context(event) do
-    %{
-      category: :telemetry_backfill,
-      kind: event_type(event),
-      source_record_id: event_id(event),
-      run_id: backfill_run_id(event),
-      point_id: event_point_id(event),
-      observable_id: event_observable_id(event),
-      occurred_at: event_occurred_at(event)
-    }
-  end
-
-  defp historical_workflow_evidence_event(workflow) do
-    %{
-      backfill_lifecycle_event_id: Map.get(workflow, :source_record_id),
-      occurred_at: Map.get(workflow, :occurred_at)
-    }
+    HistoricalWorkflows.annotate(frames, mission_id, query_opts, opts)
   end
 
   defp merge_frame_evidence(meta, []), do: meta
@@ -1921,26 +1739,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       |> Enum.uniq_by(&evidence_ref_identity/1)
     )
   end
-
-  defp event_type(event), do: event_value(event, :event_type)
-  defp backfill_run_id(event), do: event_value(event, :backfill_run_id)
-  defp event_id(event), do: event_value(event, :backfill_lifecycle_event_id)
-  defp event_point_id(event), do: event_value(event, :point_id)
-  defp event_observable_id(event), do: event_value(event, :observable_id)
-  defp event_occurred_at(event), do: event_value(event, :occurred_at)
-
-  defp event_occurred_at_us(event) do
-    case event_value(event, :occurred_at) do
-      %DateTime{} = occurred_at -> DateTime.to_unix(occurred_at, :microsecond)
-      _missing -> 0
-    end
-  end
-
-  defp event_value(event, key) when is_map(event) and is_atom(key) do
-    Map.get(event, key, Map.get(event, Atom.to_string(key)))
-  end
-
-  defp event_value(_event, _key), do: nil
 
   defp evidence_ref_identity(%{kind: kind, id: id}), do: {kind, id}
   defp evidence_ref_identity(ref), do: ref

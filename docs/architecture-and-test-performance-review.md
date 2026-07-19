@@ -918,6 +918,11 @@ source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
 backend health checks separate from telemetry fact and frame resolution;
 production-file pressure remains 11 while the remaining telemetry
 responsibilities are split.
+Moving active and terminal backfill/import lifecycle selection, frame matching,
+badge metadata, and evidence merging out of the telemetry source reduced the
+adapter again to 2,376 lines. The 204-line historical-workflow module consumes
+the scoped lookup options assembled by the source and owns only
+visualization-facing workflow annotation.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
