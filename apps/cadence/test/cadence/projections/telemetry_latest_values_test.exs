@@ -1,4 +1,6 @@
 defmodule Cadence.Projections.TelemetryLatestValuesTest do
+  alias Cadence.Jobs
+  alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.DataCase, async: false
 
@@ -46,7 +48,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     Repo.delete_all(TelemetryLatestValueRow)
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
 
-    assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
+    assert {:ok, 1} = TelemetryLatestValues.rebuild("mission-alpha")
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
   end
 
@@ -87,7 +89,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
 
     Repo.delete_all(TelemetryLatestValueRow)
 
-    assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
+    assert {:ok, 1} = TelemetryLatestValues.rebuild("mission-alpha")
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter").raw_value == 20
   end
 
@@ -123,7 +125,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
 
     Repo.delete_all(TelemetryLatestValueRow)
 
-    assert {:ok, 2} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
+    assert {:ok, 2} = TelemetryLatestValues.rebuild("mission-alpha")
 
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter",
              realm: :flight,
@@ -167,7 +169,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     Repo.delete_all(TelemetryLatestValueRow)
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
 
-    assert {:ok, 1} = Cadence.rebuild_latest_telemetry_values("mission-alpha")
+    assert {:ok, 1} = TelemetryLatestValues.rebuild("mission-alpha")
 
     latest_after_rebuild = TelemetryReads.latest_value("mission-alpha", "HK.counter")
     assert latest_after_rebuild.sample_id == "sample-rebuild-canonical"
@@ -326,11 +328,11 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
 
     Repo.delete_all(TelemetryLatestValueRow)
 
-    assert {:ok, rebuild_run} = Cadence.start_rebuild_latest_telemetry_values("mission-alpha")
+    assert {:ok, rebuild_run} = TelemetryLatestValues.start_rebuild("mission-alpha")
     assert rebuild_run.status == :running
 
     assert {:ok, queued_job} =
-             Cadence.fetch_latest_telemetry_value_rebuild_job(rebuild_run.rebuild_run_id)
+             Jobs.fetch_job_for_run(:telemetry_latest_value_rebuild, rebuild_run.rebuild_run_id)
 
     assert queued_job.status == :queued
 
@@ -341,8 +343,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     assert {:ok, rebuild_job} = Cadence.Jobs.run_job(claimed_job.job_id)
     assert rebuild_job.status == :completed
 
-    assert {:ok, completed_run} =
-             Cadence.fetch_latest_telemetry_value_rebuild_run(rebuild_run.rebuild_run_id)
+    assert {:ok, completed_run} = TelemetryLatestValues.fetch_run(rebuild_run.rebuild_run_id)
 
     assert completed_run.rebuilt_value_count == 1
     assert rebuild_job.job_type == :telemetry_latest_value_rebuild

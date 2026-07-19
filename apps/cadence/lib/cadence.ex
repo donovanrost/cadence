@@ -26,7 +26,6 @@ defmodule Cadence do
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
 
-  alias Cadence.Projections.TelemetryLatestValues, as: TelemetryLatestValueProjection
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
   alias Cadence.Reads.Replay, as: ReplayReads
@@ -1091,52 +1090,6 @@ defmodule Cadence do
   @spec diff_replay_run(binary()) :: Cadence.Replay.Diff.report()
   def diff_replay_run(replay_run_id) when is_binary(replay_run_id) do
     ReplayDiff.diff_run(replay_run_id)
-  end
-
-  @spec rebuild_latest_telemetry_values(binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_telemetry_values(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestValueProjection.rebuild(mission_id, opts)
-  end
-
-  @spec rebuild_latest_telemetry_values(binary(), binary(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def rebuild_latest_telemetry_values(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestValueProjection.rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec start_rebuild_latest_telemetry_values(binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestValues.Run.t()} | {:error, term()}
-  def start_rebuild_latest_telemetry_values(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    TelemetryLatestValueProjection.start_rebuild(mission_id, opts)
-  end
-
-  @spec start_rebuild_latest_telemetry_values(binary(), binary(), keyword()) ::
-          {:ok, Cadence.Projections.TelemetryLatestValues.Run.t()} | {:error, term()}
-  def start_rebuild_latest_telemetry_values(organization_id, mission_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    with_mission_scope(organization_id, mission_id, fn ->
-      TelemetryLatestValueProjection.start_rebuild(mission_id, opts)
-    end)
-  end
-
-  @spec fetch_latest_telemetry_value_rebuild_run(binary()) ::
-          {:ok, Cadence.Projections.TelemetryLatestValues.Run.t()} | {:error, term()}
-  def fetch_latest_telemetry_value_rebuild_run(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    TelemetryLatestValueProjection.fetch_run(rebuild_run_id)
-  end
-
-  @spec fetch_latest_telemetry_value_rebuild_job(binary()) ::
-          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
-  def fetch_latest_telemetry_value_rebuild_job(rebuild_run_id)
-      when is_binary(rebuild_run_id) do
-    Jobs.fetch_job_for_run(:telemetry_latest_value_rebuild, rebuild_run_id)
   end
 
   defp with_mission_scope(organization_id, mission_id, fun)
