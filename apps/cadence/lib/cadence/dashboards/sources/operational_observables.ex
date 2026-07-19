@@ -36,6 +36,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     ConnectionFrames,
+    ConnectionRows,
     ProductPolicy,
     RevisionPolicy
   }
@@ -1368,7 +1369,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    connection_state_rows(
+    ConnectionRows.latest(
       request.observables,
       transports_fun.(organization_id, mission_id, adapter_opts),
       source_endpoints_fun.(organization_id, mission_id, adapter_opts),
@@ -1735,7 +1736,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
     adapter_opts = adapter_opts(request, source_binding)
 
-    connection_state_history_rows(
+    ConnectionRows.history(
       request.observables,
       transports_fun.(organization_id, mission_id, adapter_opts),
       source_endpoints_fun.(organization_id, mission_id, adapter_opts),
@@ -4134,69 +4135,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
 
   defp normalize_number(_value), do: nil
 
-  defp connection_state_rows(observables, transports, source_endpoints, snapshots, request) do
-    snapshots = Enum.map(snapshots, &normalize_connection_snapshot/1)
-
-    transport_rows =
-      if "comms.transport.connection_state" in observables do
-        Enum.map(transports, &transport_connection_row(&1, snapshots))
-      else
-        []
-      end
-
-    ground_station_rows =
-      if "ground.station.connection_state" in observables do
-        Enum.map(source_endpoints, &ground_station_connection_row(&1, snapshots))
-      else
-        []
-      end
-
-    (transport_rows ++ ground_station_rows)
-    |> Enum.filter(&matches_connection_scope?(&1, request))
-  end
-
-  defp connection_state_history_rows(
-         observables,
-         transports,
-         source_endpoints,
-         snapshots,
-         request
-       ) do
-    snapshots = Enum.map(snapshots, &normalize_connection_snapshot/1)
-
-    transport_rows =
-      if "comms.transport.connection_state" in observables do
-        snapshots
-        |> Enum.filter(
-          &connection_snapshot_observable_matches?(&1, "comms.transport.connection_state")
-        )
-        |> Enum.map(&transport_connection_history_row(transports, &1))
-        |> Enum.reject(&is_nil/1)
-      else
-        []
-      end
-
-    ground_station_rows =
-      if "ground.station.connection_state" in observables do
-        snapshots
-        |> Enum.filter(
-          &connection_snapshot_observable_matches?(&1, "ground.station.connection_state")
-        )
-        |> Enum.map(&ground_station_connection_history_row(source_endpoints, &1))
-        |> Enum.reject(&is_nil/1)
-      else
-        []
-      end
-
-    (transport_rows ++ ground_station_rows)
-    |> Enum.filter(
-      &(match?(%DateTime{}, &1.observed_at) and matches_connection_scope?(&1, request) and
-          time_in_request_window?(&1.observed_at, request))
-    )
-    |> Enum.sort_by(&datetime_sort_key(&1.observed_at))
-    |> apply_request_limit(request)
-  end
-
   defp transport_execution_history_rows(
          request,
          source_binding,
@@ -4736,79 +4674,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     |> Enum.uniq()
   end
 
-  defp transport_connection_row(transport, snapshots) do
-    transport_id = attr(transport, :transport_id)
-
-    source_endpoint_id =
-      metadata_attr(transport, :source_endpoint_id) ||
-        metadata_attr(transport, :source_endpoint_ref)
-
-    ground_station_id =
-      metadata_attr(transport, :ground_station_id) || metadata_attr(transport, :antenna_id)
-
-    snapshot =
-      connection_snapshot(
-        snapshots,
-        :transport_id,
-        transport_id,
-        "comms.transport.connection_state"
-      )
-
-    link_id = link_id_for([snapshot, transport])
-
-    %{
-      observable_id: "comms.transport.connection_state",
-      resource_id: transport_id,
-      label: attr(transport, :display_name) || transport_id,
-      scope_kind: :transport,
-      transport_id: transport_id,
-      source_endpoint_id: source_endpoint_id,
-      ground_station_id: ground_station_id,
-      link_id: link_id,
-      adapter_key: attr(transport, :adapter_key),
-      connection_state:
-        connection_state(snapshot) || connection_state(attr(transport, :metadata)) || :unknown,
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: transport
-    }
-  end
-
-  defp transport_connection_history_row(transports, snapshot) do
-    with transport_id when is_binary(transport_id) <-
-           attr(snapshot, :transport_id) || attr(snapshot, :resource_id),
-         transport when not is_nil(transport) <- find_transport(transports, transport_id) do
-      build_transport_connection_history_row(transport, snapshot)
-    else
-      _missing -> nil
-    end
-  end
-
-  defp build_transport_connection_history_row(transport, snapshot) do
-    transport_id = attr(transport, :transport_id)
-
-    %{
-      observable_id: "comms.transport.connection_state",
-      resource_id: transport_id,
-      label: attr(transport, :display_name) || transport_id,
-      scope_kind: :transport,
-      transport_id: transport_id,
-      source_endpoint_id: transport_source_endpoint_id(transport, snapshot),
-      ground_station_id: transport_ground_station_id(transport, snapshot),
-      link_id: link_id_for([snapshot, transport]),
-      adapter_key: attr(snapshot, :adapter_key) || attr(transport, :adapter_key),
-      connection_state:
-        connection_state(snapshot) || connection_state(attr(transport, :metadata)) || :unknown,
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: transport
-    }
-  end
-
   defp transport_source_endpoint_id(transport, snapshot) do
     attr(snapshot, :source_endpoint_id) ||
       metadata_attr(transport, :source_endpoint_id) ||
@@ -4820,128 +4685,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metadata_attr(transport, :ground_station_id) ||
       metadata_attr(transport, :antenna_id)
   end
-
-  defp ground_station_connection_row(source_endpoint, snapshots) do
-    source_endpoint_id = attr(source_endpoint, :source_endpoint_id)
-
-    ground_station_id =
-      metadata_attr(source_endpoint, :ground_station_id) ||
-        metadata_attr(source_endpoint, :antenna_id)
-
-    snapshot =
-      connection_snapshot(
-        snapshots,
-        :source_endpoint_id,
-        source_endpoint_id,
-        "ground.station.connection_state"
-      )
-
-    resource_id = ground_station_id || source_endpoint_id
-    link_id = link_id_for([snapshot, source_endpoint])
-
-    %{
-      observable_id: "ground.station.connection_state",
-      resource_id: resource_id,
-      label: attr(source_endpoint, :display_name) || resource_id,
-      scope_kind: :ground_station,
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id: source_endpoint_id,
-      ground_station_id: ground_station_id,
-      link_id: link_id,
-      adapter_key: attr(snapshot, :adapter_key),
-      connection_state:
-        connection_state(snapshot) || connection_state(attr(source_endpoint, :metadata)) ||
-          :unknown,
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval),
-      source: source_endpoint
-    }
-  end
-
-  defp ground_station_connection_history_row(source_endpoints, snapshot) do
-    source_endpoint =
-      find_source_endpoint(
-        source_endpoints,
-        attr(snapshot, :source_endpoint_id),
-        attr(snapshot, :ground_station_id) || attr(snapshot, :resource_id)
-      )
-
-    if source_endpoint do
-      source_endpoint_id = attr(source_endpoint, :source_endpoint_id)
-
-      ground_station_id =
-        attr(snapshot, :ground_station_id) ||
-          metadata_attr(source_endpoint, :ground_station_id) ||
-          metadata_attr(source_endpoint, :antenna_id)
-
-      resource_id = ground_station_id || source_endpoint_id
-      link_id = link_id_for([snapshot, source_endpoint])
-
-      %{
-        observable_id: "ground.station.connection_state",
-        resource_id: resource_id,
-        label: attr(source_endpoint, :display_name) || resource_id,
-        scope_kind: :ground_station,
-        transport_id: attr(snapshot, :transport_id),
-        source_endpoint_id: source_endpoint_id,
-        ground_station_id: ground_station_id,
-        link_id: link_id,
-        adapter_key: attr(snapshot, :adapter_key),
-        connection_state:
-          connection_state(snapshot) || connection_state(attr(source_endpoint, :metadata)) ||
-            :unknown,
-        observed_at: attr(snapshot, :observed_at),
-        interval_id: attr(snapshot, :interval_id),
-        source_event_id: attr(snapshot, :source_event_id),
-        interval: attr(snapshot, :interval),
-        source: source_endpoint
-      }
-    end
-  end
-
-  defp normalize_connection_snapshot(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      connection_state: connection_state(snapshot),
-      observed_at: attr(snapshot, :observed_at),
-      interval_id: attr(snapshot, :interval_id),
-      source_event_id: attr(snapshot, :source_event_id),
-      interval: attr(snapshot, :interval)
-    }
-  end
-
-  defp connection_snapshot_observable_matches?(snapshot, observable_id) do
-    snapshot_observable_id = attr(snapshot, :observable_id)
-
-    is_nil(snapshot_observable_id) or snapshot_observable_id == observable_id
-  end
-
-  defp connection_snapshot(snapshots, key, value, observable_id)
-       when is_binary(value) and value != "" do
-    Enum.find(
-      snapshots,
-      &((attr(&1, key) == value or attr(&1, :resource_id) == value) and
-          connection_snapshot_observable_matches?(&1, observable_id))
-    )
-  end
-
-  defp connection_snapshot(_snapshots, _key, _value, _observable_id), do: nil
-
-  defp find_transport(transports, transport_id)
-       when is_binary(transport_id) and transport_id != "" do
-    Enum.find(transports, &(attr(&1, :transport_id) == transport_id))
-  end
-
-  defp find_transport(_transports, _transport_id), do: nil
 
   defp find_transport_for_metric_snapshot(transports, snapshot) do
     transport_id = attr(snapshot, :transport_id)

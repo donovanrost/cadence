@@ -1030,6 +1030,11 @@ operational-observables source from 6,640 to 6,492 lines. The new 160-line
 connection frame module receives resolved rows and source identity while
 provider reads and row normalization remain in the adapter; production
 source-size pressure remains 8.
+Moving connection snapshot normalization, transport and ground-station row
+joins, request-scope filtering, time windows, ordering, and limits into a
+391-line connection-row module reduced the operational-observables source from
+6,492 to 6,235 lines. Shared transport helpers still used by RF and metric
+products remain in the adapter; production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
