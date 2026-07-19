@@ -815,6 +815,10 @@ shared support module is 617 lines.
 Moving compare-mode and observed analysis-bucket cases out of the 1,601-line
 limits-source test reduced test-file pressure to 18; the source-family file is
 now 1,408 lines and the focused analysis-buckets file is 325 lines.
+Moving operational-observable, transport, and managed-runtime envelope cases
+out of the 1,676-line operational-event test reduced test-file pressure to 17
+and mirrored the production runtime-family boundary; the canonical envelope
+test is now 954 lines and the runtime-family test is 727 lines.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
