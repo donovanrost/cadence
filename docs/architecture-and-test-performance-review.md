@@ -1758,6 +1758,16 @@ identity, active-first ordering, missing-source state, credential labels, and
 readiness-policy metadata. Source-level inventory rollups and all scoped reads
 remain in the LiveView on its authenticated `:ops` route; production
 source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting source-row capability labels, health and readiness classification,
+watermark selection, credential posture, deployment state, and action
+visibility into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation` reduced
+`OpsDataSourcesLive` from 2,241 to 1,877 lines. Direct tests cover stable source
+ordering, credential and endpoint labels, capability text, lifecycle actions,
+latest watermark selection, and disabled-source enablement. The LiveView still
+owns organization- and mission-scoped inventory reads on its authenticated
+`:ops` route; production source-size pressure remains 3 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
