@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderAccountGrantRow do
+defmodule Cadence.GroundNetworks.ProviderAccountGrants.GrantRow do
   @moduledoc false
 
   use Ecto.Schema

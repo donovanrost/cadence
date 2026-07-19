@@ -82,10 +82,7 @@ persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/sche
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/derived_telemetry_sample_row.ex
 persistence_schema|lib/cadence/derived_telemetry.ex|lib/cadence/persistence/schemas/telemetry_sample_row.ex
 persistence_schema|lib/cadence/ground_networks/mission_providers.ex|lib/cadence/persistence/schemas/mission_provider_row.ex
-persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_account_grant_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_account_grants.ex|lib/cadence/persistence/schemas/provider_reservation_row.ex
-persistence_schema|lib/cadence/ground_networks/provider_accounts.ex|lib/cadence/persistence/schemas/provider_account_row.ex
-persistence_schema|lib/cadence/ground_networks/provider_accounts.ex|lib/cadence/persistence/schemas/provider_account_version_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_audit.ex|lib/cadence/persistence/schemas/provider_audit_entry_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_credentials.ex|lib/cadence/persistence/schemas/provider_credential_row.ex
 persistence_schema|lib/cadence/ground_networks/provider_event_cursors.ex|lib/cadence/persistence/schemas/provider_event_cursor_row.ex

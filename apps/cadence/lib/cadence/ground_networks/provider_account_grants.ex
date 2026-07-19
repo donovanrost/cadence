@@ -13,14 +13,13 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
     ProviderAuditEntry
   }
 
+  alias Cadence.GroundNetworks.ProviderAccountGrants.GrantRow,
+    as: ProviderAccountGrantRow
+
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.Schemas.{
-    ProviderAccountGrantRow,
-    ProviderReservationRow
-  }
-
+  alias Cadence.Persistence.Schemas.ProviderReservationRow
   alias Cadence.Repo
 
   @nonterminal_states ~w(requesting pending confirmed active unknown canceling)

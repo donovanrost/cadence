@@ -14,7 +14,11 @@ defmodule Cadence.GroundNetworks.ProviderAccounts do
     ProviderCredentials
   }
 
-  alias Cadence.Persistence.Schemas.{ProviderAccountRow, ProviderAccountVersionRow}
+  alias Cadence.GroundNetworks.ProviderAccounts.AccountRow, as: ProviderAccountRow
+
+  alias Cadence.GroundNetworks.ProviderAccounts.AccountVersionRow,
+    as: ProviderAccountVersionRow
+
   alias Cadence.Repo
 
   @spec create(Scope.t(), map(), keyword()) ::

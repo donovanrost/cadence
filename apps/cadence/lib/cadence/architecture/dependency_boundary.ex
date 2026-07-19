@@ -43,6 +43,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
   @applications_context ["lib/cadence/applications/"]
   @dashboards_context ["lib/cadence/dashboards/"]
+  @ground_networks_context ["lib/cadence/ground_networks/"]
   @projections_context ["lib/cadence/projections/"]
   @context_owned_schemas [
     {[
@@ -60,6 +61,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/notifications/"], @notifications_context},
     {["lib/cadence/applications/"], @applications_context},
     {["lib/cadence/dashboards/"], @dashboards_context},
+    {["lib/cadence/ground_networks/"], @ground_networks_context},
     {["lib/cadence/projections/"], @projections_context}
   ]
 

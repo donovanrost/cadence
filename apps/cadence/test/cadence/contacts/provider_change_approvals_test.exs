@@ -18,10 +18,15 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
     ProviderAudit
   }
 
+  alias Cadence.GroundNetworks.ProviderAccountGrants.GrantRow,
+    as: ProviderAccountGrantRow
+
+  alias Cadence.GroundNetworks.ProviderAccounts.AccountRow, as: ProviderAccountRow
+
+  alias Cadence.GroundNetworks.ProviderAccounts.AccountVersionRow,
+    as: ProviderAccountVersionRow
+
   alias Cadence.Persistence.Schemas.{
-    ProviderAccountGrantRow,
-    ProviderAccountRow,
-    ProviderAccountVersionRow,
     ProviderReservationChangeRow,
     ProviderReservationRow,
     ScheduledContactRow

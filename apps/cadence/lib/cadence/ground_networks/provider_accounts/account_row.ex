@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProviderAccountRow do
+defmodule Cadence.GroundNetworks.ProviderAccounts.AccountRow do
   @moduledoc false
 
   use Ecto.Schema
