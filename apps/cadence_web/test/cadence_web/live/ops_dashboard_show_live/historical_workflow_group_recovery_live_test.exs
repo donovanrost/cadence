@@ -72,233 +72,238 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupRecoveryLiveTes
     :exit, _reason -> :ok
   end
 
+  defp persist_group_recovery_fixture!(org, mission) do
+    requested_events =
+      for {point_id, index} <- [{"HK.counter", 1}, {"HK.voltage", 2}, {"HK.current", 3}] do
+        run_id = "dashboard-workflow-run-effective-00#{index}"
+
+        assert {:ok, event} =
+                 Cadence.record_telemetry_historical_data_workflow_event(
+                   "backfill",
+                   "requested",
+                   %{
+                     backfill_run_id: run_id,
+                     organization_id: org.organization_id,
+                     mission_id: mission.mission_id,
+                     realm: :backfill,
+                     data_source_id: "managed_questdb_backfill",
+                     binding_id: "backfill_telemetry",
+                     observable_id: point_id,
+                     point_id: point_id,
+                     source_from: ~U[2026-06-22 10:00:00Z],
+                     source_to: ~U[2026-06-22 11:00:00Z],
+                     authority: :advisory,
+                     reason: "operator_requested_effective_group",
+                     actor_id: "operator",
+                     actor_kind: "operator",
+                     payload: %{
+                       "request_source" => "dashboard_direct_request",
+                       "request_mode" => "bulk_points",
+                       "request_group_id" => "dashboard-workflow-run-effective",
+                       "request_item_index" => index,
+                       "request_item_count" => 3,
+                       "request_item_run_id" => run_id
+                     }
+                   },
+                   dashboard_runtime_invalidation?: false
+                 )
+
+        event
+      end
+
+    original_voltage_request = Enum.at(requested_events, 1)
+    original_current_request = Enum.at(requested_events, 2)
+
+    assert {:ok, failed_voltage_event} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "failed",
+               %{
+                 backfill_run_id: original_voltage_request.backfill_run_id,
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 observable_id: "HK.voltage",
+                 point_id: "HK.voltage",
+                 source_from: ~U[2026-06-22 10:00:00Z],
+                 source_to: ~U[2026-06-22 11:00:00Z],
+                 authority: :advisory,
+                 reason: "historical_data_job_failed",
+                 actor_id: "system",
+                 actor_kind: "system",
+                 payload: %{
+                   "request_source" => "dashboard_direct_request",
+                   "request_mode" => "bulk_points",
+                   "request_group_id" => "dashboard-workflow-run-effective",
+                   "request_item_index" => 2,
+                   "request_item_count" => 3,
+                   "request_item_run_id" => original_voltage_request.backfill_run_id,
+                   "source" => %{
+                     "failure" => %{
+                       "code" => "missing_field:voltage",
+                       "retryable" => false,
+                       "recovery_action" => "correct_workflow_request"
+                     }
+                   }
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert {:ok, failed_current_event} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "failed",
+               %{
+                 backfill_run_id: original_current_request.backfill_run_id,
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 observable_id: "HK.current",
+                 point_id: "HK.current",
+                 source_from: ~U[2026-06-22 10:00:00Z],
+                 source_to: ~U[2026-06-22 11:00:00Z],
+                 authority: :advisory,
+                 reason: "historical_data_job_failed",
+                 actor_id: "system",
+                 actor_kind: "system",
+                 payload: %{
+                   "request_source" => "dashboard_direct_request",
+                   "request_mode" => "bulk_points",
+                   "request_group_id" => "dashboard-workflow-run-effective",
+                   "request_item_index" => 3,
+                   "request_item_count" => 3,
+                   "request_item_run_id" => original_current_request.backfill_run_id,
+                   "source" => %{
+                     "failure" => %{
+                       "code" => "missing_field:point_id",
+                       "retryable" => false,
+                       "recovery_action" => "correct_workflow_request"
+                     }
+                   }
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert {:ok, corrected_current_request} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "requested",
+               %{
+                 backfill_run_id: "dashboard-workflow-run-effective-003-corrected",
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 observable_id: "HK.current",
+                 point_id: "HK.current",
+                 source_from: ~U[2026-06-22 10:00:00Z],
+                 source_to: ~U[2026-06-22 11:00:00Z],
+                 authority: :advisory,
+                 reason: "operator_corrected_effective_group_item",
+                 actor_id: "operator",
+                 actor_kind: "operator",
+                 payload: %{
+                   "recovery_action" => "correct_workflow_request",
+                   "corrects_run_id" => original_current_request.backfill_run_id,
+                   "corrects_event_id" => failed_current_event.backfill_lifecycle_event_id,
+                   "corrects_job_id" => "dashboard-workflow-effective-job-current",
+                   "request_source" => "dashboard_direct_request",
+                   "request_mode" => "bulk_points",
+                   "request_group_id" => "dashboard-workflow-run-effective",
+                   "request_item_index" => 3,
+                   "request_item_count" => 3,
+                   "request_item_run_id" => "dashboard-workflow-run-effective-003-corrected"
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert {:ok, corrected_voltage_request} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "requested",
+               %{
+                 backfill_run_id: "dashboard-workflow-run-effective-002-corrected",
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 observable_id: "HK.voltage",
+                 point_id: "HK.voltage",
+                 source_from: ~U[2026-06-22 10:00:00Z],
+                 source_to: ~U[2026-06-22 11:00:00Z],
+                 authority: :advisory,
+                 reason: "operator_corrected_effective_group_item",
+                 actor_id: "operator",
+                 actor_kind: "operator",
+                 payload: %{
+                   "recovery_action" => "correct_workflow_request",
+                   "corrects_run_id" => original_voltage_request.backfill_run_id,
+                   "corrects_event_id" => failed_voltage_event.backfill_lifecycle_event_id,
+                   "corrects_job_id" => "dashboard-workflow-effective-job-voltage",
+                   "request_source" => "dashboard_direct_request",
+                   "request_mode" => "bulk_points",
+                   "request_group_id" => "dashboard-workflow-run-effective",
+                   "request_item_index" => 2,
+                   "request_item_count" => 3,
+                   "request_item_run_id" => "dashboard-workflow-run-effective-002-corrected"
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert {:ok, _corrected_voltage_approved} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "approved",
+               %{
+                 backfill_run_id: "dashboard-workflow-run-effective-002-corrected",
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry",
+                 observable_id: "HK.voltage",
+                 point_id: "HK.voltage",
+                 source_from: ~U[2026-06-22 10:00:00Z],
+                 source_to: ~U[2026-06-22 11:00:00Z],
+                 authority: :advisory,
+                 reason: "operator_preapproved_corrected_effective_group_item",
+                 actor_id: "operator",
+                 actor_kind: "operator",
+                 payload: %{
+                   "recovery_action" => "correct_workflow_request",
+                   "corrects_run_id" => original_voltage_request.backfill_run_id,
+                   "corrects_event_id" => failed_voltage_event.backfill_lifecycle_event_id,
+                   "requested_event_id" => corrected_voltage_request.backfill_lifecycle_event_id,
+                   "request_source" => "dashboard_direct_request",
+                   "request_mode" => "bulk_points",
+                   "request_group_id" => "dashboard-workflow-run-effective",
+                   "request_item_index" => 2,
+                   "request_item_count" => 3,
+                   "request_item_run_id" => "dashboard-workflow-run-effective-002-corrected"
+                 }
+               },
+               dashboard_runtime_invalidation?: false
+             )
+
+    corrected_current_request
+  end
+
   describe "historical workflow group recovery surfaces" do
     test "group workflow actions advance corrected replacement request items" do
       {conn, org, mission} = signed_in_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-      requested_events =
-        for {point_id, index} <- [{"HK.counter", 1}, {"HK.voltage", 2}, {"HK.current", 3}] do
-          run_id = "dashboard-workflow-run-effective-00#{index}"
-
-          assert {:ok, event} =
-                   Cadence.record_telemetry_historical_data_workflow_event(
-                     "backfill",
-                     "requested",
-                     %{
-                       backfill_run_id: run_id,
-                       organization_id: org.organization_id,
-                       mission_id: mission.mission_id,
-                       realm: :backfill,
-                       data_source_id: "managed_questdb_backfill",
-                       binding_id: "backfill_telemetry",
-                       observable_id: point_id,
-                       point_id: point_id,
-                       source_from: ~U[2026-06-22 10:00:00Z],
-                       source_to: ~U[2026-06-22 11:00:00Z],
-                       authority: :advisory,
-                       reason: "operator_requested_effective_group",
-                       actor_id: "operator",
-                       actor_kind: "operator",
-                       payload: %{
-                         "request_source" => "dashboard_direct_request",
-                         "request_mode" => "bulk_points",
-                         "request_group_id" => "dashboard-workflow-run-effective",
-                         "request_item_index" => index,
-                         "request_item_count" => 3,
-                         "request_item_run_id" => run_id
-                       }
-                     },
-                     dashboard_runtime_invalidation?: false
-                   )
-
-          event
-        end
-
-      original_voltage_request = Enum.at(requested_events, 1)
-      original_current_request = Enum.at(requested_events, 2)
-
-      assert {:ok, failed_voltage_event} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "failed",
-                 %{
-                   backfill_run_id: original_voltage_request.backfill_run_id,
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.voltage",
-                   point_id: "HK.voltage",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "historical_data_job_failed",
-                   actor_id: "system",
-                   actor_kind: "system",
-                   payload: %{
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-effective",
-                     "request_item_index" => 2,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => original_voltage_request.backfill_run_id,
-                     "source" => %{
-                       "failure" => %{
-                         "code" => "missing_field:voltage",
-                         "retryable" => false,
-                         "recovery_action" => "correct_workflow_request"
-                       }
-                     }
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
-
-      assert {:ok, failed_current_event} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "failed",
-                 %{
-                   backfill_run_id: original_current_request.backfill_run_id,
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.current",
-                   point_id: "HK.current",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "historical_data_job_failed",
-                   actor_id: "system",
-                   actor_kind: "system",
-                   payload: %{
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-effective",
-                     "request_item_index" => 3,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => original_current_request.backfill_run_id,
-                     "source" => %{
-                       "failure" => %{
-                         "code" => "missing_field:point_id",
-                         "retryable" => false,
-                         "recovery_action" => "correct_workflow_request"
-                       }
-                     }
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
-
-      assert {:ok, corrected_current_request} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "requested",
-                 %{
-                   backfill_run_id: "dashboard-workflow-run-effective-003-corrected",
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.current",
-                   point_id: "HK.current",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "operator_corrected_effective_group_item",
-                   actor_id: "operator",
-                   actor_kind: "operator",
-                   payload: %{
-                     "recovery_action" => "correct_workflow_request",
-                     "corrects_run_id" => original_current_request.backfill_run_id,
-                     "corrects_event_id" => failed_current_event.backfill_lifecycle_event_id,
-                     "corrects_job_id" => "dashboard-workflow-effective-job-current",
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-effective",
-                     "request_item_index" => 3,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => "dashboard-workflow-run-effective-003-corrected"
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
-
-      assert {:ok, corrected_voltage_request} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "requested",
-                 %{
-                   backfill_run_id: "dashboard-workflow-run-effective-002-corrected",
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.voltage",
-                   point_id: "HK.voltage",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "operator_corrected_effective_group_item",
-                   actor_id: "operator",
-                   actor_kind: "operator",
-                   payload: %{
-                     "recovery_action" => "correct_workflow_request",
-                     "corrects_run_id" => original_voltage_request.backfill_run_id,
-                     "corrects_event_id" => failed_voltage_event.backfill_lifecycle_event_id,
-                     "corrects_job_id" => "dashboard-workflow-effective-job-voltage",
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-effective",
-                     "request_item_index" => 2,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => "dashboard-workflow-run-effective-002-corrected"
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
-
-      assert {:ok, _corrected_voltage_approved} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "approved",
-                 %{
-                   backfill_run_id: "dashboard-workflow-run-effective-002-corrected",
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.voltage",
-                   point_id: "HK.voltage",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "operator_preapproved_corrected_effective_group_item",
-                   actor_id: "operator",
-                   actor_kind: "operator",
-                   payload: %{
-                     "recovery_action" => "correct_workflow_request",
-                     "corrects_run_id" => original_voltage_request.backfill_run_id,
-                     "corrects_event_id" => failed_voltage_event.backfill_lifecycle_event_id,
-                     "requested_event_id" =>
-                       corrected_voltage_request.backfill_lifecycle_event_id,
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-effective",
-                     "request_item_index" => 2,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => "dashboard-workflow-run-effective-002-corrected"
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
-               )
+      corrected_current_request = persist_group_recovery_fixture!(org, mission)
 
       path =
         show_path(mission, dashboard) <>

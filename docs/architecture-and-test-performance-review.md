@@ -969,6 +969,10 @@ customer-source registration submission reduced that lifecycle proof from 358
 to 294 lines while retaining credential rotation, probe/drift, health,
 disable/enable, and binding-option assertions, reducing overlong-test pressure
 from 18 to 17.
+Moving the original requests, failure events, corrected replacements, and
+preapproval into a group-recovery fixture reduced that proof from 365 to 144
+lines while retaining its recovery-state, closure-readiness, and three staged
+transition assertions, reducing overlong-test pressure from 17 to 16.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
