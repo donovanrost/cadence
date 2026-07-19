@@ -1262,6 +1262,11 @@ semantic inspection into a 531-line event target module reduced
 through the scoped `Reads.MissionEvents` boundary, reducing direct
 persistence-schema edges from 115 to 114; production source-size pressure
 remains 7.
+Extracting backfill lifecycle row projection, group progress, job state, and
+recovery presentation into a 656-line row module reduced `DataLinkResolver`
+from 1,889 to 1,142 lines. Target resolution and related-link traversal remain
+in the facade for the next bounded extraction; production source-size pressure
+remains 7 and dependency ratchets are unchanged.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
