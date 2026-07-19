@@ -1617,6 +1617,13 @@ pipeline, while telemetry exploration and dashboard routes remain in the
 authenticated `:ops` LiveView session; organization-scoped owner arities are
 preserved. Production source-size pressure remains 4 and dependency ratchets
 are unchanged.
+Retiring the six limit-event history, definition-interval, and watermark read
+clauses from the root facade moved seven test call sites directly to
+`Cadence.Reads.Limits`. This reduced `Cadence` from 1,526 to 1,480 lines;
+production web callers of the root facade remain at 13 files because production
+already used the owning read module. No route or authentication placement is
+involved; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

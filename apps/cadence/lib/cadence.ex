@@ -35,7 +35,6 @@ defmodule Cadence do
   alias Cadence.Projections.TelemetryLatestValues, as: TelemetryLatestValueProjection
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
-  alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.Reads.Replay, as: ReplayReads
   alias Cadence.Replay
   alias Cadence.Replay.Diff, as: ReplayDiff
@@ -891,51 +890,6 @@ defmodule Cadence do
   @spec reset_runtime_health() :: :ok
   def reset_runtime_health do
     RuntimeHealth.reset()
-  end
-
-  @spec telemetry_limit_event_history(binary(), binary(), keyword()) ::
-          [Cadence.Limits.Event.t()]
-  def telemetry_limit_event_history(mission_id, point_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    LimitReads.event_history(mission_id, point_id, opts)
-  end
-
-  @spec telemetry_limit_event_history(binary(), binary(), binary(), keyword()) ::
-          [Cadence.Limits.Event.t()]
-  def telemetry_limit_event_history(organization_id, mission_id, point_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
-             is_list(opts) do
-    LimitReads.event_history(organization_id, mission_id, point_id, opts)
-  end
-
-  @spec telemetry_limit_definition_intervals(binary(), binary(), keyword()) ::
-          [Cadence.Limits.DefinitionInterval.t()]
-  def telemetry_limit_definition_intervals(mission_id, point_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    LimitReads.definition_intervals(mission_id, point_id, opts)
-  end
-
-  @spec telemetry_limit_definition_intervals(binary(), binary(), binary(), keyword()) ::
-          [Cadence.Limits.DefinitionInterval.t()]
-  def telemetry_limit_definition_intervals(organization_id, mission_id, point_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
-             is_list(opts) do
-    LimitReads.definition_intervals(organization_id, mission_id, point_id, opts)
-  end
-
-  @spec telemetry_limit_watermark(binary(), binary(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def telemetry_limit_watermark(mission_id, point_id, opts \\ [])
-      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    LimitReads.watermark_result(mission_id, point_id, opts)
-  end
-
-  @spec telemetry_limit_watermark(binary(), binary(), binary(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def telemetry_limit_watermark(organization_id, mission_id, point_id, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
-             is_list(opts) do
-    LimitReads.watermark_result(organization_id, mission_id, point_id, opts)
   end
 
   @spec replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::

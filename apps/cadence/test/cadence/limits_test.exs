@@ -151,12 +151,12 @@ defmodule Cadence.LimitsTest do
     assert completed_run.definition_count == 1
 
     event_history =
-      Cadence.telemetry_limit_event_history("mission-alpha", "DERIVED.counter_double")
+      LimitReads.event_history("mission-alpha", "DERIVED.counter_double")
 
     assert Enum.map(event_history, & &1.limit_state) == [:yellow_high, :green]
 
     bounded_event_history =
-      Cadence.telemetry_limit_event_history("mission-alpha", "DERIVED.counter_double",
+      LimitReads.event_history("mission-alpha", "DERIVED.counter_double",
         from_receipt_time: DateTime.from_unix!(1_700_000_200),
         to_receipt_time: DateTime.from_unix!(1_700_000_205)
       )
@@ -180,7 +180,7 @@ defmodule Cadence.LimitsTest do
     assert latest_state.evaluated_value == 60
 
     assert {:ok, watermark} =
-             Cadence.telemetry_limit_watermark("mission-alpha", "DERIVED.counter_double")
+             LimitReads.watermark_result("mission-alpha", "DERIVED.counter_double")
 
     assert watermark.confidence == :best_effort
 

@@ -29,7 +29,7 @@ defmodule Cadence.Reads.LimitsTest do
              )
 
     assert [first, second] =
-             Cadence.telemetry_limit_definition_intervals(
+             LimitReads.definition_intervals(
                @organization_id,
                @mission_id,
                "HK.counter",
@@ -62,7 +62,7 @@ defmodule Cadence.Reads.LimitsTest do
              )
 
     assert [interval] =
-             Cadence.telemetry_limit_definition_intervals(
+             LimitReads.definition_intervals(
                @organization_id,
                @mission_id <> "-range",
                "HK.counter",
@@ -109,7 +109,7 @@ defmodule Cadence.Reads.LimitsTest do
     Repo.delete_all(LimitDefinitionLifecycleEventRow)
 
     assert [first, second] =
-             Cadence.telemetry_limit_definition_intervals(
+             LimitReads.definition_intervals(
                @organization_id,
                mission_id,
                "HK.counter",
@@ -188,7 +188,7 @@ defmodule Cadence.Reads.LimitsTest do
     assert latest_replay.provenance["storage"]["replay_run_id"] == "replay-run-1"
 
     replay_history =
-      Cadence.telemetry_limit_event_history(@organization_id, mission_id, "HK.counter",
+      LimitReads.event_history(@organization_id, mission_id, "HK.counter",
         realm: :replay,
         replay_run_id: "replay-run-1",
         order: :asc
