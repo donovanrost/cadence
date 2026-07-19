@@ -18,7 +18,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     SourceResult
   }
 
-  alias Cadence.Comms.TransportStore
   alias Cadence.Telemetry.RuntimeHealth
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
@@ -35,7 +34,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     ProductPolicy,
     RevisionPolicy,
     RuntimeActivity,
-    TransportBitrateRows,
+    TransportBitrate,
     TransportExecutionState
   }
 
@@ -163,7 +162,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_lock_state: &LinkRf.default_lock_revision/3,
       link_rf_frame_sync_state: &LinkRf.default_frame_sync_revision/3,
       link_rf_metric: &LinkRf.default_metric_revision/3,
-      transport_bitrate: &default_transport_bitrate_revision/3,
+      transport_bitrate: &TransportBitrate.default_revision/3,
       transport_execution_state: &TransportExecutionState.default_revision/3,
       managed_runtime_activity: &RuntimeActivity.default_managed_revision/3,
       transport_runtime_activity: &RuntimeActivity.default_transport_revision/3,
@@ -730,10 +729,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      transport_bitrate_frame(
+      TransportBitrate.resolve_latest(
         request,
-        source_binding,
-        transport_bitrate_rows(request, source_binding, organization_id, mission_id, opts)
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :transport_bitrate, [frame])
@@ -748,9 +750,14 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frames =
-      request
-      |> transport_bitrate_history_rows(source_binding, organization_id, mission_id, opts)
-      |> operational_metric_history_frames(request, source_binding, :transport_bitrate_history)
+      TransportBitrate.resolve_history(
+        request,
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
+      )
 
     source_result(request, source_binding, :transport_bitrate_history, frames)
   end
@@ -1009,10 +1016,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @bitrate_observable_ids)) do
       frame =
-        transport_bitrate_frame(
+        TransportBitrate.resolve_latest(
           request,
-          source_binding,
-          transport_bitrate_rows(request, source_binding, organization_id, mission_id, opts)
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1031,9 +1041,14 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @bitrate_observable_ids)) do
       history_frames =
-        request
-        |> transport_bitrate_history_rows(source_binding, organization_id, mission_id, opts)
-        |> operational_metric_history_frames(request, source_binding, :transport_bitrate_history)
+        TransportBitrate.resolve_history(
+          request,
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
+        )
 
       frames ++ history_frames
     else
@@ -1323,44 +1338,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     end
   end
 
-  defp transport_bitrate_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :transport_metric_snapshots_fun,
-        &OperationalEventSnapshots.transport_bitrate/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    TransportBitrateRows.latest(
-      transports_fun.(organization_id, mission_id, adapter_opts),
-      metric_snapshots_fun.(organization_id, mission_id, adapter_opts),
-      request
-    )
-    |> LatestFreshness.annotate(request, opts)
-  end
-
-  defp transport_bitrate_history_rows(request, source_binding, organization_id, mission_id, opts) do
-    transports_fun = Keyword.get(opts, :transports_fun, &default_transports/3)
-
-    metric_snapshots_fun =
-      Keyword.get(
-        opts,
-        :transport_metric_snapshots_fun,
-        &OperationalEventSnapshots.transport_bitrate/3
-      )
-
-    adapter_opts = adapter_opts(request, source_binding)
-
-    transports = transports_fun.(organization_id, mission_id, adapter_opts)
-    snapshots = metric_snapshots_fun.(organization_id, mission_id, adapter_opts)
-
-    TransportBitrateRows.history(transports, snapshots, request)
-  end
-
   defp ingress_processing_latency_rows(request, source_binding, organization_id, mission_id, opts) do
     metric_snapshots_fun =
       Keyword.get(
@@ -1513,14 +1490,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp transport_bitrate_frame(request, source_binding, rows) do
-    OperationalMetricFrames.transport_bitrate_latest(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
   defp operational_metric_history_frames(rows, request, source_binding, capability) do
     OperationalMetricFrames.history(
       request,
@@ -1586,26 +1555,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       metadata_attr(value, :materialized_link_assignment_id)
     ]
     |> Enum.find(&present_text?/1)
-  end
-
-  defp default_transports(organization_id, mission_id, _opts) do
-    TransportStore.list_transports(organization_id, mission_id)
-  end
-
-  defp default_transport_bitrate_revision(organization_id, mission_id, opts) do
-    "transport_bitrate:" <>
-      RuntimeCacheKey.fingerprint(%{
-        transports:
-          organization_id
-          |> default_transports(mission_id, opts)
-          |> Enum.map(&transport_revision_entry/1)
-          |> Enum.sort_by(&(&1.transport_id || "")),
-        snapshots:
-          organization_id
-          |> OperationalEventSnapshots.transport_bitrate(mission_id, opts)
-          |> Enum.map(&transport_metric_revision_entry/1)
-          |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
-      })
   end
 
   defp default_runtime_metric_snapshots(_organization_id, _mission_id, _opts) do
@@ -1721,32 +1670,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
             &{&1.source_endpoint_id || "", &1.spacecraft_id || "", &1.observed_at || ""}
           )
       })
-  end
-
-  defp transport_revision_entry(transport) do
-    %{
-      transport_id: attr(transport, :transport_id),
-      display_name: attr(transport, :display_name),
-      adapter_key: attr(transport, :adapter_key),
-      metadata: attr(transport, :metadata)
-    }
-  end
-
-  defp transport_metric_revision_entry(snapshot) do
-    %{
-      observable_id: attr(snapshot, :observable_id),
-      resource_id: attr(snapshot, :resource_id),
-      transport_id: attr(snapshot, :transport_id),
-      source_endpoint_id:
-        attr(snapshot, :source_endpoint_id) || attr(snapshot, :source_endpoint_ref),
-      ground_station_id: attr(snapshot, :ground_station_id) || attr(snapshot, :antenna_id),
-      link_id: link_id_for([snapshot]),
-      adapter_key: attr(snapshot, :adapter_key),
-      value: TransportBitrateRows.value(snapshot, attr(snapshot, :observable_id)),
-      unit: attr(snapshot, :unit) || attr(snapshot, :value_unit),
-      observed_at: attr(snapshot, :observed_at),
-      source_event_id: attr(snapshot, :source_event_id)
-    }
   end
 
   defp ingress_processing_latency_revision_entry(snapshot) do

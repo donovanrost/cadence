@@ -1201,6 +1201,13 @@ latest/history frame resolution, and revisions for lock, frame synchronization,
 and numeric RF metrics. This reduced the adapter from 2,096 to 1,876 lines; it
 retains only Link RF dispatch and source identity, while production source-size
 pressure remains 8.
+Completing transport-bitrate ownership added a 142-line family resolver over
+the existing row and shared metric-frame modules. It owns transport and
+projected metric callback selection, default reads, freshness, latest/history
+frame resolution, and revision projection. This reduced the adapter from 1,876
+to 1,799 lines and removed its direct TransportStore dependency; it retains
+only bitrate dispatch and source identity, while production source-size
+pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
