@@ -1012,6 +1012,12 @@ policy into a 362-line request-policy module reduced the limits adapter to 945
 lines. This preserves the existing validation order and warning payloads while
 leaving provider orchestration in the adapter, reducing production source-size
 pressure from 9 to 8.
+Extracting product-to-family data-revision routing, provider callback selection,
+and multi-family cache fingerprints reduced the operational-observables source
+from 7,892 to 7,167 lines. The new 279-line revision-policy module preserves
+the existing product-specific fingerprint keys while the adapter retains its
+provider readers and row normalization; production source-size pressure remains
+8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
