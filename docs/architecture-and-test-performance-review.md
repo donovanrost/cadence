@@ -863,6 +863,10 @@ Separating group transitions, job recovery, and correction-authority workflows
 from the 3,837-line telemetry data-management test reduced test-file pressure
 to 9. The policy/base, group, recovery, and correction files are now 1,298,
 1,052, 970, and 372 lines, backed by 303 lines of shared workflow fixtures.
+Separating dedicated TSDB lifecycle, binding history, and cache/policy cases
+from the 3,625-line dashboard data-sources test reduced test-file pressure to
+8. The source/probe, backend, binding-history, and cache/policy files are now
+1,051, 557, 849, and 838 lines, backed by 403 lines of shared source fixtures.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
