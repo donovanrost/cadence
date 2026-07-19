@@ -992,6 +992,10 @@ observed-versus-recomputed comparison, bucket aggregation, and divergence
 warnings out of the limits source reduced that adapter from 2,682 to 2,272
 lines. The new 541-line recomputed-analysis module owns that policy; production
 source-size pressure remains 9 while the adapter is above the 1,000-line limit.
+Extracting scalar, event, analysis-bucket, and definition-interval frame shapes
+and field columns reduced the limits adapter again to 1,953 lines. The 375-line
+frame builder receives already-assembled evidence metadata, so source-binding
+policy remains in the adapter; production source-size pressure remains 9.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

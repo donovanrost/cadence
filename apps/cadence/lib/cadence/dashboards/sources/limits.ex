@@ -10,8 +10,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
     DataContext,
     DataLinks,
     DataSourceRegistry,
-    Field,
-    Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
@@ -22,6 +20,7 @@ defmodule Cadence.Dashboards.Sources.Limits do
     SourceWatermark
   }
 
+  alias Cadence.Dashboards.Sources.Limits.FrameBuilder
   alias Cadence.Dashboards.Sources.Limits.RecomputedAnalysis
   alias Cadence.Limits.{DefinitionInterval, Event}
   alias Cadence.Reads.Limits, as: LimitReads
@@ -1121,29 +1120,12 @@ defmodule Cadence.Dashboards.Sources.Limits do
          selected_intervals,
          warnings
        ) do
-    events = List.wrap(event)
-    times = Enum.map(events, &event_time/1)
-    time_axis = latest_time_axis(event)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :limits,
-      shape: :scalar,
-      time_axis: time_axis,
-      scope: request.scope_context,
-      fields: [
-        %Field{name: "time", kind: :time, values: times, metadata: %{axis: time_axis}},
-        %Field{
-          name: "normalized_state",
-          kind: :enum,
-          values: Enum.map(events, & &1.normalized_state)
-        },
-        %Field{name: "limit_state", kind: :enum, values: Enum.map(events, & &1.limit_state)},
-        %Field{name: "violation", kind: :boolean, values: Enum.map(events, & &1.violation)}
-      ],
-      meta:
-        frame_meta(request, source_binding, observable_id, event, selected_intervals, warnings)
-    }
+    FrameBuilder.latest(
+      request,
+      observable_id,
+      event,
+      frame_meta(request, source_binding, observable_id, event, selected_intervals, warnings)
+    )
   end
 
   defp recomputed_latest_frame(
@@ -1152,76 +1134,12 @@ defmodule Cadence.Dashboards.Sources.Limits do
          observable_id,
          analysis
        ) do
-    event = analysis.event
-    events = List.wrap(event)
-    observed_events = analysis.observed_events
-    semantics_mode = analysis.semantics_mode
-    time_axis = latest_time_axis(event)
-    times = Enum.map(events, &event_time/1)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}:latest_state:#{semantics_mode}",
-      source: :limits,
-      shape: :scalar,
-      time_axis: time_axis,
-      scope: request.scope_context,
-      fields: recomputed_latest_fields(events, observed_events, semantics_mode, times, time_axis),
-      meta: recomputed_latest_meta(request, source_binding, observable_id, analysis)
-    }
-  end
-
-  defp recomputed_latest_fields(events, observed_events, semantics_mode, times, time_axis) do
-    base_fields = [
-      %Field{name: "time", kind: :time, values: times, metadata: %{axis: time_axis}},
-      %Field{name: "sample_id", kind: :string, values: Enum.map(events, & &1.sample_id)},
-      %Field{
-        name: "limit_definition_id",
-        kind: :string,
-        values: Enum.map(events, & &1.limit_definition_id)
-      },
-      %Field{
-        name: "limit_definition_version",
-        kind: :number,
-        values: Enum.map(events, & &1.limit_definition_version)
-      },
-      %Field{
-        name: "normalized_state",
-        kind: :enum,
-        values: Enum.map(events, & &1.normalized_state)
-      },
-      %Field{name: "limit_state", kind: :enum, values: Enum.map(events, & &1.limit_state)},
-      %Field{name: "violation", kind: :boolean, values: Enum.map(events, & &1.violation)}
-    ]
-
-    if semantics_mode == :compare do
-      observed_by_sample_id = Map.new(observed_events, &{&1.sample_id, &1})
-
-      base_fields ++
-        [
-          %Field{
-            name: "observed_limit_event_id",
-            kind: :string,
-            values:
-              Enum.map(
-                events,
-                &(observed_by_sample_id[&1.sample_id] &&
-                    observed_by_sample_id[&1.sample_id].limit_event_id)
-              )
-          },
-          %Field{
-            name: "observed_normalized_state",
-            kind: :enum,
-            values: Enum.map(events, &Map.get(&1.provenance, "observed_normalized_state"))
-          },
-          %Field{
-            name: "limit_state_diverged",
-            kind: :boolean,
-            values: Enum.map(events, &Map.get(&1.provenance, "limit_state_diverged?"))
-          }
-        ]
-    else
-      base_fields
-    end
+    FrameBuilder.recomputed_latest(
+      request,
+      observable_id,
+      analysis,
+      recomputed_latest_meta(request, source_binding, observable_id, analysis)
+    )
   end
 
   defp event_history_frame(
@@ -1232,50 +1150,19 @@ defmodule Cadence.Dashboards.Sources.Limits do
          selected_intervals,
          warnings
        ) do
-    times = Enum.map(events, & &1.receipt_time)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :limits,
-      shape: :events,
-      time_axis: :receipt_time,
-      scope: request.scope_context,
-      fields: [
-        %Field{name: "time", kind: :time, values: times, metadata: %{axis: :receipt_time}},
-        %Field{
-          name: "limit_event_id",
-          kind: :string,
-          values: Enum.map(events, & &1.limit_event_id)
-        },
-        %Field{name: "sample_id", kind: :string, values: Enum.map(events, & &1.sample_id)},
-        %Field{
-          name: "limit_definition_id",
-          kind: :string,
-          values: Enum.map(events, & &1.limit_definition_id)
-        },
-        %Field{
-          name: "limit_definition_version",
-          kind: :number,
-          values: Enum.map(events, & &1.limit_definition_version)
-        },
-        %Field{
-          name: "normalized_state",
-          kind: :enum,
-          values: Enum.map(events, & &1.normalized_state)
-        },
-        %Field{name: "limit_state", kind: :enum, values: Enum.map(events, & &1.limit_state)},
-        %Field{name: "violation", kind: :boolean, values: Enum.map(events, & &1.violation)}
-      ],
-      meta:
-        event_history_meta(
-          request,
-          source_binding,
-          observable_id,
-          events,
-          selected_intervals,
-          warnings
-        )
-    }
+    FrameBuilder.event_history(
+      request,
+      observable_id,
+      events,
+      event_history_meta(
+        request,
+        source_binding,
+        observable_id,
+        events,
+        selected_intervals,
+        warnings
+      )
+    )
   end
 
   defp recomputed_event_history_frame(
@@ -1284,80 +1171,12 @@ defmodule Cadence.Dashboards.Sources.Limits do
          observable_id,
          analysis
        ) do
-    events = analysis.events
-    observed_events = analysis.observed_events
-    semantics_mode = analysis.semantics_mode
-    times = Enum.map(events, & &1.receipt_time)
-
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}:#{semantics_mode}",
-      source: :limits,
-      shape: :events,
-      time_axis: :receipt_time,
-      scope: request.scope_context,
-      fields: recomputed_event_fields(events, observed_events, semantics_mode, times),
-      meta:
-        recomputed_event_history_meta(
-          request,
-          source_binding,
-          observable_id,
-          analysis
-        )
-    }
-  end
-
-  defp recomputed_event_fields(events, observed_events, semantics_mode, times) do
-    base_fields = [
-      %Field{name: "time", kind: :time, values: times, metadata: %{axis: :receipt_time}},
-      %Field{name: "sample_id", kind: :string, values: Enum.map(events, & &1.sample_id)},
-      %Field{
-        name: "limit_definition_id",
-        kind: :string,
-        values: Enum.map(events, & &1.limit_definition_id)
-      },
-      %Field{
-        name: "limit_definition_version",
-        kind: :number,
-        values: Enum.map(events, & &1.limit_definition_version)
-      },
-      %Field{
-        name: "normalized_state",
-        kind: :enum,
-        values: Enum.map(events, & &1.normalized_state)
-      },
-      %Field{name: "limit_state", kind: :enum, values: Enum.map(events, & &1.limit_state)},
-      %Field{name: "violation", kind: :boolean, values: Enum.map(events, & &1.violation)}
-    ]
-
-    if semantics_mode == :compare do
-      observed_by_sample_id = Map.new(observed_events, &{&1.sample_id, &1})
-
-      base_fields ++
-        [
-          %Field{
-            name: "observed_limit_event_id",
-            kind: :string,
-            values:
-              Enum.map(
-                events,
-                &(observed_by_sample_id[&1.sample_id] &&
-                    observed_by_sample_id[&1.sample_id].limit_event_id)
-              )
-          },
-          %Field{
-            name: "observed_normalized_state",
-            kind: :enum,
-            values: Enum.map(events, &Map.get(&1.provenance, "observed_normalized_state"))
-          },
-          %Field{
-            name: "limit_state_diverged",
-            kind: :boolean,
-            values: Enum.map(events, &Map.get(&1.provenance, "limit_state_diverged?"))
-          }
-        ]
-    else
-      base_fields
-    end
+    FrameBuilder.recomputed_event_history(
+      request,
+      observable_id,
+      analysis,
+      recomputed_event_history_meta(request, source_binding, observable_id, analysis)
+    )
   end
 
   defp limit_analysis_bucket_frame(
@@ -1367,97 +1186,14 @@ defmodule Cadence.Dashboards.Sources.Limits do
          analysis
        ) do
     buckets = RecomputedAnalysis.buckets(request, analysis.events)
-    semantics_mode = analysis.semantics_mode
 
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}:analysis_buckets:#{semantics_mode}",
-      source: :limits,
-      shape: :events,
-      time_axis: :receipt_time,
-      scope: request.scope_context,
-      fields: limit_analysis_bucket_fields(buckets),
-      meta:
-        limit_analysis_bucket_meta(
-          request,
-          source_binding,
-          observable_id,
-          analysis,
-          buckets
-        )
-    }
-  end
-
-  defp limit_analysis_bucket_fields(buckets) do
-    [
-      %Field{
-        name: "time",
-        kind: :time,
-        values: Enum.map(buckets, & &1.bucket_start),
-        metadata: %{axis: :receipt_time}
-      },
-      %Field{
-        name: "bucket_start",
-        kind: :time,
-        values: Enum.map(buckets, & &1.bucket_start),
-        metadata: %{axis: :receipt_time}
-      },
-      %Field{
-        name: "bucket_end",
-        kind: :time,
-        values: Enum.map(buckets, & &1.bucket_end),
-        metadata: %{axis: :receipt_time}
-      },
-      %Field{name: "event_count", kind: :number, values: Enum.map(buckets, & &1.event_count)},
-      %Field{
-        name: "limit_event_id",
-        kind: :string,
-        values: Enum.map(buckets, & &1.limit_event_id)
-      },
-      %Field{name: "sample_id", kind: :string, values: Enum.map(buckets, & &1.sample_id)},
-      %Field{
-        name: "limit_event_ids",
-        kind: :string,
-        values: Enum.map(buckets, & &1.limit_event_ids)
-      },
-      %Field{name: "sample_ids", kind: :string, values: Enum.map(buckets, & &1.sample_ids)},
-      %Field{
-        name: "limit_definition_id",
-        kind: :string,
-        values: Enum.map(buckets, & &1.limit_definition_id)
-      },
-      %Field{
-        name: "limit_definition_version",
-        kind: :number,
-        values: Enum.map(buckets, & &1.limit_definition_version)
-      },
-      %Field{
-        name: "limit_set_name",
-        kind: :string,
-        values: Enum.map(buckets, & &1.limit_set_name)
-      },
-      %Field{
-        name: "normalized_state",
-        kind: :enum,
-        values: Enum.map(buckets, & &1.normalized_state)
-      },
-      %Field{name: "limit_state", kind: :enum, values: Enum.map(buckets, & &1.limit_state)},
-      %Field{name: "violation", kind: :boolean, values: Enum.map(buckets, & &1.violation)},
-      %Field{
-        name: "observed_normalized_state",
-        kind: :enum,
-        values: Enum.map(buckets, & &1.observed_normalized_state)
-      },
-      %Field{
-        name: "limit_state_diverged",
-        kind: :boolean,
-        values: Enum.map(buckets, & &1.limit_state_diverged)
-      },
-      %Field{
-        name: "limit_divergence_count",
-        kind: :number,
-        values: Enum.map(buckets, & &1.limit_divergence_count)
-      }
-    ]
+    FrameBuilder.analysis_buckets(
+      request,
+      observable_id,
+      analysis.semantics_mode,
+      buckets,
+      limit_analysis_bucket_meta(request, source_binding, observable_id, analysis, buckets)
+    )
   end
 
   defp definition_interval_frame(
@@ -1467,55 +1203,12 @@ defmodule Cadence.Dashboards.Sources.Limits do
          intervals,
          warnings
        ) do
-    %Frame{
-      frame_id: "#{request.request_id}:#{observable_id}",
-      source: :limits,
-      shape: :intervals,
-      time_axis: :receipt_time,
-      scope: request.scope_context,
-      fields: [
-        %Field{
-          name: "active_from",
-          kind: :time,
-          values: Enum.map(intervals, & &1.active_from),
-          metadata: %{axis: :receipt_time}
-        },
-        %Field{
-          name: "active_to",
-          kind: :time,
-          values: Enum.map(intervals, & &1.active_to),
-          metadata: %{axis: :receipt_time, open_ended?: true}
-        },
-        %Field{
-          name: "limit_definition_id",
-          kind: :string,
-          values: Enum.map(intervals, & &1.limit_definition_id)
-        },
-        %Field{
-          name: "limit_definition_version",
-          kind: :number,
-          values: Enum.map(intervals, & &1.limit_definition_version)
-        },
-        %Field{
-          name: "limit_set_name",
-          kind: :string,
-          values: Enum.map(intervals, & &1.limit_set_name)
-        },
-        %Field{name: "red_low", kind: :number, values: threshold_values(intervals, "red_low")},
-        %Field{
-          name: "yellow_low",
-          kind: :number,
-          values: threshold_values(intervals, "yellow_low")
-        },
-        %Field{
-          name: "yellow_high",
-          kind: :number,
-          values: threshold_values(intervals, "yellow_high")
-        },
-        %Field{name: "red_high", kind: :number, values: threshold_values(intervals, "red_high")}
-      ],
-      meta: definition_interval_meta(request, source_binding, observable_id, intervals, warnings)
-    }
+    FrameBuilder.definition_intervals(
+      request,
+      observable_id,
+      intervals,
+      definition_interval_meta(request, source_binding, observable_id, intervals, warnings)
+    )
   end
 
   defp frame_meta(request, source_binding, observable_id, event, selected_intervals, warnings) do
@@ -1801,12 +1494,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
     }
   end
 
-  defp threshold_values(intervals, threshold_name) do
-    Enum.map(intervals, fn %DefinitionInterval{} = interval ->
-      Map.get(interval.thresholds || %{}, threshold_name)
-    end)
-  end
-
   defp activation_evidence(%DefinitionInterval{} = interval) do
     %{
       definition_activation_key: interval.definition_activation_key,
@@ -1835,12 +1522,6 @@ defmodule Cadence.Dashboards.Sources.Limits do
       Enum.map(intervals, &activation_evidence/1)
     )
   end
-
-  defp latest_time_axis(%Event{generation_time: %DateTime{}}), do: :generation_time
-  defp latest_time_axis(_event), do: :receipt_time
-
-  defp event_time(%Event{generation_time: %DateTime{} = generation_time}), do: generation_time
-  defp event_time(%Event{receipt_time: receipt_time}), do: receipt_time
 
   defp event_count(%Event{}), do: 1
   defp event_count(nil), do: 0
