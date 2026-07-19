@@ -1701,6 +1701,16 @@ normalization, explicit and context-only matches, and stale identifiers. The
 data-sources page remains in its authenticated `:ops` LiveView session because
 it is mission-operations UI; no route or access-control placement changed.
 Production source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting adapter compatibility, effective physical-source capabilities, and
+requested dashboard-contract evaluation into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceContract` reduced `OpsDataSourcesLive`
+from 3,468 to 3,275 lines. Remediation candidates, binding changes, and source
+row capability labels now share that contract boundary, with direct tests for
+adapter filtering, physical capability overlays, and operational backing
+products. The data-sources page remains in its authenticated `:ops` LiveView
+session because it is mission-operations UI; persistence, events, forms, and
+route placement are unchanged. Production source-size pressure remains 3 and
+dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

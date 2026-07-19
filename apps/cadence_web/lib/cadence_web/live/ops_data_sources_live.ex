@@ -17,7 +17,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     TSDBDeploymentStatus
   }
 
-  alias CadenceWeb.OpsDataSourcesLive.SourceFocus
+  alias CadenceWeb.OpsDataSourcesLive.{SourceContract, SourceFocus}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -2179,11 +2179,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   defp candidate_source_for_focus?(%DataSource{} = source, focus) do
-    DataSource.active?(source) and source_logical_source_text(source) == focus.logical_source
+    DataSource.active?(source) and
+      SourceContract.logical_source_text(source) == focus.logical_source
   end
 
   defp source_capability_candidate_row(%DataSource{} = source, focus) do
-    missing = source_contract_missing_requirements(source, focus)
+    missing = SourceContract.missing_requirements(source, focus)
     compatible? = missing == []
 
     %{
@@ -2360,7 +2361,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       health = source_health_rollup(health_statuses, source, readiness_policy)
       watermark = source_watermark_rollup(watermark_statuses, source)
       credential_status = source_credential_rollup(source, credential, health.connection_profile)
-      capabilities = effective_source_capabilities(source)
+      capabilities = SourceContract.effective_capabilities(source)
       deployment_status = TSDBDeploymentStatus.from_data_source(source)
       probe_policy = SourceProbePolicy.from_data_source(source)
 
@@ -2745,10 +2746,10 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
     if focused_capability_binding?(focus, binding) do
       sources
-      |> compatible_sources(binding)
-      |> Enum.filter(&source_satisfies_focus_contract?(&1, focus))
+      |> SourceContract.compatible_sources(binding)
+      |> Enum.filter(&SourceContract.satisfies_focus?(&1, focus))
     else
-      compatible_sources(sources, binding)
+      SourceContract.compatible_sources(sources, binding)
     end
   end
 
@@ -2759,7 +2760,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp validate_compatible_source(sources, %DataBinding{} = binding, data_source_id) do
     sources
-    |> compatible_sources(binding)
+    |> SourceContract.compatible_sources(binding)
     |> Enum.any?(&(&1.data_source_id == data_source_id))
     |> case do
       true -> :ok
@@ -2784,7 +2785,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   defp validate_source_contract(%DataSource{} = source, focus) do
-    if source_satisfies_focus_contract?(source, focus) do
+    if SourceContract.satisfies_focus?(source, focus) do
       :ok
     else
       {:error, "Choose a data source that satisfies the requested dashboard contract."}
@@ -2812,16 +2813,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     end)
   end
 
-  defp compatible_sources(sources, %DataBinding{} = binding) do
-    sources
-    |> Enum.filter(&compatible_source?(&1, binding))
-    |> Enum.sort_by(& &1.data_source_id)
-  end
-
-  defp compatible_source?(%DataSource{} = source, %DataBinding{} = binding) do
-    DataSource.active?(source) and source_logical_source(source) == binding.logical_source
-  end
-
   defp focused_capability_binding?(
          %{source_empty_reason: "unsupported_source_capability"} = focus,
          %DataBinding{} = binding
@@ -2830,185 +2821,6 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   defp focused_capability_binding?(_focus, _binding), do: false
-
-  defp source_satisfies_focus_contract?(%DataSource{} = source, focus) do
-    source_contract_missing_requirements(source, focus) == []
-  end
-
-  defp source_contract_missing_requirements(%DataSource{} = source, focus) do
-    case effective_source_capabilities(source) do
-      %SourceCapabilities{} = capabilities ->
-        [
-          missing_capability(
-            :sampling,
-            requested_values(focus.requested_sampling),
-            capabilities.supported_sampling
-          ),
-          missing_capability(
-            :source_products,
-            requested_product_values_for_source_contract(focus),
-            source_supported_products_for_focus(capabilities)
-          ),
-          missing_capability(
-            :product_families,
-            requested_values(focus.requested_product_families),
-            source_supported_product_families(capabilities)
-          ),
-          missing_capability(
-            :value_kinds,
-            requested_values(focus.requested_value_kinds),
-            capabilities.supported_value_types
-          ),
-          missing_capability(
-            :shapes,
-            requested_values(focus.requested_shapes),
-            capabilities.supported_shapes
-          ),
-          missing_capability(
-            :time_axes,
-            requested_values(focus.requested_time_axes),
-            capabilities.supported_time_axes
-          )
-        ]
-        |> Enum.reject(&is_nil/1)
-
-      nil ->
-        [{:capabilities, ["unknown"]}]
-    end
-  end
-
-  defp missing_capability(_field, [], _supported), do: nil
-
-  defp missing_capability(field, requested, supported) do
-    supported = MapSet.new(Enum.map(supported, &text/1))
-    missing = Enum.reject(requested, &MapSet.member?(supported, &1))
-
-    case missing do
-      [] -> nil
-      missing -> {field, missing}
-    end
-  end
-
-  defp requested_values(nil), do: []
-
-  defp requested_values(value) when is_binary(value) do
-    value
-    |> String.split(",", trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-  end
-
-  defp requested_values(value), do: [text(value)]
-
-  defp requested_product_values_for_source_contract(focus) do
-    case requested_values(focus.requested_source_products) do
-      [] -> requested_values(focus.requested_products)
-      values -> values
-    end
-  end
-
-  defp source_supported_products_for_focus(%SourceCapabilities{} = capabilities) do
-    capabilities.supported_products
-    |> Kernel.++(source_supported_backing_products(capabilities))
-    |> Enum.uniq()
-  end
-
-  defp source_supported_backing_products(%SourceCapabilities{} = capabilities) do
-    capabilities
-    |> source_backing_contracts()
-    |> Enum.map(&Map.get(&1, :product))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.filter(&source_backing_product_supported?(capabilities, &1))
-    |> Enum.uniq()
-  end
-
-  defp source_supported_product_families(%SourceCapabilities{} = capabilities) do
-    capabilities
-    |> source_backing_contracts()
-    |> Enum.filter(fn contract ->
-      source_backing_product_supported?(capabilities, Map.get(contract, :product))
-    end)
-    |> Enum.map(&Map.get(&1, :product_family))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-  end
-
-  defp source_backing_contracts(%SourceCapabilities{} = capabilities) do
-    capabilities.metadata
-    |> metadata_value(:source_backing_contracts)
-    |> List.wrap()
-    |> Enum.filter(&is_map/1)
-  end
-
-  defp source_backing_product_supported?(%SourceCapabilities{} = capabilities, product) do
-    products = capabilities.supported_products
-
-    product in products or
-      (product in supported_source_products_for_aggregate(:operational_latest, capabilities) and
-         :operational_latest in products) or
-      (product in supported_source_products_for_aggregate(
-         :operational_state_history,
-         capabilities
-       ) and
-         :operational_state_history in products) or
-      (product in supported_source_products_for_aggregate(
-         :operational_metric_history,
-         capabilities
-       ) and
-         :operational_metric_history in products)
-  end
-
-  defp supported_source_products_for_aggregate(
-         aggregate_product,
-         %SourceCapabilities{} = capabilities
-       ) do
-    capabilities
-    |> source_backing_contracts()
-    |> Enum.filter(&(Map.get(&1, :product) == aggregate_product))
-    |> Enum.flat_map(fn aggregate_contract ->
-      aggregate_observables = Map.get(aggregate_contract, :observables, [])
-      aggregate_sampling = Map.get(aggregate_contract, :sampling)
-
-      capabilities
-      |> source_backing_contracts()
-      |> Enum.filter(fn contract ->
-        Map.get(contract, :sampling) == aggregate_sampling and
-          Enum.all?(Map.get(contract, :observables, []), &(&1 in aggregate_observables))
-      end)
-      |> Enum.map(&Map.get(&1, :product))
-    end)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-  end
-
-  defp effective_source_capabilities(%DataSource{adapter: adapter} = source)
-       when is_atom(adapter) do
-    with {:module, ^adapter} <- Code.ensure_loaded(adapter),
-         true <- function_exported?(adapter, :capabilities, 0),
-         %SourceCapabilities{} = capabilities <-
-           SourceCapabilities.normalize(adapter.capabilities()) do
-      SourceCapabilities.with_data_source_capabilities(capabilities, source)
-    else
-      _other -> nil
-    end
-  end
-
-  defp effective_source_capabilities(%DataSource{}), do: nil
-
-  defp source_logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Telemetry}),
-    do: :telemetry
-
-  defp source_logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Limits}), do: :limits
-
-  defp source_logical_source(%DataSource{
-         adapter: Cadence.Dashboards.Sources.OperationalObservables
-       }),
-       do: :operational_observables
-
-  defp source_logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Events}), do: :events
-  defp source_logical_source(%DataSource{}), do: nil
-
-  defp source_logical_source_text(%DataSource{} = source), do: text(source_logical_source(source))
 
   defp source_options(sources) do
     Enum.map(sources, fn source ->
@@ -3376,19 +3188,14 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   defp source_supported_metric_history_products_text(%SourceCapabilities{} = capabilities) do
     capabilities
-    |> source_backing_contracts()
-    |> Enum.filter(&(Map.get(&1, :sampling) == :raw_series))
-    |> Enum.map(&Map.get(&1, :product))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.filter(&source_backing_product_supported?(capabilities, &1))
-    |> Enum.uniq()
+    |> SourceContract.supported_metric_history_products()
     |> capability_values_text()
   end
 
   defp source_supported_metric_history_products_text(_capabilities), do: "unknown"
 
   defp source_supported_product_families_text(%SourceCapabilities{} = capabilities),
-    do: capability_values_text(source_supported_product_families(capabilities))
+    do: capability_values_text(SourceContract.supported_product_families(capabilities))
 
   defp source_supported_product_families_text(_capabilities), do: "unknown"
 
