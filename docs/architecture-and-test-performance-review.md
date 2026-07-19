@@ -1164,6 +1164,12 @@ pending-entry read, freshness annotation, frame resolution, and the default
 revision read behind the now 307-line family module. This reduced the adapter
 from 2,760 to 2,731 lines; it retains only command-queue dispatch and source
 identity for this family, while production source-size pressure remains 8.
+Completing transport-execution ownership moved interval callback selection,
+the default OperationalEvents interval read and option projection, frame
+resolution, and the default revision read behind the now 301-line family
+module. This reduced the adapter from 2,731 to 2,675 lines; it retains only
+transport-execution dispatch and source identity for this family, while
+production source-size pressure remains 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal

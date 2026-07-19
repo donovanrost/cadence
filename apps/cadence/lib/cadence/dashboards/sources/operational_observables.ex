@@ -206,7 +206,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       link_rf_frame_sync_state: &default_link_rf_frame_sync_state_revision/3,
       link_rf_metric: &default_link_rf_metric_revision/3,
       transport_bitrate: &default_transport_bitrate_revision/3,
-      transport_execution_state: &default_transport_execution_state_revision/3,
+      transport_execution_state: &TransportExecutionState.default_revision/3,
       managed_runtime_activity: &default_managed_runtime_activity_revision/3,
       transport_runtime_activity: &default_transport_runtime_activity_revision/3,
       ingress_processing_latency: &default_ingress_processing_latency_revision/3,
@@ -473,16 +473,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
          opts
        ) do
     frame =
-      transport_execution_state_history_frame(
+      TransportExecutionState.resolve(
         request,
-        source_binding,
-        transport_execution_history_rows(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
+        organization_id,
+        mission_id,
+        frame_source_context(request, source_binding),
+        adapter_opts(request, source_binding),
+        opts
       )
 
     source_result(request, source_binding, :transport_execution_state_history, [frame])
@@ -1219,16 +1216,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
        ) do
     if Enum.any?(request.observables, &(&1 in @transport_execution_observable_ids)) do
       frame =
-        transport_execution_state_history_frame(
+        TransportExecutionState.resolve(
           request,
-          source_binding,
-          transport_execution_history_rows(
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
+          organization_id,
+          mission_id,
+          frame_source_context(request, source_binding),
+          adapter_opts(request, source_binding),
+          opts
         )
 
       frames ++ [frame]
@@ -1758,14 +1752,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     )
   end
 
-  defp transport_execution_state_history_frame(request, source_binding, rows) do
-    TransportExecutionState.frame(
-      request,
-      rows,
-      frame_source_context(request, source_binding)
-    )
-  end
-
   defp managed_runtime_activity_history_frame(request, source_binding, rows) do
     RuntimeActivity.managed_frame(
       request,
@@ -1805,24 +1791,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
       rows,
       frame_source_context(request, source_binding)
     )
-  end
-
-  defp transport_execution_history_rows(
-         request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       ) do
-    intervals_fun =
-      Keyword.get(
-        opts,
-        :transport_execution_intervals_fun,
-        &default_transport_execution_intervals/3
-      )
-
-    intervals_fun.(organization_id, mission_id, adapter_opts(request, source_binding))
-    |> TransportExecutionState.rows(request)
   end
 
   defp transport_runtime_activity_history_frame(request, source_binding, rows) do
@@ -2161,24 +2129,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     }
   end
 
-  defp default_transport_execution_intervals(organization_id, mission_id, opts) do
-    OperationalEvents.transport_execution_intervals(
-      organization_id,
-      mission_id,
-      transport_execution_interval_opts(opts)
-    )
-  end
-
-  defp transport_execution_interval_opts(opts) do
-    [
-      from_time: Keyword.get(opts, :from),
-      to_time: Keyword.get(opts, :to),
-      replay_run_id: Keyword.get(opts, :replay_run_id),
-      event_limit: Keyword.get(opts, :event_limit, 1_000)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
   defp default_managed_runtime_events(organization_id, mission_id, opts) do
     OperationalEvents.list_events(
       organization_id,
@@ -2289,12 +2239,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
           |> Enum.map(&transport_metric_revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || &1.resource_id || "", &1.observed_at || ""})
       })
-  end
-
-  defp default_transport_execution_state_revision(organization_id, mission_id, opts) do
-    organization_id
-    |> default_transport_execution_intervals(mission_id, opts)
-    |> TransportExecutionState.revision()
   end
 
   defp default_managed_runtime_activity_revision(organization_id, mission_id, opts) do

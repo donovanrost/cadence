@@ -16,8 +16,38 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportExecutionSt
     ScopeContext
   }
 
+  alias Cadence.OperationalEvents
+
   @observable_id "comms.transport.execution_state"
   @states [:initialized, :transport_event_handled, :control_input_handled, :timer_handled]
+
+  @spec resolve(
+          PlannedSourceRequest.t(),
+          binary(),
+          binary(),
+          map(),
+          keyword(),
+          keyword()
+        ) :: Frame.t()
+  def resolve(
+        %PlannedSourceRequest{} = request,
+        organization_id,
+        mission_id,
+        source_context,
+        adapter_opts,
+        opts
+      ) do
+    intervals_fun =
+      Keyword.get(
+        opts,
+        :transport_execution_intervals_fun,
+        &default_intervals/3
+      )
+
+    intervals_fun.(organization_id, mission_id, adapter_opts)
+    |> rows(request)
+    |> then(&frame(request, &1, source_context))
+  end
 
   @spec rows([term()], PlannedSourceRequest.t()) :: [map()]
   def rows(intervals, %PlannedSourceRequest{} = request) do
@@ -88,6 +118,31 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportExecutionSt
           |> Enum.map(&revision_entry/1)
           |> Enum.sort_by(&{&1.transport_id || "", &1.starts_at || ""})
       })
+  end
+
+  @spec default_revision(binary(), binary(), keyword()) :: binary()
+  def default_revision(organization_id, mission_id, opts) do
+    organization_id
+    |> default_intervals(mission_id, opts)
+    |> revision()
+  end
+
+  defp default_intervals(organization_id, mission_id, opts) do
+    OperationalEvents.transport_execution_intervals(
+      organization_id,
+      mission_id,
+      interval_opts(opts)
+    )
+  end
+
+  defp interval_opts(opts) do
+    [
+      from_time: Keyword.get(opts, :from),
+      to_time: Keyword.get(opts, :to),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      event_limit: Keyword.get(opts, :event_limit, 1_000)
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
 
   defp row(interval) do
