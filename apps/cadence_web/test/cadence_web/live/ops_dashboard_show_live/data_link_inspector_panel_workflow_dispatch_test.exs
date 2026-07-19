@@ -100,60 +100,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
 
     document = LazyHTML.from_fragment(html)
 
-    [metadata_json] =
-      document
-      |> LazyHTML.query("#dashboard-data-link-action-outcome")
-      |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
-
-    metadata =
-      metadata_json
-      |> Jason.decode!()
-      |> Map.take([
-        "job_id",
-        "count",
-        "retried",
-        "retry_nonretryable",
-        "retry_skipped",
-        "retry_errors",
-        "retry_scope",
-        "retry_run_ids",
-        "retry_nonretryable_run_ids",
-        "retry_nonretryable_event_ids",
-        "retry_nonretryable_items",
-        "retry_skipped_run_ids",
-        "retry_skipped_event_ids",
-        "retry_skipped_items",
-        "retry_error_run_ids",
-        "retry_error_event_ids",
-        "retry_error_items",
-        "queued_jobs",
-        "failed_jobs"
-      ])
-
-    assert metadata == %{
-             "count" => "2",
-             "failed_jobs" => "0",
-             "job_id" => "job-1",
-             "queued_jobs" => "2",
-             "retried" => "1",
-             "retry_error_event_ids" => "failed-event-4",
-             "retry_error_items" =>
-               "run=run-004-corrected event=failed-event-4 job=job-4 reason=queue_down",
-             "retry_error_run_ids" => "run-004-corrected",
-             "retry_errors" => "0",
-             "retry_nonretryable" => "1",
-             "retry_nonretryable_event_ids" => "failed-event-nonretryable",
-             "retry_nonretryable_items" =>
-               "run=run-nonretryable event=failed-event-nonretryable action=correct_workflow_request reason=correction_required",
-             "retry_nonretryable_run_ids" => "run-nonretryable",
-             "retry_run_ids" => "run-004-corrected,run-005-corrected",
-             "retry_scope" => "replacement_jobs",
-             "retry_skipped" => "3",
-             "retry_skipped_event_ids" => "failed-event-skipped",
-             "retry_skipped_items" =>
-               "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed",
-             "retry_skipped_run_ids" => "run-skipped"
-           }
+    assert_outcome_metadata(document)
 
     assert ["replacement_jobs"] =
              document
@@ -323,6 +270,63 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
              |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
              |> List.first()
              |> Jason.decode!()
+  end
+
+  defp assert_outcome_metadata(document) do
+    [metadata_json] =
+      document
+      |> LazyHTML.query("#dashboard-data-link-action-outcome")
+      |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
+
+    metadata =
+      metadata_json
+      |> Jason.decode!()
+      |> Map.take([
+        "job_id",
+        "count",
+        "retried",
+        "retry_nonretryable",
+        "retry_skipped",
+        "retry_errors",
+        "retry_scope",
+        "retry_run_ids",
+        "retry_nonretryable_run_ids",
+        "retry_nonretryable_event_ids",
+        "retry_nonretryable_items",
+        "retry_skipped_run_ids",
+        "retry_skipped_event_ids",
+        "retry_skipped_items",
+        "retry_error_run_ids",
+        "retry_error_event_ids",
+        "retry_error_items",
+        "queued_jobs",
+        "failed_jobs"
+      ])
+
+    assert metadata == %{
+             "count" => "2",
+             "failed_jobs" => "0",
+             "job_id" => "job-1",
+             "queued_jobs" => "2",
+             "retried" => "1",
+             "retry_error_event_ids" => "failed-event-4",
+             "retry_error_items" =>
+               "run=run-004-corrected event=failed-event-4 job=job-4 reason=queue_down",
+             "retry_error_run_ids" => "run-004-corrected",
+             "retry_errors" => "0",
+             "retry_nonretryable" => "1",
+             "retry_nonretryable_event_ids" => "failed-event-nonretryable",
+             "retry_nonretryable_items" =>
+               "run=run-nonretryable event=failed-event-nonretryable action=correct_workflow_request reason=correction_required",
+             "retry_nonretryable_run_ids" => "run-nonretryable",
+             "retry_run_ids" => "run-004-corrected,run-005-corrected",
+             "retry_scope" => "replacement_jobs",
+             "retry_skipped" => "3",
+             "retry_skipped_event_ids" => "failed-event-skipped",
+             "retry_skipped_items" =>
+               "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed",
+             "retry_skipped_run_ids" => "run-skipped"
+           }
   end
 
   defp selected_text(lazy_html) do

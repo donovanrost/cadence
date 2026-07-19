@@ -925,6 +925,9 @@ observable rendering test from 310 to 299 lines and overlong-test pressure from
 Extracting failed historical-workflow lifecycle and job setup reduced the
 non-retryable correction LiveView test from 315 to 264 lines and overlong-test
 pressure from 29 to 28.
+Extracting the degraded workflow-dispatch outcome metadata contract reduced
+that data-link panel component test from 317 to 264 lines and overlong-test
+pressure from 28 to 27.
 Extracting QuestDB connection and schema probing, diagnostic classification,
 credential headers, and endpoint selection from the 2,882-line telemetry
 source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
