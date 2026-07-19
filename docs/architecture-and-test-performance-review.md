@@ -1215,6 +1215,12 @@ isolation, freshness, latest/history frame resolution, and revision projection.
 This reduced the adapter from 1,799 to 1,521 lines and removed its direct
 RuntimeHealth dependency; it retains only ingress-latency dispatch and source
 identity, while production source-size pressure remains 8.
+Extracting observable selection and stable frame ordering for the three
+aggregate operational products into a 196-line composer reduced the adapter
+from 1,521 to 891 lines. Direct product dispatch, source identity, facts, and
+the shared warning/result envelope remain in the adapter, while family reads
+and presentation remain in their focused modules. The adapter is now below the
+1,000-line guideline, reducing production source-size pressure from 8 to 7.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
