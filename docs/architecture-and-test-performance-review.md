@@ -773,6 +773,10 @@ ownership in the LiveView. Separating event-store queries and operational
 observable state, connection, link-RF, and metric projections from the
 1,419-line OperationalEvents context reduced the count to 20 while preserving
 the context's public read API and keeping event persistence in the facade.
+Separating command, telemetry, limits, source, contact, and interval evidence
+reference builders from the 1,478-line dashboard DataLinks module reduced the
+count to 19 while leaving navigation-link construction and request-context
+ownership in the parent.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
