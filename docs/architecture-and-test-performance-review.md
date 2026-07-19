@@ -1007,6 +1007,11 @@ reduced the limits adapter to 1,234 lines. The new 561-line query-context module
 owns the translation from planned dashboard requests to bounded provider
 queries; production source-size pressure remains 9 while the adapter is still
 above the 1,000-line limit.
+Moving request validation, product and capability selection, and adapter warning
+policy into a 362-line request-policy module reduced the limits adapter to 945
+lines. This preserves the existing validation order and warning payloads while
+leaving provider orchestration in the adapter, reducing production source-size
+pressure from 9 to 8.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
