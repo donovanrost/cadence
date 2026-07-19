@@ -24,6 +24,223 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
+  defp persist_replay_transport_execution_browser_fixture!(sandbox_owner) do
+    user = TestFixtures.persist_user!()
+    org = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, org)
+
+    mission =
+      TestFixtures.persist_mission!(org,
+        slug: "replay-operational-transport-execution-timeline-viewport",
+        display_name: "Replay Operational Transport Execution Timeline Viewport"
+      )
+
+    replay_run_id = "browser-transport-execution-replay-run"
+    other_replay_run_id = "browser-transport-execution-other-replay-run"
+
+    transport_execution_source_event_id =
+      "transport-capability-record:transport-execution-replay-alpha-1:#{replay_run_id}"
+
+    from_time = ~U[2026-06-17 12:00:00Z]
+    to_time = ~U[2026-06-17 12:04:00Z]
+
+    previous_source_execution =
+      Application.get_env(:cadence_web, :dashboard_engine_source_execution)
+
+    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
+
+    on_exit(fn ->
+      case previous_source_execution do
+        nil ->
+          Application.delete_env(:cadence_web, :dashboard_engine_source_execution)
+
+        value ->
+          Application.put_env(:cadence_web, :dashboard_engine_source_execution, value)
+      end
+
+      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
+    end)
+
+    replay_sources = persist_replay_dashboard_sources!(org.organization_id, mission.mission_id)
+    persist_replay_run!(mission, replay_run_id, from_time)
+    persist_replay_run!(mission, other_replay_run_id, from_time)
+
+    dss_14 =
+      GroundStation.new(%{
+        ground_station_id: "dss-14",
+        mission_id: mission.mission_id,
+        display_name: "Goldstone DSS-14",
+        provider: "DSN",
+        region: "California",
+        metadata: %{
+          "source_endpoint_id" => "browser-source-endpoint-alpha",
+          "transport_id" => "browser-transport-alpha",
+          "link_assignment_id" => "link-alpha"
+        }
+      })
+
+    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
+
+    alpha_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "browser-source-endpoint-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Browser Goldstone DSS-14",
+        metadata: %{
+          "ground_station_id" => dss_14.ground_station_id,
+          "link_assignment_id" => "link-alpha"
+        }
+      })
+
+    beta_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "browser-source-endpoint-beta",
+        mission_id: mission.mission_id,
+        display_name: "Browser Madrid DSS-63",
+        metadata: %{
+          "ground_station_id" => "dss-63",
+          "link_assignment_id" => "link-beta"
+        }
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
+
+    assert {:ok, _source_endpoint} =
+             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
+
+    alpha_transport =
+      Transport.new(%{
+        transport_id: "browser-transport-alpha",
+        mission_id: mission.mission_id,
+        display_name: "Alpha TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "alpha.ground.example",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
+          "ground_station_id" => dss_14.ground_station_id,
+          "link_assignment_id" => "link-alpha"
+        }
+      })
+
+    beta_transport =
+      Transport.new(%{
+        transport_id: "browser-transport-beta",
+        mission_id: mission.mission_id,
+        display_name: "Beta TCP",
+        transport_kind: :tcp_socket,
+        direction_capability: :bidirectional,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "connect",
+          "direction_capability" => "bidirectional",
+          "host" => "beta.ground.example",
+          "port" => "5001",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        },
+        metadata: %{
+          "source_endpoint_id" => beta_endpoint.source_endpoint_id,
+          "ground_station_id" => "dss-63",
+          "link_assignment_id" => "link-beta"
+        }
+      })
+
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
+    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
+
+    for {record_id, transport_id, event_kind, recorded_at, opts} <- [
+          {"transport-execution-live-alpha", alpha_transport.transport_id, :initialized,
+           ~U[2026-06-17 12:00:05Z], []},
+          {"transport-execution-replay-alpha-1", alpha_transport.transport_id, :initialized,
+           ~U[2026-06-17 12:00:10Z], [replay_run_id: replay_run_id]},
+          {"transport-execution-replay-beta", beta_transport.transport_id, :timer_handled,
+           ~U[2026-06-17 12:00:45Z],
+           [
+             replay_run_id: replay_run_id,
+             source_endpoint_id: beta_endpoint.source_endpoint_id,
+             ground_station_id: "dss-63",
+             link_id: "link-beta",
+             contact_id: "browser-contact-beta",
+             path_id: "browser-uplink-beta"
+           ]},
+          {"transport-execution-other-replay-alpha", alpha_transport.transport_id, :timer_handled,
+           ~U[2026-06-17 12:01:00Z], [replay_run_id: other_replay_run_id]},
+          {"transport-execution-replay-alpha-2", alpha_transport.transport_id,
+           :transport_event_handled, ~U[2026-06-17 12:01:30Z], [replay_run_id: replay_run_id]}
+        ] do
+      persist_transport_capability_event!(
+        org.organization_id,
+        mission.mission_id,
+        record_id,
+        transport_id,
+        event_kind,
+        recorded_at,
+        Keyword.merge(
+          [
+            source_endpoint_id: alpha_endpoint.source_endpoint_id,
+            ground_station_id: dss_14.ground_station_id,
+            link_id: "link-alpha",
+            contact_id: "browser-contact-alpha",
+            path_id: "browser-uplink-alpha"
+          ],
+          opts
+        )
+      )
+    end
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Replay Operational Transport Execution Timeline Browser",
+        widgets: [
+          %{
+            type: :state_timeline,
+            title: "Transport Execution Timeline",
+            binding: %{
+              source: :operational_observables,
+              observables: ["comms.transport.execution_state"]
+            },
+            layout: %{x: 0, y: 0, w: 8, h: 4}
+          }
+        ]
+      )
+
+    app_root = Path.expand("../../..", __DIR__)
+    ensure_assets_built!(app_root)
+
+    port = free_tcp_port()
+    start_browser_endpoint!(port, sandbox_owner)
+    base_url = "http://localhost:#{port}"
+
+    dashboard_url =
+      base_url <>
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "transport", scope_id: alpha_transport.transport_id, time_mode: "replay_run", replay_run_id: replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
+
+    %{
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      dashboard_url: dashboard_url,
+      mission: mission,
+      org: org,
+      previous_source_execution: previous_source_execution,
+      replay_run_id: replay_run_id,
+      replay_sources: replay_sources,
+      script: Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs"),
+      transport_execution_source_event_id: transport_execution_source_event_id,
+      user: user
+    }
+  end
+
   @tag :browser
   test "live operational transport execution state timeline DataLinks pass browser smoke", %{
     conn: _conn,
@@ -435,209 +652,22 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
          conn: _conn,
          sandbox_owner: sandbox_owner
        } do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    fixture = persist_replay_transport_execution_browser_fixture!(sandbox_owner)
 
-    mission =
-      TestFixtures.persist_mission!(org,
-        slug: "replay-operational-transport-execution-timeline-viewport",
-        display_name: "Replay Operational Transport Execution Timeline Viewport"
-      )
-
-    replay_run_id = "browser-transport-execution-replay-run"
-    other_replay_run_id = "browser-transport-execution-other-replay-run"
-
-    transport_execution_source_event_id =
-      "transport-capability-record:transport-execution-replay-alpha-1:#{replay_run_id}"
-
-    from_time = ~U[2026-06-17 12:00:00Z]
-    to_time = ~U[2026-06-17 12:04:00Z]
-
-    previous_source_execution =
-      Application.get_env(:cadence_web, :dashboard_engine_source_execution)
-
-    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
-
-    on_exit(fn ->
-      case previous_source_execution do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_source_execution)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_source_execution, value)
-      end
-
-      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
-    end)
-
-    replay_sources = persist_replay_dashboard_sources!(org.organization_id, mission.mission_id)
-    persist_replay_run!(mission, replay_run_id, from_time)
-    persist_replay_run!(mission, other_replay_run_id, from_time)
-
-    dss_14 =
-      GroundStation.new(%{
-        ground_station_id: "dss-14",
-        mission_id: mission.mission_id,
-        display_name: "Goldstone DSS-14",
-        provider: "DSN",
-        region: "California",
-        metadata: %{
-          "source_endpoint_id" => "browser-source-endpoint-alpha",
-          "transport_id" => "browser-transport-alpha",
-          "link_assignment_id" => "link-alpha"
-        }
-      })
-
-    assert {:ok, _ground_station} = Cadence.persist_ground_station(org.organization_id, dss_14)
-
-    alpha_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "browser-source-endpoint-alpha",
-        mission_id: mission.mission_id,
-        display_name: "Browser Goldstone DSS-14",
-        metadata: %{
-          "ground_station_id" => dss_14.ground_station_id,
-          "link_assignment_id" => "link-alpha"
-        }
-      })
-
-    beta_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "browser-source-endpoint-beta",
-        mission_id: mission.mission_id,
-        display_name: "Browser Madrid DSS-63",
-        metadata: %{
-          "ground_station_id" => "dss-63",
-          "link_assignment_id" => "link-beta"
-        }
-      })
-
-    assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, alpha_endpoint)
-
-    assert {:ok, _source_endpoint} =
-             Cadence.persist_source_endpoint(org.organization_id, beta_endpoint)
-
-    alpha_transport =
-      Transport.new(%{
-        transport_id: "browser-transport-alpha",
-        mission_id: mission.mission_id,
-        display_name: "Alpha TCP",
-        transport_kind: :tcp_socket,
-        direction_capability: :bidirectional,
-        adapter_key: :tcp_socket,
-        configuration: %{
-          "mode" => "connect",
-          "direction_capability" => "bidirectional",
-          "host" => "alpha.ground.example",
-          "port" => "5000",
-          "framing_mode" => "raw",
-          "tls_enabled" => "false"
-        },
-        metadata: %{
-          "source_endpoint_id" => alpha_endpoint.source_endpoint_id,
-          "ground_station_id" => dss_14.ground_station_id,
-          "link_assignment_id" => "link-alpha"
-        }
-      })
-
-    beta_transport =
-      Transport.new(%{
-        transport_id: "browser-transport-beta",
-        mission_id: mission.mission_id,
-        display_name: "Beta TCP",
-        transport_kind: :tcp_socket,
-        direction_capability: :bidirectional,
-        adapter_key: :tcp_socket,
-        configuration: %{
-          "mode" => "connect",
-          "direction_capability" => "bidirectional",
-          "host" => "beta.ground.example",
-          "port" => "5001",
-          "framing_mode" => "raw",
-          "tls_enabled" => "false"
-        },
-        metadata: %{
-          "source_endpoint_id" => beta_endpoint.source_endpoint_id,
-          "ground_station_id" => "dss-63",
-          "link_assignment_id" => "link-beta"
-        }
-      })
-
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, alpha_transport)
-    assert {:ok, _transport} = Cadence.persist_transport(org.organization_id, beta_transport)
-
-    for {record_id, transport_id, event_kind, recorded_at, opts} <- [
-          {"transport-execution-live-alpha", alpha_transport.transport_id, :initialized,
-           ~U[2026-06-17 12:00:05Z], []},
-          {"transport-execution-replay-alpha-1", alpha_transport.transport_id, :initialized,
-           ~U[2026-06-17 12:00:10Z], [replay_run_id: replay_run_id]},
-          {"transport-execution-replay-beta", beta_transport.transport_id, :timer_handled,
-           ~U[2026-06-17 12:00:45Z],
-           [
-             replay_run_id: replay_run_id,
-             source_endpoint_id: beta_endpoint.source_endpoint_id,
-             ground_station_id: "dss-63",
-             link_id: "link-beta",
-             contact_id: "browser-contact-beta",
-             path_id: "browser-uplink-beta"
-           ]},
-          {"transport-execution-other-replay-alpha", alpha_transport.transport_id, :timer_handled,
-           ~U[2026-06-17 12:01:00Z], [replay_run_id: other_replay_run_id]},
-          {"transport-execution-replay-alpha-2", alpha_transport.transport_id,
-           :transport_event_handled, ~U[2026-06-17 12:01:30Z], [replay_run_id: replay_run_id]}
-        ] do
-      persist_transport_capability_event!(
-        org.organization_id,
-        mission.mission_id,
-        record_id,
-        transport_id,
-        event_kind,
-        recorded_at,
-        Keyword.merge(
-          [
-            source_endpoint_id: alpha_endpoint.source_endpoint_id,
-            ground_station_id: dss_14.ground_station_id,
-            link_id: "link-alpha",
-            contact_id: "browser-contact-alpha",
-            path_id: "browser-uplink-alpha"
-          ],
-          opts
-        )
-      )
-    end
-
-    dashboard =
-      TestFixtures.persist_dashboard_document!(mission,
-        name: "Replay Operational Transport Execution Timeline Browser",
-        widgets: [
-          %{
-            type: :state_timeline,
-            title: "Transport Execution Timeline",
-            binding: %{
-              source: :operational_observables,
-              observables: ["comms.transport.execution_state"]
-            },
-            layout: %{x: 0, y: 0, w: 8, h: 4}
-          }
-        ]
-      )
-
-    app_root = Path.expand("../../..", __DIR__)
-    ensure_assets_built!(app_root)
-
-    port = free_tcp_port()
-
-    start_browser_endpoint!(port, sandbox_owner)
-
-    base_url = "http://localhost:#{port}"
-
-    dashboard_url =
-      base_url <>
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "transport", scope_id: alpha_transport.transport_id, time_mode: "replay_run", replay_run_id: replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
-
-    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+    %{
+      alpha_transport: alpha_transport,
+      app_root: app_root,
+      base_url: base_url,
+      dashboard_url: dashboard_url,
+      mission: mission,
+      org: org,
+      previous_source_execution: previous_source_execution,
+      replay_run_id: replay_run_id,
+      replay_sources: replay_sources,
+      script: script,
+      transport_execution_source_event_id: transport_execution_source_event_id,
+      user: user
+    } = fixture
 
     assert {output, 0} =
              run_dashboard_viewport_smoke(

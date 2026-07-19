@@ -1323,6 +1323,12 @@ state-timeline menu waits left behind by the shared overlay migration. The smoke
 runner now waits for the canonical `data-overlay-open` state and preserves
 toggle-safe behavior when an overlay survives a LiveView patch; both live and
 replay transport-execution browser scenarios pass again.
+Moving the 217-line replay transport topology, operational-event, dashboard,
+and endpoint-startup fixture out of its opt-in browser scenario reduced that
+test from 327 to 140 lines and overlong test-function pressure from 6 to 5. The
+authenticated dashboard route and sign-in flow are unchanged; live replay,
+copied operational-event DataLinks, and degraded source-health browser proofs
+remain covered.
 
 The same task now consumes a fresh core `mix xref graph --format json` result
 and ratchets three dependency boundaries. The initial graph contained 8 internal
