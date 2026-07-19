@@ -25,6 +25,7 @@ defmodule Cadence.Commanding do
     Encoder,
     LifecyclePolicy,
     ReleaseArtifacts,
+    ReleaseStore,
     ReleaseTargetSelection,
     RequestQueueStore,
     RequestValidation,
@@ -345,14 +346,7 @@ defmodule Cadence.Commanding do
   def fetch_command_release_attempt(organization_id, mission_id, command_release_attempt_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_release_attempt_id) do
-    case Repo.get_by(CommandReleaseAttemptRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_release_attempt_id: command_release_attempt_id
-         ) do
-      nil -> {:error, :command_release_attempt_not_found}
-      %CommandReleaseAttemptRow{} = row -> {:ok, CommandReleaseAttemptRow.to_domain(row)}
-    end
+    ReleaseStore.fetch(organization_id, mission_id, command_release_attempt_id)
   end
 
   @spec list_command_release_attempts(binary(), binary(), keyword()) :: [
@@ -360,18 +354,7 @@ defmodule Cadence.Commanding do
         ]
   def list_command_release_attempts(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    CommandReleaseAttemptRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
-    |> maybe_filter_equals(:command_queue_entry_id, Keyword.get(opts, :command_queue_entry_id))
-    |> maybe_filter_equals(:realized_contact_id, Keyword.get(opts, :realized_contact_id))
-    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
-    |> order_by([row], asc: row.attempted_at, asc: row.command_release_attempt_id)
-    |> Repo.all()
-    |> Enum.map(&CommandReleaseAttemptRow.to_domain/1)
+    ReleaseStore.list(organization_id, mission_id, opts)
   end
 
   @spec fetch_command_verifier_instance(binary(), binary(), binary()) ::
@@ -635,7 +618,7 @@ defmodule Cadence.Commanding do
          %CommandReleaseAttempt{} = pending_attempt,
          %CommandQueueEntryRow{} = claimed_queue_entry_row
        ) do
-    case persist_command_release_attempt(organization_id, pending_attempt) do
+    case ReleaseStore.persist(organization_id, pending_attempt) do
       {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
         {:ok, persisted_attempt}
 
@@ -699,24 +682,6 @@ defmodule Cadence.Commanding do
     )
   end
 
-  defp persist_command_release_attempt(
-         organization_id,
-         %CommandReleaseAttempt{} = command_release_attempt
-       ) do
-    with {:ok, scoped_command_release_attempt} <-
-           put_organization_scope(command_release_attempt, organization_id),
-         {:ok, %CommandReleaseAttemptRow{} = row} <-
-           Repo.insert(CommandReleaseAttemptRow.changeset(scoped_command_release_attempt),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :command_release_attempt_id]
-           ) do
-      {:ok, CommandReleaseAttemptRow.to_domain(row)}
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   defp complete_release_success(
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandRequestRow{} = request_row,
@@ -726,7 +691,7 @@ defmodule Cadence.Commanding do
        )
        when is_list(verifier_plans) do
     with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
-           fetch_command_release_attempt_row(
+           ReleaseStore.fetch_row(
              command_release_attempt.organization_id,
              command_release_attempt.mission_id,
              command_release_attempt.command_release_attempt_id
@@ -809,29 +774,16 @@ defmodule Cadence.Commanding do
        )}
     end)
     |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
-      fetch_final_command_release_attempt_row(repo, queue_entry_row, completed_release_attempt)
+      ReleaseStore.fetch_row(
+        repo,
+        queue_entry_row.organization_id,
+        queue_entry_row.mission_id,
+        completed_release_attempt.command_release_attempt_id
+      )
     end)
     |> Multi.run(:final_command_request, fn repo, _changes ->
       fetch_final_command_request_row(repo, queue_entry_row, request_row)
     end)
-  end
-
-  defp fetch_final_command_release_attempt_row(
-         repo,
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %CommandReleaseAttempt{} = command_release_attempt
-       ) do
-    case repo.get_by(CommandReleaseAttemptRow,
-           organization_id: queue_entry_row.organization_id,
-           mission_id: queue_entry_row.mission_id,
-           command_release_attempt_id: command_release_attempt.command_release_attempt_id
-         ) do
-      %CommandReleaseAttemptRow{} = final_release_attempt_row ->
-        {:ok, final_release_attempt_row}
-
-      nil ->
-        {:error, :command_release_attempt_not_found}
-    end
   end
 
   defp fetch_final_command_request_row(
@@ -892,7 +844,7 @@ defmodule Cadence.Commanding do
          %CommandReleaseAttempt{} = command_release_attempt,
          reason
        ) do
-    case fetch_command_release_attempt_row(
+    case ReleaseStore.fetch_row(
            command_release_attempt.organization_id,
            command_release_attempt.mission_id,
            command_release_attempt.command_release_attempt_id
@@ -984,54 +936,5 @@ defmodule Cadence.Commanding do
     end
 
     :ok
-  end
-
-  defp fetch_command_release_attempt_row(
-         organization_id,
-         mission_id,
-         command_release_attempt_id
-       ) do
-    case Repo.get_by(CommandReleaseAttemptRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_release_attempt_id: command_release_attempt_id
-         ) do
-      nil -> {:error, :command_release_attempt_not_found}
-      %CommandReleaseAttemptRow{} = row -> {:ok, row}
-    end
-  end
-
-  defp lifecycle_state_filter(opts) do
-    case Keyword.get(opts, :lifecycle_state) do
-      nil -> nil
-      lifecycle_state when is_atom(lifecycle_state) -> Atom.to_string(lifecycle_state)
-      lifecycle_state when is_binary(lifecycle_state) -> lifecycle_state
-    end
-  end
-
-  defp maybe_filter_equals(query, _field, nil), do: query
-
-  defp maybe_filter_equals(query, field, value) when is_atom(value) do
-    where(query, [row], field(row, ^field) == ^Atom.to_string(value))
-  end
-
-  defp maybe_filter_equals(query, field, value) when is_binary(value) do
-    where(query, [row], field(row, ^field) == ^value)
-  end
-
-  defp put_organization_scope(%CommandReleaseAttempt{} = command_release_attempt, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case command_release_attempt.organization_id do
-      nil ->
-        {:ok, %CommandReleaseAttempt{command_release_attempt | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, command_release_attempt}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          command_release_attempt.mission_id}}
-    end
   end
 end
