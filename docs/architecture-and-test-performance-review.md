@@ -1692,6 +1692,15 @@ rules, unique paths, realized-contact scope, and realization-state guards now
 live behind that persistence-free boundary, while resolution and database-backed
 checks remain in the context. No route or authentication placement is involved;
 production source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting URL focus parsing, source and binding inventory matching, and focus
+presentation labels into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocus` reduced `OpsDataSourcesLive` from
+3,757 to 3,468 lines. The LiveView retains parameter orchestration and
+storage-backed operational-resource resolution, and direct model tests cover
+normalization, explicit and context-only matches, and stale identifiers. The
+data-sources page remains in its authenticated `:ops` LiveView session because
+it is mission-operations UI; no route or access-control placement changed.
+Production source-size pressure remains 3 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
