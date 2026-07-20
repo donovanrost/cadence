@@ -165,6 +165,7 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
   test "protects contact profile rows through their owning context" do
     graph = %{
       "lib/cadence/contact_planning/planner.ex" => %{
+        "lib/cadence/contacts/link_assignment_store/link_assignment_row.ex" => "export",
         "lib/cadence/contacts/path_template_store/path_template_row.ex" => "export",
         "lib/cadence/contacts/profile_store/provider_profile_row.ex" => "export"
       },
@@ -175,6 +176,11 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
     }
 
     assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/contact_planning/planner.ex",
+               sink: "lib/cadence/contacts/link_assignment_store/link_assignment_row.ex"
+             },
              %{
                kind: :context_schema,
                source: "lib/cadence/contact_planning/planner.ex",

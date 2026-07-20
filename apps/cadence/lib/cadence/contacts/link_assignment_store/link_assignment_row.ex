@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ContactLinkAssignmentRow do
+defmodule Cadence.Contacts.LinkAssignmentStore.LinkAssignmentRow do
   @moduledoc false
 
   use Ecto.Schema

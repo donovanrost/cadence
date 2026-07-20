@@ -1943,6 +1943,20 @@ path resolution, versioning, current/history listing, and tombstones; the
 existing Contacts tests preserve scheduled-contact realization and facade
 behavior. No route or authentication placement is involved; production
 source-size pressure remains 1 with zero oversized test files or functions.
+Extracting shared-link creation and reusable-template application into the
+552-line `Cadence.Contacts.LinkSetup`, together with assignment persistence and
+scoped reference validation in the 296-line
+`Cadence.Contacts.LinkAssignmentStore`, reduced `Cadence.Contacts` from 2,806
+to 2,016 lines. The facade preserves its existing builder and assignment APIs;
+the setup workflow now composes the profile, path-template, assignment,
+spacecraft, and endpoint owners directly instead of cycling back through the
+facade. The assignment row now lives under its store, reducing the
+persistence-schema baseline from 104 to 103, with the Contacts ownership guard
+extended to cover it. A focused data test covers transactional shared-link
+creation, template application, idempotent skipping, assignment listing, and
+tombstones; existing Contacts and web tests preserve facade behavior. No route
+or authentication placement is involved; production source-size pressure
+remains 1 with zero oversized test files or functions.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
