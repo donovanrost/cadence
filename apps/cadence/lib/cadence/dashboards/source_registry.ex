@@ -7,7 +7,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
   """
 
   alias Cadence.Dashboards.{
-    DashboardContract,
     DataLinks,
     DataSourceRegistry,
     DataSources,
@@ -28,6 +27,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   alias Cadence.Dashboards.SourceRegistry.{
     AdapterOptions,
     CapabilityPosture,
+    ContractValidation,
     ExecutionMonitoring,
     FactsAggregation,
     HealthMerge,
@@ -75,14 +75,14 @@ defmodule Cadence.Dashboards.SourceRegistry do
          true <- function_exported?(adapter, :capabilities, 0) do
       adapter.capabilities()
       |> SourceCapabilities.normalize()
-      |> validate_source_capabilities_contract!(opts)
+      |> ContractValidation.capabilities!(opts)
     else
       _other -> nil
     end
   end
 
   def capabilities(%PlannedSourceRequest{} = request, opts) when is_list(opts) do
-    request = validate_planned_source_request_contract!(request, opts)
+    request = ContractValidation.planned_request!(request, opts)
 
     with {:ok, %{capabilities: %SourceCapabilities{} = capabilities}} <-
            capability_context(request, opts) do
@@ -93,7 +93,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   @spec capability_context(PlannedSourceRequest.t(), keyword()) ::
           {:ok, capability_context()} | {:error, ResolveWarning.t()}
   def capability_context(%PlannedSourceRequest{} = request, opts \\ []) when is_list(opts) do
-    request = validate_planned_source_request_contract!(request, opts)
+    request = ContractValidation.planned_request!(request, opts)
 
     if segmentable_source_request?(request, opts) do
       segmented_capability_context(request, opts)
@@ -148,7 +148,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
           resolved_binding.data_source
         )
         |> SourceCapabilities.normalize()
-        |> validate_source_capabilities_contract!(opts)
+        |> ContractValidation.capabilities!(opts)
 
       {:ok,
        %{
@@ -300,7 +300,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   @spec resolve(PlannedSourceRequest.t(), keyword()) :: SourceResult.t()
   def resolve(%PlannedSourceRequest{} = request, opts \\ []) when is_list(opts) do
-    request = validate_planned_source_request_contract!(request, opts)
+    request = ContractValidation.planned_request!(request, opts)
 
     if segmentable_source_request?(request, opts) do
       resolve_segmented_or_single_source(request, opts)
@@ -331,7 +331,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   @spec unavailable(PlannedSourceRequest.t(), term(), keyword()) :: SourceResult.t()
   def unavailable(%PlannedSourceRequest{} = request, reason, opts \\ []) when is_list(opts) do
-    request = validate_planned_source_request_contract!(request, opts)
+    request = ContractValidation.planned_request!(request, opts)
 
     case DataSourceRegistry.resolve(request, opts) do
       {:ok, resolved_binding} ->
@@ -356,7 +356,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   @spec facts(PlannedSourceRequest.t(), keyword()) ::
           {:ok, SourceFacts.t()} | {:error, ResolveWarning.t()}
   def facts(%PlannedSourceRequest{} = request, opts \\ []) when is_list(opts) do
-    request = validate_planned_source_request_contract!(request, opts)
+    request = ContractValidation.planned_request!(request, opts)
 
     if segmentable_source_request?(request, opts) do
       segmented_or_single_facts(request, opts)
@@ -421,7 +421,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
        |> merge_persisted_source_watermark(request, resolved_binding, opts)
        |> merge_persisted_source_health(request, resolved_binding, opts)
        |> Provenance.put_facts(resolved_binding, capability_provenance)
-       |> validate_source_facts_contract!(opts)}
+       |> ContractValidation.facts!(opts)}
     else
       {:error, %ResolveWarning{} = warning} -> {:error, warning}
       :error -> {:error, unsupported_adapter_warning(request)}
@@ -445,92 +445,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
     end
   end
 
-  defp validate_planned_source_request_contract!(%PlannedSourceRequest{} = request, opts) do
-    request = PlannedSourceRequest.normalize(request)
-
-    if validate_dashboard_contract?(opts) do
-      request
-      |> DashboardContract.validate_planned_source_request()
-      |> raise_contract_violations!(:planned_source_request)
-    end
-
-    request
-  end
-
-  defp validate_source_capabilities_contract!(%SourceCapabilities{} = capabilities, opts) do
-    capabilities = SourceCapabilities.normalize(capabilities)
-
-    if validate_dashboard_contract?(opts) do
-      capabilities
-      |> DashboardContract.validate_source_capabilities()
-      |> raise_contract_violations!(:source_capabilities)
-    end
-
-    capabilities
-  end
-
-  defp validate_source_capabilities_contract!(other, opts) do
-    if validate_dashboard_contract?(opts) do
-      other
-      |> DashboardContract.validate_source_capabilities()
-      |> raise_contract_violations!(:source_capabilities)
-    end
-
-    other
-  end
-
-  defp validate_source_facts_contract!(%SourceFacts{} = facts, opts) do
-    facts = SourceFacts.normalize(facts)
-
-    if validate_dashboard_contract?(opts) do
-      facts
-      |> DashboardContract.validate_source_facts()
-      |> raise_contract_violations!(:source_facts)
-    end
-
-    facts
-  end
-
-  defp validate_source_result_contract!(%SourceResult{} = result, opts) do
-    result = SourceResult.normalize(result)
-
-    if validate_dashboard_contract?(opts) do
-      result
-      |> DashboardContract.validate_source_result()
-      |> raise_contract_violations!(:source_result)
-    end
-
-    result
-  end
-
-  defp validate_dashboard_contract?(opts),
-    do: Keyword.get(opts, :validate_dashboard_contract?, false) == true
-
-  defp raise_contract_violations!(:ok, _boundary), do: :ok
-
-  defp raise_contract_violations!({:error, violations}, boundary) do
-    raise ArgumentError,
-          "dashboard #{boundary} contract violated: " <> format_contract_violations(violations)
-  end
-
-  defp format_contract_violations(violations) do
-    violations
-    |> Enum.map_join("; ", fn violation ->
-      path =
-        violation
-        |> Map.get(:path, [])
-        |> Enum.map_join(".", &to_string/1)
-
-      "#{path}: #{Map.get(violation, :code)}"
-    end)
-  end
-
   defp adapter_capabilities(adapter, %PlannedSourceRequest{} = request, opts) do
     with {:module, ^adapter} <- Code.ensure_loaded(adapter),
          true <- function_exported?(adapter, :capabilities, 0) do
       case SourceCapabilities.normalize(adapter.capabilities()) do
         %SourceCapabilities{} = capabilities ->
-          {:ok, validate_source_capabilities_contract!(capabilities, opts)}
+          {:ok, ContractValidation.capabilities!(capabilities, opts)}
 
         _other ->
           {:error, unsupported_adapter_warning(request)}
@@ -556,7 +476,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   defp normalize_adapter_facts_result({:ok, facts}, request, resolved_binding, opts) do
     case SourceFacts.normalize(facts) do
       %SourceFacts{} = normalized_facts ->
-        {:ok, validate_source_facts_contract!(normalized_facts, opts)}
+        {:ok, ContractValidation.facts!(normalized_facts, opts)}
 
       _other ->
         {:error, unsupported_adapter_warning(request, resolved_binding)}
@@ -830,7 +750,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       {:ok, adapter} ->
         adapter
         |> execute_adapter_result(request, resolved_binding, opts)
-        |> validate_source_result_contract!(opts)
+        |> ContractValidation.result!(opts)
 
       :error ->
         unsupported_adapter(request, resolved_binding)

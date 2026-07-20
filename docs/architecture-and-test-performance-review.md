@@ -1897,6 +1897,17 @@ redacted connection profiles, and descriptor-only public endpoints; existing
 registry, evidence, and BYO data-source suites preserve facade behavior. No
 route or authentication placement is involved; production source-size pressure
 remains 2 and dependency ratchets are unchanged.
+Extracting optional strict contract enforcement and violation formatting for
+planned requests, capabilities, facts, and results into the 96-line
+`Cadence.Dashboards.SourceRegistry.ContractValidation` reduced
+`SourceRegistry` from 1,087 to 1,007 lines. The registry retains each public
+boundary and decides where validation runs, while the extracted module owns
+normalization and the shared error contract. Direct tests cover non-strict
+normalization, strict request field paths, non-struct capability errors, facts
+normalization, and result identity enforcement; existing registry and evidence
+suites preserve facade behavior. No route or authentication placement is
+involved; production source-size pressure remains 2 and dependency ratchets
+are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
