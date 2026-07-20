@@ -1874,6 +1874,17 @@ operational-event identity, and interval query context, while existing registry
 and evidence suites preserve facade behavior. No route or authentication
 placement is involved; production source-size pressure remains 2 and dependency
 ratchets are unchanged.
+Extracting circuit admission, physical-source-keyed success and failure
+recording, and source-health event shaping into the 252-line
+`Cadence.Dashboards.SourceRegistry.ExecutionMonitoring` reduced
+`SourceRegistry` from 1,448 to 1,237 lines. The registry keeps adapter
+selection, option construction, execution, result validation, and degraded
+result presentation while delegating the operational monitoring around those
+steps. Direct tests cover disabled admission, configured failure and backoff,
+success reset, physical-source isolation, and health identity attributes;
+existing registry and evidence suites preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

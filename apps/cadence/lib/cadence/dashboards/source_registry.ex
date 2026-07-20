@@ -19,7 +19,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     RuntimeCacheKey,
     SourceActions,
     SourceCapabilities,
-    SourceCircuitBreaker,
     SourceCredentialMaterial,
     SourceCredentials,
     SourceExecutionPolicy,
@@ -31,6 +30,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   alias Cadence.Dashboards.SourceRegistry.{
     CapabilityPosture,
+    ExecutionMonitoring,
     FactsAggregation,
     HealthMerge,
     Provenance,
@@ -338,13 +338,11 @@ defmodule Cadence.Dashboards.SourceRegistry do
     case DataSourceRegistry.resolve(request, opts) do
       {:ok, resolved_binding} ->
         source_policy = SourceExecutionPolicy.resolve(request, resolved_binding, opts)
-        source_key = SourceCircuitBreaker.source_key(request, resolved_binding)
         result = source_unavailable(request, resolved_binding, reason)
 
-        record_source_circuit_result(
+        ExecutionMonitoring.record_result(
           request,
           resolved_binding,
-          source_key,
           result,
           source_policy,
           opts
@@ -946,13 +944,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   defp resolve_bound_source(%PlannedSourceRequest{} = request, resolved_binding, opts) do
     source_policy = SourceExecutionPolicy.resolve(request, resolved_binding, opts)
-    source_key = SourceCircuitBreaker.source_key(request, resolved_binding)
 
-    case source_circuit_allow(source_key, source_policy, opts) do
+    case ExecutionMonitoring.allow(request, resolved_binding, source_policy, opts) do
       {:blocked, status} ->
         result = source_degraded(request, resolved_binding, status, opts)
 
-        record_source_health_result(
+        ExecutionMonitoring.record_health(
           request,
           resolved_binding,
           result,
@@ -966,10 +963,9 @@ defmodule Cadence.Dashboards.SourceRegistry do
       {:allow, _status} ->
         result = execute_adapter(request, resolved_binding, opts)
 
-        record_source_circuit_result(
+        ExecutionMonitoring.record_result(
           request,
           resolved_binding,
-          source_key,
           result,
           source_policy,
           opts
@@ -1009,163 +1005,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
   catch
     kind, reason ->
       source_unavailable(request, resolved_binding, {kind, reason}, opts)
-  end
-
-  defp source_circuit_allow(source_key, %SourceExecutionPolicy{} = source_policy, opts) do
-    case source_circuit_breaker(opts) do
-      {:ok, server} ->
-        SourceCircuitBreaker.allow?(server, source_key, source_circuit_opts(opts, source_policy))
-
-      :disabled ->
-        {:allow, %{}}
-    end
-  end
-
-  defp record_source_circuit_result(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         source_key,
-         %SourceResult{} = result,
-         %SourceExecutionPolicy{} = source_policy,
-         opts
-       ) do
-    failure_reason = source_failure_reason(result)
-
-    circuit_status =
-      case source_circuit_breaker(opts) do
-        {:ok, server} ->
-          case failure_reason do
-            nil ->
-              SourceCircuitBreaker.record_success(
-                server,
-                source_key,
-                source_circuit_opts(opts, source_policy)
-              )
-
-              nil
-
-            reason ->
-              SourceCircuitBreaker.record_failure(
-                server,
-                source_key,
-                reason,
-                source_circuit_opts(opts, source_policy)
-              )
-          end
-
-        :disabled ->
-          nil
-      end
-
-    record_source_health_result(
-      request,
-      resolved_binding,
-      result,
-      failure_reason,
-      circuit_status,
-      opts
-    )
-
-    :ok
-  end
-
-  defp source_circuit_breaker(opts) do
-    cond do
-      Keyword.get(opts, :source_circuit_breaker?) == false ->
-        :disabled
-
-      server = Keyword.get(opts, :source_circuit_breaker) ->
-        {:ok, server}
-
-      dashboard_source_circuit_breaker_enabled?() and Process.whereis(SourceCircuitBreaker) ->
-        {:ok, SourceCircuitBreaker}
-
-      true ->
-        :disabled
-    end
-  end
-
-  defp source_circuit_opts(opts, %SourceExecutionPolicy{} = source_policy) do
-    [
-      failure_threshold: source_policy.circuit_failure_threshold,
-      backoff_ms: source_policy.circuit_backoff_ms,
-      now_ms: Keyword.get(opts, :now_ms)
-    ]
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp dashboard_source_circuit_breaker_enabled? do
-    :cadence
-    |> Application.get_env(:dashboard_source_circuit_breaker, [])
-    |> Keyword.get(:enabled?, false)
-  end
-
-  defp source_failure_reason(%SourceResult{warnings: warnings}) do
-    warnings
-    |> Enum.find(&(&1.severity == :error))
-    |> case do
-      nil -> nil
-      warning -> warning.code
-    end
-  end
-
-  defp record_source_health_result(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         %SourceResult{} = result,
-         failure_reason,
-         circuit_status,
-         opts
-       ) do
-    if source_health_recording_enabled?(opts) do
-      do_record_source_health_result(
-        request,
-        resolved_binding,
-        result,
-        failure_reason,
-        circuit_status,
-        opts
-      )
-    else
-      :ok
-    end
-  end
-
-  defp do_record_source_health_result(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         %SourceResult{} = result,
-         failure_reason,
-         circuit_status,
-         opts
-       ) do
-    source_health =
-      case failure_reason do
-        nil -> :healthy
-        :source_degraded -> :degraded
-        :source_unavailable -> :unavailable
-        _other -> :degraded
-      end
-
-    reason =
-      case failure_reason do
-        nil -> :source_recovered
-        reason -> reason
-      end
-
-    attrs =
-      request
-      |> source_health_attrs(resolved_binding, source_health, reason)
-      |> Map.put(:payload, source_health_payload(result, circuit_status))
-
-    case SourceHealth.maybe_record_source_health(attrs, opts) do
-      :ok -> :ok
-      {:error, _reason} -> :ok
-    end
-  end
-
-  defp source_health_recording_enabled?(opts) do
-    Keyword.get(opts, :record_source_health_events?, SourceHealth.enabled?(opts))
   end
 
   defp source_degraded(%PlannedSourceRequest{} = request, resolved_binding, status, opts) do
@@ -1308,56 +1147,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
        do: Map.put(meta, :degraded?, true)
 
   defp maybe_mark_source_health_degraded(meta), do: meta
-
-  defp source_health_attrs(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         source_health,
-         reason
-       ) do
-    %{
-      organization_id:
-        request.organization_id || resolved_binding.binding.organization_id ||
-          resolved_binding.data_source.organization_id,
-      mission_id:
-        request.mission_id || resolved_binding.binding.mission_id ||
-          resolved_binding.data_source.mission_id,
-      logical_source: request.logical_source || resolved_binding.binding.logical_source,
-      data_source_id: resolved_binding.data_source.data_source_id,
-      source_binding_id: resolved_binding.binding.binding_id,
-      realm: resolved_binding.realm,
-      dataset: resolved_binding.dataset,
-      source_health: source_health,
-      reason: reason
-    }
-  end
-
-  defp source_health_payload(%SourceResult{} = result, circuit_status) do
-    %{
-      degraded?: Map.get(result.meta, :degraded?),
-      returned_frame_count: Map.get(result.meta, :returned_frame_count),
-      warning_codes: Enum.map(result.warnings, & &1.code),
-      circuit: circuit_status_payload(circuit_status)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
-
-  defp circuit_status_payload(nil), do: nil
-
-  defp circuit_status_payload(status) when is_map(status) do
-    status
-    |> Map.take([
-      :state,
-      :failure_count,
-      :failure_threshold,
-      :backoff_ms,
-      :retry_after_ms,
-      :last_failure_reason
-    ])
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
-  end
 
   defp inspect_source_failure({:exception, exception}) do
     Exception.message(exception)
