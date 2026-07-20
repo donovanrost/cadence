@@ -13,15 +13,14 @@ defmodule Cadence.Contacts do
     LinkAssignment,
     Path,
     PathTemplate,
+    PathTemplateStore,
     ProfileStore,
-    ProviderBinding,
     ProviderProfile,
     RealizedContact,
     ScheduledContact,
     ScheduledContactRevisions,
     Scheduler,
     SchedulerReadModel,
-    TransportBinding,
     TransportProfile,
     Validation
   }
@@ -37,7 +36,6 @@ defmodule Cadence.Contacts do
   alias Cadence.Persistence.Schemas.{
     ContactActionRow,
     ContactLinkAssignmentRow,
-    ContactPathTemplateRow,
     RealizedContactRow,
     ScheduledContactRow
   }
@@ -429,69 +427,18 @@ defmodule Cadence.Contacts do
           {:ok, PathTemplate.t()} | {:error, term()}
   def persist_path_template(organization_id, %PathTemplate{} = path_template)
       when is_binary(organization_id) do
-    with {:ok, scoped_path_template} <- put_organization_scope(path_template, organization_id),
-         {:ok, _mission} <-
-           Missions.fetch_mission(
-             scoped_path_template.organization_id,
-             scoped_path_template.mission_id
-           ),
-         {:ok, prepared_path_template} <- prepare_path_template(scoped_path_template),
-         :ok <- validate_path_template(prepared_path_template),
-         {:ok, _row} <-
-           Repo.insert(ContactPathTemplateRow.changeset(prepared_path_template),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :path_template_id, :version]
-           ) do
-      fetch_path_template_version(
-        prepared_path_template.organization_id,
-        prepared_path_template.mission_id,
-        prepared_path_template.path_template_id,
-        prepared_path_template.version
-      )
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
+    PathTemplateStore.persist(organization_id, path_template)
   end
 
   @spec persist_path_template(PathTemplate.t()) :: {:ok, PathTemplate.t()} | {:error, term()}
   def persist_path_template(%PathTemplate{} = path_template) do
-    with {:ok, prepared_path_template} <- prepare_path_template(path_template),
-         :ok <- validate_path_template(prepared_path_template) do
-      case Repo.insert(ContactPathTemplateRow.changeset(prepared_path_template),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :path_template_id, :version]
-           ) do
-        {:ok, %ContactPathTemplateRow{} = row} ->
-          {:ok, ContactPathTemplateRow.to_domain(row)}
-
-        {:error, %Changeset{} = changeset} ->
-          {:error, changeset}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end
+    PathTemplateStore.persist(path_template)
   end
 
   @spec fetch_path_template(binary(), binary()) :: {:ok, PathTemplate.t()} | {:error, term()}
   def fetch_path_template(mission_id, path_template_id)
       when is_binary(mission_id) and is_binary(path_template_id) do
-    case latest_versioned_row(
-           ContactPathTemplateRow,
-           mission_id,
-           :path_template_id,
-           path_template_id
-         ) do
-      nil ->
-        {:error, :contact_path_template_not_found}
-
-      %ContactPathTemplateRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_path_template_not_found}
-
-      %ContactPathTemplateRow{} = row ->
-        {:ok, ContactPathTemplateRow.to_domain(row)}
-    end
+    PathTemplateStore.fetch(mission_id, path_template_id)
   end
 
   @spec fetch_path_template(binary(), binary(), binary()) ::
@@ -499,22 +446,7 @@ defmodule Cadence.Contacts do
   def fetch_path_template(organization_id, mission_id, path_template_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) do
-    case latest_versioned_row(
-           ContactPathTemplateRow,
-           organization_id,
-           mission_id,
-           :path_template_id,
-           path_template_id
-         ) do
-      nil ->
-        {:error, :contact_path_template_not_found}
-
-      %ContactPathTemplateRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_path_template_not_found}
-
-      %ContactPathTemplateRow{} = row ->
-        {:ok, ContactPathTemplateRow.to_domain(row)}
-    end
+    PathTemplateStore.fetch(organization_id, mission_id, path_template_id)
   end
 
   @spec fetch_path_template_version(binary(), binary(), pos_integer()) ::
@@ -522,14 +454,7 @@ defmodule Cadence.Contacts do
   def fetch_path_template_version(mission_id, path_template_id, version)
       when is_binary(mission_id) and is_binary(path_template_id) and is_integer(version) and
              version > 0 do
-    case Repo.get_by(ContactPathTemplateRow,
-           mission_id: mission_id,
-           path_template_id: path_template_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_path_template_not_found}
-      %ContactPathTemplateRow{} = row -> {:ok, ContactPathTemplateRow.to_domain(row)}
-    end
+    PathTemplateStore.fetch_version(mission_id, path_template_id, version)
   end
 
   @spec fetch_path_template_version(binary(), binary(), binary(), pos_integer()) ::
@@ -537,59 +462,30 @@ defmodule Cadence.Contacts do
   def fetch_path_template_version(organization_id, mission_id, path_template_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) and is_integer(version) and version > 0 do
-    case Repo.get_by(ContactPathTemplateRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           path_template_id: path_template_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_path_template_not_found}
-      %ContactPathTemplateRow{} = row -> {:ok, ContactPathTemplateRow.to_domain(row)}
-    end
+    PathTemplateStore.fetch_version(organization_id, mission_id, path_template_id, version)
   end
 
   @spec list_path_templates(binary()) :: [PathTemplate.t()]
   def list_path_templates(mission_id) when is_binary(mission_id) do
-    ContactPathTemplateRow
-    |> latest_versioned_rows(mission_id, :path_template_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactPathTemplateRow.to_domain/1)
+    PathTemplateStore.list(mission_id)
   end
 
   @spec list_path_templates(binary(), binary()) :: [PathTemplate.t()]
   def list_path_templates(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    ContactPathTemplateRow
-    |> latest_versioned_rows(organization_id, mission_id, :path_template_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactPathTemplateRow.to_domain/1)
+    PathTemplateStore.list(organization_id, mission_id)
   end
 
   @spec list_path_template_versions(binary(), binary()) :: [PathTemplate.t()]
   def list_path_template_versions(mission_id, path_template_id)
       when is_binary(mission_id) and is_binary(path_template_id) do
-    ContactPathTemplateRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.path_template_id == ^path_template_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactPathTemplateRow.to_domain/1)
+    PathTemplateStore.list_versions(mission_id, path_template_id)
   end
 
   @spec list_path_template_versions(binary(), binary(), binary()) :: [PathTemplate.t()]
   def list_path_template_versions(organization_id, mission_id, path_template_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(path_template_id) do
-    ContactPathTemplateRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.path_template_id == ^path_template_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactPathTemplateRow.to_domain/1)
+    PathTemplateStore.list_versions(organization_id, mission_id, path_template_id)
   end
 
   @spec version_path_template(binary(), binary(), binary(), map()) ::
@@ -597,12 +493,7 @@ defmodule Cadence.Contacts do
   def version_path_template(organization_id, mission_id, path_template_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) and is_map(attrs) do
-    with {:ok, %PathTemplate{} = current_path_template} <-
-           fetch_path_template(organization_id, mission_id, path_template_id),
-         {:ok, %PathTemplate{} = next_path_template} <-
-           build_next_path_template_version(current_path_template, attrs) do
-      persist_path_template(organization_id, next_path_template)
-    end
+    PathTemplateStore.version(organization_id, mission_id, path_template_id, attrs)
   end
 
   @spec delete_path_template(binary(), binary(), binary(), map()) ::
@@ -610,21 +501,7 @@ defmodule Cadence.Contacts do
   def delete_path_template(organization_id, mission_id, path_template_id, metadata_patch \\ %{})
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) and is_map(metadata_patch) do
-    with {:ok, %PathTemplate{} = current_path_template} <-
-           fetch_path_template(organization_id, mission_id, path_template_id) do
-      tombstone =
-        %PathTemplate{
-          current_path_template
-          | version: current_path_template.version + 1,
-            lifecycle_state: :deleted,
-            metadata:
-              current_path_template.metadata
-              |> Map.merge(metadata_patch)
-              |> Map.put("deleted_at", DateTime.utc_now())
-        }
-
-      persist_path_template(organization_id, tombstone)
-    end
+    PathTemplateStore.delete(organization_id, mission_id, path_template_id, metadata_patch)
   end
 
   @spec persist_scheduled_contact(ScheduledContact.t()) ::
@@ -1196,15 +1073,6 @@ defmodule Cadence.Contacts do
     case end_realized_contact_early(organization_id, mission_id, realized_contact_id, []) do
       {:ok, _realized_contact} -> :ok
       {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp validate_path_template(%PathTemplate{} = path_template) do
-    with :ok <- Validation.mission_id(path_template.mission_id),
-         :ok <- Validation.reusable_path_refs(path_template.provider_profile_ids),
-         :ok <- Validation.reusable_path_refs(path_template.transport_profile_ids),
-         {:ok, _path} <- resolve_path_template(path_template) do
-      :ok
     end
   end
 
@@ -1857,15 +1725,6 @@ defmodule Cadence.Contacts do
     end)
   end
 
-  defp fetch_path_template_for_scope(organization_id, mission_id, path_template_id)
-       when is_binary(organization_id) and organization_id != "" do
-    fetch_path_template(organization_id, mission_id, path_template_id)
-  end
-
-  defp fetch_path_template_for_scope(_organization_id, mission_id, path_template_id) do
-    fetch_path_template(mission_id, path_template_id)
-  end
-
   defp fetch_link_assignment_for_scope(organization_id, mission_id, link_assignment_id)
        when is_binary(organization_id) and organization_id != "" do
     fetch_link_assignment(organization_id, mission_id, link_assignment_id)
@@ -1886,94 +1745,7 @@ defmodule Cadence.Contacts do
   end
 
   defp resolve_path_template(%PathTemplate{} = path_template) do
-    with {:ok, provider_bindings} <- resolve_provider_bindings(path_template),
-         {:ok, transport_bindings} <- resolve_transport_bindings(path_template) do
-      metadata =
-        path_template.metadata
-        |> Map.put("path_template_id", path_template.path_template_id)
-        |> Map.put("path_template_version", path_template.version)
-
-      {:ok,
-       Path.new(%{
-         path_id: path_template.path_id,
-         direction: path_template.direction,
-         selection_role: path_template.selection_role,
-         source_endpoint_ref: path_template.source_endpoint_ref,
-         provider_path_ref: path_template.provider_path_ref,
-         provider_bindings: provider_bindings,
-         transport_bindings: transport_bindings,
-         metadata: metadata
-       })}
-    end
-  end
-
-  defp resolve_provider_bindings(%PathTemplate{} = path_template) do
-    refs =
-      if path_template.provider_profile_refs == [] do
-        refs_from_ids(path_template.provider_profile_ids, "provider_profile_id")
-      else
-        path_template.provider_profile_refs
-      end
-
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_provider_profile_ref_for_scope(
-             path_template.organization_id,
-             path_template.mission_id,
-             ref
-           ) do
-        {:ok, %ProviderProfile{} = provider_profile} ->
-          provider_binding =
-            ProviderBinding.new(%{
-              provider_binding_id: provider_profile.provider_profile_id,
-              adapter_key: provider_profile.adapter_key,
-              configuration: provider_profile.configuration,
-              metadata:
-                provider_profile.metadata
-                |> Map.put("provider_profile_id", provider_profile.provider_profile_id)
-                |> Map.put("provider_profile_version", provider_profile.version)
-            })
-
-          {:cont, {:ok, acc ++ [provider_binding]}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp resolve_transport_bindings(%PathTemplate{} = path_template) do
-    refs =
-      if path_template.transport_profile_refs == [] do
-        refs_from_ids(path_template.transport_profile_ids, "transport_profile_id")
-      else
-        path_template.transport_profile_refs
-      end
-
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_transport_profile_ref_for_scope(
-             path_template.organization_id,
-             path_template.mission_id,
-             ref
-           ) do
-        {:ok, %TransportProfile{} = transport_profile} ->
-          transport_binding =
-            TransportBinding.new(%{
-              transport_binding_id: transport_profile.transport_profile_id,
-              family_key: transport_profile.family_key,
-              target_scope: transport_profile.target_scope,
-              configuration: transport_profile.configuration,
-              metadata:
-                transport_profile.metadata
-                |> Map.put("transport_profile_id", transport_profile.transport_profile_id)
-                |> Map.put("transport_profile_version", transport_profile.version)
-            })
-
-          {:cont, {:ok, acc ++ [transport_binding]}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
+    PathTemplateStore.resolve(path_template)
   end
 
   defp fetch_provider_profile_for_scope(organization_id, mission_id, provider_profile_id)
@@ -2021,63 +1793,7 @@ defmodule Cadence.Contacts do
   end
 
   defp fetch_path_template_ref_for_scope(organization_id, mission_id, ref) do
-    fetch_versioned_ref_for_scope(
-      organization_id,
-      mission_id,
-      ref,
-      "path_template_id",
-      :contact_path_template_not_found,
-      &fetch_path_template_for_scope/3,
-      &fetch_path_template_version/4,
-      &fetch_path_template_version/3
-    )
-  end
-
-  defp prepare_path_template(%PathTemplate{} = path_template) do
-    with {:ok, provider_profile_refs} <-
-           normalize_versioned_refs(
-             path_template.provider_profile_ids,
-             path_template.provider_profile_refs,
-             "provider_profile_id",
-             fn ref ->
-               fetch_provider_profile_ref_for_scope(
-                 path_template.organization_id,
-                 path_template.mission_id,
-                 ref
-               )
-             end
-           ),
-         {:ok, transport_profile_refs} <-
-           normalize_versioned_refs(
-             path_template.transport_profile_ids,
-             path_template.transport_profile_refs,
-             "transport_profile_id",
-             fn ref ->
-               fetch_transport_profile_ref_for_scope(
-                 path_template.organization_id,
-                 path_template.mission_id,
-                 ref
-               )
-             end
-           ),
-         :ok <-
-           Validation.reusable_path_refs(
-             ids_from_refs(provider_profile_refs, "provider_profile_id")
-           ),
-         :ok <-
-           Validation.reusable_path_refs(
-             ids_from_refs(transport_profile_refs, "transport_profile_id")
-           ) do
-      {:ok,
-       %PathTemplate{
-         path_template
-         | source_endpoint_ref: nil,
-           provider_profile_ids: ids_from_refs(provider_profile_refs, "provider_profile_id"),
-           provider_profile_refs: provider_profile_refs,
-           transport_profile_ids: ids_from_refs(transport_profile_refs, "transport_profile_id"),
-           transport_profile_refs: transport_profile_refs
-       }}
-    end
+    PathTemplateStore.fetch_ref(organization_id, mission_id, ref)
   end
 
   defp prepare_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
@@ -2267,135 +1983,6 @@ defmodule Cadence.Contacts do
 
   defp refs_from_ids(ids, id_key) when is_list(ids) and is_binary(id_key) do
     Enum.map(ids, &%{id_key => &1})
-  end
-
-  defp latest_versioned_row(schema, mission_id, definition_id_field, definition_id)
-       when is_binary(mission_id) and is_atom(definition_id_field) and is_binary(definition_id) do
-    schema
-    |> where(
-      [definition_row],
-      field(definition_row, :mission_id) == ^mission_id and
-        field(definition_row, ^definition_id_field) == ^definition_id
-    )
-    |> order_by([definition_row], desc: field(definition_row, :version))
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  defp latest_versioned_row(
-         schema,
-         organization_id,
-         mission_id,
-         definition_id_field,
-         definition_id
-       )
-       when is_binary(organization_id) and is_binary(mission_id) and
-              is_atom(definition_id_field) and is_binary(definition_id) do
-    schema
-    |> where(
-      [definition_row],
-      field(definition_row, :organization_id) == ^organization_id and
-        field(definition_row, :mission_id) == ^mission_id and
-        field(definition_row, ^definition_id_field) == ^definition_id
-    )
-    |> order_by([definition_row], desc: field(definition_row, :version))
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  defp latest_versioned_rows(schema, mission_id, definition_id_field)
-       when is_binary(mission_id) and is_atom(definition_id_field) do
-    schema
-    |> where([definition_row], field(definition_row, :mission_id) == ^mission_id)
-    |> order_by([definition_row],
-      asc: field(definition_row, ^definition_id_field),
-      desc: field(definition_row, :version)
-    )
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn definition_row, acc ->
-      definition_id = Map.fetch!(definition_row, definition_id_field)
-      Map.put_new(acc, definition_id, definition_row)
-    end)
-    |> Map.values()
-  end
-
-  defp latest_versioned_rows(schema, organization_id, mission_id, definition_id_field)
-       when is_binary(organization_id) and is_binary(mission_id) and
-              is_atom(definition_id_field) do
-    schema
-    |> where(
-      [definition_row],
-      field(definition_row, :organization_id) == ^organization_id and
-        field(definition_row, :mission_id) == ^mission_id
-    )
-    |> order_by([definition_row],
-      asc: field(definition_row, ^definition_id_field),
-      desc: field(definition_row, :version)
-    )
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn definition_row, acc ->
-      definition_id = Map.fetch!(definition_row, definition_id_field)
-      Map.put_new(acc, definition_id, definition_row)
-    end)
-    |> Map.values()
-  end
-
-  defp build_next_path_template_version(%PathTemplate{} = path_template, attrs)
-       when is_map(attrs) do
-    provider_profile_ids =
-      if Map.has_key?(attrs, :provider_profile_ids) do
-        Map.get(attrs, :provider_profile_ids, [])
-      else
-        path_template.provider_profile_ids
-      end
-
-    provider_profile_refs =
-      cond do
-        Map.has_key?(attrs, :provider_profile_refs) ->
-          Map.get(attrs, :provider_profile_refs, [])
-
-        Map.has_key?(attrs, :provider_profile_ids) ->
-          []
-
-        true ->
-          path_template.provider_profile_refs
-      end
-
-    transport_profile_ids =
-      if Map.has_key?(attrs, :transport_profile_ids) do
-        Map.get(attrs, :transport_profile_ids, [])
-      else
-        path_template.transport_profile_ids
-      end
-
-    transport_profile_refs =
-      cond do
-        Map.has_key?(attrs, :transport_profile_refs) ->
-          Map.get(attrs, :transport_profile_refs, [])
-
-        Map.has_key?(attrs, :transport_profile_ids) ->
-          []
-
-        true ->
-          path_template.transport_profile_refs
-      end
-
-    {:ok,
-     %PathTemplate{
-       path_template
-       | version: path_template.version + 1,
-         lifecycle_state: :active,
-         path_id: Map.get(attrs, :path_id, path_template.path_id),
-         direction: Map.get(attrs, :direction, path_template.direction),
-         selection_role: Map.get(attrs, :selection_role, path_template.selection_role),
-         source_endpoint_ref: nil,
-         provider_path_ref: Map.get(attrs, :provider_path_ref, path_template.provider_path_ref),
-         provider_profile_ids: provider_profile_ids,
-         provider_profile_refs: provider_profile_refs,
-         transport_profile_ids: transport_profile_ids,
-         transport_profile_refs: transport_profile_refs,
-         metadata: Map.merge(path_template.metadata, Map.get(attrs, :metadata, %{}))
-     }}
   end
 
   defp list_due_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
@@ -3167,22 +2754,6 @@ defmodule Cadence.Contacts do
     |> Atom.to_string()
     |> String.replace("_", " ")
     |> String.upcase()
-  end
-
-  defp put_organization_scope(%PathTemplate{} = path_template, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case path_template.organization_id do
-      nil ->
-        {:ok, %PathTemplate{path_template | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, path_template}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          path_template.mission_id}}
-    end
   end
 
   defp put_organization_scope(%LinkAssignment{} = assignment, organization_id)

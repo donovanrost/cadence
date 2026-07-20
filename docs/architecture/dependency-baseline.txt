@@ -44,7 +44,6 @@ persistence_schema|lib/cadence/contact_planning/planner.ex|lib/cadence/persisten
 persistence_schema|lib/cadence/contact_planning/planner.ex|lib/cadence/persistence/schemas/contact_planning_search_row.ex
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/contact_action_row.ex
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/contact_link_assignment_row.ex
-persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/contact_path_template_row.ex
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/realized_contact_row.ex
 persistence_schema|lib/cadence/contacts.ex|lib/cadence/persistence/schemas/scheduled_contact_row.ex
 persistence_schema|lib/cadence/contacts/provider_change_approvals.ex|lib/cadence/persistence/schemas/provider_change_approval_row.ex

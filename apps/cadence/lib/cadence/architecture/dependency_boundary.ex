@@ -74,7 +74,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/activations/", "lib/cadence/catalog/", "lib/cadence/governance/"],
      @catalog_context},
     {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context},
-    {["lib/cadence/contacts/profile_store/"], @contacts_context},
+    {[
+       "lib/cadence/contacts/path_template_store/",
+       "lib/cadence/contacts/profile_store/"
+     ], @contacts_context},
     {["lib/cadence/limits/"], @limits_context},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ContactPathTemplateRow do
+defmodule Cadence.Contacts.PathTemplateStore.PathTemplateRow do
   @moduledoc false
 
   use Ecto.Schema

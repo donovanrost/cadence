@@ -1931,6 +1931,18 @@ initial persistence, versioning, current/history listing, and deletion, while
 the existing Contacts tests preserve facade behavior. No route or
 authentication placement is involved; production source-size pressure remains
 1 with zero oversized test files or functions.
+Extracting reusable-path persistence, version history, reference pinning,
+validation, and runtime binding resolution into the 681-line
+`Cadence.Contacts.PathTemplateStore` reduced `Cadence.Contacts` from 3,235 to
+2,806 lines. The Contacts facade preserves its scoped and legacy APIs while
+scheduled-contact assembly delegates path-template lookup and resolution to
+the extracted owner. The path-template row now lives under that store,
+reducing the persistence-schema baseline from 105 to 104, and the Contacts
+ownership guard covers it. A focused data test covers profile-version pinning,
+path resolution, versioning, current/history listing, and tombstones; the
+existing Contacts tests preserve scheduled-contact realization and facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 1 with zero oversized test files or functions.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
