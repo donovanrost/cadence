@@ -26,6 +26,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   alias Cadence.Dashboards.SourceRegistry.{
     AdapterOptions,
+    AdapterSelection,
     CapabilityPosture,
     ContractValidation,
     ExecutionMonitoring,
@@ -37,21 +38,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
     WatermarkMerge
   }
 
-  alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}
-
   @type adapter :: module()
   @type adapter_map :: %{optional(atom()) => adapter()}
   @type capability_context :: %{
           capabilities: SourceCapabilities.t(),
           provenance: map()
         }
-
-  @default_adapters %{
-    telemetry: Telemetry,
-    limits: Limits,
-    events: Events,
-    operational_observables: OperationalObservables
-  }
 
   @spec capability_fingerprint(keyword()) :: binary()
   def capability_fingerprint(opts \\ []) when is_list(opts) do
@@ -70,7 +62,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   def capabilities(logical_source_or_request, opts \\ [])
 
   def capabilities(logical_source, opts) when is_atom(logical_source) and is_list(opts) do
-    with {:ok, adapter} <- adapter_for_logical_source(logical_source, opts),
+    with {:ok, adapter} <- AdapterSelection.for_logical_source(logical_source, opts),
          {:module, ^adapter} <- Code.ensure_loaded(adapter),
          true <- function_exported?(adapter, :capabilities, 0) do
       adapter.capabilities()
@@ -140,7 +132,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
          resolved_binding,
          opts
        ) do
-    with {:ok, adapter} <- adapter_for(resolved_binding, opts),
+    with {:ok, adapter} <- AdapterSelection.for_binding(resolved_binding, opts),
          {:ok, adapter_capabilities} <- adapter_capabilities(adapter, request, opts) do
       capabilities =
         SourceCapabilities.with_data_source_capabilities(
@@ -264,8 +256,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
       |> Enum.map(&Map.get(&1, :logical_source))
       |> Enum.reject(&is_nil/1)
 
-    @default_adapters
-    |> Map.keys()
+    AdapterSelection.logical_sources()
     |> Kernel.++(adapter_sources)
     |> Kernel.++(binding_sources)
     |> Enum.uniq()
@@ -412,7 +403,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
          resolved_binding,
          opts
        ) do
-    with {:ok, adapter} <- adapter_for(resolved_binding, opts),
+    with {:ok, adapter} <- AdapterSelection.for_binding(resolved_binding, opts),
          {:ok, facts} <- adapter_facts(adapter, request, resolved_binding, opts),
          {:ok, %{provenance: capability_provenance}} <-
            resolved_binding_capability_context(request, resolved_binding, opts) do
@@ -433,15 +424,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     case DataSourceRegistry.resolve(request, opts) do
       {:ok, resolved_binding} -> SourceExecutionPolicy.resolve(request, resolved_binding, opts)
       {:error, _warning} -> SourceExecutionPolicy.resolve(opts)
-    end
-  end
-
-  defp adapter_for_logical_source(logical_source, opts) do
-    adapters = Keyword.get(opts, :adapters, %{})
-
-    case Map.fetch(adapters, logical_source) do
-      {:ok, adapter} when is_atom(adapter) -> {:ok, adapter}
-      :error -> Map.fetch(@default_adapters, logical_source)
     end
   end
 
@@ -572,22 +554,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
       :unknown in completeness -> :unknown
       :partial in completeness -> :partial
       true -> :known
-    end
-  end
-
-  defp adapter_for(resolved_binding, opts) do
-    adapters = Keyword.get(opts, :adapters, %{})
-    logical_source = resolved_binding.binding.logical_source
-
-    case Map.fetch(adapters, logical_source) do
-      {:ok, adapter} ->
-        {:ok, adapter}
-
-      :error ->
-        case resolved_binding.data_source.adapter do
-          adapter when is_atom(adapter) and not is_nil(adapter) -> {:ok, adapter}
-          _other -> :error
-        end
     end
   end
 
@@ -746,7 +712,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
   end
 
   defp execute_adapter(%PlannedSourceRequest{} = request, resolved_binding, opts) do
-    case adapter_for(resolved_binding, opts) do
+    case AdapterSelection.for_binding(resolved_binding, opts) do
       {:ok, adapter} ->
         adapter
         |> execute_adapter_result(request, resolved_binding, opts)
