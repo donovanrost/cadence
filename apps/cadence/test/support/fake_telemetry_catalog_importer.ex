@@ -3,8 +3,7 @@ defmodule Cadence.TestSupport.FakeTelemetryCatalogImporter do
 
   @behaviour Cadence.Catalog.Importer
 
-  alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Diagnostic, ImporterDescriptor, ImportResult}
+  alias Cadence.Catalog.{Diagnostic, ImporterDescriptor, ImportResult, Source}
   alias Cadence.Catalog.Telemetry.{Packet, Snapshot}
 
   @impl true
@@ -20,26 +19,26 @@ defmodule Cadence.TestSupport.FakeTelemetryCatalogImporter do
   end
 
   @impl true
-  def validate_artifact(%Artifact{source_artifact: %{"packets" => packets}})
+  def validate(%Source{source_artifact: %{"packets" => packets}})
       when is_list(packets),
       do: :ok
 
-  def validate_artifact(_artifact), do: {:error, :invalid_fake_tm_json}
+  def validate(_source), do: {:error, :invalid_fake_tm_json}
 
   @impl true
-  def import(%Artifact{} = artifact, %{import_run_id: import_run_id}) do
-    packets = artifact.source_artifact["packets"]
+  def import(%Source{} = source, %{import_run_id: import_run_id}) do
+    packets = source.source_artifact["packets"]
     packet_names = Enum.map(packets, &Map.get(&1, "name"))
 
     snapshot =
       Snapshot.new(%{
         snapshot_id: "telemetry_snapshot:" <> import_run_id,
-        organization_id: artifact.organization_id,
-        mission_id: artifact.mission_id,
-        artifact_id: artifact.artifact_id,
+        organization_id: source.organization_id,
+        mission_id: source.mission_id,
+        artifact_id: source.artifact_id,
         import_run_id: import_run_id,
         importer_key: descriptor().importer_key,
-        snapshot_name: artifact.artifact_name,
+        snapshot_name: source.artifact_name,
         packets:
           Enum.with_index(packet_names)
           |> Enum.map(fn {packet_name, index} ->
@@ -51,35 +50,20 @@ defmodule Cadence.TestSupport.FakeTelemetryCatalogImporter do
           end)
       })
 
-    with {:ok, persisted_snapshot} <-
-           Catalog.persist_telemetry_snapshot(artifact.organization_id, snapshot) do
-      {:ok,
-       ImportResult.new(%{
-         snapshot_id: persisted_snapshot.snapshot_id,
-         imported_definition_count: length(packets),
-         diagnostics: [
-           Diagnostic.new(%{
-             severity: :warning,
-             code: "fake_tm_json.warning",
-             message: "Importer preserved format-specific extensions",
-             path: ["packets"],
-             metadata: %{"packet_names" => packet_names}
-           })
-         ],
-         result_document: %{
-           "import_run_id" => import_run_id,
-           "packet_names" => packet_names,
-           "snapshot" => %{
-             "snapshot_id" => persisted_snapshot.snapshot_id,
-             "snapshot_name" => persisted_snapshot.snapshot_name,
-             "packet_count" => length(persisted_snapshot.packets),
-             "point_count" => 0,
-             "type_count" => 0,
-             "unit_count" => 0,
-             "calibration_algorithm_count" => 0
-           }
-         }
-       })}
-    end
+    {:ok,
+     ImportResult.new(%{
+       telemetry_snapshot: snapshot,
+       imported_definition_count: length(packets),
+       diagnostics: [
+         Diagnostic.new(%{
+           severity: :warning,
+           code: "fake_tm_json.warning",
+           message: "Importer preserved format-specific extensions",
+           path: ["packets"],
+           metadata: %{"packet_names" => packet_names}
+         })
+       ],
+       metadata: %{"packet_names" => packet_names}
+     })}
   end
 end

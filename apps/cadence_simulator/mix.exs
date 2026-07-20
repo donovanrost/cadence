@@ -30,6 +30,7 @@ defmodule CadenceSimulator.MixProject do
   defp deps do
     [
       {:bandit, "~> 1.5"},
+      {:cadence_catalog, in_umbrella: true},
       {:cadence_ccsds, in_umbrella: true},
       {:cadence, in_umbrella: true, only: :test},
       {:jason, "~> 1.4"},

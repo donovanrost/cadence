@@ -101,8 +101,10 @@ config :cadence,
   ],
   bootstrap_admin: [enabled: false],
   command_verifier_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
-  catalog_importers: [Cadence.Catalog.Importers.CadenceYamlDatabase],
   generators: [timestamp_type: :utc_datetime_usec]
+
+config :cadence_catalog,
+  catalog_importers: [Cadence.Catalog.Importers.CadenceYamlDatabase]
 
 config :cadence_web, CadenceWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,

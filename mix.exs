@@ -84,6 +84,10 @@ defmodule CadenceUmbrella.MixProject do
       run_child_test_command(:cadence, cadence_test_args(args))
     end
 
+    if args = Map.get(args_by_app, :cadence_catalog) do
+      run_child_test_command(:cadence_catalog, args)
+    end
+
     if args = Map.get(args_by_app, :cadence_ccsds) do
       run_child_test_command(:cadence_ccsds, args)
     end
@@ -129,6 +133,7 @@ defmodule CadenceUmbrella.MixProject do
       [] ->
         %{
           cadence: args,
+          cadence_catalog: args,
           cadence_ccsds: args,
           cadence_simulator: args,
           cadence_web: args
@@ -140,7 +145,7 @@ defmodule CadenceUmbrella.MixProject do
   end
 
   defp child_apps_for_arg(arg) do
-    [:cadence, :cadence_ccsds, :cadence_simulator, :cadence_web]
+    [:cadence, :cadence_catalog, :cadence_ccsds, :cadence_simulator, :cadence_web]
     |> Enum.filter(&child_path_arg?(arg, &1))
   end
 
@@ -161,7 +166,7 @@ defmodule CadenceUmbrella.MixProject do
 
   defp known_child_path_arg?(arg) when is_binary(arg) do
     Enum.any?(
-      [:cadence, :cadence_ccsds, :cadence_simulator, :cadence_web],
+      [:cadence, :cadence_catalog, :cadence_ccsds, :cadence_simulator, :cadence_web],
       &child_path_arg?(arg, &1)
     )
   end
@@ -173,6 +178,7 @@ defmodule CadenceUmbrella.MixProject do
   end
 
   defp child_path(:cadence), do: "apps/cadence"
+  defp child_path(:cadence_catalog), do: "apps/cadence_catalog"
   defp child_path(:cadence_ccsds), do: "apps/cadence_ccsds"
   defp child_path(:cadence_simulator), do: "apps/cadence_simulator"
   defp child_path(:cadence_web), do: "apps/cadence_web"

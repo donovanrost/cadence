@@ -15,12 +15,14 @@ defmodule Cadence.Catalog do
     Database,
     DatabaseRow,
     Events,
+    ImportExecution,
     ImportResult,
     ImportRun,
     ImportRunRow,
     Registry,
     Revision,
     RevisionRow,
+    Source,
     TelemetrySnapshotRow
   }
 
@@ -744,34 +746,36 @@ defmodule Cadence.Catalog do
       import_run_id: run.import_run_id
     }
 
-    case importer_module.import(artifact, context) do
+    case importer_module.import(source_from_artifact(artifact), context) do
       {:ok, %ImportResult{} = import_result} ->
-        completed_run =
-          %ImportRun{
-            run
-            | snapshot_id: import_result.snapshot_id,
-              status: :completed,
-              imported_definition_count: import_result.imported_definition_count,
-              diagnostics: import_result.diagnostics,
-              result_document: import_result.result_document,
-              failure_reason: nil,
-              completed_at: DateTime.utc_now()
-          }
+        case ImportExecution.persist(
+               run.organization_id,
+               run.import_run_id,
+               import_result
+             ) do
+          {:ok, outcome} ->
+            completed_run =
+              %ImportRun{
+                run
+                | snapshot_id: outcome.snapshot_id,
+                  status: :completed,
+                  imported_definition_count: outcome.imported_definition_count,
+                  diagnostics: outcome.diagnostics,
+                  result_document: outcome.result_document,
+                  failure_reason: nil,
+                  completed_at: DateTime.utc_now()
+              }
 
-        completed_run
-        |> maybe_attach_created_revision()
-        |> update_run()
+            completed_run
+            |> maybe_attach_created_revision()
+            |> update_run()
+
+          {:error, reason} ->
+            fail_run(run, reason)
+        end
 
       {:error, reason} ->
-        failed_run =
-          %ImportRun{
-            run
-            | status: :failed,
-              failure_reason: reason,
-              completed_at: DateTime.utc_now()
-          }
-
-        update_run(failed_run)
+        fail_run(run, reason)
     end
   rescue
     exception ->
@@ -795,6 +799,17 @@ defmodule Cadence.Catalog do
         }
 
       update_run(failed_run)
+  end
+
+  defp fail_run(%ImportRun{} = run, reason) do
+    failed_run = %ImportRun{
+      run
+      | status: :failed,
+        failure_reason: reason,
+        completed_at: DateTime.utc_now()
+    }
+
+    update_run(failed_run)
   end
 
   defp insert_run(%ImportRun{} = run) do
@@ -965,11 +980,26 @@ defmodule Cadence.Catalog do
   end
 
   defp validate_artifact(importer_module, %Artifact{} = artifact) do
-    if function_exported?(importer_module, :validate_artifact, 1) do
-      importer_module.validate_artifact(artifact)
+    if function_exported?(importer_module, :validate, 1) do
+      importer_module.validate(source_from_artifact(artifact))
     else
       :ok
     end
+  end
+
+  defp source_from_artifact(%Artifact{} = artifact) do
+    Source.new(%{
+      artifact_id: artifact.artifact_id,
+      organization_id: artifact.organization_id,
+      mission_id: artifact.mission_id,
+      catalog_family: artifact.catalog_family,
+      artifact_name: artifact.artifact_name,
+      format_key: artifact.format_key,
+      format_version: artifact.format_version,
+      media_type: artifact.media_type,
+      source_artifact: artifact.source_artifact,
+      metadata: artifact.metadata
+    })
   end
 
   defp maybe_filter_catalog_family(query, nil), do: query

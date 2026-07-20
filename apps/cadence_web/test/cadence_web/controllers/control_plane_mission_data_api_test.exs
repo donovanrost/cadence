@@ -11,10 +11,10 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   alias Cadence.Jobs
 
   setup do
-    previous_importers = Application.get_env(:cadence, :catalog_importers, [])
+    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
     previous_bootstrap_admin = Application.get_env(:cadence, :bootstrap_admin, [])
 
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
     ])
 
@@ -31,7 +31,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
     on_exit(fn ->
-      Application.put_env(:cadence, :catalog_importers, previous_importers)
+      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
       Application.put_env(:cadence, :bootstrap_admin, previous_bootstrap_admin)
     end)
 
@@ -649,6 +649,14 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                  %{
                    "code" => "fake_tm_json.warning",
                    "severity" => "warning"
+                 },
+                 %{
+                   "code" => "telemetry_compiler.apid_required",
+                   "severity" => "error"
+                 },
+                 %{
+                   "code" => "telemetry_compiler.apid_required",
+                   "severity" => "error"
                  }
                ],
                "result_document" => %{
@@ -722,7 +730,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
        %{
          conn: conn
        } do
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       Cadence.Catalog.Importers.CadenceYamlDatabase
     ])
 
@@ -977,7 +985,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   test "authenticated mission API manages command stages, requests, approvals, and queue entries",
        %{conn: conn} do
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       Cadence.Catalog.Importers.CadenceYamlDatabase
     ])
 

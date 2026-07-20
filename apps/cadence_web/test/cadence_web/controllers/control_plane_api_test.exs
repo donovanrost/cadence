@@ -9,10 +9,10 @@ defmodule CadenceWeb.ControlPlaneApiTest do
   @bootstrap_admin_password "bootstrap-password-123"
 
   setup do
-    previous_importers = Application.get_env(:cadence, :catalog_importers, [])
+    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
     previous_bootstrap_admin = Application.get_env(:cadence, :bootstrap_admin, [])
 
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
     ])
 
@@ -29,7 +29,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
 
     on_exit(fn ->
-      Application.put_env(:cadence, :catalog_importers, previous_importers)
+      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
       Application.put_env(:cadence, :bootstrap_admin, previous_bootstrap_admin)
     end)
 

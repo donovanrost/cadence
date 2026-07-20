@@ -31,6 +31,7 @@ defmodule Cadence.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:cadence_catalog, in_umbrella: true},
       {:cadence_ccsds, in_umbrella: true},
       {:ecto_sql, "~> 3.13"},
       {:jason, "~> 1.4"},

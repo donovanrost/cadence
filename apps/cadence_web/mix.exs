@@ -43,6 +43,7 @@ defmodule CadenceWeb.MixProject do
     [
       {:bandit, "~> 1.5"},
       {:cadence, in_umbrella: true},
+      {:cadence_catalog, in_umbrella: true},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:heroicons,
        github: "tailwindlabs/heroicons",

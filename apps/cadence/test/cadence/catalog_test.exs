@@ -28,14 +28,14 @@ defmodule Cadence.CatalogTest do
     Process.put(:catalog_test_organization_id, organization_id)
     Process.put(:catalog_test_mission_id, mission_id)
 
-    previous_importers = Application.get_env(:cadence, :catalog_importers, [])
+    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
 
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       Cadence.TestSupport.FakeTelemetryCatalogImporter
     ])
 
     on_exit(fn ->
-      Application.put_env(:cadence, :catalog_importers, previous_importers)
+      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
     end)
 
     :ok
@@ -124,7 +124,12 @@ defmodule Cadence.CatalogTest do
     assert completed_run.snapshot_id == "telemetry_snapshot:" <> queued_run.import_run_id
     assert completed_run.imported_definition_count == 2
     assert completed_run.result_document["packet_names"] == ["HK_PACKET", "EVENT_PACKET"]
-    assert [%{code: "fake_tm_json.warning", severity: :warning}] = completed_run.diagnostics
+
+    assert Enum.map(completed_run.diagnostics, &{&1.code, &1.severity}) == [
+             {"fake_tm_json.warning", :warning},
+             {"telemetry_compiler.apid_required", :error},
+             {"telemetry_compiler.apid_required", :error}
+           ]
 
     assert {:ok, telemetry_snapshot} =
              Cadence.Catalog.fetch_telemetry_snapshot(

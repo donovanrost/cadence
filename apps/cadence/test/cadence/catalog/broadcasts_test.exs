@@ -7,15 +7,15 @@ defmodule Cadence.Catalog.BroadcastsTest do
   @mission_id "mission-broadcasts"
 
   setup do
-    previous_importers = Application.get_env(:cadence, :catalog_importers, [])
+    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
 
-    Application.put_env(:cadence, :catalog_importers, [
+    Application.put_env(:cadence_catalog, :catalog_importers, [
       Cadence.TestSupport.FakeTelemetryCatalogImporter,
       Cadence.TestSupport.FakeFailingImporter
     ])
 
     on_exit(fn ->
-      Application.put_env(:cadence, :catalog_importers, previous_importers)
+      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
     end)
 
     persist_mission_scope(@organization_id, @mission_id)

@@ -3,7 +3,7 @@ defmodule Cadence.TestSupport.FakeFailingImporter do
 
   @behaviour Cadence.Catalog.Importer
 
-  alias Cadence.Catalog.{Artifact, ImporterDescriptor}
+  alias Cadence.Catalog.{ImporterDescriptor, Source}
 
   @impl true
   def descriptor do
@@ -18,10 +18,10 @@ defmodule Cadence.TestSupport.FakeFailingImporter do
   end
 
   @impl true
-  def validate_artifact(%Artifact{}), do: :ok
+  def validate(%Source{}), do: :ok
 
   @impl true
-  def import(%Artifact{}, _context) do
+  def import(%Source{}, _context) do
     {:error, :simulated_failure}
   end
 end
