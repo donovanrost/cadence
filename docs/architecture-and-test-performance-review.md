@@ -1885,6 +1885,18 @@ success reset, physical-source isolation, and health identity attributes;
 existing registry and evidence suites preserve facade behavior. No route or
 authentication placement is involved; production source-size pressure remains
 2 and dependency ratchets are unchanged.
+Extracting source-local option composition, request capability injection,
+binding context, credential resolution, and redacted-versus-ephemeral
+connection shaping into the 186-line
+`Cadence.Dashboards.SourceRegistry.AdapterOptions` reduced `SourceRegistry`
+from 1,237 to 1,087 lines. The registry retains adapter selection and
+request-aware capability lookup, then passes the selected capability contract
+into the extracted option boundary. Direct tests cover source options,
+freshness and persistence context, bearer material and normalized headers,
+redacted connection profiles, and descriptor-only public endpoints; existing
+registry, evidence, and BYO data-source suites preserve facade behavior. No
+route or authentication placement is involved; production source-size pressure
+remains 2 and dependency ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
