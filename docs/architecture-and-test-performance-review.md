@@ -1972,6 +1972,19 @@ reconciliation candidates, lifecycle updates, and filtered actions; existing
 Contacts, provider-change, projection, and web tests preserve integration
 behavior. No route or authentication placement is involved; production
 source-size pressure remains 1 with zero oversized test files or functions.
+Extracting scheduled-contact preparation, validation, reference resolution,
+and version pinning into the 254-line
+`Cadence.Contacts.ContactRuntimeConfig`, together with reconciliation,
+realization, cancellation, runtime transitions, and operator-action
+orchestration in the 653-line `Cadence.Contacts.ContactLifecycle`, reduced
+`Cadence.Contacts` from 1,585 to 665 lines. The public facade preserves its
+existing scoped APIs and keeps only organization-scoped persistence wrappers;
+the two extracted workflow owners compose the contact store and supporting
+Contacts stores directly. Existing Contacts, scheduler, runtime, and
+architecture-guard tests preserve the facade and lifecycle behavior. No route
+or authentication placement is involved. Production source-size pressure
+falls from 1 to 0, with zero oversized test files or functions and unchanged
+dependency ratchets.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

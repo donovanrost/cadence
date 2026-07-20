@@ -5,11 +5,12 @@ defmodule Cadence.Contacts do
 
   alias Cadence.Contacts.{
     ContactAction,
+    ContactLifecycle,
+    ContactRuntimeConfig,
     ContactStore,
     LinkAssignment,
     LinkAssignmentStore,
     LinkSetup,
-    Path,
     PathTemplate,
     PathTemplateStore,
     ProfileStore,
@@ -17,12 +18,10 @@ defmodule Cadence.Contacts do
     RealizedContact,
     ScheduledContact,
     SchedulerReadModel,
-    TransportProfile,
-    Validation
+    TransportProfile
   }
 
   alias Cadence.Missions
-  alias Cadence.Runtime
 
   @spec persist_provider_profile(binary(), ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
@@ -394,8 +393,8 @@ defmodule Cadence.Contacts do
   @spec persist_scheduled_contact(ScheduledContact.t()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
   def persist_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    with {:ok, prepared_scheduled_contact} <- prepare_scheduled_contact(scheduled_contact),
-         :ok <- validate_scheduled_contact(prepared_scheduled_contact) do
+    with {:ok, prepared_scheduled_contact} <- ContactRuntimeConfig.prepare(scheduled_contact),
+         :ok <- ContactRuntimeConfig.validate(prepared_scheduled_contact) do
       ContactStore.persist_scheduled(prepared_scheduled_contact)
     end
   end
@@ -508,52 +507,12 @@ defmodule Cadence.Contacts do
 
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do
-    do_reconcile(nil, reference_time)
+    ContactLifecycle.reconcile(reference_time)
   end
 
   @spec reconcile(binary(), DateTime.t()) :: {:ok, map()}
   def reconcile(mission_id, %DateTime{} = reference_time) when is_binary(mission_id) do
-    do_reconcile(mission_id, reference_time)
-  end
-
-  defp do_reconcile(mission_id, %DateTime{} = reference_time) do
-    restart_candidates =
-      list_active_realized_contacts_to_restart(reference_time, mission_id)
-
-    {expired_scheduled_contact_ids, expiration_errors} =
-      list_expired_scheduled_contacts(reference_time, mission_id)
-      |> collect_reconcile_results(&expire_scheduled_contact_for_reconcile(&1, reference_time))
-
-    {completed_scheduled_contact_ids, scheduled_completion_errors} =
-      list_completed_scheduled_contacts(reference_time, mission_id)
-      |> collect_reconcile_results(&complete_scheduled_contact_for_reconcile(&1, reference_time))
-
-    {realized_scheduled_contact_ids, realization_errors} =
-      list_due_scheduled_contacts(reference_time, mission_id)
-      |> collect_reconcile_results(&realize_scheduled_contact_for_reconcile(&1, reference_time))
-
-    {completed_realized_contact_ids, completion_errors} =
-      list_expired_active_realized_contacts(reference_time, mission_id)
-      |> collect_reconcile_results(&complete_realized_contact_for_reconcile(&1, reference_time))
-
-    {restarted_realized_contact_ids, restart_errors} =
-      restart_candidates
-      |> collect_reconcile_results(&restart_realized_contact_for_reconcile(&1, reference_time))
-
-    {:ok,
-     %{
-       reference_time: reference_time,
-       expired_scheduled_contact_ids: Enum.reverse(expired_scheduled_contact_ids),
-       completed_scheduled_contact_ids: Enum.reverse(completed_scheduled_contact_ids),
-       realized_scheduled_contact_ids: Enum.reverse(realized_scheduled_contact_ids),
-       completed_realized_contact_ids: Enum.reverse(completed_realized_contact_ids),
-       restarted_realized_contact_ids: Enum.reverse(restarted_realized_contact_ids),
-       errors:
-         Enum.reverse(expiration_errors) ++
-           Enum.reverse(scheduled_completion_errors) ++
-           Enum.reverse(realization_errors) ++
-           Enum.reverse(completion_errors) ++ Enum.reverse(restart_errors)
-     }}
+    ContactLifecycle.reconcile(mission_id, reference_time)
   end
 
   @spec next_contact_scheduler_wakeup(binary(), DateTime.t()) :: DateTime.t() | nil
@@ -581,121 +540,11 @@ defmodule Cadence.Contacts do
     ContactStore.scheduler_projection(mission_id)
   end
 
-  defp collect_reconcile_results(contacts, action)
-       when is_list(contacts) and is_function(action, 1) do
-    Enum.reduce(contacts, {[], []}, fn contact, {ids, errors} ->
-      case action.(contact) do
-        {:ok, contact_id} -> {[contact_id | ids], errors}
-        :skip -> {ids, errors}
-        {:error, error} -> {ids, [error | errors]}
-      end
-    end)
-  end
-
-  defp expire_scheduled_contact_for_reconcile(
-         %ScheduledContact{} = scheduled_contact,
-         reference_time
-       ) do
-    case expire_scheduled_contact(scheduled_contact, %{
-           expired_at: reference_time,
-           expired_from_schedule: true
-         }) do
-      {:ok, %ScheduledContact{} = expired_scheduled_contact} ->
-        {:ok, expired_scheduled_contact.scheduled_contact_id}
-
-      {:error, reason} ->
-        {:error, reconcile_error(:scheduled_contact_expiration, scheduled_contact, reason)}
-    end
-  end
-
-  defp complete_scheduled_contact_for_reconcile(
-         %ScheduledContact{} = scheduled_contact,
-         reference_time
-       ) do
-    case complete_scheduled_contact(scheduled_contact, %{
-           completed_at: reference_time,
-           completed_from_schedule: true
-         }) do
-      {:ok, %ScheduledContact{} = completed_scheduled_contact} ->
-        {:ok, completed_scheduled_contact.scheduled_contact_id}
-
-      {:error, reason} ->
-        {:error, reconcile_error(:scheduled_contact_completion, scheduled_contact, reason)}
-    end
-  end
-
-  defp realize_scheduled_contact_for_reconcile(
-         %ScheduledContact{} = scheduled_contact,
-         reference_time
-       ) do
-    case realize_scheduled_contact(
-           scheduled_contact.mission_id,
-           scheduled_contact.scheduled_contact_id,
-           clock_mode: :live,
-           initial_time: reference_time,
-           realized_at: reference_time,
-           transition_time: reference_time,
-           notify_scheduler?: false,
-           metadata: %{scheduler_realized?: true}
-         ) do
-      {:ok, %RealizedContact{} = realized_contact} ->
-        {:ok, realized_contact.realized_contact_id}
-
-      {:error, :scheduled_contact_already_realized} ->
-        :skip
-
-      {:error, reason} ->
-        {:error, reconcile_error(:scheduled_contact_realization, scheduled_contact, reason)}
-    end
-  end
-
-  defp complete_realized_contact_for_reconcile(
-         %RealizedContact{} = realized_contact,
-         reference_time
-       ) do
-    case complete_realized_contact(realized_contact, %{
-           completed_at: reference_time,
-           completed_from_schedule: true
-         }) do
-      {:ok, %RealizedContact{} = completed_realized_contact} ->
-        {:ok, completed_realized_contact.realized_contact_id}
-
-      {:error, reason} ->
-        {:error, reconcile_error(:realized_contact_completion, realized_contact, reason)}
-    end
-  end
-
-  defp restart_realized_contact_for_reconcile(
-         %RealizedContact{} = realized_contact,
-         reference_time
-       ) do
-    if Runtime.realized_contact_running?(
-         realized_contact.mission_id,
-         realized_contact.realized_contact_id
-       ) do
-      :skip
-    else
-      case start_runtime_and_mark_active(realized_contact, %{
-             reconciled_at: reference_time,
-             started_at: reference_time
-           }) do
-        {:ok, _pid} ->
-          {:ok, realized_contact.realized_contact_id}
-
-        {:error, reason} ->
-          {:error, reconcile_error(:realized_contact_restart, realized_contact, reason)}
-      end
-    end
-  end
-
   @spec realize_scheduled_contact(binary(), binary(), keyword()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
   def realize_scheduled_contact(mission_id, scheduled_contact_id, opts \\ [])
       when is_binary(mission_id) and is_binary(scheduled_contact_id) and is_list(opts) do
-    with {:ok, %ScheduledContact{} = scheduled_contact} <-
-           fetch_scheduled_contact(mission_id, scheduled_contact_id) do
-      realize_scheduled_contact_record(scheduled_contact, opts)
-    end
+    ContactLifecycle.realize_scheduled(mission_id, scheduled_contact_id, opts)
   end
 
   @spec realize_scheduled_contact(binary(), binary(), binary(), keyword()) ::
@@ -703,20 +552,19 @@ defmodule Cadence.Contacts do
   def realize_scheduled_contact(organization_id, mission_id, scheduled_contact_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(scheduled_contact_id) and is_list(opts) do
-    with {:ok, %ScheduledContact{} = scheduled_contact} <-
-           fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id) do
-      realize_scheduled_contact_record(scheduled_contact, opts)
-    end
+    ContactLifecycle.realize_scheduled(
+      organization_id,
+      mission_id,
+      scheduled_contact_id,
+      opts
+    )
   end
 
   @spec cancel_scheduled_contact(binary(), binary(), keyword()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
   def cancel_scheduled_contact(mission_id, scheduled_contact_id, opts \\ [])
       when is_binary(mission_id) and is_binary(scheduled_contact_id) and is_list(opts) do
-    with {:ok, %ScheduledContact{} = scheduled_contact} <-
-           fetch_scheduled_contact(mission_id, scheduled_contact_id) do
-      cancel_scheduled_contact_record(scheduled_contact, opts)
-    end
+    ContactLifecycle.cancel_scheduled(mission_id, scheduled_contact_id, opts)
   end
 
   @spec cancel_scheduled_contact(binary(), binary(), binary(), keyword()) ::
@@ -724,50 +572,37 @@ defmodule Cadence.Contacts do
   def cancel_scheduled_contact(organization_id, mission_id, scheduled_contact_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(scheduled_contact_id) and is_list(opts) do
-    with {:ok, %ScheduledContact{} = scheduled_contact} <-
-           fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id) do
-      cancel_scheduled_contact_record(scheduled_contact, opts)
-    end
+    ContactLifecycle.cancel_scheduled(
+      organization_id,
+      mission_id,
+      scheduled_contact_id,
+      opts
+    )
   end
 
   @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(%RealizedContact{} = realized_contact) do
-    start_runtime_and_mark_active(realized_contact, %{started_at: DateTime.utc_now()})
+    ContactLifecycle.start_realized(realized_contact)
   end
 
   @spec start_realized_contact(binary(), binary()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(mission_id, realized_contact_id)
       when is_binary(mission_id) and is_binary(realized_contact_id) do
-    with {:ok, %RealizedContact{} = realized_contact} <-
-           fetch_realized_contact(mission_id, realized_contact_id) do
-      start_realized_contact(realized_contact)
-    end
+    ContactLifecycle.start_realized(mission_id, realized_contact_id)
   end
 
   @spec start_realized_contact(binary(), binary(), binary()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(organization_id, mission_id, realized_contact_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) do
-    with {:ok, %RealizedContact{} = realized_contact} <-
-           fetch_realized_contact(organization_id, mission_id, realized_contact_id) do
-      start_realized_contact(realized_contact)
-    end
+    ContactLifecycle.start_realized(organization_id, mission_id, realized_contact_id)
   end
 
   @spec end_realized_contact_early(binary(), binary(), keyword()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
   def end_realized_contact_early(mission_id, realized_contact_id, opts \\ [])
       when is_binary(mission_id) and is_binary(realized_contact_id) and is_list(opts) do
-    case fetch_realized_contact(mission_id, realized_contact_id) do
-      {:ok, %RealizedContact{} = realized_contact} ->
-        end_realized_contact_early_record(realized_contact, opts)
-
-      {:error, :realized_contact_not_found} ->
-        case Runtime.stop_realized_contact(mission_id, realized_contact_id) do
-          :ok -> {:error, :realized_contact_not_found}
-          {:error, reason} -> {:error, reason}
-        end
-    end
+    ContactLifecycle.end_realized_early(mission_id, realized_contact_id, opts)
   end
 
   @spec end_realized_contact_early(binary(), binary(), binary(), keyword()) ::
@@ -775,780 +610,25 @@ defmodule Cadence.Contacts do
   def end_realized_contact_early(organization_id, mission_id, realized_contact_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) and is_list(opts) do
-    case fetch_realized_contact(organization_id, mission_id, realized_contact_id) do
-      {:ok, %RealizedContact{} = realized_contact} ->
-        end_realized_contact_early_record(realized_contact, opts)
-
-      {:error, :realized_contact_not_found} ->
-        case Runtime.stop_realized_contact(mission_id, realized_contact_id) do
-          :ok -> {:error, :realized_contact_not_found}
-          {:error, reason} -> {:error, reason}
-        end
-    end
+    ContactLifecycle.end_realized_early(
+      organization_id,
+      mission_id,
+      realized_contact_id,
+      opts
+    )
   end
 
   @spec stop_realized_contact(binary(), binary()) :: :ok | {:error, term()}
   def stop_realized_contact(mission_id, realized_contact_id)
       when is_binary(mission_id) and is_binary(realized_contact_id) do
-    case end_realized_contact_early(mission_id, realized_contact_id) do
-      {:ok, _realized_contact} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    ContactLifecycle.stop_realized(mission_id, realized_contact_id)
   end
 
   @spec stop_realized_contact(binary(), binary(), binary()) :: :ok | {:error, term()}
   def stop_realized_contact(organization_id, mission_id, realized_contact_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) do
-    case end_realized_contact_early(organization_id, mission_id, realized_contact_id, []) do
-      {:ok, _realized_contact} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp validate_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    with {:ok, resolved_paths} <- resolve_scheduled_contact_paths(scheduled_contact) do
-      Validation.scheduled_contact(scheduled_contact, resolved_paths)
-    end
-  end
-
-  defp realize_scheduled_contact_record(%ScheduledContact{} = scheduled_contact, opts) do
-    transition_time = Keyword.get(opts, :transition_time, DateTime.utc_now())
-
-    with :ok <- Validation.schedule_realization(scheduled_contact),
-         {:ok, realized_contact} <- build_realized_contact(scheduled_contact, opts),
-         :ok <- Validation.unique_path_ids(realized_contact.paths) do
-      with {:ok, %RealizedContact{} = persisted_realized_contact} <-
-             persist_realized_contact_transaction(scheduled_contact, realized_contact),
-           {:ok, _pid} <-
-             start_runtime_and_mark_active(persisted_realized_contact, %{
-               activated_from_schedule: true,
-               started_at: transition_time
-             }),
-           {:ok, %RealizedContact{} = active_realized_contact} <-
-             fetch_realized_contact(
-               persisted_realized_contact.mission_id,
-               persisted_realized_contact.realized_contact_id
-             ) do
-        scheduled_contact
-        |> realized_scheduled_contact_projection(active_realized_contact)
-        |> maybe_notify_contact_changed(opts)
-
-        active_realized_contact
-        |> maybe_notify_contact_changed(opts)
-      end
-    end
-  end
-
-  defp cancel_scheduled_contact_record(%ScheduledContact{} = scheduled_contact, opts) do
-    transition_time = Keyword.get(opts, :transition_time, DateTime.utc_now())
-
-    case scheduled_contact.lifecycle_state do
-      :canceled ->
-        {:ok, scheduled_contact}
-
-      :completed ->
-        {:error, :scheduled_contact_completed}
-
-      :expired ->
-        {:error, :scheduled_contact_expired}
-
-      _other_state ->
-        with {:ok, _realized_contact} <-
-               maybe_stop_linked_realized_contact_for_schedule_cancellation(
-                 scheduled_contact,
-                 transition_time,
-                 opts
-               ),
-             {:ok, %ScheduledContact{} = canceled_scheduled_contact} <-
-               update_scheduled_contact_lifecycle(
-                 scheduled_contact,
-                 :canceled,
-                 schedule_cancellation_metadata(
-                   scheduled_contact,
-                   transition_time,
-                   opts
-                 )
-               ),
-             {:ok, %ContactAction{}} <-
-               persist_contact_action(
-                 build_scheduled_contact_canceled_action(
-                   canceled_scheduled_contact,
-                   transition_time,
-                   opts
-                 )
-               ) do
-          canceled_scheduled_contact
-          |> notify_contact_changed()
-        end
-    end
-  end
-
-  defp end_realized_contact_early_record(%RealizedContact{} = realized_contact, opts) do
-    transition_time = Keyword.get(opts, :transition_time, DateTime.utc_now())
-
-    with {:ok, %RealizedContact{} = stopped_realized_contact} <-
-           stop_realized_contact_transition(
-             realized_contact,
-             realized_contact_stop_metadata(transition_time, opts)
-           ),
-         {:ok, _scheduled_contact} <-
-           maybe_cancel_linked_scheduled_contact_for_realized_stop(
-             realized_contact,
-             transition_time,
-             opts
-           ),
-         {:ok, %ContactAction{}} <-
-           persist_contact_action(
-             build_realized_contact_ended_early_action(
-               stopped_realized_contact,
-               transition_time,
-               opts
-             )
-           ) do
-      stopped_realized_contact
-      |> notify_contact_changed()
-    end
-  end
-
-  defp persist_realized_contact_transaction(
-         %ScheduledContact{} = scheduled_contact,
-         %RealizedContact{} = realized_contact
-       ) do
-    ContactStore.persist_realization(scheduled_contact, realized_contact)
-  end
-
-  defp start_runtime_and_mark_active(
-         %RealizedContact{} = realized_contact,
-         metadata_patch
-       )
-       when is_map(metadata_patch) do
-    with {:ok, %RealizedContact{} = persisted_realized_contact} <-
-           ensure_persisted_realized_contact(realized_contact),
-         {:ok, pid} <- Runtime.start_realized_contact(persisted_realized_contact),
-         {:ok, _updated_realized_contact} <-
-           update_realized_contact_lifecycle(
-             persisted_realized_contact,
-             :active,
-             metadata_patch
-           ) do
-      {:ok, pid}
-    end
-  end
-
-  defp stop_realized_contact_transition(
-         %RealizedContact{} = realized_contact,
-         metadata_patch
-       )
-       when is_map(metadata_patch) do
-    with {:ok, %RealizedContact{} = persisted_realized_contact} <-
-           ensure_persisted_realized_contact(realized_contact),
-         {:ok, %RealizedContact{} = stopped_realized_contact} <-
-           mark_realized_contact_stopped(persisted_realized_contact, metadata_patch),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             stopped_realized_contact.mission_id,
-             stopped_realized_contact.realized_contact_id
-           ) do
-      {:ok, stopped_realized_contact}
-    end
-  end
-
-  defp mark_realized_contact_stopped(
-         %RealizedContact{lifecycle_state: state} = realized_contact,
-         _metadata_patch
-       )
-       when state in [:stopped, :completed],
-       do: {:ok, realized_contact}
-
-  defp mark_realized_contact_stopped(%RealizedContact{} = realized_contact, metadata_patch) do
-    update_realized_contact_lifecycle(
-      realized_contact,
-      :stopped,
-      metadata_patch
-    )
-  end
-
-  defp complete_realized_contact(
-         %RealizedContact{} = realized_contact,
-         metadata_patch
-       )
-       when is_map(metadata_patch) do
-    with {:ok, %RealizedContact{} = persisted_realized_contact} <-
-           ensure_persisted_realized_contact(realized_contact),
-         {:ok, %RealizedContact{} = completed_realized_contact} <-
-           update_realized_contact_lifecycle(
-             persisted_realized_contact,
-             :completed,
-             metadata_patch
-           ),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             completed_realized_contact.mission_id,
-             completed_realized_contact.realized_contact_id
-           ) do
-      {:ok, completed_realized_contact}
-    end
-  end
-
-  defp ensure_persisted_realized_contact(%RealizedContact{} = realized_contact) do
-    case fetch_realized_contact(realized_contact.mission_id, realized_contact.realized_contact_id) do
-      {:ok, %RealizedContact{} = persisted_realized_contact} ->
-        {:ok, persisted_realized_contact}
-
-      {:error, :realized_contact_not_found} ->
-        persist_realized_contact(realized_contact)
-    end
-  end
-
-  defp persist_contact_action(%ContactAction{} = contact_action) do
-    ContactStore.persist_action(contact_action)
-  end
-
-  defp maybe_stop_linked_realized_contact_for_schedule_cancellation(
-         %ScheduledContact{realized_contact_id: nil},
-         _transition_time,
-         _opts
-       ),
-       do: {:ok, nil}
-
-  defp maybe_stop_linked_realized_contact_for_schedule_cancellation(
-         %ScheduledContact{} = scheduled_contact,
-         transition_time,
-         opts
-       ) do
-    case fetch_realized_contact(
-           scheduled_contact.mission_id,
-           scheduled_contact.realized_contact_id
-         ) do
-      {:ok, %RealizedContact{} = realized_contact} ->
-        stop_realized_contact_transition(
-          realized_contact,
-          schedule_cancellation_realized_metadata(transition_time, opts)
-        )
-
-      {:error, :realized_contact_not_found} ->
-        {:ok, nil}
-    end
-  end
-
-  defp maybe_cancel_linked_scheduled_contact_for_realized_stop(
-         %RealizedContact{scheduled_contact_id: nil},
-         _transition_time,
-         _opts
-       ),
-       do: {:ok, nil}
-
-  defp maybe_cancel_linked_scheduled_contact_for_realized_stop(
-         %RealizedContact{} = realized_contact,
-         transition_time,
-         opts
-       ) do
-    case fetch_scheduled_contact(
-           realized_contact.mission_id,
-           realized_contact.scheduled_contact_id
-         ) do
-      {:ok, %ScheduledContact{lifecycle_state: state} = scheduled_contact}
-      when state in [:canceled, :completed, :expired] ->
-        {:ok, scheduled_contact}
-
-      {:ok, %ScheduledContact{} = scheduled_contact} ->
-        update_scheduled_contact_lifecycle(
-          scheduled_contact,
-          :canceled,
-          realized_contact_cancellation_metadata(realized_contact, transition_time, opts)
-        )
-
-      {:error, :scheduled_contact_not_found} ->
-        {:ok, nil}
-    end
-  end
-
-  defp expire_scheduled_contact(
-         %ScheduledContact{} = scheduled_contact,
-         metadata_patch
-       )
-       when is_map(metadata_patch) do
-    update_scheduled_contact_lifecycle(scheduled_contact, :expired, metadata_patch)
-  end
-
-  defp complete_scheduled_contact(
-         %ScheduledContact{} = scheduled_contact,
-         metadata_patch
-       )
-       when is_map(metadata_patch) do
-    update_scheduled_contact_lifecycle(scheduled_contact, :completed, metadata_patch)
-  end
-
-  defp update_scheduled_contact_lifecycle(
-         %ScheduledContact{} = scheduled_contact,
-         lifecycle_state,
-         metadata_patch
-       )
-       when is_atom(lifecycle_state) and is_map(metadata_patch) do
-    ContactStore.update_scheduled_lifecycle(
-      scheduled_contact,
-      lifecycle_state,
-      metadata_patch
-    )
-  end
-
-  defp update_realized_contact_lifecycle(
-         %RealizedContact{} = realized_contact,
-         lifecycle_state,
-         metadata_patch
-       )
-       when is_atom(lifecycle_state) and is_map(metadata_patch) do
-    ContactStore.update_realized_lifecycle(
-      realized_contact,
-      lifecycle_state,
-      metadata_patch
-    )
-  end
-
-  defp build_realized_contact(%ScheduledContact{} = scheduled_contact, opts) do
-    with {:ok, resolved_paths} <- resolve_scheduled_contact_paths(scheduled_contact) do
-      metadata =
-        scheduled_contact.metadata
-        |> Map.merge(%{
-          scheduled_contact_id: scheduled_contact.scheduled_contact_id,
-          provider_contact_ref: scheduled_contact.provider_contact_ref,
-          contact_intents: scheduled_contact.contact_intents,
-          link_assignment_refs: scheduled_contact.link_assignment_refs,
-          path_template_ids: scheduled_contact.path_template_ids,
-          path_template_refs: scheduled_contact.path_template_refs
-        })
-        |> Map.merge(Keyword.get(opts, :metadata, %{}))
-
-      {:ok,
-       RealizedContact.new(%{
-         realized_contact_id:
-           Keyword.get(
-             opts,
-             :realized_contact_id,
-             scheduled_contact.scheduled_contact_id <> "_run"
-           ),
-         organization_id: scheduled_contact.organization_id,
-         mission_id: scheduled_contact.mission_id,
-         scheduled_contact_id: scheduled_contact.scheduled_contact_id,
-         source_endpoint_refs: scheduled_contact.source_endpoint_refs,
-         contact_intents: scheduled_contact.contact_intents,
-         paths: resolved_paths,
-         clock_mode: Keyword.get(opts, :clock_mode, :live),
-         initial_time: Keyword.get(opts, :initial_time, scheduled_contact.starts_at),
-         lifecycle_state: :defined,
-         realized_at: Keyword.get(opts, :realized_at, DateTime.utc_now()),
-         metadata: metadata
-       })}
-    end
-  end
-
-  defp resolve_scheduled_contact_paths(%ScheduledContact{} = scheduled_contact) do
-    with {:ok, assignment_paths} <-
-           resolve_link_assignment_paths(
-             scheduled_contact.organization_id,
-             scheduled_contact.mission_id,
-             scheduled_contact.link_assignment_refs
-           ),
-         {:ok, template_paths} <-
-           resolve_path_templates(
-             scheduled_contact.organization_id,
-             scheduled_contact.mission_id,
-             scheduled_contact.path_template_ids,
-             scheduled_contact.path_template_refs
-           ) do
-      {:ok, assignment_paths ++ template_paths ++ scheduled_contact.paths}
-    end
-  end
-
-  defp resolve_link_assignment_paths(_organization_id, _mission_id, []), do: {:ok, []}
-
-  defp resolve_link_assignment_paths(organization_id, mission_id, link_assignment_refs)
-       when is_binary(mission_id) and is_list(link_assignment_refs) do
-    Enum.reduce_while(link_assignment_refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %LinkAssignment{} = assignment} <-
-             fetch_link_assignment_ref_for_scope(organization_id, mission_id, ref),
-           {:ok, %PathTemplate{} = path_template} <-
-             fetch_path_template_ref_for_scope(organization_id, mission_id, %{
-               "path_template_id" => assignment.path_template_id,
-               "version" => assignment.path_template_version
-             }),
-           {:ok, %Path{} = resolved_path} <-
-             assignment_path_template(assignment, path_template)
-             |> resolve_path_template() do
-        {:cont, {:ok, acc ++ [resolved_path]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp assignment_path_template(%LinkAssignment{} = assignment, %PathTemplate{} = path_template) do
-    provider_profile_refs =
-      if assignment.provider_profile_refs == [] do
-        path_template.provider_profile_refs
-      else
-        assignment.provider_profile_refs
-      end
-
-    transport_profile_refs =
-      if assignment.transport_profile_refs == [] do
-        path_template.transport_profile_refs
-      else
-        assignment.transport_profile_refs
-      end
-
-    metadata =
-      path_template.metadata
-      |> Map.merge(assignment.metadata)
-      |> Map.put("link_assignment_id", assignment.link_assignment_id)
-      |> Map.put("spacecraft_id", assignment.spacecraft_id)
-
-    %PathTemplate{
-      path_template
-      | path_id: assignment.link_assignment_id,
-        direction: assignment.direction,
-        selection_role: assignment.selection_role,
-        source_endpoint_ref: assignment.source_endpoint_ref,
-        provider_path_ref: assignment.provider_path_ref || path_template.provider_path_ref,
-        provider_profile_ids: ids_from_refs(provider_profile_refs, "provider_profile_id"),
-        provider_profile_refs: provider_profile_refs,
-        transport_profile_ids: ids_from_refs(transport_profile_refs, "transport_profile_id"),
-        transport_profile_refs: transport_profile_refs,
-        metadata: metadata
-    }
-  end
-
-  defp resolve_path_templates(_organization_id, _mission_id, [], []), do: {:ok, []}
-
-  defp resolve_path_templates(organization_id, mission_id, path_template_ids, path_template_refs)
-       when is_binary(mission_id) and is_list(path_template_ids) and is_list(path_template_refs) do
-    refs =
-      if path_template_refs == [],
-        do: refs_from_ids(path_template_ids, "path_template_id"),
-        else: path_template_refs
-
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %PathTemplate{} = path_template} <-
-             fetch_path_template_ref_for_scope(organization_id, mission_id, ref),
-           {:ok, %Path{} = resolved_path} <- resolve_path_template(path_template) do
-        {:cont, {:ok, acc ++ [resolved_path]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp fetch_link_assignment_for_scope(organization_id, mission_id, link_assignment_id)
-       when is_binary(organization_id) and organization_id != "" do
-    fetch_link_assignment(organization_id, mission_id, link_assignment_id)
-  end
-
-  defp fetch_link_assignment_for_scope(_organization_id, mission_id, link_assignment_id) do
-    fetch_link_assignment(mission_id, link_assignment_id)
-  end
-
-  defp fetch_link_assignment_ref_for_scope(organization_id, mission_id, ref) do
-    case Map.get(ref, "link_assignment_id") do
-      link_assignment_id when is_binary(link_assignment_id) and link_assignment_id != "" ->
-        fetch_link_assignment_for_scope(organization_id, mission_id, link_assignment_id)
-
-      _other ->
-        {:error, :invalid_contact_runtime_config_reference}
-    end
-  end
-
-  defp resolve_path_template(%PathTemplate{} = path_template) do
-    PathTemplateStore.resolve(path_template)
-  end
-
-  defp fetch_path_template_ref_for_scope(organization_id, mission_id, ref) do
-    PathTemplateStore.fetch_ref(organization_id, mission_id, ref)
-  end
-
-  defp prepare_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    with :ok <- validate_ref_list(scheduled_contact.link_assignment_refs, "link_assignment_id"),
-         {:ok, link_assignments} <-
-           resolve_link_assignment_refs(
-             scheduled_contact.organization_id,
-             scheduled_contact.mission_id,
-             scheduled_contact.link_assignment_refs
-           ),
-         :ok <-
-           Validation.reusable_path_refs(
-             ids_from_refs(scheduled_contact.link_assignment_refs, "link_assignment_id")
-           ),
-         {:ok, path_template_refs} <-
-           normalize_versioned_refs(
-             scheduled_contact.path_template_ids,
-             scheduled_contact.path_template_refs,
-             "path_template_id",
-             fn ref ->
-               fetch_path_template_ref_for_scope(
-                 scheduled_contact.organization_id,
-                 scheduled_contact.mission_id,
-                 ref
-               )
-             end
-           ),
-         :ok <-
-           Validation.reusable_path_refs(ids_from_refs(path_template_refs, "path_template_id")) do
-      source_endpoint_refs =
-        scheduled_contact.source_endpoint_refs
-        |> Kernel.++(Enum.map(link_assignments, & &1.source_endpoint_ref))
-        |> Enum.reject(&is_nil/1)
-        |> Enum.uniq()
-
-      {:ok,
-       %ScheduledContact{
-         scheduled_contact
-         | source_endpoint_refs: source_endpoint_refs,
-           link_assignment_refs: Enum.map(link_assignments, &link_assignment_ref_from_resource/1),
-           path_template_ids: ids_from_refs(path_template_refs, "path_template_id"),
-           path_template_refs: path_template_refs
-       }}
-    end
-  end
-
-  defp resolve_link_assignment_refs(organization_id, mission_id, link_assignment_refs)
-       when is_list(link_assignment_refs) do
-    Enum.reduce_while(link_assignment_refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_link_assignment_ref_for_scope(organization_id, mission_id, ref) do
-        {:ok, %LinkAssignment{} = assignment} -> {:cont, {:ok, acc ++ [assignment]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp link_assignment_ref_from_resource(%LinkAssignment{} = assignment) do
-    %{"link_assignment_id" => assignment.link_assignment_id}
-  end
-
-  defp normalize_versioned_refs([], [], _id_key, _fetch_ref), do: {:ok, []}
-
-  defp normalize_versioned_refs(ids, refs, id_key, fetch_ref)
-       when is_list(ids) and is_list(refs) and is_binary(id_key) and is_function(fetch_ref, 1) do
-    requested_refs =
-      cond do
-        refs != [] ->
-          refs
-
-        ids != [] ->
-          refs_from_ids(ids, id_key)
-
-        true ->
-          []
-      end
-
-    with :ok <- validate_ref_list(requested_refs, id_key),
-         :ok <- validate_ref_id_alignment(ids, requested_refs, id_key) do
-      resolve_versioned_refs(requested_refs, id_key, fetch_ref)
-    end
-  end
-
-  defp validate_ref_list(refs, id_key) when is_list(refs) and is_binary(id_key) do
-    if Enum.all?(refs, fn ref ->
-         is_binary(Map.get(ref, id_key)) and Map.get(ref, id_key) != "" and
-           (is_nil(Map.get(ref, "version")) or
-              (is_integer(Map.get(ref, "version")) and Map.get(ref, "version") > 0))
-       end) do
-      :ok
-    else
-      {:error, :invalid_contact_runtime_config_reference}
-    end
-  end
-
-  defp validate_ref_id_alignment([], _refs, _id_key), do: :ok
-
-  defp validate_ref_id_alignment(ids, refs, id_key)
-       when is_list(ids) and is_list(refs) and is_binary(id_key) do
-    if ids == ids_from_refs(refs, id_key) do
-      :ok
-    else
-      {:error, :contact_runtime_config_reference_mismatch}
-    end
-  end
-
-  defp resolve_versioned_refs(refs, id_key, fetch_ref)
-       when is_list(refs) and is_binary(id_key) and is_function(fetch_ref, 1) do
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_ref.(ref) do
-        {:ok, resource} ->
-          {:cont, {:ok, acc ++ [versioned_ref_from_resource(resource, id_key)]}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp versioned_ref_from_resource(resource, id_key) do
-    %{id_key => versioned_ref_resource_id(resource, id_key), "version" => resource.version}
-  end
-
-  defp versioned_ref_resource_id(resource, "path_template_id"),
-    do: resource.path_template_id
-
-  defp ids_from_refs(refs, id_key) when is_list(refs) and is_binary(id_key) do
-    Enum.map(refs, &Map.get(&1, id_key))
-  end
-
-  defp refs_from_ids(ids, id_key) when is_list(ids) and is_binary(id_key) do
-    Enum.map(ids, &%{id_key => &1})
-  end
-
-  defp list_due_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
-    ContactStore.due_scheduled(reference_time, mission_id)
-  end
-
-  defp list_expired_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
-    ContactStore.expired_scheduled(reference_time, mission_id)
-  end
-
-  defp list_completed_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
-    ContactStore.completed_scheduled(reference_time, mission_id)
-  end
-
-  defp list_active_realized_contacts_to_restart(%DateTime{} = reference_time, mission_id) do
-    ContactStore.active_realized_to_restart(reference_time, mission_id)
-  end
-
-  defp list_expired_active_realized_contacts(%DateTime{} = reference_time, mission_id) do
-    ContactStore.expired_active_realized(reference_time, mission_id)
-  end
-
-  defp notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
-    ContactStore.notify_contact_changed(scheduled_contact)
-  end
-
-  defp notify_contact_changed(%RealizedContact{} = realized_contact) do
-    ContactStore.notify_contact_changed(realized_contact)
-  end
-
-  defp maybe_notify_contact_changed(contact, opts) do
-    if Keyword.get(opts, :notify_scheduler?, true) do
-      notify_contact_changed(contact)
-    else
-      {:ok, contact}
-    end
-  end
-
-  defp realized_scheduled_contact_projection(
-         %ScheduledContact{} = scheduled_contact,
-         %RealizedContact{} = realized_contact
-       ) do
-    %ScheduledContact{
-      scheduled_contact
-      | lifecycle_state: :realized,
-        realized_contact_id: realized_contact.realized_contact_id
-    }
-  end
-
-  defp reconcile_error(kind, %ScheduledContact{} = scheduled_contact, reason) do
-    %{
-      kind: kind,
-      mission_id: scheduled_contact.mission_id,
-      scheduled_contact_id: scheduled_contact.scheduled_contact_id,
-      reason: reason
-    }
-  end
-
-  defp reconcile_error(kind, %RealizedContact{} = realized_contact, reason) do
-    %{
-      kind: kind,
-      mission_id: realized_contact.mission_id,
-      realized_contact_id: realized_contact.realized_contact_id,
-      reason: reason
-    }
-  end
-
-  defp realized_contact_stop_metadata(transition_time, opts) do
-    %{
-      stopped_at: transition_time,
-      ended_early?: true
-    }
-    |> maybe_put_reason(opts)
-  end
-
-  defp schedule_cancellation_realized_metadata(transition_time, opts) do
-    %{
-      stopped_at: transition_time,
-      ended_early?: true,
-      stopped_from_schedule_cancellation: true
-    }
-    |> maybe_put_reason(opts)
-  end
-
-  defp schedule_cancellation_metadata(
-         %ScheduledContact{} = scheduled_contact,
-         transition_time,
-         opts
-       ) do
-    %{
-      canceled_at: transition_time,
-      canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id),
-      canceled_from_schedule_action: true
-    }
-    |> maybe_put_reason(opts)
-  end
-
-  defp realized_contact_cancellation_metadata(
-         %RealizedContact{} = realized_contact,
-         transition_time,
-         opts
-       ) do
-    %{
-      canceled_at: transition_time,
-      canceled_during_execution?: true,
-      canceled_from_realized_contact_stop: true,
-      realized_contact_id: realized_contact.realized_contact_id
-    }
-    |> maybe_put_reason(opts)
-  end
-
-  defp maybe_put_reason(metadata, opts) do
-    case Keyword.get(opts, :reason) do
-      nil -> metadata
-      reason -> Map.put(metadata, :reason, reason)
-    end
-  end
-
-  defp build_scheduled_contact_canceled_action(
-         %ScheduledContact{} = scheduled_contact,
-         transition_time,
-         opts
-       ) do
-    ContactAction.new(%{
-      organization_id: scheduled_contact.organization_id,
-      mission_id: scheduled_contact.mission_id,
-      scheduled_contact_id: scheduled_contact.scheduled_contact_id,
-      realized_contact_id: scheduled_contact.realized_contact_id,
-      action_kind: :scheduled_contact_canceled,
-      reason: Keyword.get(opts, :reason),
-      actor: Keyword.get(opts, :actor, %{}),
-      metadata: %{
-        canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id)
-      },
-      occurred_at: transition_time
-    })
-  end
-
-  defp build_realized_contact_ended_early_action(
-         %RealizedContact{} = realized_contact,
-         transition_time,
-         opts
-       ) do
-    ContactAction.new(%{
-      organization_id: realized_contact.organization_id,
-      mission_id: realized_contact.mission_id,
-      scheduled_contact_id: realized_contact.scheduled_contact_id,
-      realized_contact_id: realized_contact.realized_contact_id,
-      action_kind: :realized_contact_ended_early,
-      reason: Keyword.get(opts, :reason),
-      actor: Keyword.get(opts, :actor, %{}),
-      metadata: %{ended_early?: true},
-      occurred_at: transition_time
-    })
+    ContactLifecycle.stop_realized(organization_id, mission_id, realized_contact_id)
   end
 
   defp put_organization_scope(%ScheduledContact{} = scheduled_contact, organization_id)
