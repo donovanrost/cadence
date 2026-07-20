@@ -1919,6 +1919,18 @@ overrides, binding fallback, and missing adapters; existing registry and
 evidence suites preserve facade behavior. No route or authentication placement
 is involved. Production source-size pressure falls from 2 to 1, with zero
 oversized test files or functions and unchanged dependency ratchets.
+Extracting provider- and transport-profile persistence, version history,
+listing, and tombstones into the 543-line `Cadence.Contacts.ProfileStore`
+reduced `Cadence.Contacts` from 3,508 to 3,235 lines. The public Contacts
+facade preserves its existing scoped API while the extracted store owns the
+full profile lifecycle. The two profile rows now live under that Contacts-owned
+store, removing both legacy shared-schema edges and reducing the persistence
+schema baseline from 107 to 105; the ownership guard rejects direct callers
+from outside Contacts. Direct data tests cover both profile types across
+initial persistence, versioning, current/history listing, and deletion, while
+the existing Contacts tests preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+1 with zero oversized test files or functions.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

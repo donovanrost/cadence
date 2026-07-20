@@ -13,6 +13,7 @@ defmodule Cadence.Contacts do
     LinkAssignment,
     Path,
     PathTemplate,
+    ProfileStore,
     ProviderBinding,
     ProviderProfile,
     RealizedContact,
@@ -37,8 +38,6 @@ defmodule Cadence.Contacts do
     ContactActionRow,
     ContactLinkAssignmentRow,
     ContactPathTemplateRow,
-    ContactProviderProfileRow,
-    ContactTransportProfileRow,
     RealizedContactRow,
     ScheduledContactRow
   }
@@ -52,28 +51,7 @@ defmodule Cadence.Contacts do
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile)
       when is_binary(organization_id) do
-    with {:ok, scoped_provider_profile} <-
-           put_organization_scope(provider_profile, organization_id),
-         {:ok, _mission} <-
-           Missions.fetch_mission(
-             scoped_provider_profile.organization_id,
-             scoped_provider_profile.mission_id
-           ),
-         {:ok, _row} <-
-           Repo.insert(ContactProviderProfileRow.changeset(scoped_provider_profile),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :provider_profile_id, :version]
-           ) do
-      fetch_provider_profile_version(
-        scoped_provider_profile.organization_id,
-        scoped_provider_profile.mission_id,
-        scoped_provider_profile.provider_profile_id,
-        scoped_provider_profile.version
-      )
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
+    ProfileStore.persist_provider_profile(organization_id, provider_profile)
   end
 
   @spec create_shared_link(binary(), binary(), map()) ::
@@ -250,44 +228,14 @@ defmodule Cadence.Contacts do
   @spec persist_provider_profile(ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(%ProviderProfile{} = provider_profile) do
-    case Repo.insert(ContactProviderProfileRow.changeset(provider_profile),
-           on_conflict: :nothing,
-           conflict_target: [:mission_id, :provider_profile_id, :version]
-         ) do
-      {:ok, %ContactProviderProfileRow{}} ->
-        fetch_provider_profile_version(
-          provider_profile.mission_id,
-          provider_profile.provider_profile_id,
-          provider_profile.version
-        )
-
-      {:error, %Changeset{} = changeset} ->
-        {:error, changeset}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ProfileStore.persist_provider_profile(provider_profile)
   end
 
   @spec fetch_provider_profile(binary(), binary()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def fetch_provider_profile(mission_id, provider_profile_id)
       when is_binary(mission_id) and is_binary(provider_profile_id) do
-    case latest_versioned_row(
-           ContactProviderProfileRow,
-           mission_id,
-           :provider_profile_id,
-           provider_profile_id
-         ) do
-      nil ->
-        {:error, :contact_provider_profile_not_found}
-
-      %ContactProviderProfileRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_provider_profile_not_found}
-
-      %ContactProviderProfileRow{} = row ->
-        {:ok, ContactProviderProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_provider_profile(mission_id, provider_profile_id)
   end
 
   @spec fetch_provider_profile(binary(), binary(), binary()) ::
@@ -295,22 +243,7 @@ defmodule Cadence.Contacts do
   def fetch_provider_profile(organization_id, mission_id, provider_profile_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) do
-    case latest_versioned_row(
-           ContactProviderProfileRow,
-           organization_id,
-           mission_id,
-           :provider_profile_id,
-           provider_profile_id
-         ) do
-      nil ->
-        {:error, :contact_provider_profile_not_found}
-
-      %ContactProviderProfileRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_provider_profile_not_found}
-
-      %ContactProviderProfileRow{} = row ->
-        {:ok, ContactProviderProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_provider_profile(organization_id, mission_id, provider_profile_id)
   end
 
   @spec fetch_provider_profile_version(binary(), binary(), pos_integer()) ::
@@ -318,14 +251,7 @@ defmodule Cadence.Contacts do
   def fetch_provider_profile_version(mission_id, provider_profile_id, version)
       when is_binary(mission_id) and is_binary(provider_profile_id) and is_integer(version) and
              version > 0 do
-    case Repo.get_by(ContactProviderProfileRow,
-           mission_id: mission_id,
-           provider_profile_id: provider_profile_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_provider_profile_not_found}
-      %ContactProviderProfileRow{} = row -> {:ok, ContactProviderProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_provider_profile_version(mission_id, provider_profile_id, version)
   end
 
   @spec fetch_provider_profile_version(binary(), binary(), binary(), pos_integer()) ::
@@ -333,60 +259,36 @@ defmodule Cadence.Contacts do
   def fetch_provider_profile_version(organization_id, mission_id, provider_profile_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) and is_integer(version) and version > 0 do
-    case Repo.get_by(ContactProviderProfileRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           provider_profile_id: provider_profile_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_provider_profile_not_found}
-      %ContactProviderProfileRow{} = row -> {:ok, ContactProviderProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_provider_profile_version(
+      organization_id,
+      mission_id,
+      provider_profile_id,
+      version
+    )
   end
 
   @spec list_provider_profiles(binary()) :: [ProviderProfile.t()]
   def list_provider_profiles(mission_id) when is_binary(mission_id) do
-    ContactProviderProfileRow
-    |> latest_versioned_rows(mission_id, :provider_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactProviderProfileRow.to_domain/1)
+    ProfileStore.list_provider_profiles(mission_id)
   end
 
   @spec list_provider_profiles(binary(), binary()) :: [ProviderProfile.t()]
   def list_provider_profiles(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    ContactProviderProfileRow
-    |> latest_versioned_rows(organization_id, mission_id, :provider_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactProviderProfileRow.to_domain/1)
+    ProfileStore.list_provider_profiles(organization_id, mission_id)
   end
 
   @spec list_provider_profile_versions(binary(), binary()) :: [ProviderProfile.t()]
   def list_provider_profile_versions(mission_id, provider_profile_id)
       when is_binary(mission_id) and is_binary(provider_profile_id) do
-    ContactProviderProfileRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.provider_profile_id == ^provider_profile_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactProviderProfileRow.to_domain/1)
+    ProfileStore.list_provider_profile_versions(mission_id, provider_profile_id)
   end
 
   @spec list_provider_profile_versions(binary(), binary(), binary()) :: [ProviderProfile.t()]
   def list_provider_profile_versions(organization_id, mission_id, provider_profile_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) do
-    ContactProviderProfileRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.provider_profile_id == ^provider_profile_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactProviderProfileRow.to_domain/1)
+    ProfileStore.list_provider_profile_versions(organization_id, mission_id, provider_profile_id)
   end
 
   @spec version_provider_profile(binary(), binary(), binary(), map()) ::
@@ -394,12 +296,7 @@ defmodule Cadence.Contacts do
   def version_provider_profile(organization_id, mission_id, provider_profile_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) and is_map(attrs) do
-    with {:ok, %ProviderProfile{} = current_provider_profile} <-
-           fetch_provider_profile(organization_id, mission_id, provider_profile_id),
-         {:ok, %ProviderProfile{} = next_provider_profile} <-
-           build_next_provider_profile_version(current_provider_profile, attrs) do
-      persist_provider_profile(organization_id, next_provider_profile)
-    end
+    ProfileStore.version_provider_profile(organization_id, mission_id, provider_profile_id, attrs)
   end
 
   @spec delete_provider_profile(binary(), binary(), binary(), map()) ::
@@ -412,92 +309,32 @@ defmodule Cadence.Contacts do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) and is_map(metadata_patch) do
-    with {:ok, %ProviderProfile{} = current_provider_profile} <-
-           fetch_provider_profile(organization_id, mission_id, provider_profile_id) do
-      tombstone =
-        %ProviderProfile{
-          current_provider_profile
-          | version: current_provider_profile.version + 1,
-            lifecycle_state: :deleted,
-            metadata:
-              current_provider_profile.metadata
-              |> Map.merge(metadata_patch)
-              |> Map.put("deleted_at", DateTime.utc_now())
-        }
-
-      persist_provider_profile(organization_id, tombstone)
-    end
+    ProfileStore.delete_provider_profile(
+      organization_id,
+      mission_id,
+      provider_profile_id,
+      metadata_patch
+    )
   end
 
   @spec persist_transport_profile(binary(), TransportProfile.t()) ::
           {:ok, TransportProfile.t()} | {:error, term()}
   def persist_transport_profile(organization_id, %TransportProfile{} = transport_profile)
       when is_binary(organization_id) do
-    with {:ok, scoped_transport_profile} <-
-           put_organization_scope(transport_profile, organization_id),
-         {:ok, _mission} <-
-           Missions.fetch_mission(
-             scoped_transport_profile.organization_id,
-             scoped_transport_profile.mission_id
-           ),
-         {:ok, _row} <-
-           Repo.insert(ContactTransportProfileRow.changeset(scoped_transport_profile),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :transport_profile_id, :version]
-           ) do
-      fetch_transport_profile_version(
-        scoped_transport_profile.organization_id,
-        scoped_transport_profile.mission_id,
-        scoped_transport_profile.transport_profile_id,
-        scoped_transport_profile.version
-      )
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
+    ProfileStore.persist_transport_profile(organization_id, transport_profile)
   end
 
   @spec persist_transport_profile(TransportProfile.t()) ::
           {:ok, TransportProfile.t()} | {:error, term()}
   def persist_transport_profile(%TransportProfile{} = transport_profile) do
-    case Repo.insert(ContactTransportProfileRow.changeset(transport_profile),
-           on_conflict: :nothing,
-           conflict_target: [:mission_id, :transport_profile_id, :version]
-         ) do
-      {:ok, %ContactTransportProfileRow{}} ->
-        fetch_transport_profile_version(
-          transport_profile.mission_id,
-          transport_profile.transport_profile_id,
-          transport_profile.version
-        )
-
-      {:error, %Changeset{} = changeset} ->
-        {:error, changeset}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ProfileStore.persist_transport_profile(transport_profile)
   end
 
   @spec fetch_transport_profile(binary(), binary()) ::
           {:ok, TransportProfile.t()} | {:error, term()}
   def fetch_transport_profile(mission_id, transport_profile_id)
       when is_binary(mission_id) and is_binary(transport_profile_id) do
-    case latest_versioned_row(
-           ContactTransportProfileRow,
-           mission_id,
-           :transport_profile_id,
-           transport_profile_id
-         ) do
-      nil ->
-        {:error, :contact_transport_profile_not_found}
-
-      %ContactTransportProfileRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_transport_profile_not_found}
-
-      %ContactTransportProfileRow{} = row ->
-        {:ok, ContactTransportProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_transport_profile(mission_id, transport_profile_id)
   end
 
   @spec fetch_transport_profile(binary(), binary(), binary()) ::
@@ -505,22 +342,7 @@ defmodule Cadence.Contacts do
   def fetch_transport_profile(organization_id, mission_id, transport_profile_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(transport_profile_id) do
-    case latest_versioned_row(
-           ContactTransportProfileRow,
-           organization_id,
-           mission_id,
-           :transport_profile_id,
-           transport_profile_id
-         ) do
-      nil ->
-        {:error, :contact_transport_profile_not_found}
-
-      %ContactTransportProfileRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_transport_profile_not_found}
-
-      %ContactTransportProfileRow{} = row ->
-        {:ok, ContactTransportProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_transport_profile(organization_id, mission_id, transport_profile_id)
   end
 
   @spec fetch_transport_profile_version(binary(), binary(), pos_integer()) ::
@@ -528,14 +350,7 @@ defmodule Cadence.Contacts do
   def fetch_transport_profile_version(mission_id, transport_profile_id, version)
       when is_binary(mission_id) and is_binary(transport_profile_id) and is_integer(version) and
              version > 0 do
-    case Repo.get_by(ContactTransportProfileRow,
-           mission_id: mission_id,
-           transport_profile_id: transport_profile_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_transport_profile_not_found}
-      %ContactTransportProfileRow{} = row -> {:ok, ContactTransportProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_transport_profile_version(mission_id, transport_profile_id, version)
   end
 
   @spec fetch_transport_profile_version(binary(), binary(), binary(), pos_integer()) ::
@@ -543,60 +358,40 @@ defmodule Cadence.Contacts do
   def fetch_transport_profile_version(organization_id, mission_id, transport_profile_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(transport_profile_id) and is_integer(version) and version > 0 do
-    case Repo.get_by(ContactTransportProfileRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           transport_profile_id: transport_profile_id,
-           version: version
-         ) do
-      nil -> {:error, :contact_transport_profile_not_found}
-      %ContactTransportProfileRow{} = row -> {:ok, ContactTransportProfileRow.to_domain(row)}
-    end
+    ProfileStore.fetch_transport_profile_version(
+      organization_id,
+      mission_id,
+      transport_profile_id,
+      version
+    )
   end
 
   @spec list_transport_profiles(binary()) :: [TransportProfile.t()]
   def list_transport_profiles(mission_id) when is_binary(mission_id) do
-    ContactTransportProfileRow
-    |> latest_versioned_rows(mission_id, :transport_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactTransportProfileRow.to_domain/1)
+    ProfileStore.list_transport_profiles(mission_id)
   end
 
   @spec list_transport_profiles(binary(), binary()) :: [TransportProfile.t()]
   def list_transport_profiles(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    ContactTransportProfileRow
-    |> latest_versioned_rows(organization_id, mission_id, :transport_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ContactTransportProfileRow.to_domain/1)
+    ProfileStore.list_transport_profiles(organization_id, mission_id)
   end
 
   @spec list_transport_profile_versions(binary(), binary()) :: [TransportProfile.t()]
   def list_transport_profile_versions(mission_id, transport_profile_id)
       when is_binary(mission_id) and is_binary(transport_profile_id) do
-    ContactTransportProfileRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.transport_profile_id == ^transport_profile_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactTransportProfileRow.to_domain/1)
+    ProfileStore.list_transport_profile_versions(mission_id, transport_profile_id)
   end
 
   @spec list_transport_profile_versions(binary(), binary(), binary()) :: [TransportProfile.t()]
   def list_transport_profile_versions(organization_id, mission_id, transport_profile_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(transport_profile_id) do
-    ContactTransportProfileRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.transport_profile_id == ^transport_profile_id
+    ProfileStore.list_transport_profile_versions(
+      organization_id,
+      mission_id,
+      transport_profile_id
     )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ContactTransportProfileRow.to_domain/1)
   end
 
   @spec version_transport_profile(binary(), binary(), binary(), map()) ::
@@ -604,12 +399,12 @@ defmodule Cadence.Contacts do
   def version_transport_profile(organization_id, mission_id, transport_profile_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(transport_profile_id) and is_map(attrs) do
-    with {:ok, %TransportProfile{} = current_transport_profile} <-
-           fetch_transport_profile(organization_id, mission_id, transport_profile_id),
-         {:ok, %TransportProfile{} = next_transport_profile} <-
-           build_next_transport_profile_version(current_transport_profile, attrs) do
-      persist_transport_profile(organization_id, next_transport_profile)
-    end
+    ProfileStore.version_transport_profile(
+      organization_id,
+      mission_id,
+      transport_profile_id,
+      attrs
+    )
   end
 
   @spec delete_transport_profile(binary(), binary(), binary(), map()) ::
@@ -622,21 +417,12 @@ defmodule Cadence.Contacts do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(transport_profile_id) and is_map(metadata_patch) do
-    with {:ok, %TransportProfile{} = current_transport_profile} <-
-           fetch_transport_profile(organization_id, mission_id, transport_profile_id) do
-      tombstone =
-        %TransportProfile{
-          current_transport_profile
-          | version: current_transport_profile.version + 1,
-            lifecycle_state: :deleted,
-            metadata:
-              current_transport_profile.metadata
-              |> Map.merge(metadata_patch)
-              |> Map.put("deleted_at", DateTime.utc_now())
-        }
-
-      persist_transport_profile(organization_id, tombstone)
-    end
+    ProfileStore.delete_transport_profile(
+      organization_id,
+      mission_id,
+      transport_profile_id,
+      metadata_patch
+    )
   end
 
   @spec persist_path_template(binary(), PathTemplate.t()) ::
@@ -2554,33 +2340,6 @@ defmodule Cadence.Contacts do
     |> Map.values()
   end
 
-  defp build_next_provider_profile_version(%ProviderProfile{} = provider_profile, attrs)
-       when is_map(attrs) do
-    {:ok,
-     %ProviderProfile{
-       provider_profile
-       | version: provider_profile.version + 1,
-         lifecycle_state: :active,
-         adapter_key: Map.get(attrs, :adapter_key, provider_profile.adapter_key),
-         configuration: Map.get(attrs, :configuration, provider_profile.configuration),
-         metadata: Map.merge(provider_profile.metadata, Map.get(attrs, :metadata, %{}))
-     }}
-  end
-
-  defp build_next_transport_profile_version(%TransportProfile{} = transport_profile, attrs)
-       when is_map(attrs) do
-    {:ok,
-     %TransportProfile{
-       transport_profile
-       | version: transport_profile.version + 1,
-         lifecycle_state: :active,
-         family_key: Map.get(attrs, :family_key, transport_profile.family_key),
-         target_scope: Map.get(attrs, :target_scope, transport_profile.target_scope),
-         configuration: Map.get(attrs, :configuration, transport_profile.configuration),
-         metadata: Map.merge(transport_profile.metadata, Map.get(attrs, :metadata, %{}))
-     }}
-  end
-
   defp build_next_path_template_version(%PathTemplate{} = path_template, attrs)
        when is_map(attrs) do
     provider_profile_ids =
@@ -3408,38 +3167,6 @@ defmodule Cadence.Contacts do
     |> Atom.to_string()
     |> String.replace("_", " ")
     |> String.upcase()
-  end
-
-  defp put_organization_scope(%ProviderProfile{} = provider_profile, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case provider_profile.organization_id do
-      nil ->
-        {:ok, %ProviderProfile{provider_profile | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, provider_profile}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          provider_profile.mission_id}}
-    end
-  end
-
-  defp put_organization_scope(%TransportProfile{} = transport_profile, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case transport_profile.organization_id do
-      nil ->
-        {:ok, %TransportProfile{transport_profile | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, transport_profile}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          transport_profile.mission_id}}
-    end
   end
 
   defp put_organization_scope(%PathTemplate{} = path_template, organization_id)

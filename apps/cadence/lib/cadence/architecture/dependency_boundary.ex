@@ -38,6 +38,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/source_endpoints.ex",
     "lib/cadence/source_endpoints/"
   ]
+  @contacts_context ["lib/cadence/contacts.ex", "lib/cadence/contacts/"]
   @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]
   @jobs_context ["lib/cadence/jobs.ex", "lib/cadence/jobs/"]
   @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
@@ -73,6 +74,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     {["lib/cadence/activations/", "lib/cadence/catalog/", "lib/cadence/governance/"],
      @catalog_context},
     {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context},
+    {["lib/cadence/contacts/profile_store/"], @contacts_context},
     {["lib/cadence/limits/"], @limits_context},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},

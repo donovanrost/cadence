@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ContactTransportProfileRow do
+defmodule Cadence.Contacts.ProfileStore.TransportProfileRow do
   @moduledoc false
 
   use Ecto.Schema

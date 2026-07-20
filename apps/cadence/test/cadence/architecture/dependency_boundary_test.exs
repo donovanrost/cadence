@@ -162,6 +162,26 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
            ] = DependencyBoundary.findings(graph)
   end
 
+  test "protects contact profile rows through their owning context" do
+    graph = %{
+      "lib/cadence/contact_planning/planner.ex" => %{
+        "lib/cadence/contacts/profile_store/provider_profile_row.ex" => "export"
+      },
+      "lib/cadence/contacts/profile_store.ex" => %{
+        "lib/cadence/contacts/profile_store/provider_profile_row.ex" => "export",
+        "lib/cadence/contacts/profile_store/transport_profile_row.ex" => "export"
+      }
+    }
+
+    assert [
+             %{
+               kind: :context_schema,
+               source: "lib/cadence/contact_planning/planner.ex",
+               sink: "lib/cadence/contacts/profile_store/provider_profile_row.ex"
+             }
+           ] = DependencyBoundary.findings(graph)
+  end
+
   test "protects derived telemetry rows through their owning context" do
     graph = %{
       "lib/cadence/dashboards/data_link_resolver.ex" => %{
