@@ -1957,6 +1957,21 @@ creation, template application, idempotent skipping, assignment listing, and
 tombstones; existing Contacts and web tests preserve facade behavior. No route
 or authentication placement is involved; production source-size pressure
 remains 1 with zero oversized test files or functions.
+Extracting scheduled-contact, realized-contact, lifecycle-action, scheduler
+read-model, and reconciliation-candidate persistence into the 612-line
+`Cadence.Contacts.ContactStore` reduced `Cadence.Contacts` from 2,016 to 1,585
+lines. The facade retains preparation and lifecycle orchestration while all
+durable contact rows and transactional event writes now have one owner.
+Scheduled-contact, realized-contact, and contact-action rows moved under that
+store; `ProviderReservationChanges` remains an internal Contacts caller, while
+the mission-event rebuild now reads contact actions through the store API.
+Those ownership moves remove five shared-schema edges and reduce the
+persistence baseline from 103 to 98 with no cross-context exception. A focused
+data test covers persistence, provider-reference lookup, scheduler reads,
+reconciliation candidates, lifecycle updates, and filtered actions; existing
+Contacts, provider-change, projection, and web tests preserve integration
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 1 with zero oversized test files or functions.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered

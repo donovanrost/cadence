@@ -8,7 +8,9 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Comms.Transport
   alias Cadence.Comms.TransportStore
+  alias Cadence.Contacts.ContactStore.ScheduledContactRow
 
   alias Cadence.Contacts.{
     ProviderReservation,
@@ -18,9 +20,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     ScheduledContactRevisions
   }
 
-  alias Cadence.Comms.Transport
   alias Cadence.GroundNetworks.{MissionProvider, MissionProviders}
-  alias Cadence.Persistence.Schemas.ScheduledContactRow
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 

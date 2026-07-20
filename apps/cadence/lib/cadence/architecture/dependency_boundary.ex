@@ -75,6 +75,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
      @catalog_context},
     {["lib/cadence/comms/", "lib/cadence/source_endpoints/"], @comms_context},
     {[
+       "lib/cadence/contacts/contact_store/",
        "lib/cadence/contacts/link_assignment_store/",
        "lib/cadence/contacts/path_template_store/",
        "lib/cadence/contacts/profile_store/"

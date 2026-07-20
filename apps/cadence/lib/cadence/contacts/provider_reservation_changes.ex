@@ -3,12 +3,12 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
   import Ecto.Query
 
-  alias Cadence.Contacts.{
-    ProviderChangeApproval,
-    ProviderReservation,
-    ProviderReservationChange,
-    ScheduledContactRevisions
-  }
+  alias Cadence.Contacts.ContactStore.ScheduledContactRow
+  alias Cadence.Contacts.ProviderChangeApproval
+  alias Cadence.Contacts.ProviderReservation
+  alias Cadence.Contacts.ProviderReservationChange
+  alias Cadence.Contacts.ScheduledContactRevision
+  alias Cadence.Contacts.ScheduledContactRevisions
 
   alias Cadence.GroundNetworks.{
     DeliveryPolicy,
@@ -26,11 +26,9 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     ProviderChangeApprovalRow,
     ProviderReservationChangeRow,
     ProviderReservationRow,
-    ScheduledContactRevisionRow,
-    ScheduledContactRow
+    ScheduledContactRevisionRow
   }
 
-  alias Cadence.Contacts.ScheduledContactRevision
   alias Cadence.Repo
 
   @pending_states ~w(pending_approval acknowledgment_required policy_accepted)

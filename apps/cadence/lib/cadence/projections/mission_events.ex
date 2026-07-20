@@ -9,7 +9,7 @@ defmodule Cadence.Projections.MissionEvents do
   alias Ecto.Changeset
 
   alias Cadence.Activations.BindingSetActivation
-  alias Cadence.Contacts.{CombinedDownlinkRecord, ContactAction, DownlinkDiagnostic}
+  alias Cadence.Contacts.{CombinedDownlinkRecord, ContactAction, ContactStore, DownlinkDiagnostic}
   alias Cadence.Jobs
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.MissionEvents.Entry
@@ -18,7 +18,6 @@ defmodule Cadence.Projections.MissionEvents do
 
   alias Cadence.Persistence.Schemas.{
     CombinedDownlinkRecordRow,
-    ContactActionRow,
     DownlinkDiagnosticRow,
     ManagedActionRequestRow,
     MissionEventRow,
@@ -446,11 +445,7 @@ defmodule Cadence.Projections.MissionEvents do
   end
 
   defp load_source_entries(mission_id) do
-    contact_actions =
-      ContactActionRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&ContactActionRow.to_domain/1)
+    contact_actions = ContactStore.list_actions(mission_id, [])
 
     limit_events =
       TelemetryLimitEventRow

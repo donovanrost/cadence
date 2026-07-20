@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.RealizedContactRow do
+defmodule Cadence.Contacts.ContactStore.RealizedContactRow do
   @moduledoc false
 
   use Ecto.Schema
