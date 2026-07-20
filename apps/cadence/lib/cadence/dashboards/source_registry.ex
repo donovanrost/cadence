@@ -8,7 +8,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   alias Cadence.Dashboards.{
     DashboardContract,
-    DataContext,
     DataLinks,
     DataSourceRegistry,
     DataSources,
@@ -26,8 +25,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     SourceExecutionPolicy,
     SourceFacts,
     SourceHealth,
-    SourceHealthEvent,
-    SourceHealthStatus,
     SourceResult,
     SourceWatermarks
   }
@@ -36,14 +33,13 @@ defmodule Cadence.Dashboards.SourceRegistry do
     CapabilityPosture,
     FactsAggregation,
     HealthMerge,
-    OperationalIntervalProvenance,
     Provenance,
     SegmentResultMerge,
+    SourceHealthLookup,
     WatermarkMerge
   }
 
   alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}
-  alias Cadence.OperationalEvents.EffectiveInterval
 
   @type adapter :: module()
   @type adapter_map :: %{optional(atom()) => adapter()}
@@ -589,12 +585,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
          opts
        ) do
     if SourceHealth.enabled?(opts) do
-      case fetch_source_health_status(request, resolved_binding, opts) do
+      case SourceHealthLookup.fetch(request, resolved_binding, opts) do
         {:ok, status} ->
           classification =
             SourceHealth.classify_status(status, resolved_binding.data_source, opts)
 
-          interval = source_health_interval(request, resolved_binding, status, opts)
+          interval = SourceHealthLookup.interval(request, resolved_binding, status, opts)
 
           HealthMerge.merge_facts(facts, classification, interval)
 
@@ -1255,12 +1251,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
          opts
        ) do
     if SourceHealth.enabled?(opts) do
-      case fetch_source_health_status(request, resolved_binding, opts) do
+      case SourceHealthLookup.fetch(request, resolved_binding, opts) do
         {:ok, status} ->
           classification =
             SourceHealth.classify_status(status, resolved_binding.data_source, opts)
 
-          interval = source_health_interval(request, resolved_binding, status, opts)
+          interval = SourceHealthLookup.interval(request, resolved_binding, status, opts)
 
           meta =
             result.meta
@@ -1312,155 +1308,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
        do: Map.put(meta, :degraded?, true)
 
   defp maybe_mark_source_health_degraded(meta), do: meta
-
-  defp fetch_source_health_status(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         opts
-       ) do
-    case injected_source_health_status(request, resolved_binding, opts) do
-      %SourceHealthStatus{} = status -> {:ok, status}
-      nil -> SourceHealth.fetch_status_for_source(request, resolved_binding)
-    end
-  end
-
-  defp injected_source_health_status(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         opts
-       ) do
-    opts
-    |> Keyword.get(:source_health_statuses, [])
-    |> List.wrap()
-    |> source_health_status_for(request, resolved_binding)
-  end
-
-  defp source_health_status_for([], %PlannedSourceRequest{}, _resolved_binding), do: nil
-
-  defp source_health_status_for(
-         source_health_statuses,
-         %PlannedSourceRequest{} = request,
-         binding
-       ) do
-    exact_key =
-      request
-      |> source_health_identity(binding)
-      |> SourceHealthEvent.source_health_key()
-
-    source_key =
-      request
-      |> source_health_identity(binding)
-      |> Map.merge(%{source_binding_id: nil, realm: nil, replay_run_id: nil, dataset: nil})
-      |> SourceHealthEvent.source_health_key()
-
-    Enum.find(
-      source_health_statuses,
-      &(source_health_status_value(&1, :source_health_key) == exact_key)
-    ) ||
-      Enum.find(
-        source_health_statuses,
-        &(source_health_status_value(&1, :source_health_key) == source_key)
-      )
-  end
-
-  defp source_health_identity(%PlannedSourceRequest{} = request, resolved_binding) do
-    binding = resolved_binding.binding
-    data_source = resolved_binding.data_source
-
-    %{
-      organization_id:
-        request.organization_id || Map.get(binding, :organization_id) ||
-          Map.get(data_source, :organization_id),
-      mission_id:
-        request.mission_id || Map.get(binding, :mission_id) || Map.get(data_source, :mission_id),
-      logical_source: request.logical_source || Map.get(binding, :logical_source),
-      data_source_id: Map.get(data_source, :data_source_id),
-      source_binding_id: Map.get(binding, :binding_id),
-      realm: Map.get(binding, :realm),
-      replay_run_id: requested_replay_run_id(request),
-      dataset: Map.get(binding, :dataset)
-    }
-  end
-
-  defp source_health_status_value(%SourceHealthStatus{} = status, key), do: Map.get(status, key)
-
-  defp source_health_status_value(status, key) when is_map(status),
-    do: Map.get(status, key, Map.get(status, Atom.to_string(key)))
-
-  defp source_health_status_value(_status, _key), do: nil
-
-  defp source_health_interval(
-         %PlannedSourceRequest{} = request,
-         resolved_binding,
-         %SourceHealthStatus{} = status,
-         opts
-       ) do
-    identity = source_health_identity(request, resolved_binding)
-
-    if source_health_interval_lookup_enabled?(opts) do
-      interval_opts =
-        [
-          at: status.last_seen_at || status.observed_at,
-          logical_source: Map.get(identity, :logical_source),
-          data_source_id: Map.get(identity, :data_source_id),
-          source_binding_id: Map.get(identity, :source_binding_id),
-          realm: Map.get(identity, :realm),
-          dataset: Map.get(identity, :dataset),
-          replay_run_id: Map.get(identity, :replay_run_id)
-        ]
-        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-
-      request.organization_id
-      |> OperationalIntervalProvenance.list(
-        :source_health,
-        request.mission_id,
-        interval_opts,
-        opts
-      )
-      |> source_health_interval_for_status(status)
-    end
-  end
-
-  defp source_health_interval(%PlannedSourceRequest{}, _resolved_binding, _status, _opts), do: nil
-
-  defp source_health_interval_lookup_enabled?(opts) do
-    Keyword.get(opts, :persisted?, false) == true or
-      OperationalIntervalProvenance.reader_configured?(:source_health, opts)
-  end
-
-  defp source_health_interval_for_status(intervals, %SourceHealthStatus{} = status) do
-    Enum.find(List.wrap(intervals), fn interval ->
-      source_health_interval_matches_status?(interval, status)
-    end) || OperationalIntervalProvenance.unique(List.wrap(intervals))
-  end
-
-  defp source_health_interval_matches_status?(
-         %EffectiveInterval{} = interval,
-         %SourceHealthStatus{} = status
-       ) do
-    payload = interval.payload || %{}
-
-    get_attr(payload, :source_health_event_id) == status.source_health_event_id or
-      interval.source_event_id == source_health_operational_event_id(status)
-  end
-
-  defp source_health_interval_matches_status?(_interval, _status), do: false
-
-  defp source_health_operational_event_id(%SourceHealthStatus{} = status) do
-    replay_run_id = source_health_status_value(status, :replay_run_id)
-    source_health_event_id = source_health_status_value(status, :source_health_event_id)
-
-    cond do
-      is_binary(replay_run_id) and replay_run_id != "" and is_binary(source_health_event_id) ->
-        "operational_event:source_health_event:#{replay_run_id}:#{source_health_event_id}"
-
-      is_binary(source_health_event_id) ->
-        "operational_event:source_health_event:#{source_health_event_id}"
-
-      true ->
-        nil
-    end
-  end
 
   defp source_health_attrs(
          %PlannedSourceRequest{} = request,
@@ -1564,11 +1411,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
     sampling
     |> get_attr(:mode)
     |> normalize_atom()
-  end
-
-  defp requested_replay_run_id(%PlannedSourceRequest{} = request) do
-    DataContext.source_value(request.data_context, request.logical_source, :replay_run_id) ||
-      get_attr(request.time_context, :replay_run_id)
   end
 
   defp normalize_atom(value) when is_atom(value), do: value

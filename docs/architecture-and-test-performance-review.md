@@ -1863,6 +1863,17 @@ selection, fact enrichment, nested warning/frame/field link context, and
 evidence de-duplication; existing registry and evidence suites preserve facade
 behavior. No route or authentication placement is involved; production
 source-size pressure remains 2 and dependency ratchets are unchanged.
+Extracting injected and persisted source-health status selection, source-level
+fallback identity, and replay-aware effective-interval matching into the
+190-line `Cadence.Dashboards.SourceRegistry.SourceHealthLookup` reduced
+`SourceRegistry` from 1,606 to 1,448 lines. The registry continues to decide
+when health is enabled and how classified status decorates facts and results;
+the extracted boundary owns only status and interval retrieval. Direct tests
+cover exact-over-source-level status precedence, fallback selection, replay
+operational-event identity, and interval query context, while existing registry
+and evidence suites preserve facade behavior. No route or authentication
+placement is involved; production source-size pressure remains 2 and dependency
+ratchets are unchanged.
 Moving the 156-line persisted ground-station, endpoint, transport, event, and
 dashboard fixture phase out of its LiveView interaction test reduced overlong
 test-function pressure from 14 to 13. The authenticated route, rendered
