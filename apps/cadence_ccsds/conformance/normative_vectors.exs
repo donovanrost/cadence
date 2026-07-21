@@ -46,6 +46,14 @@
       url:
         "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/10/732x0b5ec1.pdf",
       sha256: "d9d22dd4e9b43128c9a634ae29e32a67b50c16dab52a916cc465999021cd0f91"
+    },
+    ccsds_732_1_b_3: %{
+      title: "Unified Space Data Link Protocol",
+      issue: "CCSDS 732.1-B-3",
+      published: "June 2024",
+      url:
+        "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//732x1b3e1.pdf",
+      sha256: "3d931ae1b9ffb6a9282fedcc79e619356e61f67729d1e3f9bf433f8e719420ff"
     }
   },
   vectors: [
@@ -356,6 +364,49 @@
       source: :ccsds_732_0_b_5,
       locator: "4.1.4.1.5 and annex D",
       subject: :aos_only_idle_data,
+      parameters: %{octets: 20},
+      expected_hex: "FFFFFFFF6DB6D861451F11F19716723CBE7E00B1"
+    },
+    %{
+      id: "uslp-version-4-frame-layout",
+      classification: :normative_derivation,
+      source: :ccsds_732_1_b_3,
+      locator: "4.1.1-4.1.4, figures 4-1 through 4-4",
+      subject: :uslp_transfer_frame,
+      parameters: %{
+        scid: 0x1234,
+        source_destination: :destination,
+        vcid: 0x15,
+        map_id: 0xA,
+        qos: :sequence_controlled,
+        count_octets: 2,
+        count: 0xBEEF,
+        construction_rule: :unsegmented,
+        upid: 5,
+        payload_hex: "AABB"
+      },
+      expected_hex: "C1234AB4000B02BEEFE5AABB"
+    },
+    %{
+      id: "uslp-truncated-frame-layout",
+      classification: :normative_derivation,
+      source: :ccsds_732_1_b_3,
+      locator: "annex D, figures D-1 and D-2",
+      subject: :uslp_truncated_transfer_frame,
+      parameters: %{
+        scid: 0x1234,
+        vcid: 5,
+        map_id: 6,
+        payload_hex: "010203"
+      },
+      expected_hex: "C12340ADE5010203"
+    },
+    %{
+      id: "uslp-oid-annex-h-prefix",
+      classification: :published_octets,
+      source: :ccsds_732_1_b_3,
+      locator: "annex H, page H-1",
+      subject: :uslp_only_idle_data,
       parameters: %{octets: 20},
       expected_hex: "FFFFFFFF6DB6D861451F11F19716723CBE7E00B1"
     }

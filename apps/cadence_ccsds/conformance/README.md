@@ -20,7 +20,7 @@ hashes make the source snapshot independently retrievable and auditable.
 
 The normal test suite runs seeded property checks over Space Packets, TC, TM,
 and AOS transfer frames, FECF, AOS FHEC, BCH, LDPC, CLTU, randomization,
-streaming boundaries, and arbitrary malformed inputs. Increase the case count
+streaming boundaries, USLP Version-4 framing, and arbitrary malformed inputs. Increase the case count
 or reproduce a failure with:
 
 ```sh
@@ -52,3 +52,6 @@ library build must neither download tools nor depend on an external service.
 The issue-5 AOS FHEC vectors are also cross-checked against Yamcs at a pinned
 commit. This is narrower independent evidence rather than full AOS
 interoperability; see `aos/evidence.md`.
+
+USLP evidence is currently source-hashed and normative rather than
+cross-implementation; see `uslp/evidence.md` for the exact boundary.

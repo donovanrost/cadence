@@ -11,6 +11,9 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   alias Cadence.CCSDS.SDLP.AOS.MPDU
   alias Cadence.CCSDS.SDLP.AOS.OnlyIdleData, as: AOSOnlyIdleData
   alias Cadence.CCSDS.SDLP.TM.{FrameCodec, OnlyIdleData, SecondaryHeader}
+  alias Cadence.CCSDS.SDLP.USLP.Configuration, as: USLPConfiguration
+  alias Cadence.CCSDS.SDLP.USLP.FrameCodec, as: USLPFrameCodec
+  alias Cadence.CCSDS.SDLP.USLP.OnlyIdleData, as: USLPOnlyIdleData
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec
   alias Cadence.CCSDS.TC.{SegmentHeader, TransferFrame}
@@ -20,8 +23,8 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 5
-    assert length(corpus.vectors) >= 30
+    assert map_size(corpus.sources) == 6
+    assert length(corpus.vectors) >= 33
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -235,6 +238,78 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
     oid = NormativeVectors.vector!("aos-oid-annex-d-prefix")
     expected_oid = hex(oid.expected_hex)
     assert {^expected_oid, _state} = AOSOnlyIdleData.take(oid.parameters.octets)
+  end
+
+  test "matches USLP Version-4, truncated-frame, and annex-H OID vectors" do
+    vector = NormativeVectors.vector!("uslp-version-4-frame-layout")
+    parameters = vector.parameters
+
+    configuration =
+      USLPConfiguration.new!(
+        frame_type: :variable,
+        frame_size: 64,
+        scid: parameters.scid,
+        vcid: parameters.vcid,
+        map_id: parameters.map_id,
+        source_destination: parameters.source_destination,
+        sequence_count_octets: parameters.count_octets,
+        expedited_count_octets: 1,
+        data_field_content: :mapa_sdu
+      )
+
+    frame = %LinkFrame{
+      profile: :uslp,
+      scid: parameters.scid,
+      vcid: parameters.vcid,
+      map_id: parameters.map_id,
+      frame_seq: parameters.count,
+      payload_octets: hex(parameters.payload_hex),
+      quality: :good,
+      meta: %{
+        qos: parameters.qos,
+        construction_rule: parameters.construction_rule,
+        upid: parameters.upid
+      }
+    }
+
+    expected = hex(vector.expected_hex)
+    assert {:ok, ^expected} = USLPFrameCodec.encode(frame, configuration: configuration)
+    assert {:ok, [decoded], <<>>} = USLPFrameCodec.decode(expected, configuration: configuration)
+    assert decoded.payload_octets == frame.payload_octets
+    assert decoded.frame_seq == frame.frame_seq
+
+    truncated = NormativeVectors.vector!("uslp-truncated-frame-layout")
+    truncated_parameters = truncated.parameters
+
+    truncated_configuration =
+      USLPConfiguration.new!(
+        frame_type: :variable,
+        frame_size: 32,
+        scid: truncated_parameters.scid,
+        vcid: truncated_parameters.vcid,
+        map_id: truncated_parameters.map_id,
+        data_field_content: :mapa_sdu,
+        truncated_frame_length: byte_size(hex(truncated.expected_hex))
+      )
+
+    truncated_frame = %LinkFrame{
+      profile: :uslp,
+      scid: truncated_parameters.scid,
+      vcid: truncated_parameters.vcid,
+      map_id: truncated_parameters.map_id,
+      payload_octets: hex(truncated_parameters.payload_hex),
+      quality: :good,
+      meta: %{truncated?: true, qos: :expedited}
+    }
+
+    expected_truncated = hex(truncated.expected_hex)
+
+    assert {:ok, ^expected_truncated} =
+             USLPFrameCodec.encode(truncated_frame, configuration: truncated_configuration)
+
+    oid = NormativeVectors.vector!("uslp-oid-annex-h-prefix")
+    expected_oid = hex(oid.expected_hex)
+    assert {^expected_oid, _state} = USLPOnlyIdleData.take(oid.parameters.octets)
   end
 
   defp assert_constant(binary, side, vector_id) do

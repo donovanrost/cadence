@@ -8,6 +8,8 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
   alias Cadence.CCSDS.SDLP.AOS.Configuration, as: AOSConfiguration
   alias Cadence.CCSDS.SDLP.AOS.FrameCodec, as: AOSFrameCodec
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
+  alias Cadence.CCSDS.SDLP.USLP.Configuration, as: USLPConfiguration
+  alias Cadence.CCSDS.SDLP.USLP.FrameCodec, as: USLPFrameCodec
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.TransferFrame
@@ -181,6 +183,35 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
     assert is_tuple(final_state)
   end
 
+  test "seeded fixed- and variable-length USLP Version-4 frames round-trip" do
+    final_state =
+      Enum.reduce(1..@cases, Generator.seed(@seed + 6), fn case_number, state ->
+        {frame, configuration, state} = uslp_frame(state)
+        context = context(:uslp_transfer_frame, case_number)
+        options = [configuration: configuration]
+
+        encoded = expect_ok(USLPFrameCodec.encode(frame, options), context)
+
+        decoded =
+          case USLPFrameCodec.decode(encoded, options) do
+            {:ok, [decoded], <<>>} -> decoded
+            result -> flunk_result(result, context)
+          end
+
+        assert_equal(decoded.scid, frame.scid, context)
+        assert_equal(decoded.vcid, frame.vcid, context)
+        assert_equal(decoded.map_id, frame.map_id, context)
+        assert_equal(decoded.frame_seq, frame.frame_seq, context)
+        assert_equal(decoded.payload_octets, frame.payload_octets, context)
+        assert_equal(decoded.ocf, frame.ocf, context)
+        assert_equal(decoded.meta.qos, frame.meta.qos, context)
+        assert_equal(decoded.meta.construction_rule, frame.meta.construction_rule, context)
+        state
+      end)
+
+    assert is_tuple(final_state)
+  end
+
   test "seeded arbitrary malformed inputs never crash wire decoders" do
     aos_configuration =
       AOSConfiguration.new!(
@@ -190,6 +221,16 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
         frame_header_error_control?: true,
         fecf?: true,
         maximum_packet_octets: 128
+      )
+
+    uslp_configuration =
+      USLPConfiguration.new!(
+        frame_type: :variable,
+        frame_size: 128,
+        scid: 1,
+        vcid: 1,
+        map_id: 1,
+        data_field_content: :mapa_sdu
       )
 
     final_state =
@@ -204,6 +245,11 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
 
         assert_tuple(
           AOSFrameCodec.decode_detailed(input, configuration: aos_configuration),
+          context
+        )
+
+        assert_tuple(
+          USLPFrameCodec.decode_detailed(input, configuration: uslp_configuration),
           context
         )
 
@@ -428,6 +474,75 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
   defp optional_binary(binary), do: binary
   defp bool_bit(true), do: 1
   defp bool_bit(false), do: 0
+
+  defp uslp_frame(state) do
+    {frame_type, state} = Generator.member(state, [:fixed, :variable])
+    {scid, state} = Generator.integer(state, 0, 65_535)
+    {vcid, state} = Generator.integer(state, 0, 62)
+    {map_id, state} = Generator.integer(state, 0, 15)
+    {source_destination, state} = Generator.member(state, [:source, :destination])
+    {qos, state} = Generator.member(state, [:sequence_controlled, :expedited])
+    {count_octets, state} = Generator.integer(state, 0, 7)
+    {count, state} = uslp_count(state, count_octets)
+    {fecf?, state} = Generator.boolean(state)
+    {ocf?, state} = Generator.boolean(state)
+    {insert_octets, state} = uslp_insert_octets(state, frame_type)
+    {payload_octets, state} = Generator.integer(state, 1, 128)
+    {payload, state} = Generator.binary(state, payload_octets)
+    {insert, state} = Generator.binary(state, insert_octets)
+    {ocf, state} = aos_ocf(state, ocf?)
+
+    rule = if(frame_type == :fixed, do: :start_access_sdu, else: :unsegmented)
+    pointer = if(frame_type == :fixed, do: payload_octets - 1, else: nil)
+    primary_octets = 7 + count_octets
+    tfdf_octets = if(frame_type == :fixed, do: 3, else: 1)
+
+    frame_size =
+      primary_octets + insert_octets + tfdf_octets + payload_octets +
+        optional_octets(ocf?, 4) + optional_octets(fecf?, 2)
+
+    configuration =
+      USLPConfiguration.new!(
+        frame_type: frame_type,
+        frame_size: frame_size,
+        scid: scid,
+        vcid: vcid,
+        map_id: map_id,
+        source_destination: source_destination,
+        insert_zone_length: insert_octets,
+        fecf?: fecf?,
+        ocf?: ocf?,
+        sequence_count_octets: count_octets,
+        expedited_count_octets: count_octets,
+        data_field_content: :mapa_sdu
+      )
+
+    frame = %LinkFrame{
+      profile: :uslp,
+      scid: scid,
+      vcid: vcid,
+      map_id: map_id,
+      frame_seq: count,
+      payload_octets: payload,
+      quality: :good,
+      ocf: ocf,
+      meta: %{
+        qos: qos,
+        vcf_count: count,
+        vcf_count_length: count_octets,
+        construction_rule: rule,
+        tfdf_pointer: pointer,
+        insert_zone: optional_binary(insert)
+      }
+    }
+
+    {frame, configuration, state}
+  end
+
+  defp uslp_count(state, 0), do: {nil, state}
+  defp uslp_count(state, octets), do: Generator.integer(state, 0, Integer.pow(256, octets) - 1)
+  defp uslp_insert_octets(state, :fixed), do: Generator.integer(state, 0, 4)
+  defp uslp_insert_octets(state, :variable), do: {0, state}
 
   defp channel_configuration(state) do
     {code, state} = Generator.member(state, [:bch, :ldpc_128_64, :ldpc_512_256])

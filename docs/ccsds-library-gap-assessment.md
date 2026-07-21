@@ -76,7 +76,7 @@ The shared library currently owns:
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
   enforcement, and configurable complete/partial packet delivery evidence; and
-- maintained conformance evidence comprising 30 source-hashed, section-located
+- maintained conformance evidence comprising 33 source-hashed, section-located
   CCSDS vectors, explicit provenance classes for published versus derived
   octets, seeded generative and malformed-input properties, and a pinned
   bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
@@ -89,7 +89,23 @@ The shared library currently owns:
   validation, and independent realtime/replay 24- or 28-bit VC continuity; and
 - all seven AOS service primitives (VCP, Bitstream, VCA, VC_OCF, VCF, MCF, and
   Insert), with synchronous OCF/Insert queues, loss flags, external-frame
-  validation, and the standard VCF/MCF exclusivity and Insert restrictions.
+  validation, and the standard VCF/MCF exclusivity and Insert restrictions;
+- CCSDS 732.1-B-3 USLP Version-4 fixed- and variable-length Transfer Frames,
+  including 16-bit SCIDs, source/destination addressing, MAP IDs, zero- through
+  seven-octet QoS-specific VC counters, all eight TFDZ construction rules,
+  Insert Zone, OCF, FECF, managed mixed-MAP routing, and normative truncated
+  Transfer Frames;
+- USLP managed Physical, Master, Virtual, MAP, Packet, COP, coding-repetition,
+  release-delay, and service-access parameters with hierarchy and exclusivity
+  validation;
+- USLP fixed-frame FHP/LVO processing, variable-frame Packet/MAPA/VCA
+  segmentation and reassembly, MAP Octet Stream delivery, independent
+  Sequence-Controlled and Expedited continuity, and the continuous annex-H
+  32-cell OID generator and validator; and
+- all ten USLP service boundaries (MAPP, VCP, MAPA, VCA, MAP Octet Stream,
+  USLP_MC_OCF, VCF, MCF, Insert, and COPs Management), including synchronous
+  OCF/Insert queues, frame-service isolation, portable loss evidence, managed
+  wire ingestion, and algorithm-neutral COP directive handoff.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -148,7 +164,6 @@ portable anomaly evidence.
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P2 | Unified Space Data Link | `Types.profile/0` names USLP, but no USLP codec, managed channel model, segmentation/reassembly, or service primitives exist. | Implement CCSDS 732.1-B-3 as its own protocol; do not treat it as an AOS mode. |
 | P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
 | P2 | Space Data Link Security | No SDLS security header/trailer processing, anti-replay state, authentication, or encryption hook exists. | Define algorithm-neutral security transforms and state boundaries; keep key custody outside this library. |
 | P2 | Standard time codes | CUC/CDS time-code codecs and correlation helpers are absent. | Add as an independent value-codec namespace when catalog packet layouts need standard time fields. |
@@ -185,17 +200,19 @@ still require a second capable implementation or mission testbed before making
 broad interoperability claims. None of this evidence constitutes flight
 qualification.
 
-The corpus now includes 30 vectors across five source-hashed standards and
-seeded AOS round trips for every Data Field content type and optional field.
+The corpus now includes 33 vectors across six source-hashed standards and
+seeded AOS and USLP round trips over their managed framing options.
 AOS FHEC encode/correction behavior is independently cross-checked against a
 pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
 AOS interoperability because Yamcs uses an older AOS addressing layout.
+USLP evidence currently consists of source-hashed normative frame derivations,
+the published annex-H OID sequence, and seeded properties; no independent
+implementation covering the full Issue-3 service set has been identified.
 
 ## Recommended next slice
 
-The next protocol slice is the Unified Space Data Link Protocol. It should
-reuse shared Space Packet, Encapsulation Packet, FECF, continuity,
-segmentation, reassembly, and service boundaries where their semantics align,
-while preserving USLP's variable-length frame, MAP, truncated-frame, protocol
-control command, and managed QoS semantics. It must remain its own protocol
-rather than being treated as an AOS mode.
+The next protocol slice is the Encapsulation Packet Protocol. It should add a
+strict, streaming-capable CCSDS packet envelope for the non-Space-Packet PVNs
+that the TC and USLP Packet services already model through managed packet
+formats. It should remain independent of catalog interpretation and transport
+framing so TM, AOS, TC, USLP, Cadence, and the simulator can share it.
