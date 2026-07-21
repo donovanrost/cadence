@@ -12,10 +12,14 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
   alias Cadence.CCSDS.SDLP.USLP.Configuration, as: USLPConfiguration
   alias Cadence.CCSDS.SDLP.USLP.FrameCodec, as: USLPFrameCodec
+  alias Cadence.CCSDS.SDLS.{ApplyRequest, Channel, ProcessRequest}
+  alias Cadence.CCSDS.SDLS.Provider, as: SDLSProvider
+  alias Cadence.CCSDS.SDLS.SecurityAssociation
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.TestSupport.DeterministicGenerator, as: Generator
+  alias Cadence.CCSDS.TestSupport.SDLSTestCryptoProvider
 
   @seed String.to_integer(System.get_env("CCSDS_GENERATIVE_SEED", "20260720"))
   @cases String.to_integer(System.get_env("CCSDS_GENERATIVE_CASES", "512"))
@@ -263,6 +267,49 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
     assert is_tuple(final_state)
   end
 
+  test "seeded algorithm-neutral SDLS authentication and anti-replay state round-trip" do
+    provider = sdls_provider()
+
+    {final_provider, final_generator} =
+      Enum.reduce(
+        1..@cases,
+        {provider, Generator.seed(@seed + 8)},
+        fn case_number, {provider, generator} ->
+          {frame_prefix, generator} = Generator.binary(generator, 6)
+          {data_octets, generator} = Generator.integer(generator, 0, 256)
+          {data, generator} = Generator.binary(generator, data_octets)
+          context = context(:sdls_authentication, case_number)
+
+          request = %ApplyRequest{
+            channel: sdls_channel(),
+            service: :map_packet,
+            frame_prefix: frame_prefix,
+            data: data
+          }
+
+          {applied, sender} =
+            expect_ok3(SDLSProvider.apply_security(request, provider), context)
+
+          process = %ProcessRequest{
+            channel: request.channel,
+            service: request.service,
+            frame_prefix: request.frame_prefix,
+            secured_payload: applied.payload
+          }
+
+          {processed, receiver} =
+            expect_ok3(SDLSProvider.process_security(process, sender), context)
+
+          assert_equal(processed.data, data, context)
+          assert_equal(processed.verification.code, :no_failure, context)
+          {receiver, generator}
+        end
+      )
+
+    assert %SDLSProvider{} = final_provider
+    assert is_tuple(final_generator)
+  end
+
   test "seeded arbitrary malformed inputs never crash wire decoders" do
     aos_configuration =
       AOSConfiguration.new!(
@@ -339,6 +386,38 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
       })
 
     {packet, state}
+  end
+
+  defp sdls_provider do
+    association =
+      SecurityAssociation.new!(
+        spi: 0x4567,
+        channels: [sdls_channel()],
+        service_type: :authentication,
+        active?: true,
+        sequence_number_length: 4,
+        mac_length: 8,
+        authentication_algorithm: :test_hash,
+        authentication_key_ref: :generative_key,
+        authentication_mask: :binary.copy(<<0xFF>>, 1_024),
+        sequence_number: 0,
+        sequence_window: 4,
+        sequence_number_source: :sequence_number
+      )
+
+    {:ok, provider} = SDLSProvider.init([association], SDLSTestCryptoProvider)
+    provider
+  end
+
+  defp sdls_channel do
+    Channel.new!(
+      physical_channel: "generative",
+      protocol: :tc,
+      transfer_frame_version: 0,
+      scid: 1,
+      vcid: 1,
+      map_id: 1
+    )
   end
 
   defp tc_frame(state) do

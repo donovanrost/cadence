@@ -47,6 +47,13 @@
         "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//232x0b4e1c1.pdf",
       sha256: "0892557c3f28373498c2e1a9f089cd8a63e46eddff2325c90ff1c39ea6c4d792"
     },
+    ccsds_355_0_b_2: %{
+      title: "Space Data Link Security Protocol",
+      issue: "CCSDS 355.0-B-2",
+      published: "July 2022",
+      url: "https://ccsds.org/Pubs/355x0b2.pdf",
+      sha256: "86717aedd33886013333054355b92d2d32ffaf84a4a3eb63b7b6ffc6f17d5818"
+    },
     ccsds_732_0_b_5: %{
       title: "AOS Space Data Link Protocol",
       issue: "CCSDS 732.0-B-5 with corrigendum 1",
@@ -464,6 +471,40 @@
         data_hex: "AA"
       },
       expected_hex: "FF30000000000009AA"
+    },
+    %{
+      id: "sdls-tc-baseline-security-header",
+      classification: :normative_derivation,
+      source: :ccsds_355_0_b_2,
+      locator: "annex E2.2, figure E-3",
+      subject: :sdls_security_header,
+      parameters: %{
+        profile: :tc,
+        spi: 0x1234,
+        iv_hex: "",
+        sequence_number: 0x01020304,
+        iv_octets: 0,
+        sequence_octets: 4,
+        pad_length_octets: 0
+      },
+      expected_hex: "123401020304"
+    },
+    %{
+      id: "sdls-tm-baseline-security-header",
+      classification: :normative_derivation,
+      source: :ccsds_355_0_b_2,
+      locator: "annex E1.2, figure E-1",
+      subject: :sdls_security_header,
+      parameters: %{
+        profile: :tm,
+        spi: 0x2345,
+        iv_hex: "000102030405060708090A0B",
+        sequence_number: nil,
+        iv_octets: 12,
+        sequence_octets: 0,
+        pad_length_octets: 0
+      },
+      expected_hex: "2345000102030405060708090A0B"
     }
   ]
 }

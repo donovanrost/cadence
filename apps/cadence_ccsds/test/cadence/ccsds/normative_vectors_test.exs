@@ -17,6 +17,7 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   alias Cadence.CCSDS.SDLP.USLP.Configuration, as: USLPConfiguration
   alias Cadence.CCSDS.SDLP.USLP.FrameCodec, as: USLPFrameCodec
   alias Cadence.CCSDS.SDLP.USLP.OnlyIdleData, as: USLPOnlyIdleData
+  alias Cadence.CCSDS.SDLS.{Channel, SecurityAssociation, SecurityHeader}
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec
   alias Cadence.CCSDS.TC.{SegmentHeader, TransferFrame}
@@ -26,8 +27,8 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 7
-    assert length(corpus.vectors) >= 37
+    assert map_size(corpus.sources) == 8
+    assert length(corpus.vectors) >= 39
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -125,6 +126,32 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
       assert decoded.user_defined == packet.user_defined
       assert decoded.data == packet.data
       assert decoded.header_octets == packet.header_octets
+    end
+  end
+
+  test "matches the SDLS TC and TM baseline Security Header derivations" do
+    for vector <- NormativeVectors.vectors_for(:sdls_security_header) do
+      parameters = vector.parameters
+
+      association =
+        sdls_association(
+          parameters.profile,
+          parameters.spi,
+          parameters.iv_octets,
+          parameters.sequence_octets,
+          parameters.pad_length_octets
+        )
+
+      header = %SecurityHeader{
+        spi: parameters.spi,
+        initialization_vector: hex(parameters.iv_hex),
+        sequence_number: parameters.sequence_number,
+        pad_length: 0
+      }
+
+      expected = hex(vector.expected_hex)
+      assert {:ok, ^expected} = SecurityHeader.encode(header, association)
+      assert {:ok, ^header, <<>>, ^expected} = SecurityHeader.decode_prefix(expected, association)
     end
   end
 
@@ -355,6 +382,54 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
       end
 
     assert actual == expected
+  end
+
+  defp sdls_association(:tc, spi, _iv_octets, sequence_octets, pad_octets) do
+    SecurityAssociation.new!(
+      spi: spi,
+      channels: [sdls_channel(:tc, 0, 1)],
+      service_type: :authentication,
+      sequence_number_length: sequence_octets,
+      pad_length_length: pad_octets,
+      mac_length: 16,
+      authentication_algorithm: :cmac,
+      authentication_key_ref: :normative_vector,
+      authentication_mask: :binary.copy(<<0xFF>>, 128),
+      sequence_number: 0,
+      sequence_window: 10,
+      sequence_number_source: :sequence_number
+    )
+  end
+
+  defp sdls_association(:tm, spi, iv_octets, _sequence_octets, pad_octets) do
+    SecurityAssociation.new!(
+      spi: spi,
+      channels: [sdls_channel(:tm, 0, nil)],
+      service_type: :authenticated_encryption,
+      initialization_vector_length: iv_octets,
+      pad_length_length: pad_octets,
+      mac_length: 16,
+      authentication_algorithm: :gcm,
+      authentication_key_ref: :normative_vector,
+      authentication_mask: :binary.copy(<<0xFF>>, 128),
+      sequence_number: 0,
+      sequence_window: 10,
+      sequence_number_source: :initialization_vector,
+      encryption_algorithm: :gcm,
+      encryption_key_ref: :normative_vector,
+      initialization_vector: <<0::96>>
+    )
+  end
+
+  defp sdls_channel(protocol, transfer_frame_version, map_id) do
+    Channel.new!(
+      physical_channel: "normative",
+      protocol: protocol,
+      transfer_frame_version: transfer_frame_version,
+      scid: 1,
+      vcid: 1,
+      map_id: map_id
+    )
   end
 
   defp hex(value), do: NormativeVectors.decode_hex!(value)

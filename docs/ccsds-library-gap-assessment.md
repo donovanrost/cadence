@@ -84,7 +84,7 @@ The shared library currently owns:
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
   enforcement, and configurable complete/partial packet delivery evidence; and
-- maintained conformance evidence comprising 37 source-hashed, section-located
+- maintained conformance evidence comprising 39 source-hashed, section-located
   CCSDS vectors, explicit provenance classes for published versus derived
   octets, seeded generative and malformed-input properties, and a pinned
   bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
@@ -113,7 +113,13 @@ The shared library currently owns:
 - all ten USLP service boundaries (MAPP, VCP, MAPA, VCA, MAP Octet Stream,
   USLP_MC_OCF, VCF, MCF, Insert, and COPs Management), including synchronous
   OCF/Insert queues, frame-service isolation, portable loss evidence, managed
-  wire ingestion, and algorithm-neutral COP directive handoff.
+  wire ingestion, and algorithm-neutral COP directive handoff; and
+- CCSDS 355.0-B-2 algorithm-neutral SDLS Security Associations, exact
+  Security Header and Trailer processing, ApplySecurity and ProcessSecurity
+  boundaries, all three security service types, sequence-number- and IV-based
+  anti-replay state, managed padding, protocol service restrictions, OID and
+  channel-scope constraints, standard-required authentication masks, and
+  portable verification status codes.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -172,7 +178,6 @@ portable anomaly evidence.
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P2 | Space Data Link Security | No SDLS security header/trailer processing, anti-replay state, authentication, or encryption hook exists. | Define algorithm-neutral security transforms and state boundaries; keep key custody outside this library. |
 | P2 | Standard time codes | CUC/CDS time-code codecs and correlation helpers are absent. | Add as an independent value-codec namespace when catalog packet layouts need standard time fields. |
 
 ## Application-specific follow-through
@@ -184,7 +189,8 @@ compose those pieces:
 - `cadence_catalog` supplies compiled application layouts and APID metadata but
   remains independent of protocol framing and persistence;
 - Cadence should map activated mission configuration to TC service, SCID, VCID,
-  MAP, FECF, COP-1, coding profiles, and the shared managed TM channel model;
+  MAP, FECF, COP-1, coding profiles, SDLS association/provider configuration,
+  and the shared managed TM channel model;
 - the simulator and Cadence should continue to compose catalog application data
   with the shared protocol codecs rather than duplicating wire headers; and
 - Cadence should continue to own persistence, tenancy, revisions, import runs,
@@ -207,9 +213,9 @@ still require a second capable implementation or mission testbed before making
 broad interoperability claims. None of this evidence constitutes flight
 qualification.
 
-The corpus now includes 37 vectors across seven source-hashed standards and
-seeded AOS, USLP, and Encapsulation Packet round trips over their managed
-framing options.
+The corpus now includes 39 vectors across eight source-hashed standards and
+seeded AOS, USLP, Encapsulation Packet, and SDLS round trips over their managed
+framing and state options.
 AOS FHEC encode/correction behavior is independently cross-checked against a
 pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
 AOS interoperability because Yamcs uses an older AOS addressing layout.
@@ -219,11 +225,15 @@ implementation covering the full Issue-3 service set has been identified.
 Encapsulation Packet evidence covers all four normative header sizes with
 source-hashed derivations and seeded streaming/malformed-input properties; no
 independent CCSDS 133.1-B-3 implementation is yet in the differential harness.
+SDLS evidence covers normative TC and TM Security Header layouts plus seeded
+ApplySecurity/ProcessSecurity state transitions. Its deterministic test
+provider proves algorithm-neutral orchestration only; no cryptographic
+algorithm conformance or independent SDLS differential claim is made.
 
 ## Recommended next slice
 
-The next protocol slice is Space Data Link Security. It should define
-algorithm-neutral security association selection, security-header/trailer
-parsing, anti-replay state transitions, and authenticated-transform callbacks.
-Key custody, cryptographic-provider policy, persistence, and operational
-authorization must remain outside the dependency-leaf protocol library.
+The final identified protocol slice is the CCSDS unsegmented time-code family:
+CUC and CDS value codecs, managed preamble handling, bounded fractional-time
+conversion, and explicit correlation helpers. Mission epochs, clock
+correlation policy, leap-second tables, and persistence must remain outside the
+dependency-leaf protocol library.
