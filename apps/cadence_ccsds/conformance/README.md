@@ -18,10 +18,10 @@ hashes make the source snapshot independently retrievable and auditable.
 
 ## Deterministic generative checks
 
-The normal test suite runs seeded property checks over Space Packets, TC and TM
-transfer frames, FECF, BCH, LDPC, CLTU, randomization, streaming boundaries,
-and arbitrary malformed inputs. Increase the case count or reproduce a failure
-with:
+The normal test suite runs seeded property checks over Space Packets, TC, TM,
+and AOS transfer frames, FECF, AOS FHEC, BCH, LDPC, CLTU, randomization,
+streaming boundaries, and arbitrary malformed inputs. Increase the case count
+or reproduce a failure with:
 
 ```sh
 CCSDS_GENERATIVE_CASES=10000 CCSDS_GENERATIVE_SEED=20260720 \
@@ -48,3 +48,7 @@ bash conformance/hermes/run.sh
 `hermes/evidence.md` records the last maintained run. External interoperability
 is deliberately opt-in rather than part of `mix precommit`, because a normal
 library build must neither download tools nor depend on an external service.
+
+The issue-5 AOS FHEC vectors are also cross-checked against Yamcs at a pinned
+commit. This is narrower independent evidence rather than full AOS
+interoperability; see `aos/evidence.md`.

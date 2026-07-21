@@ -74,6 +74,7 @@ defmodule Cadence.CCSDS.SDLP.AOS.Configuration do
         configuration =
           __MODULE__
           |> struct(attrs)
+          |> normalize_content_defaults(attrs)
           |> fill_address_sets()
 
         case validate(configuration) do
@@ -142,6 +143,16 @@ defmodule Cadence.CCSDS.SDLP.AOS.Configuration do
   @spec address(t()) :: {0..1023, 0..63}
   def address(%__MODULE__{scid: scid, vcid: vcid}), do: {scid, vcid}
 
+  @spec physical_address(t()) :: {binary(), 0..1023, 0..63}
+  def physical_address(%__MODULE__{} = configuration) do
+    {configuration.physical_channel, configuration.scid, configuration.vcid}
+  end
+
+  @spec matches?(t(), 0..1023, 0..63) :: boolean()
+  def matches?(%__MODULE__{} = configuration, scid, vcid) do
+    configuration.scid == scid and configuration.vcid == vcid
+  end
+
   @spec primary_header_octets(t()) :: 6 | 8
   def primary_header_octets(%__MODULE__{frame_header_error_control?: true}),
     do: @base_primary_header_octets + @header_error_control_octets
@@ -170,6 +181,20 @@ defmodule Cadence.CCSDS.SDLP.AOS.Configuration do
     |> maybe_fill(:valid_vcids, [configuration.vcid, 63] |> Enum.reject(&is_nil/1) |> Enum.uniq())
   end
 
+  defp normalize_content_defaults(configuration, attrs) do
+    if configuration.data_field_content == :m_pdu do
+      configuration
+    else
+      configuration
+      |> maybe_default(attrs, :valid_packet_version_numbers, [])
+      |> maybe_default(attrs, :maximum_packet_octets, nil)
+    end
+  end
+
+  defp maybe_default(configuration, attrs, field, value) do
+    if Map.has_key?(attrs, field), do: configuration, else: Map.put(configuration, field, value)
+  end
+
   defp maybe_fill(configuration, field, value) do
     case Map.fetch!(configuration, field) do
       [] -> Map.put(configuration, field, List.wrap(value))
@@ -177,7 +202,12 @@ defmodule Cadence.CCSDS.SDLP.AOS.Configuration do
     end
   end
 
-  defp validate_idle_channel(%__MODULE__{vcid: 63, data_field_content: :idle_data}), do: :ok
+  defp validate_idle_channel(%__MODULE__{vcid: 63, data_field_content: :idle_data, ocf?: false}),
+    do: :ok
+
+  defp validate_idle_channel(%__MODULE__{vcid: 63, data_field_content: :idle_data}),
+    do: {:error, :idle_vcid_forbids_ocf}
+
   defp validate_idle_channel(%__MODULE__{vcid: 63}), do: {:error, :idle_vcid_requires_idle_data}
 
   defp validate_idle_channel(%__MODULE__{data_field_content: :idle_data}),

@@ -63,6 +63,29 @@ defmodule Cadence.CCSDS.SDLP.AOS.FrameCodec do
     end
   end
 
+  @doc """
+  Decodes a fixed-length physical-channel stream and routes each frame to its
+  managed Virtual Channel configuration.
+
+  The optional FHEC is corrected before the issue-5 SCID and VCID are used for
+  routing. `:physical_channel` is required only when the supplied plan spans
+  more than one physical channel.
+  """
+  @spec decode_managed(binary(), [Configuration.t()], keyword()) ::
+          {:ok, [map()], [map()], binary()} | {:error, term()}
+  def decode_managed(binary, configurations, opts \\ [])
+
+  def decode_managed(binary, configurations, opts)
+      when is_binary(binary) and is_list(configurations) and is_list(opts) do
+    with :ok <- Configuration.validate_plan(configurations),
+         {:ok, physical_configurations} <- select_physical_channel(configurations, opts) do
+      decode_managed_frames(binary, physical_configurations, opts)
+    end
+  end
+
+  def decode_managed(binary, configurations, opts),
+    do: {:error, {:invalid_aos_managed_decode, binary, configurations, opts}}
+
   defp decode_complete_frames(binary, configuration, opts) do
     {frames, rest} = split_frames(binary, configuration.frame_size)
 
@@ -74,6 +97,113 @@ defmodule Cadence.CCSDS.SDLP.AOS.FrameCodec do
       end)
 
     {:ok, Enum.reverse(decoded), Enum.reverse(dropped), rest}
+  end
+
+  defp decode_managed_frames(binary, configurations, opts) do
+    frame_size = hd(configurations).frame_size
+    {frames, rest} = split_frames(binary, frame_size)
+    indexed = Map.new(configurations, &{Configuration.address(&1), &1})
+
+    {decoded, dropped} =
+      frames
+      |> Enum.with_index()
+      |> Enum.reduce({[], []}, fn {frame, index}, {decoded, dropped} ->
+        accumulate_managed_frame(frame, index, frame_size, indexed, opts, decoded, dropped)
+      end)
+
+    {:ok, Enum.reverse(decoded), Enum.reverse(dropped), rest}
+  end
+
+  defp accumulate_managed_frame(frame, index, frame_size, indexed, opts, decoded, dropped) do
+    offset = index * frame_size
+
+    case decode_routed_frame(frame, indexed, opts) do
+      {:ok, link_frame} ->
+        evidence = %{
+          frame: link_frame,
+          raw_frame_offset_bytes: offset,
+          raw_frame_length_bytes: frame_size
+        }
+
+        {[evidence | decoded], dropped}
+
+      {:error, reason} ->
+        anomaly = %{
+          anomaly_kind: :frame_decode_dropped,
+          raw_frame_offset_bytes: offset,
+          raw_frame_length_bytes: frame_size,
+          metadata: %{profile: :aos, reason: reason}
+        }
+
+        {decoded, [anomaly | dropped]}
+    end
+  end
+
+  defp decode_routed_frame(frame, indexed, opts) do
+    sample_configuration = indexed |> Map.values() |> hd()
+
+    with {:ok, scid, vcid} <- routing_address(frame, sample_configuration),
+         {:ok, configuration} <- fetch_routed_configuration(indexed, scid, vcid) do
+      decode_frame(frame, configuration, opts)
+    end
+  end
+
+  defp routing_address(
+         <<protected::16, _vcfc::24, signaling::8, error_control::16, _rest::binary>>,
+         %Configuration{frame_header_error_control?: true}
+       ) do
+    with {:ok, decoded} <- FrameHeaderErrorControl.decode(protected, signaling, error_control) do
+      decode_routing_fields(decoded.protected_header, decoded.signaling)
+    end
+  end
+
+  defp routing_address(
+         <<protected::16, _vcfc::24, signaling::8, _rest::binary>>,
+         %Configuration{frame_header_error_control?: false}
+       ) do
+    decode_routing_fields(protected, signaling)
+  end
+
+  defp routing_address(_frame, _configuration), do: {:error, :truncated_aos_primary_header}
+
+  defp decode_routing_fields(protected, signaling) do
+    <<version::2, scid_lsb::8, vcid::6>> = <<protected::16>>
+    <<_replay::1, _cycle_use::1, scid_msb::2, _cycle::4>> = <<signaling::8>>
+
+    with :ok <- validate_version(version) do
+      {:ok, scid_msb <<< 8 ||| scid_lsb, vcid}
+    end
+  end
+
+  defp fetch_routed_configuration(indexed, scid, vcid) do
+    case Map.fetch(indexed, {scid, vcid}) do
+      {:ok, configuration} -> {:ok, configuration}
+      :error -> {:error, {:unknown_aos_channel, scid, vcid}}
+    end
+  end
+
+  defp select_physical_channel(configurations, opts) do
+    grouped = Enum.group_by(configurations, & &1.physical_channel)
+
+    case Keyword.get(opts, :physical_channel) do
+      nil -> select_only_physical_channel(grouped)
+      physical when is_binary(physical) -> fetch_physical_channel(grouped, physical)
+      value -> {:error, {:invalid_physical_channel, value}}
+    end
+  end
+
+  defp select_only_physical_channel(grouped) do
+    case Map.to_list(grouped) do
+      [{_physical, configurations}] -> {:ok, configurations}
+      _many -> {:error, {:physical_channel_required, grouped |> Map.keys() |> Enum.sort()}}
+    end
+  end
+
+  defp fetch_physical_channel(grouped, physical) do
+    case Map.fetch(grouped, physical) do
+      {:ok, configurations} -> {:ok, configurations}
+      :error -> {:error, {:unknown_physical_channel, physical}}
+    end
   end
 
   defp accumulate_decoded_frame(frame, index, configuration, opts, decoded, dropped) do
@@ -309,6 +439,7 @@ defmodule Cadence.CCSDS.SDLP.AOS.FrameCodec do
           replay_flag: replay_flag,
           vc_frame_count_cycle_use_flag: cycle_use_flag,
           vc_frame_count_cycle: cycle,
+          physical_channel: configuration.physical_channel,
           data_field_content: configuration.data_field_content,
           insert_zone: insert_zone,
           insert_zone_present: insert_octets > 0,

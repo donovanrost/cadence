@@ -38,6 +38,14 @@
       url:
         "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//232x0b4e1c1.pdf",
       sha256: "0892557c3f28373498c2e1a9f089cd8a63e46eddff2325c90ff1c39ea6c4d792"
+    },
+    ccsds_732_0_b_5: %{
+      title: "AOS Space Data Link Protocol",
+      issue: "CCSDS 732.0-B-5 with corrigendum 1",
+      published: "October 2025",
+      url:
+        "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/10/732x0b5ec1.pdf",
+      sha256: "d9d22dd4e9b43128c9a634ae29e32a67b50c16dab52a916cc465999021cd0f91"
     }
   },
   vectors: [
@@ -297,6 +305,59 @@
         report_value: 99
       },
       expected_hex: "1544AC63"
+    },
+    %{
+      id: "aos-issue-5-primary-header-layout",
+      classification: :normative_derivation,
+      source: :ccsds_732_0_b_5,
+      locator: "4.1.2, figures 4-1 and 4-2",
+      subject: :aos_transfer_frame,
+      parameters: %{
+        scid: 0x321,
+        vcid: 5,
+        vcfc: 0xA0B0C0,
+        replay_flag: 1,
+        cycle_use_flag: 1,
+        cycle: 9,
+        payload_hex: "AABB"
+      },
+      expected_hex: "4845A0B0C0F9AABB"
+    },
+    %{
+      id: "aos-frame-header-error-control",
+      classification: :normative_derivation,
+      source: :ccsds_732_0_b_5,
+      locator: "4.1.2.6 and annex C",
+      subject: :aos_frame_header_error_control,
+      parameters: %{protected_header: 0x1234, signaling: 0x56},
+      expected_hex: "94DC"
+    },
+    %{
+      id: "aos-mpdu-layout",
+      classification: :normative_derivation,
+      source: :ccsds_732_0_b_5,
+      locator: "4.1.4.2, figure 4-3",
+      subject: :aos_mpdu,
+      parameters: %{first_header_pointer: 2, packet_zone_hex: "AABBCC"},
+      expected_hex: "0002AABBCC"
+    },
+    %{
+      id: "aos-bpdu-layout",
+      classification: :normative_derivation,
+      source: :ccsds_732_0_b_5,
+      locator: "4.1.4.3, figure 4-4",
+      subject: :aos_bpdu,
+      parameters: %{bitstream_data_pointer: 9, data_zone_hex: "AABBCC"},
+      expected_hex: "0009AABBCC"
+    },
+    %{
+      id: "aos-oid-annex-d-prefix",
+      classification: :normative_derivation,
+      source: :ccsds_732_0_b_5,
+      locator: "4.1.4.1.5 and annex D",
+      subject: :aos_only_idle_data,
+      parameters: %{octets: 20},
+      expected_hex: "FFFFFFFF6DB6D861451F11F19716723CBE7E00B1"
     }
   ]
 }

@@ -5,6 +5,8 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
 
   alias Cadence.CCSDS.ChannelCoding.{BCH, CLTU, Configuration, LDPC, Randomizer}
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.SDLP.AOS.Configuration, as: AOSConfiguration
+  alias Cadence.CCSDS.SDLP.AOS.FrameCodec, as: AOSFrameCodec
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
@@ -144,7 +146,52 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
     assert is_tuple(final_state)
   end
 
+  test "seeded fixed-length AOS content types and optional fields round-trip" do
+    final_state =
+      Enum.reduce(1..@cases, Generator.seed(@seed + 5), fn case_number, state ->
+        {frame, configuration, state} = aos_frame(state)
+        context = context(:aos_transfer_frame, case_number)
+        options = [configuration: configuration]
+
+        encoded = expect_ok(AOSFrameCodec.encode(frame, options), context)
+
+        decoded =
+          case AOSFrameCodec.decode(encoded, options) do
+            {:ok, [decoded], <<>>} -> decoded
+            result -> flunk_result(result, context)
+          end
+
+        assert_equal(decoded.scid, frame.scid, context)
+        assert_equal(decoded.vcid, frame.vcid, context)
+        assert_equal(decoded.frame_seq, frame.frame_seq, context)
+        assert_equal(decoded.payload_octets, frame.payload_octets, context)
+        assert_equal(decoded.ocf, frame.ocf, context)
+        assert_equal(decoded.meta.insert_zone, frame.meta.insert_zone || <<>>, context)
+        assert_equal(decoded.meta.replay_flag, frame.meta.replay_flag, context)
+
+        assert_equal(
+          decoded.meta.vc_frame_count_cycle,
+          frame.meta.vc_frame_count_cycle,
+          context
+        )
+
+        state
+      end)
+
+    assert is_tuple(final_state)
+  end
+
   test "seeded arbitrary malformed inputs never crash wire decoders" do
+    aos_configuration =
+      AOSConfiguration.new!(
+        frame_size: 32,
+        scid: 1,
+        vcid: 1,
+        frame_header_error_control?: true,
+        fecf?: true,
+        maximum_packet_octets: 128
+      )
+
     final_state =
       Enum.reduce(1..@cases, Generator.seed(@seed + 4), fn case_number, state ->
         {octets, state} = Generator.integer(state, 0, 128)
@@ -154,6 +201,11 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
         assert_tuple(SpacePacketCodec.decode_prefix(input), context)
         assert_tuple(TransferFrame.decode(input, frame_size: 128), context)
         assert_tuple(TMFrameCodec.decode_detailed(input, frame_size: 32), context)
+
+        assert_tuple(
+          AOSFrameCodec.decode_detailed(input, configuration: aos_configuration),
+          context
+        )
 
         assert_tuple(
           CLTU.decode(input, Configuration.new!(), expected_data_octets: 1),
@@ -272,6 +324,110 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
 
     {frame, [frame_size: frame_size, fecf: fecf?], state}
   end
+
+  defp aos_frame(state) do
+    {scid, state} = Generator.integer(state, 0, 1023)
+    {vcid, state} = Generator.integer(state, 0, 62)
+    {vcfc, state} = Generator.integer(state, 0, 0xFFFFFF)
+    {replay, state} = Generator.integer(state, 0, 1)
+    {cycle_use?, state} = Generator.boolean(state)
+
+    {cycle, state} = aos_cycle(state, cycle_use?)
+
+    {content, state} = Generator.member(state, [:m_pdu, :b_pdu, :vca_sdu])
+    {fhec?, state} = Generator.boolean(state)
+    {fecf?, state} = Generator.boolean(state)
+    {ocf?, state} = Generator.boolean(state)
+    {insert_octets, state} = Generator.integer(state, 0, 4)
+    {payload_octets, state} = Generator.integer(state, 1, 128)
+    {payload, state} = Generator.binary(state, payload_octets)
+    {insert, state} = Generator.binary(state, insert_octets)
+    {ocf, state} = aos_ocf(state, ocf?)
+
+    fields = %{
+      scid: scid,
+      vcid: vcid,
+      vcfc: vcfc,
+      replay: replay,
+      cycle_use?: cycle_use?,
+      cycle: cycle,
+      content: content,
+      fhec?: fhec?,
+      fecf?: fecf?,
+      ocf?: ocf?,
+      insert_octets: insert_octets,
+      payload_octets: payload_octets,
+      payload: payload,
+      insert: insert,
+      ocf: ocf
+    }
+
+    configuration = aos_configuration(fields)
+
+    meta =
+      %{
+        vcfc: fields.vcfc,
+        replay_flag: fields.replay,
+        vc_frame_count_cycle_use_flag: bool_bit(fields.cycle_use?),
+        vc_frame_count_cycle: fields.cycle,
+        insert_zone: optional_binary(fields.insert)
+      }
+      |> Map.merge(aos_content_meta(fields.content))
+
+    frame = %LinkFrame{
+      profile: :aos,
+      scid: fields.scid,
+      vcid: fields.vcid,
+      frame_seq: fields.vcfc,
+      payload_octets: fields.payload,
+      quality: :good,
+      ocf: fields.ocf,
+      meta: meta
+    }
+
+    {frame, configuration, state}
+  end
+
+  defp aos_configuration(fields) do
+    {versions, maximum} = aos_packet_parameters(fields.content)
+
+    AOSConfiguration.new!(
+      frame_size: aos_frame_size(fields),
+      scid: fields.scid,
+      vcid: fields.vcid,
+      frame_header_error_control?: fields.fhec?,
+      insert_zone_length: fields.insert_octets,
+      fecf?: fields.fecf?,
+      data_field_content: fields.content,
+      ocf?: fields.ocf?,
+      maximum_packet_octets: maximum,
+      valid_packet_version_numbers: versions
+    )
+  end
+
+  defp aos_frame_size(fields) do
+    6 + optional_octets(fields.fhec?, 2) + fields.insert_octets +
+      aos_pdu_header_octets(fields.content) + fields.payload_octets +
+      optional_octets(fields.ocf?, 4) + optional_octets(fields.fecf?, 2)
+  end
+
+  defp aos_cycle(state, true), do: Generator.integer(state, 0, 15)
+  defp aos_cycle(state, false), do: {0, state}
+  defp aos_ocf(state, true), do: Generator.binary(state, 4)
+  defp aos_ocf(state, false), do: {nil, state}
+  defp aos_packet_parameters(:m_pdu), do: {[0], 128}
+  defp aos_packet_parameters(_content), do: {[], nil}
+  defp aos_content_meta(:m_pdu), do: %{first_header_pointer: 0}
+  defp aos_content_meta(:b_pdu), do: %{bitstream_data_pointer: 0x3FFF}
+  defp aos_content_meta(:vca_sdu), do: %{}
+  defp aos_pdu_header_octets(content) when content in [:m_pdu, :b_pdu], do: 2
+  defp aos_pdu_header_octets(:vca_sdu), do: 0
+  defp optional_octets(true, octets), do: octets
+  defp optional_octets(false, _octets), do: 0
+  defp optional_binary(<<>>), do: nil
+  defp optional_binary(binary), do: binary
+  defp bool_bit(true), do: 1
+  defp bool_bit(false), do: 0
 
   defp channel_configuration(state) do
     {code, state} = Generator.member(state, [:bch, :ldpc_128_64, :ldpc_512_256])

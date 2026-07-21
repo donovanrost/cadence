@@ -4,6 +4,12 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   alias Cadence.CCSDS.ChannelCoding.{BCH, CLTU, Configuration, LDPC, Randomizer}
   alias Cadence.CCSDS.Core.LinkFrame
   alias Cadence.CCSDS.FrameErrorControl
+  alias Cadence.CCSDS.SDLP.AOS.BPDU
+  alias Cadence.CCSDS.SDLP.AOS.Configuration, as: AOSConfiguration
+  alias Cadence.CCSDS.SDLP.AOS.FrameCodec, as: AOSFrameCodec
+  alias Cadence.CCSDS.SDLP.AOS.FrameHeaderErrorControl
+  alias Cadence.CCSDS.SDLP.AOS.MPDU
+  alias Cadence.CCSDS.SDLP.AOS.OnlyIdleData, as: AOSOnlyIdleData
   alias Cadence.CCSDS.SDLP.TM.{FrameCodec, OnlyIdleData, SecondaryHeader}
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec
@@ -14,8 +20,8 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 4
-    assert length(corpus.vectors) >= 20
+    assert map_size(corpus.sources) == 5
+    assert length(corpus.vectors) >= 30
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -164,6 +170,71 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
     clcw = CLCW.new(Map.merge(clcw_vector.parameters, %{control_word_type: 0, version: 0}))
     expected_clcw = hex(clcw_vector.expected_hex)
     assert {:ok, ^expected_clcw} = CLCW.encode(clcw)
+  end
+
+  test "matches AOS issue-5 header, FHEC, M_PDU, B_PDU, and OID derivations" do
+    frame_vector = NormativeVectors.vector!("aos-issue-5-primary-header-layout")
+    parameters = frame_vector.parameters
+
+    configuration =
+      AOSConfiguration.new!(
+        frame_size: byte_size(hex(frame_vector.expected_hex)),
+        scid: parameters.scid,
+        vcid: parameters.vcid,
+        data_field_content: :vca_sdu
+      )
+
+    frame = %LinkFrame{
+      profile: :aos,
+      scid: parameters.scid,
+      vcid: parameters.vcid,
+      frame_seq: parameters.vcfc,
+      payload_octets: hex(parameters.payload_hex),
+      quality: :good,
+      meta: %{
+        vcfc: parameters.vcfc,
+        replay_flag: parameters.replay_flag,
+        vc_frame_count_cycle_use_flag: parameters.cycle_use_flag,
+        vc_frame_count_cycle: parameters.cycle
+      }
+    }
+
+    expected_frame = hex(frame_vector.expected_hex)
+    assert {:ok, ^expected_frame} = AOSFrameCodec.encode(frame, configuration: configuration)
+
+    fhec = NormativeVectors.vector!("aos-frame-header-error-control")
+
+    assert {:ok, encoded_fhec} =
+             FrameHeaderErrorControl.encode(
+               fhec.parameters.protected_header,
+               fhec.parameters.signaling
+             )
+
+    assert <<encoded_fhec::16>> == hex(fhec.expected_hex)
+
+    mpdu = NormativeVectors.vector!("aos-mpdu-layout")
+
+    assert {:ok, encoded_mpdu} =
+             MPDU.encode(%MPDU{
+               first_header_pointer: mpdu.parameters.first_header_pointer,
+               packet_zone: hex(mpdu.parameters.packet_zone_hex)
+             })
+
+    assert encoded_mpdu == hex(mpdu.expected_hex)
+
+    bpdu = NormativeVectors.vector!("aos-bpdu-layout")
+
+    assert {:ok, encoded_bpdu} =
+             BPDU.encode(%BPDU{
+               bitstream_data_pointer: bpdu.parameters.bitstream_data_pointer,
+               data_zone: hex(bpdu.parameters.data_zone_hex)
+             })
+
+    assert encoded_bpdu == hex(bpdu.expected_hex)
+
+    oid = NormativeVectors.vector!("aos-oid-annex-d-prefix")
+    expected_oid = hex(oid.expected_hex)
+    assert {^expected_oid, _state} = AOSOnlyIdleData.take(oid.parameters.octets)
   end
 
   defp assert_constant(binary, side, vector_id) do
