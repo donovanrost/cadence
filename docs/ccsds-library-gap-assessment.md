@@ -75,7 +75,12 @@ The shared library currently owns:
   rule; and
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
-  enforcement, and configurable complete/partial packet delivery evidence.
+  enforcement, and configurable complete/partial packet delivery evidence; and
+- maintained conformance evidence comprising 25 source-hashed, section-located
+  CCSDS vectors, explicit provenance classes for published versus derived
+  octets, seeded generative and malformed-input properties, and a pinned
+  bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
+  128 TC transfer frames, and 128 TM transfer frames.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -134,7 +139,6 @@ portable anomaly evidence.
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P1 | Conformance evidence | Tests include focused unit, malformed-input, state-machine, deterministic boundary-sweep, and Cadence loopback coverage. There is still no maintained published-vector corpus, generative fuzzing, or external implementation interoperability run. | Establish traceable normative vectors and differential/interoperability tests before making compliance claims. |
 | P2 | Other space data links | `Types.profile/0` names AOS and USLP, but no AOS or USLP codecs/services exist. | Implement only when a concrete mission or provider requires them; do not imply support from the type atoms. |
 | P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
 | P2 | Space Data Link Security | No SDLS security header/trailer processing, anti-replay state, authentication, or encryption hook exists. | Define algorithm-neutral security transforms and state boundaries; keep key custody outside this library. |
@@ -155,13 +159,27 @@ compose those pieces:
 - Cadence should continue to own persistence, tenancy, revisions, import runs,
   governance, activation, jobs, PubSub, and dashboard invalidation.
 
+## Conformance evidence boundary
+
+The maintained corpus lives under `apps/cadence_ccsds/conformance` and records
+the exact CCSDS publication URL, SHA-256, locator, and evidence class for every
+vector. The normal test suite consumes all entries and runs reproducible seeded
+properties; `CCSDS_GENERATIVE_CASES` and `CCSDS_GENERATIVE_SEED` scale and
+reproduce that sweep without adding a runtime dependency.
+
+The opt-in external harness pins NASA Hermes v4.0.11 by release and commit,
+checks Cadence-generated values with Hermes, and decodes Hermes-generated values
+with Cadence. Its maintained run covers Space Packets, Type-BD TC frames with
+FECF, and TM frames with and without secondary headers. Hermes does not expose
+the full Cadence subset, so TM OCF/FECF and COP-1 state-machine interoperability
+still require a second capable implementation or mission testbed before making
+broad interoperability claims. None of this evidence constitutes flight
+qualification.
+
 ## Recommended next slice
 
-The next highest-leverage protocol slice is conformance evidence: establish a
-maintained, traceable corpus of normative vectors, then add deterministic
-property/generative checks and an external implementation interoperability run.
-
-Published normative vectors, malformed-input/property testing, and external
-interoperability evidence still remain prerequisites before describing the
-uplink path as a complete interoperable or flight-qualified COP-1
-implementation.
+The next protocol slice is the AOS Space Data Link Protocol. It should reuse the
+shared Space Packet, FECF, continuity, segmentation, reassembly, and service
+boundaries where their semantics align, while keeping AOS-specific headers,
+insert zones, frame status, and managed channel configuration explicit. USLP
+should follow as its own protocol rather than being treated as an AOS mode.
