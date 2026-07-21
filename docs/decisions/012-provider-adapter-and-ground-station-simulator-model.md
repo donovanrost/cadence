@@ -5,7 +5,7 @@ aliases:
 tags: [adr, architecture, provider, transport, simulator, gsaas, tcp]
 status: accepted
 created: 2026-03-30
-updated: 2026-03-30
+updated: 2026-07-20
 ---
 
 # ADR-012: Provider Adapter and Ground Station Simulator Model
@@ -30,7 +30,7 @@ Cadence now has:
 - realized contact and path runtime
 - transport-local extensions under path runtime
 - typed `uplink_request` execution
-- real `TC` framing and narrow `COP-1`
+- real `TC` framing and a shared FOP-1B/FARM-1 COP-1 implementation
 - dev ingress harnesses for `space_packet` and `TM` transfer frames
 
 The next external-integration question is how Cadence should interact with real

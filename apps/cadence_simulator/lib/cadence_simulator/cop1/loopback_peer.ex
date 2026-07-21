@@ -15,7 +15,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.{FrameCodec, Reassembly}
-  alias Cadence.CCSDS.Transport.COP1.CLCW
+  alias Cadence.CCSDS.Transport.COP1.{CLCW, FARM}
   alias CadenceSimulator.COP1.CLCWInjector
 
   @tcp_opts [:binary, packet: 0, active: false, nodelay: true]
@@ -35,14 +35,20 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     :segment_header_flag,
     :segment_header_by_vcid,
     :tc_reassembly,
+    :farm_config,
+    farm_by_vcid: %{},
     receive_buffer: <<>>,
     tc_frame_count: 0,
+    farm_accept_count: 0,
+    farm_discard_count: 0,
     clcw_count: 0,
     command_count: 0,
     command_error_count: 0,
     last_command: nil,
     last_command_error: nil,
     last_tc_frame_seq: nil,
+    last_farm_event: nil,
+    last_farm_state: nil,
     last_clcw_report_value: nil,
     last_error: nil
   ]
@@ -63,25 +69,29 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   @impl true
   def init(opts) do
-    {:ok, tc_reassembly} =
-      Reassembly.init(max_sdu_octets: Keyword.get(opts, :max_command_sdu_octets, 1_048_576))
+    with {:ok, tc_reassembly} <-
+           Reassembly.init(max_sdu_octets: Keyword.get(opts, :max_command_sdu_octets, 1_048_576)),
+         {:ok, farm_config} <- build_farm_config(opts) do
+      state = %__MODULE__{
+        host: Keyword.get(opts, :host, "127.0.0.1"),
+        port: Keyword.fetch!(opts, :port),
+        tc_frame_size: Keyword.fetch!(opts, :tc_frame_size),
+        fecf: Keyword.get(opts, :fecf, false),
+        runtime_resolver: Keyword.get(opts, :runtime_resolver),
+        reconnect_interval_ms:
+          Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
+        clcw_injector: build_clcw_injector(opts),
+        command_target: Keyword.get(opts, :command_target),
+        segment_header_flag: Keyword.get(opts, :segment_header_flag, 0),
+        segment_header_by_vcid: Keyword.get(opts, :segment_header_by_vcid, %{}),
+        tc_reassembly: tc_reassembly,
+        farm_config: farm_config
+      }
 
-    state = %__MODULE__{
-      host: Keyword.get(opts, :host, "127.0.0.1"),
-      port: Keyword.fetch!(opts, :port),
-      tc_frame_size: Keyword.fetch!(opts, :tc_frame_size),
-      fecf: Keyword.get(opts, :fecf, false),
-      runtime_resolver: Keyword.get(opts, :runtime_resolver),
-      reconnect_interval_ms:
-        Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
-      clcw_injector: build_clcw_injector(opts),
-      command_target: Keyword.get(opts, :command_target),
-      segment_header_flag: Keyword.get(opts, :segment_header_flag, 0),
-      segment_header_by_vcid: Keyword.get(opts, :segment_header_by_vcid, %{}),
-      tc_reassembly: tc_reassembly
-    }
-
-    {:ok, connect_or_schedule(state)}
+      {:ok, connect_or_schedule(state)}
+    else
+      {:error, reason} -> {:stop, reason}
+    end
   end
 
   @impl true
@@ -94,6 +104,9 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        tc_frame_size: state.tc_frame_size,
        fecf: state.fecf,
        tc_frame_count: state.tc_frame_count,
+       farm_accept_count: state.farm_accept_count,
+       farm_discard_count: state.farm_discard_count,
+       farm_states: farm_snapshots(state.farm_by_vcid),
        clcw_count: state.clcw_count,
        command_count: state.command_count,
        command_error_count: state.command_error_count,
@@ -101,6 +114,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        last_command_error: state.last_command_error,
        reassembly_buffer_count: map_size(state.tc_reassembly.buffers),
        last_tc_frame_seq: state.last_tc_frame_seq,
+       last_farm_event: state.last_farm_event,
+       last_farm_state: state.last_farm_state,
        last_clcw_report_value: state.last_clcw_report_value,
        last_error: state.last_error
      }, state}
@@ -208,28 +223,36 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   end
 
   defp handle_tc_frame(%LinkFrame{} = frame, state) do
-    state = maybe_execute_command(frame, state)
+    with {:ok, farm} <- farm_for_frame(state, frame),
+         {:ok, transition} <- FARM.process_frame(farm, frame) do
+      state = apply_farm_transition(state, frame, transition)
 
-    clcw =
-      CLCW.new(%{
-        vcid: frame.vcid,
-        report_value: next_expected_frame_sequence(frame)
-      })
-      |> maybe_apply_injector(state.clcw_injector, state.tc_frame_count)
+      clcw =
+        transition.state
+        |> FARM.clcw()
+        |> maybe_apply_injector(state.clcw_injector, state.tc_frame_count)
 
-    with {:ok, clcw_binary} <- CLCW.encode(clcw),
-         :ok <- :gen_tcp.send(state.socket, clcw_binary) do
-      %{
-        state
-        | tc_frame_count: state.tc_frame_count + 1,
-          clcw_count: state.clcw_count + 1,
-          last_tc_frame_seq: frame.frame_seq,
-          last_clcw_report_value: clcw.report_value,
-          last_error: nil
-      }
+      with {:ok, clcw_binary} <- CLCW.encode(clcw),
+           :ok <- :gen_tcp.send(state.socket, clcw_binary) do
+        %{
+          state
+          | tc_frame_count: state.tc_frame_count + 1,
+            clcw_count: state.clcw_count + 1,
+            last_tc_frame_seq: frame.frame_seq,
+            last_clcw_report_value: clcw.report_value,
+            last_error: nil
+        }
+      else
+        {:error, reason} ->
+          Logger.warning("COP-1 loopback failed to send CLCW: #{inspect(reason)}")
+          %{state | last_error: inspect(reason)}
+      end
     else
       {:error, reason} ->
-        Logger.warning("COP-1 loopback failed to send CLCW: #{inspect(reason)}")
+        Logger.warning(
+          "COP-1 loopback failed to process TC frame with FARM-1: #{inspect(reason)}"
+        )
+
         %{state | last_error: inspect(reason)}
     end
   end
@@ -260,12 +283,61 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   defp maybe_apply_injector(%CLCW{} = clcw, _injector, _step), do: clcw
 
-  defp next_expected_frame_sequence(%LinkFrame{} = frame) do
-    if Map.get(frame.meta, :bypass_flag, 0) == 0 do
-      rem(frame.frame_seq + 1, 256)
-    else
-      frame.frame_seq
+  defp build_farm_config(opts) do
+    farm_config = %{
+      receiver_frame_sequence_number: Keyword.get(opts, :farm_initial_vr, 0),
+      positive_window_width: Keyword.get(opts, :farm_positive_window_width, 127),
+      negative_window_width: Keyword.get(opts, :farm_negative_window_width, 127),
+      retransmission_allowed: Keyword.get(opts, :farm_retransmission_allowed, true)
+    }
+
+    case FARM.new(Map.put(farm_config, :vcid, 0)) do
+      {:ok, _farm} -> {:ok, farm_config}
+      {:error, reason} -> {:error, {:invalid_farm_config, reason}}
     end
+  end
+
+  defp farm_for_frame(state, %LinkFrame{vcid: vcid}) do
+    case Map.fetch(state.farm_by_vcid, vcid) do
+      {:ok, farm} -> {:ok, farm}
+      :error -> FARM.new(Map.put(state.farm_config, :vcid, vcid))
+    end
+  end
+
+  defp apply_farm_transition(state, frame, transition) do
+    state = %{
+      state
+      | farm_by_vcid: Map.put(state.farm_by_vcid, frame.vcid, transition.state),
+        last_farm_event: transition.event,
+        last_farm_state: transition.state.state
+    }
+
+    state =
+      case transition.disposition do
+        :accept -> %{state | farm_accept_count: state.farm_accept_count + 1}
+        :discard -> %{state | farm_discard_count: state.farm_discard_count + 1}
+        _other -> state
+      end
+
+    if transition.deliver? do
+      maybe_execute_command(frame, state)
+    else
+      state
+    end
+  end
+
+  defp farm_snapshots(farm_by_vcid) do
+    Map.new(farm_by_vcid, fn {vcid, farm} ->
+      {vcid,
+       %{
+         state: farm.state,
+         receiver_frame_sequence_number: farm.receiver_frame_sequence_number,
+         retransmit: farm.retransmit,
+         farm_b_counter: farm.farm_b_counter,
+         positive_window_width: farm.positive_window_width,
+         negative_window_width: farm.negative_window_width
+       }}
+    end)
   end
 
   defp maybe_execute_command(
@@ -362,6 +434,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
           |> maybe_put_runtime_value(:tc_frame_size, runtime_updates)
           |> maybe_put_runtime_value(:segment_header_flag, runtime_updates)
           |> maybe_put_runtime_value(:fecf, runtime_updates)
+          |> maybe_put_farm_initial_vr(runtime_updates)
           |> maybe_reset_reassembly_for_runtime_change(state)
 
         maybe_log_runtime_refresh(state, refreshed_state)
@@ -377,6 +450,16 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     case Keyword.fetch(runtime_updates, key) do
       {:ok, value} -> Map.put(state, key, value)
       :error -> state
+    end
+  end
+
+  defp maybe_put_farm_initial_vr(state, runtime_updates) do
+    case Keyword.fetch(runtime_updates, :farm_initial_vr) do
+      {:ok, receiver_frame_sequence_number} ->
+        put_in(state.farm_config.receiver_frame_sequence_number, receiver_frame_sequence_number)
+
+      :error ->
+        state
     end
   end
 

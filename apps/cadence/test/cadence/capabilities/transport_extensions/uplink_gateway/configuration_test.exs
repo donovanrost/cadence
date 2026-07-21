@@ -21,6 +21,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
              cop1_timeout_ms: 5_000,
              cop1_max_retransmit: 3,
              cop1_window_size: 1,
+             cop1_timeout_type: 0,
              simulated_start_delay_ms: nil,
              simulated_completion_delay_ms: nil,
              provider_binding_id: nil,
@@ -50,6 +51,29 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
     assert configuration.provider_binding_id == "provider-alpha"
     assert configuration.provider_adapter_key == :tcp_socket
     assert :ok = Configuration.validate(configuration)
+  end
+
+  test "accepts the full FOP sliding window and timeout behavior settings" do
+    assert {:ok, configuration} =
+             Configuration.normalize(%{
+               "cop1_mode" => "fop",
+               "cop1_window_size" => 255,
+               "cop1_timeout_type" => 1
+             })
+
+    assert configuration.cop1_window_size == 255
+    assert configuration.cop1_timeout_type == 1
+    assert :ok = Configuration.validate(configuration)
+
+    assert {:error, {:invalid_uplink_gateway_field, :cop1_window_size, 256}} =
+             configuration
+             |> Map.put(:cop1_window_size, 256)
+             |> Configuration.validate()
+
+    assert {:error, {:invalid_uplink_gateway_field, :cop1_timeout_type, 2}} =
+             configuration
+             |> Map.put(:cop1_timeout_type, 2)
+             |> Configuration.validate()
   end
 
   test "preserves unsupported configuration errors" do

@@ -5,7 +5,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   It supports two runtime modes:
   - direct framed uplink with optional simulated later phases
-  - a narrow COP-1 FOP mode driven by CLCW reports and timeout retransmit
+  - COP-1 FOP-1B with a sliding window, CLCW processing, and one T1 timer per VC
   """
 
   @behaviour Cadence.Capabilities.Family
@@ -27,6 +27,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   }
 
   @cop1_timeout_timer_prefix "cop1:timeout:"
+  @cop1_t1_timer_prefix "cop1:t1:"
   @start_timer_prefix "uplink:start:"
   @completion_timer_prefix "uplink:completion:"
 
@@ -82,13 +83,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            cop1_mode: normalized_configuration.cop1_mode,
            cop1_timeout_ms: normalized_configuration.cop1_timeout_ms,
            cop1_max_retransmit: normalized_configuration.cop1_max_retransmit,
-           cop1:
-             build_cop1_state(
-               normalized_configuration.cop1_mode,
-               normalized_configuration.vcid,
-               normalized_configuration.cop1_timeout_ms,
-               normalized_configuration.cop1_max_retransmit
-             ),
+           cop1_window_size: normalized_configuration.cop1_window_size,
+           cop1_timeout_type: normalized_configuration.cop1_timeout_type,
+           cop1: build_cop1_state(normalized_configuration),
            simulated_start_delay_ms: normalized_configuration.simulated_start_delay_ms,
            simulated_completion_delay_ms: normalized_configuration.simulated_completion_delay_ms,
            provider_binding_id: normalized_configuration.provider_binding_id,
@@ -176,6 +173,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   @impl true
   def handle_timer(timer_key, app_state, %ExecutionContext{} = ctx) when is_map(app_state) do
     case parse_timer_key(timer_key) do
+      {:cop1_t1, vcid} ->
+        handle_cop1_t1(vcid, app_state, ctx)
+
       {:cop1_timeout, command_release_attempt_id, seq} ->
         handle_cop1_timeout(command_release_attempt_id, seq, app_state, ctx)
 
@@ -203,16 +203,26 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
     {:error, {:invalid_uplink_gateway_state, app_state}}
   end
 
-  defp build_cop1_state(:fop, vcid, timeout_ms, max_retransmit) do
-    FOP.new(%{
-      enabled: true,
-      vcid: vcid,
-      timeout_ms: timeout_ms,
-      max_retransmit: max_retransmit
-    })
+  defp build_cop1_state(%{cop1_mode: :fop} = configuration) do
+    state =
+      FOP.new(%{
+        enabled: true,
+        vcid: configuration.vcid,
+        state: :initial,
+        vs: configuration.initial_frame_seq,
+        nnr: configuration.initial_frame_seq,
+        t1_initial_ms: configuration.cop1_timeout_ms,
+        transmission_limit: configuration.cop1_max_retransmit + 1,
+        sliding_window_width: configuration.cop1_window_size,
+        timeout_type: configuration.cop1_timeout_type,
+        lower_layer_mode: :synchronous
+      })
+
+    {:ok, transition} = FOP.directive(state, :initiate_ad_without_clcw_check)
+    transition.state
   end
 
-  defp build_cop1_state(_mode, _vcid, _timeout_ms, _max_retransmit), do: nil
+  defp build_cop1_state(_configuration), do: nil
 
   defp cop1_enabled?(app_state) when is_map(app_state), do: app_state.cop1_mode == :fop
 
@@ -436,6 +446,20 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
     {:ok, ExecutionResult.new(%{state: app_state})}
   end
 
+  defp handle_cop1_t1(
+         vcid,
+         %{cop1: %FOP{vcid: vcid, timer_running: true}} = app_state,
+         %ExecutionContext{} = ctx
+       ) do
+    with {:ok, transition} <- FOP.timer_expired(app_state.cop1) do
+      {:ok, build_cop1_execution_result(app_state, transition, ctx.current_time)}
+    end
+  end
+
+  defp handle_cop1_t1(_vcid, app_state, %ExecutionContext{}) do
+    {:ok, ExecutionResult.new(%{state: app_state})}
+  end
+
   defp build_cop1_execution_result(app_state, transition, current_time, next_frame_seq \\ nil) do
     state = transition.state
     transition_metadata = transition_signal_metadata(transition.signal)
@@ -647,35 +671,24 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   end
 
   defp build_cop1_timer_actions(transition, release_metadata) do
-    schedule_timers =
-      case release_metadata do
-        %{command_release_attempt_id: command_release_attempt_id} ->
-          Enum.map(transition.schedule_timeout_seqs, fn seq ->
-            ScheduleTimer.new(%{
-              timer_key: cop1_timeout_timer_key(command_release_attempt_id, seq),
-              delay_ms: transition.state.timeout_ms,
-              metadata: Map.put(release_metadata, :frame_seq, seq)
-            })
-          end)
+    timer_key = cop1_t1_timer_key(transition.state.vcid)
 
-        _other ->
-          []
-      end
+    case transition.timer_action do
+      :start ->
+        [
+          ScheduleTimer.new(%{
+            timer_key: timer_key,
+            delay_ms: transition.state.t1_initial_ms,
+            metadata: Map.put(release_metadata, :vcid, transition.state.vcid)
+          })
+        ]
 
-    cancel_timers =
-      case release_metadata do
-        %{command_release_attempt_id: command_release_attempt_id} ->
-          Enum.map(transition.cancel_timeout_seqs, fn seq ->
-            CancelTimer.new(%{
-              timer_key: cop1_timeout_timer_key(command_release_attempt_id, seq)
-            })
-          end)
+      :cancel ->
+        [CancelTimer.new(%{timer_key: timer_key})]
 
-        nil ->
-          []
-      end
-
-    cancel_timers ++ schedule_timers
+      :none ->
+        []
+    end
   end
 
   defp current_cop1_release_metadata(%FOP{in_flight_release: %{metadata: metadata}})
@@ -684,9 +697,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp current_cop1_release_metadata(_cop1_state), do: nil
 
-  defp cop1_timeout_timer_key(command_release_attempt_id, seq)
-       when is_binary(command_release_attempt_id) and is_integer(seq) do
-    @cop1_timeout_timer_prefix <> command_release_attempt_id <> ":" <> Integer.to_string(seq)
+  defp cop1_t1_timer_key(vcid) when is_integer(vcid) do
+    @cop1_t1_timer_prefix <> Integer.to_string(vcid)
   end
 
   defp transition_signal_metadata(nil), do: %{}
@@ -812,6 +824,13 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp parse_timer_key(@completion_timer_prefix <> command_release_attempt_id),
     do: {:completion, command_release_attempt_id}
+
+  defp parse_timer_key(@cop1_t1_timer_prefix <> vcid_string) do
+    case Integer.parse(vcid_string) do
+      {vcid, ""} when vcid in 0..63 -> {:cop1_t1, vcid}
+      _other -> :unknown
+    end
+  end
 
   defp parse_timer_key(@cop1_timeout_timer_prefix <> tail) do
     case String.split(tail, ":", parts: 2) do

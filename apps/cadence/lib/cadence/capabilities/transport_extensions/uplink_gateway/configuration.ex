@@ -5,6 +5,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
   @default_frame_size 32
   @default_cop1_timeout_ms 5_000
   @default_cop1_max_retransmit 3
+  @default_cop1_timeout_type 0
+  @default_cop1_window_size 1
 
   @spec normalize(map()) :: {:ok, map()} | {:error, term()}
   def normalize(%{} = configuration) do
@@ -52,7 +54,19 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
            @default_cop1_max_retransmit
          ),
        cop1_window_size:
-         config_value_or_default(configuration, :cop1_window_size, "cop1_window_size", 1),
+         config_value_or_default(
+           configuration,
+           :cop1_window_size,
+           "cop1_window_size",
+           @default_cop1_window_size
+         ),
+       cop1_timeout_type:
+         config_value_or_default(
+           configuration,
+           :cop1_timeout_type,
+           "cop1_timeout_type",
+           @default_cop1_timeout_type
+         ),
        simulated_start_delay_ms:
          config_value(
            configuration,
@@ -112,6 +126,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
              :cop1_max_retransmit
            ),
          :ok <- validate_cop1_window_size(normalized_configuration.cop1_window_size),
+         :ok <- validate_cop1_timeout_type(normalized_configuration.cop1_timeout_type),
          :ok <- validate_optional_delay(normalized_configuration.simulated_start_delay_ms),
          :ok <- validate_optional_delay(normalized_configuration.simulated_completion_delay_ms) do
       validate_provider_configuration(
@@ -190,10 +205,15 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
   defp validate_non_negative_integer(value, field),
     do: {:error, {:invalid_uplink_gateway_field, field, value}}
 
-  defp validate_cop1_window_size(1), do: :ok
+  defp validate_cop1_window_size(value) when is_integer(value) and value in 1..255, do: :ok
 
   defp validate_cop1_window_size(value),
-    do: {:error, {:unsupported_uplink_gateway_cop1_window_size, value}}
+    do: {:error, {:invalid_uplink_gateway_field, :cop1_window_size, value}}
+
+  defp validate_cop1_timeout_type(value) when value in [0, 1], do: :ok
+
+  defp validate_cop1_timeout_type(value),
+    do: {:error, {:invalid_uplink_gateway_field, :cop1_timeout_type, value}}
 
   defp validate_optional_delay(nil), do: :ok
   defp validate_optional_delay(delay_ms) when is_integer(delay_ms) and delay_ms > 0, do: :ok

@@ -174,7 +174,12 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
            %{
              "capability_instance_id" => "uplink-gateway-alpha",
              "family_key" => "uplink_gateway",
-             "state" => %{"frame_size" => 32, "segment_header_flag" => 1, "fecf" => true}
+             "state" => %{
+               "frame_size" => 32,
+               "segment_header_flag" => 1,
+               "fecf" => true,
+               "next_frame_seq" => 23
+             }
            }
          ]
        }}
@@ -201,6 +206,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
     assert resolved_opts[:tc_frame_size] == 32
     assert resolved_opts[:segment_header_flag] == 1
     assert resolved_opts[:fecf]
+    assert resolved_opts[:farm_initial_vr] == 23
 
     assert {CadenceRuntimeBootstrap, :refresh_runtime_opts, [_resolver_opts]} =
              resolved_opts[:runtime_resolver]

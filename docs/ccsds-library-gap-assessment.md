@@ -47,8 +47,12 @@ The shared library currently owns:
 - the standard TC primary header and one-octet Segment Header;
 - TC MAP segmentation and stateful receive reassembly;
 - standard CLCW wire encoding and decoding; and
-- a small, pure COP-1 sending-side state machine for the current Cadence
-  single-release workflow.
+- strict Type-BC Unlock and Set V(R) control-command codecs;
+- a pure, per-VC FARM-1 receiver implementing the E1-E11 acceptance,
+  positive/negative-window, wait, lockout, FARM-B, and reporting behavior; and
+- a pure, per-VC FOP-1B sender implementing all six states, standard
+  directives, AD/BD/BC lower-layer responses, configurable K and T1 behavior,
+  CLCW classification, retransmission, suspend/resume, and standard alerts.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -71,13 +75,26 @@ TC decoding rejects a corrupt variable-length frame before MAP reassembly. The
 Cadence uplink gateway, Cadence TM ingress metadata, simulator TM framing, and
 simulator COP-1 loopback all propagate the same managed setting.
 
+The simulator COP-1 loopback now keeps independent FARM-1 state per TC virtual
+channel. Only accepted Type-AD and Type-BD data reaches command reassembly.
+Valid Type-BC Unlock and Set V(R) commands update FARM-1 directly, and emitted
+CLCWs report persistent V(R), Wait, Lockout, Retransmit, and FARM-B state.
+Cadence bootstrap seeds the receiver's initial V(R) from the uplink gateway's
+current `next_frame_seq`; standalone runs can manage V(R) and the positive and
+negative window widths explicitly.
+
+The Cadence uplink gateway composes FOP-1 in synchronous lower-layer mode. It
+initializes AD service without a CLCW check, maps the existing maximum-retry
+setting to the standard Transmission_Limit, supports K values from 1 through
+255, exposes Timeout_Type 0 and 1, and manages one replaceable T1 timer per TC
+virtual channel. The library's explicit lower-layer mode and management
+directives remain independently usable by other applications and simulators.
+
 ## Remaining gaps
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P0 | COP-1 receiving side | There is no FARM-1 implementation. The simulator loopback acknowledges accepted Type-AD frames but does not implement positive/negative windows, lockout recovery, Type-BC control directives, or a persistent receiver state per VC. | Add a pure FARM-1 state machine and make loopback CLCWs come from it. |
-| P0 | Full FOP-1 behavior | The current FOP is intentionally a small single-release implementation. It does not implement the complete directive/state machine, configurable sliding window, suspend/resume/initialize procedures, all timer modes, or all alert conditions. | Replace or evolve it behind conformance tests derived from CCSDS 232.1-B-2. |
-| P1 | TC service completeness | MAP SDU segmentation/reassembly is present, but Packet, Virtual Channel Access, aggregation, Type-BC control-command data, and managed service rules are not represented as distinct APIs. | Add explicit TC service types and management configuration rather than further overloading generic payload metadata. |
+| P1 | TC service completeness | MAP SDU segmentation/reassembly and Type-BC control commands are present, but Packet, Virtual Channel Access, aggregation, and the remaining managed service rules are not represented as distinct APIs. | Add explicit TC service types and management configuration rather than further overloading generic payload metadata. |
 | P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
 | P1 | Synchronization and channel coding | The library starts at transfer frames. It does not construct or decode CLTUs, BCH/LDPC codeblocks, start/tail sequences, attached sync markers, randomization, or channel-quality evidence. | Add a separate coding/synchronization layer so frame services remain usable without a physical-link profile. |
 | P1 | Conformance evidence | Tests are focused unit and Cadence loopback tests. There are no published CCSDS golden vectors, property tests, malformed-input corpus, fuzzing, or external implementation interoperability runs. | Establish normative vectors and differential/interoperability tests before making compliance claims. |
@@ -103,12 +120,12 @@ compose those pieces:
 
 ## Recommended next slice
 
-The next highest-leverage slice is a pure FARM-1 receiving-side state machine
-and integration of its CLCW output into the simulator loopback. FECF validation
-now prevents corrupted TC frames from reaching loopback reassembly, but the
-receiver still acknowledges otherwise valid frames without implementing the
-standard positive/negative windows, lockout recovery, or Type-BC directives.
+The next highest-leverage protocol slice is TC synchronization and channel
+coding: CLTU construction and parsing, BCH codeblocks, start/tail sequences,
+randomization, and explicit channel-quality evidence. That layer should remain
+separate from the transfer-frame and COP-1 service APIs.
 
-FARM-1 and the remaining full FOP-1 behavior remain prerequisites before
-describing the uplink path as interoperable COP-1 rather than a deterministic
-loopback implementation.
+Published normative vectors, malformed-input/property testing, and external
+interoperability evidence still remain prerequisites before describing the
+uplink path as a complete interoperable or flight-qualified COP-1
+implementation.

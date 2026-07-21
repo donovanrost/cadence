@@ -5,7 +5,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.{FrameCodec, Segmentation, TransferFrame}
-  alias Cadence.CCSDS.Transport.COP1.CLCW
+  alias Cadence.CCSDS.Transport.COP1.{CLCW, ControlCommand}
   alias CadenceSimulator.COP1.LoopbackPeer
   alias CadenceSimulator.TestSupport.FakeRuntimeResolver
 
@@ -48,7 +48,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
         host: "127.0.0.1",
         port: port,
         tc_frame_size: @tc_frame_size,
-        fecf: true
+        fecf: true,
+        farm_initial_vr: 7
       )
 
     on_exit(fn ->
@@ -107,6 +108,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
         host: "127.0.0.1",
         port: port,
         tc_frame_size: @tc_frame_size,
+        farm_initial_vr: 7,
         clcw_overrides: %{"lockout" => 1},
         clcw_schedule: [
           %{at: 0, overrides: %{"wait" => 1, "report_value" => 0}},
@@ -146,6 +148,76 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
   end
 
+  test "derives lockout recovery and report values from persistent FARM-1 state" do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, packet: 0, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(listener)
+
+    on_exit(fn ->
+      :gen_tcp.close(listener)
+    end)
+
+    {:ok, peer} =
+      CadenceSimulator.start_cop1_loopback_peer(
+        host: "127.0.0.1",
+        port: port,
+        tc_frame_size: @tc_frame_size,
+        farm_initial_vr: 0,
+        farm_positive_window_width: 2,
+        farm_negative_window_width: 2
+      )
+
+    on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
+    end)
+
+    {:ok, socket} = :gen_tcp.accept(listener)
+
+    on_exit(fn ->
+      :gen_tcp.close(socket)
+    end)
+
+    assert :ok = :gen_tcp.send(socket, tc_frame_bytes(3))
+    assert {:ok, lockout_binary} = :gen_tcp.recv(socket, 4, 1_000)
+    assert {:ok, lockout_clcw} = CLCW.decode(lockout_binary)
+    assert lockout_clcw.lockout == 1
+    assert lockout_clcw.report_value == 0
+
+    assert :ok = :gen_tcp.send(socket, control_frame_bytes({:set_vr, 3}))
+    assert {:ok, ignored_set_binary} = :gen_tcp.recv(socket, 4, 1_000)
+    assert {:ok, ignored_set_clcw} = CLCW.decode(ignored_set_binary)
+    assert ignored_set_clcw.lockout == 1
+    assert ignored_set_clcw.farm_b_counter == 1
+    assert ignored_set_clcw.report_value == 0
+
+    assert :ok = :gen_tcp.send(socket, control_frame_bytes(:unlock))
+    assert {:ok, unlock_binary} = :gen_tcp.recv(socket, 4, 1_000)
+    assert {:ok, unlock_clcw} = CLCW.decode(unlock_binary)
+    assert unlock_clcw.lockout == 0
+    assert unlock_clcw.farm_b_counter == 2
+
+    assert :ok = :gen_tcp.send(socket, control_frame_bytes({:set_vr, 3}))
+    assert {:ok, set_binary} = :gen_tcp.recv(socket, 4, 1_000)
+    assert {:ok, set_clcw} = CLCW.decode(set_binary)
+    assert set_clcw.farm_b_counter == 3
+    assert set_clcw.report_value == 3
+
+    assert :ok = :gen_tcp.send(socket, tc_frame_bytes(3))
+    assert {:ok, accepted_binary} = :gen_tcp.recv(socket, 4, 1_000)
+    assert {:ok, accepted_clcw} = CLCW.decode(accepted_binary)
+    assert accepted_clcw.lockout == 0
+    assert accepted_clcw.retransmit == 0
+    assert accepted_clcw.report_value == 4
+
+    assert_eventually(fn ->
+      snapshot = LoopbackPeer.snapshot(peer)
+
+      snapshot.tc_frame_count == 5 and snapshot.farm_accept_count == 4 and
+        snapshot.farm_discard_count == 1 and snapshot.last_farm_event == :e1 and
+        snapshot.last_farm_state == :open and
+        snapshot.farm_states[3].receiver_frame_sequence_number == 4
+    end)
+  end
+
   test "refreshes cadence runtime before connecting to a rotated uplink port" do
     {:ok, stale_listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, stale_port}} = :inet.sockname(stale_listener)
@@ -167,6 +239,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
         host: "127.0.0.1",
         port: stale_port,
         tc_frame_size: @tc_frame_size,
+        farm_initial_vr: 9,
         runtime_resolver: {FakeRuntimeResolver, :next, [resolver]}
       )
 
@@ -209,6 +282,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
         host: "127.0.0.1",
         port: port,
         tc_frame_size: @tc_frame_size,
+        farm_initial_vr: 12,
         command_target: simulator
       )
 
@@ -258,6 +332,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
         port: port,
         tc_frame_size: 11,
         segment_header_flag: 1,
+        farm_initial_vr: 20,
         command_target: simulator
       )
 
@@ -374,6 +449,28 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
       {:ok, encoded} = FrameCodec.encode(frame, frame_size: 11)
       encoded
     end)
+  end
+
+  defp control_frame_bytes(command) do
+    {:ok, payload} = ControlCommand.encode(command)
+
+    {:ok, encoded} =
+      TransferFrame.encode(
+        %TransferFrame{
+          version: 0,
+          bypass_flag: 1,
+          control_command_flag: 1,
+          spare: 0,
+          scid: 42,
+          vcid: 3,
+          frame_length: nil,
+          frame_seq: 0,
+          payload: payload
+        },
+        frame_size: @tc_frame_size
+      )
+
+    encoded
   end
 
   defp command_packet(command_payload) do

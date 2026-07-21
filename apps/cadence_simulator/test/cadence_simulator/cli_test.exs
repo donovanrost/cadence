@@ -91,7 +91,14 @@ defmodule CadenceSimulator.CLITest do
                "127.0.0.1:4100",
                "--tc-frame-size",
                "32",
-               "--fecf"
+               "--fecf",
+               "--farm-initial-vr",
+               "17",
+               "--farm-positive-window-width",
+               "200",
+               "--farm-negative-window-width",
+               "20",
+               "--no-farm-retransmission-allowed"
              ])
 
     assert opts[:runtime_mode] == :cop1_loopback
@@ -99,6 +106,10 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:port] == 4100
     assert opts[:tc_frame_size] == 32
     assert opts[:fecf]
+    assert opts[:farm_initial_vr] == 17
+    assert opts[:farm_positive_window_width] == 200
+    assert opts[:farm_negative_window_width] == 20
+    refute opts[:farm_retransmission_allowed]
   end
 
   test "parse_args loads telemetry runtime options from yaml config" do
@@ -184,6 +195,11 @@ defmodule CadenceSimulator.CLITest do
       mode: cop1_loopback
       segment_header_flag: 1
       fecf: true
+      farm:
+        initial_vr: 23
+        positive_window_width: 200
+        negative_window_width: 20
+        retransmission_allowed: false
       cadence:
         url: http://127.0.0.1:4001
         api_token: token-alpha
@@ -221,6 +237,10 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:transport_binding_id] == "uplink-gateway-alpha"
     assert opts[:segment_header_flag] == 1
     assert opts[:fecf]
+    assert opts[:farm_initial_vr] == 23
+    assert opts[:farm_positive_window_width] == 200
+    assert opts[:farm_negative_window_width] == 20
+    refute opts[:farm_retransmission_allowed]
     assert opts[:clcw_overrides] == %{"lockout" => true, "report_value" => 3}
 
     assert opts[:clcw_schedule] == [
@@ -317,6 +337,24 @@ defmodule CadenceSimulator.CLITest do
              ])
 
     assert message =~ "--tcp is required"
+  end
+
+  test "parse_args rejects invalid FARM-1 window settings" do
+    assert {:error, message} =
+             CLI.parse_args([
+               "cop1_loopback",
+               "--tcp",
+               "127.0.0.1:4100",
+               "--tc-frame-size",
+               "32",
+               "--farm-positive-window-width",
+               "8",
+               "--farm-negative-window-width",
+               "4"
+             ])
+
+    assert message =~ "invalid FARM-1 options"
+    assert message =~ "unequal_retransmission_windows"
   end
 
   test "parse_args rejects cop1_loopback without tc frame size" do

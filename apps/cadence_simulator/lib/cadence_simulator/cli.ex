@@ -3,6 +3,7 @@ defmodule CadenceSimulator.CLI do
   Thin executable entrypoint for running the simulator as its own app.
   """
 
+  alias Cadence.CCSDS.Transport.COP1.FARM
   alias CadenceSimulator.CadenceRuntimeBootstrap
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
 
@@ -52,6 +53,10 @@ defmodule CadenceSimulator.CLI do
     tc_frame_size: :integer,
     segment_header_flag: :integer,
     fecf: :boolean,
+    farm_initial_vr: :integer,
+    farm_positive_window_width: :integer,
+    farm_negative_window_width: :integer,
+    farm_retransmission_allowed: :boolean,
     clcw_overrides: :keep,
     clcw_schedule: :keep,
     help: :boolean
@@ -168,6 +173,13 @@ defmodule CadenceSimulator.CLI do
     TC Data Link:
       --segment-header-flag N  Managed Segment Header presence for the VC: 0 or 1
       --fecf                   Validate the managed TC Frame Error Control Field
+
+    FARM-1:
+      --farm-initial-vr N                Initial expected Type-AD sequence number (default: 0)
+      --farm-positive-window-width N     Positive window width (default: 127)
+      --farm-negative-window-width N     Negative window width (default: 127)
+      --farm-retransmission-allowed      Require equal retransmission windows (default)
+      --no-farm-retransmission-allowed   Permit asymmetric single-transmission windows
 
     CLCW Injection:
       --clcw-overrides SPEC    Static CLCW overrides as KEY=VALUE[,KEY=VALUE...]
@@ -329,6 +341,7 @@ defmodule CadenceSimulator.CLI do
          {:ok, segment_header_flag} <-
            optional_flag_value(parsed[:segment_header_flag], "--segment-header-flag"),
          {:ok, fecf?} <- optional_boolean_value(parsed[:fecf], "--fecf"),
+         {:ok, farm_opts} <- farm_options(parsed),
          {:ok, clcw_overrides} <-
            parse_clcw_overrides(Keyword.get_values(parsed, :clcw_overrides)),
          {:ok, clcw_schedule} <- parse_clcw_schedule(Keyword.get_values(parsed, :clcw_schedule)) do
@@ -341,6 +354,7 @@ defmodule CadenceSimulator.CLI do
         |> maybe_put(:tc_frame_size, tc_frame_size)
         |> maybe_put(:segment_header_flag, segment_header_flag)
         |> maybe_put(:fecf, fecf?)
+        |> Keyword.merge(farm_opts)
         |> maybe_put(:clcw_overrides, if(clcw_overrides == %{}, do: nil, else: clcw_overrides))
         |> maybe_put(:clcw_schedule, if(clcw_schedule == [], do: nil, else: clcw_schedule))
         |> Keyword.merge(bootstrap_opts)
@@ -401,6 +415,30 @@ defmodule CadenceSimulator.CLI do
 
   defp optional_boolean_value(_value, option),
     do: {:error, "#{option} must be true or false"}
+
+  defp farm_options(parsed) do
+    opts =
+      []
+      |> maybe_put(:farm_initial_vr, parsed[:farm_initial_vr])
+      |> maybe_put(:farm_positive_window_width, parsed[:farm_positive_window_width])
+      |> maybe_put(:farm_negative_window_width, parsed[:farm_negative_window_width])
+      |> maybe_put(:farm_retransmission_allowed, parsed[:farm_retransmission_allowed])
+
+    attrs =
+      %{}
+      |> maybe_put_map(
+        :receiver_frame_sequence_number,
+        parsed[:farm_initial_vr]
+      )
+      |> maybe_put_map(:positive_window_width, parsed[:farm_positive_window_width])
+      |> maybe_put_map(:negative_window_width, parsed[:farm_negative_window_width])
+      |> maybe_put_map(:retransmission_allowed, parsed[:farm_retransmission_allowed])
+
+    case FARM.new(attrs) do
+      {:ok, _farm} -> {:ok, opts}
+      {:error, reason} -> {:error, "invalid FARM-1 options: #{inspect(reason)}"}
+    end
+  end
 
   defp parse_provider("basic"), do: {:ok, BasicDynamics}
   defp parse_provider("database"), do: {:ok, DatabaseDynamics}
@@ -666,6 +704,7 @@ defmodule CadenceSimulator.CLI do
 
   defp loopback_config_options(config_root) do
     clcw = fetch_map_value(config_root, ["clcw"]) || %{}
+    farm = fetch_map_value(config_root, ["farm"]) || %{}
     cadence = fetch_map_value(config_root, ["cadence"]) || %{}
 
     []
@@ -676,6 +715,42 @@ defmodule CadenceSimulator.CLI do
       fetch_config_value(config_root, ["segment_header_flag"])
     )
     |> maybe_put_config(:fecf, fetch_config_value(config_root, ["fecf"]))
+    |> maybe_put_config(
+      :farm_initial_vr,
+      root_or_nested_config_value(
+        config_root,
+        ["farm_initial_vr"],
+        farm,
+        ["initial_vr", "receiver_frame_sequence_number"]
+      )
+    )
+    |> maybe_put_config(
+      :farm_positive_window_width,
+      root_or_nested_config_value(
+        config_root,
+        ["farm_positive_window_width"],
+        farm,
+        ["positive_window_width"]
+      )
+    )
+    |> maybe_put_config(
+      :farm_negative_window_width,
+      root_or_nested_config_value(
+        config_root,
+        ["farm_negative_window_width"],
+        farm,
+        ["negative_window_width"]
+      )
+    )
+    |> maybe_put_config(
+      :farm_retransmission_allowed,
+      root_or_nested_config_value(
+        config_root,
+        ["farm_retransmission_allowed"],
+        farm,
+        ["retransmission_allowed"]
+      )
+    )
     |> maybe_put_config(
       :clcw_overrides,
       fetch_config_value(config_root, ["clcw_overrides"]) ||
@@ -826,7 +901,15 @@ defmodule CadenceSimulator.CLI do
   defp normalize_config_value(_key, nil), do: nil
 
   defp normalize_config_value(key, value)
-       when key in [:tm_frame_size, :scid, :vcid, :tc_frame_size],
+       when key in [
+              :tm_frame_size,
+              :scid,
+              :vcid,
+              :tc_frame_size,
+              :farm_initial_vr,
+              :farm_positive_window_width,
+              :farm_negative_window_width
+            ],
        do: parse_integer(value) || value
 
   defp normalize_config_value(key, value)
@@ -838,12 +921,20 @@ defmodule CadenceSimulator.CLI do
   defp normalize_config_value(:parallel, value), do: parse_boolean(value)
   defp normalize_config_value(:tm_parallel_framing, value), do: parse_boolean(value)
   defp normalize_config_value(:fecf, value), do: parse_boolean(value)
+  defp normalize_config_value(:farm_retransmission_allowed, value), do: parse_boolean(value)
   defp normalize_config_value(_key, value), do: value
 
   defp fetch_config_value(nil, _keys), do: nil
 
-  defp fetch_config_value(map, keys) when is_map(map),
-    do: Enum.find_value(keys, &Map.get(map, &1))
+  defp fetch_config_value(map, keys) when is_map(map) do
+    Enum.reduce_while(keys, nil, fn key, _acc ->
+      case Map.fetch(map, key) do
+        {:ok, nil} -> {:cont, nil}
+        {:ok, value} -> {:halt, value}
+        :error -> {:cont, nil}
+      end
+    end)
+  end
 
   defp fetch_config_value(_map, _keys), do: nil
 
@@ -851,6 +942,13 @@ defmodule CadenceSimulator.CLI do
     case fetch_config_value(map, keys) do
       %{} = value -> value
       _other -> nil
+    end
+  end
+
+  defp root_or_nested_config_value(config_root, root_keys, nested, nested_keys) do
+    case fetch_config_value(config_root, root_keys) do
+      nil -> fetch_config_value(nested, nested_keys)
+      value -> value
     end
   end
 
@@ -967,6 +1065,9 @@ defmodule CadenceSimulator.CLI do
 
   defp maybe_put(opts, _key, nil), do: opts
   defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp maybe_put_map(map, _key, nil), do: map
+  defp maybe_put_map(map, key, value), do: Map.put(map, key, value)
 
   defp with_usage({:error, message}, runtime_mode),
     do: {:error, message <> "\n\n" <> usage(runtime_mode)}

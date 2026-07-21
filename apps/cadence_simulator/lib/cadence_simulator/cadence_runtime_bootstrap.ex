@@ -113,14 +113,16 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
          {:ok, transport_runtime} <- select_transport_runtime(path_snapshot, bootstrap_request),
          {:ok, tc_frame_size} <- transport_frame_size(transport_runtime),
          {:ok, segment_header_flag} <- transport_segment_header_flag(transport_runtime),
-         {:ok, fecf?} <- transport_fecf(transport_runtime) do
+         {:ok, fecf?} <- transport_fecf(transport_runtime),
+         {:ok, farm_initial_vr} <- transport_farm_initial_vr(transport_runtime) do
       {:ok,
        [
          host: host,
          port: port,
          tc_frame_size: tc_frame_size,
          segment_header_flag: segment_header_flag,
-         fecf: fecf?
+         fecf: fecf?,
+         farm_initial_vr: farm_initial_vr
        ]}
     end
   end
@@ -231,6 +233,19 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
     end
   end
 
+  defp transport_farm_initial_vr(transport_runtime) when is_map(transport_runtime) do
+    case get_in(transport_runtime, ["state", "next_frame_seq"]) do
+      nil ->
+        {:ok, 0}
+
+      receiver_frame_sequence_number when receiver_frame_sequence_number in 0..255 ->
+        {:ok, receiver_frame_sequence_number}
+
+      other ->
+        {:error, {:invalid_transport_next_frame_seq, other}}
+    end
+  end
+
   defp telemetry_frame(provider_runtime) when is_map(provider_runtime) do
     case {provider_runtime["ingress_protocol_family"], provider_runtime["fixed_message_bytes"]} do
       {protocol_family, frame_size}
@@ -296,7 +311,14 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
 
   defp merge_bootstrap_runtime_opts(runtime_opts, :cop1_loopback, bootstrap_runtime_opts) do
     runtime_opts
-    |> Keyword.drop([:host, :port, :tc_frame_size, :segment_header_flag, :fecf])
+    |> Keyword.drop([
+      :host,
+      :port,
+      :tc_frame_size,
+      :segment_header_flag,
+      :fecf,
+      :farm_initial_vr
+    ])
     |> put_missing_opts(bootstrap_runtime_opts)
   end
 

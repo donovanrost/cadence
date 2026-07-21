@@ -3,7 +3,7 @@ title: Configuration Reference
 tags: [reference, developer, config, env, profiles, runtime]
 status: active
 created: 2026-04-03
-updated: 2026-06-09
+updated: 2026-07-20
 ---
 
 # Configuration Reference
@@ -299,6 +299,39 @@ Common fields include:
 Field on generated TM transfer frames. In `cop1_loopback` profiles, the
 top-level `fecf: true` setting validates and removes the managed FECF from TC
 transfer frames before reassembly.
+
+`cop1_loopback` profiles also accept a `farm` map with these managed FARM-1
+receiver settings:
+
+- `initial_vr` (default `0`)
+- `positive_window_width` (default `127`)
+- `negative_window_width` (default `127`)
+- `retransmission_allowed` (default `true`)
+
+With Cadence bootstrap, `initial_vr` is derived from the selected uplink
+gateway runtime's current `next_frame_seq`. FARM-1 state is then maintained
+independently for each received TC virtual channel and is not reset by a TCP
+reconnect.
+
+### Uplink gateway COP-1
+
+An uplink gateway transport binding enables the shared FOP-1B sender with
+`cop1_mode: "fop"`. Its managed settings are:
+
+- `initial_frame_seq` (default `0`): initial V(S) and NN(R);
+- `cop1_timeout_ms` (default `5000`): T1 initial duration;
+- `cop1_max_retransmit` (default `3`): retransmissions after the initial
+  transmission, so the standard Transmission_Limit is this value plus one;
+- `cop1_window_size` (default `1`): FOP sliding-window K in `1..255`; it must
+  not exceed the peer FARM positive-window width; and
+- `cop1_timeout_type` (default `0`): `0` raises Alert[T1] at the transmission
+  limit, while `1` suspends AD service for later management recovery.
+
+Cadence initializes AD service without a CLCW check and uses one replaceable T1
+timer per TC virtual channel. The standard initialize-with-check, Unlock, Set
+V(R), terminate, resume, and setup directives are available from the shared
+`Cadence.CCSDS.Transport.COP1.FOP` library for runtimes that expose a COP
+management boundary.
 
 Relative paths in profiles are resolved relative to the profile file.
 
