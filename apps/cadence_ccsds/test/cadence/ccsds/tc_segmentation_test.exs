@@ -110,6 +110,39 @@ defmodule Cadence.CCSDS.TC.SegmentationTest do
     assert next_state.frame_seq == 1
   end
 
+  test "reserves the managed FECF while segmenting and validates every encoded frame" do
+    sdu = sdu(<<1, 2, 3, 4, 5>>, 4)
+    assert {:ok, state} = Segmentation.init([])
+
+    context = %{
+      frame_size: 10,
+      scid: 19,
+      vcid: 3,
+      segment_header_flag: 1,
+      fecf: true
+    }
+
+    assert {:ok, frames, _next_state} = Segmentation.segment(sdu, context, state)
+    assert Enum.map(frames, &byte_size(&1.payload_octets)) == [2, 2, 1]
+
+    encoded =
+      Enum.map(frames, fn frame ->
+        assert {:ok, bytes} = FrameCodec.encode(frame, frame_size: 10, fecf: true)
+        assert byte_size(bytes) <= 10
+        bytes
+      end)
+
+    assert {:ok, decoded, <<>>} =
+             FrameCodec.decode(IO.iodata_to_binary(encoded),
+               frame_size: 10,
+               segment_header_flag: 1,
+               fecf: true
+             )
+
+    assert Enum.map(decoded, & &1.payload_octets) == [<<1, 2>>, <<3, 4>>, <<5>>]
+    assert Enum.all?(decoded, & &1.meta.fecf_present)
+  end
+
   defp sdu(payload, map_id) do
     %SDUOctets{
       profile: :tc,

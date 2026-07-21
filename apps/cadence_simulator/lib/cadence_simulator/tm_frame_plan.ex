@@ -7,6 +7,7 @@ defmodule CadenceSimulator.TMFramePlan do
   emission.
   """
 
+  alias Cadence.CCSDS.FrameErrorControl
   alias Cadence.CCSDS.SpacePacket.Idle
 
   @primary_header_size 6
@@ -17,9 +18,10 @@ defmodule CadenceSimulator.TMFramePlan do
 
   @spec plan(binary(), %{frame_size: pos_integer()}, cache()) ::
           {:ok, [plan()], cache()} | {:error, term(), cache()}
-  def plan(packet, %{frame_size: frame_size}, cache \\ %{})
+  def plan(packet, %{frame_size: frame_size} = frame, cache \\ %{})
       when is_binary(packet) and is_integer(frame_size) and frame_size > @primary_header_size do
-    max_payload = frame_size - @primary_header_size
+    fecf_size = if Map.get(frame, :fecf, false), do: FrameErrorControl.size(), else: 0
+    max_payload = frame_size - @primary_header_size - fecf_size
 
     if max_payload > 0 do
       {:ok, plans, next_cache} = build_plans(packet, max_payload, cache, [], true)
@@ -31,14 +33,19 @@ defmodule CadenceSimulator.TMFramePlan do
 
   @spec encode_many([plan()], %{scid: non_neg_integer(), vcid: non_neg_integer()}, map()) ::
           {iodata(), non_neg_integer(), map()}
-  def encode_many(plans, %{scid: scid, vcid: vcid}, %{mcfc: mcfc, vcfc: vcfc} = state)
+  def encode_many(
+        plans,
+        %{scid: scid, vcid: vcid} = frame_config,
+        %{mcfc: mcfc, vcfc: vcfc} = state
+      )
       when is_list(plans) do
     counter_step = Map.get(state, :counter_step, 1)
+    fecf? = Map.get(frame_config, :fecf, false)
 
     {frames, _frame_count, next_mcfc, next_vcfc} =
       Enum.reduce(plans, {[], 0, mcfc, vcfc}, fn %{payload: payload, fhp: fhp},
                                                  {frames_acc, count, current_mcfc, current_vcfc} ->
-        frame =
+        frame_without_fecf =
           <<
             0::2,
             scid::10,
@@ -53,6 +60,9 @@ defmodule CadenceSimulator.TMFramePlan do
             fhp::11,
             payload::binary
           >>
+
+        frame =
+          if fecf?, do: FrameErrorControl.append(frame_without_fecf), else: frame_without_fecf
 
         {
           [frame | frames_acc],

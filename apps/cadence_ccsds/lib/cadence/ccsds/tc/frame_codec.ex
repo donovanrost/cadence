@@ -14,9 +14,10 @@ defmodule Cadence.CCSDS.TC.FrameCodec do
   @impl true
   def decode(bin, opts) when is_binary(bin) do
     frame_size = Keyword.fetch!(opts, :frame_size)
+    fecf? = Keyword.get(opts, :fecf, false)
     timestamp = Keyword.get(opts, :timestamp)
 
-    case TransferFrame.decode(bin, frame_size: frame_size) do
+    case TransferFrame.decode(bin, frame_size: frame_size, fecf: fecf?) do
       {:ok, frames, rest} ->
         with {:ok, decoded} <- decode_frames(frames, timestamp, opts) do
           {:ok, decoded, rest}
@@ -30,6 +31,7 @@ defmodule Cadence.CCSDS.TC.FrameCodec do
   @impl true
   def encode(%LinkFrame{profile: :tc} = frame, opts) do
     frame_size = Keyword.fetch!(opts, :frame_size)
+    fecf? = Keyword.get(opts, :fecf, false)
 
     with {:ok, payload} <- encode_data_field(frame) do
       tc_frame =
@@ -45,7 +47,7 @@ defmodule Cadence.CCSDS.TC.FrameCodec do
           payload: payload
         }
 
-      TransferFrame.encode(tc_frame, frame_size: frame_size)
+      TransferFrame.encode(tc_frame, frame_size: frame_size, fecf: fecf?)
     end
   end
 
@@ -92,7 +94,9 @@ defmodule Cadence.CCSDS.TC.FrameCodec do
            frame_length: frame.frame_length,
            segment_header_flag: segment_header_flag,
            sequence_flag: sequence_flag,
-           spare: frame.spare
+           spare: frame.spare,
+           fecf_present: not is_nil(frame.fecf),
+           fecf: frame.fecf
          }
        }}
     end

@@ -47,7 +47,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
       CadenceSimulator.start_cop1_loopback_peer(
         host: "127.0.0.1",
         port: port,
-        tc_frame_size: @tc_frame_size
+        tc_frame_size: @tc_frame_size,
+        fecf: true
       )
 
     on_exit(fn ->
@@ -73,9 +74,10 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
           vcid: 3,
           frame_length: nil,
           frame_seq: tc_seq,
-          payload: :binary.copy(<<0xAA>>, @tc_frame_size - 5)
+          payload: :binary.copy(<<0xAA>>, @tc_frame_size - 7)
         },
-        frame_size: @tc_frame_size
+        frame_size: @tc_frame_size,
+        fecf: true
       )
 
     assert :ok = :gen_tcp.send(socket, tc_bytes)
@@ -87,7 +89,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     assert_eventually(fn ->
       snapshot = LoopbackPeer.snapshot(peer)
 
-      snapshot.tc_frame_count == 1 and snapshot.clcw_count == 1 and
+      snapshot.fecf and snapshot.tc_frame_count == 1 and snapshot.clcw_count == 1 and
         snapshot.last_tc_frame_seq == tc_seq and snapshot.last_clcw_report_value == tc_seq + 1
     end)
   end

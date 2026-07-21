@@ -76,6 +76,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            bypass_flag: normalized_configuration.bypass_flag,
            control_command_flag: normalized_configuration.control_command_flag,
            segment_header_flag: normalized_configuration.segment_header_flag,
+           fecf: normalized_configuration.fecf,
            next_frame_seq: normalized_configuration.initial_frame_seq,
            packet_sequence_counts: %{},
            cop1_mode: normalized_configuration.cop1_mode,
@@ -248,11 +249,13 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
                vcid: app_state.vcid,
                bypass_flag: app_state.bypass_flag,
                control_command_flag: app_state.control_command_flag,
-               segment_header_flag: app_state.segment_header_flag
+               segment_header_flag: app_state.segment_header_flag,
+               fecf: app_state.fecf
              },
              segmentation_state
            ),
-         {:ok, transfer_frames} <- encode_transfer_frames(frames, app_state.frame_size) do
+         {:ok, transfer_frames} <-
+           encode_transfer_frames(frames, app_state.frame_size, app_state.fecf) do
       {:ok, enrich_uplink_request(packetized_request, transfer_frames, frames, app_state),
        %{
          next_frame_seq: next_segmentation_state.frame_seq,
@@ -347,9 +350,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
     }
   end
 
-  defp encode_transfer_frames(frames, frame_size) when is_list(frames) do
+  defp encode_transfer_frames(frames, frame_size, fecf?) when is_list(frames) do
     Enum.reduce_while(frames, {:ok, []}, fn frame, {:ok, acc} ->
-      case FrameCodec.encode(frame, frame_size: frame_size) do
+      case FrameCodec.encode(frame, frame_size: frame_size, fecf: fecf?) do
         {:ok, transfer_frame} -> {:cont, {:ok, [transfer_frame | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end

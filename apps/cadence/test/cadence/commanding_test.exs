@@ -407,7 +407,11 @@ defmodule Cadence.CommandingTest do
                %{"user_id" => "queue-operator"}
              )
 
-    realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
+    realized_contact =
+      persist_active_uplink_contact(
+        source_endpoint.source_endpoint_id,
+        %{"service_name" => "gateway", "fecf" => true}
+      )
 
     assert {:ok,
             %{
@@ -513,10 +517,14 @@ defmodule Cadence.CommandingTest do
       persisted_transport_action_request.request_document["transfer_frames_base64"]
 
     assert {:ok, [decoded_transfer_frame], <<>>} =
-             TransferFrame.decode(Base.decode64!(encoded_transfer_frame), frame_size: 32)
+             TransferFrame.decode(Base.decode64!(encoded_transfer_frame),
+               frame_size: 32,
+               fecf: true
+             )
 
     assert decoded_transfer_frame.scid == 0
     assert decoded_transfer_frame.vcid == 0
+    assert is_integer(decoded_transfer_frame.fecf)
     assert {:ok, command_packet} = SpacePacketCodec.decode(decoded_transfer_frame.payload)
     assert command_packet.packet_type == :command
     assert command_packet.apid == 0

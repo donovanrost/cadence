@@ -5,8 +5,11 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
   `:frame_size` is the managed maximum frame size. Individual TC frames may be
   shorter; their actual boundary is carried by the Frame Length field.
 
-  Frame Error Control Fields are not interpreted by this codec yet.
+  FECF presence is a managed option supplied as `fecf: true` on encode and
+  decode. The Frame Length field includes the FECF when it is present.
   """
+
+  alias Cadence.CCSDS.FrameErrorControl
 
   @primary_header_size 5
   @maximum_frame_size 1024
@@ -20,7 +23,8 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
           vcid: non_neg_integer(),
           frame_length: non_neg_integer(),
           frame_seq: non_neg_integer(),
-          payload: binary()
+          payload: binary(),
+          fecf: FrameErrorControl.value() | nil
         }
 
   defstruct [
@@ -32,33 +36,48 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
     :vcid,
     :frame_length,
     :frame_seq,
-    :payload
+    :payload,
+    :fecf
   ]
 
   @spec encode(t(), keyword()) :: {:ok, binary()} | {:error, term()}
   def encode(%__MODULE__{} = frame, opts) do
     maximum_frame_size = Keyword.fetch!(opts, :frame_size)
+    fecf? = Keyword.get(opts, :fecf, false)
+    fecf_size = fecf_length_bytes(fecf?)
 
-    with :ok <- validate_maximum_frame_size(maximum_frame_size),
-         {:ok, payload, frame_length} <- normalize_payload(frame, maximum_frame_size),
+    with :ok <- validate_fecf_presence(fecf?),
+         :ok <- validate_maximum_frame_size(maximum_frame_size, fecf_size),
+         {:ok, payload, frame_length} <-
+           normalize_payload(frame, maximum_frame_size, fecf_size),
          {:ok, header_fields} <-
            validate_header_fields(frame, frame_length, maximum_frame_size),
          {:ok, header} <- build_header(header_fields) do
-      {:ok, header <> payload}
+      encoded = header <> payload
+      {:ok, if(fecf?, do: FrameErrorControl.append(encoded), else: encoded)}
     end
   end
 
   @spec decode(binary(), keyword()) :: {:ok, [t()], binary()} | {:error, term()}
   def decode(buffer, opts) when is_binary(buffer) do
     maximum_frame_size = Keyword.fetch!(opts, :frame_size)
+    fecf? = Keyword.get(opts, :fecf, false)
+    fecf_size = fecf_length_bytes(fecf?)
 
-    case validate_maximum_frame_size(maximum_frame_size) do
-      :ok -> decode_frames(buffer, maximum_frame_size, [])
-      {:error, reason} -> {:error, reason}
+    with :ok <- validate_fecf_presence(fecf?),
+         :ok <- validate_maximum_frame_size(maximum_frame_size, fecf_size) do
+      decode_frames(buffer, maximum_frame_size, fecf?, [])
     end
   end
 
-  defp decode_frame(<<
+  defp decode_frame(frame, fecf?) do
+    with {:ok, frame_without_fecf, fecf} <- validate_and_strip_fecf(frame, fecf?),
+         {:ok, %__MODULE__{} = decoded} <- decode_frame_body(frame_without_fecf) do
+      {:ok, %{decoded | fecf: fecf}}
+    end
+  end
+
+  defp decode_frame_body(<<
          version::2,
          bypass_flag::1,
          control_command_flag::1,
@@ -85,14 +104,15 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
          :ok <- validate_flag(bypass_flag, :bypass_flag),
          :ok <- validate_flag(control_command_flag, :control_command_flag),
          :ok <- validate_frame_type(bypass_flag, control_command_flag),
-         :ok <- validate_spare(spare) do
+         :ok <- validate_spare(spare),
+         :ok <- validate_data_field(payload) do
       {:ok, frame}
     end
   end
 
-  defp decode_frame(_frame), do: {:error, :invalid_frame}
+  defp decode_frame_body(_frame), do: {:error, :invalid_frame}
 
-  defp decode_frames(buffer, _maximum_frame_size, acc)
+  defp decode_frames(buffer, _maximum_frame_size, _fecf?, acc)
        when byte_size(buffer) < @primary_header_size do
     {:ok, Enum.reverse(acc), buffer}
   end
@@ -100,6 +120,7 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
   defp decode_frames(
          <<_prefix::22, frame_length::10, _frame_seq::8, _rest::binary>> = buffer,
          maximum_frame_size,
+         fecf?,
          acc
        ) do
     frame_size = frame_length + 1
@@ -117,15 +138,15 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
       true ->
         <<frame_binary::binary-size(^frame_size), rest::binary>> = buffer
 
-        case decode_frame(frame_binary) do
-          {:ok, frame} -> decode_frames(rest, maximum_frame_size, [frame | acc])
+        case decode_frame(frame_binary, fecf?) do
+          {:ok, frame} -> decode_frames(rest, maximum_frame_size, fecf?, [frame | acc])
           {:error, reason} -> {:error, reason}
         end
     end
   end
 
-  defp normalize_payload(%__MODULE__{} = frame, maximum_frame_size) do
-    max_payload = maximum_frame_size - @primary_header_size
+  defp normalize_payload(%__MODULE__{} = frame, maximum_frame_size, fecf_size) do
+    max_payload = maximum_frame_size - @primary_header_size - fecf_size
     payload = frame.payload || <<>>
     payload_size = byte_size(payload)
 
@@ -137,7 +158,7 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
         {:error, {:data_field_too_large, payload_size, max_payload}}
 
       true ->
-        actual_frame_length = @primary_header_size + payload_size - 1
+        actual_frame_length = @primary_header_size + payload_size + fecf_size - 1
 
         case frame.frame_length do
           nil ->
@@ -192,12 +213,12 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
      >>}
   end
 
-  defp validate_maximum_frame_size(frame_size)
-       when is_integer(frame_size) and frame_size > @primary_header_size and
+  defp validate_maximum_frame_size(frame_size, fecf_size)
+       when is_integer(frame_size) and frame_size > @primary_header_size + fecf_size and
               frame_size <= @maximum_frame_size,
        do: :ok
 
-  defp validate_maximum_frame_size(frame_size),
+  defp validate_maximum_frame_size(frame_size, _fecf_size),
     do: {:error, {:invalid_maximum_frame_size, frame_size}}
 
   defp validate_version(0), do: :ok
@@ -219,6 +240,19 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
 
   defp validate_spare(0), do: :ok
   defp validate_spare(value), do: {:error, {:reserved_spare_not_zero, value}}
+
+  defp validate_data_field(<<>>), do: {:error, :empty_data_field}
+  defp validate_data_field(_payload), do: :ok
+
+  defp validate_and_strip_fecf(frame, true), do: FrameErrorControl.validate_and_strip(frame)
+  defp validate_and_strip_fecf(frame, false), do: {:ok, frame, nil}
+
+  defp fecf_length_bytes(true), do: FrameErrorControl.size()
+  defp fecf_length_bytes(false), do: 0
+  defp fecf_length_bytes(_other), do: 0
+
+  defp validate_fecf_presence(value) when is_boolean(value), do: :ok
+  defp validate_fecf_presence(value), do: {:error, {:invalid_fecf_presence, value}}
 
   defp validate_range(nil, _min, _max, field), do: {:error, {:missing_field, field}}
 

@@ -654,7 +654,13 @@ defmodule CadenceSimulator.Coordinator do
     {:ok, framed_output, next_frame_state} =
       Segmentation.segment_encode(
         sdu,
-        %{frame_size: frame.frame_size, scid: frame.scid, vcid: frame.vcid, ocf_length: 0},
+        %{
+          frame_size: frame.frame_size,
+          scid: frame.scid,
+          vcid: frame.vcid,
+          ocf_length: 0,
+          fecf: frame.fecf
+        },
         frame_state,
         []
       )

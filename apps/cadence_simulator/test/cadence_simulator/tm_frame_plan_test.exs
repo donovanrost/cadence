@@ -6,7 +6,7 @@ defmodule CadenceSimulator.TMFramePlanTest do
   alias CadenceSimulator.TMFramePlan
 
   test "planned tm frames encode identically to segmentation" do
-    frame = %{format: :tm, frame_size: 32, scid: 11, vcid: 2}
+    frame = %{format: :tm, frame_size: 32, scid: 11, vcid: 2, fecf: true}
 
     packet =
       <<0x08, 0x01, 0xC0, 0x01, 0x00, 0x09, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10>>
@@ -28,7 +28,13 @@ defmodule CadenceSimulator.TMFramePlanTest do
           timestamp: nil,
           meta: %{}
         },
-        %{frame_size: frame.frame_size, scid: frame.scid, vcid: frame.vcid, ocf_length: 0},
+        %{
+          frame_size: frame.frame_size,
+          scid: frame.scid,
+          vcid: frame.vcid,
+          ocf_length: 0,
+          fecf: true
+        },
         segmentation_state,
         []
       )

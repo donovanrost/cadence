@@ -25,6 +25,7 @@ defmodule CadenceSimulator.CLITest do
                "11",
                "--vcid",
                "2",
+               "--fecf",
                "--parallel",
                "--tm-parallel-framing",
                "--generator-count",
@@ -52,7 +53,7 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:send_batch_timeout] == 50
     assert opts[:send_batch_size] == 8192
 
-    assert opts[:frame] == %{format: :tm, frame_size: 1115, scid: 11, vcid: 2}
+    assert opts[:frame] == %{format: :tm, frame_size: 1115, scid: 11, vcid: 2, fecf: true}
   end
 
   test "parse_args infers the scenario provider from --scenario" do
@@ -89,13 +90,15 @@ defmodule CadenceSimulator.CLITest do
                "--tcp",
                "127.0.0.1:4100",
                "--tc-frame-size",
-               "32"
+               "32",
+               "--fecf"
              ])
 
     assert opts[:runtime_mode] == :cop1_loopback
     assert opts[:host] == "127.0.0.1"
     assert opts[:port] == 4100
     assert opts[:tc_frame_size] == 32
+    assert opts[:fecf]
   end
 
   test "parse_args loads telemetry runtime options from yaml config" do
@@ -122,6 +125,7 @@ defmodule CadenceSimulator.CLITest do
           frame_size: 1115
           scid: 5
           vcid: 2
+          fecf: true
         parallel: true
         tm_parallel_framing: true
         generator_count: 3
@@ -142,7 +146,7 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:path_id] == "downlink-path-alpha"
     assert opts[:output] == {:tcp, "127.0.0.1", 4200}
     assert opts[:provider] == DatabaseDynamics
-    assert opts[:frame] == %{format: :tm, frame_size: 1115, scid: 5, vcid: 2}
+    assert opts[:frame] == %{format: :tm, frame_size: 1115, scid: 5, vcid: 2, fecf: true}
     assert opts[:parallel_mode] == :parallel
     assert opts[:tm_parallel_framing] == true
     assert opts[:generator_count] == 3
@@ -179,6 +183,7 @@ defmodule CadenceSimulator.CLITest do
       write_config!("""
       mode: cop1_loopback
       segment_header_flag: 1
+      fecf: true
       cadence:
         url: http://127.0.0.1:4001
         api_token: token-alpha
@@ -215,6 +220,7 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:provider_binding_id] == "tcp-uplink-provider"
     assert opts[:transport_binding_id] == "uplink-gateway-alpha"
     assert opts[:segment_header_flag] == 1
+    assert opts[:fecf]
     assert opts[:clcw_overrides] == %{"lockout" => true, "report_value" => 3}
 
     assert opts[:clcw_schedule] == [

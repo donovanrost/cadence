@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   @behaviour Cadence.CCSDS.SDLP.FrameCodec
 
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.FrameErrorControl
 
   @default_secondary_header_length 0
   @default_ocf_length 4
@@ -27,17 +28,20 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     frame_size = Keyword.fetch!(opts, :frame_size)
     sec_hdr_len = Keyword.get(opts, :secondary_header_length, @default_secondary_header_length)
     ocf_len = Keyword.get(opts, :ocf_length, @default_ocf_length)
+    fecf? = Keyword.get(opts, :fecf, false)
     timestamp = Keyword.get(opts, :timestamp)
 
-    case split_frames(bin, frame_size) do
-      {:incomplete, rest} ->
-        {:ok, [], [], rest}
+    with :ok <- validate_fecf_presence(fecf?) do
+      case split_frames(bin, frame_size) do
+        {:incomplete, rest} ->
+          {:ok, [], [], rest}
 
-      {frames, rest} ->
-        {decoded, dropped, _stats} =
-          decode_frames(frames, frame_size, sec_hdr_len, ocf_len, timestamp)
+        {frames, rest} ->
+          {decoded, dropped, _stats} =
+            decode_frames(frames, frame_size, sec_hdr_len, ocf_len, fecf?, timestamp)
 
-        {:ok, decoded, dropped, rest}
+          {:ok, decoded, dropped, rest}
+      end
     end
   end
 
@@ -46,6 +50,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     frame_size = Keyword.fetch!(opts, :frame_size)
     sec_hdr_len = Keyword.get(opts, :secondary_header_length, @default_secondary_header_length)
     ocf_len = Keyword.get(opts, :ocf_length, @default_ocf_length)
+    fecf? = Keyword.get(opts, :fecf, false)
 
     ocf_flag = Map.get(frame.meta, :ocf_flag, if(has_ocf?(frame), do: 1, else: 0))
     sec_hdr_flag = Map.get(frame.meta, :secondary_header_flag, 0)
@@ -63,9 +68,12 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
 
     expected_data_len =
       frame_size - @primary_header_size - ocf_length_bytes(ocf_flag, ocf_len) -
-        secondary_header_bytes(sec_hdr_flag, sec_hdr_len)
+        secondary_header_bytes(sec_hdr_flag, sec_hdr_len) - fecf_length_bytes(fecf?)
 
     cond do
+      not is_boolean(fecf?) ->
+        {:error, {:invalid_fecf_presence, fecf?}}
+
       sec_hdr_flag != 0 ->
         {:error, :secondary_header_not_supported}
 
@@ -73,7 +81,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
         {:error, {:invalid_data_field_length, payload_size, expected_data_len}}
 
       true ->
-        encode_valid_frame(frame, payload, ocf_len, header_fields)
+        encode_valid_frame(frame, payload, ocf_len, fecf?, header_fields)
     end
   end
 
@@ -88,6 +96,10 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   defp secondary_header_bytes(1, sec_hdr_len), do: sec_hdr_len
   defp secondary_header_bytes(_, _), do: 0
 
+  defp fecf_length_bytes(true), do: FrameErrorControl.size()
+  defp fecf_length_bytes(false), do: 0
+  defp fecf_length_bytes(_other), do: 0
+
   defp maybe_extract_ocf(_frame, 0, _ocf_len), do: {:ok, <<>>}
 
   defp maybe_extract_ocf(%LinkFrame{ocf: ocf}, 1, ocf_len) when is_binary(ocf) do
@@ -100,33 +112,38 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
 
   defp maybe_extract_ocf(_frame, 1, _ocf_len), do: {:error, :missing_ocf}
 
-  defp encode_valid_frame(frame, payload, ocf_len, header_fields) do
+  defp encode_valid_frame(frame, payload, ocf_len, fecf?, header_fields) do
     {ocf_flag, mcfc, vcfc, sec_hdr_flag, sync_flag, packet_order_flag, segment_len_id, fhp} =
       header_fields
 
     case maybe_extract_ocf(frame, ocf_flag, ocf_len) do
       {:ok, ocf} ->
-        {:ok,
-         <<
-           0::2,
-           frame.scid::10,
-           frame.vcid::3,
-           ocf_flag::1,
-           mcfc::8,
-           vcfc::8,
-           sec_hdr_flag::1,
-           sync_flag::1,
-           packet_order_flag::1,
-           segment_len_id::2,
-           fhp::11,
-           payload::binary,
-           ocf::binary
-         >>}
+        encoded =
+          <<
+            0::2,
+            frame.scid::10,
+            frame.vcid::3,
+            ocf_flag::1,
+            mcfc::8,
+            vcfc::8,
+            sec_hdr_flag::1,
+            sync_flag::1,
+            packet_order_flag::1,
+            segment_len_id::2,
+            fhp::11,
+            payload::binary,
+            ocf::binary
+          >>
+
+        {:ok, maybe_append_fecf(encoded, fecf?)}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  defp maybe_append_fecf(frame, true), do: FrameErrorControl.append(frame)
+  defp maybe_append_fecf(frame, false), do: frame
 
   defp split_frames(buffer, frame_size) do
     if byte_size(buffer) < frame_size do
@@ -141,7 +158,26 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     end
   end
 
-  defp decode_frame(
+  defp decode_frame(frame, sec_hdr_len, ocf_len, fecf?, timestamp) do
+    with {:ok, frame_without_fecf, fecf} <- validate_and_strip_fecf(frame, fecf?),
+         {:ok, %LinkFrame{} = decoded} <-
+           decode_frame_body(frame_without_fecf, sec_hdr_len, ocf_len, timestamp) do
+      {:ok,
+       %{
+         decoded
+         | meta:
+             Map.merge(decoded.meta, %{
+               fecf_present: fecf?,
+               fecf: fecf
+             })
+       }}
+    else
+      {:drop, reason} -> {:drop, reason}
+      {:error, reason} -> {:drop, reason}
+    end
+  end
+
+  defp decode_frame_body(
          <<version::2, scid::10, vcid::3, ocf_flag::1, mcfc::8, vcfc::8, sec_hdr_flag::1,
            sync_flag::1, packet_order_flag::1, segment_len_id::2, fhp::11, payload::binary>>,
          sec_hdr_len,
@@ -183,16 +219,17 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     end
   end
 
-  defp decode_frame(_frame, _sec_hdr_len, _ocf_len, _timestamp), do: {:drop, :invalid_frame}
+  defp decode_frame_body(_frame, _sec_hdr_len, _ocf_len, _timestamp),
+    do: {:drop, :invalid_frame}
 
-  defp decode_frames(frames, frame_size, sec_hdr_len, ocf_len, timestamp) do
+  defp decode_frames(frames, frame_size, sec_hdr_len, ocf_len, fecf?, timestamp) do
     {decoded, dropped, decode_stats} =
       frames
       |> Enum.with_index()
       |> Enum.reduce({[], [], %{ok: 0, drop: 0}}, fn {frame, index}, {acc, dropped_acc, stats} ->
         raw_frame_offset_bytes = index * frame_size
 
-        case decode_frame(frame, sec_hdr_len, ocf_len, timestamp) do
+        case decode_frame(frame, sec_hdr_len, ocf_len, fecf?, timestamp) do
           {:ok, %LinkFrame{} = decoded_frame} ->
             {[
                %{
@@ -242,6 +279,12 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   end
 
   defp frame_decode_metadata(_frame, reason), do: %{reason: reason}
+
+  defp validate_and_strip_fecf(frame, true), do: FrameErrorControl.validate_and_strip(frame)
+  defp validate_and_strip_fecf(frame, false), do: {:ok, frame, nil}
+
+  defp validate_fecf_presence(value) when is_boolean(value), do: :ok
+  defp validate_fecf_presence(value), do: {:error, {:invalid_fecf_presence, value}}
 
   defp validate_version(0), do: :ok
   defp validate_version(version), do: {:error, {:unsupported_version, version}}

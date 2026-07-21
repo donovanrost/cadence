@@ -293,6 +293,12 @@ Common fields include:
 - `frame.tm_frame_size`
 - `frame.scid`
 - `frame.vcid`
+- `frame.fecf`
+
+`frame.fecf: true` enables the managed two-octet CCSDS Frame Error Control
+Field on generated TM transfer frames. In `cop1_loopback` profiles, the
+top-level `fecf: true` setting validates and removes the managed FECF from TC
+transfer frames before reassembly.
 
 Relative paths in profiles are resolved relative to the profile file.
 

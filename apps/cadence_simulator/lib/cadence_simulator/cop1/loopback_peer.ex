@@ -25,6 +25,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     :host,
     :port,
     :tc_frame_size,
+    :fecf,
     :runtime_resolver,
     :socket,
     :reconnect_interval_ms,
@@ -69,6 +70,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       host: Keyword.get(opts, :host, "127.0.0.1"),
       port: Keyword.fetch!(opts, :port),
       tc_frame_size: Keyword.fetch!(opts, :tc_frame_size),
+      fecf: Keyword.get(opts, :fecf, false),
       runtime_resolver: Keyword.get(opts, :runtime_resolver),
       reconnect_interval_ms:
         Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
@@ -90,6 +92,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        port: state.port,
        connected?: is_port(state.socket),
        tc_frame_size: state.tc_frame_size,
+       fecf: state.fecf,
        tc_frame_count: state.tc_frame_count,
        clcw_count: state.clcw_count,
        command_count: state.command_count,
@@ -189,6 +192,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     case FrameCodec.decode(
            buffer,
            frame_size: state.tc_frame_size,
+           fecf: state.fecf,
            segment_header_flag: state.segment_header_flag,
            segment_header_by_vcid: state.segment_header_by_vcid
          ) do
@@ -357,6 +361,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
           |> maybe_put_runtime_value(:port, runtime_updates)
           |> maybe_put_runtime_value(:tc_frame_size, runtime_updates)
           |> maybe_put_runtime_value(:segment_header_flag, runtime_updates)
+          |> maybe_put_runtime_value(:fecf, runtime_updates)
           |> maybe_reset_reassembly_for_runtime_change(state)
 
         maybe_log_runtime_refresh(state, refreshed_state)
@@ -381,7 +386,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
         previous_state.host,
         previous_state.port,
         previous_state.tc_frame_size,
-        previous_state.segment_header_flag
+        previous_state.segment_header_flag,
+        previous_state.fecf
       }
 
     refreshed_runtime =
@@ -389,7 +395,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
         refreshed_state.host,
         refreshed_state.port,
         refreshed_state.tc_frame_size,
-        refreshed_state.segment_header_flag
+        refreshed_state.segment_header_flag,
+        refreshed_state.fecf
       }
 
     if refreshed_runtime != previous_runtime do
@@ -401,15 +408,16 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   defp maybe_reset_reassembly_for_runtime_change(refreshed_state, previous_state) do
     if refreshed_state.tc_frame_size != previous_state.tc_frame_size or
-         refreshed_state.segment_header_flag != previous_state.segment_header_flag do
+         refreshed_state.segment_header_flag != previous_state.segment_header_flag or
+         refreshed_state.fecf != previous_state.fecf do
       %{refreshed_state | tc_reassembly: %{refreshed_state.tc_reassembly | buffers: %{}}}
     else
       refreshed_state
     end
   end
 
-  defp format_runtime({host, port, tc_frame_size, segment_header_flag}) do
-    "#{host}:#{port} tc_frame_size=#{tc_frame_size} segment_header_flag=#{segment_header_flag}"
+  defp format_runtime({host, port, tc_frame_size, segment_header_flag, fecf?}) do
+    "#{host}:#{port} tc_frame_size=#{tc_frame_size} segment_header_flag=#{segment_header_flag} fecf=#{fecf?}"
   end
 
   defp resolve_runtime_updates({module, function, args})

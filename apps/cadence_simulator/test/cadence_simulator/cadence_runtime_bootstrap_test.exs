@@ -18,7 +18,8 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "host" => "127.0.0.1",
              "port" => 4100,
              "ingress_protocol_family" => "tm",
-             "fixed_message_bytes" => 1115
+             "fixed_message_bytes" => 1115,
+             "ingress_metadata" => %{"fecf" => true}
            }
          ],
          "transport_runtimes" => []
@@ -44,7 +45,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              )
 
     assert resolved_opts[:output] == {:tcp, "127.0.0.1", 4100}
-    assert resolved_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0}
+    assert resolved_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0, fecf: true}
 
     assert {CadenceRuntimeBootstrap, :refresh_runtime_opts, [_resolver_opts]} =
              resolved_opts[:runtime_resolver]
@@ -94,7 +95,14 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              )
 
     assert resolved_opts[:output] == {:tcp, "127.0.0.1", 4100}
-    assert resolved_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0}
+
+    assert resolved_opts[:frame] == %{
+             format: :tm,
+             frame_size: 1115,
+             scid: 0,
+             vcid: 0,
+             fecf: false
+           }
   end
 
   test "telemetry runtime resolver tuple refreshes runtime opts" do
@@ -138,7 +146,14 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
     assert {module, function, args} = resolved_opts[:runtime_resolver]
     assert {:ok, refreshed_opts} = apply(module, function, args)
     assert refreshed_opts[:output] == {:tcp, "127.0.0.1", 4100}
-    assert refreshed_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0}
+
+    assert refreshed_opts[:frame] == %{
+             format: :tm,
+             frame_size: 1115,
+             scid: 0,
+             vcid: 0,
+             fecf: false
+           }
   end
 
   test "resolves cop1 loopback socket and tc frame size from Cadence path runtime snapshot" do
@@ -159,7 +174,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
            %{
              "capability_instance_id" => "uplink-gateway-alpha",
              "family_key" => "uplink_gateway",
-             "state" => %{"frame_size" => 32, "segment_header_flag" => 1}
+             "state" => %{"frame_size" => 32, "segment_header_flag" => 1, "fecf" => true}
            }
          ]
        }}
@@ -185,6 +200,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
     assert resolved_opts[:port] == 4200
     assert resolved_opts[:tc_frame_size] == 32
     assert resolved_opts[:segment_header_flag] == 1
+    assert resolved_opts[:fecf]
 
     assert {CadenceRuntimeBootstrap, :refresh_runtime_opts, [_resolver_opts]} =
              resolved_opts[:runtime_resolver]

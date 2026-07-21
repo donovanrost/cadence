@@ -493,7 +493,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
            format: :tm,
            frame_size: frame_size,
            scid: Map.get(data_plane, "scid", 0),
-           vcid: Map.get(data_plane, "vcid", 0)
+           vcid: Map.get(data_plane, "vcid", 0),
+           fecf: Map.get(data_plane, "fecf", false)
          },
          parallel_mode: :parallel,
          generator_count: Map.get(data_plane, "generator_count", 1),

@@ -33,6 +33,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
            "segment_header_flag",
            0
          ),
+       fecf: config_value_or_default(configuration, :fecf, "fecf", false),
        initial_frame_seq:
          config_value_or_default(configuration, :initial_frame_seq, "initial_frame_seq", 0),
        cop1_mode: normalize_cop1_mode(config_value(configuration, :cop1_mode, "cop1_mode")),
@@ -94,6 +95,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
              normalized_configuration.segment_header_flag,
              :segment_header_flag
            ),
+         :ok <- validate_boolean(normalized_configuration.fecf, :fecf),
          :ok <-
            validate_range(
              normalized_configuration.initial_frame_seq,
@@ -213,6 +215,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
 
   defp validate_flag(value, _field) when value in [0, 1], do: :ok
   defp validate_flag(value, field), do: {:error, {:invalid_uplink_gateway_flag, field, value}}
+
+  defp validate_boolean(value, _field) when is_boolean(value), do: :ok
+
+  defp validate_boolean(value, field),
+    do: {:error, {:invalid_uplink_gateway_field, field, value}}
 
   defp validate_range(value, min, max, _field)
        when is_integer(value) and value >= min and value <= max,

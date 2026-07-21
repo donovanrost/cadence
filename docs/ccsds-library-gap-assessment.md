@@ -40,6 +40,8 @@ The shared library currently owns:
   helpers, and mission-pattern Idle Packet construction;
 - semantic `LinkFrame` and `SDUOctets` value types;
 - fixed-length TM transfer-frame encoding and decoding;
+- shared CCSDS Frame Error Control Field generation and validation for TM and
+  TC, with managed presence and explicit corruption evidence;
 - TM packet-oriented segmentation and reassembly;
 - variable-length TC transfer-frame encoding and streaming decoding;
 - the standard TC primary header and one-octet Segment Header;
@@ -61,15 +63,22 @@ protocol. The frame does not carry a Segment Header presence bit. Type-AD
 reassembly checks frame sequence continuity; Type-BD reassembly uses arrival
 order because Type-B frame sequence numbers are not available for that purpose.
 
+FECF presence is supplied as the managed `fecf: true | false` channel setting;
+there is no presence bit in either transfer-frame header. Encoding reserves the
+final two octets and includes them in the TC Frame Length count. TM detailed
+decoding drops a corrupt fixed-length frame with `:invalid_fecf` evidence, while
+TC decoding rejects a corrupt variable-length frame before MAP reassembly. The
+Cadence uplink gateway, Cadence TM ingress metadata, simulator TM framing, and
+simulator COP-1 loopback all propagate the same managed setting.
+
 ## Remaining gaps
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P0 | Frame error control | TM and TC codecs do not generate or validate the optional Frame Error Control Field. Corrupt frames can be presented as good data. | Add the CCSDS CRC implementation, managed FECF presence, encode/decode validation, and explicit quality/drop evidence. |
 | P0 | COP-1 receiving side | There is no FARM-1 implementation. The simulator loopback acknowledges accepted Type-AD frames but does not implement positive/negative windows, lockout recovery, Type-BC control directives, or a persistent receiver state per VC. | Add a pure FARM-1 state machine and make loopback CLCWs come from it. |
 | P0 | Full FOP-1 behavior | The current FOP is intentionally a small single-release implementation. It does not implement the complete directive/state machine, configurable sliding window, suspend/resume/initialize procedures, all timer modes, or all alert conditions. | Replace or evolve it behind conformance tests derived from CCSDS 232.1-B-2. |
 | P1 | TC service completeness | MAP SDU segmentation/reassembly is present, but Packet, Virtual Channel Access, aggregation, Type-BC control-command data, and managed service rules are not represented as distinct APIs. | Add explicit TC service types and management configuration rather than further overloading generic payload metadata. |
-| P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks FECF, VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
+| P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
 | P1 | Synchronization and channel coding | The library starts at transfer frames. It does not construct or decode CLTUs, BCH/LDPC codeblocks, start/tail sequences, attached sync markers, randomization, or channel-quality evidence. | Add a separate coding/synchronization layer so frame services remain usable without a physical-link profile. |
 | P1 | Conformance evidence | Tests are focused unit and Cadence loopback tests. There are no published CCSDS golden vectors, property tests, malformed-input corpus, fuzzing, or external implementation interoperability runs. | Establish normative vectors and differential/interoperability tests before making compliance claims. |
 | P2 | Other space data links | `Types.profile/0` names AOS and USLP, but no AOS or USLP codecs/services exist. | Implement only when a concrete mission or provider requires them; do not imply support from the type atoms. |
@@ -94,15 +103,12 @@ compose those pieces:
 
 ## Recommended next slice
 
-The next highest-leverage slice is Frame Error Control Field support shared by
-TM and TC:
+The next highest-leverage slice is a pure FARM-1 receiving-side state machine
+and integration of its CLCW output into the simulator loopback. FECF validation
+now prevents corrupted TC frames from reaching loopback reassembly, but the
+receiver still acknowledges otherwise valid frames without implementing the
+standard positive/negative windows, lockout recovery, or Type-BC directives.
 
-1. add the CCSDS CRC implementation and standard-derived vectors;
-2. model FECF presence as managed channel configuration;
-3. generate FECFs during TM and TC encoding;
-4. validate FECFs before reassembly and surface explicit corruption evidence;
-5. add malformed, truncation, and end-to-end simulator vectors.
-
-FARM-1 should follow FECF. Both remain prerequisites before describing the
-uplink path as interoperable COP-1 rather than a deterministic loopback
-implementation.
+FARM-1 and the remaining full FOP-1 behavior remain prerequisites before
+describing the uplink path as interoperable COP-1 rather than a deterministic
+loopback implementation.

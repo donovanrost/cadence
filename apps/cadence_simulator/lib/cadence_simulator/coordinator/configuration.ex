@@ -50,7 +50,8 @@ defmodule CadenceSimulator.Coordinator.Configuration do
       format: :tm,
       frame_size: frame_size,
       scid: Map.get(frame, :scid, 0),
-      vcid: Map.get(frame, :vcid, 0)
+      vcid: Map.get(frame, :vcid, 0),
+      fecf: normalize_fecf(Map.get(frame, :fecf, false))
     }
   end
 
@@ -60,12 +61,19 @@ defmodule CadenceSimulator.Coordinator.Configuration do
       format: :tm,
       frame_size: frame_size,
       scid: Map.get(frame, "scid", 0),
-      vcid: Map.get(frame, "vcid", 0)
+      vcid: Map.get(frame, "vcid", 0),
+      fecf: normalize_fecf(Map.get(frame, "fecf", false))
     }
   end
 
   def normalize_frame(other) do
     raise ArgumentError, "unsupported simulator frame config: #{inspect(other)}"
+  end
+
+  defp normalize_fecf(value) when is_boolean(value), do: value
+
+  defp normalize_fecf(value) do
+    raise ArgumentError, "unsupported simulator FECF config: #{inspect(value)}"
   end
 
   def init_frame_state(nil), do: {:ok, nil}

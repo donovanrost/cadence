@@ -112,13 +112,15 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
          {:ok, {host, port}} <- provider_host_port(provider_runtime),
          {:ok, transport_runtime} <- select_transport_runtime(path_snapshot, bootstrap_request),
          {:ok, tc_frame_size} <- transport_frame_size(transport_runtime),
-         {:ok, segment_header_flag} <- transport_segment_header_flag(transport_runtime) do
+         {:ok, segment_header_flag} <- transport_segment_header_flag(transport_runtime),
+         {:ok, fecf?} <- transport_fecf(transport_runtime) do
       {:ok,
        [
          host: host,
          port: port,
          tc_frame_size: tc_frame_size,
-         segment_header_flag: segment_header_flag
+         segment_header_flag: segment_header_flag,
+         fecf: fecf?
        ]}
     end
   end
@@ -221,16 +223,27 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
     end
   end
 
+  defp transport_fecf(transport_runtime) when is_map(transport_runtime) do
+    case get_in(transport_runtime, ["state", "fecf"]) do
+      nil -> {:ok, false}
+      fecf? when is_boolean(fecf?) -> {:ok, fecf?}
+      other -> {:error, {:invalid_transport_fecf, other}}
+    end
+  end
+
   defp telemetry_frame(provider_runtime) when is_map(provider_runtime) do
     case {provider_runtime["ingress_protocol_family"], provider_runtime["fixed_message_bytes"]} do
       {protocol_family, frame_size}
       when protocol_family in ["tm", "tm_transfer_frame"] and is_integer(frame_size) and
              frame_size > 0 ->
+        ingress_metadata = provider_runtime["ingress_metadata"] || %{}
+
         %{
           format: :tm,
           frame_size: frame_size,
           scid: 0,
-          vcid: 0
+          vcid: 0,
+          fecf: Map.get(ingress_metadata, "fecf", false)
         }
 
       _other ->
@@ -283,7 +296,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
 
   defp merge_bootstrap_runtime_opts(runtime_opts, :cop1_loopback, bootstrap_runtime_opts) do
     runtime_opts
-    |> Keyword.drop([:host, :port, :tc_frame_size, :segment_header_flag])
+    |> Keyword.drop([:host, :port, :tc_frame_size, :segment_header_flag, :fecf])
     |> put_missing_opts(bootstrap_runtime_opts)
   end
 

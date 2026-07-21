@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.TC.Segmentation do
   @behaviour Cadence.CCSDS.SDLP.Segmentation
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.FrameErrorControl
 
   @primary_header_size 5
 
@@ -39,11 +40,16 @@ defmodule Cadence.CCSDS.TC.Segmentation do
     segment_header_flag = Map.get(ctx, :segment_header_flag, 0)
     bypass_flag = Map.get(ctx, :bypass_flag, 0)
     control_command_flag = Map.get(ctx, :control_command_flag, 0)
+    fecf? = Map.get(ctx, :fecf, false)
     segment_header_size = if segment_header_flag == 1, do: 1, else: 0
-    max_payload = frame_size - @primary_header_size - segment_header_size
+
+    max_payload =
+      frame_size - @primary_header_size - segment_header_size - fecf_length_bytes(fecf?)
+
     map_id = sdu.map_id || Map.get(ctx, :map_id, 0)
 
-    with :ok <- validate_flag(segment_header_flag, :segment_header_flag),
+    with :ok <- validate_fecf_presence(fecf?),
+         :ok <- validate_flag(segment_header_flag, :segment_header_flag),
          :ok <- validate_flag(bypass_flag, :bypass_flag),
          :ok <- validate_flag(control_command_flag, :control_command_flag),
          :ok <- validate_frame_type(bypass_flag, control_command_flag),
@@ -62,6 +68,7 @@ defmodule Cadence.CCSDS.TC.Segmentation do
          max_payload: max_payload,
          bypass_flag: bypass_flag,
          control_command_flag: control_command_flag,
+         fecf: fecf?,
          segment_header_flag: segment_header_flag,
          spare: Map.get(ctx, :spare, 0)
        }}
@@ -121,7 +128,8 @@ defmodule Cadence.CCSDS.TC.Segmentation do
         control_command_flag: frame_ctx.control_command_flag,
         segment_header_flag: frame_ctx.segment_header_flag,
         sequence_flag: sequence_flag,
-        spare: frame_ctx.spare
+        spare: frame_ctx.spare,
+        fecf_present: frame_ctx.fecf
       }
     }
   end
@@ -162,4 +170,11 @@ defmodule Cadence.CCSDS.TC.Segmentation do
 
   defp validate_max_payload(max_payload) when max_payload > 0, do: :ok
   defp validate_max_payload(_max_payload), do: {:error, :frame_size_too_small}
+
+  defp fecf_length_bytes(true), do: FrameErrorControl.size()
+  defp fecf_length_bytes(false), do: 0
+  defp fecf_length_bytes(_other), do: 0
+
+  defp validate_fecf_presence(value) when is_boolean(value), do: :ok
+  defp validate_fecf_presence(value), do: {:error, {:invalid_fecf_presence, value}}
 end

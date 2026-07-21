@@ -76,7 +76,7 @@ defmodule Cadence.CCSDS.SDLP.TM.SegmentationTest do
     frame_size = 36
     payload = :binary.copy(<<0xEF>>, 40)
     ocf = <<1, 2, 3, 4>>
-    ctx = %{frame_size: frame_size, scid: 9, vcid: 3, ocf: ocf}
+    ctx = %{frame_size: frame_size, scid: 9, vcid: 3, ocf: ocf, fecf: true}
 
     sdu = %SDUOctets{
       profile: :tm,
@@ -98,7 +98,9 @@ defmodule Cadence.CCSDS.SDLP.TM.SegmentationTest do
     expected =
       frames
       |> Enum.map(fn frame ->
-        {:ok, encoded} = FrameCodec.encode(frame, frame_size: frame_size, ocf_length: 4)
+        {:ok, encoded} =
+          FrameCodec.encode(frame, frame_size: frame_size, ocf_length: 4, fecf: true)
+
         encoded
       end)
       |> IO.iodata_to_binary()

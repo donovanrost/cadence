@@ -27,6 +27,7 @@ defmodule CadenceSimulator.CLI do
     tm_frame_size: :integer,
     scid: :integer,
     vcid: :integer,
+    fecf: :boolean,
     parallel: :boolean,
     tm_parallel_framing: :boolean,
     generator_count: :integer,
@@ -50,6 +51,7 @@ defmodule CadenceSimulator.CLI do
     tcp: :string,
     tc_frame_size: :integer,
     segment_header_flag: :integer,
+    fecf: :boolean,
     clcw_overrides: :keep,
     clcw_schedule: :keep,
     help: :boolean
@@ -126,6 +128,7 @@ defmodule CadenceSimulator.CLI do
       --tm-frame-size BYTES    Wrap generated packets into TM transfer frames
       --scid VALUE             TM SCID (default: 0)
       --vcid VALUE             TM VCID (default: 0)
+      --fecf                   Generate the managed TM Frame Error Control Field
 
     Cadence Bootstrap:
       --cadence-url URL        Resolve path runtime socket info from Cadence
@@ -164,6 +167,7 @@ defmodule CadenceSimulator.CLI do
 
     TC Data Link:
       --segment-header-flag N  Managed Segment Header presence for the VC: 0 or 1
+      --fecf                   Validate the managed TC Frame Error Control Field
 
     CLCW Injection:
       --clcw-overrides SPEC    Static CLCW overrides as KEY=VALUE[,KEY=VALUE...]
@@ -324,6 +328,7 @@ defmodule CadenceSimulator.CLI do
          {:ok, tc_frame_size} <- optional_positive_integer_value(parsed[:tc_frame_size]),
          {:ok, segment_header_flag} <-
            optional_flag_value(parsed[:segment_header_flag], "--segment-header-flag"),
+         {:ok, fecf?} <- optional_boolean_value(parsed[:fecf], "--fecf"),
          {:ok, clcw_overrides} <-
            parse_clcw_overrides(Keyword.get_values(parsed, :clcw_overrides)),
          {:ok, clcw_schedule} <- parse_clcw_schedule(Keyword.get_values(parsed, :clcw_schedule)) do
@@ -335,6 +340,7 @@ defmodule CadenceSimulator.CLI do
         |> maybe_put(:port, output && elem(output, 2))
         |> maybe_put(:tc_frame_size, tc_frame_size)
         |> maybe_put(:segment_header_flag, segment_header_flag)
+        |> maybe_put(:fecf, fecf?)
         |> maybe_put(:clcw_overrides, if(clcw_overrides == %{}, do: nil, else: clcw_overrides))
         |> maybe_put(:clcw_schedule, if(clcw_schedule == [], do: nil, else: clcw_schedule))
         |> Keyword.merge(bootstrap_opts)
@@ -390,6 +396,12 @@ defmodule CadenceSimulator.CLI do
   defp optional_flag_value(_value, option),
     do: {:error, "#{option} must be 0 or 1"}
 
+  defp optional_boolean_value(nil, _option), do: {:ok, nil}
+  defp optional_boolean_value(value, _option) when is_boolean(value), do: {:ok, value}
+
+  defp optional_boolean_value(_value, option),
+    do: {:error, "#{option} must be true or false"}
+
   defp parse_provider("basic"), do: {:ok, BasicDynamics}
   defp parse_provider("database"), do: {:ok, DatabaseDynamics}
   defp parse_provider("scenario"), do: {:ok, ScenarioProvider}
@@ -443,7 +455,8 @@ defmodule CadenceSimulator.CLI do
          format: :tm,
          frame_size: frame_size,
          scid: parsed[:scid] || 0,
-         vcid: parsed[:vcid] || 0
+         vcid: parsed[:vcid] || 0,
+         fecf: parsed[:fecf] || false
        }}
     else
       {:error, "--tm-frame-size must be a positive integer"}
@@ -631,6 +644,7 @@ defmodule CadenceSimulator.CLI do
        )
        |> maybe_put_config(:scid, config_frame_value(config_root, frame, "scid"))
        |> maybe_put_config(:vcid, config_frame_value(config_root, frame, "vcid"))
+       |> maybe_put_config(:fecf, config_frame_value(config_root, frame, "fecf"))
        |> maybe_put_config(:parallel, config_parallel_value(config_root))
        |> maybe_put_config(
          :tm_parallel_framing,
@@ -661,6 +675,7 @@ defmodule CadenceSimulator.CLI do
       :segment_header_flag,
       fetch_config_value(config_root, ["segment_header_flag"])
     )
+    |> maybe_put_config(:fecf, fetch_config_value(config_root, ["fecf"]))
     |> maybe_put_config(
       :clcw_overrides,
       fetch_config_value(config_root, ["clcw_overrides"]) ||
@@ -822,6 +837,7 @@ defmodule CadenceSimulator.CLI do
   defp normalize_config_value(:noise_amplitude, value), do: parse_float(value) || value
   defp normalize_config_value(:parallel, value), do: parse_boolean(value)
   defp normalize_config_value(:tm_parallel_framing, value), do: parse_boolean(value)
+  defp normalize_config_value(:fecf, value), do: parse_boolean(value)
   defp normalize_config_value(_key, value), do: value
 
   defp fetch_config_value(nil, _keys), do: nil

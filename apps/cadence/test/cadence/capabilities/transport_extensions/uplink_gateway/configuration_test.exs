@@ -15,6 +15,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
              bypass_flag: 0,
              control_command_flag: 0,
              segment_header_flag: 0,
+             fecf: false,
              initial_frame_seq: 0,
              cop1_mode: :disabled,
              cop1_timeout_ms: 5_000,
@@ -34,6 +35,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
              Configuration.normalize(%{
                "service_name" => "gateway",
                "tc_frame_size" => 64,
+               "fecf" => true,
                "cop1_mode" => "fop",
                "provider" => %{
                  "provider_binding_id" => "provider-alpha",
@@ -43,6 +45,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
 
     assert configuration.service_name == "gateway"
     assert configuration.frame_size == 64
+    assert configuration.fecf
     assert configuration.cop1_mode == :fop
     assert configuration.provider_binding_id == "provider-alpha"
     assert configuration.provider_adapter_key == :tcp_socket

@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   @behaviour Cadence.CCSDS.SDLP.Segmentation
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.FrameErrorControl
   alias Cadence.CCSDS.SpacePacket.Idle
 
   @primary_header_size 6
@@ -129,7 +130,14 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   defp build_frame(
          payload,
          fhp,
-         %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag, timestamp: timestamp},
+         %{
+           scid: scid,
+           vcid: vcid,
+           ocf: ocf,
+           ocf_flag: ocf_flag,
+           fecf: fecf?,
+           timestamp: timestamp
+         },
          state
        ) do
     %LinkFrame{
@@ -150,7 +158,8 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
         secondary_header_flag: 0,
         sync_flag: 0,
         packet_order_flag: 0,
-        segment_length_id: 3
+        segment_length_id: 3,
+        fecf_present: fecf?
       }
     }
   end
@@ -158,26 +167,29 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   defp encode_frame(
          payload,
          fhp,
-         %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag},
+         %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag, fecf: fecf?},
          state
        ) do
     ocf_bin = if ocf_flag == 1, do: ocf, else: <<>>
 
-    <<
-      0::2,
-      scid::10,
-      vcid::3,
-      ocf_flag::1,
-      state.mcfc::8,
-      state.vcfc::8,
-      0::1,
-      0::1,
-      0::1,
-      3::2,
-      fhp::11,
-      payload::binary,
-      ocf_bin::binary
-    >>
+    frame =
+      <<
+        0::2,
+        scid::10,
+        vcid::3,
+        ocf_flag::1,
+        state.mcfc::8,
+        state.vcfc::8,
+        0::1,
+        0::1,
+        0::1,
+        3::2,
+        fhp::11,
+        payload::binary,
+        ocf_bin::binary
+      >>
+
+    if fecf?, do: FrameErrorControl.append(frame), else: frame
   end
 
   defp build_last_payload(segment, max_payload, state) do
@@ -217,9 +229,12 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
     frame_size = Map.fetch!(ctx, :frame_size)
     scid = sdu.scid || Map.get(ctx, :scid, 0)
     vcid = sdu.vcid || Map.get(ctx, :vcid, 0)
+    fecf? = Map.get(ctx, :fecf, false)
 
-    with {:ok, ocf, ocf_len} <- normalize_ocf(ctx),
-         max_payload when max_payload > 0 <- frame_size - @primary_header_size - ocf_len do
+    with :ok <- validate_fecf_presence(fecf?),
+         {:ok, ocf, ocf_len} <- normalize_ocf(ctx),
+         max_payload when max_payload > 0 <-
+           frame_size - @primary_header_size - ocf_len - fecf_length_bytes(fecf?) do
       {:ok,
        %{
          frame_size: frame_size,
@@ -228,6 +243,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
          vcid: vcid,
          ocf: ocf,
          ocf_flag: if(ocf_len > 0, do: 1, else: 0),
+         fecf: fecf?,
          timestamp: sdu.timestamp
        }}
     end
@@ -251,4 +267,10 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
         {:error, :invalid_ocf}
     end
   end
+
+  defp fecf_length_bytes(true), do: FrameErrorControl.size()
+  defp fecf_length_bytes(false), do: 0
+
+  defp validate_fecf_presence(value) when is_boolean(value), do: :ok
+  defp validate_fecf_presence(value), do: {:error, {:invalid_fecf_presence, value}}
 end

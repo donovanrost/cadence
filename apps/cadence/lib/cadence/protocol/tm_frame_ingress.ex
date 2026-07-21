@@ -76,6 +76,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
          frame_size: frame_size,
          secondary_header_length: fetch_integer(metadata, :secondary_header_length, 0),
          ocf_length: fetch_integer(metadata, :ocf_length, 4),
+         fecf: fetch_boolean(metadata, :fecf, false),
          timestamp: raw_evidence.source_time || raw_evidence.receipt_time
        ]}
     end
@@ -292,7 +293,19 @@ defmodule Cadence.Protocol.TMFrameIngress do
     end
   end
 
+  defp fetch_boolean(metadata, key, default) when is_map(metadata) and is_boolean(default) do
+    case metadata_value(metadata, key) do
+      nil -> default
+      value when is_boolean(value) -> value
+      _value -> default
+    end
+  end
+
   defp metadata_value(metadata, key) when is_map(metadata) and is_atom(key) do
-    Map.get(metadata, key) || Map.get(metadata, Atom.to_string(key))
+    cond do
+      Map.has_key?(metadata, key) -> Map.get(metadata, key)
+      Map.has_key?(metadata, Atom.to_string(key)) -> Map.get(metadata, Atom.to_string(key))
+      true -> nil
+    end
   end
 end

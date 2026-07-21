@@ -69,6 +69,40 @@ defmodule Cadence.CCSDS.TC.TransferFrameTest do
     assert decoded.payload == payload
   end
 
+  test "includes, validates, and strips the managed FECF" do
+    payload = <<0xAA, 0xBB, 0xCC>>
+
+    frame = %TransferFrame{
+      version: 0,
+      bypass_flag: 0,
+      control_command_flag: 0,
+      spare: 0,
+      scid: 42,
+      vcid: 5,
+      frame_seq: 77,
+      payload: payload
+    }
+
+    assert {:ok, encoded} = TransferFrame.encode(frame, frame_size: 12, fecf: true)
+    assert byte_size(encoded) == 10
+
+    assert <<_prefix::22, 9::10, _rest::binary>> = encoded
+
+    assert {:ok, [decoded], <<>>} =
+             TransferFrame.decode(encoded, frame_size: 12, fecf: true)
+
+    assert decoded.payload == payload
+    assert is_integer(decoded.fecf)
+
+    <<prefix::binary-size(5), byte, suffix::binary>> = encoded
+    corrupted = prefix <> <<Bitwise.bxor(byte, 0x01)>> <> suffix
+
+    assert {:error, {:invalid_fecf, expected, received}} =
+             TransferFrame.decode(corrupted, frame_size: 12, fecf: true)
+
+    assert expected != received
+  end
+
   test "decodes concatenated variable-length frames and preserves an incomplete tail" do
     first = transfer_frame_bytes(1, <<1, 2>>)
     second = transfer_frame_bytes(2, <<3, 4, 5, 6>>)

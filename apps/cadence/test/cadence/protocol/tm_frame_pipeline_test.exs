@@ -26,14 +26,19 @@ defmodule Cadence.Protocol.TMFramePipelineTest do
     {:ok, segmentation_state} = Segmentation.init([])
 
     {:ok, encoded_frames, _segmentation_state} =
-      Segmentation.segment_encode(sdu, %{frame_size: frame_size}, segmentation_state, [])
+      Segmentation.segment_encode(
+        sdu,
+        %{frame_size: frame_size, fecf: true},
+        segmentation_state,
+        []
+      )
 
     {:ok, pipeline_state} = TMFramePipeline.init(default_sdu_type: :space_packet)
 
     assert {:ok, [decoded_packet], <<>>, _pipeline_state} =
              TMFramePipeline.decode_space_packets(
                encoded_frames,
-               [frame_size: frame_size],
+               [frame_size: frame_size, fecf: true],
                pipeline_state
              )
 
