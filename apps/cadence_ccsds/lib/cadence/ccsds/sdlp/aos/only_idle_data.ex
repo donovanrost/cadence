@@ -1,6 +1,6 @@
-defmodule Cadence.CCSDS.SDLP.TM.OnlyIdleData do
+defmodule Cadence.CCSDS.SDLP.AOS.OnlyIdleData do
   @moduledoc """
-  TM namespace for the shared CCSDS Only Idle Data sequence.
+  AOS namespace for the shared CCSDS Only Idle Data sequence.
   """
 
   alias Cadence.CCSDS.SDLP.OnlyIdleData
