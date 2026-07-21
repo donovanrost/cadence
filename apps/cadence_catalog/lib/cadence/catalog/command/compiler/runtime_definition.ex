@@ -5,6 +5,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
   """
 
   alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, EncodingStep}
+  alias Cadence.Catalog.Command.StateEffect
 
   @type layout_kind :: :binary_container | :space_packet | :service_data_unit | :raw_payload
   @type byte_order :: :big_endian | :little_endian
@@ -29,6 +30,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
           encoding_steps: [EncodingStep.t()],
           default_argument_values: map(),
           fixed_argument_values: map(),
+          state_effects: [StateEffect.t()],
           metadata: map()
         }
 
@@ -52,6 +54,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
     encoding_steps: [],
     default_argument_values: %{},
     fixed_argument_values: %{},
+    state_effects: [],
     metadata: %{}
   ]
 
@@ -77,6 +80,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
       encoding_steps: Map.get(attrs, :encoding_steps, []),
       default_argument_values: Map.get(attrs, :default_argument_values, %{}),
       fixed_argument_values: Map.get(attrs, :fixed_argument_values, %{}),
+      state_effects: Map.get(attrs, :state_effects, []),
       metadata: Map.get(attrs, :metadata, %{})
     }
   end

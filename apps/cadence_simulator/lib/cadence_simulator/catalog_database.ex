@@ -9,6 +9,8 @@ defmodule CadenceSimulator.CatalogDatabase do
 
   alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
+  alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
+  alias Cadence.Catalog.Command.{Decoder, Invocation}
   alias Cadence.Catalog.{Ids, ImportResult, Source}
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
   alias Cadence.Catalog.Telemetry.Compiler, as: TelemetryCompiler
@@ -85,6 +87,57 @@ defmodule CadenceSimulator.CatalogDatabase do
       compilation_diagnostics(database.telemetry_compilation) ++
       compilation_diagnostics(database.command_compilation)
   end
+
+  @doc """
+  Fetches one compiled command by its stable ID or catalog name.
+  """
+  @spec fetch_command(t(), binary()) :: {:ok, RuntimeDefinition.t()} | {:error, term()}
+  def fetch_command(
+        %__MODULE__{command_compilation: %CommandCompilerResult{} = result},
+        command_ref
+      )
+      when is_binary(command_ref) do
+    case Enum.find(
+           result.runtime_definitions,
+           &(&1.command_id == command_ref or &1.name == command_ref)
+         ) do
+      %RuntimeDefinition{} = runtime_definition -> {:ok, runtime_definition}
+      nil -> {:error, {:simulator_command_not_found, command_ref}}
+    end
+  end
+
+  def fetch_command(%__MODULE__{}, command_ref),
+    do: {:error, {:simulator_command_not_found, command_ref}}
+
+  @doc """
+  Resolves invocation arguments for a command in this database.
+  """
+  @spec resolve_command(t(), binary(), map()) ::
+          {:ok, RuntimeDefinition.t(), map()} | {:error, term()}
+  def resolve_command(%__MODULE__{} = database, command_ref, arguments)
+      when is_binary(command_ref) and is_map(arguments) do
+    with {:ok, %RuntimeDefinition{} = runtime_definition} <-
+           fetch_command(database, command_ref),
+         {:ok, resolved_arguments} <- Invocation.resolve(runtime_definition, arguments) do
+      {:ok, runtime_definition, resolved_arguments}
+    end
+  end
+
+  @doc """
+  Decodes an encoded command payload using this database's compiled commands.
+  """
+  @spec decode_command(t(), binary()) ::
+          {:ok, %{runtime_definition: RuntimeDefinition.t(), arguments: map()}}
+          | {:error, term()}
+  def decode_command(
+        %__MODULE__{command_compilation: %CommandCompilerResult{} = result},
+        payload
+      )
+      when is_binary(payload) do
+    Decoder.decode(result.runtime_definitions, payload)
+  end
+
+  def decode_command(%__MODULE__{}, _payload), do: {:error, :command_catalog_not_loaded}
 
   defp validate(importer, source) do
     if function_exported?(importer, :validate, 1) do

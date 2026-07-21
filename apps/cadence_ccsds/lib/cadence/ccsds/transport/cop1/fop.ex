@@ -278,8 +278,8 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
          [oldest | _] = frames,
          report_value
        ) do
-    ack_distance = seq_distance(oldest.seq, report_value)
-    {acked, remaining} = Enum.split(frames, ack_distance + 1)
+    acknowledged_frame_count = seq_distance(oldest.seq, report_value)
+    {acked, remaining} = Enum.split(frames, acknowledged_frame_count)
     updated_state = %{state | last_report_value: report_value}
     cancel_timeout_seqs = Enum.map(acked, & &1.seq)
 
@@ -320,8 +320,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
 
   defp update_flags(state, %CLCW{} = clcw) do
     wait =
-      clcw.wait == 1 or clcw.no_rf_available == 1 or clcw.no_bit_lock == 1 or
-        clcw.farm_busy == 1
+      clcw.wait == 1 or clcw.no_rf_available == 1 or clcw.no_bit_lock == 1
 
     %{
       state
@@ -332,7 +331,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
   end
 
   defp valid_report_value?(%{in_flight_release: %{frames: [oldest | frames]}}, report_value) do
-    seq_distance(oldest.seq, report_value) < length([oldest | frames])
+    seq_distance(oldest.seq, report_value) <= length([oldest | frames])
   end
 
   defp seq_distance(base, seq), do: rem(seq - base + 256, 256)

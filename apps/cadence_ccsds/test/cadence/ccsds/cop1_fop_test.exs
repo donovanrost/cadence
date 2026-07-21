@@ -31,7 +31,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOPTest do
     assert {:ok, completion_transition} =
              FOP.apply_clcw(
                start_transition.state,
-               CLCW.new(%{vcid: 0, report_value: 0})
+               CLCW.new(%{vcid: 0, report_value: 1})
              )
 
     assert completion_transition.cancel_timeout_seqs == [0]

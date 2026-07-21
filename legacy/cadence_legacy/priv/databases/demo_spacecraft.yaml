@@ -1785,6 +1785,10 @@ commands:
         bit_length: 8
         valid_values: [0, 1, 2, 3, 4, 5, 6]
         description: "Mode (0=BOOT, 1=SAFE, 2=IDLE, 3=NOMINAL, 4=SCIENCE, 5=MANEUVER, 6=EMERGENCY)"
+    effects:
+      - target: HK.sc_mode
+        operation: set
+        argument: mode
 
   - name: SAFE_MODE
     opcode: 0x04
@@ -1792,6 +1796,10 @@ commands:
     is_hazardous: true
     hazard_description: "Will disable normal operations and science collection"
     requires_confirmation: true
+    effects:
+      - target: HK.sc_mode
+        operation: set
+        value: 1
 
   # ---------------------------------------------------------------------------
   # Thermal Commands
@@ -1826,6 +1834,10 @@ commands:
         bit_length: 8
         valid_values: [0, 1, 2, 3]
         description: "Mode (0=OFF, 1=PASSIVE, 2=ACTIVE, 3=SURVIVAL)"
+    effects:
+      - target: THERM.thermal_mode
+        operation: set
+        argument: mode
 
   - name: SET_HEATER_SETPOINT
     opcode: 0x12
@@ -1862,6 +1874,10 @@ commands:
         bit_length: 8
         valid_values: [0, 1, 2, 3, 4]
         description: "Mode (0=OFF, 1=SAFE, 2=NOMINAL, 3=HIGH_POWER, 4=ECLIPSE)"
+    effects:
+      - target: EPS.eps_mode
+        operation: set
+        argument: mode
 
   - name: ENABLE_LOAD
     opcode: 0x21
@@ -1910,6 +1926,10 @@ commands:
         bit_length: 8
         valid_values: [0, 1, 2, 3, 4, 5, 6]
         description: "Mode (0=OFF, 1=DETUMBLE, 2=SUN_POINT, 3=NADIR_POINT, 4=TARGET_TRACK, 5=INERTIAL_HOLD, 6=SAFE)"
+    effects:
+      - target: ADCS.adcs_mode
+        operation: set
+        argument: mode
 
   - name: SLEW_TO_ATTITUDE
     opcode: 0x31
@@ -1985,6 +2005,10 @@ commands:
         bit_length: 8
         valid_values: [0, 1, 2, 3, 4]
         description: "Mode (0=OFF, 1=RX_ONLY, 2=TX_ONLY, 3=FULL_DUPLEX, 4=BEACON)"
+    effects:
+      - target: COMM.comm_mode
+        operation: set
+        argument: mode
 
   - name: SET_TX_POWER
     opcode: 0x41
@@ -1999,6 +2023,10 @@ commands:
         max_value: 35.0
         units: "dBm"
         description: "Transmit power"
+    effects:
+      - target: COMM.tx_power
+        operation: set
+        argument: power
 
   - name: SET_TX_FREQ
     opcode: 0x42
@@ -2013,6 +2041,10 @@ commands:
         max_value: 450.0
         units: "MHz"
         description: "Transmit frequency"
+    effects:
+      - target: COMM.tx_freq
+        operation: set
+        argument: frequency
 
   # ---------------------------------------------------------------------------
   # Payload Commands
@@ -2020,10 +2052,18 @@ commands:
   - name: PAYLOAD_ON
     opcode: 0x50
     description: "Turn on the payload"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 1
 
   - name: PAYLOAD_OFF
     opcode: 0x51
     description: "Turn off the payload"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 0
 
   - name: START_COLLECTION
     opcode: 0x52
@@ -2046,10 +2086,18 @@ commands:
         valid_values: [0, 1, 2]
         default_value: 0
         description: "Collection mode (0=NORMAL, 1=HIGH_RES, 2=BURST)"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 3
 
   - name: STOP_COLLECTION
     opcode: 0x53
     description: "Stop payload data collection"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 1
 
   - name: FORMAT_STORAGE
     opcode: 0x54

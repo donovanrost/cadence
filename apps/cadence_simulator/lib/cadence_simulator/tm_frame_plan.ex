@@ -7,9 +7,10 @@ defmodule CadenceSimulator.TMFramePlan do
   emission.
   """
 
+  alias Cadence.CCSDS.SpacePacket.Idle
+
   @primary_header_size 6
-  @min_idle_packet_size @primary_header_size + 1
-  @idle_apid 0x7FF
+  @min_idle_packet_size 7
 
   @type plan :: %{payload: binary(), fhp: non_neg_integer()}
   @type cache :: %{optional(pos_integer()) => binary()}
@@ -104,26 +105,9 @@ defmodule CadenceSimulator.TMFramePlan do
         {padding, cache}
 
       _ ->
-        padding = build_idle_packet(padding_size)
+        padding = Idle.encode!(padding_size)
         {padding, Map.put(cache, padding_size, padding)}
     end
-  end
-
-  defp build_idle_packet(size) do
-    payload_size = size - @primary_header_size
-    packet_length = payload_size - 1
-    payload = :binary.copy(<<0>>, payload_size)
-
-    <<
-      0::3,
-      0::1,
-      0::1,
-      @idle_apid::11,
-      3::2,
-      0::14,
-      packet_length::16,
-      payload::binary
-    >>
   end
 
   defp increment_counter(value, step), do: rem(value + step, 256)

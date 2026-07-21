@@ -6,10 +6,10 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
   @type bit :: 0 | 1
 
   @type t :: %__MODULE__{
-          control_word_type: 0..3,
+          control_word_type: bit(),
           version: 0..3,
           status: 0..7,
-          cop_in_effect: bit(),
+          cop_in_effect: 0..3,
           vcid: 0..63,
           spare_1: 0..3,
           no_rf_available: bit(),
@@ -17,8 +17,8 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
           lockout: bit(),
           wait: bit(),
           retransmit: bit(),
-          farm_busy: bit(),
-          spare_2: 0..3,
+          farm_b_counter: 0..3,
+          spare_2: bit(),
           report_value: 0..255
         }
 
@@ -33,7 +33,7 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
             lockout: 0,
             wait: 0,
             retransmit: 0,
-            farm_busy: 0,
+            farm_b_counter: 0,
             spare_2: 0,
             report_value: 0
 
@@ -48,10 +48,10 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
     with :ok <- validate(clcw) do
       {:ok,
        <<
-         clcw.control_word_type::2,
+         clcw.control_word_type::1,
          clcw.version::2,
          clcw.status::3,
-         clcw.cop_in_effect::1,
+         clcw.cop_in_effect::2,
          clcw.vcid::6,
          clcw.spare_1::2,
          clcw.no_rf_available::1,
@@ -59,8 +59,8 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
          clcw.lockout::1,
          clcw.wait::1,
          clcw.retransmit::1,
-         clcw.farm_busy::1,
-         clcw.spare_2::2,
+         clcw.farm_b_counter::2,
+         clcw.spare_2::1,
          clcw.report_value::8
        >>}
     end
@@ -68,10 +68,10 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
 
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(<<
-        control_word_type::2,
+        control_word_type::1,
         version::2,
         status::3,
-        cop_in_effect::1,
+        cop_in_effect::2,
         vcid::6,
         spare_1::2,
         no_rf_available::1,
@@ -79,8 +79,8 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
         lockout::1,
         wait::1,
         retransmit::1,
-        farm_busy::1,
-        spare_2::2,
+        farm_b_counter::2,
+        spare_2::1,
         report_value::8
       >>) do
     {:ok,
@@ -96,7 +96,7 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
        lockout: lockout,
        wait: wait,
        retransmit: retransmit,
-       farm_busy: farm_busy,
+       farm_b_counter: farm_b_counter,
        spare_2: spare_2,
        report_value: report_value
      }}
@@ -106,10 +106,10 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
 
   defp validate(%__MODULE__{} = clcw) do
     checks = [
-      fn -> validate_range(clcw.control_word_type, 0, 3, :control_word_type) end,
+      fn -> validate_bit(clcw.control_word_type, :control_word_type) end,
       fn -> validate_range(clcw.version, 0, 3, :version) end,
       fn -> validate_range(clcw.status, 0, 7, :status) end,
-      fn -> validate_bit(clcw.cop_in_effect, :cop_in_effect) end,
+      fn -> validate_range(clcw.cop_in_effect, 0, 3, :cop_in_effect) end,
       fn -> validate_range(clcw.vcid, 0, 63, :vcid) end,
       fn -> validate_range(clcw.spare_1, 0, 3, :spare_1) end,
       fn -> validate_bit(clcw.no_rf_available, :no_rf_available) end,
@@ -117,8 +117,8 @@ defmodule Cadence.CCSDS.Transport.COP1.CLCW do
       fn -> validate_bit(clcw.lockout, :lockout) end,
       fn -> validate_bit(clcw.wait, :wait) end,
       fn -> validate_bit(clcw.retransmit, :retransmit) end,
-      fn -> validate_bit(clcw.farm_busy, :farm_busy) end,
-      fn -> validate_range(clcw.spare_2, 0, 3, :spare_2) end,
+      fn -> validate_range(clcw.farm_b_counter, 0, 3, :farm_b_counter) end,
+      fn -> validate_bit(clcw.spare_2, :spare_2) end,
       fn -> validate_range(clcw.report_value, 0, 255, :report_value) end
     ]
 

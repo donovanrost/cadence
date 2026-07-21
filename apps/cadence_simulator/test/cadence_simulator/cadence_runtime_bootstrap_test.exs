@@ -45,8 +45,10 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
 
     assert resolved_opts[:output] == {:tcp, "127.0.0.1", 4100}
     assert resolved_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0}
+
     assert {CadenceRuntimeBootstrap, :refresh_runtime_opts, [_resolver_opts]} =
              resolved_opts[:runtime_resolver]
+
     refute Keyword.has_key?(resolved_opts, :cadence_url)
     refute Keyword.has_key?(resolved_opts, :api_token)
   end
@@ -157,7 +159,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
            %{
              "capability_instance_id" => "uplink-gateway-alpha",
              "family_key" => "uplink_gateway",
-             "state" => %{"frame_size" => 32}
+             "state" => %{"frame_size" => 32, "segment_header_flag" => 1}
            }
          ]
        }}
@@ -182,8 +184,11 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
     assert resolved_opts[:host] == "127.0.0.1"
     assert resolved_opts[:port] == 4200
     assert resolved_opts[:tc_frame_size] == 32
+    assert resolved_opts[:segment_header_flag] == 1
+
     assert {CadenceRuntimeBootstrap, :refresh_runtime_opts, [_resolver_opts]} =
              resolved_opts[:runtime_resolver]
+
     refute Keyword.has_key?(resolved_opts, :cadence_url)
   end
 

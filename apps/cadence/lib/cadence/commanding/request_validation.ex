@@ -7,12 +7,12 @@ defmodule Cadence.Commanding.RequestValidation do
   alias Cadence.Catalog.Command.Compiler
 
   alias Cadence.Catalog.Command.Compiler.{
-    ArgumentSpec,
     OperationalBinding,
     RuntimeDefinition
   }
 
   alias Cadence.Catalog.Command.Definition, as: CommandDefinition
+  alias Cadence.Catalog.Command.Invocation
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Missions
@@ -37,9 +37,9 @@ defmodule Cadence.Commanding.RequestValidation do
              command_request.command_id
            ),
          {:ok, resolved_argument_values} <-
-           resolve_argument_values(
-             command_request.argument_values,
-             request_basis.runtime_definition
+           Invocation.resolve(
+             request_basis.runtime_definition,
+             command_request.argument_values
            ) do
       {:ok,
        CommandRequest.new(%{
@@ -147,101 +147,6 @@ defmodule Cadence.Commanding.RequestValidation do
   defp fetch_verifier_plans(compiler_result, command_id) do
     Enum.filter(compiler_result.verifier_plans, &(&1.command_id == command_id))
   end
-
-  defp resolve_argument_values(argument_values, %RuntimeDefinition{} = runtime_definition) do
-    normalized_values = normalize_argument_values(argument_values)
-
-    argument_specs_by_name =
-      Map.new(runtime_definition.argument_specs, fn %ArgumentSpec{} = argument_spec ->
-        {argument_spec.name, argument_spec}
-      end)
-
-    unknown_arguments =
-      normalized_values
-      |> Map.keys()
-      |> Enum.reject(&Map.has_key?(argument_specs_by_name, &1))
-
-    if unknown_arguments != [] do
-      {:error, {:unknown_command_arguments, Enum.sort(unknown_arguments)}}
-    else
-      runtime_definition.argument_specs
-      |> Enum.reduce_while({:ok, %{}}, fn %ArgumentSpec{} = argument_spec, {:ok, acc} ->
-        append_resolved_argument_value(argument_spec, normalized_values, acc)
-      end)
-    end
-  end
-
-  defp append_resolved_argument_value(
-         %ArgumentSpec{} = argument_spec,
-         normalized_values,
-         acc
-       ) do
-    case resolve_argument_value(argument_spec, normalized_values) do
-      {:ok, :skip} ->
-        {:cont, {:ok, acc}}
-
-      {:ok, value} ->
-        {:cont, {:ok, Map.put(acc, argument_spec.name, value)}}
-
-      {:error, reason} ->
-        {:halt, {:error, reason}}
-    end
-  end
-
-  defp resolve_argument_value(%ArgumentSpec{} = argument_spec, normalized_values) do
-    case Map.fetch(normalized_values, argument_spec.name) do
-      {:ok, provided_value} -> resolve_provided_argument_value(argument_spec, provided_value)
-      :error -> resolve_missing_argument_value(argument_spec)
-    end
-  end
-
-  defp resolve_provided_argument_value(%ArgumentSpec{} = argument_spec, provided_value) do
-    cond do
-      not is_nil(argument_spec.fixed_value) and provided_value != argument_spec.fixed_value ->
-        {:error,
-         {:command_argument_fixed_value_conflict, argument_spec.name, argument_spec.fixed_value,
-          provided_value}}
-
-      not valid_argument_value?(provided_value, argument_spec) ->
-        {:error,
-         {:invalid_command_argument_type, argument_spec.name, argument_spec.base_type,
-          provided_value}}
-
-      not is_nil(argument_spec.fixed_value) ->
-        {:ok, argument_spec.fixed_value}
-
-      true ->
-        {:ok, provided_value}
-    end
-  end
-
-  defp resolve_missing_argument_value(%ArgumentSpec{} = argument_spec) do
-    cond do
-      not is_nil(argument_spec.fixed_value) ->
-        {:ok, argument_spec.fixed_value}
-
-      not is_nil(argument_spec.default_value) ->
-        {:ok, argument_spec.default_value}
-
-      argument_spec.required ->
-        {:error, {:missing_required_command_argument, argument_spec.name}}
-
-      true ->
-        {:ok, :skip}
-    end
-  end
-
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :integer}), do: is_integer(value)
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :float}), do: is_number(value)
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :string}), do: is_binary(value)
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :binary}), do: is_binary(value)
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :boolean}), do: is_boolean(value)
-
-  defp valid_argument_value?(value, %ArgumentSpec{base_type: :enumerated}) do
-    is_integer(value) or is_binary(value)
-  end
-
-  defp valid_argument_value?(_value, _argument_spec), do: false
 
   defp normalize_argument_values(argument_values) when is_map(argument_values) do
     Map.new(argument_values, fn {key, value} -> {to_string(key), value} end)

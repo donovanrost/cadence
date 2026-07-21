@@ -67,4 +67,28 @@ defmodule Cadence.CCSDS.SDLP.TM.ReassemblyTest do
     assert {:ok, [sdu], _state} = Reassembly.ingest(frame2, %{direction: :downlink}, state)
     assert sdu.octets == packet
   end
+
+  test "rejects a packet whose declared size exceeds the managed maximum" do
+    {:ok, state} =
+      Reassembly.init(default_sdu_type: :space_packet, max_space_packet_size: 12)
+
+    frame = %LinkFrame{
+      profile: :tm,
+      scid: 1,
+      vcid: 2,
+      map_id: nil,
+      frame_seq: 10,
+      payload_octets: <<0, 1, 0xC0, 0, 0, 10>>,
+      quality: :good,
+      ocf: nil,
+      timestamp: nil,
+      meta: %{fhp: 0}
+    }
+
+    assert {:error, {:invalid_space_packet, {:packet_size_exceeds_managed_maximum, 17, 12}},
+            next_state} =
+             Reassembly.ingest(frame, %{direction: :downlink}, state)
+
+    assert next_state.packet_buffers_by_vcid == %{}
+  end
 end

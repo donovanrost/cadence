@@ -5,6 +5,7 @@ defmodule Cadence.CommandingTest do
 
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
+  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Transport.COP1.CLCW
 
@@ -516,7 +517,11 @@ defmodule Cadence.CommandingTest do
 
     assert decoded_transfer_frame.scid == 0
     assert decoded_transfer_frame.vcid == 0
-    assert decoded_transfer_frame.payload |> binary_part(0, 1) == <<0x01>>
+    assert {:ok, command_packet} = SpacePacketCodec.decode(decoded_transfer_frame.payload)
+    assert command_packet.packet_type == :command
+    assert command_packet.apid == 0
+    assert command_packet.sequence_count == 0
+    assert command_packet.data == <<0x01>>
   end
 
   test "delivers framed uplink bytes through the configured tcp provider adapter", %{
@@ -580,12 +585,15 @@ defmodule Cadence.CommandingTest do
                %{"user_id" => "release-operator"}
              )
 
-    assert {:ok, delivered_frame} = :gen_tcp.recv(provider_socket, 32, 1_000)
+    assert {:ok, delivered_frame} = :gen_tcp.recv(provider_socket, 0, 1_000)
 
     assert {:ok, [decoded_transfer_frame], <<>>} =
              TransferFrame.decode(delivered_frame, frame_size: 32)
 
-    assert decoded_transfer_frame.payload |> binary_part(0, 1) == <<0x01>>
+    assert {:ok, command_packet} = SpacePacketCodec.decode(decoded_transfer_frame.payload)
+    assert command_packet.packet_type == :command
+    assert command_packet.apid == 0
+    assert command_packet.data == <<0x01>>
 
     provider_request_row =
       TransportActionRequestRow
@@ -947,7 +955,7 @@ defmodule Cadence.CommandingTest do
                realized_contact.realized_contact_id,
                "uplink-path-alpha",
                "uplink-gateway-alpha",
-               %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 0)},
+               %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 1)},
                []
              )
 

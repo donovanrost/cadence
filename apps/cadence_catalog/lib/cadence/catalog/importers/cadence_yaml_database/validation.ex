@@ -9,6 +9,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   @supported_match_criteria_types ~w(comparison range expression compound)
   @supported_match_comparisons ~w(equal not_equal greater less greater_equal less_equal in_range not_in_range)
   @supported_match_operators ~w(and or)
+  @supported_effect_operations ~w(set increment decrement toggle)
 
   def validate(%Source{} = artifact) do
     with :ok <- validate_format(artifact),
@@ -100,7 +101,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
 
   defp validate_packet(packet, packet_index) when is_map(packet) do
     with {:ok, _name} <- require_binary(packet, "name", "packet", packet_index),
-         {:ok, _apid} <- optional_integer(packet, "apid"),
+         {:ok, apid} <- optional_integer(packet, "apid"),
+         :ok <- validate_apid(apid, "Packet '#{packet["name"]}'"),
          {:ok, items} <- require_list(packet, "items", "packet", packet_index) do
       validate_items(packet["name"], items)
     end
@@ -121,7 +123,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   defp validate_item(packet_name, item, item_index) when is_map(item) do
     with {:ok, data_type} <- require_binary(item, "data_type", "item", item_index),
          {:ok, _name} <- require_binary(item, "name", "item", item_index),
-         {:ok, bit_offset} <- require_integer(item, "bit_offset", "item", item_index),
+         {:ok, bit_offset} <- optional_integer(item, "bit_offset"),
          {:ok, bit_size} <- require_integer(item, "bit_size", "item", item_index) do
       cond do
         data_type not in @supported_data_types ->
@@ -129,7 +131,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
            {:validation_error,
             "Item '#{item["name"]}' in packet '#{packet_name}' has unsupported data_type '#{data_type}'"}}
 
-        bit_offset < 0 ->
+        is_integer(bit_offset) and bit_offset < 0 ->
           {:error,
            {:validation_error,
             "Item '#{item["name"]}' in packet '#{packet_name}' must have non-negative bit_offset"}}
@@ -161,10 +163,13 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
 
   defp validate_command(command, command_index) when is_map(command) do
     with {:ok, _name} <- require_binary(command, "name", "command", command_index),
+         {:ok, apid} <- optional_integer(command, "apid"),
+         :ok <- validate_apid(apid, "Command '#{command["name"]}'"),
          {:ok, _opcode} <- optional_integer(command, "opcode"),
          :ok <- validate_hazard_shape(command, command_index),
-         :ok <- validate_command_parameters(command) do
-      validate_command_verifiers(command)
+         :ok <- validate_command_parameters(command),
+         :ok <- validate_command_verifiers(command) do
+      validate_command_effects(command)
     end
   end
 
@@ -183,6 +188,13 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   end
 
   defp validate_hazard_shape(_command, _command_index), do: :ok
+
+  defp validate_apid(nil, _subject), do: :ok
+  defp validate_apid(apid, _subject) when apid in 0..0x7FF, do: :ok
+
+  defp validate_apid(apid, subject) do
+    {:error, {:validation_error, "#{subject} APID must be between 0 and 2047, got #{apid}"}}
+  end
 
   defp validate_command_parameters(%{"parameters" => nil}), do: :ok
 
@@ -378,6 +390,89 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
     {:error,
      {:validation_error,
       "Parameter at index #{parameter_index} in command '#{command_name}' must be a map"}}
+  end
+
+  defp validate_command_effects(%{"effects" => nil}), do: :ok
+
+  defp validate_command_effects(%{} = command) when not is_map_key(command, "effects"),
+    do: :ok
+
+  defp validate_command_effects(%{"name" => command_name, "effects" => effects} = command)
+       when is_list(effects) do
+    parameter_names =
+      command
+      |> Map.get("parameters", [])
+      |> Enum.map(& &1["name"])
+      |> MapSet.new()
+
+    Enum.reduce_while(Enum.with_index(effects), :ok, fn {effect, effect_index}, :ok ->
+      case validate_command_effect(command_name, effect, effect_index, parameter_names) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_command_effects(%{"name" => command_name}) do
+    {:error,
+     {:validation_error, "Command '#{command_name}' field 'effects' must be a list when present"}}
+  end
+
+  defp validate_command_effect(command_name, effect, effect_index, parameter_names)
+       when is_map(effect) do
+    operation = Map.get(effect, "operation", "set")
+    argument = Map.get(effect, "argument")
+
+    with {:ok, _target} <- require_binary(effect, "target", "effect", effect_index),
+         :ok <- validate_effect_operation(command_name, operation),
+         :ok <- validate_effect_argument(command_name, argument, parameter_names) do
+      validate_effect_value_source(command_name, effect, operation, argument)
+    end
+  end
+
+  defp validate_command_effect(command_name, _effect, effect_index, _parameter_names) do
+    {:error,
+     {:validation_error,
+      "Effect at index #{effect_index} in command '#{command_name}' must be a map"}}
+  end
+
+  defp validate_effect_operation(_command_name, operation)
+       when operation in @supported_effect_operations,
+       do: :ok
+
+  defp validate_effect_operation(command_name, operation) do
+    {:error,
+     {:validation_error,
+      "Command '#{command_name}' effect has unsupported operation '#{operation}'"}}
+  end
+
+  defp validate_effect_argument(_command_name, nil, _parameter_names), do: :ok
+
+  defp validate_effect_argument(command_name, argument, parameter_names)
+       when is_binary(argument) do
+    if MapSet.member?(parameter_names, argument) do
+      :ok
+    else
+      {:error,
+       {:validation_error,
+        "Command '#{command_name}' effect references unknown argument '#{argument}'"}}
+    end
+  end
+
+  defp validate_effect_argument(command_name, _argument, _parameter_names) do
+    {:error, {:validation_error, "Command '#{command_name}' effect argument must be a string"}}
+  end
+
+  defp validate_effect_value_source(_command_name, _effect, "toggle", _argument), do: :ok
+
+  defp validate_effect_value_source(command_name, effect, operation, argument) do
+    if is_binary(argument) or Map.has_key?(effect, "value") do
+      :ok
+    else
+      {:error,
+       {:validation_error,
+        "Command '#{command_name}' #{operation} effect requires an argument or value"}}
+    end
   end
 
   defp require_binary(data, key, subject, index) when is_map(data) do

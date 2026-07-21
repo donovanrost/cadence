@@ -3,6 +3,8 @@ defmodule Cadence.CCSDS.SDLP.TM.SegmentationTest do
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.{FrameCodec, Segmentation}
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
 
   test "single-frame payloads are padded with an idle packet and keep fhp at zero" do
     payload = :binary.copy(<<0xAB>>, 16)
@@ -30,6 +32,11 @@ defmodule Cadence.CCSDS.SDLP.TM.SegmentationTest do
     assert frame.meta.fhp == 0
     assert byte_size(frame.payload_octets) == frame_size - 6
     assert binary_part(frame.payload_octets, 0, byte_size(payload)) == payload
+
+    idle_packet = binary_part(frame.payload_octets, byte_size(payload), 42)
+    assert {:ok, idle} = SpacePacketCodec.decode(idle_packet)
+    assert SpacePacket.idle?(idle)
+
     assert next_state.mcfc == 1
     assert next_state.vcfc == 1
   end

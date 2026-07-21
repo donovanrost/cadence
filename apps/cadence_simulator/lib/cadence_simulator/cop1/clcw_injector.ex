@@ -18,13 +18,11 @@ defmodule CadenceSimulator.COP1.CLCWInjector do
   defstruct overrides: %{}, schedule: []
 
   @bit_fields [
-    :cop_in_effect,
     :no_rf_available,
     :no_bit_lock,
     :lockout,
     :wait,
-    :retransmit,
-    :farm_busy
+    :retransmit
   ]
 
   @allowed_fields [
@@ -39,7 +37,7 @@ defmodule CadenceSimulator.COP1.CLCWInjector do
     :lockout,
     :wait,
     :retransmit,
-    :farm_busy,
+    :farm_b_counter,
     :spare_2,
     :report_value
   ]

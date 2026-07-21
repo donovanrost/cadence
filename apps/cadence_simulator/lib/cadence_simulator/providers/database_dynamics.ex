@@ -3,8 +3,8 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   Generates telemetry values from a YAML telemetry definition set.
 
   Unlike `BasicDynamics`, this provider derives point names and value-generation
-  strategies directly from the same dev-format YAML used by the simulator
-  encoder.
+  strategies from the portable canonical catalog. Compiled command effects can
+  override those generated values at runtime.
   """
 
   @behaviour CadenceSimulator.DynamicsProvider
@@ -12,6 +12,11 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   import Bitwise
 
   require Logger
+
+  alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
+  alias Cadence.Catalog.Command.StateEffect
+  alias Cadence.Catalog.Telemetry.{Packet, Point, Snapshot, Type}
+  alias CadenceSimulator.CatalogDatabase
 
   @boolean_toggle_rate 20
   @default_noise_amplitude 1.0
@@ -29,6 +34,9 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   ]
 
   defstruct [
+    :catalog_database,
+    :command_state_table,
+    :items_by_qualified_name,
     :packets,
     :packet_count,
     :item_count,
@@ -37,145 +45,214 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @impl true
   def init(config) do
-    definitions_path = Map.get(config, :definitions_path)
-    definitions_content = Map.get(config, :definitions_content)
+    with {:ok, definitions_content, source_attrs} <- load_definitions(config),
+         {:ok, catalog_database} <-
+           CatalogDatabase.load_yaml(definitions_content, source_attrs),
+         %Snapshot{} = telemetry_snapshot <-
+           catalog_database.import_result.bundle.telemetry_snapshot do
+      {packets, item_count} = extract_definitions(telemetry_snapshot)
+      items_by_qualified_name = index_items(packets)
+      command_state_table = init_command_state()
 
-    result =
-      cond do
-        is_binary(definitions_content) ->
-          YamlElixir.read_from_string(definitions_content)
+      Logger.info("""
+      DatabaseDynamics initialized:
+        packets: #{length(packets)}
+        items: #{item_count}
+        commands: #{command_count(catalog_database)}
+      """)
 
-        is_binary(definitions_path) ->
-          with {:ok, content} <- File.read(definitions_path) do
-            YamlElixir.read_from_string(content)
-          end
-
-        true ->
-          {:error, :no_definitions_provided}
-      end
-
-    case result do
-      {:ok, parsed} ->
-        {packets, item_count} = extract_definitions(parsed)
-
-        Logger.info("""
-        DatabaseDynamics initialized:
-          packets: #{length(packets)}
-          items: #{item_count}
-        """)
-
-        {:ok,
-         %__MODULE__{
-           packets: packets,
-           packet_count: length(packets),
-           item_count: item_count,
-           noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
-         }}
-
-      {:error, reason} ->
-        {:error, {:failed_to_load_definitions, reason}}
+      {:ok,
+       %__MODULE__{
+         catalog_database: catalog_database,
+         command_state_table: command_state_table,
+         items_by_qualified_name: items_by_qualified_name,
+         packets: packets,
+         packet_count: length(packets),
+         item_count: item_count,
+         noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
+       }}
+    else
+      nil -> {:error, {:failed_to_load_definitions, :telemetry_catalog_not_found}}
+      {:error, reason} -> {:error, {:failed_to_load_definitions, reason}}
     end
   end
 
   @impl true
   def generate_values(state, step) do
-    {:ok, build_flat_values(state.packets, step, state.noise_amplitude), state}
+    overrides = command_state(state).overrides
+    {:ok, build_flat_values(state.packets, step, state.noise_amplitude, overrides), state}
   end
 
   @impl true
   def generate_packet_values(state, step) do
-    {:ok, build_packet_values(state.packets, step, state.noise_amplitude), state}
+    overrides = command_state(state).overrides
+    {:ok, build_packet_values(state.packets, step, state.noise_amplitude, overrides), state}
   end
 
   @impl true
   def status(state) do
+    command_state = command_state(state)
+
     %{
       provider: "DatabaseDynamics",
       packet_count: state.packet_count,
       item_count: state.item_count,
-      noise_amplitude: state.noise_amplitude
+      noise_amplitude: state.noise_amplitude,
+      command_count: command_state.command_count,
+      last_command: command_state.last_command,
+      overridden_point_count: map_size(command_state.overrides)
     }
+  end
+
+  @impl true
+  def execute_command(state, command_ref, arguments) do
+    with {:ok, %RuntimeDefinition{} = runtime_definition, resolved_arguments} <-
+           CatalogDatabase.resolve_command(
+             state.catalog_database,
+             command_ref,
+             arguments
+           ),
+         {:ok, result} <-
+           execute_runtime_definition(state, runtime_definition, resolved_arguments) do
+      {:ok, result, state}
+    else
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def execute_encoded_command(state, payload) do
+    with {:ok,
+          %{
+            runtime_definition: %RuntimeDefinition{} = runtime_definition,
+            arguments: resolved_arguments
+          }} <- CatalogDatabase.decode_command(state.catalog_database, payload),
+         {:ok, result} <-
+           execute_runtime_definition(state, runtime_definition, resolved_arguments) do
+      {:ok, result, state}
+    else
+      {:error, reason} -> {:error, reason, state}
+    end
   end
 
   @impl true
   def parallel_safe?(_config), do: true
 
-  defp extract_definitions(parsed) do
-    packets = parsed["packets"] || []
+  defp load_definitions(config) do
+    definitions_path = Map.get(config, :definitions_path)
+    definitions_content = Map.get(config, :definitions_content)
 
-    Enum.reduce(packets, {[], 0}, fn packet_data, {pkts, item_count} ->
-      packet_name = packet_data["name"]
+    cond do
+      is_binary(definitions_content) ->
+        {:ok, definitions_content, %{artifact_name: "simulator-catalog.yaml"}}
 
-      packet_items =
-        (packet_data["items"] || [])
-        |> Enum.with_index()
-        |> Enum.map(fn {item_data, index} -> build_item_spec(packet_name, item_data, index) end)
-        |> Enum.sort_by(fn item -> {item.bit_offset, item.sort_index} end)
+      is_binary(definitions_path) ->
+        case File.read(definitions_path) do
+          {:ok, content} ->
+            {:ok, content, %{artifact_name: Path.basename(definitions_path)}}
 
-      {
-        [
-          %{
-            name: packet_name,
-            apid: packet_data["apid"],
-            description: packet_data["description"],
-            items: packet_items
-          }
-          | pkts
-        ],
-        item_count + length(packet_items)
-      }
-    end)
-    |> then(fn {packet_defs, item_count} -> {Enum.reverse(packet_defs), item_count} end)
+          {:error, reason} ->
+            {:error, {:load_error, definitions_path, reason}}
+        end
+
+      true ->
+        {:error, :no_definitions_provided}
+    end
   end
 
-  defp build_item_spec(packet_name, item_data, sort_index) do
-    item_name = item_data["name"]
-    qualified_name = "#{packet_name}.#{item_name}"
-    phase = :erlang.phash2(item_name) / 1000.0
+  defp extract_definitions(%Snapshot{} = snapshot) do
+    points_by_id = Map.new(snapshot.points, &{&1.point_id, &1})
+    types_by_id = Map.new(snapshot.types, &{&1.type_id, &1})
+
+    Enum.reduce(snapshot.packets, {[], 0}, fn %Packet{} = packet, {packets, item_count} ->
+      packet_items = build_packet_items(packet, points_by_id, types_by_id)
+
+      packet_spec = %{
+        name: packet.name,
+        apid: packet.apid,
+        description: packet.description,
+        items: packet_items
+      }
+
+      {[packet_spec | packets], item_count + length(packet_items)}
+    end)
+    |> then(fn {packets, item_count} -> {Enum.reverse(packets), item_count} end)
+  end
+
+  defp build_packet_items(%Packet{} = packet, points_by_id, types_by_id) do
+    packet.entries
+    |> Enum.with_index()
+    |> Enum.flat_map(&build_packet_item(packet.name, &1, points_by_id, types_by_id))
+    |> Enum.sort_by(&{&1.bit_offset, &1.sort_index})
+  end
+
+  defp build_packet_item(packet_name, {entry, index}, points_by_id, types_by_id) do
+    with point_id when is_binary(point_id) <- entry.point_id,
+         %Point{} = point <- Map.get(points_by_id, point_id),
+         %Type{} = type <- Map.get(types_by_id, point.type_id) do
+      [build_item_spec(packet_name, entry, point, type, index)]
+    else
+      _other -> []
+    end
+  end
+
+  defp build_item_spec(packet_name, entry, %Point{} = point, %Type{} = type, sort_index) do
+    qualified_name = "#{packet_name}.#{point.name}"
+    phase = :erlang.phash2(point.name) / 1000.0
+    enumerations = Map.new(type.enumerations, &{&1.value, &1.label})
 
     %{
-      bit_offset: item_data["bit_offset"] || 0,
-      name: item_name,
+      bit_offset: entry.bit_offset || 0,
+      name: point.name,
       qualified_name: qualified_name,
       sort_index: sort_index,
-      generator: build_generator(packet_name, item_name, item_data, phase)
+      enumerations: enumerations,
+      generator: build_generator(packet_name, point, type, phase)
     }
   end
 
-  defp build_packet_values(packet_specs, step, noise_amplitude) do
+  defp build_packet_values(packet_specs, step, noise_amplitude, overrides) do
     Enum.map(packet_specs, fn %{name: packet_name, items: item_specs} ->
       values =
-        Enum.map(item_specs, fn %{generator: generator} ->
-          generate_item_value(generator, step, noise_amplitude)
-        end)
+        Enum.map(item_specs, &item_value(&1, step, noise_amplitude, overrides))
 
       {packet_name, values}
     end)
   end
 
-  defp build_flat_values(packet_specs, step, noise_amplitude) do
+  defp build_flat_values(packet_specs, step, noise_amplitude, overrides) do
     Enum.reduce(packet_specs, %{}, fn %{items: item_specs}, acc ->
-      Enum.reduce(item_specs, acc, fn %{qualified_name: qualified_name, generator: generator},
-                                      item_acc ->
-        Map.put(item_acc, qualified_name, generate_item_value(generator, step, noise_amplitude))
+      Enum.reduce(item_specs, acc, fn item, item_acc ->
+        Map.put(
+          item_acc,
+          item.qualified_name,
+          item_value(item, step, noise_amplitude, overrides)
+        )
       end)
     end)
   end
 
-  defp build_generator(packet_name, item_name, item_data, phase) do
-    conversion = item_data["conversion"]
-    limits = item_data["limits"] || %{}
-    bit_size = item_data["bit_size"]
+  defp item_value(item, step, noise_amplitude, overrides) do
+    Map.get_lazy(
+      overrides,
+      item.qualified_name,
+      fn -> generate_item_value(item.generator, step, noise_amplitude) end
+    )
+  end
 
-    case sorted_state_values(conversion) do
-      state_values when is_list(state_values) ->
+  defp build_generator(packet_name, %Point{} = point, %Type{} = type, phase) do
+    limits = Map.get(point.extensions, "limits", %{})
+    bit_size = if type.encoding, do: type.encoding.size_bits, else: nil
+
+    case state_values(type) do
+      state_values when is_list(state_values) and state_values != [] ->
         {:state_cycle, List.to_tuple(state_values), length(state_values)}
 
       _ ->
         build_typed_generator(
           packet_name,
-          item_name,
-          item_data["data_type"],
+          point.name,
+          generator_data_type(type),
           bit_size,
           limits,
           phase
@@ -267,6 +344,200 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     :crypto.strong_rand_bytes(byte_size)
   end
 
+  defp execute_runtime_definition(state, %RuntimeDefinition{} = runtime_definition, arguments) do
+    current_state = command_state(state)
+    argument_specs_by_id = Map.new(runtime_definition.argument_specs, &{&1.argument_id, &1})
+
+    result =
+      Enum.reduce_while(
+        runtime_definition.state_effects,
+        {:ok, current_state.overrides, []},
+        fn %StateEffect{} = effect, {:ok, overrides, applied_effects} ->
+          case apply_state_effect(
+                 state,
+                 effect,
+                 arguments,
+                 argument_specs_by_id,
+                 overrides
+               ) do
+            {:ok, next_overrides, applied_effect} ->
+              {:cont, {:ok, next_overrides, [applied_effect | applied_effects]}}
+
+            {:error, reason} ->
+              {:halt, {:error, reason}}
+          end
+        end
+      )
+
+    case result do
+      {:ok, overrides, applied_effects} ->
+        command_result = %{
+          command_id: runtime_definition.command_id,
+          command_name: runtime_definition.name,
+          arguments: arguments,
+          applied_effects: Enum.reverse(applied_effects)
+        }
+
+        put_command_state(state, %{
+          overrides: overrides,
+          command_count: current_state.command_count + 1,
+          last_command: command_result
+        })
+
+        {:ok, command_result}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp apply_state_effect(state, %StateEffect{} = effect, arguments, specs_by_id, overrides) do
+    with {:ok, item} <- fetch_effect_target(state, effect),
+         {:ok, operand} <- effect_operand(effect, arguments, specs_by_id),
+         {:ok, value} <- apply_effect_operation(effect, operand, overrides),
+         {:ok, normalized_value} <- normalize_effect_value(item, value) do
+      {:ok, Map.put(overrides, effect.target_ref, normalized_value),
+       %{
+         effect_id: effect.effect_id,
+         target_ref: effect.target_ref,
+         operation: effect.operation,
+         value: normalized_value
+       }}
+    end
+  end
+
+  defp fetch_effect_target(state, %StateEffect{} = effect) do
+    case Map.fetch(state.items_by_qualified_name, effect.target_ref) do
+      {:ok, item} -> {:ok, item}
+      :error -> {:error, {:command_effect_target_not_found, effect.target_ref}}
+    end
+  end
+
+  defp effect_operand(%StateEffect{operation: :toggle}, _arguments, _specs_by_id),
+    do: {:ok, nil}
+
+  defp effect_operand(%StateEffect{argument_id: argument_id}, arguments, specs_by_id)
+       when is_binary(argument_id) do
+    with {:ok, argument_spec} <- Map.fetch(specs_by_id, argument_id),
+         {:ok, value} <- Map.fetch(arguments, argument_spec.name) do
+      {:ok, value}
+    else
+      :error -> {:error, {:command_effect_argument_not_found, argument_id}}
+    end
+  end
+
+  defp effect_operand(%StateEffect{value: value}, _arguments, _specs_by_id), do: {:ok, value}
+
+  defp apply_effect_operation(%StateEffect{operation: :set}, operand, _overrides),
+    do: {:ok, operand}
+
+  defp apply_effect_operation(
+         %StateEffect{operation: :increment, target_ref: target},
+         operand,
+         values
+       )
+       when is_number(operand) do
+    current = Map.get(values, target, 0)
+
+    if is_number(current),
+      do: {:ok, current + operand},
+      else: {:error, {:command_effect_requires_numeric_target, target, current}}
+  end
+
+  defp apply_effect_operation(
+         %StateEffect{operation: :decrement, target_ref: target},
+         operand,
+         values
+       )
+       when is_number(operand) do
+    current = Map.get(values, target, 0)
+
+    if is_number(current),
+      do: {:ok, current - operand},
+      else: {:error, {:command_effect_requires_numeric_target, target, current}}
+  end
+
+  defp apply_effect_operation(
+         %StateEffect{operation: :toggle, target_ref: target},
+         _operand,
+         values
+       ) do
+    current = Map.get(values, target, false)
+
+    if is_boolean(current),
+      do: {:ok, not current},
+      else: {:error, {:command_effect_requires_boolean_target, target, current}}
+  end
+
+  defp apply_effect_operation(%StateEffect{} = effect, operand, _values),
+    do: {:error, {:invalid_command_effect_operand, effect.operation, operand}}
+
+  defp normalize_effect_value(%{enumerations: enumerations}, value)
+       when map_size(enumerations) > 0 do
+    cond do
+      Map.has_key?(enumerations, value) ->
+        {:ok, Map.fetch!(enumerations, value)}
+
+      value in Map.values(enumerations) ->
+        {:ok, value}
+
+      true ->
+        {:error, {:command_effect_enumeration_value_not_found, value}}
+    end
+  end
+
+  defp normalize_effect_value(_item, value), do: {:ok, value}
+
+  defp init_command_state do
+    table =
+      :ets.new(:database_dynamics_command_state, [
+        :set,
+        :protected,
+        read_concurrency: true
+      ])
+
+    :ets.insert(table, {:state, %{overrides: %{}, command_count: 0, last_command: nil}})
+    table
+  end
+
+  defp command_state(%__MODULE__{command_state_table: table}) do
+    [{:state, command_state}] = :ets.lookup(table, :state)
+    command_state
+  end
+
+  defp put_command_state(%__MODULE__{command_state_table: table}, command_state) do
+    true = :ets.insert(table, {:state, command_state})
+    :ok
+  end
+
+  defp index_items(packets) do
+    packets
+    |> Enum.flat_map(& &1.items)
+    |> Map.new(&{&1.qualified_name, &1})
+  end
+
+  defp command_count(%CatalogDatabase{command_compilation: nil}), do: 0
+
+  defp command_count(%CatalogDatabase{command_compilation: command_compilation}),
+    do: length(command_compilation.runtime_definitions)
+
+  defp state_values(%Type{} = type) do
+    type.enumerations
+    |> Enum.sort_by(& &1.value)
+    |> Enum.map(& &1.label)
+  end
+
+  defp generator_data_type(%Type{base_type: :float}), do: "float"
+  defp generator_data_type(%Type{base_type: :boolean}), do: "boolean"
+  defp generator_data_type(%Type{base_type: :string}), do: "string"
+  defp generator_data_type(%Type{base_type: :binary}), do: "binary"
+
+  defp generator_data_type(%Type{base_type: :integer, encoding: %{signed: true}}),
+    do: "int"
+
+  defp generator_data_type(%Type{base_type: :integer}), do: "uint"
+  defp generator_data_type(%Type{}), do: "float"
+
   defp get_float_range(limits, item_name) do
     case range_from_limits(limits) do
       {:ok, range} -> range
@@ -294,14 +565,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defp counter_name?(name) do
     String.contains?(name, ["count", "uptime", "seq"])
   end
-
-  defp sorted_state_values(%{"type" => "state_table", "states" => states}) when is_map(states) do
-    states
-    |> Map.values()
-    |> Enum.sort()
-  end
-
-  defp sorted_state_values(_), do: nil
 
   defp get_int_range(limits, bit_size, signed) do
     case int_range_from_limits(limits) do

@@ -9,7 +9,8 @@ defmodule CadenceSimulator.PacketEncoder do
 
   require Logger
 
-  import Bitwise
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.{Codec, Sequence}
 
   defstruct [
     :packets,
@@ -34,8 +35,6 @@ defmodule CadenceSimulator.PacketEncoder do
           apid: non_neg_integer() | nil,
           is_big_endian: boolean(),
           payload_size: non_neg_integer(),
-          packet_id: non_neg_integer(),
-          data_length: non_neg_integer(),
           packing_strategy: :sequential | :spliced,
           pack_items: [packet_pack_item()],
           tail_gap: binary(),
@@ -167,8 +166,6 @@ defmodule CadenceSimulator.PacketEncoder do
           apid: packet_data["apid"],
           is_big_endian: packet_data["big_endian"] != false,
           payload_size: 0,
-          packet_id: 0,
-          data_length: 0,
           packing_strategy: :spliced,
           pack_items: [],
           tail_gap: <<>>,
@@ -205,14 +202,10 @@ defmodule CadenceSimulator.PacketEncoder do
         %{strategy: strategy, pack_items: pack_items, tail_gap: tail_gap} =
           build_packing_layout(ordered_item_defs, payload_size)
 
-        apid = packet_def.apid || 0
-
         packet_def = %{
           packet_def
           | items: ordered_item_defs,
             payload_size: payload_size,
-            packet_id: build_packet_id(apid),
-            data_length: max(payload_size - 1, 0),
             packing_strategy: strategy,
             pack_items: pack_items,
             tail_gap: tail_gap
@@ -277,9 +270,8 @@ defmodule CadenceSimulator.PacketEncoder do
       packet_def ->
         binary = encode_packet_binary(encoder, packet_def, values)
         apid = packet_def.apid || 0
-        seq = Map.get(encoder.sequence_counts, apid, 0)
-        new_seq = rem(seq + 1, 16_384)
-        encoder = %{encoder | sequence_counts: Map.put(encoder.sequence_counts, apid, new_seq)}
+        {_seq, sequence_counts} = Sequence.take(encoder.sequence_counts, apid)
+        encoder = %{encoder | sequence_counts: sequence_counts}
         {:ok, binary, encoder}
     end
   end
@@ -506,16 +498,20 @@ defmodule CadenceSimulator.PacketEncoder do
   end
 
   defp build_ccsds_packet(packet_def, sequence, payload) do
-    <<
-      0::3,
-      0::1,
-      0::1,
-      packet_def.apid || 0::11,
-      3::2,
-      sequence::14,
-      packet_def.data_length::16,
-      payload::binary
-    >>
+    packet =
+      SpacePacket.new(%{
+        packet_type: :telemetry,
+        secondary_header?: false,
+        apid: packet_def.apid || 0,
+        sequence_flag: :unsegmented,
+        sequence_count: sequence,
+        data: payload
+      })
+
+    case Codec.encode(packet) do
+      {:ok, encoded} -> encoded
+      {:error, reason} -> raise ArgumentError, "invalid telemetry packet: #{inspect(reason)}"
+    end
   end
 
   defp active_packets(encoder, values) do
@@ -588,10 +584,6 @@ defmodule CadenceSimulator.PacketEncoder do
       pack_items: Enum.reverse(pack_items),
       tail_gap: tail_gap
     }
-  end
-
-  defp build_packet_id(apid) do
-    0 <<< 13 ||| 0 <<< 12 ||| apid
   end
 
   defp zero_binary(0), do: <<>>

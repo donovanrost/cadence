@@ -102,6 +102,19 @@ defmodule CadenceSimulator.Coordinator do
   @spec stats(GenServer.server()) :: map()
   def stats(server), do: GenServer.call(server, :stats)
 
+  @spec execute_command(GenServer.server(), binary(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def execute_command(server, command_ref, arguments \\ %{})
+      when is_binary(command_ref) and is_map(arguments) do
+    GenServer.call(server, {:execute_command, command_ref, arguments})
+  end
+
+  @spec execute_encoded_command(GenServer.server(), binary()) ::
+          {:ok, map()} | {:error, term()}
+  def execute_encoded_command(server, payload) when is_binary(payload) do
+    GenServer.call(server, {:execute_encoded_command, payload})
+  end
+
   @impl true
   def init(opts) do
     target_id = Keyword.get(opts, :target_id, @default_target_id)
@@ -292,6 +305,14 @@ defmodule CadenceSimulator.Coordinator do
     {:reply, stats_snapshot(state), state}
   end
 
+  def handle_call({:execute_command, command_ref, arguments}, _from, state) do
+    execute_provider_command(state, :execute_command, [command_ref, arguments])
+  end
+
+  def handle_call({:execute_encoded_command, payload}, _from, state) do
+    execute_provider_command(state, :execute_encoded_command, [payload])
+  end
+
   def handle_call({:set_rate, rate_hz}, _from, state) when is_number(rate_hz) do
     if rate_hz > 0 do
       if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
@@ -331,6 +352,7 @@ defmodule CadenceSimulator.Coordinator do
       frame: state.frame,
       output: state.output,
       parallel_mode: state.parallel_mode,
+      provider_status: provider_status(state),
       simulator_metrics: SimulatorMetrics.snapshot(state.metrics_id),
       send_buffer_stats: send_buffer_stats(state)
     }
@@ -351,6 +373,31 @@ defmodule CadenceSimulator.Coordinator do
   end
 
   defp maybe_merge_parallel_stats(base_stats, _state), do: base_stats
+
+  defp provider_status(state) do
+    if function_exported?(state.provider_module, :status, 1) do
+      state.provider_module.status(state.provider_state)
+    else
+      %{}
+    end
+  end
+
+  defp execute_provider_command(state, callback, arguments) do
+    if function_exported?(state.provider_module, callback, length(arguments) + 1) do
+      case apply(state.provider_module, callback, [state.provider_state | arguments]) do
+        {:ok, result, provider_state} ->
+          {:reply, {:ok, result}, %{state | provider_state: provider_state}}
+
+        {:error, reason, provider_state} ->
+          {:reply, {:error, reason}, %{state | provider_state: provider_state}}
+
+        other ->
+          {:reply, {:error, {:invalid_provider_command_result, other}}, state}
+      end
+    else
+      {:reply, {:error, :command_execution_unsupported}, state}
+    end
+  end
 
   defp parallel_stats(state) do
     %{

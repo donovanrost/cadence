@@ -9,6 +9,8 @@ defmodule Cadence.Protocol.TMFramePipeline do
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.{FrameCodec, Reassembly}
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
 
   @type state :: term()
 
@@ -89,11 +91,10 @@ defmodule Cadence.Protocol.TMFramePipeline do
     end)
   end
 
-  defp idle_space_packet?(
-         <<_version::3, _type_flag::1, secondary_header_flag::1, apid::11, _rest::bitstring>>
-       ) do
-    secondary_header_flag == 0 and apid == 0x7FF
+  defp idle_space_packet?(encoded_packet) do
+    case SpacePacketCodec.decode(encoded_packet) do
+      {:ok, packet} -> SpacePacket.idle?(packet)
+      {:error, _reason} -> false
+    end
   end
-
-  defp idle_space_packet?(_packet), do: false
 end

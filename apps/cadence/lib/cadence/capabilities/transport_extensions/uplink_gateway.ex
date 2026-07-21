@@ -14,6 +14,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   alias Cadence.ActionRequests.{CancelTimer, ProviderRequest, ScheduleTimer, UplinkRequest}
   alias Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration
   alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.{Codec, Sequence}
   alias Cadence.CCSDS.TC.{FrameCodec, Segmentation}
   alias Cadence.CCSDS.Transport.COP1.{CLCW, FOP}
 
@@ -75,6 +77,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            control_command_flag: normalized_configuration.control_command_flag,
            segment_header_flag: normalized_configuration.segment_header_flag,
            next_frame_seq: normalized_configuration.initial_frame_seq,
+           packet_sequence_counts: %{},
            cop1_mode: normalized_configuration.cop1_mode,
            cop1_timeout_ms: normalized_configuration.cop1_timeout_ms,
            cop1_max_retransmit: normalized_configuration.cop1_max_retransmit,
@@ -136,18 +139,18 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       when is_map(app_state) do
     case accepts_service?(app_state.service_name, uplink_request.preferred_uplink_service) do
       true ->
-        with {:ok, framed_uplink_request, next_frame_seq} <-
+        with {:ok, framed_uplink_request, framing_state} <-
                frame_uplink_request(uplink_request, app_state, ctx.current_time) do
           case cop1_strategy(app_state, framed_uplink_request) do
             :fop ->
-              handle_cop1_release(framed_uplink_request, app_state, next_frame_seq, ctx)
+              handle_cop1_release(framed_uplink_request, app_state, framing_state, ctx)
 
             :direct ->
               {:ok,
                build_direct_execution_result(
                  framed_uplink_request,
                  app_state,
-                 next_frame_seq,
+                 framing_state,
                  ctx.current_time
                )}
           end
@@ -231,8 +234,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp frame_uplink_request(%UplinkRequest{} = uplink_request, app_state, current_time) do
     with {:ok, encoded_command} <- Base.decode64(uplink_request.encoded_binary_base64),
+         {:ok, command_sdu, packet_sequence_counts, packet_metadata} <-
+           packetize_command(encoded_command, uplink_request, app_state.packet_sequence_counts),
          {:ok, segmentation_state} <- Segmentation.init(frame_seq: app_state.next_frame_seq),
-         sdu <- build_sdu(encoded_command, uplink_request, app_state, current_time),
+         packetized_request <- put_packet_metadata(uplink_request, packet_metadata),
+         sdu <- build_sdu(command_sdu, packetized_request, app_state, current_time),
          {:ok, frames, next_segmentation_state} <-
            Segmentation.segment(
              sdu,
@@ -247,8 +253,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
              segmentation_state
            ),
          {:ok, transfer_frames} <- encode_transfer_frames(frames, app_state.frame_size) do
-      {:ok, enrich_uplink_request(uplink_request, transfer_frames, frames, app_state),
-       next_segmentation_state.frame_seq}
+      {:ok, enrich_uplink_request(packetized_request, transfer_frames, frames, app_state),
+       %{
+         next_frame_seq: next_segmentation_state.frame_seq,
+         packet_sequence_counts: packet_sequence_counts
+       }}
     else
       :error ->
         {:error, {:invalid_uplink_request_payload, :base64}}
@@ -259,6 +268,63 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp packetize_command(
+         encoded_command,
+         %UplinkRequest{layout_kind: :space_packet, apid: apid},
+         sequence_counts
+       )
+       when is_integer(apid) and apid in 0..0x7FF do
+    {sequence_count, next_sequence_counts} = Sequence.take(sequence_counts, apid)
+
+    packet =
+      SpacePacket.new(%{
+        packet_type: :command,
+        secondary_header?: false,
+        apid: apid,
+        sequence_flag: :unsegmented,
+        sequence_count: sequence_count,
+        data: encoded_command
+      })
+
+    with {:ok, encoded_packet} <- Codec.encode(packet) do
+      {:ok, encoded_packet, next_sequence_counts,
+       %{
+         "space_packet_apid" => apid,
+         "space_packet_sequence_count" => sequence_count,
+         "space_packet_size_bytes" => byte_size(encoded_packet)
+       }}
+    end
+  end
+
+  defp packetize_command(
+         _encoded_command,
+         %UplinkRequest{layout_kind: :space_packet, apid: apid},
+         _sequence_counts
+       )
+       when not is_nil(apid) do
+    {:error, {:invalid_space_packet_apid, apid}}
+  end
+
+  defp packetize_command(
+         _encoded_command,
+         %UplinkRequest{layout_kind: :space_packet},
+         _sequence_counts
+       ) do
+    {:error, :missing_space_packet_apid}
+  end
+
+  defp packetize_command(encoded_command, %UplinkRequest{}, sequence_counts) do
+    {:ok, encoded_command, sequence_counts, %{}}
+  end
+
+  defp put_packet_metadata(%UplinkRequest{} = uplink_request, packet_metadata)
+       when map_size(packet_metadata) == 0,
+       do: uplink_request
+
+  defp put_packet_metadata(%UplinkRequest{} = uplink_request, packet_metadata) do
+    %{uplink_request | metadata: Map.merge(uplink_request.metadata, packet_metadata)}
   end
 
   defp build_sdu(encoded_command, uplink_request, app_state, current_time) do
@@ -324,7 +390,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   defp handle_cop1_release(
          framed_uplink_request,
          app_state,
-         next_frame_seq,
+         framing_state,
          %ExecutionContext{} = ctx
        ) do
     with {:ok, frame_entries} <- frame_entries_from_request(framed_uplink_request),
@@ -336,10 +402,14 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            ) do
       {:ok,
        build_cop1_execution_result(
-         %{app_state | next_frame_seq: next_frame_seq},
+         %{
+           app_state
+           | next_frame_seq: framing_state.next_frame_seq,
+             packet_sequence_counts: framing_state.packet_sequence_counts
+         },
          transition,
          ctx.current_time,
-         next_frame_seq
+         framing_state.next_frame_seq
        )}
     end
   end
@@ -413,7 +483,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   defp build_direct_execution_result(
          %UplinkRequest{} = framed_uplink_request,
          app_state,
-         next_frame_seq,
+         framing_state,
          current_time
        ) do
     release_metadata = release_metadata(framed_uplink_request)
@@ -434,7 +504,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
                 completion_delay_ms: app_state.simulated_completion_delay_ms
               }
             ),
-          next_frame_seq: next_frame_seq,
+          next_frame_seq: framing_state.next_frame_seq,
+          packet_sequence_counts: framing_state.packet_sequence_counts,
           accepted_uplink_count: app_state.accepted_uplink_count + 1,
           last_release_attempt_id: framed_uplink_request.command_release_attempt_id,
           last_command_request_id: framed_uplink_request.command_request_id,

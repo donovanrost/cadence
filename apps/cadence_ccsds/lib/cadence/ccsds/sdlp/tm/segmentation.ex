@@ -6,10 +6,10 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   @behaviour Cadence.CCSDS.SDLP.Segmentation
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.SpacePacket.Idle
 
   @primary_header_size 6
-  @min_idle_packet_size @primary_header_size + 1
-  @idle_apid 0x7FF
+  @min_idle_packet_size 7
 
   @impl true
   def init(opts) do
@@ -202,26 +202,9 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
         {padding, state}
 
       _ ->
-        padding = build_idle_packet(padding_size)
+        padding = Idle.encode!(padding_size)
         {padding, %{state | idle_padding_cache: Map.put(cache, padding_size, padding)}}
     end
-  end
-
-  defp build_idle_packet(size) do
-    payload_size = size - @primary_header_size
-    packet_length = payload_size - 1
-    payload = :binary.copy(<<0>>, payload_size)
-
-    <<
-      0::3,
-      0::1,
-      0::1,
-      @idle_apid::11,
-      3::2,
-      0::14,
-      packet_length::16,
-      payload::binary
-    >>
   end
 
   defp increment_state(%{mcfc: mcfc, vcfc: vcfc} = state) do

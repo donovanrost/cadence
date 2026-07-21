@@ -1,6 +1,7 @@
 defmodule CadenceSimulator.PacketEncoderTest do
   use CadenceSimulator.Case, async: true
 
+  alias Cadence.CCSDS.SpacePacket.Codec
   alias CadenceSimulator.PacketEncoder
 
   @definitions """
@@ -65,6 +66,16 @@ defmodule CadenceSimulator.PacketEncoderTest do
     assert Enum.all?(packets, fn {_name, binary} ->
              is_binary(binary) and byte_size(binary) > 0
            end)
+
+    [{"FIRST", first}, {"SECOND", second}] = packets
+    assert {:ok, first_packet} = Codec.decode(first)
+    assert {:ok, second_packet} = Codec.decode(second)
+    assert first_packet.packet_type == :telemetry
+    assert first_packet.apid == 1
+    assert first_packet.sequence_count == 0
+    assert first_packet.data == <<7>>
+    assert second_packet.apid == 2
+    assert second_packet.data == <<1>>
   end
 
   test "encode_packet_values_with_sequence emits the same packets without rescanning flat values" do

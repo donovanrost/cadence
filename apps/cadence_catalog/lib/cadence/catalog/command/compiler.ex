@@ -122,6 +122,7 @@ defmodule Cadence.Catalog.Command.Compiler do
           encoding_steps: encoding_steps,
           default_argument_values: definition.default_argument_values,
           fixed_argument_values: definition.fixed_argument_values,
+          state_effects: definition.state_effects,
           metadata: %{"compiler_version" => context.compiler_version}
         })
 

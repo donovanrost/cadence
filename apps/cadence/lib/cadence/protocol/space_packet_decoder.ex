@@ -1,13 +1,13 @@
 defmodule Cadence.Protocol.SpacePacketDecoder do
   @moduledoc """
-  Minimal CCSDS space packet decoder for the first Cadence telemetry slice.
+  Cadence adapter over the shared CCSDS Space Packet codec.
   """
 
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.Codec
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.PacketRecord
-
-  @primary_header_bytes 6
 
   @spec decode(RawEvidence.t()) :: {:ok, PacketRecord.t()} | {:error, term()}
   def decode(%RawEvidence{} = raw_evidence) do
@@ -18,64 +18,36 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
           {:ok, PacketRecord.t()} | {:error, term()}
   def decode_packet(%RawEvidence{} = raw_evidence, raw_packet, opts \\ [])
       when is_binary(raw_packet) and is_list(opts) do
-    if byte_size(raw_packet) < @primary_header_bytes do
-      {:error, {:packet_too_short, byte_size(raw_packet)}}
-    else
-      do_decode_packet(raw_evidence, raw_packet, opts)
+    codec_opts = Keyword.take(opts, [:max_packet_size])
+
+    case Codec.decode(raw_packet, codec_opts) do
+      {:ok, packet} -> build_packet_record(raw_evidence, packet, opts)
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp do_decode_packet(%RawEvidence{} = raw_evidence, raw_packet, opts) do
-    <<
-      version::3,
-      _type_flag::1,
-      secondary_header_flag::1,
-      apid::11,
-      sequence_flags::2,
-      sequence_count::14,
-      packet_length::16,
-      rest::binary
-    >> = raw_packet
+  defp build_packet_record(%RawEvidence{} = raw_evidence, %SpacePacket{} = packet, opts) do
+    provenance =
+      base_provenance(raw_evidence) |> Map.merge(Keyword.get(opts, :provenance, %{}))
 
-    data_field_length = packet_length + 1
-    expected_total_length = @primary_header_bytes + data_field_length
-    actual_total_length = byte_size(raw_packet)
-
-    cond do
-      version != 0 ->
-        {:error, {:unsupported_space_packet_version, version}}
-
-      actual_total_length < expected_total_length ->
-        {:error, {:truncated_packet, expected_total_length, actual_total_length}}
-
-      actual_total_length > expected_total_length ->
-        {:error, {:trailing_bytes, expected_total_length, actual_total_length}}
-
-      true ->
-        packet_data = binary_part(rest, 0, data_field_length)
-
-        provenance =
-          base_provenance(raw_evidence) |> Map.merge(Keyword.get(opts, :provenance, %{}))
-
-        {:ok,
-         %PacketRecord{
-           packet_id: Ids.new("packet"),
-           evidence_id: raw_evidence.evidence_id,
-           mission_id: raw_evidence.mission_id,
-           source_endpoint_ref: raw_evidence.source_endpoint_ref,
-           spacecraft_id: raw_evidence.spacecraft_id,
-           protocol_family: Keyword.get(opts, :protocol_family, raw_evidence.protocol_family),
-           packet_kind: Keyword.get(opts, :packet_kind, :space_packet),
-           apid: apid,
-           sequence_flags: sequence_flags,
-           sequence_count: sequence_count,
-           secondary_header?: secondary_header_flag == 1,
-           packet_data: packet_data,
-           source_time: Keyword.get(opts, :source_time, raw_evidence.source_time),
-           receipt_time: Keyword.get(opts, :receipt_time, raw_evidence.receipt_time),
-           provenance: provenance
-         }}
-    end
+    {:ok,
+     %PacketRecord{
+       packet_id: Ids.new("packet"),
+       evidence_id: raw_evidence.evidence_id,
+       mission_id: raw_evidence.mission_id,
+       source_endpoint_ref: raw_evidence.source_endpoint_ref,
+       spacecraft_id: raw_evidence.spacecraft_id,
+       protocol_family: Keyword.get(opts, :protocol_family, raw_evidence.protocol_family),
+       packet_kind: Keyword.get(opts, :packet_kind, :space_packet),
+       apid: packet.apid,
+       sequence_flags: SpacePacket.sequence_flag_value(packet.sequence_flag),
+       sequence_count: packet.sequence_count,
+       secondary_header?: packet.secondary_header?,
+       packet_data: packet.data,
+       source_time: Keyword.get(opts, :source_time, raw_evidence.source_time),
+       receipt_time: Keyword.get(opts, :receipt_time, raw_evidence.receipt_time),
+       provenance: provenance
+     }}
   end
 
   defp base_provenance(%RawEvidence{} = raw_evidence) do

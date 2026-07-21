@@ -6,14 +6,14 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
   @behaviour Cadence.CCSDS.SDLP.Reassembly
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.Stream
 
   import Bitwise
 
   @default_oid_validation :none
   @default_oid_prefix_bytes 10
   @oid_seed 0xFFFFFFFF
-  @space_packet_primary_header_size 6
-
   @impl true
   def init(opts) do
     oid_validation =
@@ -35,6 +35,8 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
        continuation_by_vcid: %{},
        oid_lfsr_by_vcid: %{},
        default_sdu_type: default_sdu_type,
+       max_space_packet_size:
+         Keyword.get(opts, :max_space_packet_size, SpacePacket.maximum_size()),
        packet_buffers_by_vcid: %{}
      }}
   end
@@ -46,9 +48,14 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
 
     case extract_segments(frame.payload_octets, vcid, fhp, state) do
       {:ok, segments, next_state} ->
-        {packets, final_state} = reassemble_space_packets(segments, vcid, next_state)
-        sdu_octets = build_sdu_octets(packets, frame, ctx, final_state)
-        {:ok, sdu_octets, final_state}
+        case reassemble_space_packets(segments, vcid, next_state) do
+          {:ok, packets, final_state} ->
+            sdu_octets = build_sdu_octets(packets, frame, ctx, final_state)
+            {:ok, sdu_octets, final_state}
+
+          {:error, reason, final_state} ->
+            {:error, reason, final_state}
+        end
 
       {:error, reason, next_state} ->
         {:error, reason, next_state}
@@ -62,19 +69,20 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
 
   defp reassemble_space_packets(segments, _vcid, %{default_sdu_type: sdu_type} = state)
        when sdu_type != :space_packet do
-    {segments, state}
+    {:ok, segments, state}
   end
 
   defp reassemble_space_packets(segments, vcid, state) do
     buffer = Map.get(state.packet_buffers_by_vcid, vcid, <<>>)
+    packet_bytes = IO.iodata_to_binary([buffer | segments])
 
-    {packets, remaining} =
-      Enum.reduce(segments, {[], buffer}, fn segment, {acc, buffered} ->
-        {new_packets, rest} = split_space_packets(buffered <> segment)
-        {acc ++ new_packets, rest}
-      end)
+    case Stream.extract(packet_bytes, max_packet_size: state.max_space_packet_size) do
+      {:ok, packets, remaining} ->
+        {:ok, packets, update_packet_buffer(state, vcid, remaining)}
 
-    {packets, update_packet_buffer(state, vcid, remaining)}
+      {:error, reason} ->
+        {:error, {:invalid_space_packet, reason}, clear_packet_buffer(state, vcid)}
+    end
   end
 
   defp update_packet_buffer(state, vcid, <<>>) do
@@ -83,24 +91,6 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
 
   defp update_packet_buffer(state, vcid, buffer) do
     %{state | packet_buffers_by_vcid: Map.put(state.packet_buffers_by_vcid, vcid, buffer)}
-  end
-
-  defp split_space_packets(buffer) when byte_size(buffer) < @space_packet_primary_header_size do
-    {[], buffer}
-  end
-
-  defp split_space_packets(
-         <<_packet_id::16, _seq_control::16, length::16, _rest::binary>> = buffer
-       ) do
-    total_size = @space_packet_primary_header_size + length + 1
-
-    if byte_size(buffer) < total_size do
-      {[], buffer}
-    else
-      <<packet::binary-size(^total_size), remaining::binary>> = buffer
-      {more, rest} = split_space_packets(remaining)
-      {[packet | more], rest}
-    end
   end
 
   defp build_sdu_octets(segments, frame, ctx, state) do

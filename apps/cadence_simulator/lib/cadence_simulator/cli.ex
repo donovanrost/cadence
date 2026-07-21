@@ -49,6 +49,7 @@ defmodule CadenceSimulator.CLI do
     transport_binding_id: :string,
     tcp: :string,
     tc_frame_size: :integer,
+    segment_header_flag: :integer,
     clcw_overrides: :keep,
     clcw_schedule: :keep,
     help: :boolean
@@ -159,7 +160,10 @@ defmodule CadenceSimulator.CLI do
 
     Required:
       --tcp HOST:PORT          TCP uplink provider socket to connect to
-      --tc-frame-size BYTES    Fixed TC transfer frame size expected on the socket
+      --tc-frame-size BYTES    Maximum TC transfer frame size accepted on the socket
+
+    TC Data Link:
+      --segment-header-flag N  Managed Segment Header presence for the VC: 0 or 1
 
     CLCW Injection:
       --clcw-overrides SPEC    Static CLCW overrides as KEY=VALUE[,KEY=VALUE...]
@@ -318,6 +322,8 @@ defmodule CadenceSimulator.CLI do
   defp build_loopback_options(parsed) do
     with {:ok, output} <- optional_tcp_output(parsed),
          {:ok, tc_frame_size} <- optional_positive_integer_value(parsed[:tc_frame_size]),
+         {:ok, segment_header_flag} <-
+           optional_flag_value(parsed[:segment_header_flag], "--segment-header-flag"),
          {:ok, clcw_overrides} <-
            parse_clcw_overrides(Keyword.get_values(parsed, :clcw_overrides)),
          {:ok, clcw_schedule} <- parse_clcw_schedule(Keyword.get_values(parsed, :clcw_schedule)) do
@@ -328,6 +334,7 @@ defmodule CadenceSimulator.CLI do
         |> maybe_put(:host, output && elem(output, 1))
         |> maybe_put(:port, output && elem(output, 2))
         |> maybe_put(:tc_frame_size, tc_frame_size)
+        |> maybe_put(:segment_header_flag, segment_header_flag)
         |> maybe_put(:clcw_overrides, if(clcw_overrides == %{}, do: nil, else: clcw_overrides))
         |> maybe_put(:clcw_schedule, if(clcw_schedule == [], do: nil, else: clcw_schedule))
         |> Keyword.merge(bootstrap_opts)
@@ -376,6 +383,12 @@ defmodule CadenceSimulator.CLI do
 
   defp optional_positive_integer_value(_value),
     do: {:error, "--tc-frame-size must be a positive integer"}
+
+  defp optional_flag_value(nil, _option), do: {:ok, nil}
+  defp optional_flag_value(value, _option) when value in [0, 1], do: {:ok, value}
+
+  defp optional_flag_value(_value, option),
+    do: {:error, "#{option} must be 0 or 1"}
 
   defp parse_provider("basic"), do: {:ok, BasicDynamics}
   defp parse_provider("database"), do: {:ok, DatabaseDynamics}
@@ -644,6 +657,10 @@ defmodule CadenceSimulator.CLI do
     []
     |> maybe_put_config(:tcp, config_socket_value(config_root, %{}, :tcp))
     |> maybe_put_config(:tc_frame_size, fetch_config_value(config_root, ["tc_frame_size"]))
+    |> maybe_put_config(
+      :segment_header_flag,
+      fetch_config_value(config_root, ["segment_header_flag"])
+    )
     |> maybe_put_config(
       :clcw_overrides,
       fetch_config_value(config_root, ["clcw_overrides"]) ||

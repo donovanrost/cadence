@@ -18,7 +18,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     EncodingEntry,
     EncodingLayout,
     MatchCriteria,
-    OperationalMetadata
+    OperationalMetadata,
+    StateEffect
   }
 
   alias Cadence.Catalog.Telemetry.{
@@ -175,6 +176,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
     {entries, state} =
       packet_data["items"]
+      |> infer_item_bit_offsets()
       |> Enum.with_index()
       |> Enum.map_reduce(state, fn {item_data, item_index}, acc ->
         build_item(packet_data, packet_index, item_data, item_index, packet_byte_order, acc)
@@ -200,6 +202,16 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
       })
 
     {packet, state}
+  end
+
+  defp infer_item_bit_offsets(items) when is_list(items) do
+    items
+    |> Enum.map_reduce(0, fn item, next_offset ->
+      bit_offset = Map.get(item, "bit_offset", next_offset)
+      bit_size = Map.get(item, "bit_size", 0)
+      {Map.put(item, "bit_offset", bit_offset), max(next_offset, bit_offset + bit_size)}
+    end)
+    |> elem(0)
   end
 
   defp build_item(packet_data, packet_index, item_data, item_index, packet_byte_order, state) do
@@ -453,6 +465,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         byte_order: byte_order,
         size_bits: command_layout_size_bits(command_data),
         max_size_bits: command_layout_size_bits(command_data),
+        apid: parsed_integer(Map.get(command_data, "apid", 0)),
         opcode: parsed_integer(Map.get(command_data, "opcode")),
         opcode_size_bits: 8,
         entries: entries,
@@ -475,6 +488,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         description: Map.get(command_data, "description"),
         encoding_layout_ref: layout_id,
         arguments: argument_ids,
+        state_effects:
+          build_command_state_effects(command_data, command_index, state, argument_ids),
         verifiers: build_command_verifiers(command_data, command_index, state, command_name),
         operational_metadata: build_command_operational_metadata(command_data),
         provenance:
@@ -524,6 +539,33 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         metadata: map_document(Map.get(verifier_data, "metadata")),
         provenance:
           command_provenance(state.artifact, state.import_run_id, verifier_path, verifier_name)
+      })
+    end)
+  end
+
+  defp build_command_state_effects(command_data, command_index, state, argument_ids) do
+    argument_ids_by_name =
+      command_data
+      |> Map.get("parameters", [])
+      |> Enum.zip(argument_ids)
+      |> Map.new(fn {parameter, argument_id} -> {parameter["name"], argument_id} end)
+
+    command_data
+    |> Map.get("effects", [])
+    |> Enum.with_index()
+    |> Enum.map(fn {effect_data, effect_index} ->
+      StateEffect.new(%{
+        effect_id:
+          state.snapshot_id <>
+            ":state_effect:" <>
+            Integer.to_string(command_index) <>
+            ":" <>
+            Integer.to_string(effect_index),
+        target_ref: Map.fetch!(effect_data, "target"),
+        operation: Map.get(effect_data, "operation", "set"),
+        argument_ref: Map.get(argument_ids_by_name, effect_data["argument"]),
+        value: Map.get(effect_data, "value"),
+        metadata: map_document(Map.get(effect_data, "metadata"))
       })
     end)
   end

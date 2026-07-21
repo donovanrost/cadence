@@ -9,6 +9,7 @@ defmodule Cadence.Catalog.Command.Definition do
     Normalize,
     OperationalMetadata,
     Provenance,
+    StateEffect,
     TransmissionConstraint,
     Verifier
   }
@@ -28,6 +29,7 @@ defmodule Cadence.Catalog.Command.Definition do
           argument_ids: [binary()],
           default_argument_values: map(),
           fixed_argument_values: map(),
+          state_effects: [StateEffect.t()],
           transmission_constraints: [TransmissionConstraint.t()],
           verifiers: [Verifier.t()],
           operational_metadata: OperationalMetadata.t() | nil,
@@ -50,6 +52,7 @@ defmodule Cadence.Catalog.Command.Definition do
     argument_ids: [],
     default_argument_values: %{},
     fixed_argument_values: %{},
+    state_effects: [],
     transmission_constraints: [],
     verifiers: [],
     extensions: %{}
@@ -70,6 +73,7 @@ defmodule Cadence.Catalog.Command.Definition do
       argument_ids: argument_ids(attrs),
       default_argument_values: map_value(Normalize.get(attrs, :default_argument_values, %{})),
       fixed_argument_values: map_value(Normalize.get(attrs, :fixed_argument_values, %{})),
+      state_effects: Normalize.nested_list(attrs, :state_effects, StateEffect),
       transmission_constraints:
         Normalize.nested_list(attrs, :transmission_constraints, TransmissionConstraint),
       verifiers: Normalize.nested_list(attrs, :verifiers, Verifier),

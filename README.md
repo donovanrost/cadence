@@ -13,6 +13,7 @@ Cadence is now structured as an umbrella project.
 ## Documentation
 
 - [Developer Architecture Guide](docs/developer-architecture-guide.md) - current implementation shape, storage tiers, runtime boundaries, and local development workflow
+- [CCSDS Library Gap Assessment](docs/ccsds-library-gap-assessment.md) - implemented protocol subset, remaining standards gaps, and recommended sequencing
 - [How-To Guides](docs/how-to/_index.md) - practical workflows for local development, profiling, and benchmarking
 - [Architecture Decision Records](docs/decisions/_index.md) - accepted architectural decisions for the redesigned system
 - [Contact Scheduling and Ground Network Simulation Design](docs/superpowers/specs/2026-07-12-contact-scheduling-and-ground-network-simulation-design.md) - idealized provider-neutral scheduling and simulator end state

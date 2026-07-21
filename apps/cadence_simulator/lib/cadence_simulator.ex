@@ -36,6 +36,17 @@ defmodule CadenceSimulator do
     Coordinator.stats(pid)
   end
 
+  @spec execute_command(pid(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def execute_command(pid, command_ref, arguments \\ %{})
+      when is_pid(pid) and is_binary(command_ref) and is_map(arguments) do
+    Coordinator.execute_command(pid, command_ref, arguments)
+  end
+
+  @spec execute_encoded_command(pid(), binary()) :: {:ok, map()} | {:error, term()}
+  def execute_encoded_command(pid, payload) when is_pid(pid) and is_binary(payload) do
+    Coordinator.execute_encoded_command(pid, payload)
+  end
+
   @spec await_simulator(pid()) :: {:ok, term()}
   def await_simulator(pid) when is_pid(pid) do
     ref = Process.monitor(pid)

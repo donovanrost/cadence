@@ -111,12 +111,14 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
          :ok <- ensure_connectable_provider(provider_runtime, :cop1_loopback),
          {:ok, {host, port}} <- provider_host_port(provider_runtime),
          {:ok, transport_runtime} <- select_transport_runtime(path_snapshot, bootstrap_request),
-         {:ok, tc_frame_size} <- transport_frame_size(transport_runtime) do
+         {:ok, tc_frame_size} <- transport_frame_size(transport_runtime),
+         {:ok, segment_header_flag} <- transport_segment_header_flag(transport_runtime) do
       {:ok,
        [
          host: host,
          port: port,
-         tc_frame_size: tc_frame_size
+         tc_frame_size: tc_frame_size,
+         segment_header_flag: segment_header_flag
        ]}
     end
   end
@@ -211,6 +213,14 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
     end
   end
 
+  defp transport_segment_header_flag(transport_runtime) when is_map(transport_runtime) do
+    case get_in(transport_runtime, ["state", "segment_header_flag"]) do
+      nil -> {:ok, 0}
+      segment_header_flag when segment_header_flag in [0, 1] -> {:ok, segment_header_flag}
+      other -> {:error, {:invalid_transport_segment_header_flag, other}}
+    end
+  end
+
   defp telemetry_frame(provider_runtime) when is_map(provider_runtime) do
     case {provider_runtime["ingress_protocol_family"], provider_runtime["fixed_message_bytes"]} do
       {protocol_family, frame_size}
@@ -273,7 +283,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
 
   defp merge_bootstrap_runtime_opts(runtime_opts, :cop1_loopback, bootstrap_runtime_opts) do
     runtime_opts
-    |> Keyword.drop([:host, :port, :tc_frame_size])
+    |> Keyword.drop([:host, :port, :tc_frame_size, :segment_header_flag])
     |> put_missing_opts(bootstrap_runtime_opts)
   end
 

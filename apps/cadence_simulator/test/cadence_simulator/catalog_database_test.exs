@@ -15,6 +15,10 @@ defmodule CadenceSimulator.CatalogDatabaseTest do
   commands:
     - name: RESET_COUNTER
       opcode: 7
+      effects:
+        - target: HK.counter
+          operation: set
+          value: 0
   """
 
   test "loads and compiles a combined database through the shared catalog app" do
@@ -40,6 +44,13 @@ defmodule CadenceSimulator.CatalogDatabaseTest do
 
     assert [runtime_definition] = database.command_compilation.runtime_definitions
     assert runtime_definition.name == "RESET_COUNTER"
+
+    assert [%{target_ref: "HK.counter", operation: :set, value: 0}] =
+             runtime_definition.state_effects
+
+    assert {:ok, decoded} = CatalogDatabase.decode_command(database, <<7, 0, 0>>)
+    assert decoded.runtime_definition.name == "RESET_COUNTER"
+    assert decoded.arguments == %{}
     assert CatalogDatabase.diagnostics(database) == []
   end
 end

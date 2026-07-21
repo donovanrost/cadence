@@ -178,6 +178,7 @@ defmodule CadenceSimulator.CLITest do
     config_path =
       write_config!("""
       mode: cop1_loopback
+      segment_header_flag: 1
       cadence:
         url: http://127.0.0.1:4001
         api_token: token-alpha
@@ -213,6 +214,7 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:path_id] == "uplink-path-alpha"
     assert opts[:provider_binding_id] == "tcp-uplink-provider"
     assert opts[:transport_binding_id] == "uplink-gateway-alpha"
+    assert opts[:segment_header_flag] == 1
     assert opts[:clcw_overrides] == %{"lockout" => true, "report_value" => 3}
 
     assert opts[:clcw_schedule] == [

@@ -2,16 +2,19 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   @moduledoc """
   TCP-connected simulator peer for COP-1 loopback.
 
-  It receives framed TC uplink bytes from a Cadence TCP provider, decodes
-  fixed-size TC transfer frames, and responds on the same socket with encoded
-  CLCW reports.
+  It receives framed TC uplink bytes from a Cadence TCP provider, decodes TC
+  transfer frames up to the managed maximum size, reassembles MAP SDUs, and
+  responds on the same socket with encoded CLCW reports.
   """
 
   use GenServer
 
   require Logger
 
-  alias Cadence.CCSDS.TC.TransferFrame
+  alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.SpacePacket
+  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias Cadence.CCSDS.TC.{FrameCodec, Reassembly}
   alias Cadence.CCSDS.Transport.COP1.CLCW
   alias CadenceSimulator.COP1.CLCWInjector
 
@@ -27,9 +30,17 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     :reconnect_interval_ms,
     :connect_timer_ref,
     :clcw_injector,
+    :command_target,
+    :segment_header_flag,
+    :segment_header_by_vcid,
+    :tc_reassembly,
     receive_buffer: <<>>,
     tc_frame_count: 0,
     clcw_count: 0,
+    command_count: 0,
+    command_error_count: 0,
+    last_command: nil,
+    last_command_error: nil,
     last_tc_frame_seq: nil,
     last_clcw_report_value: nil,
     last_error: nil
@@ -51,6 +62,9 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   @impl true
   def init(opts) do
+    {:ok, tc_reassembly} =
+      Reassembly.init(max_sdu_octets: Keyword.get(opts, :max_command_sdu_octets, 1_048_576))
+
     state = %__MODULE__{
       host: Keyword.get(opts, :host, "127.0.0.1"),
       port: Keyword.fetch!(opts, :port),
@@ -58,7 +72,11 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       runtime_resolver: Keyword.get(opts, :runtime_resolver),
       reconnect_interval_ms:
         Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
-      clcw_injector: build_clcw_injector(opts)
+      clcw_injector: build_clcw_injector(opts),
+      command_target: Keyword.get(opts, :command_target),
+      segment_header_flag: Keyword.get(opts, :segment_header_flag, 0),
+      segment_header_by_vcid: Keyword.get(opts, :segment_header_by_vcid, %{}),
+      tc_reassembly: tc_reassembly
     }
 
     {:ok, connect_or_schedule(state)}
@@ -74,6 +92,11 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        tc_frame_size: state.tc_frame_size,
        tc_frame_count: state.tc_frame_count,
        clcw_count: state.clcw_count,
+       command_count: state.command_count,
+       command_error_count: state.command_error_count,
+       last_command: state.last_command,
+       last_command_error: state.last_command_error,
+       reassembly_buffer_count: map_size(state.tc_reassembly.buffers),
        last_tc_frame_seq: state.last_tc_frame_seq,
        last_clcw_report_value: state.last_clcw_report_value,
        last_error: state.last_error
@@ -96,7 +119,11 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   def handle_info({:tcp_closed, socket}, %{socket: socket} = state) do
     Logger.warning("COP-1 loopback socket closed")
-    {:noreply, schedule_reconnect(%{state | socket: nil, receive_buffer: <<>>})}
+
+    {:noreply,
+     state
+     |> reset_connection_state()
+     |> schedule_reconnect()}
   end
 
   def handle_info({:tcp_error, socket, reason}, %{socket: socket} = state) do
@@ -104,9 +131,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
     {:noreply,
      schedule_reconnect(%{
-       state
+       reset_connection_state(state)
        | socket: nil,
-         receive_buffer: <<>>,
          last_error: inspect(reason)
      })}
   end
@@ -160,7 +186,12 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   defp process_inbound_data(state, data) do
     buffer = state.receive_buffer <> data
 
-    case TransferFrame.decode(buffer, frame_size: state.tc_frame_size) do
+    case FrameCodec.decode(
+           buffer,
+           frame_size: state.tc_frame_size,
+           segment_header_flag: state.segment_header_flag,
+           segment_header_by_vcid: state.segment_header_by_vcid
+         ) do
       {:ok, frames, rest} ->
         frames
         |> Enum.reduce(%{state | receive_buffer: rest}, &handle_tc_frame/2)
@@ -172,11 +203,13 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     end
   end
 
-  defp handle_tc_frame(%TransferFrame{} = frame, state) do
+  defp handle_tc_frame(%LinkFrame{} = frame, state) do
+    state = maybe_execute_command(frame, state)
+
     clcw =
       CLCW.new(%{
         vcid: frame.vcid,
-        report_value: frame.frame_seq
+        report_value: next_expected_frame_sequence(frame)
       })
       |> maybe_apply_injector(state.clcw_injector, state.tc_frame_count)
 
@@ -223,6 +256,96 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   defp maybe_apply_injector(%CLCW{} = clcw, _injector, _step), do: clcw
 
+  defp next_expected_frame_sequence(%LinkFrame{} = frame) do
+    if Map.get(frame.meta, :bypass_flag, 0) == 0 do
+      rem(frame.frame_seq + 1, 256)
+    else
+      frame.frame_seq
+    end
+  end
+
+  defp maybe_execute_command(
+         %LinkFrame{} = frame,
+         %{command_target: command_target} = state
+       )
+       when not is_nil(command_target) do
+    if Map.get(frame.meta, :control_command_flag, 0) == 0 do
+      ingest_command_frame(frame, state)
+    else
+      state
+    end
+  end
+
+  defp maybe_execute_command(%LinkFrame{}, state), do: state
+
+  defp ingest_command_frame(%LinkFrame{} = frame, state) do
+    case Reassembly.ingest(
+           frame,
+           %{direction: :uplink, sdu_kind_hint: :command},
+           state.tc_reassembly
+         ) do
+      {:ok, sdus, reassembly_state} ->
+        Enum.reduce(sdus, %{state | tc_reassembly: reassembly_state}, &execute_command_sdu/2)
+
+      {:error, reason, reassembly_state} ->
+        %{
+          state
+          | tc_reassembly: reassembly_state,
+            command_error_count: state.command_error_count + 1,
+            last_command_error: inspect(reason)
+        }
+    end
+  end
+
+  defp execute_command_sdu(sdu, %{command_target: command_target} = state) do
+    with {:ok, command_payload} <- command_application_data(sdu.octets),
+         {:ok, command_result} <-
+           CadenceSimulator.execute_encoded_command(command_target, command_payload) do
+      %{
+        state
+        | command_count: state.command_count + 1,
+          last_command: command_result,
+          last_command_error: nil
+      }
+    else
+      {:error, reason} ->
+        %{
+          state
+          | command_error_count: state.command_error_count + 1,
+            last_command_error: inspect(reason)
+        }
+    end
+  catch
+    :exit, reason ->
+      %{
+        state
+        | command_error_count: state.command_error_count + 1,
+          last_command_error: inspect(reason)
+      }
+  end
+
+  defp command_application_data(packet_octets) do
+    case SpacePacketCodec.decode(packet_octets) do
+      {:ok, %SpacePacket{packet_type: :command, data: data}} ->
+        {:ok, data}
+
+      {:ok, %SpacePacket{packet_type: packet_type}} ->
+        {:error, {:unexpected_command_packet_type, packet_type}}
+
+      {:error, reason} ->
+        {:error, {:invalid_command_space_packet, reason}}
+    end
+  end
+
+  defp reset_connection_state(state) do
+    %{
+      state
+      | socket: nil,
+        receive_buffer: <<>>,
+        tc_reassembly: %{state.tc_reassembly | buffers: %{}}
+    }
+  end
+
   defp maybe_refresh_runtime(%{runtime_resolver: nil} = state), do: state
 
   defp maybe_refresh_runtime(state) do
@@ -233,6 +356,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
           |> maybe_put_runtime_value(:host, runtime_updates)
           |> maybe_put_runtime_value(:port, runtime_updates)
           |> maybe_put_runtime_value(:tc_frame_size, runtime_updates)
+          |> maybe_put_runtime_value(:segment_header_flag, runtime_updates)
+          |> maybe_reset_reassembly_for_runtime_change(state)
 
         maybe_log_runtime_refresh(state, refreshed_state)
         refreshed_state
@@ -251,8 +376,21 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   end
 
   defp maybe_log_runtime_refresh(previous_state, refreshed_state) do
-    previous_runtime = {previous_state.host, previous_state.port, previous_state.tc_frame_size}
-    refreshed_runtime = {refreshed_state.host, refreshed_state.port, refreshed_state.tc_frame_size}
+    previous_runtime =
+      {
+        previous_state.host,
+        previous_state.port,
+        previous_state.tc_frame_size,
+        previous_state.segment_header_flag
+      }
+
+    refreshed_runtime =
+      {
+        refreshed_state.host,
+        refreshed_state.port,
+        refreshed_state.tc_frame_size,
+        refreshed_state.segment_header_flag
+      }
 
     if refreshed_runtime != previous_runtime do
       Logger.info(
@@ -261,8 +399,17 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     end
   end
 
-  defp format_runtime({host, port, tc_frame_size}) do
-    "#{host}:#{port} tc_frame_size=#{tc_frame_size}"
+  defp maybe_reset_reassembly_for_runtime_change(refreshed_state, previous_state) do
+    if refreshed_state.tc_frame_size != previous_state.tc_frame_size or
+         refreshed_state.segment_header_flag != previous_state.segment_header_flag do
+      %{refreshed_state | tc_reassembly: %{refreshed_state.tc_reassembly | buffers: %{}}}
+    else
+      refreshed_state
+    end
+  end
+
+  defp format_runtime({host, port, tc_frame_size, segment_header_flag}) do
+    "#{host}:#{port} tc_frame_size=#{tc_frame_size} segment_header_flag=#{segment_header_flag}"
   end
 
   defp resolve_runtime_updates({module, function, args})

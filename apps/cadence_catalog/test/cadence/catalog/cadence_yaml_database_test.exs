@@ -2,6 +2,7 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
+  alias Cadence.Catalog.Command.Decoder
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
   alias Cadence.Catalog.Source
   alias Cadence.Catalog.Telemetry.Compiler, as: TelemetryCompiler
@@ -27,12 +28,17 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
               1: NOMINAL
   commands:
     - name: SET_MODE
+      apid: 77
       opcode: 3
       parameters:
         - name: mode
           data_type: uint
           bit_offset: 0
           bit_length: 8
+      effects:
+        - target: HK.mode
+          operation: set
+          argument: mode
   """
 
   test "imports and compiles a combined database without Cadence persistence" do
@@ -67,5 +73,38 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
              CommandCompiler.compile(import_result.bundle.command_snapshot)
 
     assert runtime_definition.name == "SET_MODE"
+    assert runtime_definition.apid == 77
+    assert [state_effect] = runtime_definition.state_effects
+    assert state_effect.target_ref == "HK.mode"
+    assert state_effect.operation == :set
+    assert state_effect.argument_id == hd(runtime_definition.argument_specs).argument_id
+
+    assert {:ok, decoded} = Decoder.decode([runtime_definition], <<3, 1>>)
+
+    assert decoded.runtime_definition.command_id == runtime_definition.command_id
+    assert decoded.arguments == %{"mode" => 1}
+  end
+
+  test "rejects command APIDs outside the Space Packet field" do
+    source =
+      Source.new(%{
+        artifact_id: "invalid-command-apid",
+        organization_id: "org-alpha",
+        mission_id: "mission-alpha",
+        catalog_family: :command,
+        artifact_name: "invalid.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: """
+        commands:
+          - name: INVALID
+            apid: 2048
+            opcode: 1
+        """
+      })
+
+    assert CadenceYamlDatabase.validate(source) ==
+             {:error,
+              {:validation_error, "Command 'INVALID' APID must be between 0 and 2047, got 2048"}}
   end
 end

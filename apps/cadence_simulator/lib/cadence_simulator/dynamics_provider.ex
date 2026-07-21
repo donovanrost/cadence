@@ -44,5 +44,25 @@ defmodule CadenceSimulator.DynamicsProvider do
   """
   @callback parallel_safe?(config :: map()) :: boolean()
 
-  @optional_callbacks [generate_packet_values: 2, status: 1, parallel_safe?: 1]
+  @doc """
+  Applies one command invocation to provider state.
+  """
+  @callback execute_command(state :: term(), command_ref :: binary(), arguments :: map()) ::
+              {:ok, result :: map(), new_state :: term()}
+              | {:error, reason :: term(), state :: term()}
+
+  @doc """
+  Decodes and applies one encoded command payload to provider state.
+  """
+  @callback execute_encoded_command(state :: term(), payload :: binary()) ::
+              {:ok, result :: map(), new_state :: term()}
+              | {:error, reason :: term(), state :: term()}
+
+  @optional_callbacks [
+    execute_command: 3,
+    execute_encoded_command: 2,
+    generate_packet_values: 2,
+    status: 1,
+    parallel_safe?: 1
+  ]
 end
