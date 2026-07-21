@@ -6,7 +6,16 @@ defmodule Cadence.Protocol.ProtocolAnomaly do
   alias Cadence.Ids
 
   @type anomaly_kind ::
-          :frame_decode_dropped | :frame_reassembly_error | :frame_sequence_discontinuity
+          :frame_decode_dropped
+          | :frame_reassembly_error
+          | :frame_sequence_discontinuity
+          | :master_channel_frame_count_discontinuity
+          | :partial_packet_on_frame_count_discontinuity
+          | :orphan_packet_continuation
+          | :first_header_pointer_resynchronization
+          | :continuation_decode_failed
+          | :invalid_space_packet
+          | :oid_validation_failed
 
   @type t :: %__MODULE__{
           anomaly_id: binary(),

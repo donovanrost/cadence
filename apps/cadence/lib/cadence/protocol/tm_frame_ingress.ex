@@ -14,8 +14,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   alias Cadence.Protocol.PacketRecord
 
-  @type continuity_key :: {non_neg_integer(), non_neg_integer()}
-  @type continuity_state :: %{optional(continuity_key()) => non_neg_integer()}
+  @type continuity_state :: map()
 
   @type result :: %{
           packet_records: [PacketRecord.t()],
@@ -47,16 +46,14 @@ defmodule Cadence.Protocol.TMFrameIngress do
          {:ok, packet_records} <- build_packet_records(raw_evidence, sdu_octets) do
       transfer_frame_records = build_transfer_frame_records(raw_evidence, frame_infos)
 
-      protocol_anomalies =
-        build_pipeline_anomalies(raw_evidence, decode_anomalies) ++
-          build_continuity_anomalies(raw_evidence, frame_infos, continuity_state)
+      protocol_anomalies = build_pipeline_anomalies(raw_evidence, decode_anomalies)
 
       {:ok,
        %{
          packet_records: packet_records,
          transfer_frame_records: transfer_frame_records,
          protocol_anomalies: protocol_anomalies
-       }, rest, next_pipeline_state, next_continuity_state(frame_infos, continuity_state)}
+       }, rest, next_pipeline_state, continuity_state}
     else
       {:error, reason, next_pipeline_state} ->
         {:error, reason, next_pipeline_state, continuity_state}
@@ -132,7 +129,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
         spacecraft_id: raw_evidence.spacecraft_id,
         protocol_family: raw_evidence.protocol_family,
         direction: raw_evidence.direction,
-        anomaly_kind: anomaly.anomaly_kind,
+        anomaly_kind: application_anomaly_kind(anomaly.anomaly_kind),
         scid: Map.get(anomaly, :scid, Map.get(metadata, :scid)),
         vcid: Map.get(anomaly, :vcid, Map.get(metadata, :vcid)),
         map_id: Map.get(anomaly, :map_id, Map.get(metadata, :map_id)),
@@ -143,15 +140,6 @@ defmodule Cadence.Protocol.TMFrameIngress do
         metadata: metadata
       })
     end)
-  end
-
-  defp build_continuity_anomalies(%RawEvidence{} = raw_evidence, frame_infos, continuity_state)
-       when is_list(frame_infos) and is_map(continuity_state) do
-    frame_infos
-    |> Enum.reduce({continuity_state, []}, fn frame_info, {acc_state, acc} ->
-      reduce_continuity_anomaly(raw_evidence, frame_info, acc_state, acc)
-    end)
-    |> elem(1)
   end
 
   defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, acc) do
@@ -187,91 +175,10 @@ defmodule Cadence.Protocol.TMFrameIngress do
     )
   end
 
-  defp reduce_continuity_anomaly(%RawEvidence{} = raw_evidence, frame_info, acc_state, acc) do
-    frame = frame_info.frame
-    key = {frame.scid, frame.vcid}
+  defp application_anomaly_kind(:virtual_channel_frame_count_discontinuity),
+    do: :frame_sequence_discontinuity
 
-    case Map.fetch(acc_state, key) do
-      {:ok, previous_frame_seq} ->
-        continue_or_record_anomaly(
-          raw_evidence,
-          frame_info,
-          acc_state,
-          acc,
-          key,
-          previous_frame_seq
-        )
-
-      :error ->
-        {Map.put(acc_state, key, frame.frame_seq), acc}
-    end
-  end
-
-  defp continue_or_record_anomaly(
-         %RawEvidence{} = raw_evidence,
-         frame_info,
-         acc_state,
-         acc,
-         key,
-         previous_frame_seq
-       ) do
-    frame = frame_info.frame
-    expected_frame_seq = rem(previous_frame_seq + 1, 256)
-    next_state = Map.put(acc_state, key, frame.frame_seq)
-
-    if expected_frame_seq == frame.frame_seq do
-      {next_state, acc}
-    else
-      {next_state,
-       acc ++
-         [
-           build_continuity_anomaly(
-             raw_evidence,
-             frame_info,
-             previous_frame_seq,
-             expected_frame_seq
-           )
-         ]}
-    end
-  end
-
-  defp build_continuity_anomaly(
-         %RawEvidence{} = raw_evidence,
-         frame_info,
-         previous_frame_seq,
-         expected_frame_seq
-       ) do
-    frame = frame_info.frame
-
-    ProtocolAnomaly.new(%{
-      evidence_id: raw_evidence.evidence_id,
-      mission_id: raw_evidence.mission_id,
-      source_endpoint_ref: raw_evidence.source_endpoint_ref,
-      spacecraft_id: raw_evidence.spacecraft_id,
-      protocol_family: raw_evidence.protocol_family,
-      direction: raw_evidence.direction,
-      anomaly_kind: :frame_sequence_discontinuity,
-      scid: frame.scid,
-      vcid: frame.vcid,
-      map_id: frame.map_id,
-      frame_seq: frame.frame_seq,
-      raw_frame_offset_bytes: frame_info.raw_frame_offset_bytes,
-      raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
-      recorded_at: raw_evidence.receipt_time,
-      metadata: %{
-        previous_frame_seq: previous_frame_seq,
-        expected_frame_seq: expected_frame_seq,
-        observed_frame_seq: frame.frame_seq
-      }
-    })
-  end
-
-  defp next_continuity_state(frame_infos, continuity_state) when is_list(frame_infos) do
-    Enum.reduce(frame_infos, continuity_state, fn frame_info, acc ->
-      frame = frame_info.frame
-      Map.put(acc, {frame.scid, frame.vcid}, frame.frame_seq)
-    end)
-  end
+  defp application_anomaly_kind(kind), do: kind
 
   defp fetch_integer(metadata, key, default \\ :required)
 

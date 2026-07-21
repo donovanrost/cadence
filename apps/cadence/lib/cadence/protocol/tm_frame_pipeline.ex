@@ -21,6 +21,9 @@ defmodule Cadence.Protocol.TMFramePipeline do
     |> Reassembly.init()
   end
 
+  @spec stats(state()) :: map()
+  def stats(state), do: Reassembly.stats(state)
+
   @spec decode_sdu_octets(binary(), keyword(), state(), map()) ::
           {:ok, [SDUOctets.t()], binary(), state()} | {:error, term(), state()}
   def decode_sdu_octets(frame_bytes, codec_opts, state, ctx \\ %{})
@@ -53,6 +56,7 @@ defmodule Cadence.Protocol.TMFramePipeline do
            decode_sdu_octets(frame_bytes, codec_opts, state, ctx) do
       packets =
         sdu_octets
+        |> Enum.filter(&(&1.sdu_kind_hint == :space_packet))
         |> Enum.map(& &1.octets)
         |> Enum.reject(&idle_space_packet?/1)
 
@@ -65,13 +69,15 @@ defmodule Cadence.Protocol.TMFramePipeline do
     |> Enum.reduce({[], [], decode_anomalies, state}, fn frame_info,
                                                          {acc_sdu_octets, kept_frames, anomalies,
                                                           current_state} ->
-      case Reassembly.ingest(frame_info.frame, ctx, current_state) do
-        {:ok, sdu_octets, next_state} ->
-          {acc_sdu_octets ++ sdu_octets, kept_frames ++ [frame_info], anomalies, next_state}
+      case Reassembly.ingest_detailed(frame_info.frame, ctx, current_state) do
+        {:ok, sdu_octets, reassembly_anomalies, next_state} ->
+          {acc_sdu_octets ++ sdu_octets, kept_frames ++ [frame_info],
+           anomalies ++ locate_anomalies(reassembly_anomalies, frame_info), next_state}
 
-        {:error, reason, next_state} ->
+        {:error, reason, reassembly_anomalies, next_state} ->
           {acc_sdu_octets, kept_frames,
            anomalies ++
+             locate_anomalies(reassembly_anomalies, frame_info) ++
              [
                %{
                  anomaly_kind: :frame_reassembly_error,
@@ -88,6 +94,18 @@ defmodule Cadence.Protocol.TMFramePipeline do
     end)
     |> then(fn {sdu_octets, kept_frames, anomalies, next_state} ->
       {:ok, sdu_octets, kept_frames, anomalies, rest, next_state}
+    end)
+  end
+
+  defp locate_anomalies(anomalies, frame_info) do
+    Enum.map(anomalies, fn anomaly ->
+      anomaly
+      |> Map.put_new(:scid, frame_info.frame.scid)
+      |> Map.put_new(:vcid, frame_info.frame.vcid)
+      |> Map.put_new(:map_id, frame_info.frame.map_id)
+      |> Map.put_new(:frame_seq, frame_info.frame.frame_seq)
+      |> Map.put(:raw_frame_offset_bytes, frame_info.raw_frame_offset_bytes)
+      |> Map.put(:raw_frame_length_bytes, frame_info.raw_frame_length_bytes)
     end)
   end
 

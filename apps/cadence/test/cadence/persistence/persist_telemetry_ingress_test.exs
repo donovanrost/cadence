@@ -475,6 +475,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, second_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence_two)
 
     assert Enum.map(second_result.protocol_anomalies, & &1.anomaly_kind) == [
+             :master_channel_frame_count_discontinuity,
              :frame_sequence_discontinuity
            ]
 
@@ -530,13 +531,17 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert Enum.all?(latency_samples, &(&1.unit == "ms"))
     assert Enum.all?(latency_samples, &(&1.value > 0))
 
-    [anomaly_row] =
+    anomaly_rows =
       ProtocolAnomalyRow
       |> where([row], row.mission_id == "mission-alpha")
       |> Repo.all()
 
-    assert anomaly_row.anomaly_kind == "frame_sequence_discontinuity"
-    assert anomaly_row.evidence_id == raw_evidence_two.evidence_id
+    assert Enum.sort(Enum.map(anomaly_rows, & &1.anomaly_kind)) == [
+             "frame_sequence_discontinuity",
+             "master_channel_frame_count_discontinuity"
+           ]
+
+    assert Enum.all?(anomaly_rows, &(&1.evidence_id == raw_evidence_two.evidence_id))
   end
 
   test "batched persistence retries tolerate already-inserted protocol anomalies" do
@@ -679,7 +684,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert first_result.protocol_anomalies == []
 
     assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two)
-    assert length(second_result.protocol_anomalies) == 1
+    assert length(second_result.protocol_anomalies) == 2
 
     assert :ok =
              Cadence.Persistence.persist_processing_results(
@@ -693,7 +698,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
                record_current_values?: false
              )
 
-    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, mission_id) == 1
+    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, mission_id) == 2
   end
 
   test "persists multiple processing results in one batch with Postgres archive backends" do
@@ -968,19 +973,25 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert length(second_result.packet_records) == 1
 
     assert Enum.map(second_result.protocol_anomalies, & &1.anomaly_kind) == [
+             :master_channel_frame_count_discontinuity,
              :frame_sequence_discontinuity
            ]
 
-    [anomaly_row] =
+    anomaly_rows =
       ProtocolAnomalyRow
       |> where([row], row.mission_id == "mission-alpha")
       |> Repo.all()
 
+    assert length(anomaly_rows) == 2
+
+    anomaly_row =
+      Enum.find(anomaly_rows, &(&1.anomaly_kind == "frame_sequence_discontinuity"))
+
     assert anomaly_row.anomaly_kind == "frame_sequence_discontinuity"
     assert anomaly_row.protocol_family == "tm"
     assert anomaly_row.vcid == 2
-    assert anomaly_row.metadata["expected_frame_seq"] == 2
-    assert anomaly_row.metadata["observed_frame_seq"] == 3
+    assert anomaly_row.metadata["expected"] == 2
+    assert anomaly_row.metadata["observed"] == 3
   end
 
   defp count_for_mission(schema, field, mission_id) do

@@ -182,6 +182,8 @@ defmodule Cadence.Runtime.PartitionOwner do
   def handle_call(:snapshot, _from, state) do
     case snapshot_managed_applications(state) do
       {:ok, managed_applications} ->
+        tm_stats = TMFramePipeline.stats(state.tm_pipeline_state)
+
         snapshot = %{
           mission_id: state.mission_id,
           activation_id: state.active_activation.activation_id,
@@ -198,10 +200,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           timer_count: TimerService.count(state.timer_service),
           timers: TimerService.snapshot(state.timer_service),
           tm_frame_remainder_bytes: byte_size(state.tm_frame_remainder),
-          tm_packet_buffer_vcid_count:
-            tm_vcid_count(state.tm_pipeline_state, :packet_buffers_by_vcid),
-          tm_continuation_vcid_count:
-            tm_vcid_count(state.tm_pipeline_state, :continuation_by_vcid),
+          tm_packet_buffer_vcid_count: tm_stats.buffered_virtual_channels,
+          tm_continuation_vcid_count: tm_stats.continuation_virtual_channels,
           async_output_count: length(state.async_outputs)
         }
 
@@ -897,14 +897,6 @@ defmodule Cadence.Runtime.PartitionOwner do
       end
     end)
   end
-
-  defp tm_vcid_count(state, key) when is_map(state) and is_atom(key) do
-    state
-    |> Map.get(key, %{})
-    |> map_size()
-  end
-
-  defp tm_vcid_count(_state, _key), do: 0
 
   defp default_initial_time(:replay, %BindingSetActivation{} = activation),
     do: activation.activated_at

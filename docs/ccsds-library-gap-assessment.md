@@ -39,10 +39,19 @@ The shared library currently owns:
 - bounded streaming Space Packet decoding, independent per-APID sequence
   helpers, and mission-pattern Idle Packet construction;
 - semantic `LinkFrame` and `SDUOctets` value types;
-- fixed-length TM transfer-frame encoding and decoding;
+- fixed-length TM transfer-frame encoding and decoding for Packet, Idle Data,
+  and VCA_SDU Virtual Channels, with managed channel configuration;
 - shared CCSDS Frame Error Control Field generation and validation for TM and
   TC, with managed presence and explicit corruption evidence;
-- TM packet-oriented segmentation and reassembly;
+- TM Packet segmentation and continuity-aware reassembly keyed by GVCID,
+  including independent MCFC/VCFC tracking, partial-packet disposition, and
+  source-frame provenance;
+- the complete TM Transfer Frame Secondary Header value codec, managed
+  Master/Virtual Channel association, and fixed-length validation;
+- standards-shaped Idle Packet filling across frame boundaries and the
+  continuous annex-D Only Idle Data PN generator and validator;
+- TM Virtual Channel Packet and Virtual Channel Access request/indication
+  primitives, including VCA status fields and VCFC-derived loss flags;
 - variable-length TC transfer-frame encoding and streaming decoding;
 - the standard TC primary header and one-octet Segment Header;
 - TC MAP segmentation and stateful receive reassembly;
@@ -110,11 +119,21 @@ boundary expects data frames to have already passed FARM-1 and optional SDLS
 processing. MAP, Virtual Channel, and Master Channel multiplexing order remains
 mission-managed, as the standard does not prescribe those ordering algorithms.
 
+TM channel configuration now makes the otherwise off-wire physical, Master
+Channel, Virtual Channel, and Packet-transfer facts explicit: fixed frame and
+FECF sizes, valid SCIDs/VCIDs, Packet versus VCA content, FSH/OCF association,
+valid Packet Version Numbers, maximum Packet length, and incomplete-Packet
+delivery policy. Configuration-plan validation keeps Master Channel FSH/OCF
+settings static across its configured Virtual Channels. The frame decoder
+reports malformed headers and managed-setting mismatches, while reassembly
+reports MCFC/VCFC discontinuities, orphan continuations, FHP resynchronization,
+partial-Packet disposition, invalid Packets, and OID validation failures as
+portable anomaly evidence.
+
 ## Remaining gaps
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
 | P1 | Conformance evidence | Tests include focused unit, malformed-input, state-machine, deterministic boundary-sweep, and Cadence loopback coverage. There is still no maintained published-vector corpus, generative fuzzing, or external implementation interoperability run. | Establish traceable normative vectors and differential/interoperability tests before making compliance claims. |
 | P2 | Other space data links | `Types.profile/0` names AOS and USLP, but no AOS or USLP codecs/services exist. | Implement only when a concrete mission or provider requires them; do not imply support from the type atoms. |
 | P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
@@ -130,7 +149,7 @@ compose those pieces:
 - `cadence_catalog` supplies compiled application layouts and APID metadata but
   remains independent of protocol framing and persistence;
 - Cadence should map activated mission configuration to TC service, SCID, VCID,
-  MAP, FECF, COP-1, and coding profiles;
+  MAP, FECF, COP-1, coding profiles, and the shared managed TM channel model;
 - the simulator and Cadence should continue to compose catalog application data
   with the shared protocol codecs rather than duplicating wire headers; and
 - Cadence should continue to own persistence, tenancy, revisions, import runs,
@@ -138,10 +157,9 @@ compose those pieces:
 
 ## Recommended next slice
 
-The next highest-leverage protocol slice is TM robustness: introduce managed
-TM channel configuration and continuity state, then complete secondary-header,
-VCA, idle-data, and anomaly-reporting behavior without coupling those protocol
-rules to Cadence persistence or runtime processes.
+The next highest-leverage protocol slice is conformance evidence: establish a
+maintained, traceable corpus of normative vectors, then add deterministic
+property/generative checks and an external implementation interoperability run.
 
 Published normative vectors, malformed-input/property testing, and external
 interoperability evidence still remain prerequisites before describing the

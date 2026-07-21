@@ -48,7 +48,7 @@ defmodule Cadence.Protocol.TMFramePipelineTest do
   test "reports dropped invalid TM frames as detailed anomalies" do
     frame_size = 14
     frame = build_tm_single_frame(42, 1, <<0, 21>>, frame_size)
-    invalid_frame = put_sync_flag(frame, 1)
+    invalid_frame = put_packet_order_flag(frame, 1)
 
     {:ok, pipeline_state} = TMFramePipeline.init(default_sdu_type: :space_packet)
 
@@ -60,7 +60,7 @@ defmodule Cadence.Protocol.TMFramePipelineTest do
              )
 
     assert anomaly.anomaly_kind == :frame_decode_dropped
-    assert anomaly.metadata.reason == :vca_sdu
+    assert anomaly.metadata.reason == :packet_order_flag_reserved
     assert anomaly.metadata.vcid == 2
     assert anomaly.raw_frame_offset_bytes == 0
   end
@@ -110,10 +110,10 @@ defmodule Cadence.Protocol.TMFramePipelineTest do
     encoded_frames
   end
 
-  defp put_sync_flag(
+  defp put_packet_order_flag(
          <<version::2, scid::10, vcid::3, ocf_flag::1, mcfc::8, vcfc::8, sec_hdr_flag::1,
-           _sync_flag::1, packet_order_flag::1, segment_length_id::2, fhp::11, rest::binary>>,
-         sync_flag
+           sync_flag::1, _packet_order_flag::1, segment_length_id::2, fhp::11, rest::binary>>,
+         packet_order_flag
        ) do
     <<
       version::2,
