@@ -59,7 +59,14 @@ The shared library currently owns:
   and
 - complete BCH and LDPC CLTU construction and decoding, including managed
   randomization, standard start and tail sequences, fill validation, inverted
-  polarity and start-error handling, and per-codeword channel-quality evidence.
+  polarity and start-error handling, and per-codeword channel-quality evidence;
+- distinct request and indication primitives for the MAPP, VCP, MAPA, VCA,
+  VCF, and MCF services, with managed SAP addresses, Type-A/Type-B selection,
+  coding repetitions, service-exclusivity validation, and the VCA single-frame
+  rule; and
+- managed Packet Service formats keyed by Packet Version Number, stable packet
+  blocking, MAP packet segmentation, receive extraction, maximum-length
+  enforcement, and configurable complete/partial packet delivery evidence.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -97,13 +104,18 @@ setting to the standard Transmission_Limit, supports K values from 1 through
 virtual channel. The library's explicit lower-layer mode and management
 directives remain independently usable by other applications and simulators.
 
+The pure TC service provider composes the existing frame, segmentation, and
+reassembly primitives without owning scheduling or runtime state. Its receive
+boundary expects data frames to have already passed FARM-1 and optional SDLS
+processing. MAP, Virtual Channel, and Master Channel multiplexing order remains
+mission-managed, as the standard does not prescribe those ordering algorithms.
+
 ## Remaining gaps
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P1 | TC service completeness | MAP SDU segmentation/reassembly and Type-BC control commands are present, but Packet, Virtual Channel Access, aggregation, and the remaining managed service rules are not represented as distinct APIs. | Add explicit TC service types and management configuration rather than further overloading generic payload metadata. |
 | P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
-| P1 | Conformance evidence | Tests are focused unit and Cadence loopback tests. There are no published CCSDS golden vectors, property tests, malformed-input corpus, fuzzing, or external implementation interoperability runs. | Establish normative vectors and differential/interoperability tests before making compliance claims. |
+| P1 | Conformance evidence | Tests include focused unit, malformed-input, state-machine, deterministic boundary-sweep, and Cadence loopback coverage. There is still no maintained published-vector corpus, generative fuzzing, or external implementation interoperability run. | Establish traceable normative vectors and differential/interoperability tests before making compliance claims. |
 | P2 | Other space data links | `Types.profile/0` names AOS and USLP, but no AOS or USLP codecs/services exist. | Implement only when a concrete mission or provider requires them; do not imply support from the type atoms. |
 | P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
 | P2 | Space Data Link Security | No SDLS security header/trailer processing, anti-replay state, authentication, or encryption hook exists. | Define algorithm-neutral security transforms and state boundaries; keep key custody outside this library. |
@@ -117,8 +129,8 @@ compose those pieces:
 
 - `cadence_catalog` supplies compiled application layouts and APID metadata but
   remains independent of protocol framing and persistence;
-- Cadence should map activated mission configuration to SCID, VCID, MAP, FECF,
-  COP-1, and coding profiles;
+- Cadence should map activated mission configuration to TC service, SCID, VCID,
+  MAP, FECF, COP-1, and coding profiles;
 - the simulator and Cadence should continue to compose catalog application data
   with the shared protocol codecs rather than duplicating wire headers; and
 - Cadence should continue to own persistence, tenancy, revisions, import runs,
@@ -126,10 +138,10 @@ compose those pieces:
 
 ## Recommended next slice
 
-The next highest-leverage protocol slice is TC service completeness: represent
-Packet, Virtual Channel Access, and Frame services as distinct APIs over the
-existing frame, MAP, and COP-1 primitives, with their managed service rules
-made explicit rather than inferred from generic payload metadata.
+The next highest-leverage protocol slice is TM robustness: introduce managed
+TM channel configuration and continuity state, then complete secondary-header,
+VCA, idle-data, and anomaly-reporting behavior without coupling those protocol
+rules to Cadence persistence or runtime processes.
 
 Published normative vectors, malformed-input/property testing, and external
 interoperability evidence still remain prerequisites before describing the
