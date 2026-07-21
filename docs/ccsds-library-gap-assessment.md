@@ -23,7 +23,7 @@ including:
 
 - CCSDS 132.0-B-3, TM Space Data Link Protocol;
 - CCSDS 133.0-B-2, Space Packet Protocol;
-- CCSDS 231.0-B-4, TC Synchronization and Channel Coding;
+- CCSDS 231.0-B-4 with corrigendum 1, TC Synchronization and Channel Coding;
 - CCSDS 232.0-B-4 with corrigendum 1, TC Space Data Link Protocol;
 - CCSDS 232.1-B-2 with corrigendum 1, Communications Operation Procedure-1;
 - CCSDS 355.0-B-2, Space Data Link Security Protocol;
@@ -52,7 +52,14 @@ The shared library currently owns:
   positive/negative-window, wait, lockout, FARM-B, and reporting behavior; and
 - a pure, per-VC FOP-1B sender implementing all six states, standard
   directives, AD/BD/BC lower-layer responses, configurable K and T1 behavior,
-  CLCW classification, retransmission, suspend/resume, and standard alerts.
+  CLCW classification, retransmission, suspend/resume, and standard alerts;
+- the TC pseudo-randomizer, systematic BCH(63,56) codeblocks with detection or
+  single-error correction, and systematic LDPC(128,64) and LDPC(512,256)
+  codeblocks with binary hard-decision validation and single-error correction;
+  and
+- complete BCH and LDPC CLTU construction and decoding, including managed
+  randomization, standard start and tail sequences, fill validation, inverted
+  polarity and start-error handling, and per-codeword channel-quality evidence.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -96,7 +103,6 @@ directives remain independently usable by other applications and simulators.
 | --- | --- | --- | --- |
 | P1 | TC service completeness | MAP SDU segmentation/reassembly and Type-BC control commands are present, but Packet, Virtual Channel Access, aggregation, and the remaining managed service rules are not represented as distinct APIs. | Add explicit TC service types and management configuration rather than further overloading generic payload metadata. |
 | P1 | TM robustness | TM supports packet-carrying frames with no secondary header. It lacks VC/MC continuity checks, complete idle-data behavior, secondary-header support, VCA service, and richer decode anomaly reporting across reassembly. | Add managed TM channel configuration, continuity tracking, secondary headers, and complete packet/idle handling. |
-| P1 | Synchronization and channel coding | The library starts at transfer frames. It does not construct or decode CLTUs, BCH/LDPC codeblocks, start/tail sequences, attached sync markers, randomization, or channel-quality evidence. | Add a separate coding/synchronization layer so frame services remain usable without a physical-link profile. |
 | P1 | Conformance evidence | Tests are focused unit and Cadence loopback tests. There are no published CCSDS golden vectors, property tests, malformed-input corpus, fuzzing, or external implementation interoperability runs. | Establish normative vectors and differential/interoperability tests before making compliance claims. |
 | P2 | Other space data links | `Types.profile/0` names AOS and USLP, but no AOS or USLP codecs/services exist. | Implement only when a concrete mission or provider requires them; do not imply support from the type atoms. |
 | P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
@@ -120,10 +126,10 @@ compose those pieces:
 
 ## Recommended next slice
 
-The next highest-leverage protocol slice is TC synchronization and channel
-coding: CLTU construction and parsing, BCH codeblocks, start/tail sequences,
-randomization, and explicit channel-quality evidence. That layer should remain
-separate from the transfer-frame and COP-1 service APIs.
+The next highest-leverage protocol slice is TC service completeness: represent
+Packet, Virtual Channel Access, and Frame services as distinct APIs over the
+existing frame, MAP, and COP-1 primitives, with their managed service rules
+made explicit rather than inferred from generic payload metadata.
 
 Published normative vectors, malformed-input/property testing, and external
 interoperability evidence still remain prerequisites before describing the
