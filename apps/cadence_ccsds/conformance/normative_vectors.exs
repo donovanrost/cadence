@@ -47,6 +47,14 @@
         "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//232x0b4e1c1.pdf",
       sha256: "0892557c3f28373498c2e1a9f089cd8a63e46eddff2325c90ff1c39ea6c4d792"
     },
+    ccsds_301_0_b_4: %{
+      title: "Time Code Formats",
+      issue: "CCSDS 301.0-B-4 with Editorial Change 1",
+      published: "November 2010; Editorial Change 1 February 2014",
+      url:
+        "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//301x0b4e1.pdf",
+      sha256: "d431183dbe57548dd4384d0e0cc4e8cbd9b14317972355d3012d14e72ab897f5"
+    },
     ccsds_355_0_b_2: %{
       title: "Space Data Link Security Protocol",
       issue: "CCSDS 355.0-B-2",
@@ -471,6 +479,86 @@
         data_hex: "AA"
       },
       expected_hex: "FF30000000000009AA"
+    },
+    %{
+      id: "cuc-level-1-one-octet-preamble",
+      classification: :normative_derivation,
+      source: :ccsds_301_0_b_4,
+      locator: "3.2.1-3.2.2, pages 3-2 to 3-3",
+      subject: :cuc_time_code,
+      parameters: %{
+        epoch: :ccsds,
+        coarse_octets: 4,
+        fine_octets: 3,
+        mission_bits: 0,
+        coarse_time: 0x01020304,
+        fine_time: 0xAABBCC
+      },
+      expected_hex: "1F01020304AABBCC"
+    },
+    %{
+      id: "cuc-level-2-extended-preamble",
+      classification: :normative_derivation,
+      source: :ccsds_301_0_b_4,
+      locator: "3.2.1-3.2.2, pages 3-2 to 3-3",
+      subject: :cuc_time_code,
+      parameters: %{
+        epoch: :agency,
+        coarse_octets: 7,
+        fine_octets: 10,
+        mission_bits: 2,
+        coarse_time: 0x01020304050607,
+        fine_time: 0x0102030405060708090A
+      },
+      expected_hex: "AF7E010203040506070102030405060708090A"
+    },
+    %{
+      id: "cds-level-1-millisecond-preamble",
+      classification: :normative_derivation,
+      source: :ccsds_301_0_b_4,
+      locator: "3.3.1-3.3.2, pages 3-3 to 3-4",
+      subject: :cds_time_code,
+      parameters: %{
+        epoch: :ccsds,
+        day_octets: 2,
+        submillisecond_octets: 0,
+        day_count: 0x1234,
+        milliseconds_of_day: 0x01020304,
+        submilliseconds: 0
+      },
+      expected_hex: "40123401020304"
+    },
+    %{
+      id: "cds-level-2-microsecond-preamble",
+      classification: :normative_derivation,
+      source: :ccsds_301_0_b_4,
+      locator: "3.3.1-3.3.2 and annex A, pages 3-3 to 3-4 and A-2",
+      subject: :cds_time_code,
+      parameters: %{
+        epoch: :agency,
+        day_octets: 3,
+        submillisecond_octets: 2,
+        day_count: 0x010203,
+        milliseconds_of_day: 0x04050607,
+        submilliseconds: 999
+      },
+      expected_hex: "4D0102030405060703E7"
+    },
+    %{
+      id: "cds-level-1-picosecond-preamble",
+      classification: :normative_derivation,
+      source: :ccsds_301_0_b_4,
+      locator: "3.3.1-3.3.2, pages 3-3 to 3-4",
+      subject: :cds_time_code,
+      parameters: %{
+        epoch: :ccsds,
+        day_octets: 3,
+        submillisecond_octets: 4,
+        day_count: 0x010203,
+        milliseconds_of_day: 0x04050607,
+        submilliseconds: 999_999_999
+      },
+      expected_hex: "46010203040506073B9AC9FF"
     },
     %{
       id: "sdls-tc-baseline-security-header",

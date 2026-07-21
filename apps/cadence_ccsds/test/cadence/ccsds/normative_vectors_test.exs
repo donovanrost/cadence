@@ -22,13 +22,19 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   alias Cadence.CCSDS.SpacePacket.Codec
   alias Cadence.CCSDS.TC.{SegmentHeader, TransferFrame}
   alias Cadence.CCSDS.TestSupport.NormativeVectors
+  alias Cadence.CCSDS.Time.CDS
+  alias Cadence.CCSDS.Time.CDS.Codec, as: CDSCodec
+  alias Cadence.CCSDS.Time.CDS.Configuration, as: CDSConfiguration
+  alias Cadence.CCSDS.Time.CUC
+  alias Cadence.CCSDS.Time.CUC.Codec, as: CUCCodec
+  alias Cadence.CCSDS.Time.CUC.Configuration, as: CUCConfiguration
   alias Cadence.CCSDS.Transport.COP1.{CLCW, ControlCommand}
 
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 8
-    assert length(corpus.vectors) >= 39
+    assert map_size(corpus.sources) == 9
+    assert length(corpus.vectors) >= 44
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -126,6 +132,56 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
       assert decoded.user_defined == packet.user_defined
       assert decoded.data == packet.data
       assert decoded.header_octets == packet.header_octets
+    end
+  end
+
+  test "matches the CUC P-field and T-field derivations" do
+    for vector <- NormativeVectors.vectors_for(:cuc_time_code) do
+      parameters = vector.parameters
+
+      configuration =
+        CUCConfiguration.new!(
+          epoch: parameters.epoch,
+          coarse_octets: parameters.coarse_octets,
+          fine_octets: parameters.fine_octets,
+          mission_bits: parameters.mission_bits
+        )
+
+      value =
+        CUC.new!(
+          coarse_time: parameters.coarse_time,
+          fine_time: parameters.fine_time,
+          configuration: configuration
+        )
+
+      expected = hex(vector.expected_hex)
+      assert {:ok, ^expected} = CUCCodec.encode(value)
+      assert {:ok, ^value} = CUCCodec.decode(expected)
+    end
+  end
+
+  test "matches the CDS P-field and T-field derivations" do
+    for vector <- NormativeVectors.vectors_for(:cds_time_code) do
+      parameters = vector.parameters
+
+      configuration =
+        CDSConfiguration.new!(
+          epoch: parameters.epoch,
+          day_octets: parameters.day_octets,
+          submillisecond_octets: parameters.submillisecond_octets
+        )
+
+      value =
+        CDS.new!(
+          day_count: parameters.day_count,
+          milliseconds_of_day: parameters.milliseconds_of_day,
+          submilliseconds: parameters.submilliseconds,
+          configuration: configuration
+        )
+
+      expected = hex(vector.expected_hex)
+      assert {:ok, ^expected} = CDSCodec.encode(value)
+      assert {:ok, ^value} = CDSCodec.decode(expected)
     end
   end
 

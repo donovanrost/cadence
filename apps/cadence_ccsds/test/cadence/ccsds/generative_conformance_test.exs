@@ -20,6 +20,12 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.TestSupport.DeterministicGenerator, as: Generator
   alias Cadence.CCSDS.TestSupport.SDLSTestCryptoProvider
+  alias Cadence.CCSDS.Time.CDS
+  alias Cadence.CCSDS.Time.CDS.Codec, as: CDSCodec
+  alias Cadence.CCSDS.Time.CDS.Configuration, as: CDSConfiguration
+  alias Cadence.CCSDS.Time.CUC
+  alias Cadence.CCSDS.Time.CUC.Codec, as: CUCCodec
+  alias Cadence.CCSDS.Time.CUC.Configuration, as: CUCConfiguration
 
   @seed String.to_integer(System.get_env("CCSDS_GENERATIVE_SEED", "20260720"))
   @cases String.to_integer(System.get_env("CCSDS_GENERATIVE_CASES", "512"))
@@ -310,6 +316,23 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
     assert is_tuple(final_generator)
   end
 
+  test "seeded CUC and CDS P-fields and time counters round-trip" do
+    final_state =
+      Enum.reduce(1..@cases, Generator.seed(@seed + 9), fn case_number, state ->
+        context = context(:time_codes, case_number)
+        {cuc, state} = cuc_time(state)
+        cuc_encoded = expect_ok(CUCCodec.encode(cuc), context)
+        assert_result(CUCCodec.decode(cuc_encoded), {:ok, cuc}, context)
+
+        {cds, state} = cds_time(state)
+        cds_encoded = expect_ok(CDSCodec.encode(cds), context)
+        assert_result(CDSCodec.decode(cds_encoded, day_length: :normal), {:ok, cds}, context)
+        state
+      end)
+
+    assert is_tuple(final_state)
+  end
+
   test "seeded arbitrary malformed inputs never crash wire decoders" do
     aos_configuration =
       AOSConfiguration.new!(
@@ -339,6 +362,8 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
 
         assert_tuple(SpacePacketCodec.decode_prefix(input), context)
         assert_tuple(EncapsulationPacketCodec.decode_prefix(input), context)
+        assert_tuple(CUCCodec.decode_prefix(input), context)
+        assert_tuple(CDSCodec.decode_prefix(input), context)
         assert_tuple(TransferFrame.decode(input, frame_size: 128), context)
         assert_tuple(TMFrameCodec.decode_detailed(input, frame_size: 32), context)
 
@@ -419,6 +444,63 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
       map_id: 1
     )
   end
+
+  defp cuc_time(state) do
+    {epoch, state} = Generator.member(state, [:ccsds, :agency])
+    {coarse_octets, state} = Generator.integer(state, 1, 7)
+    {fine_octets, state} = Generator.integer(state, 0, 10)
+    {mission_bits, state} = Generator.integer(state, 0, 3)
+    {coarse_binary, state} = Generator.binary(state, coarse_octets)
+    {fine_binary, state} = Generator.binary(state, fine_octets)
+
+    configuration =
+      CUCConfiguration.new!(
+        epoch: epoch,
+        coarse_octets: coarse_octets,
+        fine_octets: fine_octets,
+        mission_bits: mission_bits
+      )
+
+    value =
+      CUC.new!(
+        coarse_time: :binary.decode_unsigned(coarse_binary),
+        fine_time: :binary.decode_unsigned(fine_binary),
+        configuration: configuration
+      )
+
+    {value, state}
+  end
+
+  defp cds_time(state) do
+    {epoch, state} = Generator.member(state, [:ccsds, :agency])
+    {day_octets, state} = Generator.member(state, [2, 3])
+    {submillisecond_octets, state} = Generator.member(state, [0, 2, 4])
+    {day_binary, state} = Generator.binary(state, day_octets)
+    {milliseconds, state} = Generator.integer(state, 0, 86_399_999)
+    {submilliseconds, state} = cds_submilliseconds(state, submillisecond_octets)
+
+    configuration =
+      CDSConfiguration.new!(
+        epoch: epoch,
+        day_octets: day_octets,
+        submillisecond_octets: submillisecond_octets,
+        day_length: :normal
+      )
+
+    value =
+      CDS.new!(
+        day_count: :binary.decode_unsigned(day_binary),
+        milliseconds_of_day: milliseconds,
+        submilliseconds: submilliseconds,
+        configuration: configuration
+      )
+
+    {value, state}
+  end
+
+  defp cds_submilliseconds(state, 0), do: {0, state}
+  defp cds_submilliseconds(state, 2), do: Generator.integer(state, 0, 999)
+  defp cds_submilliseconds(state, 4), do: Generator.integer(state, 0, 999_999_999)
 
   defp tc_frame(state) do
     {type, state} = Generator.member(state, [{0, 0}, {1, 0}, {1, 1}])

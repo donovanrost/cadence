@@ -21,8 +21,8 @@ hashes make the source snapshot independently retrievable and auditable.
 The normal test suite runs seeded property checks over Space Packets,
 Encapsulation Packets, TC, TM, AOS, and USLP transfer frames, FECF, AOS FHEC,
 BCH, LDPC, CLTU, randomization, SDLS state transitions, streaming boundaries,
-and arbitrary malformed inputs. Increase the case count or reproduce a failure
-with:
+CUC/CDS P-fields and counters, and arbitrary malformed inputs. Increase the
+case count or reproduce a failure with:
 
 ```sh
 CCSDS_GENERATIVE_CASES=10000 CCSDS_GENERATIVE_SEED=20260720 \
@@ -63,3 +63,7 @@ normative derivations and seeded properties; see `encapsulation/evidence.md`.
 SDLS evidence covers normative Security Header layouts and algorithm-neutral
 state orchestration, not cryptographic-algorithm conformance; see
 `sdls/evidence.md`.
+
+CUC and CDS evidence covers normative P-field/T-field derivations, exact
+fractional arithmetic, and explicit correlation boundaries; see
+`time/evidence.md`.

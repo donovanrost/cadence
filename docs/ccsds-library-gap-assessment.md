@@ -27,6 +27,7 @@ including:
 - CCSDS 231.0-B-4 with corrigendum 1, TC Synchronization and Channel Coding;
 - CCSDS 232.0-B-4 with corrigendum 1, TC Space Data Link Protocol;
 - CCSDS 232.1-B-2 with corrigendum 1, Communications Operation Procedure-1;
+- CCSDS 301.0-B-4 with Editorial Change 1, Time Code Formats;
 - CCSDS 355.0-B-2, Space Data Link Security Protocol;
 - CCSDS 732.0-B-5, AOS Space Data Link Protocol; and
 - CCSDS 732.1-B-3, Unified Space Data Link Protocol.
@@ -84,7 +85,7 @@ The shared library currently owns:
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
   enforcement, and configurable complete/partial packet delivery evidence; and
-- maintained conformance evidence comprising 39 source-hashed, section-located
+- maintained conformance evidence comprising 44 source-hashed, section-located
   CCSDS vectors, explicit provenance classes for published versus derived
   octets, seeded generative and malformed-input properties, and a pinned
   bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
@@ -119,7 +120,12 @@ The shared library currently owns:
   boundaries, all three security service types, sequence-number- and IV-based
   anti-replay state, managed padding, protocol service restrictions, OID and
   channel-scope constraints, standard-required authentication masks, and
-  portable verification status codes.
+  portable verification status codes; and
+- CCSDS 301.0-B-4 CUC and CDS time-code values and strict codecs, including
+  explicit and implicit P-fields, both epoch classes, all standardized counter
+  lengths and resolutions, normal and leap-adjusted CDS bounds, exact rational
+  fractional time, and explicit counter/`DateTime` correlation with reported
+  rounding error.
 
 Cadence now wraps catalog-compiled `:space_packet` command application data in
 telecommand Space Packets before TC segmentation. The uplink gateway maintains
@@ -176,9 +182,10 @@ portable anomaly evidence.
 
 ## Remaining gaps
 
-| Priority | Area | Current limitation | Library work |
-| --- | --- | --- | --- |
-| P2 | Standard time codes | CUC/CDS time-code codecs and correlation helpers are absent. | Add as an independent value-codec namespace when catalog packet layouts need standard time fields. |
+There are no remaining implementation gaps in the protocol subset targeted by
+this assessment. This is not a claim that `cadence_ccsds` implements every
+CCSDS publication or is flight-qualified; additions beyond this baseline
+should be driven by a concrete mission or product integration requirement.
 
 ## Application-specific follow-through
 
@@ -213,9 +220,9 @@ still require a second capable implementation or mission testbed before making
 broad interoperability claims. None of this evidence constitutes flight
 qualification.
 
-The corpus now includes 39 vectors across eight source-hashed standards and
+The corpus now includes 44 vectors across nine source-hashed standards and
 seeded AOS, USLP, Encapsulation Packet, and SDLS round trips over their managed
-framing and state options.
+framing and state options, plus seeded CUC/CDS P-field and counter round trips.
 AOS FHEC encode/correction behavior is independently cross-checked against a
 pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
 AOS interoperability because Yamcs uses an older AOS addressing layout.
@@ -229,11 +236,16 @@ SDLS evidence covers normative TC and TM Security Header layouts plus seeded
 ApplySecurity/ProcessSecurity state transitions. Its deterministic test
 provider proves algorithm-neutral orchestration only; no cryptographic
 algorithm conformance or independent SDLS differential claim is made.
+CUC/CDS evidence covers source-hashed P-field/T-field derivations, all binary
+resolutions, incomplete-input behavior, and exact correlation/rounding
+properties. Leap-second tables and mission clock correlation remain external,
+and no independent time-code implementation is yet in the differential harness.
 
 ## Recommended next slice
 
-The final identified protocol slice is the CCSDS unsegmented time-code family:
-CUC and CDS value codecs, managed preamble handling, bounded fractional-time
-conversion, and explicit correlation helpers. Mission epochs, clock
-correlation policy, leap-second tables, and persistence must remain outside the
-dependency-leaf protocol library.
+The protocol-gap program is complete for the assessed baseline. The next work
+should be application composition: teach the catalog type/compiler boundary to
+select CUC or CDS layouts where mission schemas request them, then let Cadence
+and the simulator supply mission epochs, live clock-correlation anchors, and
+leap-second policy. Those concerns must remain outside the dependency-leaf
+protocol library.
