@@ -23,6 +23,14 @@
         "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//133x0b2e2.pdf",
       sha256: "a7d3acaa7d8af5f306917dff454b69de187855c45a51bb76ac4636fb5b23e34e"
     },
+    ccsds_133_1_b_3: %{
+      title: "Encapsulation Packet Protocol",
+      issue: "CCSDS 133.1-B-3 with errata 1",
+      published: "May 2020",
+      url:
+        "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//133x1b3e1.pdf",
+      sha256: "1c19bf6d355a6d3d2b4fd917355f3b81d6b086f9e5d5422b10800ec29d2657b3"
+    },
     ccsds_231_0_b_4: %{
       title: "TC Synchronization and Channel Coding",
       issue: "CCSDS 231.0-B-4 with errata 1 and corrigendum 1",
@@ -409,6 +417,53 @@
       subject: :uslp_only_idle_data,
       parameters: %{octets: 20},
       expected_hex: "FFFFFFFF6DB6D861451F11F19716723CBE7E00B1"
+    },
+    %{
+      id: "encapsulation-one-octet-idle",
+      classification: :normative_derivation,
+      source: :ccsds_133_1_b_3,
+      locator: "4.1.2, figure 4-2 and 4.1.3.1",
+      subject: :encapsulation_packet,
+      parameters: %{protocol_id: 0, header_octets: 1, data_hex: ""},
+      expected_hex: "E0"
+    },
+    %{
+      id: "encapsulation-two-octet-header",
+      classification: :normative_derivation,
+      source: :ccsds_133_1_b_3,
+      locator: "4.1.2, figure 4-3",
+      subject: :encapsulation_packet,
+      parameters: %{protocol_id: 1, header_octets: 2, data_hex: "AABBCC"},
+      expected_hex: "E505AABBCC"
+    },
+    %{
+      id: "encapsulation-four-octet-extended-header",
+      classification: :normative_derivation,
+      source: :ccsds_133_1_b_3,
+      locator: "4.1.2, figure 4-4",
+      subject: :encapsulation_packet,
+      parameters: %{
+        protocol_id: 6,
+        protocol_id_extension: 5,
+        user_defined: 10,
+        header_octets: 4,
+        data_hex: "1122"
+      },
+      expected_hex: "FAA500061122"
+    },
+    %{
+      id: "encapsulation-eight-octet-header",
+      classification: :normative_derivation,
+      source: :ccsds_133_1_b_3,
+      locator: "4.1.2, figure 4-5",
+      subject: :encapsulation_packet,
+      parameters: %{
+        protocol_id: 7,
+        user_defined: 3,
+        header_octets: 8,
+        data_hex: "AA"
+      },
+      expected_hex: "FF30000000000009AA"
     }
   ]
 }

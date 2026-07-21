@@ -3,6 +3,9 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
 
   alias Cadence.CCSDS.ChannelCoding.{BCH, CLTU, Configuration, LDPC, Randomizer}
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.EncapsulationPacket
+  alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
+  alias Cadence.CCSDS.EncapsulationPacket.Configuration, as: EncapsulationConfiguration
   alias Cadence.CCSDS.FrameErrorControl
   alias Cadence.CCSDS.SDLP.AOS.BPDU
   alias Cadence.CCSDS.SDLP.AOS.Configuration, as: AOSConfiguration
@@ -23,8 +26,8 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 6
-    assert length(corpus.vectors) >= 33
+    assert map_size(corpus.sources) == 7
+    assert length(corpus.vectors) >= 37
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -94,6 +97,35 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
     expected = hex(vector.expected_hex)
     assert {:ok, ^expected} = Codec.encode(packet)
     assert {:ok, ^packet} = Codec.decode(expected)
+  end
+
+  test "matches all four Encapsulation Packet header derivations" do
+    configuration = EncapsulationConfiguration.new!(valid_extended_protocol_ids: [5])
+
+    for vector <- NormativeVectors.vectors_for(:encapsulation_packet) do
+      packet =
+        EncapsulationPacket.new(%{
+          protocol_id: vector.parameters.protocol_id,
+          protocol_id_extension: Map.get(vector.parameters, :protocol_id_extension),
+          user_defined: Map.get(vector.parameters, :user_defined, 0),
+          data: hex(vector.parameters.data_hex),
+          header_octets: vector.parameters.header_octets
+        })
+
+      expected = hex(vector.expected_hex)
+
+      assert {:ok, ^expected} =
+               EncapsulationPacketCodec.encode(packet, configuration: configuration)
+
+      assert {:ok, decoded} =
+               EncapsulationPacketCodec.decode(expected, configuration: configuration)
+
+      assert decoded.protocol_id == packet.protocol_id
+      assert decoded.protocol_id_extension == packet.protocol_id_extension
+      assert decoded.user_defined == packet.user_defined
+      assert decoded.data == packet.data
+      assert decoded.header_octets == packet.header_octets
+    end
   end
 
   test "matches the BCH derivations and every published LDPC generator base row" do

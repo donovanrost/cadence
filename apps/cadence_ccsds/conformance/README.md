@@ -18,10 +18,10 @@ hashes make the source snapshot independently retrievable and auditable.
 
 ## Deterministic generative checks
 
-The normal test suite runs seeded property checks over Space Packets, TC, TM,
-and AOS transfer frames, FECF, AOS FHEC, BCH, LDPC, CLTU, randomization,
-streaming boundaries, USLP Version-4 framing, and arbitrary malformed inputs. Increase the case count
-or reproduce a failure with:
+The normal test suite runs seeded property checks over Space Packets,
+Encapsulation Packets, TC, TM, AOS, and USLP transfer frames, FECF, AOS FHEC,
+BCH, LDPC, CLTU, randomization, streaming boundaries, and arbitrary malformed
+inputs. Increase the case count or reproduce a failure with:
 
 ```sh
 CCSDS_GENERATIVE_CASES=10000 CCSDS_GENERATIVE_SEED=20260720 \
@@ -55,3 +55,6 @@ interoperability; see `aos/evidence.md`.
 
 USLP evidence is currently source-hashed and normative rather than
 cross-implementation; see `uslp/evidence.md` for the exact boundary.
+
+Encapsulation Packet evidence covers all four header sizes with source-hashed
+normative derivations and seeded properties; see `encapsulation/evidence.md`.

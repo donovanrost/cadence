@@ -5,6 +5,8 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
 
   alias Cadence.CCSDS.ChannelCoding.{BCH, CLTU, Configuration, LDPC, Randomizer}
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.EncapsulationPacket
+  alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
   alias Cadence.CCSDS.SDLP.AOS.Configuration, as: AOSConfiguration
   alias Cadence.CCSDS.SDLP.AOS.FrameCodec, as: AOSFrameCodec
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
@@ -212,6 +214,55 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
     assert is_tuple(final_state)
   end
 
+  test "seeded adaptive Encapsulation Packets and streaming boundaries round-trip" do
+    final_state =
+      Enum.reduce(1..@cases, Generator.seed(@seed + 7), fn case_number, state ->
+        {protocol_id, state} = Generator.member(state, [0, 1, 2, 3, 4, 7])
+        {user_defined, state} = Generator.integer(state, 0, 15)
+        {data_octets, state} = Generator.integer(state, 1, 1_024)
+        {data, state} = Generator.binary(state, data_octets)
+        context = context(:encapsulation_packet, case_number)
+
+        packet =
+          EncapsulationPacket.new(
+            protocol_id: protocol_id,
+            user_defined: user_defined,
+            data: data
+          )
+
+        encoded = expect_ok(EncapsulationPacketCodec.encode(packet), context)
+        decoded = expect_ok(EncapsulationPacketCodec.decode(encoded), context)
+        assert_equal(decoded.protocol_id, protocol_id, context)
+        assert_equal(decoded.user_defined, user_defined, context)
+        assert_equal(decoded.data, data, context)
+
+        assert_equal(
+          expect_ok(EncapsulationPacketCodec.encode(decoded), context),
+          encoded,
+          context
+        )
+
+        {split, state} = Generator.integer(state, 0, byte_size(encoded) - 1)
+        <<prefix::binary-size(^split), suffix::binary>> = encoded
+
+        assert_result(
+          EncapsulationPacketCodec.decode_prefix(prefix),
+          {:incomplete, prefix},
+          context
+        )
+
+        assert_result(
+          EncapsulationPacketCodec.decode_prefix(prefix <> suffix),
+          {:ok, decoded, <<>>},
+          context
+        )
+
+        state
+      end)
+
+    assert is_tuple(final_state)
+  end
+
   test "seeded arbitrary malformed inputs never crash wire decoders" do
     aos_configuration =
       AOSConfiguration.new!(
@@ -240,6 +291,7 @@ defmodule Cadence.CCSDS.GenerativeConformanceTest do
         context = context(:malformed_input, case_number)
 
         assert_tuple(SpacePacketCodec.decode_prefix(input), context)
+        assert_tuple(EncapsulationPacketCodec.decode_prefix(input), context)
         assert_tuple(TransferFrame.decode(input, frame_size: 128), context)
         assert_tuple(TMFrameCodec.decode_detailed(input, frame_size: 32), context)
 

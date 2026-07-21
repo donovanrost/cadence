@@ -23,6 +23,7 @@ including:
 
 - CCSDS 132.0-B-3, TM Space Data Link Protocol;
 - CCSDS 133.0-B-2, Space Packet Protocol;
+- CCSDS 133.1-B-3, Encapsulation Packet Protocol;
 - CCSDS 231.0-B-4 with corrigendum 1, TC Synchronization and Channel Coding;
 - CCSDS 232.0-B-4 with corrigendum 1, TC Space Data Link Protocol;
 - CCSDS 232.1-B-2 with corrigendum 1, Communications Operation Procedure-1;
@@ -38,6 +39,13 @@ The shared library currently owns:
   codec;
 - bounded streaming Space Packet decoding, independent per-APID sequence
   helpers, and mission-pattern Idle Packet construction;
+- strict CCSDS 133.1-B-3 Encapsulation Packet encoding, decoding, and streaming
+  extraction across the one-, two-, four-, and eight-octet headers, including
+  adaptive generation, managed EPI registries, extended protocol IDs, exact-size
+  Idle Packet construction, and request/indication primitives;
+- dynamic PVN-7 Packet length resolution in the managed Packet Service format,
+  allowing mixed Space and Encapsulation Packet blocks to pass through the TC
+  and USLP Packet services without treating EPP as a fixed-header format;
 - semantic `LinkFrame` and `SDUOctets` value types;
 - fixed-length TM transfer-frame encoding and decoding for Packet, Idle Data,
   and VCA_SDU Virtual Channels, with managed channel configuration;
@@ -76,7 +84,7 @@ The shared library currently owns:
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
   enforcement, and configurable complete/partial packet delivery evidence; and
-- maintained conformance evidence comprising 33 source-hashed, section-located
+- maintained conformance evidence comprising 37 source-hashed, section-located
   CCSDS vectors, explicit provenance classes for published versus derived
   octets, seeded generative and malformed-input properties, and a pinned
   bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
@@ -164,7 +172,6 @@ portable anomaly evidence.
 
 | Priority | Area | Current limitation | Library work |
 | --- | --- | --- | --- |
-| P2 | Encapsulation packets | CCSDS Encapsulation Packet Protocol is absent. | Add after the Space Packet boundary is stable if non-Space-Packet payloads require a standard envelope. |
 | P2 | Space Data Link Security | No SDLS security header/trailer processing, anti-replay state, authentication, or encryption hook exists. | Define algorithm-neutral security transforms and state boundaries; keep key custody outside this library. |
 | P2 | Standard time codes | CUC/CDS time-code codecs and correlation helpers are absent. | Add as an independent value-codec namespace when catalog packet layouts need standard time fields. |
 
@@ -200,19 +207,23 @@ still require a second capable implementation or mission testbed before making
 broad interoperability claims. None of this evidence constitutes flight
 qualification.
 
-The corpus now includes 33 vectors across six source-hashed standards and
-seeded AOS and USLP round trips over their managed framing options.
+The corpus now includes 37 vectors across seven source-hashed standards and
+seeded AOS, USLP, and Encapsulation Packet round trips over their managed
+framing options.
 AOS FHEC encode/correction behavior is independently cross-checked against a
 pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
 AOS interoperability because Yamcs uses an older AOS addressing layout.
 USLP evidence currently consists of source-hashed normative frame derivations,
 the published annex-H OID sequence, and seeded properties; no independent
 implementation covering the full Issue-3 service set has been identified.
+Encapsulation Packet evidence covers all four normative header sizes with
+source-hashed derivations and seeded streaming/malformed-input properties; no
+independent CCSDS 133.1-B-3 implementation is yet in the differential harness.
 
 ## Recommended next slice
 
-The next protocol slice is the Encapsulation Packet Protocol. It should add a
-strict, streaming-capable CCSDS packet envelope for the non-Space-Packet PVNs
-that the TC and USLP Packet services already model through managed packet
-formats. It should remain independent of catalog interpretation and transport
-framing so TM, AOS, TC, USLP, Cadence, and the simulator can share it.
+The next protocol slice is Space Data Link Security. It should define
+algorithm-neutral security association selection, security-header/trailer
+parsing, anti-replay state transitions, and authenticated-transform callbacks.
+Key custody, cryptographic-provider policy, persistence, and operational
+authorization must remain outside the dependency-leaf protocol library.

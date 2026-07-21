@@ -5,10 +5,17 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
 
   Packet blocking requires the service provider to know the position and size
   of each packet length field. `:length_adjustment` converts the unsigned wire
-  value into the total packet length in octets.
+  value into the total packet length in octets. Encapsulation Packets use a
+  dedicated dynamic resolver because their length field moves with the
+  Length-of-Length value in the first octet.
   """
 
+  alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
+
+  @type kind :: :fixed | :encapsulation_packet
+
   @type t :: %__MODULE__{
+          kind: kind(),
           packet_version_number: 0..7,
           minimum_packet_octets: pos_integer(),
           length_field_offset_bits: non_neg_integer(),
@@ -16,7 +23,8 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
           length_adjustment: integer()
         }
 
-  defstruct packet_version_number: 0,
+  defstruct kind: :fixed,
+            packet_version_number: 0,
             minimum_packet_octets: 7,
             length_field_offset_bits: 32,
             length_field_bits: 16,
@@ -24,6 +32,18 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
 
   @spec space_packet() :: t()
   def space_packet, do: %__MODULE__{}
+
+  @spec encapsulation_packet() :: t()
+  def encapsulation_packet do
+    %__MODULE__{
+      kind: :encapsulation_packet,
+      packet_version_number: 7,
+      minimum_packet_octets: 1,
+      length_field_offset_bits: 0,
+      length_field_bits: 1,
+      length_adjustment: 0
+    }
+  end
 
   @spec new(map() | keyword()) :: {:ok, t()} | {:error, term()}
   def new(attrs \\ %{}) when is_map(attrs) or is_list(attrs) do
@@ -41,8 +61,15 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
   end
 
   @spec validate(t()) :: :ok | {:error, term()}
+  def validate(%__MODULE__{kind: :encapsulation_packet} = format) do
+    with :ok <- validate_encapsulation_pvn(format.packet_version_number) do
+      validate_encapsulation_minimum(format.minimum_packet_octets)
+    end
+  end
+
   def validate(%__MODULE__{} = format) do
-    with :ok <- validate_range(format.packet_version_number, 0, 7, :packet_version_number),
+    with :ok <- validate_fixed_kind(format.kind),
+         :ok <- validate_range(format.packet_version_number, 0, 7, :packet_version_number),
          :ok <- validate_positive(format.minimum_packet_octets, :minimum_packet_octets),
          :ok <- validate_non_negative(format.length_field_offset_bits, :length_field_offset_bits),
          :ok <- validate_range(format.length_field_bits, 1, 32, :length_field_bits),
@@ -59,6 +86,17 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
 
   @spec total_packet_octets(binary(), t()) ::
           {:ok, pos_integer()} | {:error, term()}
+  def total_packet_octets(packet, %__MODULE__{kind: :encapsulation_packet} = format)
+      when is_binary(packet) do
+    with {:ok, total_octets} <- EncapsulationPacketCodec.packet_length(packet),
+         true <- total_octets >= format.minimum_packet_octets do
+      {:ok, total_octets}
+    else
+      false -> {:error, {:invalid_packet_length, 0, format.minimum_packet_octets}}
+      {:error, _reason} = error -> error
+    end
+  end
+
   def total_packet_octets(packet, %__MODULE__{} = format) when is_binary(packet) do
     offset_bits = format.length_field_offset_bits
     length_bits = format.length_field_bits
@@ -89,6 +127,19 @@ defmodule Cadence.CCSDS.TC.Service.PacketFormat do
        {:length_field_outside_minimum_packet, required_octets, format.minimum_packet_octets}}
     end
   end
+
+  defp validate_fixed_kind(:fixed), do: :ok
+  defp validate_fixed_kind(value), do: {:error, {:invalid_field, :kind, value}}
+
+  defp validate_encapsulation_pvn(7), do: :ok
+
+  defp validate_encapsulation_pvn(value),
+    do: {:error, {:invalid_encapsulation_packet_version_number, value}}
+
+  defp validate_encapsulation_minimum(1), do: :ok
+
+  defp validate_encapsulation_minimum(value),
+    do: {:error, {:invalid_encapsulation_packet_minimum, value}}
 
   defp validate_positive(value, _field) when is_integer(value) and value > 0, do: :ok
   defp validate_positive(value, field), do: {:error, {:invalid_field, field, value}}

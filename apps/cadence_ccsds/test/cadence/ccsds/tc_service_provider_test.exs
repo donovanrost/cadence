@@ -2,10 +2,19 @@ defmodule Cadence.CCSDS.TC.Service.ProviderTest do
   use ExUnit.Case, async: true
 
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.EncapsulationPacket
+  alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.FrameCodec
-  alias Cadence.CCSDS.TC.Service.{Configuration, PacketConfiguration, Provider, Request}
+
+  alias Cadence.CCSDS.TC.Service.{
+    Configuration,
+    PacketConfiguration,
+    PacketFormat,
+    Provider,
+    Request
+  }
 
   test "MAP Packet Service blocks complete Packets and segments an oversized Packet" do
     configuration = map_packet_configuration()
@@ -60,6 +69,39 @@ defmodule Cadence.CCSDS.TC.Service.ProviderTest do
     assert {:ok, [indication_1, indication_2], _receiver} = Provider.ingest(frame, provider)
     assert indication_1.data == packet_1
     assert indication_2.data == packet_2
+  end
+
+  test "MAP Packet Service carries adaptive Encapsulation Packets" do
+    {:ok, packet_configuration} =
+      PacketConfiguration.new(
+        valid_packet_version_numbers: [7],
+        maximum_packet_octets: 64,
+        formats: %{7 => PacketFormat.encapsulation_packet()}
+      )
+
+    configuration =
+      configuration(
+        service: :map_packet,
+        map_id: 7,
+        frame_size: 22,
+        segmentation?: true,
+        maximum_sdu_octets: 64,
+        packet: packet_configuration
+      )
+
+    packet =
+      EncapsulationPacket.new(protocol_id: 4, user_defined: 3, data: :binary.copy(<<7>>, 25))
+      |> EncapsulationPacketCodec.encode()
+      |> elem(1)
+
+    request = packet_request(packet, :encapsulation, packet_version_number: 7)
+    assert {:ok, sender} = Provider.init([configuration])
+    assert {:ok, frames, _sender} = Provider.request(request, sender)
+    assert length(frames) > 1
+    assert {:ok, receiver} = Provider.init([configuration])
+    assert {[indication], _receiver} = ingest_all(frames, receiver)
+    assert indication.data == packet
+    assert indication.packet_version_number == 7
   end
 
   test "MAP Access permits managed segmentation while VCA rejects an oversized SDU" do
@@ -289,7 +331,7 @@ defmodule Cadence.CCSDS.TC.Service.ProviderTest do
       scid: attrs[:scid],
       vcid: attrs[:vcid],
       map_id: attrs[:map_id],
-      packet_version_number: 0,
+      packet_version_number: Keyword.get(attrs, :packet_version_number, 0),
       sdu_id: sdu_id,
       service_type: :sequence_controlled,
       meta: %{}

@@ -2,11 +2,14 @@ defmodule Cadence.CCSDS.USLPServiceProviderTest do
   use ExUnit.Case, async: true
 
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.EncapsulationPacket
+  alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
   alias Cadence.CCSDS.SDLP.USLP.Configuration
   alias Cadence.CCSDS.SDLP.USLP.FrameCodec
   alias Cadence.CCSDS.SDLP.USLP.Service.{Indication, Provider, Request}
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias Cadence.CCSDS.TC.Service.{PacketConfiguration, PacketFormat}
 
   test "composes all five primary data services through generation and reception" do
     configurations = [
@@ -106,6 +109,45 @@ defmodule Cadence.CCSDS.USLPServiceProviderTest do
     assert frame.meta.insert_zone == <<7, 8>>
     assert {:ok, indications, _provider} = Provider.ingest(frame, provider)
     assert Enum.map(indications, & &1.service) == [:map_access, :insert]
+  end
+
+  test "MAP Packet Service carries adaptive Encapsulation Packets" do
+    {:ok, packet_configuration} =
+      PacketConfiguration.new(
+        valid_packet_version_numbers: [7],
+        maximum_packet_octets: 64,
+        formats: %{7 => PacketFormat.encapsulation_packet()}
+      )
+
+    configuration =
+      configuration(6, 1, :packets,
+        packet_service: :map,
+        packet_configuration: packet_configuration
+      )
+
+    packet =
+      EncapsulationPacket.new(protocol_id: 1, user_defined: 2, data: :binary.copy(<<9>>, 40))
+      |> EncapsulationPacketCodec.encode()
+      |> elem(1)
+
+    request =
+      request(:map_packet, configuration, packet,
+        packet_version_number: 7,
+        sdu_id: :encapsulation
+      )
+
+    assert {:ok, sender} = Provider.init([configuration])
+    assert {:ok, frames, _sender} = Provider.request(request, sender)
+    assert length(frames) > 1
+    assert {:ok, receiver} = Provider.init([configuration])
+
+    {indications, _receiver} =
+      Enum.reduce(frames, {[], receiver}, fn frame, {indications, state} ->
+        assert {:ok, emitted, next_state} = Provider.ingest(frame, state)
+        {indications ++ emitted, next_state}
+      end)
+
+    assert [%Indication{data: ^packet, packet_version_number: 7}] = indications
   end
 
   test "exposes COP management directives without owning the COP engine" do
