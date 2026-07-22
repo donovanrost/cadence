@@ -2,7 +2,8 @@ defmodule Cadence.CCSDS.TC.Service.PacketProcessing do
   @moduledoc false
 
   alias Cadence.CCSDS.Core.LinkFrame
-  alias Cadence.CCSDS.TC.Service.{Configuration, Indication, PacketConfiguration, Request}
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.TC.Service.{Configuration, Indication, Request}
 
   @spec validate_requests([Request.t()], PacketConfiguration.t()) :: :ok | {:error, term()}
   def validate_requests(requests, %PacketConfiguration{} = packet_configuration) do

@@ -11,10 +11,10 @@ defmodule Cadence.CCSDS.SDLP.USLP.Service.Provider do
   """
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
 
   alias Cadence.CCSDS.SDLP.USLP.{Configuration, Continuity, FrameCodec, Reassembly, Segmentation}
   alias Cadence.CCSDS.SDLP.USLP.Service.{Indication, Request}
-  alias Cadence.CCSDS.TC.Service.PacketFormat
 
   @type physical_address :: {binary(), 0..65_535, 0..63, 0..15}
   @type virtual_address :: {binary(), 0..65_535, 0..63}

@@ -13,12 +13,12 @@ defmodule Cadence.CCSDS.TC.Service.Provider do
   """
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
   alias Cadence.CCSDS.TC.{FrameCodec, Reassembly, Segmentation}
 
   alias Cadence.CCSDS.TC.Service.{
     Configuration,
     Indication,
-    PacketConfiguration,
     PacketProcessing,
     Request
   }

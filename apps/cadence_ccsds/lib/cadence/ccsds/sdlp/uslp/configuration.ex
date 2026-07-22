@@ -8,8 +8,8 @@ defmodule Cadence.CCSDS.SDLP.USLP.Configuration do
   MAP ID so a managed decoder can route mixed variable-length streams.
   """
 
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
   alias Cadence.CCSDS.SDLP.USLP.TFDF
-  alias Cadence.CCSDS.TC.Service.PacketConfiguration
 
   @type frame_type :: :fixed | :variable
   @type source_destination :: :source | :destination

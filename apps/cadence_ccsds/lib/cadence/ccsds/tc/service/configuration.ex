@@ -8,7 +8,7 @@ defmodule Cadence.CCSDS.TC.Service.Configuration do
   """
 
   alias Cadence.CCSDS.FrameErrorControl
-  alias Cadence.CCSDS.TC.Service.PacketConfiguration
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
 
   @type service ::
           :map_packet

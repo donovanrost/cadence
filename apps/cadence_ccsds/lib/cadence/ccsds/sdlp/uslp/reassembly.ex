@@ -11,8 +11,8 @@ defmodule Cadence.CCSDS.SDLP.USLP.Reassembly do
   @behaviour Cadence.CCSDS.SDLP.Reassembly
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
   alias Cadence.CCSDS.SDLP.USLP.{Configuration, Continuity, OnlyIdleData}
-  alias Cadence.CCSDS.TC.Service.PacketFormat
 
   @impl true
   def init(opts \\ []) when is_list(opts) do

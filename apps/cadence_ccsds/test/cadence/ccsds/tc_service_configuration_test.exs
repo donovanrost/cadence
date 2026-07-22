@@ -1,7 +1,8 @@
 defmodule Cadence.CCSDS.TC.Service.ConfigurationTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.CCSDS.TC.Service.{Configuration, PacketConfiguration}
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.TC.Service.Configuration
 
   test "validates managed MAP Packet parameters and derived frame capacity" do
     assert {:ok, packet} = PacketConfiguration.new(maximum_packet_octets: 64)

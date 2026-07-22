@@ -4,12 +4,13 @@ defmodule Cadence.CCSDS.USLPServiceProviderTest do
   alias Cadence.CCSDS.Core.LinkFrame
   alias Cadence.CCSDS.EncapsulationPacket
   alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
   alias Cadence.CCSDS.SDLP.USLP.Configuration
   alias Cadence.CCSDS.SDLP.USLP.FrameCodec
   alias Cadence.CCSDS.SDLP.USLP.Service.{Indication, Provider, Request}
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
-  alias Cadence.CCSDS.TC.Service.{PacketConfiguration, PacketFormat}
 
   test "composes all five primary data services through generation and reception" do
     configurations = [

@@ -1,12 +1,12 @@
-defmodule Cadence.CCSDS.TC.Service.PacketConfiguration do
+defmodule Cadence.CCSDS.Packet.Configuration do
   @moduledoc """
-  Managed parameters for TC MAP and Virtual Channel Packet Services.
+  Managed parameters shared by CCSDS Space Data Link Packet Services.
 
   Formats are keyed by Packet Version Number so blocked packets can be
   delimited without assuming every Packet Service user uses Space Packets.
   """
 
-  alias Cadence.CCSDS.TC.Service.PacketFormat
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
 
   @type extracted_packet :: %{
           octets: binary(),

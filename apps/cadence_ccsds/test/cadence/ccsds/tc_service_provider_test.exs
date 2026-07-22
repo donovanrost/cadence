@@ -4,14 +4,14 @@ defmodule Cadence.CCSDS.TC.Service.ProviderTest do
   alias Cadence.CCSDS.Core.LinkFrame
   alias Cadence.CCSDS.EncapsulationPacket
   alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.FrameCodec
 
   alias Cadence.CCSDS.TC.Service.{
     Configuration,
-    PacketConfiguration,
-    PacketFormat,
     Provider,
     Request
   }

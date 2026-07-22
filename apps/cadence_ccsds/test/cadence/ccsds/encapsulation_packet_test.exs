@@ -4,7 +4,8 @@ defmodule Cadence.CCSDS.EncapsulationPacketTest do
   alias Cadence.CCSDS.EncapsulationPacket
   alias Cadence.CCSDS.EncapsulationPacket.{Codec, Configuration, Idle, Stream}
   alias Cadence.CCSDS.EncapsulationPacket.Service.{Provider, Request}
-  alias Cadence.CCSDS.TC.Service.{PacketConfiguration, PacketFormat}
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
 
   test "encodes and decodes all four standard header sizes" do
     vectors = [

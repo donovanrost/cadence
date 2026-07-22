@@ -1,13 +1,14 @@
-defmodule Cadence.CCSDS.TC.Service.PacketFormat do
+defmodule Cadence.CCSDS.Packet.Format do
   @moduledoc """
-  Managed description of the Packet Version Number and length field of a TC
-  Packet Service data unit.
+  Managed description of a CCSDS Packet Service data unit's Packet Version
+  Number and length field.
 
-  Packet blocking requires the service provider to know the position and size
-  of each packet length field. `:length_adjustment` converts the unsigned wire
-  value into the total packet length in octets. Encapsulation Packets use a
-  dedicated dynamic resolver because their length field moves with the
-  Length-of-Length value in the first octet.
+  Space Data Link Packet Services require the service provider to know the
+  position and size of each packet length field when blocking packets.
+  `:length_adjustment` converts the unsigned wire value into the total packet
+  length in octets. Encapsulation Packets use a dedicated dynamic resolver
+  because their length field moves with the Length-of-Length value in the first
+  octet.
   """
 
   alias Cadence.CCSDS.EncapsulationPacket.Codec, as: EncapsulationPacketCodec

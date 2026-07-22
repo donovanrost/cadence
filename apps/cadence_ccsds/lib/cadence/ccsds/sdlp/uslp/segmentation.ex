@@ -12,10 +12,11 @@ defmodule Cadence.CCSDS.SDLP.USLP.Segmentation do
   @behaviour Cadence.CCSDS.SDLP.Segmentation
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
   alias Cadence.CCSDS.SDLP.USLP.{Configuration, FrameCodec, OnlyIdleData, TFDF}
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Idle
-  alias Cadence.CCSDS.TC.Service.{PacketConfiguration, PacketFormat}
 
   @minimum_idle_packet_octets 7
 

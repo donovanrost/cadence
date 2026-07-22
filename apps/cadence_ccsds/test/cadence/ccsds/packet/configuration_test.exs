@@ -1,9 +1,10 @@
-defmodule Cadence.CCSDS.TC.Service.PacketConfigurationTest do
+defmodule Cadence.CCSDS.Packet.ConfigurationTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.CCSDS.Packet.Configuration, as: PacketConfiguration
+  alias Cadence.CCSDS.Packet.Format, as: PacketFormat
   alias Cadence.CCSDS.SpacePacket
   alias Cadence.CCSDS.SpacePacket.Codec
-  alias Cadence.CCSDS.TC.Service.{PacketConfiguration, PacketFormat}
 
   test "validates and extracts blocked Space Packets by their standard length fields" do
     packet_1 = space_packet(1, <<1>>)
