@@ -3,7 +3,7 @@ title: "CCSDS Library Gap Assessment"
 tags: [architecture, ccsds, simulator, telemetry, commanding]
 status: active
 created: 2026-07-19
-updated: 2026-07-20
+updated: 2026-07-21
 ---
 
 # CCSDS Library Gap Assessment
@@ -29,6 +29,7 @@ including:
 - CCSDS 232.1-B-2 with corrigendum 1, Communications Operation Procedure-1;
 - CCSDS 301.0-B-4 with Editorial Change 1, Time Code Formats;
 - CCSDS 355.0-B-2, Space Data Link Security Protocol;
+- CCSDS 727.0-B-5 with errata 1, CCSDS File Delivery Protocol;
 - CCSDS 732.0-B-5, AOS Space Data Link Protocol; and
 - CCSDS 732.1-B-3, Unified Space Data Link Protocol.
 
@@ -44,6 +45,32 @@ The shared library currently owns:
   extraction across the one-, two-, four-, and eight-octet headers, including
   adaptive generation, managed EPI registries, extended protocol IDs, exact-size
   Idle Packet construction, and request/indication primitives;
+- strict CCSDS 727.0-B-5 CFDP encoding, decoding, and streaming extraction for
+  all eight standard PDU payload forms and all six standard TLV forms,
+  including one- through eight-octet entity and transaction identifiers,
+  small- and large-file offsets, segment metadata, record-continuation state,
+  optional PDU CRCs, and managed checksum-type acceptance;
+- the mandatory modular and null file-checksum procedures, offset-aware
+  out-of-order modular accumulation, and an explicit provider boundary for
+  registered mission checksum algorithms;
+- pure Class 1 sender and receiver procedures with an in-memory convenience
+  path and caller-owned read, write, checksum, finalize, and discard effects
+  for external file sources and sinks; optional closure; out-of-order and
+  duplicate segment handling; Check timer effects; checksum and size
+  verification; and portable indications;
+- pure Class 2 sender and receiver procedures with external source/sink effects,
+  EOF and Finished positive acknowledgements, deferred and immediate NAK
+  repair, caller-triggered asynchronous NAK issuance, Metadata and data
+  retransmission, Prompt and Keep Alive handling, NAK and positive-ACK limits,
+  caller-owned timer effects, and portable indications;
+- MIB-shaped default fault policies with per-transaction Fault Handler Override
+  precedence, all four standard actions (cancel, suspend, ignore, and abandon),
+  and local suspend/resume procedures that pause applicable transmission and
+  timer activity without discarding received file state;
+- strict typed codecs for all chapter-6 Proxy Operation messages, the shared
+  Originating Transaction ID message, and Directory Listing request/response
+  messages, returned as ordinary Message-to-User TLVs without executing or
+  authorizing the requested operation;
 - dynamic PVN-7 Packet length resolution in the managed Packet Service format,
   allowing mixed Space and Encapsulation Packet blocks to pass through the TC
   and USLP Packet services without treating EPP as a fixed-header format;
@@ -85,11 +112,13 @@ The shared library currently owns:
 - managed Packet Service formats keyed by Packet Version Number, stable packet
   blocking, MAP packet segmentation, receive extraction, maximum-length
   enforcement, and configurable complete/partial packet delivery evidence; and
-- maintained conformance evidence comprising 44 source-hashed, section-located
+- maintained conformance evidence comprising 51 source-hashed, section-located
   CCSDS vectors, explicit provenance classes for published versus derived
   octets, seeded generative and malformed-input properties, and a pinned
   bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
-  128 TC transfer frames, and 128 TM transfer frames; and
+  128 TC transfer frames, and 128 TM transfer frames, plus a pinned
+  bidirectional `spacepackets` 0.32.0 CFDP run over 128 Cadence-generated and 11
+  independently generated PDUs; and
 - CCSDS 732.0-B-5 issue-5 AOS fixed-length transfer frames with 10-bit SCIDs,
   optional shortened Reed-Solomon FHEC, Insert Zone, M_PDU, B_PDU, VCA_SDU,
   OID, OCF, and FECF processing, including managed mixed-VC stream routing;
@@ -182,10 +211,27 @@ portable anomaly evidence.
 
 ## Remaining gaps
 
-There are no remaining implementation gaps in the protocol subset targeted by
-this assessment. This is not a claim that `cadence_ccsds` implements every
-CCSDS publication or is flight-qualified; additions beyond this baseline
-should be driven by a concrete mission or product integration requirement.
+The targeted CFDP baseline now covers the complete issue-5 wire surface, the
+interoperable Class 1 and Class 2 core procedures, scalable caller-owned file
+effects, configurable fault/suspension policy, and typed proxy/directory
+messages. The remaining CFDP library extensions are separable from Cadence
+product design:
+
+- add inactivity monitoring, optional Keep Alive limit detection, local
+  cancel/report primitives, and transaction-history/status-report responses;
+- add typed Remote Status Report and Remote Suspend/Resume chapter-6 messages;
+- model ordered Filestore Request execution and Filestore Response production
+  as caller-owned effects after successful delivery;
+- add record-aware sender segmentation policies above the already-supported
+  File Data segment-metadata wire fields; and
+- perform a cross-implementation Class 1/Class 2 transaction run. The current
+  independent evidence is intentionally limited to PDU parsing and generation.
+
+These are honest extension points rather than requirements for composing the
+current PDU codec and mandatory transfer core. This is not a claim that
+`cadence_ccsds` implements every CCSDS publication or is flight-qualified;
+additional protocol families should still be driven by concrete mission or
+product requirements.
 
 ## Application-specific follow-through
 
@@ -220,8 +266,8 @@ still require a second capable implementation or mission testbed before making
 broad interoperability claims. None of this evidence constitutes flight
 qualification.
 
-The corpus now includes 44 vectors across nine source-hashed standards and
-seeded AOS, USLP, Encapsulation Packet, and SDLS round trips over their managed
+The corpus now includes 51 vectors across ten source-hashed standards and
+seeded AOS, USLP, Encapsulation Packet, CFDP, and SDLS round trips over their managed
 framing and state options, plus seeded CUC/CDS P-field and counter round trips.
 AOS FHEC encode/correction behavior is independently cross-checked against a
 pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
@@ -236,6 +282,13 @@ SDLS evidence covers normative TC and TM Security Header layouts plus seeded
 ApplySecurity/ProcessSecurity state transitions. Its deterministic test
 provider proves algorithm-neutral orchestration only; no cryptographic
 algorithm conformance or independent SDLS differential claim is made.
+CFDP evidence covers audited Metadata, File Data, EOF, annex-F checksum, Proxy
+Put, Originating Transaction ID, and Directory Listing Response derivations;
+all PDU and TLV forms in focused tests; seeded round trips over all standard
+identifier widths; malformed-input safety; in-memory and external-file Class 1
+and Class 2 loss, NAK, fault-policy, suspension, and timer scenarios; and the
+pinned bidirectional `spacepackets` PDU run. The external run does not yet claim
+transaction-procedure interoperability.
 CUC/CDS evidence covers source-hashed P-field/T-field derivations, all binary
 resolutions, incomplete-input behavior, and exact correlation/rounding
 properties. Leap-second tables and mission clock correlation remain external,
@@ -243,9 +296,8 @@ and no independent time-code implementation is yet in the differential harness.
 
 ## Recommended next slice
 
-The protocol-gap program is complete for the assessed baseline. The next work
-should be application composition: teach the catalog type/compiler boundary to
-select CUC or CDS layouts where mission schemas request them, then let Cadence
-and the simulator supply mission epochs, live clock-correlation anchors, and
-leap-second policy. Those concerns must remain outside the dependency-leaf
-protocol library.
+Keep Cadence CFDP integration deferred until its storage, operator, activation,
+and transport product design is settled. If the library is extended first, the
+highest-value next slice is effect-driven Filestore Request execution plus
+inactivity/Keep Alive monitoring, followed by an independent Class 1/Class 2
+transaction harness. None requires Cadence persistence or UI decisions.

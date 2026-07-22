@@ -19,10 +19,11 @@ hashes make the source snapshot independently retrievable and auditable.
 ## Deterministic generative checks
 
 The normal test suite runs seeded property checks over Space Packets,
-Encapsulation Packets, TC, TM, AOS, and USLP transfer frames, FECF, AOS FHEC,
-BCH, LDPC, CLTU, randomization, SDLS state transitions, streaming boundaries,
-CUC/CDS P-fields and counters, and arbitrary malformed inputs. Increase the
-case count or reproduce a failure with:
+Encapsulation Packets, CFDP PDUs and user-operation messages, TC, TM, AOS, and
+USLP transfer frames, FECF,
+AOS FHEC, BCH, LDPC, CLTU, randomization, SDLS state transitions, streaming
+boundaries, CUC/CDS P-fields and counters, and arbitrary malformed inputs.
+Increase the case count or reproduce a failure with:
 
 ```sh
 CCSDS_GENERATIVE_CASES=10000 CCSDS_GENERATIVE_SEED=20260720 \
@@ -53,6 +54,11 @@ library build must neither download tools nor depend on an external service.
 The issue-5 AOS FHEC vectors are also cross-checked against Yamcs at a pinned
 commit. This is narrower independent evidence rather than full AOS
 interoperability; see `aos/evidence.md`.
+
+`cfdp_spacepackets/run.sh` performs a bidirectional CFDP PDU differential run
+against `spacepackets==0.32.0`. The normal build does not install Python
+packages; see `cfdp_spacepackets/evidence.md` for the pinned artifact, covered
+PDU forms, maintained digest, and exact claim boundary.
 
 USLP evidence is currently source-hashed and normative rather than
 cross-implementation; see `uslp/evidence.md` for the exact boundary.

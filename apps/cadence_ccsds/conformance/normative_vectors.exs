@@ -1,6 +1,6 @@
 %{
   schema_version: 1,
-  maintained_on: "2026-07-20",
+  maintained_on: "2026-07-21",
   classifications: %{
     published_octets: "Octets printed verbatim by the cited Recommended Standard.",
     normative_table: "A row or constant printed verbatim in a normative table.",
@@ -61,6 +61,14 @@
       published: "July 2022",
       url: "https://ccsds.org/Pubs/355x0b2.pdf",
       sha256: "86717aedd33886013333054355b92d2d32ffaf84a4a3eb63b7b6ffc6f17d5818"
+    },
+    ccsds_727_0_b_5: %{
+      title: "CCSDS File Delivery Protocol (CFDP)",
+      issue: "CCSDS 727.0-B-5 with errata 1",
+      published: "July 2020",
+      url:
+        "https://ccsds.org/wp-content/uploads/gravity_forms/5-448e85c647331d9cbaf66c096458bdd5/2025/01//727x0b5e1.pdf",
+      sha256: "8b84c694be2312cd7364b39a8fd053a75c1bd48cb477965841750ec46c13108c"
     },
     ccsds_732_0_b_5: %{
       title: "AOS Space Data Link Protocol",
@@ -479,6 +487,69 @@
         data_hex: "AA"
       },
       expected_hex: "FF30000000000009AA"
+    },
+    %{
+      id: "cfdp-metadata-pdu-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "5.1 and 5.2.5, figure 5-1 and table 5-9",
+      subject: :cfdp_pdu,
+      parameters: %{kind: :metadata},
+      expected_hex: "24000A0001020307000000000301610162"
+    },
+    %{
+      id: "cfdp-file-data-pdu-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "5.1 and 5.3, figure 5-1 and table 5-14",
+      subject: :cfdp_pdu,
+      parameters: %{kind: :file_data},
+      expected_hex: "3400070001020300000000AABBCC"
+    },
+    %{
+      id: "cfdp-eof-pdu-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "5.1 and 5.2.2, figure 5-1 and table 5-6",
+      subject: :cfdp_pdu,
+      parameters: %{kind: :end_of_file},
+      expected_hex: "24000A000102030400AABBCCDD00000003"
+    },
+    %{
+      id: "cfdp-annex-f-modular-checksum",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "4.2.5 and annex F, pages F-1 through F-3",
+      subject: :cfdp_modular_checksum,
+      parameters: %{file_hex: "000102030405060708090A0B0C0D0E"},
+      expected_hex: "181C2015"
+    },
+    %{
+      id: "cfdp-proxy-put-request-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "6.1 and 6.2.3.2, tables 6-1 and 6-4",
+      subject: :cfdp_user_operation,
+      parameters: %{kind: :proxy_put_request},
+      expected_hex: "6366647000010301610162"
+    },
+    %{
+      id: "cfdp-originating-transaction-id-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "6.1.5, tables 6-1 and 6-2",
+      subject: :cfdp_user_operation,
+      parameters: %{kind: :originating_transaction_id},
+      expected_hex: "636664700A10000109"
+    },
+    %{
+      id: "cfdp-directory-listing-response-layout",
+      classification: :normative_derivation,
+      source: :ccsds_727_0_b_5,
+      locator: "6.1 and 6.3.4.2, tables 6-1 and 6-16",
+      subject: :cfdp_user_operation,
+      parameters: %{kind: :directory_listing_response},
+      expected_hex: "63666470118001780179"
     },
     %{
       id: "cuc-level-1-one-octet-preamble",

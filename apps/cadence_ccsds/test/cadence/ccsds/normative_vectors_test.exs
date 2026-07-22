@@ -1,6 +1,17 @@
 defmodule Cadence.CCSDS.NormativeVectorsTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.CCSDS.CFDP.{Checksum, FileData, PDU, TransactionID}
+  alias Cadence.CCSDS.CFDP.Codec, as: CFDPCodec
+  alias Cadence.CCSDS.CFDP.Directive.{EndOfFile, Metadata}
+  alias Cadence.CCSDS.CFDP.UserOperation.Codec, as: UserOperationCodec
+
+  alias Cadence.CCSDS.CFDP.UserOperation.{
+    DirectoryListingResponse,
+    OriginatingTransactionID,
+    ProxyPutRequest
+  }
+
   alias Cadence.CCSDS.ChannelCoding.{BCH, CLTU, Configuration, LDPC, Randomizer}
   alias Cadence.CCSDS.Core.LinkFrame
   alias Cadence.CCSDS.EncapsulationPacket
@@ -33,8 +44,8 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
   test "corpus has complete, unique, and auditable provenance" do
     corpus = NormativeVectors.corpus()
     assert corpus.schema_version == 1
-    assert map_size(corpus.sources) == 9
-    assert length(corpus.vectors) >= 44
+    assert map_size(corpus.sources) == 10
+    assert length(corpus.vectors) >= 48
 
     ids = Enum.map(corpus.vectors, & &1.id)
     assert Enum.uniq(ids) == ids
@@ -132,6 +143,60 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
       assert decoded.user_defined == packet.user_defined
       assert decoded.data == packet.data
       assert decoded.header_octets == packet.header_octets
+    end
+  end
+
+  test "matches the CFDP PDU and modular-checksum derivations" do
+    pdus = %{
+      metadata:
+        cfdp_pdu(%Metadata{
+          checksum_type: 0,
+          file_size: 3,
+          source_file_name: "a",
+          destination_file_name: "b"
+        }),
+      file_data: cfdp_pdu(%FileData{offset: 0, data: hex("AABBCC")}),
+      end_of_file: cfdp_pdu(%EndOfFile{file_checksum: 0xAABBCCDD, file_size: 3})
+    }
+
+    for vector <- NormativeVectors.vectors_for(:cfdp_pdu) do
+      expected = hex(vector.expected_hex)
+      pdu = Map.fetch!(pdus, vector.parameters.kind)
+      assert {:ok, ^expected} = CFDPCodec.encode(pdu)
+      assert {:ok, decoded} = CFDPCodec.decode(expected)
+      assert decoded.payload == pdu.payload
+    end
+
+    checksum = NormativeVectors.vector!("cfdp-annex-f-modular-checksum")
+    expected = checksum.expected_hex |> hex() |> :binary.decode_unsigned()
+    assert Checksum.modular(hex(checksum.parameters.file_hex)) == expected
+  end
+
+  test "matches the CFDP proxy and directory message derivations" do
+    operations = %{
+      proxy_put_request: %ProxyPutRequest{
+        destination_entity_id: 3,
+        destination_entity_id_octets: 1,
+        source_file_name: "a",
+        destination_file_name: "b"
+      },
+      originating_transaction_id: %OriginatingTransactionID{
+        transaction_id: TransactionID.new(1, 9),
+        entity_id_octets: 2,
+        sequence_number_octets: 1
+      },
+      directory_listing_response: %DirectoryListingResponse{
+        listing_response: :unsuccessful,
+        directory_name: "x",
+        directory_file_name: "y"
+      }
+    }
+
+    for vector <- NormativeVectors.vectors_for(:cfdp_user_operation) do
+      operation = Map.fetch!(operations, vector.parameters.kind)
+      expected = hex(vector.expected_hex)
+      assert {:ok, %{message: ^expected} = tlv} = UserOperationCodec.encode(operation)
+      assert {:ok, ^operation} = UserOperationCodec.decode(tlv)
     end
   end
 
@@ -425,6 +490,17 @@ defmodule Cadence.CCSDS.NormativeVectorsTest do
     oid = NormativeVectors.vector!("uslp-oid-annex-h-prefix")
     expected_oid = hex(oid.expected_hex)
     assert {^expected_oid, _state} = USLPOnlyIdleData.take(oid.parameters.octets)
+  end
+
+  defp cfdp_pdu(payload) do
+    %PDU{
+      direction: :toward_file_receiver,
+      transmission_mode: :unacknowledged,
+      source_entity_id: 1,
+      transaction_sequence_number: 2,
+      destination_entity_id: 3,
+      payload: payload
+    }
   end
 
   defp assert_constant(binary, side, vector_id) do
