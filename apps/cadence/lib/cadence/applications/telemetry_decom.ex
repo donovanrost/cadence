@@ -29,10 +29,10 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Catalog.Telemetry.Packet
   alias Cadence.Catalog.Telemetry.RuntimeArtifacts
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
+  alias Cadence.Control.Activations
   alias Cadence.Governance
   alias Cadence.Missions
   alias Cadence.Repo
-  alias Cadence.Runtime
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
@@ -252,7 +252,7 @@ defmodule Cadence.Applications.TelemetryDecom do
            compile_mission_binding_set(organization_id, mission_id, configs),
          {:ok, _persisted} <- Governance.persist_binding_set(organization_id, binding_set),
          {:ok, _activation} <-
-           Runtime.activate_binding_set(
+           Activations.activate_binding_set(
              mission_id,
              binding_set.binding_set_id,
              binding_set.version,

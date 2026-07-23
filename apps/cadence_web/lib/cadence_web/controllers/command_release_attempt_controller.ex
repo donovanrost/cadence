@@ -4,6 +4,7 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
   action_fallback CadenceWeb.FallbackController
 
   alias Cadence.Commanding.CommandReleaseAttempt
+  alias Cadence.Projections.CommandStatus
   alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -15,7 +16,11 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_release_attempt_filters(params) do
       command_release_attempts =
-        Cadence.Commanding.list_command_release_attempts(organization_id, mission_id, filters)
+        CommandStatus.list_release_attempts(
+          organization_id,
+          mission_id,
+          filters
+        )
         |> Enum.map(&ControlPlaneJSON.command_release_attempt/1)
 
       json(conn, %{data: command_release_attempts})
@@ -34,7 +39,7 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
              mission_id
            ),
          {:ok, %CommandReleaseAttempt{} = command_release_attempt} <-
-           Cadence.Commanding.fetch_command_release_attempt(
+           CommandStatus.fetch_release_attempt(
              organization_id,
              mission_id,
              command_release_attempt_id

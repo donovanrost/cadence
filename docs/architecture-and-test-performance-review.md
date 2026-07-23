@@ -3,7 +3,7 @@ title: Cadence Architecture and Test Performance Review
 tags: [developer, architecture, refactoring, testing, performance]
 status: active
 created: 2026-07-18
-updated: 2026-07-18
+updated: 2026-07-21
 ---
 
 # Cadence Architecture and Test Performance Review
@@ -86,6 +86,12 @@ The target ownership and allowed dependency directions are now published in the
 policy keeps the ten domain contexts inside `:cadence`, treats the root facade
 and horizontal persistence namespaces as transitional, and defines the
 platform services that may remain shared leaves.
+
+The authority and runtime direction is now published separately in the
+[management, control, and data plane target architecture](architecture/management-control-data-plane-target.md).
+The context map and plane model are complementary: contexts identify business
+ownership, while planes identify who may govern, operationalize, or execute a
+state transition.
 
 ## Implementation progress
 
@@ -240,11 +246,11 @@ that change for different reasons.
 | `ControlPlaneParams` | 1,971 | 56 / — | Parameters for many API resources |
 | `ControlPlaneJSON` | 1,297 | — | Serialization for many API resources |
 
-`Cadence.Application` also starts control-plane services, data-plane services,
-projections, integrations, dashboard caches, runtime supervision, mission
-health, command dispatch and verification, contact scheduling, provider
-ingestion, and jobs under one application supervisor. This works today, but it
-does not expose restart domains or future extraction seams.
+`Cadence.Application` also starts management workflows, control-plane services,
+data-plane services, projections, integrations, dashboard caches, runtime
+supervision, mission health, command dispatch and verification, contact
+scheduling, provider ingestion, and jobs under one application supervisor. This
+works today, but it does not expose restart domains or future extraction seams.
 
 ## Proposed bounded contexts
 
@@ -407,16 +413,18 @@ Before creating more umbrella applications, group children under internal
 supervisors:
 
 ```text
-Cadence.ControlPlane.Supervisor
-Cadence.DataPlane.Supervisor
+Cadence.Management.Supervisor
+Cadence.Control.Supervisor
+Cadence.Runtime.Supervisor
 Cadence.Projections.Supervisor
 Cadence.Integrations.Supervisor
 ```
 
 This makes ownership, startup order, and restart behavior visible while keeping
-deployment simple. A future `cadence_runtime` application becomes justified
-only when runtime and data-plane modules form a one-way dependency leaf with a
-clear lifecycle and independent operational reason to start or deploy.
+deployment simple. Mission control ownership should be a separate restart domain
+from mission data-plane execution. A future `cadence_runtime` application
+becomes justified only when runtime modules form a one-way dependency leaf with
+a clear lifecycle and independent operational reason to start or deploy.
 
 ### 6. Reduce `CadenceWeb` compile coupling
 

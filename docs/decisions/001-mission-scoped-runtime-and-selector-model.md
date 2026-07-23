@@ -4,7 +4,7 @@ aliases: [runtime selector model, mission scoped runtime, activation model]
 tags: [adr, architecture, runtime, selector, activation, mission]
 status: accepted
 created: 2026-03-28
-updated: 2026-03-28
+updated: 2026-07-21
 ---
 
 # ADR-001: Mission-Scoped Runtime and Selector Model
@@ -67,13 +67,18 @@ contact-runtime concerns.
 
 ### 2. Runtime Behavior
 
-Cadence behaves as a control plane plus reconciled runtime:
+Cadence behaves as a governed management plane, an operational control plane,
+and a reconciled data-plane runtime, using the definitions in
+[ADR-015](015-management-control-data-plane-architecture.md):
 
-1. Users define desired state through API or UI.
-2. Desired state is stored as governed configuration.
-3. An explicit activation makes one configuration basis live for a scope.
-4. Runtime reconcilers converge running instances to the active basis.
-5. New live traffic is interpreted against the active basis for that mission.
+1. Users and services define desired state through management-plane APIs or UI.
+2. Desired state is stored as governed, versioned configuration.
+3. The control plane executes an approved activation and makes one exact
+   configuration generation operational for a scope.
+4. Control-plane reconcilers converge data-plane runtime instances to that
+   active generation.
+5. New live traffic is interpreted by the data plane against the applied
+   generation for that mission.
 
 Activation affects future live traffic only.
 

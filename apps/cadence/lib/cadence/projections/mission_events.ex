@@ -60,7 +60,9 @@ defmodule Cadence.Projections.MissionEvents do
             "source_record_kind" => causality_text(event, :source_record_kind),
             "source_record_id" => causality_text(event, :source_record_id),
             "binding_set_id" => payload_text(event, :binding_set_id),
-            "binding_set_version" => payload_value(event, :binding_set_version)
+            "binding_set_version" => payload_value(event, :binding_set_version),
+            "generation" => payload_value(event, :generation),
+            "binding_set_content_sha256" => payload_text(event, :binding_set_content_sha256)
           })
       })
     ]

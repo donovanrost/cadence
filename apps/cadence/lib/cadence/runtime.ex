@@ -1,47 +1,16 @@
 defmodule Cadence.Runtime do
   @moduledoc """
-  Supervised mission runtime boundary for active-basis resolution and partition
-  ownership.
+  Supervised data-plane boundary for mission and partition execution.
   """
 
-  alias Cadence.Activations
-  alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Contacts.RealizedContact
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.ContactCoordinator
   alias Cadence.Runtime.MissionCoordinator
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.PartitionKey
   alias Cadence.Runtime.RealizedContactRuntime
-
-  @spec activate_binding_set(binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(mission_id, binding_set_id, version, opts \\ [])
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 and is_list(opts) do
-    with {:ok, %BindingSetActivation{} = activation} <-
-           Activations.activate_binding_set(mission_id, binding_set_id, version, opts),
-         {:ok, _mission_runtime} <- ensure_mission_started(mission_id),
-         {:ok, _activation} <- MissionCoordinator.refresh_active_basis(mission_id) do
-      {:ok, activation}
-    end
-  end
-
-  @spec fetch_active_activation(binary()) :: {:ok, BindingSetActivation.t()} | {:error, term()}
-  def fetch_active_activation(mission_id) when is_binary(mission_id) do
-    Activations.fetch_active_activation(mission_id)
-  end
-
-  @spec fetch_active_binding_set(binary()) :: {:ok, BindingSet.t()} | {:error, term()}
-  def fetch_active_binding_set(mission_id) when is_binary(mission_id) do
-    Activations.fetch_active_binding_set(mission_id)
-  end
-
-  @spec list_activations(binary()) :: [BindingSetActivation.t()]
-  def list_activations(mission_id) when is_binary(mission_id) do
-    Activations.list_activations(mission_id)
-  end
+  alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @spec ensure_mission_started(binary()) :: {:ok, pid()} | {:error, term()}
   def ensure_mission_started(mission_id) when is_binary(mission_id) do
@@ -154,8 +123,9 @@ defmodule Cadence.Runtime do
     )
   end
 
-  @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
-  def start_realized_contact(%RealizedContact{} = realized_contact) do
+  @doc false
+  @spec start_realized_contact(RealizedContactRuntimeSpec.t()) :: {:ok, pid()} | {:error, term()}
+  def start_realized_contact(%RealizedContactRuntimeSpec{} = realized_contact) do
     with {:ok, _mission_runtime} <- ensure_mission_started(realized_contact.mission_id) do
       child_spec =
         Supervisor.child_spec(

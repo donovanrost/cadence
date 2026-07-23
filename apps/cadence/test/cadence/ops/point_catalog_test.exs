@@ -2,6 +2,8 @@ defmodule Cadence.Ops.PointCatalogTest do
   # async: false — registers the fake catalog importer via Application.put_env.
   use Cadence.ConfigCase, async: false
 
+  @moduletag :runtime
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Catalog
   alias Cadence.Catalog.Telemetry.Snapshot

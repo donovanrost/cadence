@@ -7,16 +7,18 @@ defmodule Cadence.Runtime.PathCoordinator do
   use GenServer
 
   alias Cadence.Capabilities.Descriptor
-  alias Cadence.Contacts.{Path, ProviderBinding, TransportBinding}
   alias Cadence.ProviderAdapters
 
   alias Cadence.Runtime.{
     ActivationContext,
     CapabilityRegistry,
+    ContactPathSpec,
     IngressPersistenceProjector,
     MissionRuntime,
     PartitionKey,
-    ProviderIngressExecutor
+    ProviderBindingSpec,
+    ProviderIngressExecutor,
+    TransportBindingSpec
   }
 
   alias Cadence.Runtime.TransportRuntime
@@ -24,20 +26,20 @@ defmodule Cadence.Runtime.PathCoordinator do
   @type state :: %{
           mission_id: binary(),
           realized_contact_id: binary(),
-          path: Path.t(),
+          path: ContactPathSpec.t(),
           activation_id: binary(),
           binding_set_id: binary(),
           binding_set_version: pos_integer(),
           clock_mode: :live | :replay,
           initial_time: DateTime.t(),
-          provider_bindings: %{required(binary()) => ProviderBinding.t()},
-          transport_bindings: %{required(binary()) => TransportBinding.t()}
+          provider_bindings: %{required(binary()) => ProviderBindingSpec.t()},
+          transport_bindings: %{required(binary()) => TransportBindingSpec.t()}
         }
 
   def start_link(opts) when is_list(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
-    %Path{} = path = Keyword.fetch!(opts, :path)
+    %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
 
     GenServer.start_link(
       __MODULE__,
@@ -81,7 +83,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
-    %Path{} = path = Keyword.fetch!(opts, :path)
+    %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
     clock_mode = Keyword.get(opts, :clock_mode, :live)
     initial_time = Keyword.get(opts, :initial_time, DateTime.utc_now())
 
@@ -173,7 +175,8 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   defp start_provider_runtimes(state) do
-    Enum.reduce_while(state.path.provider_bindings, :ok, fn %ProviderBinding{} = provider_binding,
+    Enum.reduce_while(state.path.provider_bindings, :ok, fn %ProviderBindingSpec{} =
+                                                              provider_binding,
                                                             :ok ->
       with {:ok, _projector} <- start_provider_persistence_projector(state, provider_binding),
            {:ok, _executor} <- start_provider_ingress_executor(state, provider_binding),
@@ -189,7 +192,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     end)
   end
 
-  defp start_provider_persistence_projector(state, %ProviderBinding{} = provider_binding) do
+  defp start_provider_persistence_projector(state, %ProviderBindingSpec{} = provider_binding) do
     child_spec =
       {IngressPersistenceProjector,
        name:
@@ -218,7 +221,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     end
   end
 
-  defp start_provider_ingress_executor(state, %ProviderBinding{} = provider_binding) do
+  defp start_provider_ingress_executor(state, %ProviderBindingSpec{} = provider_binding) do
     child_spec =
       {ProviderIngressExecutor,
        name:
@@ -254,7 +257,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     end
   end
 
-  defp start_provider_runtime(state, %ProviderBinding{} = provider_binding, provider_module) do
+  defp start_provider_runtime(state, %ProviderBindingSpec{} = provider_binding, provider_module) do
     child_spec =
       provider_module.child_spec(
         name:
@@ -295,7 +298,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   defp start_transport_runtimes(state) do
-    Enum.reduce_while(state.path.transport_bindings, :ok, fn %TransportBinding{} =
+    Enum.reduce_while(state.path.transport_bindings, :ok, fn %TransportBindingSpec{} =
                                                                transport_binding,
                                                              :ok ->
       with {:ok, %Descriptor{kind: :transport_extension}} <-
@@ -314,7 +317,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     end)
   end
 
-  defp build_transport_configuration(state, %TransportBinding{} = transport_binding) do
+  defp build_transport_configuration(state, %TransportBindingSpec{} = transport_binding) do
     CapabilityRegistry.build_instance(
       transport_binding.family_key,
       transport_binding.configuration,
@@ -333,7 +336,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     )
   end
 
-  defp start_transport_runtime(state, %TransportBinding{} = transport_binding, configuration) do
+  defp start_transport_runtime(state, %TransportBindingSpec{} = transport_binding, configuration) do
     child_spec =
       {TransportRuntime,
        mission_id: state.mission_id,
@@ -406,22 +409,31 @@ defmodule Cadence.Runtime.PathCoordinator do
     end
   end
 
-  defp transport_scope_ref(%Path{} = path, %TransportBinding{target_scope: :path}),
+  defp transport_scope_ref(%ContactPathSpec{} = path, %TransportBindingSpec{target_scope: :path}),
     do: path.path_id
 
   defp transport_scope_ref(
-         %Path{},
-         %TransportBinding{target_scope: :transport, transport_binding_id: transport_binding_id}
+         %ContactPathSpec{},
+         %TransportBindingSpec{
+           target_scope: :transport,
+           transport_binding_id: transport_binding_id
+         }
        ),
        do: transport_binding_id
 
-  defp transport_partition_key(%Path{} = path, %TransportBinding{target_scope: :path}) do
+  defp transport_partition_key(
+         %ContactPathSpec{} = path,
+         %TransportBindingSpec{target_scope: :path}
+       ) do
     PartitionKey.new(%{affinity: :path, value: path.path_id})
   end
 
   defp transport_partition_key(
-         %Path{},
-         %TransportBinding{target_scope: :transport, transport_binding_id: transport_binding_id}
+         %ContactPathSpec{},
+         %TransportBindingSpec{
+           target_scope: :transport,
+           transport_binding_id: transport_binding_id
+         }
        ) do
     PartitionKey.new(%{affinity: :transport, value: transport_binding_id})
   end

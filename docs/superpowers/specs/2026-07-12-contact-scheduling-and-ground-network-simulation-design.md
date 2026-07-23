@@ -8,7 +8,7 @@
 - Related decisions:
   - [ADR-006: Contact, Link, and Transport Runtime Model](../../decisions/006-contact-link-and-transport-runtime-model.md)
   - [ADR-012: Provider Adapter and Ground Station Simulator Model](../../decisions/012-provider-adapter-and-ground-station-simulator-model.md)
-  - [ADR-013: Shared CCSDS Library Boundary](../../decisions/013-shared-ccsds-library-boundary.md)
+  - [ADR-014: Shared CCSDS Library Boundary](../../decisions/014-shared-ccsds-library-boundary.md)
 - Related designs:
   - [Comms Transport, Routing, and Spacecraft Profile UX](2026-06-01-comms-transport-routing-and-spacecraft-profile-design.md)
   - [Simulator Provider Contract v1](2026-07-13-simulator-provider-contract-v1.md)

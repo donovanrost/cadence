@@ -1,6 +1,8 @@
 defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   use Cadence.ConfigCase, async: false
 
+  @moduletag :runtime
+
   import Ecto.Query
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -445,7 +447,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version
@@ -827,7 +829,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version
@@ -940,7 +942,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version

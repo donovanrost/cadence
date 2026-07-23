@@ -6,7 +6,6 @@ defmodule Cadence.Replay do
   alias Ecto.Changeset
   alias Ecto.Multi
 
-  alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.{DispatchDecision, WorkItem}
   alias Cadence.Governance
   alias Cadence.Jobs
@@ -27,7 +26,14 @@ defmodule Cadence.Replay do
   alias Cadence.Replay.Run
   alias Cadence.Replay.Scope
   alias Cadence.Repo
-  alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
+
+  alias Cadence.Runtime.{
+    ManagedActionRequest,
+    ManagedCapabilityRecord,
+    ManagedTimerEvent,
+    MissionRuntimeSpec
+  }
+
   alias Cadence.Runtime.{PartitionKey, PartitionOwner}
   alias Cadence.Telemetry.Sample
 
@@ -199,32 +205,36 @@ defmodule Cadence.Replay do
   end
 
   defp process_raw_evidences(%Run{} = run, raw_evidences, binding_set) do
-    replay_activation = replay_activation(run)
+    with {:ok, replay_runtime_spec} <- replay_runtime_spec(run, binding_set) do
+      case process_replay_raw_evidences(
+             raw_evidences,
+             binding_set,
+             replay_runtime_spec,
+             %{},
+             []
+           ) do
+        {:ok, processing_results, partition_owners} ->
+          finalize_replay_results(processing_results, partition_owners)
 
-    case process_replay_raw_evidences(
-           raw_evidences,
-           binding_set,
-           replay_activation,
-           %{},
-           []
-         ) do
-      {:ok, processing_results, partition_owners} ->
-        result =
-          with {:ok, runtime_records} <- drain_replay_partition_owners(partition_owners) do
-            {:ok,
-             %{
-               processing_results: Enum.reverse(processing_results),
-               runtime_records: runtime_records
-             }}
-          end
-
-        stop_replay_partition_owners(partition_owners)
-        result
-
-      {:error, reason, partition_owners} ->
-        stop_replay_partition_owners(partition_owners)
-        {:error, reason}
+        {:error, reason, partition_owners} ->
+          stop_replay_partition_owners(partition_owners)
+          {:error, reason}
+      end
     end
+  end
+
+  defp finalize_replay_results(processing_results, partition_owners) do
+    result =
+      with {:ok, runtime_records} <- drain_replay_partition_owners(partition_owners) do
+        {:ok,
+         %{
+           processing_results: Enum.reverse(processing_results),
+           runtime_records: runtime_records
+         }}
+      end
+
+    stop_replay_partition_owners(partition_owners)
+    result
   end
 
   defp persist_completed_run(%Run{} = run, replay_result) do
@@ -417,12 +427,14 @@ defmodule Cadence.Replay do
     end)
   end
 
-  defp replay_activation(%Run{} = run) do
-    BindingSetActivation.new(%{
+  defp replay_runtime_spec(%Run{} = run, binding_set) do
+    MissionRuntimeSpec.new(%{
       activation_id: run.replay_run_id <> ":replay",
       mission_id: run.mission_id,
+      generation: 1,
       binding_set_id: run.binding_set_id,
       binding_set_version: run.binding_set_version,
+      binding_set: binding_set,
       activated_at: run.started_at,
       metadata: %{"replay" => true, "replay_run_id" => run.replay_run_id}
     })
@@ -435,7 +447,7 @@ defmodule Cadence.Replay do
   defp process_replay_raw_evidences(
          [raw_evidence | remaining_raw_evidences],
          binding_set,
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          partition_owners,
          acc
        ) do
@@ -471,7 +483,7 @@ defmodule Cadence.Replay do
   defp ensure_replay_partition_owner(
          partition_owners,
          %PartitionKey{} = partition_key,
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          binding_set,
          raw_evidence
        ) do

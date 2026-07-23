@@ -8,19 +8,25 @@ aliases:
     postgres polling
   ]
 tags: [adr, architecture, control-plane, data-plane, runtime, reconciliation, otp]
-status: accepted
+status: superseded
 created: 2026-06-08
-updated: 2026-06-09
+updated: 2026-07-21
 ---
 
 # ADR-013: Control Plane, Data Plane, and Reconciliation Patterns
 
 ## Status
 
-Accepted
+Superseded by
+[ADR-015: Management Plane, Control Plane, and Data Plane Architecture](015-management-control-data-plane-architecture.md).
 
-This accepts the design pattern. It does not claim every existing subsystem
-already follows the pattern; the adoption map below calls out current gaps.
+The durable-write, signaling, reconciliation, process-ownership, and failure
+recovery patterns in this ADR remain valid. ADR-015 replaces this ADR's plane
+definitions and assigns reconciliation to the control plane.
+
+This ADR originally accepted the design pattern. It did not claim every
+existing subsystem already followed the pattern; the adoption map below calls
+out the gaps at that time.
 
 ## Context
 

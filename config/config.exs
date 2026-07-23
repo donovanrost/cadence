@@ -21,6 +21,7 @@ config :logger, :default_formatter,
   ]
 
 config :cadence,
+  activation_governance: [approval_required: true],
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,
   background_jobs: [

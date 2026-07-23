@@ -9,13 +9,13 @@ defmodule Cadence.Runtime.DownlinkCombiner do
   alias Cadence.Contacts.{
     CombinedDownlinkRecord,
     DownlinkDiagnostic,
-    DownlinkObservation,
-    Path,
-    RealizedContact
+    DownlinkObservation
   }
 
   alias Cadence.Persistence
+  alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @type state :: %{
           mission_id: binary(),
@@ -28,7 +28,7 @@ defmodule Cadence.Runtime.DownlinkCombiner do
         }
 
   def start_link(opts) when is_list(opts) do
-    %RealizedContact{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
 
     GenServer.start_link(
       __MODULE__,
@@ -53,7 +53,7 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   @impl true
   def init(opts) do
-    %RealizedContact{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
 
     {:ok,
      %{
@@ -171,11 +171,11 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   defp selected_downlink_path_id(paths) do
     paths
-    |> Enum.find(fn %Path{} = path ->
+    |> Enum.find(fn %ContactPathSpec{} = path ->
       path.direction == :downlink and path.selection_role == :selected
     end)
     |> case do
-      %Path{} = path -> path.path_id
+      %ContactPathSpec{} = path -> path.path_id
       nil -> nil
     end
   end

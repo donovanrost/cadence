@@ -1,6 +1,6 @@
 # owner: Cadence core architecture
 # review-by: 2026-10-18
-# rationale: Ratchet root facade, shared persistence schema, and cross-context row debt
+# rationale: Ratchet plane direction, root facade, shared schema, and cross-context row debt
 #
 # Each entry is an existing dependency, not permission for new code. Remove an entry
 # in the same change that removes its edge. The architecture check rejects additions,

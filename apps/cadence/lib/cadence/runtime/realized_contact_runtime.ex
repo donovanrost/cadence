@@ -3,10 +3,10 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
 
   use Supervisor
 
-  alias Cadence.Contacts.RealizedContact
   alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Runtime.RealizedContactRuntimeSpec
 
-  def start_link(%RealizedContact{} = realized_contact) do
+  def start_link(%RealizedContactRuntimeSpec{} = realized_contact) do
     Supervisor.start_link(
       __MODULE__,
       realized_contact,
@@ -19,7 +19,7 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
   end
 
   @impl true
-  def init(%RealizedContact{} = realized_contact) do
+  def init(%RealizedContactRuntimeSpec{} = realized_contact) do
     children = [
       {DynamicSupervisor,
        strategy: :one_for_one,

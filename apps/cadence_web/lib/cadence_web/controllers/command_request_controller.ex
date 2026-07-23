@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommandRequestController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_request_filters(params) do
       command_requests =
-        Cadence.Commanding.list_command_requests(organization_id, mission_id, filters)
+        Cadence.Management.Commanding.list_command_requests(organization_id, mission_id, filters)
         |> Enum.map(&ControlPlaneJSON.command_request/1)
 
       json(conn, %{data: command_requests})
@@ -41,7 +41,10 @@ defmodule CadenceWeb.CommandRequestController do
              default_requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, %CommandRequest{} = persisted_command_request} <-
-           Cadence.Commanding.persist_command_request(organization_id, command_request) do
+           Cadence.Management.Commanding.persist_command_request(
+             organization_id,
+             command_request
+           ) do
       conn
       |> put_status(:created)
       |> json(%{data: ControlPlaneJSON.command_request(persisted_command_request)})
@@ -60,7 +63,7 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id
            ),
          {:ok, %CommandRequest{} = command_request} <-
-           Cadence.Commanding.fetch_command_request(
+           Cadence.Management.Commanding.fetch_command_request(
              organization_id,
              mission_id,
              command_request_id
@@ -90,7 +93,7 @@ defmodule CadenceWeb.CommandRequestController do
              default_decided_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, result} <-
-           Cadence.Commanding.approve_command_request(
+           Cadence.Management.Commanding.approve_command_request(
              organization_id,
              mission_id,
              command_request_id,
@@ -122,7 +125,7 @@ defmodule CadenceWeb.CommandRequestController do
              default_decided_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, result} <-
-           Cadence.Commanding.reject_command_request(
+           Cadence.Management.Commanding.reject_command_request(
              organization_id,
              mission_id,
              command_request_id,
@@ -152,11 +155,15 @@ defmodule CadenceWeb.CommandRequestController do
              Map.get(params, "queue_entry", %{}),
              default_enqueued_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
-         {:ok, result} <-
-           Cadence.Commanding.enqueue_command_request(
+         {:ok, approved_command} <-
+           Cadence.Management.Commanding.fetch_approved_command(
              organization_id,
              mission_id,
-             command_request_id,
+             command_request_id
+           ),
+         {:ok, result} <-
+           Cadence.Control.Commanding.enqueue(
+             approved_command,
              Keyword.fetch!(queue_opts, :enqueued_by),
              Keyword.drop(queue_opts, [:enqueued_by])
            ) do

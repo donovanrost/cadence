@@ -1,7 +1,15 @@
 defmodule Cadence.Runtime.TransportRuntimeTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Runtime.{PartitionKey, TransportRuntime}
+  alias Cadence.Runtime.{CapabilityRegistry, PartitionKey, TransportRuntime}
+
+  setup do
+    if is_nil(Process.whereis(CapabilityRegistry)) do
+      start_supervised!(CapabilityRegistry)
+    end
+
+    :ok
+  end
 
   test "runs a live transport extension and keeps its heartbeat timer armed" do
     path_ref = "path-live-alpha"

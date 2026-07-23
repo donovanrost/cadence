@@ -5,20 +5,22 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   use GenServer
 
-  alias Cadence.Contacts.{DownlinkObservation, Path, RealizedContact}
+  alias Cadence.Contacts.DownlinkObservation
+  alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.DownlinkCombiner
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.PathCoordinator
   alias Cadence.Runtime.PathRuntime
+  alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @type state :: %{
-          realized_contact: RealizedContact.t(),
+          realized_contact: RealizedContactRuntimeSpec.t(),
           path_ids: [binary()],
-          paths: %{required(binary()) => Path.t()}
+          paths: %{required(binary()) => ContactPathSpec.t()}
         }
 
   def start_link(opts) when is_list(opts) do
-    %RealizedContact{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
 
     GenServer.start_link(
       __MODULE__,
@@ -75,7 +77,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   @impl true
   def init(opts) do
-    %RealizedContact{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
 
     with :ok <- validate_realized_contact(realized_contact),
          {:ok, path_ids} <- start_path_runtimes(realized_contact) do
@@ -196,8 +198,9 @@ defmodule Cadence.Runtime.ContactCoordinator do
     {:reply, reply, state}
   end
 
-  defp start_path_runtimes(%RealizedContact{} = realized_contact) do
-    Enum.reduce_while(realized_contact.paths, {:ok, []}, fn %Path{} = path, {:ok, acc} ->
+  defp start_path_runtimes(%RealizedContactRuntimeSpec{} = realized_contact) do
+    Enum.reduce_while(realized_contact.paths, {:ok, []}, fn %ContactPathSpec{} = path,
+                                                            {:ok, acc} ->
       child_spec =
         Supervisor.child_spec(
           {PathRuntime,
@@ -228,7 +231,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end)
   end
 
-  defp collect_path_snapshots(%RealizedContact{} = realized_contact, path_ids) do
+  defp collect_path_snapshots(%RealizedContactRuntimeSpec{} = realized_contact, path_ids) do
     Enum.reduce_while(path_ids, {:ok, []}, fn path_id, {:ok, acc} ->
       with {:ok, path_runtime} <-
              path_runtime(
@@ -254,7 +257,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end
   end
 
-  defp downlink_combiner_snapshot(%RealizedContact{} = realized_contact) do
+  defp downlink_combiner_snapshot(%RealizedContactRuntimeSpec{} = realized_contact) do
     with {:ok, downlink_combiner} <-
            downlink_combiner(realized_contact.mission_id, realized_contact.realized_contact_id) do
       DownlinkCombiner.snapshot(downlink_combiner)
@@ -273,7 +276,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   defp maybe_handle_downlink_observation(state, path_id, event, opts) do
     case Map.fetch(state.paths, path_id) do
-      {:ok, %Path{direction: :downlink} = path} ->
+      {:ok, %ContactPathSpec{direction: :downlink} = path} ->
         with {:ok, observation} <-
                DownlinkObservation.from_transport_event(
                  state.realized_contact.mission_id,
@@ -298,10 +301,13 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end
   end
 
-  defp validate_realized_contact(%RealizedContact{paths: []}),
+  defp validate_realized_contact(%RealizedContactRuntimeSpec{paths: []}),
     do: {:error, :realized_contact_requires_at_least_one_path}
 
-  defp validate_realized_contact(%RealizedContact{paths: paths, contact_intents: contact_intents}) do
+  defp validate_realized_contact(%RealizedContactRuntimeSpec{
+         paths: paths,
+         contact_intents: contact_intents
+       }) do
     with :ok <- validate_unique_path_ids(paths),
          :ok <- validate_selected_path_presence(paths),
          :ok <- validate_contact_intents(paths, contact_intents),

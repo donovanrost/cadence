@@ -1,6 +1,8 @@
 defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
   use Cadence.ConfigCase, async: false
 
+  @moduletag :runtime
+
   import Cadence.Dashboards.DataSourcesFixtures
 
   alias Cadence.Dashboards.{

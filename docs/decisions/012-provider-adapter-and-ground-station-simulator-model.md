@@ -11,7 +11,7 @@ updated: 2026-07-20
 # ADR-012: Provider Adapter and Ground Station Simulator Model
 
 > CCSDS code sharing and the simulator's independent dependency/configuration
-> boundary are defined by [ADR-013](013-shared-ccsds-library-boundary.md).
+> boundary are defined by [ADR-014](014-shared-ccsds-library-boundary.md).
 
 ## Status
 

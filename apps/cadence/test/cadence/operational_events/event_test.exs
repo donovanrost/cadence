@@ -25,8 +25,10 @@ defmodule Cadence.OperationalEvents.EventTest do
         activation_id: "activation-runtime-1",
         organization_id: "org-1",
         mission_id: "mission-1",
+        generation: 7,
         binding_set_id: "runtime-basis",
         binding_set_version: 3,
+        binding_set_content_sha256: String.duplicate("a", 64),
         activated_at: activated_at,
         metadata: %{"change_request" => "CR-17"}
       })
@@ -54,7 +56,9 @@ defmodule Cadence.OperationalEvents.EventTest do
     assert event.payload == %{
              binding_set_id: "runtime-basis",
              binding_set_version: 3,
-             activation_id: "activation-runtime-1"
+             activation_id: "activation-runtime-1",
+             generation: 7,
+             binding_set_content_sha256: String.duplicate("a", 64)
            }
 
     assert event.current == event.payload

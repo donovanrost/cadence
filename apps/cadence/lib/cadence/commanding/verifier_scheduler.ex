@@ -5,8 +5,8 @@ defmodule Cadence.Commanding.VerifierScheduler do
 
   use GenServer
 
-  alias Cadence.Commanding
   alias Cadence.Commanding.CommandVerifierInstance
+  alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
   @max_timer_ms 2_147_483_647

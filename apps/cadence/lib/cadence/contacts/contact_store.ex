@@ -18,6 +18,7 @@ defmodule Cadence.Contacts.ContactStore do
   alias Cadence.Contacts.Scheduler
   alias Cadence.Contacts.SchedulerReadModel
   alias Cadence.Contacts.Validation
+  alias Cadence.Control.Commanding
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
@@ -541,7 +542,7 @@ defmodule Cadence.Contacts.ContactStore do
 
   def notify_contact_changed(%RealizedContact{} = realized_contact) do
     Scheduler.notify_contact_changed(realized_contact)
-    Cadence.Commanding.notify_release_target_available(realized_contact)
+    Commanding.notify_release_target_available(realized_contact)
     invalidate_dashboard_events(realized_contact)
     {:ok, realized_contact}
   end

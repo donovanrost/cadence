@@ -299,12 +299,16 @@ defmodule Cadence.OperationalEvents.Event do
       payload: %{
         binding_set_id: activation.binding_set_id,
         binding_set_version: activation.binding_set_version,
-        activation_id: activation.activation_id
+        activation_id: activation.activation_id,
+        generation: activation.generation,
+        binding_set_content_sha256: activation.binding_set_content_sha256
       },
       current: %{
         binding_set_id: activation.binding_set_id,
         binding_set_version: activation.binding_set_version,
-        activation_id: activation.activation_id
+        activation_id: activation.activation_id,
+        generation: activation.generation,
+        binding_set_content_sha256: activation.binding_set_content_sha256
       },
       metadata: activation.metadata
     })

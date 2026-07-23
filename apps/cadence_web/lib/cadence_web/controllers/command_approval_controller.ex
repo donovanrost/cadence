@@ -4,6 +4,7 @@ defmodule CadenceWeb.CommandApprovalController do
   action_fallback CadenceWeb.FallbackController
 
   alias Cadence.Commanding.CommandApproval
+  alias Cadence.Management.Commanding
   alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -15,7 +16,11 @@ defmodule CadenceWeb.CommandApprovalController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_approval_filters(params) do
       command_approvals =
-        Cadence.Commanding.list_command_approvals(organization_id, mission_id, filters)
+        Commanding.list_command_approvals(
+          organization_id,
+          mission_id,
+          filters
+        )
         |> Enum.map(&ControlPlaneJSON.command_approval/1)
 
       json(conn, %{data: command_approvals})
@@ -34,7 +39,7 @@ defmodule CadenceWeb.CommandApprovalController do
              mission_id
            ),
          {:ok, %CommandApproval{} = command_approval} <-
-           Cadence.Commanding.fetch_command_approval(
+           Commanding.fetch_command_approval(
              organization_id,
              mission_id,
              command_approval_id

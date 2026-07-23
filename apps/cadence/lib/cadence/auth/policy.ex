@@ -71,6 +71,23 @@ defmodule Cadence.Auth.Policy do
     end
   end
 
+  def authorize(%Scope{} = current_scope, :request_activation, params) do
+    authorize(current_scope, :operate_mission, params)
+  end
+
+  def authorize(%Scope{actor_kind: :service}, :approve_activation, _params),
+    do: {:error, :human_activation_approver_required}
+
+  def authorize(%Scope{} = current_scope, :approve_activation, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      }) do
+    authorize(current_scope, :manage_mission, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+  end
+
   def authorize(
         %Scope{} = current_scope,
         :manage_service_identities,

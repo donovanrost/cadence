@@ -35,6 +35,8 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
 
   @impl true
   def run(args) do
+    Mix.Task.run("compile")
+
     {opts, remaining, invalid} = OptionParser.parse(args, strict: @switches)
     validate_args!(remaining, invalid)
     validate_limits!(opts)
@@ -111,6 +113,8 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         "#{Map.get(counts, :root_facade, 0)} root-facade edges, " <>
         "#{Map.get(counts, :persistence_schema, 0)} schema edges, " <>
         "#{Map.get(counts, :context_schema, 0)} cross-context row edges, " <>
+        "#{Map.get(counts, :plane_direction, 0)} reverse-plane edges, " <>
+        "#{Map.get(counts, :plane_internal, 0)} cross-plane internal edges, " <>
         "#{length(result.new)} new, #{length(result.resolved)} resolved; " <>
         "owner #{result.owner}, review by #{result.review_by}."
     )

@@ -3,7 +3,6 @@ defmodule Cadence.Contacts.DownlinkObservation do
   Canonical contact-level observation contributed by one downlink path.
   """
 
-  alias Cadence.Contacts.Path
   alias Cadence.Ids
 
   @type t :: %__MODULE__{
@@ -50,12 +49,12 @@ defmodule Cadence.Contacts.DownlinkObservation do
     }
   end
 
-  @spec from_transport_event(binary(), binary(), Path.t(), term(), keyword()) ::
+  @spec from_transport_event(binary(), binary(), map(), term(), keyword()) ::
           {:ok, t()} | {:error, term()}
   def from_transport_event(
         mission_id,
         realized_contact_id,
-        %Path{} = path,
+        %{path_id: path_id} = path,
         %__MODULE__{} = observation,
         opts
       )
@@ -72,7 +71,7 @@ defmodule Cadence.Contacts.DownlinkObservation do
          observation
          | mission_id: mission_id,
            realized_contact_id: realized_contact_id,
-           path_id: path.path_id,
+           path_id: path_id,
            source_endpoint_ref: observation.source_endpoint_ref || path.source_endpoint_ref,
            observed_at: observed_at
        }}
@@ -81,7 +80,13 @@ defmodule Cadence.Contacts.DownlinkObservation do
     end
   end
 
-  def from_transport_event(mission_id, realized_contact_id, %Path{} = path, event, opts)
+  def from_transport_event(
+        mission_id,
+        realized_contact_id,
+        %{path_id: path_id} = path,
+        event,
+        opts
+      )
       when is_binary(mission_id) and is_binary(realized_contact_id) and is_map(event) and
              is_list(opts) do
     case event_kind(event) do
@@ -101,7 +106,7 @@ defmodule Cadence.Contacts.DownlinkObservation do
              new(%{
                mission_id: mission_id,
                realized_contact_id: realized_contact_id,
-               path_id: path.path_id,
+               path_id: path_id,
                source_endpoint_ref: path.source_endpoint_ref,
                observation_key: observation_key,
                payload: Map.get(event, :payload, Map.get(event, "payload")),
@@ -116,8 +121,14 @@ defmodule Cadence.Contacts.DownlinkObservation do
     end
   end
 
-  def from_transport_event(_mission_id, _realized_contact_id, %Path{}, _event, _opts),
-    do: {:error, :not_downlink_observation}
+  def from_transport_event(
+        _mission_id,
+        _realized_contact_id,
+        %{path_id: _path_id},
+        _event,
+        _opts
+      ),
+      do: {:error, :not_downlink_observation}
 
   defp event_kind(event) do
     case Map.get(event, :kind, Map.get(event, "kind")) do

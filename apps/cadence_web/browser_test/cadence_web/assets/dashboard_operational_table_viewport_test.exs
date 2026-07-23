@@ -322,7 +322,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -493,7 +493,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version
@@ -720,7 +720,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
     binding_set = persist_binding_set!(org, mission)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Cadence.Control.Activations.activate_binding_set(
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version

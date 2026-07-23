@@ -325,7 +325,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   end
 
   defp fetch_active_binding_set_summary(mission_id) do
-    case Cadence.Runtime.fetch_active_activation(mission_id) do
+    case Cadence.Activations.fetch_active_activation(mission_id) do
       {:ok, activation} ->
         %{
           binding_set_id: activation.binding_set_id,

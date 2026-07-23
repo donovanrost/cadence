@@ -3,9 +3,9 @@ defmodule Cadence.Commanding.Dispatcher do
 
   use GenServer
 
-  alias Cadence.Commanding
   alias Cadence.Commanding.DispatchSupervisor
   alias Cadence.Commanding.LaneDispatcher
+  alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
   @event_prefix [:cadence, :commanding, :dispatcher]

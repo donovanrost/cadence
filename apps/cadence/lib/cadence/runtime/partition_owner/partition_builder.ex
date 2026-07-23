@@ -1,7 +1,6 @@
 defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   @moduledoc false
 
-  alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Capabilities.{Descriptor, ExecutionContext, ExecutionResult}
 
@@ -9,6 +8,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
     ActionExecutor,
     ActivationContext,
     CapabilityRegistry,
+    MissionRuntimeSpec,
     PartitionKey,
     TimerService
   }
@@ -17,7 +17,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   def build(
         %BindingSet{} = binding_set,
-        %BindingSetActivation{} = activation,
+        %MissionRuntimeSpec{} = activation,
         %PartitionKey{} = partition_key,
         clock_mode,
         %DateTime{} = current_time
@@ -61,7 +61,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp initialize_managed_applications(
          %BindingSet{} = runtime_binding_set,
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %PartitionKey{} = partition_key,
          clock_mode,
          %DateTime{} = current_time
@@ -85,7 +85,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   defp reduce_managed_application_initialization(
          %CapabilityInstance{} = capability_instance,
          {:ok, acc, timer_service, runtime_records},
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %BindingSet{} = runtime_binding_set,
          %PartitionKey{} = partition_key
        ) do
@@ -110,7 +110,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp maybe_initialize_managed_application_instance(
          %Descriptor{kind: :managed_application},
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %BindingSet{} = runtime_binding_set,
          %PartitionKey{} = partition_key,
          %CapabilityInstance{} = capability_instance,
@@ -131,7 +131,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp maybe_initialize_managed_application_instance(
          %Descriptor{},
-         %BindingSetActivation{},
+         %MissionRuntimeSpec{},
          %BindingSet{},
          %PartitionKey{},
          %CapabilityInstance{},
@@ -143,7 +143,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   end
 
   defp initialize_managed_application_instance(
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %BindingSet{} = runtime_binding_set,
          %PartitionKey{} = partition_key,
          %CapabilityInstance{} = capability_instance,
@@ -310,7 +310,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   end
 
   def execution_context(
-        %BindingSetActivation{} = activation,
+        %MissionRuntimeSpec{} = activation,
         %BindingSet{} = runtime_binding_set,
         %PartitionKey{} = partition_key,
         %CapabilityInstance{} = capability_instance,

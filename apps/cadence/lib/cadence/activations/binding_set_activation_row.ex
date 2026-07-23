@@ -13,10 +13,13 @@ defmodule Cadence.Activations.BindingSetActivationRow do
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 
   schema "mission_binding_set_activations" do
+    field(:activation_request_id, :string)
     field(:mission_id, :string)
     field(:organization_id, :string)
+    field(:generation, :integer)
     field(:binding_set_id, :string)
     field(:binding_set_version, :integer)
+    field(:binding_set_content_sha256, :string)
     field(:metadata, :map, default: %{})
     field(:activated_at, :utc_datetime_usec)
 
@@ -26,6 +29,7 @@ defmodule Cadence.Activations.BindingSetActivationRow do
   @required_fields [
     :activation_id,
     :mission_id,
+    :generation,
     :binding_set_id,
     :binding_set_version,
     :metadata,
@@ -44,10 +48,13 @@ defmodule Cadence.Activations.BindingSetActivationRow do
   def to_domain(%__MODULE__{} = activation_row) do
     %BindingSetActivation{
       activation_id: activation_row.activation_id,
+      activation_request_id: activation_row.activation_request_id,
       organization_id: activation_row.organization_id,
       mission_id: activation_row.mission_id,
+      generation: activation_row.generation,
       binding_set_id: activation_row.binding_set_id,
       binding_set_version: activation_row.binding_set_version,
+      binding_set_content_sha256: activation_row.binding_set_content_sha256,
       metadata: JsonDocument.unwrap_value(activation_row.metadata),
       activated_at: activation_row.activated_at
     }
@@ -56,10 +63,13 @@ defmodule Cadence.Activations.BindingSetActivationRow do
   defp domain_attrs(%BindingSetActivation{} = activation) do
     %{
       activation_id: activation.activation_id,
+      activation_request_id: activation.activation_request_id,
       organization_id: activation.organization_id,
       mission_id: activation.mission_id,
+      generation: activation.generation,
       binding_set_id: activation.binding_set_id,
       binding_set_version: activation.binding_set_version,
+      binding_set_content_sha256: activation.binding_set_content_sha256,
       metadata: JsonDocument.wrap_value(activation.metadata),
       activated_at: activation.activated_at
     }
@@ -68,10 +78,13 @@ defmodule Cadence.Activations.BindingSetActivationRow do
   defp all_fields do
     [
       :activation_id,
+      :activation_request_id,
       :organization_id,
       :mission_id,
+      :generation,
       :binding_set_id,
       :binding_set_version,
+      :binding_set_content_sha256,
       :metadata,
       :activated_at
     ]

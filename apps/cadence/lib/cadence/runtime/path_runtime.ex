@@ -3,13 +3,12 @@ defmodule Cadence.Runtime.PathRuntime do
 
   use Supervisor
 
-  alias Cadence.Contacts.Path
-  alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Runtime.{ContactPathSpec, MissionRuntime}
 
   def start_link(opts) when is_list(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
-    %Path{} = path = Keyword.fetch!(opts, :path)
+    %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
 
     Supervisor.start_link(
       __MODULE__,
@@ -22,7 +21,7 @@ defmodule Cadence.Runtime.PathRuntime do
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
-    %Path{} = path = Keyword.fetch!(opts, :path)
+    %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
 
     children = [
       {DynamicSupervisor,

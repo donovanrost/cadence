@@ -6,8 +6,6 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   use GenServer
 
-  alias Cadence.Activations.BindingSetActivation
-
   alias Cadence.ApplicationDispatch.{
     BindingSet,
     CapabilityInstance,
@@ -27,6 +25,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     CapabilityRegistry,
     Clock,
     MissionRuntime,
+    MissionRuntimeSpec,
     PartitionKey,
     TimerService
   }
@@ -38,7 +37,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @type state :: %{
           mission_id: binary(),
           partition_key: PartitionKey.t(),
-          active_activation: BindingSetActivation.t(),
+          active_activation: MissionRuntimeSpec.t(),
           binding_set: BindingSet.t(),
           runtime_binding_set: BindingSet.t(),
           managed_application_states: %{required(binary()) => term()},
@@ -86,10 +85,10 @@ defmodule Cadence.Runtime.PartitionOwner do
     GenServer.call(partition_owner, :snapshot)
   end
 
-  @spec reconcile(pid(), BindingSetActivation.t(), BindingSet.t()) :: :ok
+  @spec reconcile(pid(), MissionRuntimeSpec.t(), BindingSet.t()) :: :ok
   def reconcile(
         partition_owner,
-        %BindingSetActivation{} = activation,
+        %MissionRuntimeSpec{} = activation,
         %BindingSet{} = binding_set
       ) do
     GenServer.call(partition_owner, {:reconcile, activation, binding_set})
@@ -187,6 +186,8 @@ defmodule Cadence.Runtime.PartitionOwner do
         snapshot = %{
           mission_id: state.mission_id,
           activation_id: state.active_activation.activation_id,
+          generation: state.active_activation.generation,
+          binding_set_content_sha256: state.active_activation.binding_set_content_sha256,
           binding_set_id: state.runtime_binding_set.binding_set_id,
           binding_set_version: state.runtime_binding_set.version,
           partition_key: PartitionKey.identifier(state.partition_key),
@@ -213,7 +214,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   def handle_call(
-        {:reconcile, %BindingSetActivation{} = activation, %BindingSet{} = binding_set},
+        {:reconcile, %MissionRuntimeSpec{} = activation, %BindingSet{} = binding_set},
         _from,
         state
       ) do
@@ -400,7 +401,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp build_runtime_partition_state(
          %BindingSet{} = binding_set,
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %PartitionKey{} = partition_key,
          clock_mode,
          %DateTime{} = current_time
@@ -670,7 +671,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp build_execution_context(
-         %BindingSetActivation{} = activation,
+         %MissionRuntimeSpec{} = activation,
          %BindingSet{} = runtime_binding_set,
          %PartitionKey{} = partition_key,
          %CapabilityInstance{} = capability_instance,
@@ -898,10 +899,10 @@ defmodule Cadence.Runtime.PartitionOwner do
     end)
   end
 
-  defp default_initial_time(:replay, %BindingSetActivation{} = activation),
+  defp default_initial_time(:replay, %MissionRuntimeSpec{} = activation),
     do: activation.activated_at
 
-  defp default_initial_time(_clock_mode, %BindingSetActivation{}), do: DateTime.utc_now()
+  defp default_initial_time(_clock_mode, %MissionRuntimeSpec{}), do: DateTime.utc_now()
 
   defp current_runtime_time(state), do: TimerService.current_time(state.timer_service)
 

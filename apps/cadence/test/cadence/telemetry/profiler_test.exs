@@ -2,6 +2,7 @@ defmodule Cadence.Telemetry.ProfilerTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Control.Activations
   alias Cadence.Ingress.RawEvidence
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -60,7 +61,7 @@ defmodule Cadence.Telemetry.ProfilerTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Activations.activate_binding_set(
                mission_id,
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version

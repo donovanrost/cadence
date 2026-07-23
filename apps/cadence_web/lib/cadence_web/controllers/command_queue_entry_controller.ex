@@ -4,6 +4,8 @@ defmodule CadenceWeb.CommandQueueEntryController do
   action_fallback CadenceWeb.FallbackController
 
   alias Cadence.Commanding.CommandQueueEntry
+  alias Cadence.Control.Commanding
+  alias Cadence.Projections.CommandStatus
   alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -15,7 +17,11 @@ defmodule CadenceWeb.CommandQueueEntryController do
            ),
          {:ok, filters} <- ControlPlaneParams.command_queue_entry_filters(params) do
       command_queue_entries =
-        Cadence.Commanding.list_command_queue_entries(organization_id, mission_id, filters)
+        CommandStatus.list_queue_entries(
+          organization_id,
+          mission_id,
+          filters
+        )
         |> Enum.map(&ControlPlaneJSON.command_queue_entry/1)
 
       json(conn, %{data: command_queue_entries})
@@ -34,7 +40,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              mission_id
            ),
          {:ok, %CommandQueueEntry{} = command_queue_entry} <-
-           Cadence.Commanding.fetch_command_queue_entry(
+           CommandStatus.fetch_queue_entry(
              organization_id,
              mission_id,
              command_queue_entry_id
@@ -63,7 +69,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              default_released_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
          {:ok, result} <-
-           Cadence.Commanding.release_command_queue_entry(
+           Commanding.release_command_queue_entry(
              organization_id,
              mission_id,
              command_queue_entry_id,

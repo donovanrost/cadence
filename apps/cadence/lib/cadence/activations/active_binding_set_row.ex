@@ -15,8 +15,11 @@ defmodule Cadence.Activations.ActiveBindingSetRow do
   schema "mission_active_binding_sets" do
     field(:organization_id, :string)
     field(:activation_id, :string)
+    field(:activation_request_id, :string)
+    field(:generation, :integer)
     field(:binding_set_id, :string)
     field(:binding_set_version, :integer)
+    field(:binding_set_content_sha256, :string)
     field(:metadata, :map, default: %{})
     field(:activated_at, :utc_datetime_usec)
 
@@ -26,6 +29,7 @@ defmodule Cadence.Activations.ActiveBindingSetRow do
   @required_fields [
     :mission_id,
     :activation_id,
+    :generation,
     :binding_set_id,
     :binding_set_version,
     :metadata,
@@ -44,10 +48,13 @@ defmodule Cadence.Activations.ActiveBindingSetRow do
   def to_domain(%__MODULE__{} = active_basis_row) do
     %BindingSetActivation{
       activation_id: active_basis_row.activation_id,
+      activation_request_id: active_basis_row.activation_request_id,
       organization_id: active_basis_row.organization_id,
       mission_id: active_basis_row.mission_id,
+      generation: active_basis_row.generation,
       binding_set_id: active_basis_row.binding_set_id,
       binding_set_version: active_basis_row.binding_set_version,
+      binding_set_content_sha256: active_basis_row.binding_set_content_sha256,
       metadata: JsonDocument.unwrap_value(active_basis_row.metadata),
       activated_at: active_basis_row.activated_at
     }
@@ -61,8 +68,11 @@ defmodule Cadence.Activations.ActiveBindingSetRow do
       organization_id: activation.organization_id,
       mission_id: activation.mission_id,
       activation_id: activation.activation_id,
+      activation_request_id: activation.activation_request_id,
+      generation: activation.generation,
       binding_set_id: activation.binding_set_id,
       binding_set_version: activation.binding_set_version,
+      binding_set_content_sha256: activation.binding_set_content_sha256,
       metadata: metadata_document(activation.metadata),
       activated_at: activation.activated_at
     }
@@ -73,8 +83,11 @@ defmodule Cadence.Activations.ActiveBindingSetRow do
       :mission_id,
       :organization_id,
       :activation_id,
+      :activation_request_id,
+      :generation,
       :binding_set_id,
       :binding_set_version,
+      :binding_set_content_sha256,
       :metadata,
       :activated_at
     ]

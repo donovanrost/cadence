@@ -22,7 +22,6 @@ defmodule Cadence.Commanding do
     CommandVerifierInstance,
     Dispatcher,
     DispatchSupervisor,
-    Encoder,
     LifecyclePolicy,
     ReleaseArtifacts,
     ReleaseStore,
@@ -38,6 +37,7 @@ defmodule Cadence.Commanding do
 
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
+  alias Cadence.Control.Commanding, as: ControlCommanding
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
   alias Cadence.Telemetry.Sample
@@ -48,7 +48,6 @@ defmodule Cadence.Commanding do
   }
 
   alias Cadence.Repo
-  alias Cadence.Runtime
 
   @spec persist_command_stage(binary(), CommandStage.t()) ::
           {:ok, CommandStage.t()} | {:error, term()}
@@ -547,7 +546,7 @@ defmodule Cadence.Commanding do
              request_row.command_id
            ),
          {:ok, encoded_command} <-
-           Encoder.encode(
+           ControlCommanding.encode_command(
              request_basis.runtime_definition,
              JsonDocument.unwrap_value(request_row.resolved_argument_values_document)
            ) do
@@ -637,16 +636,7 @@ defmodule Cadence.Commanding do
 
   defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
        when is_map(release_context) do
-    uplink_request = ReleaseArtifacts.uplink_request(persisted_attempt)
-
-    case Runtime.handle_path_control_input(
-           release_context.mission_id,
-           release_context.realized_contact.realized_contact_id,
-           release_context.path.path_id,
-           release_context.transport_binding.transport_binding_id,
-           uplink_request,
-           occurred_at: release_context.attempted_at
-         ) do
+    case ControlCommanding.transmit_release_attempt(release_context, persisted_attempt) do
       {:ok, _transport_outputs} ->
         complete_release_success(
           release_context.queue_entry_row,

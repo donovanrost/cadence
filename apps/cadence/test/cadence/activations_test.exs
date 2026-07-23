@@ -3,6 +3,8 @@ defmodule Cadence.ActivationsTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Runtime
+  alias Cadence.Runtime.MissionRuntimeSpec
+  alias Cadence.Runtime.Missions, as: RuntimeMissions
   alias Cadence.Telemetry.PacketDefinition
 
   @organization_id "org-alpha"
@@ -33,6 +35,11 @@ defmodule Cadence.ActivationsTest do
     assert activation.mission_id == binding_set.mission_id
     assert activation.binding_set_id == binding_set.binding_set_id
     assert activation.binding_set_version == binding_set.version
+    assert activation.generation == 1
+
+    assert activation.binding_set_content_sha256 ==
+             MissionRuntimeSpec.content_sha256(binding_set)
+
     assert activation.metadata["reason"] == "initial bootstrap"
 
     assert {:ok, active_activation} =
@@ -51,6 +58,23 @@ defmodule Cadence.ActivationsTest do
 
     assert active_binding_set.binding_set_id == binding_set.binding_set_id
     assert active_binding_set.version == binding_set.version
+
+    assert {:ok, runtime_spec} = RuntimeMissions.applied_spec(binding_set.mission_id)
+    assert runtime_spec.generation == activation.generation
+    assert runtime_spec.binding_set == binding_set
+
+    assert {:ok, next_activation} =
+             Cadence.Control.Activations.activate_binding_set(
+               @organization_id,
+               binding_set.mission_id,
+               binding_set.binding_set_id,
+               binding_set.version,
+               []
+             )
+
+    assert next_activation.generation == 2
+    assert {:ok, next_runtime_spec} = RuntimeMissions.applied_spec(binding_set.mission_id)
+    assert next_runtime_spec.generation == 2
   end
 
   defp persisted_binding_set(mission_id, version, packet_name) do

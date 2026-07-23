@@ -271,8 +271,9 @@ Definition of done:
 
 ## Defer For Now
 
-- Multi-node ownership implementation. ADR-013 names the boundary; concrete
-  distributed ownership can wait until there is a real deployment requirement.
+- Multi-node ownership implementation. ADR-015 assigns placement and
+  reconciliation to the control plane; concrete distributed ownership can wait
+  until there is a real deployment requirement.
 - QuestDB or TSDB adapters. Keep interfaces open, but do not add a TSDB backend
   before retention and query patterns are clearer.
 - Runtime-health UI. The data is now available; the UI/API surface is future

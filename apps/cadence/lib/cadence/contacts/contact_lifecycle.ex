@@ -9,7 +9,7 @@ defmodule Cadence.Contacts.ContactLifecycle do
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.Validation
-  alias Cadence.Runtime
+  alias Cadence.Control.Contacts, as: Runtime
 
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do

@@ -225,7 +225,7 @@ defmodule Cadence.CommandingTest do
     persisted_request_id = persisted_request.command_request_id
 
     assert {:error, {:command_request_self_approval_not_allowed, ^persisted_request_id}} =
-             Cadence.Commanding.approve_command_request(
+             Cadence.Management.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -240,8 +240,13 @@ defmodule Cadence.CommandingTest do
                %{"user_id" => "queue-operator"}
              )
 
-    assert {:ok, %{approval: approval, command_request: approved_request}} =
-             Cadence.Commanding.approve_command_request(
+    assert {:ok,
+            %{
+              approval: approval,
+              command_request: approved_request,
+              approved_command: approved_command
+            }} =
+             Cadence.Management.Commanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -253,6 +258,8 @@ defmodule Cadence.CommandingTest do
     assert approval.decision == :approved
     assert approval.reason == "Reviewed by flight director"
     assert approved_request.lifecycle_state == :approved
+    assert approved_command.command_request_id == persisted_request.command_request_id
+    assert is_binary(approved_command.content_sha256)
 
     assert {:ok, fetched_approval} =
              Cadence.Commanding.fetch_command_approval(
@@ -273,10 +280,8 @@ defmodule Cadence.CommandingTest do
     assert listed_approval.command_approval_id == approval.command_approval_id
 
     assert {:ok, %{queue_entry: queue_entry, command_request: queued_request}} =
-             Cadence.Commanding.enqueue_command_request(
-               @organization_id,
-               @mission_id,
-               persisted_request.command_request_id,
+             Cadence.Control.Commanding.enqueue(
+               approved_command,
                %{"user_id" => "queue-operator"}
              )
 

@@ -1,12 +1,19 @@
 ---
-title: "ADR-013: Shared CCSDS Library Boundary"
+title: "ADR-014: Shared CCSDS Library Boundary"
 tags: [adr, architecture, ccsds, simulator, dependencies]
 status: accepted
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-07-21
 ---
 
-# ADR-013: Shared CCSDS Library Boundary
+# ADR-014: Shared CCSDS Library Boundary
+
+## Status
+
+Accepted
+
+This ADR was originally recorded as ADR-013. It was renumbered without changing
+the decision because the repository already had a different accepted ADR-013.
 
 ## Context
 

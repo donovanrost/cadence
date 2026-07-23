@@ -7,6 +7,7 @@ defmodule Cadence.Persistence do
   alias Ecto.Multi
 
   alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
+  alias Cadence.Control.Commanding
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
   alias Cadence.OperationalEvents
@@ -118,7 +119,7 @@ defmodule Cadence.Persistence do
     |> add_transport_action_request_inserts(action_requests)
     |> add_transport_timer_event_inserts(timer_events)
     |> Multi.run(:command_verifier_evaluations, fn repo, _changes ->
-      Cadence.Commanding.evaluate_transport_command_verifiers(
+      Commanding.evaluate_transport_command_verifiers(
         repo,
         capability_records,
         action_requests
@@ -417,7 +418,7 @@ defmodule Cadence.Persistence do
     |> add_prepared_processing_result_inserts(prepared_results)
     |> add_protocol_anomaly_inserts(protocol_anomalies_from_prepared(prepared_results))
     |> Multi.run(:command_verifier_evaluations, fn repo, _changes ->
-      Cadence.Commanding.evaluate_command_verifiers(
+      Commanding.evaluate_command_verifiers(
         repo,
         telemetry_samples_from_prepared(prepared_results)
       )

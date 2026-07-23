@@ -19,6 +19,11 @@ defmodule CadenceUmbrella.MixProject do
         precommit: :test,
         "test.fast": :test,
         "test.runtime": :test,
+        "test.management": :test,
+        "test.control": :test,
+        "test.data": :test,
+        "test.projections": :test,
+        "test.planes": :test,
         "test.integration": :test,
         "test.browser": :test,
         "test.browser.full": :test
@@ -38,6 +43,11 @@ defmodule CadenceUmbrella.MixProject do
       test: [&run_child_tests/1],
       "test.fast": [&run_fast_tests/1],
       "test.runtime": [&run_runtime_tests/1],
+      "test.management": [&run_plane_tests(:management, &1)],
+      "test.control": [&run_plane_tests(:control, &1)],
+      "test.data": [&run_plane_tests(:data, &1)],
+      "test.projections": [&run_plane_tests(:projections, &1)],
+      "test.planes": [&run_all_plane_tests/1],
       "test.integration": [&run_integration_tests/1],
       "test.browser": [&run_browser_tests/1],
       "test.browser.full": [&run_full_browser_tests/1],
@@ -46,6 +56,7 @@ defmodule CadenceUmbrella.MixProject do
         "compile --warnings-as-errors",
         "credo --strict",
         "cadence.architecture.check --summary",
+        "test.planes",
         "test"
       ]
     ]
@@ -66,6 +77,22 @@ defmodule CadenceUmbrella.MixProject do
   defp run_runtime_tests(args) do
     run_child_mix_command(:cadence, ["db.setup.test"])
     run_child_test_command(:cadence, cadence_test_args(["--only", "runtime" | args]))
+  end
+
+  defp run_all_plane_tests(args) do
+    Enum.each([:management, :control, :data, :projections], &run_plane_tests(&1, args))
+  end
+
+  defp run_plane_tests(plane, args) do
+    if plane == :management do
+      run_child_mix_command(:cadence, ["db.setup.test"])
+    end
+
+    run_child_test_command(
+      :cadence,
+      ["--no-start" | plane_test_paths(plane)] ++ args,
+      [{"CADENCE_TEST_PLANE", Atom.to_string(plane)}]
+    )
   end
 
   defp run_integration_tests(args) do
@@ -183,6 +210,19 @@ defmodule CadenceUmbrella.MixProject do
   defp child_path(:cadence_simulator), do: "apps/cadence_simulator"
   defp child_path(:cadence_web), do: "apps/cadence_web"
 
+  defp plane_test_paths(:data) do
+    [
+      "plane_test/data",
+      "test/cadence/runtime/ingress_persistence_projector_test.exs",
+      "test/cadence/runtime/processed_ingress_batch_test.exs",
+      "test/cadence/runtime/provider_ingress_executor_test.exs",
+      "test/cadence/runtime/timer_service_test.exs",
+      "test/cadence/runtime/transport_runtime_test.exs"
+    ]
+  end
+
+  defp plane_test_paths(plane), do: ["plane_test/#{plane}"]
+
   defp cadence_test_args(args) do
     # The cadence child app owns globally named runtimes and a shared DB sandbox.
     # Keep the umbrella gate deterministic unless a caller explicitly overrides it.
@@ -193,11 +233,12 @@ defmodule CadenceUmbrella.MixProject do
     end
   end
 
-  defp run_child_mix_command(app, args) when is_atom(app) and is_list(args) do
+  defp run_child_mix_command(app, args, extra_env \\ [])
+       when is_atom(app) and is_list(args) and is_list(extra_env) do
     {_output, status} =
       System.cmd("mix", args,
         cd: child_path(app),
-        env: [{"MIX_ENV", Atom.to_string(Mix.env())}],
+        env: [{"MIX_ENV", Atom.to_string(Mix.env())} | extra_env],
         into: IO.stream(:stdio, :line),
         stderr_to_stdout: true
       )
@@ -207,7 +248,7 @@ defmodule CadenceUmbrella.MixProject do
     end
   end
 
-  defp run_child_test_command(app, args) when is_atom(app) do
-    run_child_mix_command(app, ["test" | args])
+  defp run_child_test_command(app, args, extra_env \\ []) when is_atom(app) do
+    run_child_mix_command(app, ["test" | args], extra_env)
   end
 end

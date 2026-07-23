@@ -7,8 +7,8 @@ defmodule Cadence.Contacts.Scheduler do
 
   alias Cadence.Contacts
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
-  alias Cadence.Runtime
-  alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Control.MissionRuntime
+  alias Cadence.Control.Missions
 
   @default_safety_poll_interval_ms 60_000
   @max_timer_ms 2_147_483_647
@@ -347,8 +347,8 @@ defmodule Cadence.Contacts.Scheduler do
 
   defp notify_mission_scheduler(mission_id, message) do
     if scheduler_enabled?() do
-      case Runtime.ensure_mission_started(mission_id) do
-        {:ok, _mission_runtime} ->
+      case Missions.ensure_started(mission_id) do
+        {:ok, _mission_control_runtime} ->
           mission_id
           |> MissionRuntime.contact_scheduler_name()
           |> notify_server(message)

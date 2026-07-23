@@ -21,7 +21,7 @@ defmodule CadenceWeb.ActivationController do
          {:ok, {binding_set_id, version, opts}} <-
            ControlPlaneParams.activation(mission_id, activation_params),
          {:ok, %BindingSetActivation{} = activation} <-
-           Cadence.Activations.activate_binding_set(
+           Cadence.Control.Activations.activate_binding_set(
              organization_id,
              mission_id,
              binding_set_id,

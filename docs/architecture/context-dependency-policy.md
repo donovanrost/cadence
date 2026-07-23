@@ -3,7 +3,7 @@ title: Cadence Context Dependency Policy
 tags: [developer, architecture, boundaries, xref]
 status: active
 created: 2026-07-18
-updated: 2026-07-18
+updated: 2026-07-21
 owner: Cadence core architecture
 review_by: 2026-10-18
 ---
@@ -16,6 +16,14 @@ This policy turns the bounded-context direction in the
 [architecture and test performance review](../architecture-and-test-performance-review.md)
 into a concrete dependency target. It describes ownership and allowed
 dependencies inside `:cadence`; it does not require an immediate umbrella split.
+
+The
+[management, control, and data plane target](management-control-data-plane-target.md)
+adds a second architectural axis. This policy answers which business context
+owns a capability. The plane architecture answers which authority owns a
+specific state transition. A module must satisfy both. Current contexts that
+contain operations from multiple planes are migration boundaries, not evidence
+that the plane distinction should be collapsed.
 
 Dependencies point from a caller to a callee. A context may call only the
 contexts listed in its row, plus its own modules. Asynchronous facts should

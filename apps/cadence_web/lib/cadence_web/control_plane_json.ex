@@ -650,8 +650,10 @@ defmodule CadenceWeb.ControlPlaneJSON do
       activation_id: activation.activation_id,
       organization_id: activation.organization_id,
       mission_id: activation.mission_id,
+      generation: activation.generation,
       binding_set_id: activation.binding_set_id,
       binding_set_version: activation.binding_set_version,
+      binding_set_content_sha256: activation.binding_set_content_sha256,
       activated_at: iso8601(activation.activated_at),
       metadata: activation.metadata
     }

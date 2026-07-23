@@ -3,7 +3,7 @@ title: Developer Architecture Guide
 tags: [developer, architecture, runtime, persistence, simulator, onboarding]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-21
 ---
 
 # Developer Architecture Guide
@@ -33,7 +33,11 @@ updated in the same change.
 
 ## 1. System Shape
 
-Cadence is a multi-tenant control plane plus a reconciled mission runtime.
+Cadence is a multi-tenant management plane, an operational control plane, and a
+reconciled mission data plane. The authority model is defined by
+[ADR-015](./decisions/015-management-control-data-plane-architecture.md), and
+the intended end state is described in the
+[target architecture](./architecture/management-control-data-plane-target.md).
 
 At the umbrella level:
 
@@ -47,12 +51,14 @@ At the umbrella level:
 - `legacy/cadence_legacy` is a preserved reference snapshot of the previous
   system and is useful for migration and performance comparisons.
 
-Conceptually, the system is split into four layers:
+Conceptually, the system has three authority planes and two cross-cutting
+structures:
 
-1. Governed configuration and activation
-2. Ordered live runtime lanes
-3. Async persistence and archive projections
-4. Query and replay read models
+1. Management: governed intent, policy, approval, and audit
+2. Control: activation, scheduling, selection, reconciliation, and dispatch
+3. Data: ordered live runtime and protocol execution
+4. Async persistence and archive projections
+5. Query, dashboard, and replay read models
 
 The most important architectural rule is that **mission meaning is governed by
 mission-scoped configuration, not by transport artifacts alone**.
@@ -69,7 +75,7 @@ The scopes matter because they determine where code and state belong.
 ### Organization
 
 - Tenant boundary
-- Owns missions, identities, and control-plane records
+- Owns missions, identities, and management-plane records
 - Not a hot runtime scope
 
 ### Mission
@@ -99,9 +105,15 @@ semantic root. Those are inputs to mission-scoped interpretation.
 The provider model is defined by
 [ADR-012](./decisions/012-provider-adapter-and-ground-station-simulator-model.md).
 
-Providers are **transport adapters**, not mission runtimes.
+Provider integration spans three deliberately separate responsibilities:
 
-Provider adapters own:
+- provider account, credential, grant, and mission-provider administration is
+  management-plane work;
+- provider capabilities, inventory, opportunities, reservations, and recovery
+  use the control-plane `Cadence.Contacts.ProviderClient` boundary; and
+- live data delivery uses path-local data-plane provider adapters.
+
+Data-plane provider adapters own:
 
 - external socket or session lifecycle
 - connect/listen/accept logic
@@ -109,7 +121,7 @@ Provider adapters own:
 - provider-local metadata
 - transport-local status and error reporting
 
-Provider adapters do **not** own:
+Data-plane provider adapters do **not** own:
 
 - mission semantic interpretation
 - selector matching
@@ -117,17 +129,18 @@ Provider adapters do **not** own:
 - command approval or release policy
 - durable persistence strategy
 
-The current TCP provider implementation is
+The current TCP data-plane provider implementation is
 `Cadence.ProviderAdapters.TCPSocket`.
 
-When adding a new provider, the correct question is:
+When adding a new provider data adapter, the correct question is:
 
 > How do I convert external I/O into canonical Cadence ingress or transport
 > events?
 
 Not:
 
-> How do I reimplement mission logic inside the provider?
+> How do I reimplement mission logic or provider reservation policy inside the
+> delivery adapter?
 
 ## 4. Telemetry Ingress Path
 
@@ -196,7 +209,7 @@ Cadence now uses multiple storage tiers.
 | Raw ingress evidence | `Cadence.IngressArchive.FileSystem` | Async projector | Filesystem archive plus lightweight index rows |
 | Packet and frame records | `Cadence.Protocol.RecordArchive.FileSystem` | Async projector | Archive-oriented, not default OLTP rows |
 | Protocol anomalies | Postgres | Async projector | Low-rate operational facts worth querying live |
-| Control-plane records | Postgres | N/A | Missions, contacts, auth, activations, approvals, etc. |
+| Management/control records | Postgres | N/A | Missions, governed configuration, approvals, activations, reservations, queues, and lifecycle state |
 
 ### 5.1 Current value store
 

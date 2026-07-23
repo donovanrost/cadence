@@ -1,12 +1,14 @@
 defmodule Cadence.Architecture.DependencyBoundary do
   @moduledoc """
-  Ratchets transitional root-facade, persistence-schema, and cross-context
-  schema dependencies.
+  Ratchets transitional root-facade, persistence-schema, cross-context schema,
+  and cross-plane dependencies.
 
   The checked-in baseline is debt, not permission for new code. A change fails
   when it adds an unlisted dependency, leaves a resolved dependency in the
   baseline, or lets the baseline review date expire.
   """
+
+  alias Cadence.Architecture.PlaneBoundary
 
   @root_facade "lib/cadence.ex"
   @schema_prefix "lib/cadence/persistence/schemas/"
@@ -98,7 +100,12 @@ defmodule Cadence.Architecture.DependencyBoundary do
   ]
 
   @type finding :: %{
-          required(:kind) => :context_schema | :root_facade | :persistence_schema,
+          required(:kind) =>
+            :context_schema
+            | :plane_direction
+            | :plane_internal
+            | :root_facade
+            | :persistence_schema,
           required(:source) => String.t(),
           required(:sink) => String.t(),
           required(:label) => String.t(),
@@ -158,6 +165,11 @@ defmodule Cadence.Architecture.DependencyBoundary do
   end
 
   defp edge_finding(source, {sink, label}) do
+    PlaneBoundary.findings_for_edge(source, sink, label) ++
+      legacy_edge_findings(source, sink, label)
+  end
+
+  defp legacy_edge_findings(source, sink, label) do
     cond do
       internal_cadence_source?(source) and sink == @root_facade ->
         [finding(:root_facade, source, sink, label)]

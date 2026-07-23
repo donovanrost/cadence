@@ -4,6 +4,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
   @moduletag :integration
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Control.Activations
   alias Cadence.Ingress.RawEvidence
 
   alias Cadence.Runtime.{
@@ -45,7 +46,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
     binding_set = persist_binding_set(mission_id)
 
     assert {:ok, _activation} =
-             Cadence.Runtime.activate_binding_set(
+             Activations.activate_binding_set(
                mission_id,
                binding_set.binding_set_id,
                binding_set.version

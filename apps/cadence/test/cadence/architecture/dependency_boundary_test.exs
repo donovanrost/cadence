@@ -3,6 +3,73 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
 
   alias Cadence.Architecture.DependencyBoundary
 
+  test "enforces plane direction and explicit public cross-plane boundaries" do
+    graph = %{
+      "lib/cadence/control/activations/executor.ex" => %{
+        "lib/cadence/runtime/managed_action_request.ex" => "export",
+        "lib/cadence/runtime/mission_runtime_spec.ex" => "export",
+        "lib/cadence/runtime/missions.ex" => "runtime",
+        "lib/cadence/runtime/mission_coordinator.ex" => "runtime"
+      },
+      "lib/cadence/management/activations.ex" => %{
+        "lib/cadence/runtime/managed_action_request.ex" => "export"
+      },
+      "lib/cadence/projections/mission_events.ex" => %{
+        "lib/cadence/runtime/managed_action_request.ex" => "export"
+      },
+      "lib/cadence/runtime/mission_coordinator.ex" => %{
+        "lib/cadence/management/activations.ex" => "runtime",
+        "lib/cadence/runtime/mission_runtime.ex" => "runtime"
+      }
+    }
+
+    findings = DependencyBoundary.findings(graph)
+
+    assert Enum.any?(findings, fn finding ->
+             finding.kind == :plane_internal and
+               finding.source == "lib/cadence/control/activations/executor.ex" and
+               finding.sink == "lib/cadence/runtime/mission_coordinator.ex"
+           end)
+
+    assert Enum.count(findings, &(&1.kind == :plane_direction)) == 2
+
+    refute Enum.any?(findings, fn finding ->
+             finding.sink == "lib/cadence/runtime/managed_action_request.ex" and
+               finding.source in [
+                 "lib/cadence/control/activations/executor.ex",
+                 "lib/cadence/projections/mission_events.ex"
+               ]
+           end)
+
+    refute Enum.any?(findings, fn finding ->
+             finding.source == "lib/cadence/control/activations/executor.ex" and
+               finding.sink in [
+                 "lib/cadence/runtime/mission_runtime_spec.ex",
+                 "lib/cadence/runtime/missions.ex"
+               ]
+           end)
+
+    refute Enum.any?(findings, fn finding ->
+             finding.source == "lib/cadence/runtime/mission_coordinator.ex" and
+               finding.sink == "lib/cadence/runtime/mission_runtime.ex"
+           end)
+  end
+
+  test "data-plane source does not reach into activation or governance persistence" do
+    runtime_sources =
+      ["lib/cadence/runtime.ex" | Path.wildcard("lib/cadence/runtime/**/*.ex")]
+
+    forbidden_references = ["Cadence.Activations", "Cadence.Governance"]
+
+    assert [] ==
+             for(
+               source <- runtime_sources,
+               reference <- forbidden_references,
+               String.contains?(File.read!(source), reference),
+               do: {source, reference}
+             )
+  end
+
   test "finds root-facade, horizontal schema, and cross-context row dependencies" do
     graph = %{
       "lib/cadence/accounts.ex" => %{

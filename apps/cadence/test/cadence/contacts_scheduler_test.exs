@@ -6,8 +6,9 @@ defmodule Cadence.ContactsSchedulerTest do
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Contacts.Scheduler
+  alias Cadence.Control.MissionRuntime
+  alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Runtime
-  alias Cadence.Runtime.MissionRuntime
 
   @scheduler_event_prefix [:cadence, :contacts, :scheduler]
   @scheduler_events [
@@ -200,7 +201,7 @@ defmodule Cadence.ContactsSchedulerTest do
     assert {:ok, _summary} = Scheduler.reconcile_now(scheduler_name, reference_time)
   end
 
-  test "default contact notifications route to the mission runtime scheduler", %{
+  test "default contact notifications route to the mission control scheduler", %{
     mission_id: mission_id
   } do
     previous_contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler)
@@ -249,6 +250,10 @@ defmodule Cadence.ContactsSchedulerTest do
              )
 
     assert :ok = Runtime.stop_mission(mission_id)
+    assert is_pid(GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id)))
+
+    assert :ok = ControlMissions.stop(mission_id)
+    refute GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id))
   end
 
   test "mission scheduler updates its projection from contact change notifications", %{

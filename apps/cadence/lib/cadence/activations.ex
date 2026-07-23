@@ -5,6 +5,7 @@ defmodule Cadence.Activations do
 
   import Ecto.Query
 
+  alias Ecto.Adapters.SQL
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -14,6 +15,7 @@ defmodule Cadence.Activations do
     BindingSetActivationRow
   }
 
+  alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance
   alias Cadence.Missions
   alias Cadence.OperationalEvents
@@ -26,42 +28,13 @@ defmodule Cadence.Activations do
   def activate_binding_set(organization_id, mission_id, binding_set_id, version, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
              is_integer(version) and version > 0 and is_list(opts) do
-    metadata = Keyword.get(opts, :metadata, %{})
-    activated_at = Keyword.get(opts, :activated_at, DateTime.utc_now())
-
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, _binding_set} <-
-           Governance.fetch_binding_set(organization_id, mission_id, binding_set_id, version) do
-      activation =
-        BindingSetActivation.new(%{
-          organization_id: organization_id,
-          mission_id: mission_id,
-          binding_set_id: binding_set_id,
-          binding_set_version: version,
-          metadata: metadata,
-          activated_at: activated_at
-        })
-
-      Multi.new()
-      |> Multi.insert(:activation_row, BindingSetActivationRow.changeset(activation))
-      |> Multi.run(:active_basis_row, fn repo, _changes ->
-        upsert_active_basis_row(repo, activation)
-      end)
-      |> Multi.run(:mission_event_projection, fn repo, _changes ->
-        persist_activation_mission_event(repo, activation)
-      end)
-      |> Repo.transaction()
-      |> case do
-        {:ok, %{active_basis_row: %ActiveBindingSetRow{} = active_basis_row}} ->
-          {:ok, ActiveBindingSetRow.to_domain(active_basis_row)}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
-    end
+    ControlActivations.activate_binding_set(
+      organization_id,
+      mission_id,
+      binding_set_id,
+      version,
+      opts
+    )
   end
 
   @spec activate_binding_set(binary(), binary(), pos_integer(), keyword()) ::
@@ -69,38 +42,46 @@ defmodule Cadence.Activations do
   def activate_binding_set(mission_id, binding_set_id, version, opts \\ [])
       when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
              version > 0 and is_list(opts) do
-    metadata = Keyword.get(opts, :metadata, %{})
-    activated_at = Keyword.get(opts, :activated_at, DateTime.utc_now())
+    ControlActivations.activate_binding_set(mission_id, binding_set_id, version, opts)
+  end
 
-    with {:ok, _binding_set} <- Governance.fetch_binding_set(mission_id, binding_set_id, version) do
-      activation =
-        BindingSetActivation.new(%{
-          mission_id: mission_id,
-          binding_set_id: binding_set_id,
-          binding_set_version: version,
-          metadata: metadata,
-          activated_at: activated_at
-        })
+  @doc false
+  @spec record_binding_set_activation(binary(), binary(), binary(), pos_integer(), keyword()) ::
+          {:ok, BindingSetActivation.t()} | {:error, term()}
+  def record_binding_set_activation(organization_id, mission_id, binding_set_id, version, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
+             is_integer(version) and version > 0 and is_list(opts) do
+    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, _content_hash} <- Keyword.fetch(opts, :binding_set_content_sha256) do
+      persist_activation(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        activation_request_id: Keyword.get(opts, :activation_request_id),
+        binding_set_id: binding_set_id,
+        binding_set_version: version,
+        binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
+        metadata: Keyword.get(opts, :metadata, %{}),
+        activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
+      })
+    end
+  end
 
-      Multi.new()
-      |> Multi.insert(:activation_row, BindingSetActivationRow.changeset(activation))
-      |> Multi.run(:active_basis_row, fn repo, _changes ->
-        upsert_active_basis_row(repo, activation)
-      end)
-      |> Multi.run(:mission_event_projection, fn repo, _changes ->
-        persist_activation_mission_event(repo, activation)
-      end)
-      |> Repo.transaction()
-      |> case do
-        {:ok, %{active_basis_row: %ActiveBindingSetRow{} = active_basis_row}} ->
-          {:ok, ActiveBindingSetRow.to_domain(active_basis_row)}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
+  @doc false
+  @spec record_binding_set_activation(binary(), binary(), pos_integer(), keyword()) ::
+          {:ok, BindingSetActivation.t()} | {:error, term()}
+  def record_binding_set_activation(mission_id, binding_set_id, version, opts)
+      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
+             version > 0 and is_list(opts) do
+    with {:ok, _content_hash} <- Keyword.fetch(opts, :binding_set_content_sha256) do
+      persist_activation(%{
+        mission_id: mission_id,
+        activation_request_id: Keyword.get(opts, :activation_request_id),
+        binding_set_id: binding_set_id,
+        binding_set_version: version,
+        binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
+        metadata: Keyword.get(opts, :metadata, %{}),
+        activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
+      })
     end
   end
 
@@ -187,6 +168,14 @@ defmodule Cadence.Activations do
     |> Enum.map(&BindingSetActivationRow.to_domain/1)
   end
 
+  @doc false
+  @spec list_active_activations() :: [BindingSetActivation.t()]
+  def list_active_activations do
+    ActiveBindingSetRow
+    |> Repo.all()
+    |> Enum.map(&ActiveBindingSetRow.to_domain/1)
+  end
+
   defp upsert_active_basis_row(repo, %BindingSetActivation{} = activation) do
     changeset = ActiveBindingSetRow.changeset(activation)
 
@@ -195,8 +184,11 @@ defmodule Cadence.Activations do
            on_conflict: [
              set: [
                activation_id: activation.activation_id,
+               activation_request_id: activation.activation_request_id,
+               generation: activation.generation,
                binding_set_id: activation.binding_set_id,
                binding_set_version: activation.binding_set_version,
+               binding_set_content_sha256: activation.binding_set_content_sha256,
                metadata: ActiveBindingSetRow.metadata_document(activation.metadata),
                activated_at: activation.activated_at
              ]
@@ -221,6 +213,91 @@ defmodule Cadence.Activations do
              OperationalEvent.from_binding_set_activation(activation)
            ) do
       MissionEvents.persist_entries(repo, MissionEvents.project(event))
+    end
+  end
+
+  defp persist_activation(attrs) do
+    Multi.new()
+    |> Multi.run(:generation_lock, fn repo, _changes ->
+      acquire_generation_lock(repo, attrs.mission_id)
+    end)
+    |> Multi.run(:generation, fn repo, _changes ->
+      {:ok, next_generation(repo, attrs.mission_id)}
+    end)
+    |> Multi.run(:activation_record, fn repo, %{generation: generation} ->
+      find_or_insert_activation(repo, attrs, generation)
+    end)
+    |> Multi.run(:active_basis_row, fn repo, %{activation_record: activation_record} ->
+      maybe_upsert_active_basis(repo, activation_record)
+    end)
+    |> Multi.run(:mission_event_projection, fn repo, %{activation_record: activation_record} ->
+      maybe_persist_activation_mission_event(repo, activation_record)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{activation_record: %{row: activation_row}}} ->
+        {:ok, BindingSetActivationRow.to_domain(activation_row)}
+
+      {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+        {:error, changeset}
+
+      {:error, _operation, reason, _changes_so_far} ->
+        {:error, reason}
+    end
+  end
+
+  defp find_or_insert_activation(repo, attrs, generation) do
+    case existing_activation(repo, attrs.activation_request_id) do
+      %BindingSetActivationRow{} = row ->
+        {:ok, %{row: row, inserted?: false}}
+
+      nil ->
+        changeset =
+          attrs
+          |> Map.put(:generation, generation)
+          |> BindingSetActivation.new()
+          |> BindingSetActivationRow.changeset()
+
+        case repo.insert(changeset) do
+          {:ok, row} -> {:ok, %{row: row, inserted?: true}}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp existing_activation(_repo, nil), do: nil
+
+  defp existing_activation(repo, activation_request_id) do
+    repo.get_by(BindingSetActivationRow, activation_request_id: activation_request_id)
+  end
+
+  defp maybe_upsert_active_basis(repo, %{row: row, inserted?: true}) do
+    upsert_active_basis_row(repo, BindingSetActivationRow.to_domain(row))
+  end
+
+  defp maybe_upsert_active_basis(_repo, %{inserted?: false}), do: {:ok, :unchanged}
+
+  defp maybe_persist_activation_mission_event(repo, %{row: row, inserted?: true}) do
+    persist_activation_mission_event(repo, BindingSetActivationRow.to_domain(row))
+  end
+
+  defp maybe_persist_activation_mission_event(_repo, %{inserted?: false}), do: {:ok, :unchanged}
+
+  defp acquire_generation_lock(repo, mission_id) do
+    case SQL.query(repo, "SELECT pg_advisory_xact_lock(hashtext($1))", [mission_id]) do
+      {:ok, _result} -> {:ok, :locked}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp next_generation(repo, mission_id) do
+    BindingSetActivationRow
+    |> where([activation], activation.mission_id == ^mission_id)
+    |> select([activation], max(activation.generation))
+    |> repo.one()
+    |> case do
+      nil -> 1
+      generation -> generation + 1
     end
   end
 end
