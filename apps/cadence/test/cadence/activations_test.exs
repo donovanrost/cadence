@@ -24,7 +24,7 @@ defmodule Cadence.ActivationsTest do
              )
 
     assert {:ok, activation} =
-             Cadence.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                @organization_id,
                binding_set.mission_id,
                binding_set.binding_set_id,
@@ -64,7 +64,7 @@ defmodule Cadence.ActivationsTest do
     assert runtime_spec.binding_set == binding_set
 
     assert {:ok, next_activation} =
-             Cadence.Control.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                @organization_id,
                binding_set.mission_id,
                binding_set.binding_set_id,

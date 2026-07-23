@@ -390,12 +390,58 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
     assert %{
              "data" => %{
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "binding_set_id" => "ops",
-               "binding_set_version" => 1
+               "request" => %{
+                 "activation_request_id" => activation_request_id,
+                 "organization_id" => ^organization_id,
+                 "mission_id" => ^mission_id,
+                 "binding_set_id" => "ops",
+                 "binding_set_version" => 1,
+                 "state" => "approval_pending"
+               },
+               "execution" => nil
              }
-           } = json_response(activation_conn, 201)
+           } = json_response(activation_conn, 202)
+
+    request_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}"
+      )
+
+    assert %{
+             "data" => %{
+               "request" => %{"state" => "approval_pending"},
+               "execution" => nil
+             }
+           } = json_response(request_conn, 200)
+
+    service_approval_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}/approve",
+        %{"decision" => %{"reason" => "services cannot provide the human approval"}}
+      )
+
+    assert %{"errors" => [%{"reason" => "human_activation_approver_required"}]} =
+             json_response(service_approval_conn, 422)
+
+    approval_conn =
+      conn
+      |> authorize(organization_admin_token(organization_id))
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}/approve",
+        %{"decision" => %{"reason" => "approved for API bootstrap"}}
+      )
+
+    assert %{
+             "data" => %{
+               "request" => %{"state" => "approved"},
+               "decision" => %{"decision" => "approved"},
+               "execution" => %{"status" => "succeeded", "generation" => 1}
+             }
+           } = json_response(approval_conn, 200)
 
     active_conn =
       conn

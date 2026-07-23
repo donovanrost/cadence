@@ -8,12 +8,14 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   alias Cadence.Comms.Transport
 
   alias Cadence.ContactPlanning.{
-    ContactPlanApprovals,
     ContactPlanExecutions,
     ContactPlans,
     ContactRequirements,
     Planner
   }
+
+  alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
@@ -149,8 +151,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     resolve_route = fn _, _, _, _ -> {:ok, route} end
 
-    assert {:ok, approved_plan, _version, _approval} =
-             ContactPlanApprovals.approve(
+    assert {:ok, approved_handoff} =
+             ManagementContacts.approve_plan(
                admin_scope,
                mission_id,
                plan.contact_plan_id,
@@ -160,6 +162,20 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
                now: DateTime.add(@now, 1, :second),
                resolve_route: resolve_route
              )
+
+    assert [] ==
+             ContactPlanExecutions.list(
+               organization_id,
+               mission_id,
+               plan.contact_plan_id,
+               plan_version.version
+             )
+
+    assert :ok = ControlContacts.accept_approved_plan(approved_handoff)
+    assert :ok = ControlContacts.accept_approved_plan(approved_handoff)
+
+    assert {:ok, approved_plan, _version} =
+             ManagementContacts.fetch_plan(organization_id, mission_id, plan.contact_plan_id)
 
     %{
       organization_id: organization_id,
@@ -171,7 +187,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     }
   end
 
-  test "approval creates durable items and execution links exact Plan evidence to reservations",
+  test "Control accepts an approved handoff and links exact Plan evidence to reservations",
        context do
     pending_items =
       ContactPlanExecutions.list(

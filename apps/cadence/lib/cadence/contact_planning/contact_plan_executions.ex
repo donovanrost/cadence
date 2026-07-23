@@ -8,10 +8,11 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.ContactPlanning.{
     AutomationGrants,
     ContactPlanExecutionItem,
-    ContactPlanVersion,
     ContentHash,
     Planner
   }
+
+  alias Cadence.Management.Contacts.ApprovedContactPlan
 
   alias Cadence.Contacts.{ProviderBooking, ProviderReservation, ProviderReservations}
   alias Cadence.Contacts.ProviderScheduling
@@ -27,31 +28,31 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   @processable_states ~w(pending requesting)
 
   @doc false
-  @spec ensure_items(struct(), ContactPlanVersion.t(), [struct()]) :: :ok | {:error, term()}
-  def ensure_items(plan, %ContactPlanVersion{} = version, selected) when is_list(selected) do
+  @spec accept(ApprovedContactPlan.t()) :: :ok | {:error, term()}
+  def accept(%ApprovedContactPlan{} = approved_plan) do
     results =
-      Enum.map(selected, fn snapshot ->
+      Enum.map(approved_plan.opportunity_snapshot_ids, fn snapshot_id ->
         idempotency_key =
           "cadence:contact-plan:" <>
             ContentHash.sha256(%{
-              "plan_id" => plan.contact_plan_id,
-              "plan_version" => version.version,
-              "snapshot_id" => snapshot.contact_opportunity_snapshot_id
+              "plan_id" => approved_plan.contact_plan_id,
+              "plan_version" => approved_plan.contact_plan_version,
+              "snapshot_id" => snapshot_id
             })
 
         ContactPlanExecutionItem.new(%{
-          organization_id: plan.organization_id,
-          mission_id: plan.mission_id,
-          contact_plan_id: plan.contact_plan_id,
-          contact_plan_version: version.version,
-          contact_opportunity_snapshot_id: snapshot.contact_opportunity_snapshot_id,
+          organization_id: approved_plan.organization_id,
+          mission_id: approved_plan.mission_id,
+          contact_plan_id: approved_plan.contact_plan_id,
+          contact_plan_version: approved_plan.contact_plan_version,
+          contact_opportunity_snapshot_id: snapshot_id,
           idempotency_key: idempotency_key,
           lifecycle_state: :pending,
           attempt_count: 0,
           last_error_document: %{}
         })
         |> ContactPlanExecutionItemRow.changeset()
-        |> Repo.insert()
+        |> Repo.insert(on_conflict: :nothing)
       end)
 
     case Enum.find(results, &match?({:error, _}, &1)) do

@@ -327,6 +327,20 @@ defmodule CadenceWeb.Router do
            :show
     end
 
+    live_session :ops_admin,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.OrganizationAuth, :require_organization_admin},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.UserAuth, :attach_user_menu},
+        {CadenceWeb.OpsShellHook, :default}
+      ],
+      layout: {CadenceWeb.Layouts, :ops} do
+      live "/missions/:mission_id/ops/activations",
+           OpsActivationRequestsLive,
+           :index
+    end
+
     # Legacy comms URL aliases -- 301 redirect to canonical paths so old
     # bookmarks (and any unmigrated outbound links) still resolve.
     get "/missions/:mission_id/comms/links",
@@ -622,6 +636,16 @@ defmodule CadenceWeb.Router do
 
         post "/activations", ActivationController, :create
         get "/activations/active", ActivationController, :show
+        get "/activation_requests", ActivationController, :index
+        get "/activation_requests/:activation_request_id", ActivationController, :show_request
+
+        post "/activation_requests/:activation_request_id/approve",
+             ActivationController,
+             :approve
+
+        post "/activation_requests/:activation_request_id/reject",
+             ActivationController,
+             :reject
       end
     end
   end

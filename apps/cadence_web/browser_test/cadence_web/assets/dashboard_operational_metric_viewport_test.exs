@@ -198,7 +198,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
       )
 
     assert {:ok, _activation} =
-             Cadence.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                org.organization_id,
                mission.mission_id,
                replay_metric_binding_set.binding_set_id,

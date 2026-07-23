@@ -2,7 +2,6 @@ defmodule CadenceWeb.ControlPlaneJSON do
   @moduledoc false
 
   alias Cadence.Accounts.User
-  alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.{DispatchDecision, WorkItem}
   alias Cadence.Auth.Scope
   alias Cadence.Auth.ServiceIdentity
@@ -641,29 +640,6 @@ defmodule CadenceWeb.ControlPlaneJSON do
       release_attempt: command_release_attempt(release_attempt),
       queue_entry: command_queue_entry(queue_entry),
       command_request: command_request(command_request)
-    }
-  end
-
-  @spec activation(BindingSetActivation.t()) :: map()
-  def activation(%BindingSetActivation{} = activation) do
-    %{
-      activation_id: activation.activation_id,
-      organization_id: activation.organization_id,
-      mission_id: activation.mission_id,
-      generation: activation.generation,
-      binding_set_id: activation.binding_set_id,
-      binding_set_version: activation.binding_set_version,
-      binding_set_content_sha256: activation.binding_set_content_sha256,
-      activated_at: iso8601(activation.activated_at),
-      metadata: activation.metadata
-    }
-  end
-
-  @spec active_binding_set(BindingSetActivation.t(), BindingSet.t()) :: map()
-  def active_binding_set(%BindingSetActivation{} = activation, %BindingSet{} = binding_set) do
-    %{
-      activation: activation(activation),
-      binding_set: binding_set(binding_set)
     }
   end
 

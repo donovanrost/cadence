@@ -5,13 +5,21 @@ defmodule Cadence.Control.Commanding do
 
   alias Cadence.Commanding, as: LegacyCommanding
   alias Cadence.Commanding.CommandReleaseAttempt
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
   alias Cadence.Runtime.TransmitCommand
 
   @spec enqueue(ApprovedCommand.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def enqueue(%ApprovedCommand{} = approved_command, enqueued_by \\ %{}, opts \\ []) do
-    with {:ok, %{command_request: command_request} = result} <-
+    with {:ok, command_request} <-
+           LegacyCommanding.fetch_command_request(
+             approved_command.organization_id,
+             approved_command.mission_id,
+             approved_command.command_request_id
+           ),
+         true <- ApprovedCommand.matches_request?(approved_command, command_request),
+         {:ok, %{command_request: queued_request} = result} <-
            LegacyCommanding.enqueue_command_request(
              approved_command.organization_id,
              approved_command.mission_id,
@@ -24,7 +32,7 @@ defmodule Cadence.Control.Commanding do
                &Map.put(&1, :approved_content_sha256, approved_command.content_sha256)
              )
            ),
-         true <- ApprovedCommand.matches_request?(approved_command, command_request) do
+         true <- ApprovedCommand.matches_request?(approved_command, queued_request) do
       {:ok, result}
     else
       false -> {:error, :approved_command_basis_changed}
@@ -32,14 +40,24 @@ defmodule Cadence.Control.Commanding do
     end
   end
 
-  defdelegate enqueue_command_request(
-                organization_id,
-                mission_id,
-                command_request_id,
-                enqueued_by \\ %{},
-                opts \\ []
-              ),
-              to: LegacyCommanding
+  @spec enqueue_approved_command(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def enqueue_approved_command(
+        organization_id,
+        mission_id,
+        command_request_id,
+        enqueued_by \\ %{},
+        opts \\ []
+      ) do
+    with {:ok, approved_command} <-
+           ManagementCommanding.fetch_approved_command(
+             organization_id,
+             mission_id,
+             command_request_id
+           ) do
+      enqueue(approved_command, enqueued_by, opts)
+    end
+  end
 
   defdelegate dispatch_queue_lane(
                 organization_id,

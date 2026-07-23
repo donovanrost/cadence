@@ -5,7 +5,6 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
-    ContactPlanApprovals,
     ContactPlanExecutions,
     ContactPlans,
     ContactRequirements,
@@ -15,6 +14,9 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanningRuns,
     FleetRepairs
   }
+
+  alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.GroundNetworks.ProviderError
 
@@ -370,8 +372,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
       {:ok, route(suffix)}
     end
 
-    assert {:ok, approved, _version, _approval} =
-             ContactPlanApprovals.approve(
+    assert {:ok, approved_handoff} =
+             ManagementContacts.approve_plan(
                context.admin_scope,
                @mission_id,
                source.plan.contact_plan_id,
@@ -380,6 +382,15 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
                "Approve repair source",
                now: DateTime.add(@now, 1, :second),
                resolve_route: resolve_route
+             )
+
+    assert :ok = ControlContacts.accept_approved_plan(approved_handoff)
+
+    assert {:ok, approved, _version} =
+             ManagementContacts.fetch_plan(
+               @organization_id,
+               @mission_id,
+               source.plan.contact_plan_id
              )
 
     source_snapshots =
@@ -444,8 +455,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
                now: DateTime.add(@now, 3, :second)
              )
 
-    assert {:ok, _approved_repair, _version, _approval} =
-             ContactPlanApprovals.approve(
+    assert {:ok, repair_handoff} =
+             ManagementContacts.approve_plan(
                context.admin_scope,
                @mission_id,
                repaired.plan.contact_plan_id,
@@ -455,6 +466,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
                now: DateTime.add(@now, 4, :second),
                resolve_route: resolve_route
              )
+
+    assert :ok = ControlContacts.accept_approved_plan(repair_handoff)
 
     repair_items =
       ContactPlanExecutions.list(

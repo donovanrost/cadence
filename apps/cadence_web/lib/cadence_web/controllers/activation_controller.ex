@@ -3,9 +3,26 @@ defmodule CadenceWeb.ActivationController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.Activations.ActivationExecution
+  alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Management.Activations.{ActivationDecision, ActivationRequest}
+  alias CadenceWeb.{ActivationJSON, ActivationParams, ControlPlaneAccess}
+
+  def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, filters} <- ActivationParams.filters(params),
+         {:ok, requests} <-
+           ManagementActivations.list(conn.assigns.current_scope, mission_id, filters) do
+      json(conn, %{data: Enum.map(requests, &ActivationJSON.request/1)})
+    end
+  end
 
   def create(conn, %{
         "organization_id" => organization_id,
@@ -18,19 +35,101 @@ defmodule CadenceWeb.ActivationController do
              organization_id,
              mission_id
            ),
-         {:ok, {binding_set_id, version, opts}} <-
-           ControlPlaneParams.activation(mission_id, activation_params),
-         {:ok, %BindingSetActivation{} = activation} <-
-           Cadence.Control.Activations.activate_binding_set(
-             organization_id,
+         {:ok, request_params} <- ActivationParams.request(activation_params),
+         {:ok, %ActivationRequest{} = request} <-
+           ManagementActivations.request(
+             conn.assigns.current_scope,
              mission_id,
-             binding_set_id,
-             version,
-             opts
+             request_params.binding_set_id,
+             request_params.version,
+             change_class: request_params.change_class,
+             metadata: request_params.metadata
            ) do
-      conn
-      |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.activation(activation)})
+      respond_to_request(conn, request)
+    end
+  end
+
+  def show_request(conn, %{
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "activation_request_id" => activation_request_id
+      }) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %ActivationRequest{} = request} <-
+           fetch_scoped_request(
+             conn.assigns.current_scope,
+             mission_id,
+             activation_request_id
+           ) do
+      json(conn, %{data: ActivationJSON.request_result(request, fetch_execution(request))})
+    end
+  end
+
+  def approve(
+        conn,
+        %{
+          "organization_id" => organization_id,
+          "mission_id" => mission_id,
+          "activation_request_id" => activation_request_id
+        } = params
+      ) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %ActivationRequest{}} <-
+           fetch_scoped_request(
+             conn.assigns.current_scope,
+             mission_id,
+             activation_request_id
+           ),
+         {:ok, reason} <- ActivationParams.decision(Map.get(params, "decision", %{})),
+         {:ok, %ActivationRequest{} = request, %ActivationDecision{} = decision, approved} <-
+           ManagementActivations.approve(
+             conn.assigns.current_scope,
+             activation_request_id,
+             reason
+           ),
+         {:ok, %ActivationExecution{} = execution} <- ControlActivations.execute(approved) do
+      json(conn, %{data: ActivationJSON.approval_result(request, decision, execution)})
+    end
+  end
+
+  def reject(
+        conn,
+        %{
+          "organization_id" => organization_id,
+          "mission_id" => mission_id,
+          "activation_request_id" => activation_request_id
+        } = params
+      ) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %ActivationRequest{}} <-
+           fetch_scoped_request(
+             conn.assigns.current_scope,
+             mission_id,
+             activation_request_id
+           ),
+         {:ok, reason} <- ActivationParams.decision(Map.get(params, "decision", %{})),
+         {:ok, %ActivationRequest{} = request, %ActivationDecision{} = decision} <-
+           ManagementActivations.reject(
+             conn.assigns.current_scope,
+             activation_request_id,
+             reason
+           ) do
+      json(conn, %{data: ActivationJSON.rejection_result(request, decision)})
     end
   end
 
@@ -41,11 +140,45 @@ defmodule CadenceWeb.ActivationController do
              organization_id,
              mission_id
            ),
-         {:ok, %BindingSetActivation{} = activation} <-
-           Cadence.Activations.fetch_active_activation(organization_id, mission_id),
+         {:ok, activation} <- ControlActivations.fetch_active_basis(organization_id, mission_id),
          {:ok, %BindingSet{} = binding_set} <-
-           Cadence.Activations.fetch_active_binding_set(organization_id, mission_id) do
-      json(conn, %{data: ControlPlaneJSON.active_binding_set(activation, binding_set)})
+           Cadence.Governance.fetch_binding_set(
+             organization_id,
+             mission_id,
+             activation.binding_set_id,
+             activation.binding_set_version
+           ) do
+      json(conn, %{data: ActivationJSON.active_binding_set(activation, binding_set)})
+    end
+  end
+
+  defp respond_to_request(conn, %ActivationRequest{state: :approval_pending} = request) do
+    conn
+    |> put_status(:accepted)
+    |> json(%{data: ActivationJSON.request_result(request, nil)})
+  end
+
+  defp respond_to_request(conn, %ActivationRequest{state: :approved} = request) do
+    with {:ok, approved} <- ManagementActivations.fetch_approved(request.activation_request_id),
+         {:ok, %ActivationExecution{} = execution} <- ControlActivations.execute(approved) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: ActivationJSON.request_result(request, execution)})
+    end
+  end
+
+  defp fetch_scoped_request(current_scope, mission_id, activation_request_id) do
+    case ManagementActivations.fetch(current_scope, activation_request_id) do
+      {:ok, %ActivationRequest{mission_id: ^mission_id} = request} -> {:ok, request}
+      {:ok, %ActivationRequest{}} -> {:error, :activation_request_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_execution(%ActivationRequest{} = request) do
+    case ControlActivations.fetch_execution(request.activation_request_id) do
+      {:ok, %ActivationExecution{} = execution} -> execution
+      {:error, :activation_execution_not_found} -> nil
     end
   end
 end

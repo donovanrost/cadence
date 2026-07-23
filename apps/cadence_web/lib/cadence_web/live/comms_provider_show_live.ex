@@ -2,7 +2,8 @@ defmodule CadenceWeb.CommsProviderShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.GroundNetworks
+  alias Cadence.Control.Providers, as: ControlProviders
+  alias Cadence.Management.Providers, as: ManagementProviders
 
   alias Cadence.GroundNetworks.{
     DeliveryProfile,
@@ -16,10 +17,14 @@ defmodule CadenceWeb.CommsProviderShowLive do
   def mount(%{"provider_id" => provider_id}, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    case GroundNetworks.fetch_provider(scope.organization_id, mission.mission_id, provider_id) do
+    case ManagementProviders.fetch_provider(
+           scope.organization_id,
+           mission.mission_id,
+           provider_id
+         ) do
       {:ok, provider} ->
         versions =
-          GroundNetworks.list_provider_versions(
+          ManagementProviders.list_provider_versions(
             scope.organization_id,
             mission.mission_id,
             provider_id
@@ -57,7 +62,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
      socket
      |> assign(:provider_action, :validate)
      |> start_async(:validate_provider, fn ->
-       GroundNetworks.validate_provider(scope, mission.mission_id, provider.provider_id, opts)
+       ControlProviders.validate_current(scope, mission.mission_id, provider.provider_id, opts)
      end)}
   end
 
@@ -71,7 +76,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
      socket
      |> assign(:provider_action, :sync)
      |> start_async(:sync_provider, fn ->
-       GroundNetworks.sync_provider(scope, mission.mission_id, provider.provider_id, opts)
+       ControlProviders.sync_current(scope, mission.mission_id, provider.provider_id, opts)
      end)}
   end
 
@@ -80,7 +85,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
   def handle_event("archive-provider", _params, socket) do
     %{current_scope: scope, current_mission: mission, provider: provider} = socket.assigns
 
-    case GroundNetworks.archive_provider(scope, mission.mission_id, provider.provider_id) do
+    case ManagementProviders.archive_provider(scope, mission.mission_id, provider.provider_id) do
       {:ok, _archived} ->
         {:noreply,
          socket
@@ -335,14 +340,14 @@ defmodule CadenceWeb.CommsProviderShowLive do
   defp refresh_provider(socket) do
     %{current_scope: scope, current_mission: mission, provider: current} = socket.assigns
 
-    case GroundNetworks.fetch_provider(
+    case ManagementProviders.fetch_provider(
            scope.organization_id,
            mission.mission_id,
            current.provider_id
          ) do
       {:ok, provider} ->
         versions =
-          GroundNetworks.list_provider_versions(
+          ManagementProviders.list_provider_versions(
             scope.organization_id,
             mission.mission_id,
             provider.provider_id

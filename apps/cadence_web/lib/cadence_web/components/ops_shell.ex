@@ -103,6 +103,7 @@ defmodule CadenceWeb.Components.OpsShell do
   attr :dashboards, :list, required: true
   attr :active_dashboard_id, :string, required: true
   attr :active_item, :atom, required: true
+  attr :current_scope, :any, required: true
 
   def ops_nav_rail(assigns) do
     ~H"""
@@ -135,6 +136,13 @@ defmodule CadenceWeb.Components.OpsShell do
           icon="hero-circle-stack"
           label="Data Sources"
           active={@active_item == :data_sources}
+        />
+        <.rail_link
+          :if={activation_approver?(@current_scope)}
+          navigate={~p"/missions/#{@mission.mission_id}/ops/activations"}
+          icon="hero-shield-check"
+          label="Approvals"
+          active={@active_item == :activations}
         />
         <.rail_link
           navigate={~p"/missions/#{@mission.mission_id}/ops/planning"}
@@ -189,6 +197,11 @@ defmodule CadenceWeb.Components.OpsShell do
       </div>
     </nav>
     """
+  end
+
+  defp activation_approver?(scope) do
+    MapSet.member?(scope.capabilities, :organization_admin) or
+      MapSet.member?(scope.capabilities, :platform_admin)
   end
 
   attr :navigate, :string, required: true

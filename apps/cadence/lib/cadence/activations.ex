@@ -15,35 +15,12 @@ defmodule Cadence.Activations do
     BindingSetActivationRow
   }
 
-  alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
-
-  @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(organization_id, mission_id, binding_set_id, version, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
-             is_integer(version) and version > 0 and is_list(opts) do
-    ControlActivations.activate_binding_set(
-      organization_id,
-      mission_id,
-      binding_set_id,
-      version,
-      opts
-    )
-  end
-
-  @spec activate_binding_set(binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(mission_id, binding_set_id, version, opts \\ [])
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 and is_list(opts) do
-    ControlActivations.activate_binding_set(mission_id, binding_set_id, version, opts)
-  end
 
   @doc false
   @spec record_binding_set_activation(binary(), binary(), binary(), pos_integer(), keyword()) ::

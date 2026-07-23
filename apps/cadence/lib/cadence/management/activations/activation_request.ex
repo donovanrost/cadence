@@ -17,6 +17,7 @@ defmodule Cadence.Management.Activations.ActivationRequest do
           requester_actor_id: binary(),
           requester_actor_document: map(),
           policy_document: map(),
+          metadata: map(),
           requested_at: DateTime.t(),
           decided_at: DateTime.t() | nil
         }
@@ -34,6 +35,7 @@ defmodule Cadence.Management.Activations.ActivationRequest do
     :requester_actor_id,
     :requester_actor_document,
     :policy_document,
+    :metadata,
     :requested_at,
     :decided_at
   ]

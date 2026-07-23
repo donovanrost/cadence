@@ -3,12 +3,9 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.ContactPlanning.{
-    ContactPlanApprovals,
-    ContactPlanExecutions,
-    ContactPlans,
-    ContactRequirements
-  }
+  alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.Contacts, as: ManagementContacts
+  alias Cadence.Projections.ContactStatus
 
   @impl true
   def mount(%{"contact_plan_id" => plan_id}, _session, socket) do
@@ -43,7 +40,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
   def handle_event("submit-plan", %{"submission" => %{"reason" => reason}}, socket) do
     %{current_scope: scope, current_mission: mission, plan: plan} = socket.assigns
 
-    case ContactPlans.submit(
+    case ManagementContacts.submit_plan(
            scope,
            mission.mission_id,
            plan.contact_plan_id,
@@ -73,7 +70,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
      socket
      |> assign(:executing?, true)
      |> start_async(:execute_contact_plan, fn ->
-       ContactPlanExecutions.execute(scope, mission.mission_id, plan.contact_plan_id)
+       ControlContacts.execute_approved_plan(scope, mission.mission_id, plan.contact_plan_id)
      end)}
   end
 
@@ -335,7 +332,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
     result =
       case decision do
         :approve ->
-          ContactPlanApprovals.approve(
+          ControlContacts.approve_and_accept_plan(
             scope,
             mission.mission_id,
             plan.contact_plan_id,
@@ -345,7 +342,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
           )
 
         :reject ->
-          ContactPlanApprovals.reject(
+          ManagementContacts.reject_plan(
             scope,
             mission.mission_id,
             plan.contact_plan_id,
@@ -356,6 +353,9 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
       end
 
     case result do
+      {:ok, _approved_plan} ->
+        refresh_with_flash(socket, :info, "Plan decision recorded.")
+
       {:ok, _plan, _version, _approval} ->
         refresh_with_flash(socket, :info, "Plan decision recorded.")
 
@@ -375,12 +375,14 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     plan_id = socket.assigns.contact_plan_id
 
-    with {:ok, plan, version} <-
-           ContactPlans.fetch(scope.organization_id, mission.mission_id, plan_id) do
+    with {:ok, status} <-
+           ContactStatus.project(scope.organization_id, mission.mission_id, plan_id) do
+      %{plan: plan, version: version} = status.requested
+
       requirements =
         Enum.map(version.requirement_refs_document["requirements"] || [], fn ref ->
           {:ok, requirement} =
-            ContactRequirements.fetch_version(
+            ManagementContacts.fetch_requirement_version(
               scope.organization_id,
               mission.mission_id,
               ref["id"],
@@ -390,36 +392,16 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
           requirement
         end)
 
-      selected =
-        ContactPlans.selected_snapshots(
-          scope.organization_id,
-          mission.mission_id,
-          plan.contact_plan_id,
-          version.version
-        )
-
-      approvals =
-        ContactPlanApprovals.list(
-          scope.organization_id,
-          mission.mission_id,
-          plan.contact_plan_id
-        )
-
-      execution_version = plan.approved_version || version.version
-
-      execution_items =
-        ContactPlanExecutions.list(
-          scope.organization_id,
-          mission.mission_id,
-          plan.contact_plan_id,
-          execution_version
-        )
+      selected = status.requested.selected_opportunities
+      approvals = status.requested.approvals
+      execution_items = status.operational.execution_items
 
       {:ok,
        socket
        |> assign(:plan, plan)
        |> assign(:version, version)
        |> assign(:requirements, requirements)
+       |> assign(:contact_status, status)
        |> assign(:selected_opportunities, selected)
        |> assign(:approvals, approvals)
        |> assign(:organization_admin?, organization_admin?(scope))

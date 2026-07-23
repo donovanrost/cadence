@@ -18,6 +18,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias CadenceWeb.TestFixtures
 
   def bootstrap(conn) do
     bootstrap_admin_token = bootstrap_admin_login(conn)
@@ -75,6 +76,13 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
 
   def authorize(conn, api_token) do
     put_req_header(conn, "authorization", "Bearer " <> api_token)
+  end
+
+  def organization_admin_token(organization_id) when is_binary(organization_id) do
+    {:ok, organization} = Cadence.Organizations.fetch_organization(organization_id)
+    user = TestFixtures.persist_user!()
+    _membership = TestFixtures.grant_membership!(user, organization, role: :organization_admin)
+    TestFixtures.member_session_token!(user)
   end
 
   def fetch_command_id(command_snapshot, command_name) do

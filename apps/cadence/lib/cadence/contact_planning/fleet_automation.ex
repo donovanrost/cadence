@@ -8,17 +8,18 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
   """
 
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Contacts, as: ControlContacts
 
   alias Cadence.ContactPlanning.{
     AutomationGrants,
-    ContactPlanApprovals,
-    ContactPlanExecutions,
     ContactPlans,
     FleetAutomationActions,
     FleetPlanner,
     FleetPlanningRuns,
     FleetRepairs
   }
+
+  alias Cadence.Management.Contacts, as: ManagementContacts
 
   @spec plan(Scope.t(), binary(), map(), binary(), keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -329,17 +330,24 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
          evidence,
          opts
        ) do
-    case ContactPlanApprovals.approve(
-           scope,
-           plan.mission_id,
-           plan.contact_plan_id,
-           version.version,
-           version.content_sha256,
-           "Approved by exact bounded automation grant",
-           automation_opts(opts, grant, evidence)
-         ) do
-      {:ok, approved, _version, approval} -> {:ok, approved, approval}
-      {:error, reason} -> {:error, reason}
+    with {:ok, _handoff} <-
+           ControlContacts.approve_and_accept_plan(
+             scope,
+             plan.mission_id,
+             plan.contact_plan_id,
+             version.version,
+             version.content_sha256,
+             "Approved by exact bounded automation grant",
+             automation_opts(opts, grant, evidence)
+           ),
+         {:ok, approved, _version} <-
+           ManagementContacts.fetch_plan(
+             plan.organization_id,
+             plan.mission_id,
+             plan.contact_plan_id
+           ),
+         {:ok, approval} <- fetch_approval(approved) do
+      {:ok, approved, approval}
     end
   end
 
@@ -350,13 +358,15 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
               :partially_reserved,
               :reserved
             ] do
-    case ContactPlanApprovals.list(
-           plan.organization_id,
-           plan.mission_id,
-           plan.contact_plan_id
-         ) do
-      [approval | _rest] -> {:ok, plan, approval}
-      [] -> {:error, :automated_contact_plan_approval_evidence_not_found}
+    with {:ok, handoff} <-
+           ManagementContacts.fetch_approved_plan(
+             plan.organization_id,
+             plan.mission_id,
+             plan.contact_plan_id
+           ),
+         :ok <- ControlContacts.accept_approved_plan(handoff),
+         {:ok, approval} <- fetch_approval(plan) do
+      {:ok, plan, approval}
     end
   end
 
@@ -415,7 +425,7 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
              opts
            ),
          {:ok, execution} <-
-           ContactPlanExecutions.execute(
+           ControlContacts.execute_approved_plan(
              scope,
              plan.mission_id,
              plan.contact_plan_id,
@@ -436,6 +446,17 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
              opts
            ) do
       {:ok, %{execution: execution, action: completed}}
+    end
+  end
+
+  defp fetch_approval(plan) do
+    case ManagementContacts.list_approvals(
+           plan.organization_id,
+           plan.mission_id,
+           plan.contact_plan_id
+         ) do
+      [approval | _rest] -> {:ok, approval}
+      [] -> {:error, :automated_contact_plan_approval_evidence_not_found}
     end
   end
 

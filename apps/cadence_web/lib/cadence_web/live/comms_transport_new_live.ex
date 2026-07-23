@@ -6,13 +6,13 @@ defmodule CadenceWeb.CommsTransportNewLive do
 
   alias Cadence.Comms.{Transport, TransportKind}
   alias Cadence.Comms.TransportKinds.TCPSocket
-  alias Cadence.GroundNetworks
+  alias Cadence.Management.Providers
   alias Phoenix.HTML.Form
 
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    providers = GroundNetworks.list_providers(scope.organization_id, mission.mission_id)
+    providers = Providers.list_providers(scope.organization_id, mission.mission_id)
 
     {:ok,
      socket

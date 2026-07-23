@@ -87,6 +87,12 @@ defmodule Cadence.GroundNetworks do
     end
   end
 
+  @doc false
+  @spec validate_provider_configuration(MissionProvider.t(), keyword()) ::
+          {:ok, MissionProvider.t()} | {:error, term()}
+  def validate_provider_configuration(%MissionProvider{} = provider, opts \\ []),
+    do: do_validate_provider(provider, opts)
+
   @spec sync_provider(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
   def sync_provider(scope_or_organization_id, mission_id, provider_id, opts \\ [])
@@ -102,6 +108,12 @@ defmodule Cadence.GroundNetworks do
       do_sync_provider(provider, opts)
     end
   end
+
+  @doc false
+  @spec sync_provider_configuration(MissionProvider.t(), keyword()) ::
+          {:ok, MissionProvider.t()} | {:error, term()}
+  def sync_provider_configuration(%MissionProvider{} = provider, opts \\ []),
+    do: do_sync_provider(provider, opts)
 
   defp do_validate_provider(provider, opts) do
     checked_at = now(opts)

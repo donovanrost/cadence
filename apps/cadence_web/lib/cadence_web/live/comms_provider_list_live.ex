@@ -2,12 +2,12 @@ defmodule CadenceWeb.CommsProviderListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.GroundNetworks
+  alias Cadence.Management.Providers
 
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    providers = GroundNetworks.list_providers(scope.organization_id, mission.mission_id)
+    providers = Providers.list_providers(scope.organization_id, mission.mission_id)
 
     {:ok,
      socket

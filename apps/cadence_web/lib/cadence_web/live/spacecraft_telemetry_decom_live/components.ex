@@ -154,6 +154,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   end
 
   attr :config, :any, default: nil
+  attr :pending_activation_request, :any, default: nil
 
   def apply_section(%{config: nil} = assigns) do
     ~H"""
@@ -167,19 +168,34 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   def apply_section(assigns) do
     ~H"""
-    <div class="flex justify-end gap-2">
-      <.button
-        :if={@config.enabled}
-        variant={:ghost}
-        phx-click="disable"
-        id="telemetry-decom-disable-button"
-        data-confirm="Disable Telemetry Decom for this spacecraft?"
+    <div class="space-y-3">
+      <.callout
+        :if={@pending_activation_request}
+        variant={:info}
+        id="telemetry-decom-activation-pending"
       >
-        Disable
-      </.button>
-      <.button phx-click="enable" id="telemetry-decom-enable-button">
-        Apply mission changes
-      </.button>
+        Activation request
+        <span class="font-mono">{@pending_activation_request.activation_request_id}</span>
+        is waiting for approval from a different mission administrator.
+      </.callout>
+      <div class="flex justify-end gap-2">
+        <.button
+          :if={@config.enabled}
+          variant={:ghost}
+          phx-click="disable"
+          id="telemetry-decom-disable-button"
+          data-confirm="Disable Telemetry Decom for this spacecraft?"
+        >
+          Disable
+        </.button>
+        <.button
+          phx-click="enable"
+          id="telemetry-decom-enable-button"
+          disabled={not is_nil(@pending_activation_request)}
+        >
+          Request mission changes
+        </.button>
+      </div>
     </div>
     """
   end
@@ -248,15 +264,15 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     do: "This configuration is live on the mission."
 
   defp status_description(:configured),
-    do: "Choices are saved. Apply mission changes to publish them."
+    do: "Choices are saved. Request mission changes to publish them."
 
   defp status_description(:outdated),
     do:
-      "The saved configuration differs from what is live. Apply mission changes to publish the latest state."
+      "The saved configuration differs from what is live. Request mission changes to publish the latest state."
 
   defp status_description(:disabled),
     do:
-      "This spacecraft is excluded from Telemetry Decom. Apply mission changes to publish the disabled state."
+      "This spacecraft is excluded from Telemetry Decom. Request mission changes to publish the disabled state."
 
   defp status_description(:not_configured),
     do: "Choose a catalog revision and packet claims, then apply mission changes."

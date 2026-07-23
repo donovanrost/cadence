@@ -9,13 +9,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     AutomationGrants,
     ContactPlan,
     ContactPlanApproval,
-    ContactPlanExecutions,
     ContactPlans,
-    ContactPlanVersion,
-    Planner
+    ContactPlanVersion
   }
-
-  alias Cadence.Contacts.ProviderScheduling
 
   alias Cadence.Persistence.Schemas.{
     ContactPlanApprovalRow,
@@ -153,11 +149,10 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
        ),
        do: :ok
 
-  defp maybe_revalidate(:approved, version, requirements, selected, actor, now, opts) do
+  defp maybe_revalidate(:approved, version, requirements, selected, actor, now, _opts) do
     with :ok <- proposal_satisfied(version),
          :ok <- approval_mode(requirements, actor),
          :ok <- unexpired(selected, now),
-         :ok <- routes_exact(version.organization_id, version.mission_id, selected, opts),
          {:ok, current_policy} <- ContactPlans.policy_snapshot(requirements, selected) do
       exact_policy(version.policy_snapshot_document, current_policy)
     end
@@ -193,7 +188,6 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
              context.now
            ),
          {:ok, approval_row} <- Repo.insert(ContactPlanApprovalRow.changeset(approval)),
-         :ok <- maybe_create_execution_items(context.decision, plan_row, version, selected),
          {:ok, updated_plan_row} <-
            update_plan(
              plan_row,
@@ -221,20 +215,6 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       version.version
     )
   end
-
-  defp maybe_create_execution_items(:approved, plan, version, _selected) do
-    bookable =
-      ContactPlans.bookable_snapshots(
-        plan.organization_id,
-        plan.mission_id,
-        plan.contact_plan_id,
-        version.version
-      )
-
-    ContactPlanExecutions.ensure_items(plan, version, bookable)
-  end
-
-  defp maybe_create_execution_items(:rejected, _plan, _version, _selected), do: :ok
 
   defp proposal_satisfied(version) do
     if version.conflict_document["clear"] == true and
@@ -264,35 +244,6 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       do: :ok,
       else: {:error, :contact_plan_opportunity_expired}
   end
-
-  defp routes_exact(organization_id, mission_id, snapshots, opts) do
-    resolver =
-      Keyword.get(opts, :resolve_route, &ProviderScheduling.resolve_ready_downlink_route/4)
-
-    Enum.reduce_while(snapshots, :ok, fn snapshot, :ok ->
-      route = snapshot.route_binding_document
-
-      organization_id
-      |> resolve_route(mission_id, route, resolver)
-      |> route_resolution_result(route)
-    end)
-  end
-
-  defp resolve_route(organization_id, mission_id, route, resolver) do
-    resolver.(organization_id, mission_id, route["spacecraft_id"], route["route_key"])
-  end
-
-  defp route_resolution_result({:ok, current_route}, route) do
-    if Planner.route_binding(current_route) == route,
-      do: {:cont, :ok},
-      else: {:halt, {:error, :contact_plan_route_binding_changed}}
-  end
-
-  defp route_resolution_result({:error, _reason}, _route),
-    do: {:halt, {:error, :contact_plan_route_not_ready}}
-
-  defp route_resolution_result(_other, _route),
-    do: {:halt, {:error, :contact_plan_route_resolution_malformed}}
 
   defp exact_policy(policy, policy), do: :ok
   defp exact_policy(_approved, _current), do: {:error, :contact_plan_policy_snapshot_changed}

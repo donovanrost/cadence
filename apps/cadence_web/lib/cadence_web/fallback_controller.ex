@@ -55,6 +55,10 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "binding_set_not_found")
   end
 
+  def call(conn, {:error, :activation_request_not_found}) do
+    error_response(conn, :not_found, "activation_request_not_found")
+  end
+
   def call(conn, {:error, :catalog_importer_not_found}) do
     error_response(conn, :not_found, "catalog_importer_not_found")
   end

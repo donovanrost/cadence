@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
+  alias Cadence.Control.ManagedResources
 
   alias Cadence.Dashboards.{
     DataBinding,
@@ -13,6 +14,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceReadiness,
     SourceWatermarks
   }
+
+  alias Cadence.Projections.ManagedResourceStatus
 
   alias CadenceWeb.OpsDataSourcesLive.{
     Page,
@@ -153,7 +156,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("deprovision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case Cadence.Dashboards.request_tsdb_backend_deprovisioning(data_source_id, %{},
+    case ManagedResources.request_tsdb_backend(data_source_id, :deprovision, %{},
            actor_id: current_user_id(scope),
            payload: source_action_payload(socket, %{data_source_id: data_source_id})
          ) do
@@ -176,7 +179,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("provision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case Cadence.Dashboards.request_tsdb_backend_provisioning(data_source_id, %{},
+    case ManagedResources.request_tsdb_backend(data_source_id, :provision, %{},
            actor_id: current_user_id(scope),
            payload: source_action_payload(socket, %{data_source_id: data_source_id})
          ) do
@@ -566,34 +569,15 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   defp metadata_value(_metadata, _key), do: nil
 
   defp retry_deployment_run(job_id) do
-    case Cadence.Dashboards.retry_managed_questdb_provisioning_run(job_id) do
-      {:ok, run} ->
-        {:ok, run}
-
-      {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
-        Cadence.Dashboards.retry_tsdb_backend_lifecycle_run(job_id)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ManagedResources.retry_deployment_run(job_id)
   end
 
   defp requeue_deployment_run(job_id) do
-    case Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job_id) do
-      {:ok, run} ->
-        {:ok, run}
-
-      {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
-        Cadence.Dashboards.requeue_tsdb_backend_lifecycle_run(job_id)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ManagedResources.requeue_deployment_run(job_id)
   end
 
   defp tsdb_deployment_runs(mission_id) do
-    Cadence.Dashboards.list_managed_questdb_provisioning_runs(mission_id) ++
-      Cadence.Dashboards.list_tsdb_backend_lifecycle_runs(mission_id)
+    ManagedResourceStatus.deployment_runs(mission_id)
   end
 
   defp deployment_run_sort_key(run) do

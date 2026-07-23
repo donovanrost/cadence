@@ -61,6 +61,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
+     |> assign(
+       :pending_activation_request,
+       pending_activation_request(socket.assigns.current_scope, mission_id)
+     )
      |> assign(:saved_at, config && config.updated_at)}
   end
 
@@ -147,22 +151,19 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
         %{assigns: %{current_scope: scope, current_mission: mission, current_spacecraft: sc}} =
           socket
       ) do
-    case TelemetryDecom.apply_mission(
-           scope.organization_id,
+    case TelemetryDecom.request_mission_apply(
+           scope,
            mission.mission_id,
            sc.spacecraft_id
          ) do
-      {:ok, config} ->
+      {:ok, %{config: config, activation_request: request}} ->
         {:noreply,
          socket
          |> assign(:config, config)
-         |> assign(
-           :active_binding_set_summary,
-           fetch_active_binding_set_summary(mission.mission_id)
-         )
+         |> assign(:pending_activation_request, request)
          |> put_flash(
            :info,
-           "Telemetry Decom mission changes applied. All enabled spacecraft configurations are now live."
+           "Telemetry Decom activation requested. A different mission administrator must approve it before the changes become live."
          )}
 
       {:error, reason} ->
@@ -284,7 +285,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
             <Components.preview_section preview={@preview} />
             <div class="border-t border-base-300/30"></div>
 
-            <Components.apply_section config={@config} />
+            <Components.apply_section
+              config={@config}
+              pending_activation_request={@pending_activation_request}
+            />
           <% end %>
         </div>
       </.card>
@@ -334,6 +338,17 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
 
       {:error, _} ->
         nil
+    end
+  end
+
+  defp pending_activation_request(current_scope, mission_id) do
+    case Cadence.Management.Activations.latest_pending(
+           current_scope,
+           mission_id,
+           TelemetryDecom.binding_set_id(mission_id)
+         ) do
+      {:ok, request} -> request
+      {:error, _reason} -> nil
     end
   end
 

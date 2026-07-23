@@ -72,7 +72,8 @@ defmodule Cadence.Auth.Policy do
   end
 
   def authorize(%Scope{} = current_scope, :request_activation, params) do
-    authorize(current_scope, :operate_mission, params)
+    action = if current_scope.actor_kind == :service, do: :manage_mission, else: :operate_mission
+    authorize(current_scope, action, params)
   end
 
   def authorize(%Scope{actor_kind: :service}, :approve_activation, _params),

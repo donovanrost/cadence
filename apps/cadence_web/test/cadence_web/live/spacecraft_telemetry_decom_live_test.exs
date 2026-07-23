@@ -154,6 +154,43 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     refute disabled.enabled
   end
 
+  test "requesting mission changes creates a pending governed activation" do
+    {conn, org, mission, spacecraft} = setup_session()
+    _revision = persist_revision!(org, mission)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+      )
+
+    view
+    |> element("input[phx-click='toggle_apid'][phx-value-apid='42']")
+    |> render_click()
+
+    html =
+      view
+      |> element("#telemetry-decom-enable-button")
+      |> render_click()
+
+    assert html =~ "Telemetry Decom activation requested"
+    assert has_element?(view, "#telemetry-decom-activation-pending")
+
+    assert {:error, :no_active_binding_set} =
+             Cadence.Activations.fetch_active_activation(
+               org.organization_id,
+               mission.mission_id
+             )
+
+    {:ok, remounted_view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+      )
+
+    assert has_element?(remounted_view, "#telemetry-decom-activation-pending")
+  end
+
   test "focuses the page on catalog revision and handled APID selection" do
     {conn, org, mission, spacecraft} = setup_session()
     _revision = persist_revision!(org, mission)

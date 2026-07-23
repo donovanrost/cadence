@@ -7,11 +7,14 @@ defmodule Cadence.Projections.ActivationStatus do
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Activations.ActivationExecution
+  alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Management.Activations.ActivationRequest
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
 
   @type t :: %{
-          desired: map() | nil,
+          requested: map() | nil,
+          operational: map() | nil,
           applied: map() | nil,
           observed: map()
         }
@@ -19,18 +22,39 @@ defmodule Cadence.Projections.ActivationStatus do
   @spec fetch(binary(), binary()) :: {:ok, t()} | {:error, term()}
   def fetch(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    desired = desired_basis(organization_id, mission_id)
+    requested = requested_intent(organization_id, mission_id)
+    operational = operational_basis(organization_id, mission_id)
     applied = applied_basis(mission_id)
 
     {:ok,
      %{
-       desired: desired,
+       requested: requested,
+       operational: operational,
        applied: applied,
-       observed: observed_state(desired, applied)
+       observed: observed_state(requested, operational, applied)
      }}
   end
 
-  defp desired_basis(organization_id, mission_id) do
+  defp requested_intent(organization_id, mission_id) do
+    case ManagementActivations.latest_request(organization_id, mission_id) do
+      %ActivationRequest{} = request ->
+        %{
+          activation_request_id: request.activation_request_id,
+          state: request.state,
+          binding_set_id: request.binding_set_id,
+          binding_set_version: request.binding_set_version,
+          binding_set_content_sha256: request.binding_set_content_sha256,
+          change_class: request.change_class,
+          requested_at: request.requested_at,
+          decided_at: request.decided_at
+        }
+
+      nil ->
+        nil
+    end
+  end
+
+  defp operational_basis(organization_id, mission_id) do
     case ControlActivations.fetch_active_basis(organization_id, mission_id) do
       {:ok, %BindingSetActivation{} = activation} ->
         %{
@@ -82,43 +106,62 @@ defmodule Cadence.Projections.ActivationStatus do
     end
   end
 
-  defp observed_state(nil, nil) do
-    %{mission_runtime: :stopped, generation_alignment: :no_desired_generation}
+  defp observed_state(requested, operational, applied) do
+    operational
+    |> generation_observation(applied)
+    |> Map.put(:request_alignment, request_alignment(requested, operational))
   end
 
-  defp observed_state(%{generation: desired_generation}, nil) do
+  defp generation_observation(nil, nil) do
+    %{mission_runtime: :stopped, generation_alignment: :no_operational_generation}
+  end
+
+  defp generation_observation(%{generation: operational_generation}, nil) do
     %{
       mission_runtime: :stopped,
       generation_alignment: :not_applied,
-      desired_generation: desired_generation,
+      operational_generation: operational_generation,
       applied_generation: nil
     }
   end
 
-  defp observed_state(%{generation: generation}, %{generation: generation}) do
+  defp generation_observation(%{generation: generation}, %{generation: generation}) do
     %{
       mission_runtime: :running,
       generation_alignment: :converged,
-      desired_generation: generation,
+      operational_generation: generation,
       applied_generation: generation
     }
   end
 
-  defp observed_state(%{generation: desired}, %{generation: applied}) do
+  defp generation_observation(%{generation: operational}, %{generation: applied}) do
     %{
       mission_runtime: :running,
       generation_alignment: :diverged,
-      desired_generation: desired,
+      operational_generation: operational,
       applied_generation: applied
     }
   end
 
-  defp observed_state(nil, %{generation: applied}) do
+  defp generation_observation(nil, %{generation: applied}) do
     %{
       mission_runtime: :running,
       generation_alignment: :orphaned,
-      desired_generation: nil,
+      operational_generation: nil,
       applied_generation: applied
     }
   end
+
+  defp request_alignment(nil, nil), do: :not_requested
+  defp request_alignment(%{state: :approval_pending}, _operational), do: :pending_approval
+  defp request_alignment(%{state: :rejected}, _operational), do: :rejected
+
+  defp request_alignment(
+         %{state: :approved, activation_request_id: request_id},
+         %{activation_request_id: request_id}
+       ),
+       do: :executed
+
+  defp request_alignment(%{state: :approved}, _operational), do: :awaiting_execution
+  defp request_alignment(nil, _operational), do: :untracked_operational_basis
 end

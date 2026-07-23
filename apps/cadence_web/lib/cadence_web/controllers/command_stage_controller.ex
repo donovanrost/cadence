@@ -5,7 +5,9 @@ defmodule CadenceWeb.CommandStageController do
 
   alias Cadence.Commanding.CommandStage
   alias Cadence.Management.Commanding
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -14,10 +16,10 @@ defmodule CadenceWeb.CommandStageController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.command_stage_filters(params) do
+         {:ok, filters} <- CommandingParams.command_stage_filters(params) do
       command_stages =
         Commanding.list_command_stages(organization_id, mission_id, filters)
-        |> Enum.map(&ControlPlaneJSON.command_stage/1)
+        |> Enum.map(&CommandingJSON.command_stage/1)
 
       json(conn, %{data: command_stages})
     end
@@ -35,7 +37,7 @@ defmodule CadenceWeb.CommandStageController do
              mission_id
            ),
          {:ok, %CommandStage{} = command_stage} <-
-           ControlPlaneParams.command_stage(
+           CommandingParams.command_stage(
              organization_id,
              mission_id,
              command_stage_params,
@@ -45,7 +47,7 @@ defmodule CadenceWeb.CommandStageController do
            Commanding.persist_command_stage(organization_id, command_stage) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.command_stage(persisted_command_stage)})
+      |> json(%{data: CommandingJSON.command_stage(persisted_command_stage)})
     end
   end
 
@@ -66,7 +68,7 @@ defmodule CadenceWeb.CommandStageController do
              mission_id,
              command_stage_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_stage(command_stage)})
+      json(conn, %{data: CommandingJSON.command_stage(command_stage)})
     end
   end
 
@@ -89,13 +91,13 @@ defmodule CadenceWeb.CommandStageController do
              command_stage_id
            ),
          {:ok, %CommandStage{} = updated_command_stage} <-
-           ControlPlaneParams.command_stage(existing_command_stage, command_stage_params),
+           CommandingParams.command_stage(existing_command_stage, command_stage_params),
          {:ok, %CommandStage{} = persisted_command_stage} <-
            Commanding.update_command_stage(
              organization_id,
              updated_command_stage
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_stage(persisted_command_stage)})
+      json(conn, %{data: CommandingJSON.command_stage(persisted_command_stage)})
     end
   end
 
@@ -112,7 +114,7 @@ defmodule CadenceWeb.CommandStageController do
              mission_id
            ),
          {:ok, {staged_command_item_ids, requested_by}} <-
-           ControlPlaneParams.command_stage_submission(
+           CommandingParams.command_stage_submission(
              submission_params,
              default_requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
@@ -124,7 +126,7 @@ defmodule CadenceWeb.CommandStageController do
              staged_command_item_ids,
              requested_by
            ) do
-      json(conn, %{data: Enum.map(command_requests, &ControlPlaneJSON.command_request/1)})
+      json(conn, %{data: Enum.map(command_requests, &CommandingJSON.command_request/1)})
     end
   end
 end

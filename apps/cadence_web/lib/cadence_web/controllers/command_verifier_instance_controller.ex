@@ -5,7 +5,9 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
 
   alias Cadence.Commanding.CommandVerifierInstance
   alias Cadence.Projections.CommandStatus
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -14,14 +16,14 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.command_verifier_instance_filters(params) do
+         {:ok, filters} <- CommandingParams.command_verifier_instance_filters(params) do
       command_verifier_instances =
         CommandStatus.list_verifier_instances(
           organization_id,
           mission_id,
           filters
         )
-        |> Enum.map(&ControlPlaneJSON.command_verifier_instance/1)
+        |> Enum.map(&CommandingJSON.command_verifier_instance/1)
 
       json(conn, %{data: command_verifier_instances})
     end
@@ -44,7 +46,7 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
              mission_id,
              command_verifier_instance_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_verifier_instance(command_verifier_instance)})
+      json(conn, %{data: CommandingJSON.command_verifier_instance(command_verifier_instance)})
     end
   end
 end

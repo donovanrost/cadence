@@ -10,14 +10,15 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   alias Cadence.Comms.TransportStore
 
   alias Cadence.ContactPlanning.{
-    ContactPlanApprovals,
-    ContactPlanExecutions,
     ContactPlans,
     ContactRequirements,
     FleetPlanner,
     FleetPlanningPolicies,
     Planner
   }
+
+  alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.Contacts.{
     ProviderBooking,
@@ -163,8 +164,8 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert pending_plan.lifecycle_state == :pending_approval
 
-    assert {:ok, approved_plan, ^plan_version, approval} =
-             ContactPlanApprovals.approve(
+    assert {:ok, approved_handoff} =
+             ManagementContacts.approve_plan(
                scope,
                setup.mission_id,
                plan.contact_plan_id,
@@ -173,12 +174,28 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                "Approved for the simulator boundary proof"
              )
 
+    assert :ok = ControlContacts.accept_approved_plan(approved_handoff)
+
+    assert {:ok, approved_plan, ^plan_version} =
+             ManagementContacts.fetch_plan(
+               setup.organization_id,
+               setup.mission_id,
+               plan.contact_plan_id
+             )
+
+    assert [approval] =
+             ManagementContacts.list_approvals(
+               setup.organization_id,
+               setup.mission_id,
+               plan.contact_plan_id
+             )
+
     assert approved_plan.lifecycle_state == :approved
     assert approval.actor_kind == :user
     assert approval.actor_id == scope.user.user_id
 
     assert {:ok, execution} =
-             ContactPlanExecutions.execute(
+             ControlContacts.execute_approved_plan(
                scope,
                setup.mission_id,
                plan.contact_plan_id,
@@ -254,7 +271,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     assert confirmed_reservation.delivery_state == :pending
 
     assert {:ok, converged_execution} =
-             ContactPlanExecutions.execute(
+             ControlContacts.execute_approved_plan(
                scope,
                setup.mission_id,
                plan.contact_plan_id,

@@ -3,7 +3,7 @@ defmodule CadenceWeb.CommsProviderNewLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.GroundNetworks
+  alias Cadence.Management.Providers
 
   alias Cadence.GroundNetworks.{
     MissionProvider,
@@ -49,7 +49,7 @@ defmodule CadenceWeb.CommsProviderNewLive do
     with {:ok, binding} <- selected_binding(socket.assigns.provider_bindings, params),
          {:ok, attrs} <- provider_attrs(params, mission.mission_id, binding),
          provider <- MissionProvider.new(attrs),
-         {:ok, provider} <- GroundNetworks.persist_provider(scope, provider) do
+         {:ok, provider} <- Providers.persist_provider(scope, provider) do
       {:noreply,
        push_navigate(socket,
          to: ~p"/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"

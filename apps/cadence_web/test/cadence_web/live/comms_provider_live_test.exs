@@ -2,6 +2,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
+  @async_timeout 1_000
 
   import Phoenix.LiveViewTest
 
@@ -120,13 +121,13 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert has_element?(view, "#provider-admin-diagnostics-json")
 
     view |> element("#validate-provider-button") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#provider-control-plane-health", "Healthy")
     assert has_element?(view, "#provider-capabilities")
 
     view |> element("#sync-provider-button") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#service-profile-service-realtime-ttc-downlink")
     assert has_element?(view, "#delivery-profile-delivery-cadence-primary")

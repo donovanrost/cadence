@@ -447,7 +447,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Control.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version
@@ -654,7 +654,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
              Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                organization_id,
                mission_id,
                persisted_binding_set.binding_set_id,
@@ -829,7 +829,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Control.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version
@@ -942,7 +942,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, persisted_binding_set} = Cadence.Governance.persist_binding_set(binding_set)
 
     assert {:ok, _activation} =
-             Cadence.Control.Activations.activate_binding_set(
+             Cadence.ActivationFixtures.activate_binding_set(
                "mission-alpha",
                persisted_binding_set.binding_set_id,
                persisted_binding_set.version

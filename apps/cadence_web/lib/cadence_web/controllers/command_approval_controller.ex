@@ -5,7 +5,9 @@ defmodule CadenceWeb.CommandApprovalController do
 
   alias Cadence.Commanding.CommandApproval
   alias Cadence.Management.Commanding
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -14,14 +16,14 @@ defmodule CadenceWeb.CommandApprovalController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.command_approval_filters(params) do
+         {:ok, filters} <- CommandingParams.command_approval_filters(params) do
       command_approvals =
         Commanding.list_command_approvals(
           organization_id,
           mission_id,
           filters
         )
-        |> Enum.map(&ControlPlaneJSON.command_approval/1)
+        |> Enum.map(&CommandingJSON.command_approval/1)
 
       json(conn, %{data: command_approvals})
     end
@@ -44,7 +46,7 @@ defmodule CadenceWeb.CommandApprovalController do
              mission_id,
              command_approval_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_approval(command_approval)})
+      json(conn, %{data: CommandingJSON.command_approval(command_approval)})
     end
   end
 end

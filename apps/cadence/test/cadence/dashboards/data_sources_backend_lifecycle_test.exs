@@ -3,11 +3,12 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   import Cadence.Dashboards.DataSourcesFixtures
 
+  alias Cadence.Control.ManagedResources
+
   alias Cadence.Dashboards.{
     DataSource,
     DataSources,
     SourceCredentials,
-    TSDBBackendLifecycleJobs,
     TSDBDeploymentStatus
   }
 
@@ -272,8 +273,9 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              })
 
     assert {:ok, requested_source, queued_job} =
-             TSDBBackendLifecycleJobs.request_provisioning(
+             ManagedResources.request_tsdb_backend(
                "worker-provision-byo",
+               :provision,
                %{},
                actor_id: "operator-1",
                payload: %{source: "test"},
@@ -379,8 +381,9 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              })
 
     assert {:ok, requested_source, queued_job} =
-             TSDBBackendLifecycleJobs.request_deprovisioning(
+             ManagedResources.request_tsdb_backend(
                "worker-deprovision-byo",
+               :deprovision,
                %{},
                actor_id: "operator-1",
                payload: %{source: "test"},

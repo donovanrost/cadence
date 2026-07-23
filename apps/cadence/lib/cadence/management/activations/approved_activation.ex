@@ -12,6 +12,7 @@ defmodule Cadence.Management.Activations.ApprovedActivation do
           requester_actor_document: map(),
           approval_decision_ids: [binary()],
           policy_document: map(),
+          metadata: map(),
           approved_at: DateTime.t()
         }
 
@@ -26,6 +27,7 @@ defmodule Cadence.Management.Activations.ApprovedActivation do
     :requester_actor_document,
     :approval_decision_ids,
     :policy_document,
+    :metadata,
     :approved_at
   ]
   defstruct @enforce_keys

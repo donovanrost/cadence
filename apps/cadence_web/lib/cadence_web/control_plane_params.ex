@@ -314,19 +314,6 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
-  @spec activation(binary(), map()) ::
-          {:ok, {binary(), pos_integer(), keyword()}} | {:error, term()}
-  def activation(mission_id, params) when is_binary(mission_id) and is_map(params) do
-    with {:ok, binding_set_id} <- required_string(params, "binding_set_id"),
-         {:ok, version} <- positive_integer(params, "version", nil) do
-      {:ok,
-       {binding_set_id, version,
-        [
-          metadata: map_value(params, "metadata")
-        ]}}
-    end
-  end
-
   @spec provider_profile(binary(), binary(), map()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def provider_profile(organization_id, mission_id, params)

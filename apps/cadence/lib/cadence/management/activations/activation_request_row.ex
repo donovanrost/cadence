@@ -33,6 +33,7 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
     field(:requester_actor_id, :string)
     field(:requester_actor_document, :map, default: %{})
     field(:policy_document, :map, default: %{})
+    field(:metadata, :map, default: %{})
     field(:requested_at, :utc_datetime_usec)
     field(:decided_at, :utc_datetime_usec)
 
@@ -52,6 +53,7 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
     :requester_actor_id,
     :requester_actor_document,
     :policy_document,
+    :metadata,
     :requested_at,
     :decided_at
   ]
@@ -84,6 +86,7 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
       requester_actor_id: row.requester_actor_id,
       requester_actor_document: JsonDocument.unwrap_value(row.requester_actor_document),
       policy_document: JsonDocument.unwrap_value(row.policy_document),
+      metadata: JsonDocument.unwrap_value(row.metadata),
       requested_at: row.requested_at,
       decided_at: row.decided_at
     }
@@ -94,5 +97,6 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
     |> Map.from_struct()
     |> Map.update!(:requester_actor_document, &JsonDocument.wrap_value/1)
     |> Map.update!(:policy_document, &JsonDocument.wrap_value/1)
+    |> Map.update!(:metadata, &JsonDocument.wrap_value/1)
   end
 end

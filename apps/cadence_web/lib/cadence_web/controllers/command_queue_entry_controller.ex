@@ -6,7 +6,9 @@ defmodule CadenceWeb.CommandQueueEntryController do
   alias Cadence.Commanding.CommandQueueEntry
   alias Cadence.Control.Commanding
   alias Cadence.Projections.CommandStatus
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -15,14 +17,14 @@ defmodule CadenceWeb.CommandQueueEntryController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.command_queue_entry_filters(params) do
+         {:ok, filters} <- CommandingParams.command_queue_entry_filters(params) do
       command_queue_entries =
         CommandStatus.list_queue_entries(
           organization_id,
           mission_id,
           filters
         )
-        |> Enum.map(&ControlPlaneJSON.command_queue_entry/1)
+        |> Enum.map(&CommandingJSON.command_queue_entry/1)
 
       json(conn, %{data: command_queue_entries})
     end
@@ -45,7 +47,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              mission_id,
              command_queue_entry_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_queue_entry(command_queue_entry)})
+      json(conn, %{data: CommandingJSON.command_queue_entry(command_queue_entry)})
     end
   end
 
@@ -64,7 +66,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              mission_id
            ),
          {:ok, release_opts} <-
-           ControlPlaneParams.command_release_attempt(
+           CommandingParams.command_release_attempt(
              Map.get(params, "release_attempt", %{}),
              default_released_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
@@ -77,7 +79,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
              Keyword.fetch!(release_opts, :released_by),
              Keyword.drop(release_opts, [:realized_contact_id, :released_by])
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_queue_entry_release_result(result)})
+      json(conn, %{data: CommandingJSON.command_queue_entry_release_result(result)})
     end
   end
 end

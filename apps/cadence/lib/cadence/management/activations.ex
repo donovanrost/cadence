@@ -49,7 +49,13 @@ defmodule Cadence.Management.Activations do
              version
            ) do
       current_scope
-      |> build_request(binding_set, requester_actor, change_class, requested_at)
+      |> build_request(
+        binding_set,
+        requester_actor,
+        change_class,
+        Keyword.get(opts, :metadata, %{}),
+        requested_at
+      )
       |> persist_request()
     end
   end
@@ -76,6 +82,38 @@ defmodule Cadence.Management.Activations do
       nil -> {:error, :activation_request_not_found}
       row -> {:ok, ActivationRequestRow.to_domain(row)}
     end
+  end
+
+  @spec list(Scope.t(), binary(), keyword()) ::
+          {:ok, [ActivationRequest.t()]} | {:error, term()}
+  def list(%Scope{} = current_scope, mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    with :ok <- authorize_request(current_scope, mission_id, :mission_data_plane) do
+      {:ok, list_requests(current_scope.organization_id, mission_id, opts)}
+    end
+  end
+
+  @spec latest_pending(Scope.t(), binary(), binary()) ::
+          {:ok, ActivationRequest.t() | nil} | {:error, term()}
+  def latest_pending(%Scope{} = current_scope, mission_id, binding_set_id)
+      when is_binary(mission_id) and is_binary(binding_set_id) do
+    with {:ok, requests} <-
+           list(current_scope, mission_id,
+             state: :approval_pending,
+             binding_set_id: binding_set_id,
+             limit: 1
+           ) do
+      {:ok, List.first(requests)}
+    end
+  end
+
+  @doc "Internal read boundary for projection-owned activation status."
+  @spec latest_request(binary(), binary()) :: ActivationRequest.t() | nil
+  def latest_request(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    organization_id
+    |> list_requests(mission_id, limit: 1)
+    |> List.first()
   end
 
   @spec fetch_approved(binary()) :: {:ok, ApprovedActivation.t()} | {:error, term()}
@@ -114,7 +152,14 @@ defmodule Cadence.Management.Activations do
     })
   end
 
-  defp build_request(scope, binding_set, requester_actor, change_class, requested_at) do
+  defp build_request(
+         scope,
+         binding_set,
+         requester_actor,
+         change_class,
+         metadata,
+         requested_at
+       ) do
     approval_required? = approval_required?()
 
     ActivationRequest.new(%{
@@ -129,6 +174,7 @@ defmodule Cadence.Management.Activations do
       requester_actor_id: requester_actor["id"],
       requester_actor_document: requester_actor,
       policy_document: request_policy(approval_required?),
+      metadata: metadata,
       requested_at: requested_at,
       decided_at: decided_at(approval_required?, requested_at)
     })
@@ -239,6 +285,33 @@ defmodule Cadence.Management.Activations do
     |> Repo.all()
   end
 
+  defp list_requests(organization_id, mission_id, opts) do
+    ActivationRequestRow
+    |> where(
+      [request],
+      request.organization_id == ^organization_id and request.mission_id == ^mission_id
+    )
+    |> maybe_filter_state(Keyword.get(opts, :state))
+    |> maybe_filter_binding_set(Keyword.get(opts, :binding_set_id))
+    |> order_by([request], desc: request.requested_at, desc: request.activation_request_id)
+    |> limit(^normalize_limit(Keyword.get(opts, :limit, 100)))
+    |> Repo.all()
+    |> Enum.map(&ActivationRequestRow.to_domain/1)
+  end
+
+  defp maybe_filter_state(query, nil), do: query
+
+  defp maybe_filter_state(query, state) when state in [:approval_pending, :approved, :rejected],
+    do: where(query, [request], request.state == ^state)
+
+  defp maybe_filter_binding_set(query, nil), do: query
+
+  defp maybe_filter_binding_set(query, binding_set_id) when is_binary(binding_set_id),
+    do: where(query, [request], request.binding_set_id == ^binding_set_id)
+
+  defp normalize_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 500)
+  defp normalize_limit(_limit), do: 100
+
   defp approved_handoff(request_row, decision_rows) do
     %ApprovedActivation{
       activation_request_id: request_row.activation_request_id,
@@ -251,6 +324,7 @@ defmodule Cadence.Management.Activations do
       requester_actor_document: JsonDocument.unwrap_value(request_row.requester_actor_document),
       approval_decision_ids: Enum.map(decision_rows, & &1.activation_decision_id),
       policy_document: JsonDocument.unwrap_value(request_row.policy_document),
+      metadata: JsonDocument.unwrap_value(request_row.metadata),
       approved_at: request_row.decided_at
     }
   end

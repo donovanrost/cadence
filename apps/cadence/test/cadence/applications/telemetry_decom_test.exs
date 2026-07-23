@@ -1,13 +1,17 @@
 defmodule Cadence.Applications.TelemetryDecomTest do
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.ApplicationBinding
   alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance
+  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Runtime
   alias Cadence.Runtime.MissionCoordinator
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -149,7 +153,35 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
   end
 
-  describe "apply_mission/3" do
+  describe "governed mission apply" do
+    test "creates a pending request without changing the active runtime basis" do
+      {spacecraft, revision, endpoint} = setup_mission()
+
+      assert {:ok, _config} =
+               TelemetryDecom.configure(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id,
+                 catalog_revision_id: revision.catalog_revision_id,
+                 handled_apids: [42],
+                 source_endpoint_id: endpoint.source_endpoint_id
+               )
+
+      assert {:ok, %{config: config, activation_request: request}} =
+               TelemetryDecom.request_mission_apply(
+                 user_scope("requester"),
+                 @mission_id,
+                 spacecraft.spacecraft_id
+               )
+
+      assert request.state == :approval_pending
+      assert request.metadata["application"] == "telemetry_decom"
+      assert config.applied_binding_set_id == nil
+
+      assert {:error, :no_active_binding_set} =
+               Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
+    end
+
     test "compiles and activates the mission binding set, stamping each config" do
       {spacecraft, revision, endpoint} = setup_mission()
 
@@ -164,7 +196,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                )
 
       assert {:ok, applied} =
-               TelemetryDecom.apply_mission(
+               apply_mission(
                  @organization_id,
                  @mission_id,
                  spacecraft.spacecraft_id
@@ -200,10 +232,10 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, _} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       {:ok, second} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       assert second.applied_binding_set_version == 2
     end
@@ -222,7 +254,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, _applied} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       assert {:ok, activation} = MissionCoordinator.active_activation(@mission_id)
       assert activation.binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
@@ -243,7 +275,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, _} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       {:ok, _} =
         TelemetryDecom.disable(@organization_id, @mission_id, spacecraft.spacecraft_id)
@@ -261,7 +293,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
              }) == :outdated
 
       assert {:ok, _config} =
-               TelemetryDecom.apply_mission(
+               apply_mission(
                  @organization_id,
                  @mission_id,
                  spacecraft.spacecraft_id
@@ -309,7 +341,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, applied} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       assert applied.applied_binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
 
@@ -344,7 +376,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, _applied} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       other_endpoint =
         persist_source_endpoint!(@mission_id, spacecraft.spacecraft_id, display_name: "Backup")
@@ -404,7 +436,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, _applied} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       assert {:ok, reconfigured} =
                TelemetryDecom.configure(
@@ -435,7 +467,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         )
 
       {:ok, applied} =
-        TelemetryDecom.apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
+        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
 
       assert {:ok, reconfigured} =
                TelemetryDecom.configure(
@@ -505,6 +537,39 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                spacecraft.spacecraft_id
              ) == %{42 => "Event Reporting"}
     end
+  end
+
+  defp apply_mission(organization_id, mission_id, spacecraft_id) do
+    requester = user_scope(organization_id, "requester")
+    approver = user_scope(organization_id, "approver")
+
+    with {:ok, %{activation_request: request}} <-
+           TelemetryDecom.request_mission_apply(requester, mission_id, spacecraft_id),
+         {:ok, _request, _decision, approved} <-
+           ManagementActivations.approve(
+             approver,
+             request.activation_request_id,
+             "approved in Telemetry Decom test"
+           ),
+         {:ok, _execution} <- ControlActivations.execute(approved) do
+      TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft_id)
+    end
+  end
+
+  defp user_scope(user_id), do: user_scope(@organization_id, user_id)
+
+  defp user_scope(organization_id, prefix) do
+    user_id = "#{prefix}-#{System.unique_integer([:positive])}"
+
+    user =
+      User.new(%{
+        user_id: user_id,
+        email: user_id <> "@example.test",
+        display_name: user_id,
+        capabilities: [:platform_admin]
+      })
+
+    Scope.new(%{user: user, organization_id: organization_id})
   end
 
   defp setup_mission do

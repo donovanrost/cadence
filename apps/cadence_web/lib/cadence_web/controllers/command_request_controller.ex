@@ -4,7 +4,9 @@ defmodule CadenceWeb.CommandRequestController do
   action_fallback CadenceWeb.FallbackController
 
   alias Cadence.Commanding.CommandRequest
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -13,10 +15,10 @@ defmodule CadenceWeb.CommandRequestController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.command_request_filters(params) do
+         {:ok, filters} <- CommandingParams.command_request_filters(params) do
       command_requests =
         Cadence.Management.Commanding.list_command_requests(organization_id, mission_id, filters)
-        |> Enum.map(&ControlPlaneJSON.command_request/1)
+        |> Enum.map(&CommandingJSON.command_request/1)
 
       json(conn, %{data: command_requests})
     end
@@ -34,7 +36,7 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id
            ),
          {:ok, %CommandRequest{} = command_request} <-
-           ControlPlaneParams.command_request(
+           CommandingParams.command_request(
              organization_id,
              mission_id,
              command_request_params,
@@ -47,7 +49,7 @@ defmodule CadenceWeb.CommandRequestController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.command_request(persisted_command_request)})
+      |> json(%{data: CommandingJSON.command_request(persisted_command_request)})
     end
   end
 
@@ -68,7 +70,7 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id,
              command_request_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_request(command_request)})
+      json(conn, %{data: CommandingJSON.command_request(command_request)})
     end
   end
 
@@ -87,7 +89,7 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id
            ),
          {:ok, approval_opts} <-
-           ControlPlaneParams.command_approval(
+           CommandingParams.command_approval(
              command_request_id,
              Map.get(params, "approval", %{}),
              default_decided_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
@@ -100,7 +102,7 @@ defmodule CadenceWeb.CommandRequestController do
              Keyword.fetch!(approval_opts, :decided_by),
              Keyword.drop(approval_opts, [:decided_by])
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_request_decision_result(result)})
+      json(conn, %{data: CommandingJSON.command_request_decision_result(result)})
     end
   end
 
@@ -119,7 +121,7 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id
            ),
          {:ok, approval_opts} <-
-           ControlPlaneParams.command_approval(
+           CommandingParams.command_approval(
              command_request_id,
              Map.get(params, "rejection", %{}),
              default_decided_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
@@ -132,7 +134,7 @@ defmodule CadenceWeb.CommandRequestController do
              Keyword.fetch!(approval_opts, :decided_by),
              Keyword.drop(approval_opts, [:decided_by])
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_request_decision_result(result)})
+      json(conn, %{data: CommandingJSON.command_request_decision_result(result)})
     end
   end
 
@@ -151,23 +153,19 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id
            ),
          {:ok, queue_opts} <-
-           ControlPlaneParams.command_queue_entry(
+           CommandingParams.command_queue_entry(
              Map.get(params, "queue_entry", %{}),
              default_enqueued_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
-         {:ok, approved_command} <-
-           Cadence.Management.Commanding.fetch_approved_command(
+         {:ok, result} <-
+           Cadence.Control.Commanding.enqueue_approved_command(
              organization_id,
              mission_id,
-             command_request_id
-           ),
-         {:ok, result} <-
-           Cadence.Control.Commanding.enqueue(
-             approved_command,
+             command_request_id,
              Keyword.fetch!(queue_opts, :enqueued_by),
              Keyword.drop(queue_opts, [:enqueued_by])
            ) do
-      json(conn, %{data: ControlPlaneJSON.command_request_enqueue_result(result)})
+      json(conn, %{data: CommandingJSON.command_request_enqueue_result(result)})
     end
   end
 end

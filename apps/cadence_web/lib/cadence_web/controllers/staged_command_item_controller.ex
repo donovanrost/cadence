@@ -6,7 +6,9 @@ defmodule CadenceWeb.StagedCommandItemController do
   alias Cadence.Commanding.CommandStage
   alias Cadence.Commanding.StagedCommandItem
   alias Cadence.Management.Commanding
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
+  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
+  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(
         conn,
@@ -28,7 +30,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id,
              command_stage_id
            ),
-         {:ok, filters} <- ControlPlaneParams.staged_command_item_filters(params) do
+         {:ok, filters} <- CommandingParams.staged_command_item_filters(params) do
       staged_command_items =
         filters
         |> Keyword.put(:command_stage_id, command_stage_id)
@@ -39,7 +41,7 @@ defmodule CadenceWeb.StagedCommandItemController do
             &1
           )
         )
-        |> Enum.map(&ControlPlaneJSON.staged_command_item/1)
+        |> Enum.map(&CommandingJSON.staged_command_item/1)
 
       json(conn, %{data: staged_command_items})
     end
@@ -64,7 +66,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              command_stage_id
            ),
          {:ok, %StagedCommandItem{} = staged_command_item} <-
-           ControlPlaneParams.staged_command_item(
+           CommandingParams.staged_command_item(
              organization_id,
              mission_id,
              command_stage_id,
@@ -77,7 +79,7 @@ defmodule CadenceWeb.StagedCommandItemController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
+      |> json(%{data: CommandingJSON.staged_command_item(persisted_staged_command_item)})
     end
   end
 
@@ -98,7 +100,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              mission_id,
              staged_command_item_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.staged_command_item(staged_command_item)})
+      json(conn, %{data: CommandingJSON.staged_command_item(staged_command_item)})
     end
   end
 
@@ -121,7 +123,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              staged_command_item_id
            ),
          {:ok, %StagedCommandItem{} = updated_staged_command_item} <-
-           ControlPlaneParams.staged_command_item(
+           CommandingParams.staged_command_item(
              existing_staged_command_item,
              staged_command_item_params
            ),
@@ -130,7 +132,7 @@ defmodule CadenceWeb.StagedCommandItemController do
              organization_id,
              updated_staged_command_item
            ) do
-      json(conn, %{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
+      json(conn, %{data: CommandingJSON.staged_command_item(persisted_staged_command_item)})
     end
   end
 end

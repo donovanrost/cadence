@@ -10,10 +10,13 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Activations
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Auth.Scope
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow}
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Governance
+  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ApprovedActivation
   alias Cadence.Platform.ContentHash
   alias Cadence.Repo
@@ -31,6 +34,15 @@ defmodule Cadence.Control.Activations do
       else
         execute_and_record(execution_row, approved_activation, opts)
       end
+    end
+  end
+
+  @spec approve_and_execute(Scope.t(), binary(), binary(), keyword()) ::
+          {:ok, ActivationExecution.t()} | {:error, term()}
+  def approve_and_execute(%Scope{} = current_scope, request_id, reason, opts \\ []) do
+    with {:ok, _request, _decision, approved} <-
+           ManagementActivations.approve(current_scope, request_id, reason, opts) do
+      execute(approved, opts)
     end
   end
 
@@ -56,28 +68,6 @@ defmodule Cadence.Control.Activations do
 
   @doc false
   def list_active_bases, do: Activations.list_active_activations()
-
-  @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(organization_id, mission_id, binding_set_id, version, opts)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
-             is_integer(version) and version > 0 and is_list(opts) do
-    with {:ok, %BindingSet{} = binding_set} <-
-           Governance.fetch_binding_set(organization_id, mission_id, binding_set_id, version) do
-      execute_activation(organization_id, mission_id, binding_set, opts)
-    end
-  end
-
-  @spec activate_binding_set(binary(), binary(), pos_integer(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def activate_binding_set(mission_id, binding_set_id, version, opts \\ [])
-      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
-             version > 0 and is_list(opts) do
-    with {:ok, %BindingSet{} = binding_set} <-
-           Governance.fetch_binding_set(mission_id, binding_set_id, version) do
-      execute_activation(binding_set.organization_id, mission_id, binding_set, opts)
-    end
-  end
 
   defp execute_activation(organization_id, mission_id, %BindingSet{} = binding_set, opts) do
     content_sha256 = MissionRuntimeSpec.content_sha256(binding_set)
@@ -113,12 +103,14 @@ defmodule Cadence.Control.Activations do
                approved_activation.organization_id,
                approved_activation.mission_id,
                binding_set,
-               Keyword.put(
-                 opts,
+               opts
+               |> Keyword.put(
                  :activation_request_id,
                  approved_activation.activation_request_id
                )
-             ) do
+               |> Keyword.put(:metadata, approved_activation.metadata)
+             ),
+           :ok <- TelemetryDecom.activation_applied(binding_set, approved_activation.metadata) do
         complete_execution(execution_row, activation, now(opts))
       end
 

@@ -207,31 +207,17 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
              )
   end
 
-  test "approval requires the exact ready route and catches changed bindings", context do
-    assert {:error, :contact_plan_route_not_ready} =
+  test "approval records immutable route bindings without invoking Control", context do
+    assert {:ok, _plan, _version, _approval} =
              ContactPlanApprovals.approve(
                context.admin_scope,
                @mission_id,
                context.plan.contact_plan_id,
                1,
                context.plan_version.content_sha256,
-               "Route reviewed",
+               "Route configuration reviewed",
                now: DateTime.add(@now, 2, :second),
-               resolve_route: fn _, _, _, _ -> {:error, :grant_revoked} end
-             )
-
-    changed_route = route(%{transport_version: 99})
-
-    assert {:error, :contact_plan_route_binding_changed} =
-             ContactPlanApprovals.approve(
-               context.admin_scope,
-               @mission_id,
-               context.plan.contact_plan_id,
-               1,
-               context.plan_version.content_sha256,
-               "Route reviewed",
-               now: DateTime.add(@now, 2, :second),
-               resolve_route: fn _, _, _, _ -> {:ok, changed_route} end
+               resolve_route: fn _, _, _, _ -> raise "Control resolver must not run" end
              )
   end
 

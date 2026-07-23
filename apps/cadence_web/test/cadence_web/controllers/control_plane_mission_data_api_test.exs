@@ -969,10 +969,30 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     assert %{
              "data" => %{
-               "binding_set_id" => ^binding_set_id,
-               "binding_set_version" => 2
+               "request" => %{
+                 "activation_request_id" => activation_request_id,
+                 "binding_set_id" => ^binding_set_id,
+                 "binding_set_version" => 2,
+                 "state" => "approval_pending"
+               },
+               "execution" => nil
              }
-           } = json_response(activation_conn, 201)
+           } = json_response(activation_conn, 202)
+
+    approval_conn =
+      conn
+      |> authorize(organization_admin_token(organization_id))
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}/approve",
+        %{"decision" => %{"reason" => "approved for mission data test"}}
+      )
+
+    assert %{
+             "data" => %{
+               "request" => %{"state" => "approved"},
+               "execution" => %{"status" => "succeeded", "generation" => 1}
+             }
+           } = json_response(approval_conn, 200)
 
     assert_dev_telemetry_ingress(
       conn,

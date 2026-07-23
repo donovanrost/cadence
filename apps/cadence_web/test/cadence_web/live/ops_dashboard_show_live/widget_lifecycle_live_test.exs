@@ -78,7 +78,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
   defp activate_binding_set!(org, mission, binding_set) do
     {:ok, _activation} =
-      Cadence.Activations.activate_binding_set(
+      Cadence.ActivationFixtures.activate_binding_set(
         org.organization_id,
         mission.mission_id,
         binding_set.binding_set_id,

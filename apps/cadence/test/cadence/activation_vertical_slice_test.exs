@@ -1,6 +1,8 @@
 defmodule Cadence.ActivationVerticalSliceTest do
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :config
+
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
@@ -10,6 +12,17 @@ defmodule Cadence.ActivationVerticalSliceTest do
   alias Cadence.Projections.ActivationStatus
   alias Cadence.Runtime
   alias Cadence.Runtime.Missions, as: RuntimeMissions
+
+  setup do
+    previous_governance = Application.get_env(:cadence, :activation_governance, [])
+    Application.put_env(:cadence, :activation_governance, approval_required: true)
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :activation_governance, previous_governance)
+    end)
+
+    :ok
+  end
 
   test "approved intent executes once and converges the exact data-plane generation" do
     organization_id = unique("org-vertical-activation")
@@ -52,9 +65,10 @@ defmodule Cadence.ActivationVerticalSliceTest do
 
     assert {:ok,
             %{
-              desired: %{generation: 1},
+              requested: %{state: :approved},
+              operational: %{generation: 1},
               applied: %{generation: 1},
-              observed: %{generation_alignment: :converged}
+              observed: %{generation_alignment: :converged, request_alignment: :executed}
             }} = ActivationStatus.fetch(organization_id, mission_id)
 
     assert {:ok, same_execution} = ControlActivations.execute(approved)
@@ -65,7 +79,8 @@ defmodule Cadence.ActivationVerticalSliceTest do
 
     assert {:ok,
             %{
-              desired: %{generation: 1},
+              requested: %{state: :approved},
+              operational: %{generation: 1},
               applied: nil,
               observed: %{generation_alignment: :not_applied}
             }} = ActivationStatus.fetch(organization_id, mission_id)
@@ -73,6 +88,80 @@ defmodule Cadence.ActivationVerticalSliceTest do
     assert {:ok, %{generation: 1}} = MissionRuntimeReconciler.reconcile(mission_id)
 
     assert {:ok, %{generation: 1}} = RuntimeMissions.applied_spec(mission_id)
+  end
+
+  test "policy-approved intent executes without a human decision when approval is disabled" do
+    Application.put_env(:cadence, :activation_governance, approval_required: false)
+
+    organization_id = unique("org-policy-activation")
+    mission_id = unique("mission-policy-activation")
+    persist_mission_scope(organization_id, mission_id)
+
+    binding_set = persist_binding_set(organization_id, mission_id, "policy-basis")
+    requester = user_scope(organization_id, unique("requester"))
+
+    assert {:ok, %{state: :approved} = request} =
+             ManagementActivations.request(
+               requester,
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version,
+               metadata: %{"source" => "policy-test"}
+             )
+
+    assert {:ok, approved} =
+             ManagementActivations.fetch_approved(request.activation_request_id)
+
+    assert approved.approval_decision_ids == []
+    assert approved.metadata == %{"source" => "policy-test"}
+    assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+
+    assert {:ok, activation} =
+             ControlActivations.fetch_active_basis(organization_id, mission_id)
+
+    assert activation.activation_request_id == request.activation_request_id
+    assert activation.metadata == %{"source" => "policy-test"}
+
+    assert :ok = Runtime.stop_mission(mission_id)
+  end
+
+  test "the requester cannot approve their own activation request" do
+    organization_id = unique("org-self-approval")
+    mission_id = unique("mission-self-approval")
+    persist_mission_scope(organization_id, mission_id)
+
+    binding_set = persist_binding_set(organization_id, mission_id, "self-approval-basis")
+    requester = user_scope(organization_id, unique("requester"))
+
+    assert {:ok, request} =
+             ManagementActivations.request(
+               requester,
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    assert {:error, :activation_self_approval_forbidden} =
+             ManagementActivations.approve(
+               requester,
+               request.activation_request_id,
+               "self approval must fail"
+             )
+  end
+
+  defp persist_binding_set(organization_id, mission_id, binding_set_id) do
+    binding_set =
+      BindingSet.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        binding_set_id: binding_set_id,
+        version: 1
+      })
+
+    assert {:ok, ^binding_set} =
+             Cadence.Governance.persist_binding_set(organization_id, binding_set)
+
+    binding_set
   end
 
   defp user_scope(organization_id, user_id) do
