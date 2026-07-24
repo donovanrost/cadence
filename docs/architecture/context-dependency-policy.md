@@ -125,9 +125,9 @@ when a removed edge is left in the baseline, or when the baseline review date
 expires. Removing an edge and its baseline entry in the same change makes the
 policy ratchet toward the target. As of 2026-07-23, root-facade, horizontal
 persistence-schema, cross-context row, web catch-all, and unclassified-module
-debt are all zero. The remaining baseline contains 36 named context/plane
-direction edges concentrated in mixed legacy facades and workflows; they are
-not exceptions to the target architecture.
+debt and cross-plane internal access are all zero. The remaining baseline
+contains 31 named context/plane direction edges concentrated in mixed legacy
+facades and workflows; they are not exceptions to the target architecture.
 
 ## Dependency exceptions
 

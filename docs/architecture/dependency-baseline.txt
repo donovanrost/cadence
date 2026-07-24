@@ -36,8 +36,3 @@ plane_direction|lib/cadence/provider_adapters/tcp_socket.ex|lib/cadence/source_e
 plane_direction|lib/cadence/runtime/ingress.ex|lib/cadence/source_endpoints.ex
 plane_direction|lib/cadence/runtime/provider_ingress_executor.ex|lib/cadence/source_endpoints.ex
 plane_direction|lib/cadence/telemetry/storage/observation_identity_states.ex|lib/cadence/projections/telemetry_latest_values.ex
-plane_internal|lib/cadence/contact_planning/planner.ex|lib/cadence/management/contacts/store/contact_opportunity_snapshot_row.ex
-plane_internal|lib/cadence/contact_planning/planner.ex|lib/cadence/management/contacts/store/contact_planning_run_row.ex
-plane_internal|lib/cadence/contact_planning/planner.ex|lib/cadence/management/contacts/store/contact_planning_search_row.ex
-plane_internal|lib/cadence/replay.ex|lib/cadence/runtime/partition_key.ex
-plane_internal|lib/cadence/replay.ex|lib/cadence/runtime/partition_owner.ex

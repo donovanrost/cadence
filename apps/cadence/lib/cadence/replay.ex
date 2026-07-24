@@ -31,10 +31,10 @@ defmodule Cadence.Replay do
     ManagedActionRequest,
     ManagedCapabilityRecord,
     ManagedTimerEvent,
-    MissionRuntimeSpec
+    MissionRuntimeSpec,
+    ReplaySession
   }
 
-  alias Cadence.Runtime.{PartitionKey, PartitionOwner}
   alias Cadence.Telemetry.Sample
 
   @spec replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::
@@ -206,35 +206,8 @@ defmodule Cadence.Replay do
 
   defp process_raw_evidences(%Run{} = run, raw_evidences, binding_set) do
     with {:ok, replay_runtime_spec} <- replay_runtime_spec(run, binding_set) do
-      case process_replay_raw_evidences(
-             raw_evidences,
-             binding_set,
-             replay_runtime_spec,
-             %{},
-             []
-           ) do
-        {:ok, processing_results, partition_owners} ->
-          finalize_replay_results(processing_results, partition_owners)
-
-        {:error, reason, partition_owners} ->
-          stop_replay_partition_owners(partition_owners)
-          {:error, reason}
-      end
+      ReplaySession.process(raw_evidences, replay_runtime_spec)
     end
-  end
-
-  defp finalize_replay_results(processing_results, partition_owners) do
-    result =
-      with {:ok, runtime_records} <- drain_replay_partition_owners(partition_owners) do
-        {:ok,
-         %{
-           processing_results: Enum.reverse(processing_results),
-           runtime_records: runtime_records
-         }}
-      end
-
-    stop_replay_partition_owners(partition_owners)
-    result
   end
 
   defp persist_completed_run(%Run{} = run, replay_result) do
@@ -438,119 +411,6 @@ defmodule Cadence.Replay do
       activated_at: run.started_at,
       metadata: %{"replay" => true, "replay_run_id" => run.replay_run_id}
     })
-  end
-
-  defp process_replay_raw_evidences([], _binding_set, _activation, partition_owners, acc) do
-    {:ok, acc, partition_owners}
-  end
-
-  defp process_replay_raw_evidences(
-         [raw_evidence | remaining_raw_evidences],
-         binding_set,
-         %MissionRuntimeSpec{} = activation,
-         partition_owners,
-         acc
-       ) do
-    partition_key = PartitionKey.from_raw_evidence(raw_evidence)
-
-    case ensure_replay_partition_owner(
-           partition_owners,
-           partition_key,
-           activation,
-           binding_set,
-           raw_evidence
-         ) do
-      {:ok, partition_owner, next_partition_owners} ->
-        case PartitionOwner.process_raw_evidence(partition_owner, raw_evidence) do
-          {:ok, processing_result} ->
-            process_replay_raw_evidences(
-              remaining_raw_evidences,
-              binding_set,
-              activation,
-              next_partition_owners,
-              [processing_result | acc]
-            )
-
-          {:error, reason} ->
-            {:error, {raw_evidence.evidence_id, reason}, next_partition_owners}
-        end
-
-      {:error, reason} ->
-        {:error, {raw_evidence.evidence_id, reason}, partition_owners}
-    end
-  end
-
-  defp ensure_replay_partition_owner(
-         partition_owners,
-         %PartitionKey{} = partition_key,
-         %MissionRuntimeSpec{} = activation,
-         binding_set,
-         raw_evidence
-       ) do
-    case Map.fetch(partition_owners, partition_key) do
-      {:ok, partition_owner} ->
-        {:ok, partition_owner, partition_owners}
-
-      :error ->
-        case PartitionOwner.start_link(
-               mission_id: activation.mission_id,
-               partition_key: partition_key,
-               active_activation: activation,
-               binding_set: binding_set,
-               register?: false,
-               persist_runtime_records?: false,
-               clock_mode: :replay,
-               initial_time: replay_time_for_raw_evidence(raw_evidence)
-             ) do
-          {:ok, partition_owner} ->
-            {:ok, partition_owner, Map.put(partition_owners, partition_key, partition_owner)}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-    end
-  end
-
-  defp drain_replay_partition_owners(partition_owners) do
-    Enum.reduce_while(partition_owners, {:ok, empty_runtime_records()}, fn
-      {_partition_key, partition_owner}, {:ok, runtime_records} ->
-        case PartitionOwner.drain_runtime_records(partition_owner) do
-          {:ok, partition_runtime_records} ->
-            {:cont, {:ok, merge_runtime_records(runtime_records, partition_runtime_records)}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-    end)
-  end
-
-  defp stop_replay_partition_owners(partition_owners) do
-    Enum.each(partition_owners, fn
-      {_partition_key, partition_owner} when is_pid(partition_owner) ->
-        if Process.alive?(partition_owner) do
-          PartitionOwner.stop(partition_owner)
-        end
-    end)
-  end
-
-  defp empty_runtime_records do
-    %{
-      capability_records: [],
-      action_requests: [],
-      timer_events: []
-    }
-  end
-
-  defp merge_runtime_records(left, right) do
-    %{
-      capability_records: left.capability_records ++ right.capability_records,
-      action_requests: left.action_requests ++ right.action_requests,
-      timer_events: left.timer_events ++ right.timer_events
-    }
-  end
-
-  defp replay_time_for_raw_evidence(raw_evidence) do
-    raw_evidence.source_time || raw_evidence.receipt_time
   end
 
   defp processing_result_packet_records(%{packet_records: packet_records})

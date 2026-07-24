@@ -1,8 +1,6 @@
 defmodule Cadence.ContactPlanning.Planner do
   @moduledoc "Durable bounded multi-provider planning for one exact Contact Requirement version."
 
-  import Ecto.Query
-
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
@@ -16,15 +14,8 @@ defmodule Cadence.ContactPlanning.Planner do
 
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.GroundNetworks.{ProviderError, Validation}
+  alias Cadence.Management.Contacts.PlanningResults
   alias Cadence.Persistence.JsonDocument
-
-  alias Cadence.Management.Contacts.Store.{
-    ContactOpportunitySnapshotRow,
-    ContactPlanningRunRow,
-    ContactPlanningSearchRow
-  }
-
-  alias Cadence.Repo
 
   @route_binding_fields [
     :route_key,
@@ -89,7 +80,7 @@ defmodule Cadence.ContactPlanning.Planner do
              started_at: started_at,
              summary_document: %{}
            }),
-         {:ok, _run_row} <- Repo.insert(ContactPlanningRunRow.changeset(run)) do
+         {:ok, _persisted_run} <- PlanningResults.start_run(run) do
       execute_run(run, current_version, opts)
     end
   end
@@ -119,53 +110,22 @@ defmodule Cadence.ContactPlanning.Planner do
   @spec fetch_run(binary(), binary(), binary()) ::
           {:ok, ContactPlanningRun.t()} | {:error, :contact_planning_run_not_found}
   def fetch_run(organization_id, mission_id, run_id) do
-    case Repo.get_by(ContactPlanningRunRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           contact_planning_run_id: run_id
-         ) do
-      nil -> {:error, :contact_planning_run_not_found}
-      row -> {:ok, ContactPlanningRunRow.to_domain(row)}
-    end
+    PlanningResults.fetch_run(organization_id, mission_id, run_id)
   end
 
   @spec list_runs(binary(), binary(), binary()) :: [ContactPlanningRun.t()]
   def list_runs(organization_id, mission_id, requirement_id) do
-    ContactPlanningRunRow
-    |> where(
-      [run],
-      run.organization_id == ^organization_id and run.mission_id == ^mission_id and
-        run.contact_requirement_id == ^requirement_id
-    )
-    |> order_by([run], desc: run.started_at)
-    |> Repo.all()
-    |> Enum.map(&ContactPlanningRunRow.to_domain/1)
+    PlanningResults.list_runs(organization_id, mission_id, requirement_id)
   end
 
   @spec list_searches(binary(), binary(), binary()) :: [ContactPlanningSearch.t()]
   def list_searches(organization_id, mission_id, run_id) do
-    ContactPlanningSearchRow
-    |> where(
-      [search],
-      search.organization_id == ^organization_id and search.mission_id == ^mission_id and
-        search.contact_planning_run_id == ^run_id
-    )
-    |> order_by([search], asc: search.route_order, asc: search.route_key)
-    |> Repo.all()
-    |> Enum.map(&ContactPlanningSearchRow.to_domain/1)
+    PlanningResults.list_searches(organization_id, mission_id, run_id)
   end
 
   @spec list_snapshots(binary(), binary(), binary()) :: [ContactOpportunitySnapshot.t()]
   def list_snapshots(organization_id, mission_id, run_id) do
-    ContactOpportunitySnapshotRow
-    |> where(
-      [snapshot],
-      snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-        snapshot.contact_planning_run_id == ^run_id
-    )
-    |> order_by([snapshot], asc: snapshot.starts_at, asc: snapshot.provider_opportunity_ref)
-    |> Repo.all()
-    |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
+    PlanningResults.list_snapshots(organization_id, mission_id, run_id)
   end
 
   defp list_routes(requirement, opts) do
@@ -317,64 +277,27 @@ defmodule Cadence.ContactPlanning.Planner do
   defp search_success_outcome(_opportunities), do: :succeeded_with_results
 
   defp persist_results(run, requirement, findings, results, completed_at) do
-    Repo.transaction(fn ->
-      readiness = build_readiness_searches(run, findings, completed_at)
+    readiness = build_readiness_searches(run, findings, completed_at)
 
-      searched =
-        results
-        |> Enum.with_index(length(readiness))
-        |> Enum.map(fn {result, index} ->
-          build_search_and_snapshots(run, requirement, result, index, completed_at)
-        end)
+    searched =
+      results
+      |> Enum.with_index(length(readiness))
+      |> Enum.map(fn {result, index} ->
+        build_search_and_snapshots(run, requirement, result, index, completed_at)
+      end)
 
-      all = readiness ++ searched
-      searches = Enum.map(all, &elem(&1, 0))
-      snapshots = Enum.flat_map(all, &elem(&1, 1))
+    all = readiness ++ searched
+    searches = Enum.map(all, &elem(&1, 0))
+    snapshots = Enum.flat_map(all, &elem(&1, 1))
 
-      persisted_searches =
-        Enum.map(searches, fn search ->
-          search
-          |> ContactPlanningSearchRow.changeset()
-          |> Repo.insert!()
-          |> ContactPlanningSearchRow.to_domain()
-        end)
-
-      persisted_snapshots =
-        Enum.map(snapshots, fn snapshot ->
-          snapshot
-          |> ContactOpportunitySnapshotRow.changeset()
-          |> Repo.insert!()
-          |> ContactOpportunitySnapshotRow.to_domain()
-        end)
-
-      summary = summary(persisted_searches, persisted_snapshots)
-      lifecycle_state = run_state(persisted_searches)
-
-      run_row = Repo.get!(ContactPlanningRunRow, run.contact_planning_run_id)
-
-      updated_run =
-        run_row
-        |> ContactPlanningRunRow.completion_changeset(%{
-          lifecycle_state: Atom.to_string(lifecycle_state),
-          completed_at: completed_at,
-          summary_document: JsonDocument.wrap_value(summary)
-        })
-        |> Repo.update!()
-        |> ContactPlanningRunRow.to_domain()
-
-      %{
-        run: updated_run,
-        searches: persisted_searches,
-        snapshots:
-          Enum.sort_by(
-            persisted_snapshots,
-            &{&1.starts_at, &1.provider_opportunity_ref}
-          )
-      }
-    end)
-  rescue
-    error in [ArgumentError, Ecto.InvalidChangesetError] ->
-      {:error, {:contact_planning_persistence_failed, Exception.message(error)}}
+    PlanningResults.complete_run(
+      run,
+      searches,
+      snapshots,
+      run_state(searches),
+      completed_at,
+      summary(searches, snapshots)
+    )
   end
 
   defp fail_run(run, reason, completed_at) do
@@ -389,31 +312,7 @@ defmodule Cadence.ContactPlanning.Planner do
       "failure" => failure
     }
 
-    case Repo.get(ContactPlanningRunRow, run.contact_planning_run_id) do
-      nil ->
-        {:error, :contact_planning_run_not_found}
-
-      row ->
-        row
-        |> ContactPlanningRunRow.completion_changeset(%{
-          lifecycle_state: "failed",
-          completed_at: completed_at,
-          summary_document: JsonDocument.wrap_value(summary)
-        })
-        |> Repo.update()
-        |> case do
-          {:ok, updated} ->
-            {:ok,
-             %{
-               run: ContactPlanningRunRow.to_domain(updated),
-               searches: [],
-               snapshots: []
-             }}
-
-          {:error, update_error} ->
-            {:error, {:contact_planning_failure_persistence_failed, update_error}}
-        end
-    end
+    PlanningResults.fail_run(run, completed_at, summary)
   end
 
   defp build_readiness_searches(run, findings, completed_at) do

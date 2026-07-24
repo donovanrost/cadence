@@ -578,7 +578,7 @@ The logical boundary is now executable in the current umbrella:
   catch-all params/JSON boundaries directly; resource-owned `CadenceWeb.API.*`
   modules are the migration seam; and
 - the full context and plane dependency matrix is ratcheted by xref. The live
-  baseline contains 36 named direction/internal edges, while root-facade,
+  baseline contains 31 named direction edges, while root-facade,
   horizontal schema, cross-context row, web catch-all, and unclassified debt
   are zero.
 

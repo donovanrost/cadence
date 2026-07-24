@@ -54,6 +54,36 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
              )
   end
 
+  test "cross-plane callers use public resource boundaries, not owner internals" do
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/contact_planning/planner.ex",
+               "lib/cadence/management/contacts/planning_results.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :plane_internal}] =
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/contact_planning/planner.ex",
+               "lib/cadence/management/contacts/store/contact_planning_run_row.ex",
+               "runtime"
+             )
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/replay.ex",
+               "lib/cadence/runtime/replay_session.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :plane_internal}] =
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/replay.ex",
+               "lib/cadence/runtime/partition_owner.ex",
+               "runtime"
+             )
+  end
+
   test "web code reaches legacy catch-all namespaces only through resource adapters" do
     findings =
       DependencyBoundary.findings(%{
