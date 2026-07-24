@@ -7,6 +7,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.Management.Transports
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.TestSupport.FakeProviderClient
@@ -302,7 +303,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
         delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
       })
 
-    {:ok, transport} = TransportStore.persist_transport(organization_id, transport)
+    {:ok, transport} = Transports.persist_transport(organization_id, transport)
     transport
   end
 

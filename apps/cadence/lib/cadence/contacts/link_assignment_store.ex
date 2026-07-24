@@ -7,12 +7,12 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
 
   alias Ecto.Changeset
 
+  alias Cadence.Comms.ConfigurationValidation
   alias Cadence.Contacts.LinkAssignment
   alias Cadence.Contacts.LinkAssignmentStore.LinkAssignmentRow
   alias Cadence.Contacts.PathTemplate
   alias Cadence.Contacts.PathTemplateStore
   alias Cadence.Contacts.ProfileStore
-  alias Cadence.Contacts.Validation
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
@@ -122,14 +122,22 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   end
 
   defp validate(%LinkAssignment{} = assignment) do
-    with :ok <- Validation.mission_id(assignment.mission_id),
-         :ok <- Validation.required_binary(assignment.spacecraft_id, :missing_spacecraft_id),
+    with :ok <- ConfigurationValidation.mission_id(assignment.mission_id),
          :ok <-
-           Validation.required_binary(
+           ConfigurationValidation.required_binary(
+             assignment.spacecraft_id,
+             :missing_spacecraft_id
+           ),
+         :ok <-
+           ConfigurationValidation.required_binary(
              assignment.source_endpoint_ref,
              :missing_source_endpoint_ref
            ),
-         :ok <- Validation.required_binary(assignment.path_template_id, :missing_path_template_id),
+         :ok <-
+           ConfigurationValidation.required_binary(
+             assignment.path_template_id,
+             :missing_path_template_id
+           ),
          {:ok, spacecraft} <-
            SpacecraftStore.fetch_spacecraft(
              assignment.organization_id,
@@ -261,11 +269,11 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   defp normalize_ref_result({:error, reason}, _not_found_reason), do: {:error, reason}
 
   defp validate_ref_ids(%LinkAssignment{} = assignment) do
-    case Validation.reusable_path_refs(
+    case ConfigurationValidation.reusable_refs(
            ids_from_refs(assignment.provider_profile_refs, "provider_profile_id")
          ) do
       :ok ->
-        Validation.reusable_path_refs(
+        ConfigurationValidation.reusable_refs(
           ids_from_refs(assignment.transport_profile_refs, "transport_profile_id")
         )
 

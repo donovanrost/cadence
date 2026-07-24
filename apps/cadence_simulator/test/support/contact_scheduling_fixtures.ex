@@ -5,7 +5,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
   import ExUnit.Assertions
   import ExUnit.Callbacks, only: [start_supervised!: 1, stop_supervised: 1]
 
-  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+  alias Cadence.Comms.RoutingRuleStore
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -22,6 +22,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.GroundNetworks
+  alias Cadence.Management.Transports
 
   alias Cadence.GroundNetworks.{
     MissionProvider,
@@ -265,7 +266,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
       })
 
     assert {:ok, transport} =
-             TransportStore.persist_transport(setup.organization_id, transport)
+             Transports.persist_transport(setup.organization_id, transport)
 
     assert transport.origin == :provider_managed
     assert transport.configuration["port"] == telemetry_port

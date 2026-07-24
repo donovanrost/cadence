@@ -55,8 +55,11 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/contacts/downlink_diagnostic.ex" => :runtime,
     "lib/cadence/contacts/downlink_observation.ex" => :runtime,
     "lib/cadence/contacts/link_assignment.ex" => :comms,
+    "lib/cadence/contacts/path.ex" => :comms,
     "lib/cadence/contacts/path_template.ex" => :comms,
+    "lib/cadence/contacts/provider_binding.ex" => :comms,
     "lib/cadence/contacts/provider_profile.ex" => :comms,
+    "lib/cadence/contacts/transport_binding.ex" => :comms,
     "lib/cadence/contacts/transport_profile.ex" => :comms,
     "lib/cadence/contacts/provider_clients/registry.ex" => :ground_networks,
     "lib/cadence/contacts/provider_clients/simulator_http.ex" => :ground_networks,
@@ -75,6 +78,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/management/data_sources.ex" => :dashboards,
     "lib/cadence/management/data_sources/execution_policy.ex" => :dashboards,
     "lib/cadence/management/data_sources/lifecycle.ex" => :dashboards,
+    "lib/cadence/management/transports.ex" => :composition,
     "lib/cadence/projections/data_source_bindings.ex" => :dashboards,
     "lib/cadence/projections/data_source_health.ex" => :dashboards,
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,
@@ -105,6 +109,11 @@ defmodule Cadence.Architecture.ContextBoundary do
     runtime: [
       "lib/cadence/action_requests/",
       "lib/cadence/provider_adapters/"
+    ],
+    comms: [
+      "lib/cadence/contacts/link_assignment_store",
+      "lib/cadence/contacts/path_template_store",
+      "lib/cadence/contacts/profile_store"
     ],
     read_models: [
       "lib/cadence/mission_events/",
@@ -269,7 +278,9 @@ defmodule Cadence.Architecture.ContextBoundary do
                                 {"lib/cadence/control/activations.ex",
                                  "lib/cadence/control/missions.ex"},
                                 {"lib/cadence/control/mission_runtime.ex",
-                                 "lib/cadence/contacts/scheduler.ex"}
+                                 "lib/cadence/contacts/scheduler.ex"},
+                                {"lib/cadence/ground_networks/provider_event_processor.ex",
+                                 "lib/cadence/control/contacts/provider_events.ex"}
                               ])
 
   @type context ::

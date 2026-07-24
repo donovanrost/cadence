@@ -2,11 +2,10 @@ defmodule CadenceWeb.CommsTransportNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Comms.TransportStore
-
   alias Cadence.Comms.{Transport, TransportKind}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Management.Providers
+  alias Cadence.Management.Transports
   alias Phoenix.HTML.Form
 
   @impl true
@@ -40,7 +39,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
          {:ok, transport} <-
            build_transport(params, socket.assigns.providers, mission, display_name),
          {:ok, persisted} <-
-           TransportStore.persist_transport(scope.organization_id, transport) do
+           Transports.persist_transport(scope.organization_id, transport) do
       {:noreply,
        push_navigate(socket,
          to: ~p"/missions/#{mission.mission_id}/comms/transports/#{persisted.transport_id}"

@@ -5,19 +5,11 @@
 # Each entry is an existing dependency, not permission for new code. Remove an entry
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
-context_direction|lib/cadence/comms/transport_store.ex|lib/cadence/ground_networks/mission_provider.ex
-context_direction|lib/cadence/comms/transport_store.ex|lib/cadence/ground_networks/validation.ex
 context_direction|lib/cadence/contact_planning/fleet_planner.ex|lib/cadence/contact_planning/fleet_repairs.ex
 context_direction|lib/cadence/contacts/provider_scheduling.ex|lib/cadence/contacts.ex
 context_direction|lib/cadence/contacts/provider_scheduling.ex|lib/cadence/contacts/provider_booking.ex
 context_direction|lib/cadence/control/providers.ex|lib/cadence/contacts/provider_reservations.ex
 context_direction|lib/cadence/governance.ex|lib/cadence/source_endpoints.ex
-context_direction|lib/cadence/ground_networks/provider_event_processor.ex|lib/cadence/contacts/provider_reservation.ex
-context_direction|lib/cadence/ground_networks/provider_event_processor.ex|lib/cadence/contacts/provider_reservation_reconciler.ex
-context_direction|lib/cadence/ground_networks/provider_event_processor.ex|lib/cadence/contacts/provider_reservations.ex
-plane_direction|lib/cadence/comms/routing_rule_store.ex|lib/cadence/contacts.ex
-plane_direction|lib/cadence/comms/transport_store.ex|lib/cadence/contacts.ex
-plane_direction|lib/cadence/comms/transport_store.ex|lib/cadence/ground_networks.ex
 plane_direction|lib/cadence/governance.ex|lib/cadence/capabilities/registry.ex
 plane_direction|lib/cadence/management/commanding.ex|lib/cadence/commanding.ex
 plane_direction|lib/cadence/management/providers.ex|lib/cadence/ground_networks.ex

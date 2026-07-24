@@ -7,6 +7,7 @@ defmodule Cadence.Comms.TransportStoreTest do
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.Management.Transports
 
   describe "TCP transport kind" do
     test "normalizes and summarizes TCP config" do
@@ -181,8 +182,10 @@ defmodule Cadence.Comms.TransportStoreTest do
           delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
         })
 
-      assert {:ok, persisted} =
+      assert {:error, :provider_transport_basis_required} =
                TransportStore.persist_transport(organization_id, transport)
+
+      assert {:ok, persisted} = Transports.persist_transport(organization_id, transport)
 
       assert persisted.origin == :provider_managed
       assert persisted.transport_kind == :tcp_socket
@@ -261,7 +264,7 @@ defmodule Cadence.Comms.TransportStoreTest do
         })
 
       assert {:error, :mission_provider_not_validated} =
-               TransportStore.persist_transport(organization_id, transport)
+               Transports.persist_transport(organization_id, transport)
     end
   end
 

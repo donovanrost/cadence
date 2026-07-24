@@ -7,21 +7,21 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.{Transport, TransportKind, TransportRow}
+  alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportRow}
   alias Cadence.Comms.TransportKinds.TCPSocket
-  alias Cadence.Contacts, as: ContactsService
-  alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProvider, Validation}
+  alias Cadence.Contacts.ProfileStore
   alias Cadence.Missions
+  alias Cadence.Platform.RedactedJson
   alias Cadence.Repo
 
-  @spec persist_transport(binary(), Transport.t()) :: {:ok, Transport.t()} | {:error, term()}
-  def persist_transport(organization_id, %Transport{} = transport)
-      when is_binary(organization_id) do
+  @spec persist_transport(binary(), Transport.t(), keyword()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def persist_transport(organization_id, %Transport{} = transport, opts \\ [])
+      when is_binary(organization_id) and is_list(opts) do
     with {:ok, scoped_transport} <- put_organization_scope(transport, organization_id),
          {:ok, _mission} <-
            Missions.fetch_mission(scoped_transport.organization_id, scoped_transport.mission_id),
-         {:ok, normalized_transport} <- normalize_transport(scoped_transport),
+         {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts),
          {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
          {:ok, _row} <-
            Repo.insert(TransportRow.changeset(transport_with_provider),
@@ -102,16 +102,16 @@ defmodule Cadence.Comms.TransportStore do
     |> Enum.map(&TransportRow.to_domain/1)
   end
 
-  @spec version_transport(binary(), binary(), binary(), map()) ::
+  @spec version_transport(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, Transport.t()} | {:error, term()}
-  def version_transport(organization_id, mission_id, transport_id, attrs)
+  def version_transport(organization_id, mission_id, transport_id, attrs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
-             is_map(attrs) do
+             is_map(attrs) and is_list(opts) do
     with {:ok, %Transport{} = current_transport} <-
            fetch_transport(organization_id, mission_id, transport_id),
          {:ok, %Transport{} = next_transport} <-
            build_next_transport_version(current_transport, attrs) do
-      persist_transport(organization_id, next_transport)
+      persist_transport(organization_id, next_transport, opts)
     end
   end
 
@@ -137,10 +137,10 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  defp normalize_transport(%Transport{lifecycle_state: :archived} = transport),
+  defp normalize_transport(%Transport{lifecycle_state: :archived} = transport, _opts),
     do: {:ok, transport}
 
-  defp normalize_transport(%Transport{origin: :direct} = transport) do
+  defp normalize_transport(%Transport{origin: :direct} = transport, _opts) do
     with {:ok, entry} <- TransportKind.fetch(transport.transport_kind),
          {:ok, configuration} <- entry.module.normalize_config(transport.configuration) do
       {:ok,
@@ -161,15 +161,11 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  defp normalize_transport(%Transport{origin: :provider_managed} = transport) do
+  defp normalize_transport(%Transport{origin: :provider_managed} = transport, opts) do
     with {:ok, provider_id, provider_version} <- provider_reference(transport),
-         {:ok, %MissionProvider{} = provider} <-
-           GroundNetworks.fetch_provider(
-             transport.organization_id,
-             transport.mission_id,
-             provider_id
-           ),
-         true <- provider.version == provider_version,
+         {:ok, %ProviderTransportBasis{} = provider} <- provider_transport_basis(opts),
+         :ok <- require_provider_scope(transport, provider, provider_id),
+         true <- provider.provider_version == provider_version,
          :ok <- require_validated_provider(provider),
          {:ok, service_profile} <-
            find_profile(provider, "service_profiles", transport.service_profile_ref),
@@ -185,7 +181,7 @@ defmodule Cadence.Comms.TransportStore do
            direction_capability: :inbound,
            configuration: configuration,
            mission_provider_id: provider.provider_id,
-           mission_provider_version: provider.version,
+           mission_provider_version: provider.provider_version,
            service_profile_ref: exact_profile_ref(service_profile),
            delivery_profile_ref: exact_profile_ref(delivery_profile),
            provider_configuration_snapshot:
@@ -206,7 +202,7 @@ defmodule Cadence.Comms.TransportStore do
     with {:ok, entry} <- TransportKind.fetch(transport.transport_kind),
          {:ok, provider_profile} <- entry.module.materialize_provider_profile(transport),
          {:ok, provider_profile} <-
-           ContactsService.persist_provider_profile(transport.organization_id, provider_profile) do
+           ProfileStore.persist_provider_profile(transport.organization_id, provider_profile) do
       {:ok,
        %Transport{
          transport
@@ -262,7 +258,23 @@ defmodule Cadence.Comms.TransportStore do
 
   defp provider_reference(_transport), do: {:error, :mission_provider_reference_required}
 
-  defp require_validated_provider(%MissionProvider{} = provider) do
+  defp provider_transport_basis(opts) do
+    case Keyword.fetch(opts, :provider_transport_basis) do
+      {:ok, %ProviderTransportBasis{} = basis} -> {:ok, basis}
+      _missing_or_invalid -> {:error, :provider_transport_basis_required}
+    end
+  end
+
+  defp require_provider_scope(transport, provider, provider_id) do
+    if provider.organization_id == transport.organization_id and
+         provider.mission_id == transport.mission_id and provider.provider_id == provider_id do
+      :ok
+    else
+      {:error, :mission_provider_configuration_scope_mismatch}
+    end
+  end
+
+  defp require_validated_provider(%ProviderTransportBasis{} = provider) do
     cond do
       provider.lifecycle_state != :active ->
         {:error, :mission_provider_not_active}
@@ -270,7 +282,7 @@ defmodule Cadence.Comms.TransportStore do
       not match?(%DateTime{}, provider.last_validated_at) ->
         {:error, :mission_provider_not_validated}
 
-      get_in(provider.metadata, ["control_plane", "status"]) != "healthy" ->
+      provider.control_status != "healthy" ->
         {:error, :mission_provider_not_validated}
 
       not match?(%DateTime{}, provider.last_synced_at) ->
@@ -328,10 +340,10 @@ defmodule Cadence.Comms.TransportStore do
   end
 
   defp provider_snapshot(provider, service_profile, delivery_profile, configuration) do
-    Validation.sanitize(%{
+    RedactedJson.sanitize(%{
       "provider" => %{
         "id" => provider.provider_id,
-        "version" => provider.version,
+        "version" => provider.provider_version,
         "display_name" => provider.display_name,
         "provider_type" => Atom.to_string(provider.provider_type),
         "environment_ref" => provider.environment_ref

@@ -1,7 +1,7 @@
 defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Management.Transports
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
@@ -46,7 +46,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     provider = persist_provider!(organization_id, mission_id, suffix)
 
     assert {:ok, transport} =
-             TransportStore.persist_transport(
+             Transports.persist_transport(
                organization_id,
                Transport.new(%{
                  transport_id: "provider-transport-#{suffix}",

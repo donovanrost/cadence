@@ -7,6 +7,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
 
   alias Ecto.Changeset
 
+  alias Cadence.Comms.ConfigurationValidation
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.PathTemplate
   alias Cadence.Contacts.PathTemplateStore.PathTemplateRow
@@ -15,7 +16,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Contacts.ProviderProfile
   alias Cadence.Contacts.TransportBinding
   alias Cadence.Contacts.TransportProfile
-  alias Cadence.Contacts.Validation
   alias Cadence.Missions
   alias Cadence.Repo
 
@@ -250,9 +250,9 @@ defmodule Cadence.Contacts.PathTemplateStore do
   end
 
   defp validate(%PathTemplate{} = path_template) do
-    with :ok <- Validation.mission_id(path_template.mission_id),
-         :ok <- Validation.reusable_path_refs(path_template.provider_profile_ids),
-         :ok <- Validation.reusable_path_refs(path_template.transport_profile_ids),
+    with :ok <- ConfigurationValidation.mission_id(path_template.mission_id),
+         :ok <- ConfigurationValidation.reusable_refs(path_template.provider_profile_ids),
+         :ok <- ConfigurationValidation.reusable_refs(path_template.transport_profile_ids),
          {:ok, _path} <- resolve(path_template) do
       :ok
     end
@@ -286,11 +286,11 @@ defmodule Cadence.Contacts.PathTemplateStore do
              end
            ),
          :ok <-
-           Validation.reusable_path_refs(
+           ConfigurationValidation.reusable_refs(
              ids_from_refs(provider_profile_refs, "provider_profile_id")
            ),
          :ok <-
-           Validation.reusable_path_refs(
+           ConfigurationValidation.reusable_refs(
              ids_from_refs(transport_profile_refs, "transport_profile_id")
            ) do
       {:ok,

@@ -1,7 +1,7 @@
 defmodule Cadence.ProviderChangeFixtures do
   @moduledoc false
 
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Management.Transports
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
@@ -20,7 +20,7 @@ defmodule Cadence.ProviderChangeFixtures do
     provider = persist_provider!(organization_id, mission_id, suffix, policy_document)
 
     {:ok, transport} =
-      TransportStore.persist_transport(
+      Transports.persist_transport(
         organization_id,
         Transport.new(%{
           transport_id: "transport-provider-change-#{suffix}",

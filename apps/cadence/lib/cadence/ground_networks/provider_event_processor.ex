@@ -3,12 +3,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
 
   use GenServer
 
-  alias Cadence.Contacts.{
-    ProviderReservation,
-    ProviderReservationReconciler,
-    ProviderReservations
-  }
-
+  alias Cadence.Control.Contacts.ProviderEvents
   alias Cadence.GroundNetworks.{ProviderEventInbox, ProviderEventInboxEntry}
 
   @default_process_interval_ms 1_000
@@ -72,18 +67,15 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
 
   defp process_entry(%ProviderEventInboxEntry{resource_type: resource_type} = entry, opts)
        when resource_type in ["contact", "delivery"] do
-    with {:ok, reservation} <- correlate(entry),
-         {:ok, reconciled} <- reconcile(reservation, opts),
-         :ok <- after_reconcile(entry, reconciled, opts),
+    with {:ok, resolution} <- ProviderEvents.reconcile_provider_event(entry, opts),
          {:ok, processed} <-
-           ProviderEventInbox.complete(entry, resolution(reconciled), now: now(opts)) do
+           ProviderEventInbox.complete(entry, resolution, now: now(opts)) do
       {:ok, processed}
     else
-      {:error, reason}
-      when reason in [:provider_reservation_not_found, :provider_event_correlation_ambiguous] ->
+      {:quarantine, reason} ->
         quarantine(entry, reason, opts)
 
-      {:error, %ProviderReservation{} = _reservation, reason} ->
+      {:retry, reason} ->
         retry(entry, reason, opts)
 
       {:error, :injected_after_domain_commit} = injected ->
@@ -99,39 +91,6 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
       {:ok, processed} -> {:ok, processed}
       {:error, reason} -> {:error, reason}
     end
-  end
-
-  defp correlate(entry) do
-    ProviderReservations.resolve_provider_event(
-      entry.organization_id,
-      entry.provider_account_id,
-      entry.provider_account_version,
-      entry.resource_id,
-      entry.client_reference
-    )
-  end
-
-  defp reconcile(reservation, opts) do
-    case ProviderReservationReconciler.reconcile_reservation(reservation, provider_opts(opts)) do
-      {:ok, reconciled} -> {:ok, reconciled}
-      {:error, %ProviderReservation{} = updated, reason} -> {:error, updated, reason}
-    end
-  end
-
-  defp after_reconcile(entry, reservation, opts) do
-    case Keyword.get(opts, :after_reconcile) do
-      callback when is_function(callback, 2) -> callback.(entry, reservation)
-      _other -> :ok
-    end
-  end
-
-  defp resolution(reservation) do
-    %{
-      mission_id: reservation.mission_id,
-      provider_id: reservation.provider_id,
-      provider_reservation_id: reservation.provider_reservation_id,
-      scheduled_contact_id: reservation.scheduled_contact_id
-    }
   end
 
   defp retry(entry, reason, opts) do
@@ -166,19 +125,6 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
         {:error, _reason}, acc -> %{acc | errors: acc.errors + 1}
       end
     )
-  end
-
-  defp provider_opts(opts) do
-    Keyword.drop(opts, [
-      :after_reconcile,
-      :limit,
-      :max_concurrency,
-      :name,
-      :now,
-      :process_interval_ms,
-      :processing_timeout_ms,
-      :worker_ref
-    ])
   end
 
   defp default_worker_ref,

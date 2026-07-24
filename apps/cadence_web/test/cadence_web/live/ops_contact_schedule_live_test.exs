@@ -12,12 +12,13 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+  alias Cadence.Comms.RoutingRuleStore
 
   alias Cadence.Comms.{RoutingRule, Transport}
   alias Cadence.Contacts.{ProviderBooking, ProviderReservations, ProviderScheduling}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.Management.Transports
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.OpsContactScheduleLive.OpportunityToken
@@ -362,7 +363,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
       })
 
     assert {:ok, transport} =
-             TransportStore.persist_transport(org.organization_id, transport)
+             Transports.persist_transport(org.organization_id, transport)
 
     rule =
       RoutingRule.new(%{

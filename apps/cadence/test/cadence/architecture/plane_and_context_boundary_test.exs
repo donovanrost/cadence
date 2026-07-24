@@ -53,6 +53,20 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
                "runtime"
              )
 
+    assert [] ==
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/ground_networks/provider_event_processor.ex",
+               "lib/cadence/control/contacts/provider_events.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :context_direction}] =
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/ground_networks/provider_event_processor.ex",
+               "lib/cadence/contacts/provider_reservations.ex",
+               "runtime"
+             )
+
     assert :telemetry == ContextBoundary.classify("lib/cadence/control/derived_telemetry.ex")
     assert :telemetry == ContextBoundary.classify("lib/cadence/control/ingress.ex")
   end

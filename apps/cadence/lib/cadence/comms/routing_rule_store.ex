@@ -16,8 +16,15 @@ defmodule Cadence.Comms.RoutingRuleStore do
   }
 
   alias Cadence.Comms.TransportStore
-  alias Cadence.Contacts, as: ContactsService
-  alias Cadence.Contacts.{LinkAssignment, PathTemplate}
+
+  alias Cadence.Contacts.{
+    LinkAssignment,
+    LinkAssignmentStore,
+    PathTemplate,
+    PathTemplateStore,
+    ProfileStore
+  }
+
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
@@ -258,7 +265,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
   end
 
   defp fetch_materialized_provider(rule, %Transport{materialized_provider_profile_id: provider_id}) do
-    ContactsService.fetch_provider_profile(rule.organization_id, rule.mission_id, provider_id)
+    ProfileStore.fetch_provider_profile(rule.organization_id, rule.mission_id, provider_id)
   end
 
   defp materialize_for_directions(
@@ -307,7 +314,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
       })
 
     with {:ok, path_template} <-
-           ContactsService.persist_path_template(rule.organization_id, path_template) do
+           PathTemplateStore.persist(rule.organization_id, path_template) do
       assignment =
         LinkAssignment.new(%{
           mission_id: rule.mission_id,
@@ -326,7 +333,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
         })
 
       with {:ok, assignment} <-
-             ContactsService.persist_link_assignment(rule.organization_id, assignment) do
+             LinkAssignmentStore.persist(rule.organization_id, assignment) do
         {:ok, %{path_template: path_template, link_assignment: assignment}}
       end
     end
