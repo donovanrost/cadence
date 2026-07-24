@@ -7,8 +7,8 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
 
   import Ecto.Query
 
-  alias Cadence.Persistence.Schemas.TelemetryLatestValueRow
   alias Cadence.Repo
+  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
   alias Cadence.Telemetry.LatestProjectionOrder
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.SelectionPolicy
@@ -53,6 +53,27 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
     with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
       upsert_latest_samples([sample])
+    end
+  end
+
+  @impl true
+  def replace_values_for_scope(mission_id, samples, opts)
+      when is_binary(mission_id) and is_list(samples) and is_list(opts) do
+    Repo.transaction(fn ->
+      TelemetryLatestValueRow
+      |> where([row], row.mission_id == ^mission_id)
+      |> maybe_filter_rebuild_spacecraft(Keyword.get(opts, :spacecraft_id))
+      |> maybe_filter_source(opts)
+      |> Repo.delete_all()
+
+      case upsert_latest_samples(samples) do
+        :ok -> :ok
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -118,6 +139,12 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     else
       query
     end
+  end
+
+  defp maybe_filter_rebuild_spacecraft(query, nil), do: query
+
+  defp maybe_filter_rebuild_spacecraft(query, spacecraft_id) do
+    where(query, [row], row.spacecraft_scope_id == ^spacecraft_id)
   end
 
   defp maybe_filter_source(query, opts) do

@@ -9,7 +9,8 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition
-  alias Cadence.Persistence.Schemas.{TelemetryLatestLimitStateRow, TelemetryLimitEventRow}
+  alias Cadence.Limits.Store.LatestStateRow, as: TelemetryLatestLimitStateRow
+  alias Cadence.Limits.Store.LimitEventRow, as: TelemetryLimitEventRow
   alias Cadence.Telemetry.PacketDefinition
 
   test "rebuilds the latest limit-state projection in an async job" do

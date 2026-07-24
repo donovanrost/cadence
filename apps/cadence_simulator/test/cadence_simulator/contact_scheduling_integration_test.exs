@@ -40,8 +40,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   }
 
   alias Cadence.GroundNetworks.Opportunity
-  alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow}
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Spacecraft
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
   alias CadenceSimulator.Provider.{FleetScenarios, Orchestrator, Router, Store}
 
   @definitions Path.expand(

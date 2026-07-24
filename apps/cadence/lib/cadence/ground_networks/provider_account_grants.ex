@@ -17,12 +17,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
     as: ProviderAccountGrantRow
 
   alias Cadence.Missions
-  alias Cadence.Persistence.JsonDocument
-
-  alias Cadence.Persistence.Schemas.ProviderReservationRow
   alias Cadence.Repo
-
-  @nonterminal_states ~w(requesting pending confirmed active unknown canceling)
 
   @spec grant(Scope.t(), binary(), binary(), map(), keyword()) ::
           {:ok, ProviderAccountGrant.t()} | {:error, term()}
@@ -113,9 +108,6 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
 
       Multi.new()
       |> Multi.insert(:grant, ProviderAccountGrantRow.changeset(revoked))
-      |> Multi.run(:affected_reservations, fn repo, _changes ->
-        mark_reservations(repo, revoked, now)
-      end)
       |> ProviderAudit.put_entry(:audit_entry, audit)
       |> Repo.transaction()
       |> case do
@@ -268,29 +260,6 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
         "restrictions" => grant.restrictions
       }
     })
-  end
-
-  defp mark_reservations(repo, grant, now) do
-    metadata_patch = %{
-      "provider_grant_review" => %{
-        "grant_id" => grant.provider_account_grant_id,
-        "grant_version" => grant.version,
-        "reason" => grant.revoke_reason,
-        "recorded_at" => DateTime.to_iso8601(now)
-      }
-    }
-
-    {count, _rows} =
-      ProviderReservationRow
-      |> where(
-        [row],
-        row.organization_id == ^grant.organization_id and row.mission_id == ^grant.mission_id and
-          row.provider_account_grant_id == ^grant.provider_account_grant_id and
-          row.lifecycle_state in ^@nonterminal_states
-      )
-      |> repo.update_all(set: [operator_review_document: JsonDocument.wrap_value(metadata_patch)])
-
-    {:ok, count}
   end
 
   defp latest_row(organization_id, provider_account_grant_id) do

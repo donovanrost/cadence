@@ -12,7 +12,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
 
   alias Cadence.Ingress.RawEvidence
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Runtime.ManagedRecords.{
     ManagedActionRequestRow,
     ManagedCapabilityRecordRow,
     ManagedTimerEventRow

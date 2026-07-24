@@ -3,6 +3,8 @@ defmodule CadenceWeb.ProviderAccountShowLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.Control.Providers, as: ControlProviders
+
   alias Cadence.GroundNetworks.{
     ProviderAccountGrants,
     ProviderAccounts,
@@ -113,7 +115,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
   end
 
   def handle_event("revoke-grant", %{"grant-id" => grant_id}, socket) do
-    case ProviderAccountGrants.revoke(
+    case ControlProviders.revoke_account_grant(
            socket.assigns.current_scope,
            grant_id,
            "Revoked by organization administrator"

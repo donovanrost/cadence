@@ -14,16 +14,15 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
 
   alias Cadence.OperationalEvents
 
-  alias Cadence.Persistence.Schemas.{
-    CombinedDownlinkRecordRow,
-    DownlinkDiagnosticRow,
-    DownlinkObservationRow,
-    TransportActionRequestRow,
-    TransportCapabilityRecordRow,
-    TransportTimerEventRow
-  }
+  alias Cadence.Persistence.Schemas.{DownlinkObservationRow, TransportTimerEventRow}
+  alias Cadence.Runtime.DownlinkRecords.{CombinedDownlinkRecordRow, DownlinkDiagnosticRow}
 
   alias Cadence.Runtime
+
+  alias Cadence.Runtime.TransportRecords.{
+    TransportActionRequestRow,
+    TransportCapabilityRecordRow
+  }
 
   setup do
     mission_id =

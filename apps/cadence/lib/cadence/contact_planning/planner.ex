@@ -18,7 +18,7 @@ defmodule Cadence.ContactPlanning.Planner do
   alias Cadence.GroundNetworks.{ProviderError, Validation}
   alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     ContactOpportunitySnapshotRow,
     ContactPlanningRunRow,
     ContactPlanningSearchRow

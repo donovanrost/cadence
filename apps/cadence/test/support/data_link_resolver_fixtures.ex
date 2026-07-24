@@ -19,12 +19,12 @@ defmodule Cadence.Dashboards.DataLinkResolverFixtures do
   alias Cadence.Contacts.{Path, RealizedContact}
   alias Cadence.Ingress.RawEvidence
 
-  alias Cadence.Persistence.Schemas.TelemetrySampleRow
   alias Cadence.Repo
   alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
   def persist_sample_scope!(suffix, value) do
     organization_id = "org-#{suffix}"

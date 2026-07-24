@@ -22,18 +22,13 @@ defmodule Cadence.Limits do
   }
 
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
-  alias Cadence.Telemetry.LatestProjectionOrder
 
-  alias Cadence.Persistence.Schemas.{
-    DerivedTelemetrySampleRow,
-    TelemetryLatestLimitStateRow,
-    TelemetryLimitEventRow,
-    TelemetrySampleRow
-  }
+  alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
+  alias Cadence.Limits.Store
 
   alias Cadence.Repo
+  alias Cadence.Telemetry.SampleRecords
 
-  @mission_scope_key "__mission__"
   @type evaluation_mode :: :canonical_event | :latest_value_projection
 
   @spec persist_limit_definition(Definition.t()) :: {:ok, Definition.t()} | {:error, term()}
@@ -153,16 +148,9 @@ defmodule Cadence.Limits do
   def fetch_limit_event(organization_id, mission_id, limit_event_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(limit_event_id) do
-    TelemetryLimitEventRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.limit_event_id == ^limit_event_id
-    )
-    |> Repo.one()
-    |> case do
-      %TelemetryLimitEventRow{} = row -> {:ok, TelemetryLimitEventRow.to_domain(row)}
-      nil -> {:error, :limit_event_not_found}
+    case Store.fetch_event(organization_id, mission_id, limit_event_id) do
+      {:ok, event} -> {:ok, event}
+      {:error, :not_found} -> {:error, :limit_event_not_found}
     end
   end
 
@@ -173,17 +161,13 @@ defmodule Cadence.Limits do
     source_sample_type = Keyword.get(opts, :source_sample_type)
     query_limit = Keyword.get(opts, :limit, 100)
 
-    TelemetryLimitEventRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.sample_id == ^sample_id
+    Store.list_events(mission_id,
+      organization_id: organization_id,
+      sample_id: sample_id,
+      source_sample_type: source_sample_type,
+      order: :desc,
+      limit: query_limit
     )
-    |> maybe_filter_limit_event_source_sample_type(source_sample_type)
-    |> order_by([row], desc: row.receipt_time)
-    |> limit(^query_limit)
-    |> Repo.all()
-    |> Enum.map(&TelemetryLimitEventRow.to_domain/1)
   end
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
@@ -284,13 +268,9 @@ defmodule Cadence.Limits do
 
   defp fetch_source_samples(mission_id, spacecraft_id) do
     telemetry_samples =
-      TelemetrySampleRow
-      |> where([sample_row], sample_row.mission_id == ^mission_id)
-      |> maybe_filter_telemetry_spacecraft(spacecraft_id)
-      |> Repo.all()
-      |> Enum.map(fn %TelemetrySampleRow{} = sample_row ->
-        sample = TelemetrySampleRow.to_domain(sample_row)
-
+      mission_id
+      |> SampleRecords.list_samples(spacecraft_id: spacecraft_id)
+      |> Enum.map(fn sample ->
         %{
           source_sample_type: :telemetry_sample,
           sample_id: sample.sample_id,
@@ -306,13 +286,9 @@ defmodule Cadence.Limits do
       end)
 
     derived_samples =
-      DerivedTelemetrySampleRow
-      |> where([sample_row], sample_row.mission_id == ^mission_id)
-      |> maybe_filter_derived_spacecraft(spacecraft_id)
-      |> Repo.all()
-      |> Enum.map(fn %DerivedTelemetrySampleRow{} = sample_row ->
-        sample = DerivedTelemetrySampleRow.to_domain(sample_row)
-
+      mission_id
+      |> DerivedTelemetryStore.list_samples(spacecraft_id: spacecraft_id)
+      |> Enum.map(fn sample ->
         %{
           source_sample_type: :derived_telemetry_sample,
           sample_id: sample.derived_sample_id,
@@ -416,52 +392,11 @@ defmodule Cadence.Limits do
   end
 
   defp add_event_inserts(%Multi{} = multi, limit_events) do
-    Enum.reduce(limit_events, multi, fn %Event{} = event, acc ->
-      Multi.insert(
-        acc,
-        {:limit_event, event.limit_event_id},
-        TelemetryLimitEventRow.changeset(event),
-        on_conflict: :nothing,
-        conflict_target: [:limit_event_id]
-      )
-    end)
+    Store.add_event_inserts(multi, limit_events)
   end
 
   defp persist_latest_states(repo, limit_events) do
-    Enum.reduce_while(limit_events, {:ok, []}, fn %Event{} = event, {:ok, acc} ->
-      case persist_latest_state(repo, event) do
-        {:ok, latest_state_row} -> {:cont, {:ok, [latest_state_row | acc]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  defp persist_latest_state(repo, %Event{} = event) do
-    existing_row =
-      repo.get_by(TelemetryLatestLimitStateRow,
-        mission_id: event.mission_id,
-        spacecraft_scope_id: event.spacecraft_id || @mission_scope_key,
-        point_id: event.point_id
-      )
-
-    cond do
-      is_nil(existing_row) ->
-        %TelemetryLatestLimitStateRow{}
-        |> TelemetryLatestLimitStateRow.changeset(event)
-        |> repo.insert()
-
-      latest_state_newer?(event, existing_row) ->
-        existing_row
-        |> TelemetryLatestLimitStateRow.changeset(event)
-        |> repo.update()
-
-      true ->
-        {:ok, existing_row}
-    end
-  end
-
-  defp latest_state_newer?(%Event{} = event, %TelemetryLatestLimitStateRow{} = latest_state_row) do
-    LatestProjectionOrder.newer?(event, latest_state_row, :limit_event_id)
+    Store.persist_latest_states(repo, limit_events)
   end
 
   defp compare_source_sample_order(left, right) do
@@ -615,27 +550,5 @@ defmodule Cadence.Limits do
       nil -> []
       spacecraft_id -> [spacecraft_id: spacecraft_id]
     end
-  end
-
-  defp maybe_filter_telemetry_spacecraft(query, nil), do: query
-
-  defp maybe_filter_telemetry_spacecraft(query, spacecraft_id),
-    do: where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
-
-  defp maybe_filter_derived_spacecraft(query, nil), do: query
-
-  defp maybe_filter_derived_spacecraft(query, spacecraft_id),
-    do: where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
-
-  defp maybe_filter_limit_event_source_sample_type(query, nil), do: query
-
-  defp maybe_filter_limit_event_source_sample_type(query, source_sample_type)
-       when is_atom(source_sample_type) do
-    where(query, [row], row.source_sample_type == ^Atom.to_string(source_sample_type))
-  end
-
-  defp maybe_filter_limit_event_source_sample_type(query, source_sample_type)
-       when is_binary(source_sample_type) do
-    where(query, [row], row.source_sample_type == ^source_sample_type)
   end
 end

@@ -5,23 +5,18 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   events.
   """
 
-  import Ecto.Query
-
   alias Ecto.Changeset
 
   alias Cadence.Jobs
   alias Cadence.Limits
   alias Cadence.Limits.Event
+  alias Cadence.Limits.Store
 
-  alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryLatestValueRow,
-    TelemetryLatestLimitStateRow,
-    TelemetryLatestValueRow,
-    TelemetryLimitEventRow
-  }
+  alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
 
   alias Cadence.Projections.TelemetryLatestLimitStates.{RebuildRunRow, Run}
   alias Cadence.Repo
+  alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.LatestProjectionOrder
 
   @spec rebuild(binary(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
@@ -148,32 +143,18 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
 
     latest_events =
-      TelemetryLimitEventRow
-      |> where([event_row], event_row.mission_id == ^mission_id)
-      |> maybe_filter_spacecraft(spacecraft_id)
-      |> Repo.all()
-      |> Enum.reduce(%{}, fn %TelemetryLimitEventRow{} = event_row, acc ->
-        key = {event_row.mission_id, event_row.spacecraft_id || "__mission__", event_row.point_id}
+      mission_id
+      |> Store.list_events(spacecraft_id: spacecraft_id)
+      |> Enum.reduce(%{}, fn %Event{} = event, acc ->
+        key = {event.mission_id, event.spacecraft_id || "__mission__", event.point_id}
 
-        Map.update(acc, key, event_row, &latest_event_row(event_row, &1))
+        Map.update(acc, key, event, &latest_event(&1, event))
       end)
       |> Map.values()
-      |> Enum.map(&TelemetryLimitEventRow.to_domain/1)
 
-    Repo.transaction(fn ->
-      TelemetryLatestLimitStateRow
-      |> where([state_row], state_row.mission_id == ^mission_id)
-      |> maybe_filter_latest_spacecraft(spacecraft_id)
-      |> Repo.delete_all()
-
-      Enum.each(latest_events, fn %Event{} = event ->
-        %TelemetryLatestLimitStateRow{}
-        |> TelemetryLatestLimitStateRow.changeset(event)
-        |> Repo.insert!()
-      end)
-    end)
+    Store.replace_latest_states(mission_id, latest_events, opts)
     |> case do
-      {:ok, _result} ->
+      :ok ->
         completed_run =
           %Run{
             run
@@ -210,20 +191,9 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
              definitions,
              mode: :latest_value_projection
            ) do
-      Repo.transaction(fn ->
-        TelemetryLatestLimitStateRow
-        |> where([state_row], state_row.mission_id == ^mission_id)
-        |> maybe_filter_latest_spacecraft(spacecraft_id)
-        |> Repo.delete_all()
-
-        Enum.each(latest_state_events, fn %Event{} = event ->
-          %TelemetryLatestLimitStateRow{}
-          |> TelemetryLatestLimitStateRow.changeset(event)
-          |> Repo.insert!()
-        end)
-      end)
+      Store.replace_latest_states(mission_id, latest_state_events, opts)
       |> case do
-        {:ok, _result} ->
+        :ok ->
           completed_run =
             %Run{
               run
@@ -288,65 +258,48 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
     end
   end
 
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id),
-    do: where(query, [event_row], event_row.spacecraft_id == ^spacecraft_id)
-
-  defp maybe_filter_latest_spacecraft(query, nil), do: query
-
-  defp maybe_filter_latest_spacecraft(query, spacecraft_id),
-    do: where(query, [state_row], state_row.spacecraft_scope_id == ^spacecraft_id)
-
-  defp latest_event_row(
-         %TelemetryLimitEventRow{} = event_row,
-         %TelemetryLimitEventRow{} = existing_row
-       ) do
-    if event_row_newer?(event_row, existing_row), do: event_row, else: existing_row
-  end
-
-  defp event_row_newer?(event_row, existing_row) do
-    LatestProjectionOrder.newer?(event_row, existing_row, :limit_event_id)
+  defp latest_event(%Event{} = existing, %Event{} = candidate) do
+    if LatestProjectionOrder.newer?(candidate, existing, :limit_event_id),
+      do: candidate,
+      else: existing
   end
 
   defp fetch_latest_value_sources(mission_id, spacecraft_id) do
+    telemetry_opts = if spacecraft_id, do: [spacecraft_id: spacecraft_id], else: []
+
     telemetry_sources =
-      TelemetryLatestValueRow
-      |> where([latest_value_row], latest_value_row.mission_id == ^mission_id)
-      |> maybe_filter_latest_telemetry_spacecraft(spacecraft_id)
-      |> Repo.all()
-      |> Enum.map(fn %TelemetryLatestValueRow{} = latest_value_row ->
+      mission_id
+      |> CurrentValueStore.latest_values_for_mission(telemetry_opts)
+      |> Enum.map(fn latest_value ->
         %{
           source_sample_type: :telemetry_sample,
-          sample_id: latest_value_row.sample_id,
-          mission_id: latest_value_row.mission_id,
-          spacecraft_id: latest_value_row.spacecraft_id,
-          point_id: latest_value_row.point_id,
-          point_name: latest_value_row.point_name,
-          value: unwrap_value(latest_value_row.engineering_value, latest_value_row.raw_value),
-          generation_time: latest_value_row.generation_time,
-          receipt_time: latest_value_row.receipt_time,
-          provenance: latest_value_row.provenance
+          sample_id: latest_value.sample_id,
+          mission_id: latest_value.mission_id,
+          spacecraft_id: latest_value.spacecraft_id,
+          point_id: latest_value.point_id,
+          point_name: latest_value.point_name,
+          value: unwrap_value(latest_value.engineering_value, latest_value.raw_value),
+          generation_time: latest_value.generation_time,
+          receipt_time: latest_value.receipt_time,
+          provenance: latest_value.provenance
         }
       end)
 
     derived_sources =
-      DerivedTelemetryLatestValueRow
-      |> where([latest_value_row], latest_value_row.mission_id == ^mission_id)
-      |> maybe_filter_latest_derived_spacecraft(spacecraft_id)
-      |> Repo.all()
-      |> Enum.map(fn %DerivedTelemetryLatestValueRow{} = latest_value_row ->
+      mission_id
+      |> DerivedTelemetryStore.list_latest_values(telemetry_opts)
+      |> Enum.map(fn latest_value ->
         %{
           source_sample_type: :derived_telemetry_sample,
-          sample_id: latest_value_row.derived_sample_id,
-          mission_id: latest_value_row.mission_id,
-          spacecraft_id: latest_value_row.spacecraft_id,
-          point_id: latest_value_row.point_id,
-          point_name: latest_value_row.point_name,
-          value: unwrap_value(latest_value_row.value),
-          generation_time: latest_value_row.generation_time,
-          receipt_time: latest_value_row.receipt_time,
-          provenance: latest_value_row.provenance
+          sample_id: latest_value.derived_sample_id,
+          mission_id: latest_value.mission_id,
+          spacecraft_id: latest_value.spacecraft_id,
+          point_id: latest_value.point_id,
+          point_name: latest_value.point_name,
+          value: latest_value.value,
+          generation_time: latest_value.generation_time,
+          receipt_time: latest_value.receipt_time,
+          provenance: latest_value.provenance
         }
       end)
 
@@ -363,21 +316,6 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   defp unwrap_value(nil, %{"value" => value}), do: value
   defp unwrap_value(nil, fallback), do: fallback
   defp unwrap_value(value, _fallback), do: value
-
-  defp unwrap_value(%{"value" => value}), do: value
-  defp unwrap_value(value), do: value
-
-  defp maybe_filter_latest_telemetry_spacecraft(query, nil), do: query
-
-  defp maybe_filter_latest_telemetry_spacecraft(query, spacecraft_id) do
-    where(query, [latest_value_row], latest_value_row.spacecraft_scope_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_latest_derived_spacecraft(query, nil), do: query
-
-  defp maybe_filter_latest_derived_spacecraft(query, spacecraft_id) do
-    where(query, [latest_value_row], latest_value_row.spacecraft_scope_id == ^spacecraft_id)
-  end
 
   defp source_mode_name(:canonical_limit_events), do: "canonical_limit_events"
   defp source_mode_name(:latest_value_projection), do: "latest_value_projection"

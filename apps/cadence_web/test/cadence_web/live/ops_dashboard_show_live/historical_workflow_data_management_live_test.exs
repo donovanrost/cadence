@@ -15,8 +15,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
 
   alias Cadence.Dashboards.Document
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.{PacketRecordRow, RawEvidenceRow}
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
   alias Cadence.Repo
   alias Cadence.Telemetry.{HistoryStore, Sample, Storage}
   alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS

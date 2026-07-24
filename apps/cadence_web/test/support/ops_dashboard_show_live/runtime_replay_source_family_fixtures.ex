@@ -24,11 +24,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
 
-  alias Cadence.Persistence.Schemas.{
-    PacketRecordRow,
-    RawEvidenceRow,
-    ReplayRunRow
-  }
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
+
+  alias Cadence.Control.Replay.Store.ReplayRunRow
 
   alias Cadence.Protocol.PacketRecord
   alias Cadence.Replay.Run

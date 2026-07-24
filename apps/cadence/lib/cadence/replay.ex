@@ -12,7 +12,7 @@ defmodule Cadence.Replay do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Control.Replay.Store.{
     ReplayDispatchDecisionRow,
     ReplayDispatchWorkItemRow,
     ReplayManagedActionRequestRow,

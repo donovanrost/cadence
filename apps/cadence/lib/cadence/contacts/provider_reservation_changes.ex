@@ -22,7 +22,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
   alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Control.Contacts.Store.{
     ProviderChangeApprovalRow,
     ProviderReservationChangeRow,
     ProviderReservationRow,

@@ -2,8 +2,9 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.{PacketRecordRow, RawEvidenceRow}
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
   alias Cadence.Telemetry.CurrentValueStore.Postgres
   alias Cadence.Telemetry.Sample
 

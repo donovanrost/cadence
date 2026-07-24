@@ -26,10 +26,10 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   alias Cadence.OperationalEvents.Event
   alias Cadence.Commanding.CommandQueueEntryRow
   alias Cadence.Commanding.CommandRequestRow
-  alias Cadence.Persistence.Schemas.ReplayRunRow
-  alias Cadence.Persistence.Schemas.ReplayTelemetrySampleRow
-  alias Cadence.Persistence.Schemas.TelemetryLimitEventRow
-  alias Cadence.Persistence.Schemas.TelemetrySampleRow
+  alias Cadence.Control.Replay.Store.ReplayRunRow
+  alias Cadence.Control.Replay.Store.ReplayTelemetrySampleRow
+  alias Cadence.Limits.Store.LimitEventRow, as: TelemetryLimitEventRow
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias Cadence.Runtime.ManagedActionRequest

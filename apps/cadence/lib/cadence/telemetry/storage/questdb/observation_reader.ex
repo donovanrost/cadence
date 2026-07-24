@@ -7,11 +7,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
   query shape later.
   """
 
-  import Ecto.Query
-
-  alias Cadence.Persistence.Schemas.TelemetryObservationIdentityStateRow
-  alias Cadence.Repo
   alias Cadence.Telemetry.{EffectiveSelection, Sample, SelectionPolicy, SourceFilters}
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates
   alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SQL}
 
   @select_columns [
@@ -454,56 +451,15 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
   end
 
   defp query_identity_states(mission_id, point_id, opts) do
-    TelemetryObservationIdentityStateRow
-    |> where([row], row.mission_id == ^mission_id and row.point_id == ^point_id)
-    |> maybe_filter_organization(Keyword.get(opts, :organization_id))
-    |> maybe_filter_spacecraft(Keyword.get(opts, :spacecraft_id))
-    |> maybe_filter_realm(Keyword.get(opts, :realm))
-    |> maybe_filter_replay_run(SourceFilters.replay_run_id(opts))
-    |> maybe_filter_data_source(Keyword.get(opts, :data_source_id))
-    |> maybe_filter_binding(SourceFilters.binding_id(opts))
-    |> Repo.all()
-  end
-
-  defp maybe_filter_organization(query, nil), do: query
-
-  defp maybe_filter_organization(query, organization_id) do
-    where(query, [row], row.organization_id == ^organization_id)
-  end
-
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id) do
-    where(query, [row], row.spacecraft_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_realm(query, nil), do: query
-  defp maybe_filter_realm(query, ""), do: query
-
-  defp maybe_filter_realm(query, realm) do
-    realm = to_string(realm)
-    where(query, [row], row.realm == ^realm)
-  end
-
-  defp maybe_filter_replay_run(query, nil), do: query
-  defp maybe_filter_replay_run(query, ""), do: query
-
-  defp maybe_filter_replay_run(query, replay_run_id) do
-    where(query, [row], row.replay_run_id == ^replay_run_id)
-  end
-
-  defp maybe_filter_data_source(query, nil), do: query
-  defp maybe_filter_data_source(query, ""), do: query
-
-  defp maybe_filter_data_source(query, data_source_id) do
-    where(query, [row], row.data_source_id == ^data_source_id)
-  end
-
-  defp maybe_filter_binding(query, nil), do: query
-  defp maybe_filter_binding(query, ""), do: query
-
-  defp maybe_filter_binding(query, binding_id) do
-    where(query, [row], row.binding_id == ^binding_id)
+    ObservationIdentityStates.list_for_selection(mission_id,
+      organization_id: Keyword.get(opts, :organization_id),
+      point_id: point_id,
+      spacecraft_id: Keyword.get(opts, :spacecraft_id),
+      realm: Keyword.get(opts, :realm),
+      replay_run_id: SourceFilters.replay_run_id(opts),
+      data_source_id: Keyword.get(opts, :data_source_id),
+      binding_id: SourceFilters.binding_id(opts)
+    )
   end
 
   defp symbol_opt(opts, key, default) do

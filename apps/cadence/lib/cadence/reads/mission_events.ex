@@ -6,7 +6,7 @@ defmodule Cadence.Reads.MissionEvents do
   import Ecto.Query
 
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Persistence.Schemas.MissionEventRow
+  alias Cadence.Projections.MissionEvents.Store.MissionEventRow
   alias Cadence.Repo
 
   @spec fetch_for_mission(binary(), binary(), binary()) ::

@@ -15,6 +15,8 @@ defmodule Cadence.TestSupport.LazyCurrentValueStore do
 
   def replace_value(_mission_id, _point_id, _sample_or_nil, _opts), do: :ok
 
+  def replace_values_for_scope(_mission_id, _samples, _opts), do: :ok
+
   def latest_value(_mission_id, _point_id, _opts), do: nil
 
   def latest_values_for_mission(_mission_id, _opts), do: []

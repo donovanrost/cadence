@@ -9,7 +9,7 @@ defmodule Cadence.IngressArchive.Postgres do
   alias Ecto.Multi
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.RawEvidenceRow
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 

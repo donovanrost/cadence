@@ -6,22 +6,18 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
-    AutomationGrants,
     ContactPlanExecutionItem,
     ContentHash,
     Planner
   }
 
+  alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Management.Contacts.ApprovedContactPlan
 
   alias Cadence.Contacts.{ProviderBooking, ProviderReservation, ProviderReservations}
   alias Cadence.Contacts.ProviderScheduling
 
-  alias Cadence.Persistence.Schemas.{
-    ContactOpportunitySnapshotRow,
-    ContactPlanExecutionItemRow,
-    ContactPlanRow
-  }
+  alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
 
   alias Cadence.Repo
 
@@ -101,47 +97,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   end
 
   defp begin_execution(organization_id, mission_id, plan_id, opts) do
-    now = now(opts)
-
-    Repo.transaction(fn ->
-      case lock_plan(organization_id, mission_id, plan_id) do
-        {:ok, %ContactPlanRow{lifecycle_state: "reserved"} = row} ->
-          ContactPlanRow.to_domain(row)
-
-        {:ok, %ContactPlanRow{lifecycle_state: state} = row}
-        when state in ["approved", "executing", "partially_reserved", "failed"] ->
-          advance_execution_row(row, now)
-
-        {:ok, _row} ->
-          Repo.rollback(:contact_plan_not_executable)
-
-        {:error, reason} ->
-          Repo.rollback(reason)
-      end
-    end)
-    |> normalize_transaction()
+    ManagementContacts.start_execution_projection(organization_id, mission_id, plan_id, now(opts))
   end
-
-  defp advance_execution_row(%ContactPlanRow{approved_version: version} = row, now)
-       when is_integer(version) do
-    case row
-         |> ContactPlanRow.projection_changeset(%{
-           current_version: row.current_version,
-           lifecycle_state: "executing",
-           lifecycle_changed_by: row.approved_by,
-           lifecycle_changed_at: now,
-           lifecycle_reason: "execution started",
-           approved_version: row.approved_version,
-           approved_at: row.approved_at,
-           approved_by: row.approved_by
-         })
-         |> Repo.update() do
-      {:ok, updated} -> ContactPlanRow.to_domain(updated)
-      {:error, reason} -> Repo.rollback(reason)
-    end
-  end
-
-  defp advance_execution_row(_row, _now), do: Repo.rollback(:contact_plan_not_approved)
 
   defp process_item(
          %{provider_reservation_id: reservation_id, lifecycle_state: state} = item,
@@ -225,13 +182,16 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   end
 
   defp fetch_snapshot(item) do
-    case Repo.get_by(ContactOpportunitySnapshotRow,
-           organization_id: item.organization_id,
-           mission_id: item.mission_id,
-           contact_opportunity_snapshot_id: item.contact_opportunity_snapshot_id
+    case ManagementContacts.fetch_opportunity_snapshot(
+           item.organization_id,
+           item.mission_id,
+           item.contact_opportunity_snapshot_id
          ) do
-      nil -> {:error, :contact_plan_execution_snapshot_not_found}
-      row -> {:ok, ContactOpportunitySnapshotRow.to_domain(row)}
+      {:error, :contact_opportunity_snapshot_not_found} ->
+        {:error, :contact_plan_execution_snapshot_not_found}
+
+      result ->
+        result
     end
   end
 
@@ -396,32 +356,18 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   defp project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
     items = list(organization_id, mission_id, plan_id, plan_version)
     state = projection_state(items)
-    now = now(opts)
 
-    Repo.transaction(fn ->
-      with {:ok, row} <- lock_plan(organization_id, mission_id, plan_id),
-           true <- row.approved_version == plan_version,
-           {:ok, updated} <-
-             row
-             |> ContactPlanRow.projection_changeset(%{
-               current_version: row.current_version,
-               lifecycle_state: Atom.to_string(state),
-               lifecycle_changed_by: row.approved_by,
-               lifecycle_changed_at: now,
-               lifecycle_reason: projection_reason(items),
-               approved_version: row.approved_version,
-               approved_at: row.approved_at,
-               approved_by: row.approved_by
-             })
-             |> Repo.update() do
-        {ContactPlanRow.to_domain(updated), items}
-      else
-        false -> Repo.rollback(:contact_plan_approved_version_changed)
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+    ManagementContacts.update_execution_projection(
+      organization_id,
+      mission_id,
+      plan_id,
+      plan_version,
+      state,
+      projection_reason(items),
+      now(opts)
+    )
     |> case do
-      {:ok, {plan, projected_items}} -> {:ok, plan, projected_items}
+      {:ok, plan} -> {:ok, plan, items}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -447,20 +393,6 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     |> then(&"execution projection: #{&1}")
   end
 
-  defp lock_plan(organization_id, mission_id, plan_id) do
-    case ContactPlanRow
-         |> where(
-           [plan],
-           plan.organization_id == ^organization_id and plan.mission_id == ^mission_id and
-             plan.contact_plan_id == ^plan_id
-         )
-         |> lock("FOR UPDATE")
-         |> Repo.one() do
-      nil -> {:error, :contact_plan_not_found}
-      row -> {:ok, row}
-    end
-  end
-
   defp authorize_member(current_scope, mission_id) do
     Policy.authorize(current_scope, :operate_mission, %{
       organization_id: current_scope.organization_id,
@@ -475,7 +407,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     grant_id = Keyword.get(opts, :automation_grant_id)
     evidence = Keyword.get(opts, :automation_evidence, %{})
 
-    case AutomationGrants.authorize(
+    case ManagementContacts.authorize_automation(
            scope,
            mission_id,
            grant_id,

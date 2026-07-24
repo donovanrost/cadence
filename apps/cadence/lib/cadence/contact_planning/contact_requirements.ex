@@ -14,7 +14,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
 
   alias Cadence.Missions
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     ContactRequirementRow,
     ContactRequirementVersionRow
   }

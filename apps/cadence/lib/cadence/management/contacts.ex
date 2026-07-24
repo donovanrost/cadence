@@ -9,6 +9,7 @@ defmodule Cadence.Management.Contacts do
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
+    AutomationGrants,
     ContactPlanApprovals,
     ContactPlans,
     ContactRequirements
@@ -35,6 +36,25 @@ defmodule Cadence.Management.Contacts do
     to: ContactPlans,
     as: :selected_snapshots
 
+  defdelegate fetch_opportunity_snapshot(organization_id, mission_id, snapshot_id),
+    to: ContactPlans
+
+  @doc false
+  defdelegate start_execution_projection(organization_id, mission_id, plan_id, now),
+    to: ContactPlans
+
+  @doc false
+  defdelegate update_execution_projection(
+                organization_id,
+                mission_id,
+                plan_id,
+                plan_version,
+                state,
+                reason,
+                now
+              ),
+              to: ContactPlans
+
   defdelegate fetch_requirement_version(organization_id, mission_id, requirement_id, version),
     to: ContactRequirements,
     as: :fetch_version
@@ -42,6 +62,11 @@ defmodule Cadence.Management.Contacts do
   defdelegate list_approvals(organization_id, mission_id, plan_id),
     to: ContactPlanApprovals,
     as: :list
+
+  @doc false
+  defdelegate authorize_automation(scope, mission_id, grant_id, action, evidence, opts \\ []),
+    to: AutomationGrants,
+    as: :authorize
 
   @spec fetch_approved_plan(binary(), binary(), binary()) ::
           {:ok, ApprovedContactPlan.t()} | {:error, term()}

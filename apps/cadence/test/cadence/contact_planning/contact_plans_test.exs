@@ -4,7 +4,7 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
-  alias Cadence.Persistence.Schemas.ContactPlanRow
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
   alias Cadence.Repo
   alias Cadence.Spacecraft
 

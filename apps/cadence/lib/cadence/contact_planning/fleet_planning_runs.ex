@@ -13,7 +13,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     FleetPlanningRunRequirementRef
   }
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     FleetPlanningDecisionRow,
     FleetPlanningRunRequirementRefRow,
     FleetPlanningRunRow

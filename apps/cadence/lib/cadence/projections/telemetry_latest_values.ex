@@ -4,17 +4,9 @@ defmodule Cadence.Projections.TelemetryLatestValues do
   samples.
   """
 
-  import Ecto.Query
-
   alias Ecto.Changeset
 
   alias Cadence.Jobs
-
-  alias Cadence.Persistence.Schemas.{
-    TelemetryLatestValueRow,
-    TelemetryObservationIdentityStateRow,
-    TelemetrySampleRow
-  }
 
   alias Cadence.Projections.TelemetryLatestValues.{RebuildRunRow, Run}
   alias Cadence.Repo
@@ -22,7 +14,9 @@ defmodule Cadence.Projections.TelemetryLatestValues do
   alias Cadence.Telemetry.EffectiveSelection
   alias Cadence.Telemetry.LatestProjectionOrder
   alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.SampleRecords
   alias Cadence.Telemetry.SourceFilters
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates
 
   @spec rebuild(binary(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def rebuild(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
@@ -112,31 +106,15 @@ defmodule Cadence.Projections.TelemetryLatestValues do
     mission_id = run.mission_id
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
 
-    sample_rows =
-      TelemetrySampleRow
-      |> where([sample_row], sample_row.mission_id == ^mission_id)
-      |> maybe_filter_spacecraft(spacecraft_id)
-      |> Repo.all()
+    samples = SampleRecords.list_samples(mission_id, spacecraft_id: spacecraft_id)
 
     latest_samples =
-      sample_rows
-      |> latest_samples_for_rows(identity_rows_for_mission(mission_id, opts), opts)
+      samples
+      |> latest_samples_for_samples(identity_states_for_mission(mission_id, opts), opts)
 
-    Repo.transaction(fn ->
-      TelemetryLatestValueRow
-      |> where([latest_value_row], latest_value_row.mission_id == ^mission_id)
-      |> maybe_filter_latest_spacecraft(spacecraft_id)
-      |> maybe_filter_latest_source(opts)
-      |> Repo.delete_all()
-
-      Enum.each(latest_samples, fn %Sample{} = sample ->
-        %TelemetryLatestValueRow{}
-        |> TelemetryLatestValueRow.changeset(sample)
-        |> Repo.insert!()
-      end)
-    end)
+    CurrentValueStore.replace_values_for_scope(mission_id, latest_samples, opts)
     |> case do
-      {:ok, _result} ->
+      :ok ->
         completed_run =
           %Run{
             run
@@ -185,91 +163,34 @@ defmodule Cadence.Projections.TelemetryLatestValues do
       {:error, {kind, reason}}
   end
 
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id) do
-    where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_exact_spacecraft(query, opts) do
-    case Keyword.fetch(opts, :spacecraft_id) do
-      {:ok, nil} -> where(query, [row], is_nil(row.spacecraft_id))
-      {:ok, spacecraft_id} -> where(query, [row], row.spacecraft_id == ^spacecraft_id)
-      :error -> query
-    end
-  end
-
-  defp maybe_filter_latest_spacecraft(query, nil), do: query
-
-  defp maybe_filter_latest_spacecraft(query, spacecraft_id) do
-    where(query, [latest_value_row], latest_value_row.spacecraft_scope_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_latest_source(query, opts) do
-    opts
-    |> SourceFilters.normalize()
-    |> Enum.reduce(query, fn
-      {:realm, realm}, query ->
-        where(query, [latest_value_row], latest_value_row.realm == ^realm)
-
-      {:data_source_id, data_source_id}, query ->
-        where(query, [latest_value_row], latest_value_row.data_source_id == ^data_source_id)
-
-      {:binding_id, binding_id}, query ->
-        where(query, [latest_value_row], latest_value_row.binding_id == ^binding_id)
-
-      {:source_endpoint_ids, source_endpoint_ids}, query ->
-        where(
-          query,
-          [latest_value_row],
-          fragment("?->'storage'->>'source_endpoint_id'", latest_value_row.provenance) in ^source_endpoint_ids
-        )
-    end)
-  end
-
   defp sample_rows_for_point(mission_id, point_id, opts) do
-    TelemetrySampleRow
-    |> where(
-      [sample_row],
-      sample_row.mission_id == ^mission_id and sample_row.point_id == ^point_id
+    mission_id
+    |> SampleRecords.list_samples(
+      point_id: point_id,
+      spacecraft_id: Keyword.get(opts, :spacecraft_id)
     )
     |> maybe_filter_exact_spacecraft(opts)
-    |> Repo.all()
   end
 
   defp identity_rows_for_point(mission_id, point_id, opts) do
-    TelemetryObservationIdentityStateRow
-    |> where([identity_state], identity_state.mission_id == ^mission_id)
-    |> where([identity_state], identity_state.point_id == ^point_id)
+    mission_id
+    |> ObservationIdentityStates.list_for_selection(
+      point_id: point_id,
+      spacecraft_id: Keyword.get(opts, :spacecraft_id),
+      realm: Keyword.get(opts, :realm),
+      data_source_id: Keyword.get(opts, :data_source_id),
+      binding_id: SourceFilters.binding_id(opts)
+    )
     |> maybe_filter_exact_spacecraft(opts)
-    |> maybe_filter_identity_source(opts)
-    |> Repo.all()
   end
 
-  defp identity_rows_for_mission(mission_id, opts) do
-    TelemetryObservationIdentityStateRow
-    |> where([identity_state], identity_state.mission_id == ^mission_id)
-    |> maybe_filter_spacecraft(Keyword.get(opts, :spacecraft_id))
-    |> maybe_filter_identity_source(opts)
-    |> Repo.all()
-  end
-
-  defp maybe_filter_identity_source(query, opts) do
-    opts
-    |> SourceFilters.normalize()
-    |> Enum.reduce(query, fn
-      {:realm, realm}, query ->
-        where(query, [identity_state], identity_state.realm == ^realm)
-
-      {:data_source_id, data_source_id}, query ->
-        where(query, [identity_state], identity_state.data_source_id == ^data_source_id)
-
-      {:binding_id, binding_id}, query ->
-        where(query, [identity_state], identity_state.binding_id == ^binding_id)
-
-      {:source_endpoint_ids, _source_endpoint_ids}, query ->
-        query
-    end)
+  defp identity_states_for_mission(mission_id, opts) do
+    ObservationIdentityStates.list_for_selection(mission_id,
+      spacecraft_id: Keyword.get(opts, :spacecraft_id),
+      realm: Keyword.get(opts, :realm),
+      data_source_id: Keyword.get(opts, :data_source_id),
+      binding_id: SourceFilters.binding_id(opts)
+    )
   end
 
   defp latest_sample_for_rows(sample_rows, identity_rows, opts) do
@@ -281,8 +202,8 @@ defmodule Cadence.Projections.TelemetryLatestValues do
     end)
   end
 
-  defp latest_samples_for_rows(sample_rows, identity_rows, opts) do
-    sample_rows
+  defp latest_samples_for_samples(samples, identity_rows, opts) do
+    samples
     |> effective_selected_samples(identity_rows, opts)
     |> Enum.reduce(%{}, fn %Sample{} = sample, acc ->
       {realm, data_source_id, binding_id} = SourceFilters.sample_key(sample)
@@ -296,11 +217,17 @@ defmodule Cadence.Projections.TelemetryLatestValues do
     |> Map.values()
   end
 
-  defp effective_selected_samples(sample_rows, identity_rows, opts) do
-    sample_rows
-    |> Enum.map(&TelemetrySampleRow.to_domain/1)
+  defp effective_selected_samples(samples, identity_rows, opts) do
+    samples
     |> SourceFilters.filter_samples(opts)
     |> EffectiveSelection.selected_samples(identity_rows, opts)
+  end
+
+  defp maybe_filter_exact_spacecraft(records, opts) do
+    case Keyword.fetch(opts, :spacecraft_id) do
+      {:ok, spacecraft_id} -> Enum.filter(records, &(&1.spacecraft_id == spacecraft_id))
+      :error -> records
+    end
   end
 
   defp latest_sample(%Sample{} = sample, %Sample{} = existing_sample) do

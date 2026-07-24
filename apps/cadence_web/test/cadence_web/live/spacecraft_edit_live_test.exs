@@ -104,7 +104,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
 
       assert {:ok, _endpoint} =
-               Cadence.SpacecraftStore.ensure_managed_source_endpoint(
+               Cadence.SourceEndpoints.ensure_managed_source_endpoint(
                  org.organization_id,
                  spacecraft
                )

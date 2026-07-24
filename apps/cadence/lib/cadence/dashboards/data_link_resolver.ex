@@ -6,7 +6,6 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   persisted records behind it.
   """
 
-  import Ecto.Query
   import Cadence.Dashboards.DataLinkResolver.Support
 
   alias Cadence.Dashboards.{
@@ -22,15 +21,11 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets
   alias Cadence.Dashboards.DataLinkResolver.SourceStateTargets
   alias Cadence.Dashboards.DataLinkResolver.TransportRuntimeTargets
+  alias Cadence.IngressArchive
   alias Cadence.Limits
   alias Cadence.Ops.PointCatalog
 
-  alias Cadence.Persistence.Schemas.{
-    RawEvidenceRow,
-    TelemetrySampleRow
-  }
-
-  alias Cadence.Repo
+  alias Cadence.Telemetry.SampleRecords
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @supported_targets DataLink.resolvable_targets()
@@ -283,19 +278,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_telemetry_sample(%DataLink{} = link, organization_id, mission_id) do
-    sample_row =
-      TelemetrySampleRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.sample_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case sample_row do
-      %TelemetrySampleRow{} = sample_row ->
-        sample = TelemetrySampleRow.to_domain(sample_row)
-
+    case SampleRecords.fetch_sample(organization_id, mission_id, link.target_id) do
+      {:ok, sample} ->
         {:ok,
          inspector(
            link,
@@ -310,25 +294,14 @@ defmodule Cadence.Dashboards.DataLinkResolver do
            )
          )}
 
-      nil ->
+      {:error, :not_found} ->
         {:error, inspector(link, :missing, "Telemetry sample was not found in this mission.", [])}
     end
   end
 
   defp resolve_raw_evidence(%DataLink{} = link, organization_id, mission_id) do
-    evidence_row =
-      RawEvidenceRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.evidence_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case evidence_row do
-      %RawEvidenceRow{} = evidence_row ->
-        evidence = RawEvidenceRow.to_domain(evidence_row)
-
+    case IngressArchive.fetch_raw_evidence(mission_id, link.target_id) do
+      {:ok, evidence} ->
         {:ok,
          inspector(
            link,
@@ -338,7 +311,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
            raw_evidence_related_links(link, evidence, organization_id, mission_id)
          )}
 
-      nil ->
+      {:error, _reason} ->
         {:error, inspector(link, :missing, "Raw evidence was not found in this mission.", [])}
     end
   end
@@ -666,17 +639,14 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp raw_evidence_related_links(%DataLink{} = link, evidence, organization_id, mission_id) do
-    TelemetrySampleRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.evidence_id == ^evidence.evidence_id
+    mission_id
+    |> SampleRecords.list_samples(
+      organization_id: organization_id,
+      evidence_id: evidence.evidence_id,
+      order: :receipt_desc,
+      limit: 5
     )
-    |> order_by([row], desc: row.receipt_time)
-    |> limit(5)
-    |> Repo.all()
-    |> Enum.map(fn sample_row ->
-      sample = TelemetrySampleRow.to_domain(sample_row)
+    |> Enum.map(fn sample ->
       related_link(link, :telemetry_sample, sample.sample_id, "Telemetry sample")
     end)
   end
@@ -711,16 +681,9 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   defp comparison_sample(comparison, key, organization_id, mission_id) do
     case state_value(comparison, key) do
       sample_id when is_binary(sample_id) and sample_id != "" ->
-        TelemetrySampleRow
-        |> where(
-          [row],
-          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-            row.sample_id == ^sample_id
-        )
-        |> Repo.one()
-        |> case do
-          %TelemetrySampleRow{} = sample_row -> TelemetrySampleRow.to_domain(sample_row)
-          nil -> nil
+        case SampleRecords.fetch_sample(organization_id, mission_id, sample_id) do
+          {:ok, sample} -> sample
+          {:error, :not_found} -> nil
         end
 
       _missing ->

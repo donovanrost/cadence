@@ -27,7 +27,11 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
     as: ProviderAccountVersionRow
 
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
-  alias Cadence.Persistence.Schemas.{ProviderReservationChangeRow, ProviderReservationRow}
+
+  alias Cadence.Control.Contacts.Store.{
+    ProviderReservationChangeRow,
+    ProviderReservationRow
+  }
 
   alias Cadence.ProviderChangeFixtures
   alias Cadence.Repo

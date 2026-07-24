@@ -36,6 +36,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/commanding/verifier_store.ex" => :control,
     "lib/cadence/commanding/verifier_transport_signals.ex" => :control,
     "lib/cadence/commanding/verifier_workflow.ex" => :control,
+    "lib/cadence/contact_planning/automation_grants.ex" => :management,
     "lib/cadence/contact_planning/contact_plan.ex" => :management,
     "lib/cadence/contact_planning/contact_plan_approval.ex" => :management,
     "lib/cadence/contact_planning/contact_plan_approvals.ex" => :management,
@@ -43,6 +44,20 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/contact_plan_executions.ex" => :control,
     "lib/cadence/contact_planning/contact_plan_version.ex" => :management,
     "lib/cadence/contact_planning/contact_plans.ex" => :management,
+    "lib/cadence/contact_planning/contact_requirement_templates.ex" => :management,
+    "lib/cadence/contact_planning/contact_requirements.ex" => :management,
+    "lib/cadence/contact_planning/fleet_automation_actions.ex" => :control,
+    "lib/cadence/contact_planning/fleet_planning_policies.ex" => :management,
+    "lib/cadence/contact_planning/fleet_planning_runs.ex" => :management,
+    "lib/cadence/derived_telemetry/store.ex" => :data,
+    "lib/cadence/reads/derived_telemetry.ex" => :projections,
+    "lib/cadence/limits/store.ex" => :data,
+    "lib/cadence/reads/limits.ex" => :projections,
+    "lib/cadence/telemetry/current_value_store.ex" => :data,
+    "lib/cadence/telemetry/sample_records.ex" => :data,
+    "lib/cadence/reads/mission_events.ex" => :projections,
+    "lib/cadence/reads/replay.ex" => :projections,
+    "lib/cadence/replay/diff.ex" => :projections,
     "lib/cadence/dashboards/data_source.ex" => :management,
     "lib/cadence/dashboards/managed_questdb_provisioning.ex" => :control,
     "lib/cadence/dashboards/managed_questdb_provisioning_jobs.ex" => :control,
@@ -76,6 +91,12 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/contacts/provider_scheduling.ex",
       "lib/cadence/ground_networks/provider_event",
       "lib/cadence/ground_networks/provider_evidence"
+    ],
+    data: [
+      "lib/cadence/derived_telemetry/store/",
+      "lib/cadence/limits/store/",
+      "lib/cadence/telemetry/current_value_store/",
+      "lib/cadence/telemetry/sample_records/"
     ]
   ]
 
@@ -109,6 +130,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/management/providers.ex",
                               "lib/cadence/management/providers/provider_configuration.ex",
                               "lib/cadence/control/providers.ex",
+                              "lib/cadence/control/replay/store.ex",
                               "lib/cadence/ground_networks/mission_provider.ex",
                               "lib/cadence/ground_networks/mission_providers.ex",
                               "lib/cadence/ground_networks/provider_account_grants.ex",
@@ -129,7 +151,16 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/runtime/transmit_command.ex",
                               "lib/cadence/runtime/transport_action_request.ex",
                               "lib/cadence/runtime/transport_capability_record.ex",
-                              "lib/cadence/runtime/managed_action_request.ex"
+                              "lib/cadence/runtime/transport_records.ex",
+                              "lib/cadence/runtime/downlink_records.ex",
+                              "lib/cadence/runtime/managed_records.ex",
+                              "lib/cadence/runtime/managed_action_request.ex",
+                              "lib/cadence/runtime/managed_capability_record.ex",
+                              "lib/cadence/runtime/managed_timer_event.ex",
+                              "lib/cadence/derived_telemetry/store.ex",
+                              "lib/cadence/limits/store.ex",
+                              "lib/cadence/telemetry/current_value_store.ex",
+                              "lib/cadence/telemetry/sample_records.ex"
                             ])
 
   @type plane :: :management | :control | :data | :projections | :platform

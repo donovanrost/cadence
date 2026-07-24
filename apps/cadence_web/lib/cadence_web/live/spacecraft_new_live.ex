@@ -208,7 +208,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
   defp maybe_ensure_source_endpoint(_organization_id, %{scid: nil}), do: :ok
 
   defp maybe_ensure_source_endpoint(organization_id, spacecraft) do
-    Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft)
+    Cadence.SourceEndpoints.ensure_managed_source_endpoint(organization_id, spacecraft)
   end
 
   defp format_errors(%Ecto.Changeset{} = changeset) do

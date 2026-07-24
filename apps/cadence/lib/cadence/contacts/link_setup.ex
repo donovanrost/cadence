@@ -12,7 +12,6 @@ defmodule Cadence.Contacts.LinkSetup do
   alias Cadence.Contacts.TransportProfile
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
-  alias Cadence.SpacecraftStore
 
   @type shared_link_direction :: :downlink | :uplink | :bidirectional
 
@@ -312,7 +311,7 @@ defmodule Cadence.Contacts.LinkSetup do
          provider_path_ref
        ) do
     with {:ok, endpoint} <-
-           SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft),
+           SourceEndpoints.ensure_managed_source_endpoint(organization_id, spacecraft),
          {:ok, _assignment} <-
            LinkAssignmentStore.persist(
              organization_id,

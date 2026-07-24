@@ -21,10 +21,10 @@ defmodule Cadence.Contacts.ProviderReservations do
     ScheduledContact
   }
 
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.GroundNetworks.Validation
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.ProviderReservationRow
   alias Cadence.Repo
 
   @document_byte_limit 65_536
@@ -46,6 +46,30 @@ defmodule Cadence.Contacts.ProviderReservations do
     "canceled" => :canceled,
     "failed" => :failed
   }
+
+  @spec mark_provider_grant_for_review(map(), DateTime.t()) :: {:ok, non_neg_integer()}
+  def mark_provider_grant_for_review(grant, %DateTime{} = now) when is_map(grant) do
+    metadata_patch = %{
+      "provider_grant_review" => %{
+        "grant_id" => grant.provider_account_grant_id,
+        "grant_version" => grant.version,
+        "reason" => grant.revoke_reason,
+        "recorded_at" => DateTime.to_iso8601(now)
+      }
+    }
+
+    {count, _rows} =
+      ProviderReservationRow
+      |> where(
+        [row],
+        row.organization_id == ^grant.organization_id and row.mission_id == ^grant.mission_id and
+          row.provider_account_grant_id == ^grant.provider_account_grant_id and
+          row.lifecycle_state in ^@nonterminal_states
+      )
+      |> Repo.update_all(set: [operator_review_document: JsonDocument.wrap_value(metadata_patch)])
+
+    {:ok, count}
+  end
 
   @allowed_transitions %{
     requesting: ~w(requesting pending confirmed active completed unknown rejected failed)a,

@@ -2,7 +2,9 @@ defmodule Cadence.Control.Providers do
   @moduledoc "Control-plane boundary for external provider validation and inventory operations."
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Contacts.ProviderReservations
   alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.ProviderAccountGrants
   alias Cadence.Management.Providers
   alias Cadence.Management.Providers.ProviderConfiguration
 
@@ -34,6 +36,18 @@ defmodule Cadence.Control.Providers do
   @spec sync(ProviderConfiguration.t(), keyword()) :: {:ok, struct()} | {:error, term()}
   def sync(%ProviderConfiguration{} = configuration, opts \\ []) do
     GroundNetworks.sync_provider_configuration(configuration.provider, opts)
+  end
+
+  @spec revoke_account_grant(Scope.t(), binary(), binary(), keyword()) ::
+          {:ok, struct()} | {:error, term()}
+  def revoke_account_grant(%Scope{} = scope, grant_id, reason, opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+
+    with {:ok, revoked} <- ProviderAccountGrants.revoke(scope, grant_id, reason, opts),
+         {:ok, _affected_count} <-
+           ProviderReservations.mark_provider_grant_for_review(revoked, now) do
+      {:ok, revoked}
+    end
   end
 
   defp authorize(scope, mission_id) do

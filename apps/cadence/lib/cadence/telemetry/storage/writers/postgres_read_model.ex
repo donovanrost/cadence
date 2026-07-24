@@ -9,8 +9,7 @@ defmodule Cadence.Telemetry.Storage.Writers.PostgresReadModel do
 
   @behaviour Cadence.Telemetry.Storage.Writer
 
-  alias Cadence.Persistence.Schemas.TelemetrySampleRow
-  alias Cadence.Repo
+  alias Cadence.Telemetry.SampleRecords
   alias Cadence.Telemetry.Storage.ObservationEnvelope
 
   @impl true
@@ -18,30 +17,10 @@ defmodule Cadence.Telemetry.Storage.Writers.PostgresReadModel do
 
   @impl true
   def persist_envelopes(envelopes, _opts) when is_list(envelopes) do
-    rows = sample_rows(envelopes)
-
-    case rows do
-      [] ->
-        :ok
-
-      [_ | _] ->
-        case Repo.insert_all(TelemetrySampleRow, rows,
-               conflict_target: :sample_id,
-               on_conflict: :nothing
-             ) do
-          {count, _rows} when count <= length(rows) -> :ok
-          {count, _rows} -> {:error, {:insert_all_count_mismatch, :telemetry_samples, count}}
-        end
-    end
-  end
-
-  defp sample_rows(envelopes) do
-    inserted_at = DateTime.utc_now()
-
-    Enum.map(envelopes, fn %ObservationEnvelope{} = envelope ->
-      envelope
-      |> ObservationEnvelope.to_sample()
-      |> TelemetrySampleRow.insert_attrs(inserted_at)
+    envelopes
+    |> Enum.map(fn %ObservationEnvelope{} = envelope ->
+      ObservationEnvelope.to_sample(envelope)
     end)
+    |> SampleRecords.persist_samples()
   end
 end

@@ -10,9 +10,9 @@ defmodule Cadence.SourceEndpoints do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.SourceEndpointRow
   alias Cadence.Repo
-  alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
+  alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
 
   @spec persist_source_endpoint(binary(), SourceEndpoint.t()) ::
@@ -119,6 +119,25 @@ defmodule Cadence.SourceEndpoints do
     |> order_by([row], asc: row.source_endpoint_id)
     |> Repo.all()
     |> Enum.map(&SourceEndpointRow.to_domain/1)
+  end
+
+  @spec ensure_managed_source_endpoint(binary(), Spacecraft.t()) ::
+          {:ok, SourceEndpoint.t()} | {:error, term()}
+  def ensure_managed_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
+      when is_binary(organization_id) do
+    source_endpoint_id = managed_source_endpoint_id(spacecraft.spacecraft_id)
+
+    case Repo.get_by(SourceEndpointRow,
+           organization_id: organization_id,
+           mission_id: spacecraft.mission_id,
+           source_endpoint_id: source_endpoint_id
+         ) do
+      %SourceEndpointRow{} = row ->
+        update_managed_source_endpoint(row, organization_id, spacecraft, source_endpoint_id)
+
+      nil ->
+        persist_managed_source_endpoint(organization_id, spacecraft, source_endpoint_id)
+    end
   end
 
   @spec resolve_raw_evidence(RawEvidence.t()) :: {:ok, RawEvidence.t()} | {:error, term()}
@@ -305,6 +324,57 @@ defmodule Cadence.SourceEndpoints do
           {:error, :spacecraft_not_found} -> {:error, :spacecraft_not_found}
         end
     end
+  end
+
+  defp managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
+
+  defp update_managed_source_endpoint(
+         %SourceEndpointRow{} = row,
+         organization_id,
+         spacecraft,
+         source_endpoint_id
+       ) do
+    source_endpoint =
+      managed_source_endpoint(
+        organization_id,
+        spacecraft,
+        source_endpoint_id,
+        SourceEndpointRow.to_domain(row).metadata
+      )
+
+    case row
+         |> SourceEndpointRow.update_changeset(source_endpoint)
+         |> Repo.update() do
+      {:ok, %SourceEndpointRow{} = updated_row} -> {:ok, SourceEndpointRow.to_domain(updated_row)}
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp persist_managed_source_endpoint(organization_id, spacecraft, source_endpoint_id) do
+    source_endpoint =
+      managed_source_endpoint(organization_id, spacecraft, source_endpoint_id, %{})
+
+    case Repo.insert(SourceEndpointRow.changeset(source_endpoint),
+           on_conflict: :nothing,
+           conflict_target: [:mission_id, :source_endpoint_id]
+         ) do
+      {:ok, %SourceEndpointRow{} = row} -> {:ok, SourceEndpointRow.to_domain(row)}
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp managed_source_endpoint(organization_id, spacecraft, source_endpoint_id, metadata) do
+    SourceEndpoint.new(%{
+      source_endpoint_id: source_endpoint_id,
+      organization_id: organization_id,
+      mission_id: spacecraft.mission_id,
+      spacecraft_id: spacecraft.spacecraft_id,
+      scid: spacecraft.scid,
+      display_name: spacecraft.display_name,
+      metadata: Map.put(metadata || %{}, "managed_by", "spacecraft")
+    })
   end
 
   defp maybe_filter_spacecraft(query, nil), do: query

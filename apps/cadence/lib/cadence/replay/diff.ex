@@ -4,11 +4,8 @@ defmodule Cadence.Replay.Diff do
   evidence and point identifiers.
   """
 
-  import Ecto.Query
-
-  alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.{ReplayTelemetrySampleRow, TelemetrySampleRow}
-  alias Cadence.Repo
+  alias Cadence.Control.Replay.Store, as: ReplayStore
+  alias Cadence.Telemetry.SampleRecords
 
   @type report :: %{
           replay_run_id: binary(),
@@ -21,28 +18,17 @@ defmodule Cadence.Replay.Diff do
 
   @spec diff_run(binary()) :: report()
   def diff_run(replay_run_id) when is_binary(replay_run_id) do
-    replay_rows =
-      ReplayTelemetrySampleRow
-      |> where([sample_row], sample_row.replay_run_id == ^replay_run_id)
-      |> order_by([sample_row],
-        asc: sample_row.evidence_id,
-        asc: sample_row.point_id,
-        asc: sample_row.sample_id
-      )
-      |> Repo.all()
+    replay_rows = ReplayStore.telemetry_comparison_samples(replay_run_id)
 
     replay_keys = Enum.map(replay_rows, &sample_key/1)
     evidence_ids = replay_rows |> Enum.map(& &1.evidence_id) |> Enum.uniq()
 
+    {:ok, replay_run} = ReplayStore.fetch_run(replay_run_id)
+
     live_rows =
-      TelemetrySampleRow
-      |> where([sample_row], sample_row.evidence_id in ^evidence_ids)
-      |> order_by([sample_row],
-        asc: sample_row.evidence_id,
-        asc: sample_row.point_id,
-        asc: sample_row.sample_id
-      )
-      |> Repo.all()
+      replay_run.mission_id
+      |> SampleRecords.list_samples(evidence_ids: evidence_ids, order: :evidence_point)
+      |> Enum.map(&live_comparison_sample/1)
 
     replay_by_key = Map.new(replay_rows, &{sample_key(&1), &1})
     live_by_key = Map.new(live_rows, &{sample_key(&1), &1})
@@ -70,7 +56,7 @@ defmodule Cadence.Replay.Diff do
         %{
           evidence_id: live_row.evidence_id,
           point_id: live_row.point_id,
-          live_raw_value: JsonDocument.unwrap_value(live_row.raw_value)
+          live_raw_value: live_row.raw_value
         }
       end)
 
@@ -124,10 +110,8 @@ defmodule Cadence.Replay.Diff do
   defp sample_key(sample_row), do: {sample_row.evidence_id, sample_row.point_id}
 
   defp equivalent_sample_rows?(replay_row, live_row) do
-    JsonDocument.unwrap_value(replay_row.raw_value) ==
-      JsonDocument.unwrap_value(live_row.raw_value) and
-      JsonDocument.unwrap_value(replay_row.engineering_value) ==
-        JsonDocument.unwrap_value(live_row.engineering_value) and
+    replay_row.raw_value == live_row.raw_value and
+      replay_row.engineering_value == live_row.engineering_value and
       replay_row.quality_state == live_row.quality_state
   end
 
@@ -135,10 +119,10 @@ defmodule Cadence.Replay.Diff do
     %{
       evidence_id: replay_row.evidence_id,
       point_id: replay_row.point_id,
-      replay_raw_value: JsonDocument.unwrap_value(replay_row.raw_value),
-      live_raw_value: JsonDocument.unwrap_value(live_row.raw_value),
-      replay_engineering_value: JsonDocument.unwrap_value(replay_row.engineering_value),
-      live_engineering_value: JsonDocument.unwrap_value(live_row.engineering_value),
+      replay_raw_value: replay_row.raw_value,
+      live_raw_value: live_row.raw_value,
+      replay_engineering_value: replay_row.engineering_value,
+      live_engineering_value: live_row.engineering_value,
       replay_quality_state: replay_row.quality_state,
       live_quality_state: live_row.quality_state
     }
@@ -148,7 +132,18 @@ defmodule Cadence.Replay.Diff do
     %{
       evidence_id: replay_row.evidence_id,
       point_id: replay_row.point_id,
-      replay_raw_value: JsonDocument.unwrap_value(replay_row.raw_value)
+      replay_raw_value: replay_row.raw_value
+    }
+  end
+
+  defp live_comparison_sample(row) do
+    %{
+      evidence_id: row.evidence_id,
+      point_id: row.point_id,
+      sample_id: row.sample_id,
+      raw_value: row.raw_value,
+      engineering_value: row.engineering_value,
+      quality_state: Atom.to_string(row.quality_state)
     }
   end
 end

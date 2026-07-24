@@ -41,6 +41,25 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/source_endpoints/"
   ]
   @contacts_context ["lib/cadence/contacts.ex", "lib/cadence/contacts/"]
+  @management_contacts_context [
+    "lib/cadence/management/contacts.ex",
+    "lib/cadence/management/contacts/",
+    "lib/cadence/contact_planning/automation_grants.ex",
+    "lib/cadence/contact_planning/contact_plan_approvals.ex",
+    "lib/cadence/contact_planning/contact_plans.ex",
+    "lib/cadence/contact_planning/contact_requirement_templates.ex",
+    "lib/cadence/contact_planning/contact_requirements.ex",
+    "lib/cadence/contact_planning/fleet_planning_policies.ex",
+    "lib/cadence/contact_planning/fleet_planning_runs.ex",
+    "lib/cadence/contact_planning/planner.ex"
+  ]
+  @control_contacts_context @contacts_context ++
+                              [
+                                "lib/cadence/control/contacts.ex",
+                                "lib/cadence/control/contacts/",
+                                "lib/cadence/contact_planning/contact_plan_executions.ex",
+                                "lib/cadence/contact_planning/fleet_automation_actions.ex"
+                              ]
   @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]
   @jobs_context ["lib/cadence/jobs.ex", "lib/cadence/jobs/"]
   @notifications_context ["lib/cadence/notifications.ex", "lib/cadence/notifications/"]
@@ -63,7 +82,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/protocol/record_archive.ex",
     "lib/cadence/protocol/record_archive/"
   ]
-  @projections_context ["lib/cadence/projections/"]
+  @projections_context [
+    "lib/cadence/projections/",
+    "lib/cadence/reads/mission_events.ex"
+  ]
   @telemetry_context ["lib/cadence/telemetry/"]
   @context_owned_schemas [
     {[
@@ -82,21 +104,86 @@ defmodule Cadence.Architecture.DependencyBoundary do
        "lib/cadence/contacts/path_template_store/",
        "lib/cadence/contacts/profile_store/"
      ], @contacts_context},
+    {["lib/cadence/management/contacts/store/"], @management_contacts_context},
+    {["lib/cadence/control/contacts/store/"], @control_contacts_context},
+    {["lib/cadence/control/replay/store/"],
+     [
+       "lib/cadence/control/replay/store.ex",
+       "lib/cadence/control/replay/store/",
+       "lib/cadence/replay.ex"
+     ]},
+    {["lib/cadence/limits/store/"],
+     [
+       "lib/cadence/limits/store.ex",
+       "lib/cadence/limits/store/"
+     ]},
     {["lib/cadence/limits/"], @limits_context},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},
     {["lib/cadence/applications/"], @applications_context},
     {["lib/cadence/dashboards/"], @dashboards_context},
+    {["lib/cadence/derived_telemetry/store/"],
+     [
+       "lib/cadence/derived_telemetry/store.ex",
+       "lib/cadence/derived_telemetry/store/"
+     ]},
     {["lib/cadence/derived_telemetry/"], @derived_telemetry_context},
     {["lib/cadence/ground_networks/"], @ground_networks_context},
-    {["lib/cadence/ingress_archive/file_system/"], @ingress_archive_context},
+    {[
+       "lib/cadence/ingress_archive/file_system/",
+       "lib/cadence/ingress_archive/postgres/"
+     ], @ingress_archive_context},
     {["lib/cadence/operational_events/"], @operational_events_context},
-    {["lib/cadence/protocol/record_archive/file_system/"], @protocol_record_archive_context},
+    {[
+       "lib/cadence/protocol/record_archive/file_system/",
+       "lib/cadence/protocol/record_archive/postgres/"
+     ], @protocol_record_archive_context},
     {["lib/cadence/projections/"], @projections_context},
     {[
        "lib/cadence/telemetry/storage/backfill_lifecycle_events/",
        "lib/cadence/telemetry/storage/observation_identity_states/"
-     ], @telemetry_context}
+     ], @telemetry_context},
+    {[
+       "lib/cadence/telemetry/sample_records/"
+     ],
+     [
+       "lib/cadence/telemetry/sample_records.ex",
+       "lib/cadence/telemetry/sample_records/"
+     ]},
+    {[
+       "lib/cadence/telemetry/current_value_store/postgres/"
+     ],
+     [
+       "lib/cadence/telemetry/current_value_store.ex",
+       "lib/cadence/telemetry/current_value_store/"
+     ]},
+    {[
+       "lib/cadence/projections/mission_events/store/"
+     ],
+     [
+       "lib/cadence/projections/mission_events.ex",
+       "lib/cadence/projections/mission_events/",
+       "lib/cadence/reads/mission_events.ex"
+     ]},
+    {[
+       "lib/cadence/runtime/downlink_records/"
+     ],
+     [
+       "lib/cadence/runtime/downlink_records.ex",
+       "lib/cadence/runtime/downlink_records/"
+     ]},
+    {[
+       "lib/cadence/runtime/managed_records/"
+     ],
+     [
+       "lib/cadence/runtime/managed_records.ex",
+       "lib/cadence/runtime/managed_records/"
+     ]},
+    {["lib/cadence/runtime/transport_records/"],
+     [
+       "lib/cadence/runtime/transport_records.ex",
+       "lib/cadence/runtime/transport_records/"
+     ]}
   ]
 
   @type finding :: %{

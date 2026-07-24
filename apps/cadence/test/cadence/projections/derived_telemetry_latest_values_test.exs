@@ -7,8 +7,8 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.DerivedTelemetry.Definition
+  alias Cadence.DerivedTelemetry.Store.LatestValueRow, as: DerivedTelemetryLatestValueRow
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRow
   alias Cadence.Telemetry.PacketDefinition
 
   test "rebuilds the latest derived telemetry value projection in an async job" do

@@ -16,17 +16,16 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
   alias Cadence.Persistence.Schemas.{
     DispatchDecisionRow,
-    PacketRecordRow,
-    ProtocolAnomalyRow,
-    RawEvidenceRow,
-    TelemetryLatestValueRow,
-    TelemetrySampleRow,
-    TransferFrameRecordRow
+    ProtocolAnomalyRow
   }
 
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Protocol.RecordArchive.Postgres.{PacketRecordRow, TransferFrameRecordRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
   test "persists raw evidence, packet records, and canonical telemetry samples without live dispatch rows" do
     spacecraft =

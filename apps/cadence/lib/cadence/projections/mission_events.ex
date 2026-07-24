@@ -12,21 +12,17 @@ defmodule Cadence.Projections.MissionEvents do
   alias Cadence.Contacts.{CombinedDownlinkRecord, ContactAction, ContactStore, DownlinkDiagnostic}
   alias Cadence.Jobs
   alias Cadence.Limits.Event, as: LimitEvent
+  alias Cadence.Limits.Store, as: LimitStore
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
-  alias Cadence.Persistence.Schemas.{
-    CombinedDownlinkRecordRow,
-    DownlinkDiagnosticRow,
-    ManagedActionRequestRow,
-    MissionEventRow,
-    TelemetryLimitEventRow
-  }
-
   alias Cadence.Projections.MissionEvents.{RebuildRunRow, Run}
+  alias Cadence.Projections.MissionEvents.Store.MissionEventRow
   alias Cadence.Repo
+  alias Cadence.Runtime.DownlinkRecords
   alias Cadence.Runtime.ManagedActionRequest
+  alias Cadence.Runtime.ManagedRecords
 
   @spec project(OperationalEvent.t()) :: [Entry.t()]
   def project(%OperationalEvent{kind: :binding_set_activated} = event) do
@@ -450,28 +446,12 @@ defmodule Cadence.Projections.MissionEvents do
     contact_actions = ContactStore.list_actions(mission_id, [])
 
     limit_events =
-      TelemetryLimitEventRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&TelemetryLimitEventRow.to_domain/1)
+      LimitStore.list_events(mission_id)
 
-    managed_action_requests =
-      ManagedActionRequestRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&ManagedActionRequestRow.to_domain/1)
+    managed_action_requests = ManagedRecords.list_action_requests(mission_id)
 
-    combined_records =
-      CombinedDownlinkRecordRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&CombinedDownlinkRecordRow.to_domain/1)
-
-    diagnostics =
-      DownlinkDiagnosticRow
-      |> where([row], row.mission_id == ^mission_id)
-      |> Repo.all()
-      |> Enum.map(&DownlinkDiagnosticRow.to_domain/1)
+    combined_records = DownlinkRecords.list_combined(mission_id)
+    diagnostics = DownlinkRecords.list_diagnostics(mission_id)
 
     operational_events = OperationalEvents.list_all_events(mission_id)
 

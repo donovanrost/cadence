@@ -17,8 +17,8 @@ defmodule Cadence.Reads.MissionEventsTest do
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Persistence.Schemas.MissionEventRow
   alias Cadence.Projections.MissionEvents
+  alias Cadence.Projections.MissionEvents.Store.MissionEventRow
   alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Repo
   alias Cadence.Runtime

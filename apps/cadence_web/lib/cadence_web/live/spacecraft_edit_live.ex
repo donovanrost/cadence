@@ -150,7 +150,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
 
   defp maybe_sync_managed_source_endpoint(organization_id, %Spacecraft{scid: scid} = spacecraft)
        when is_integer(scid) do
-    case Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft) do
+    case Cadence.SourceEndpoints.ensure_managed_source_endpoint(organization_id, spacecraft) do
       {:ok, _endpoint} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -165,7 +165,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
            source_endpoint_id
          ) do
       {:ok, _endpoint} ->
-        case Cadence.SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft) do
+        case Cadence.SourceEndpoints.ensure_managed_source_endpoint(organization_id, spacecraft) do
           {:ok, _endpoint} -> :ok
           {:error, reason} -> {:error, reason}
         end

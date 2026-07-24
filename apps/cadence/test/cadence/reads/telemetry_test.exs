@@ -4,8 +4,8 @@ defmodule Cadence.Reads.TelemetryTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.TelemetrySampleRow
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
   setup do
     suffix = System.unique_integer([:positive])

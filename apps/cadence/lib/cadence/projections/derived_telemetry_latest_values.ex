@@ -4,17 +4,11 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
   derived telemetry samples.
   """
 
-  import Ecto.Query
-
   alias Ecto.Changeset
 
   alias Cadence.DerivedTelemetry.Sample
+  alias Cadence.DerivedTelemetry.Store
   alias Cadence.Jobs
-
-  alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryLatestValueRow,
-    DerivedTelemetrySampleRow
-  }
 
   alias Cadence.Projections.DerivedTelemetryLatestValues.{RebuildRunRow, Run}
   alias Cadence.Repo
@@ -89,37 +83,21 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
     mission_id = run.mission_id
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
 
-    sample_rows =
-      DerivedTelemetrySampleRow
-      |> where([sample_row], sample_row.mission_id == ^mission_id)
-      |> maybe_filter_spacecraft(spacecraft_id)
-      |> Repo.all()
+    samples = Store.list_samples(mission_id, spacecraft_id: spacecraft_id)
 
     latest_samples =
-      sample_rows
-      |> Enum.reduce(%{}, fn %DerivedTelemetrySampleRow{} = sample_row, acc ->
+      samples
+      |> Enum.reduce(%{}, fn %Sample{} = sample, acc ->
         key =
-          {sample_row.mission_id, sample_row.spacecraft_id || "__mission__", sample_row.point_id}
+          {sample.mission_id, sample.spacecraft_id || "__mission__", sample.point_id}
 
-        Map.update(acc, key, sample_row, &latest_sample_row(sample_row, &1))
+        Map.update(acc, key, sample, &latest_sample(&1, sample))
       end)
       |> Map.values()
-      |> Enum.map(&DerivedTelemetrySampleRow.to_domain/1)
 
-    Repo.transaction(fn ->
-      DerivedTelemetryLatestValueRow
-      |> where([latest_value_row], latest_value_row.mission_id == ^mission_id)
-      |> maybe_filter_latest_spacecraft(spacecraft_id)
-      |> Repo.delete_all()
-
-      Enum.each(latest_samples, fn %Sample{} = sample ->
-        %DerivedTelemetryLatestValueRow{}
-        |> DerivedTelemetryLatestValueRow.changeset(sample)
-        |> Repo.insert!()
-      end)
-    end)
+    Store.replace_latest_values(mission_id, latest_samples, opts)
     |> case do
-      {:ok, _result} ->
+      :ok ->
         completed_run =
           %Run{
             run
@@ -168,30 +146,10 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
       {:error, {kind, reason}}
   end
 
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id) do
-    where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_latest_spacecraft(query, nil), do: query
-
-  defp maybe_filter_latest_spacecraft(query, spacecraft_id) do
-    where(query, [latest_value_row], latest_value_row.spacecraft_scope_id == ^spacecraft_id)
-  end
-
-  defp latest_sample_row(
-         %DerivedTelemetrySampleRow{} = sample_row,
-         %DerivedTelemetrySampleRow{} = existing_row
-       ) do
-    if sample_row_newer?(sample_row, existing_row), do: sample_row, else: existing_row
-  end
-
-  defp sample_row_newer?(
-         %DerivedTelemetrySampleRow{} = sample_row,
-         %DerivedTelemetrySampleRow{} = existing_row
-       ) do
-    LatestProjectionOrder.newer?(sample_row, existing_row, :derived_sample_id)
+  defp latest_sample(%Sample{} = existing, %Sample{} = candidate) do
+    if LatestProjectionOrder.newer?(candidate, existing, :derived_sample_id),
+      do: candidate,
+      else: existing
   end
 
   defp opts_from_run(%Run{metadata: metadata}) when is_map(metadata) do

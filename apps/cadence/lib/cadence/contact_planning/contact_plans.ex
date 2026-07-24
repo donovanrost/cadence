@@ -17,16 +17,16 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   alias Cadence.Missions
 
-  alias Cadence.Persistence.Schemas.ContactOpportunitySnapshotRow
-  alias Cadence.Persistence.Schemas.ContactPlanApprovalRow
-  alias Cadence.Persistence.Schemas.ContactPlanningRunRow
-  alias Cadence.Persistence.Schemas.ContactPlanningSearchRow
-  alias Cadence.Persistence.Schemas.ContactPlanOpportunityRefRow
-  alias Cadence.Persistence.Schemas.ContactPlanRequirementRefRow
-  alias Cadence.Persistence.Schemas.ContactPlanRow
-  alias Cadence.Persistence.Schemas.ContactPlanRunRefRow
-  alias Cadence.Persistence.Schemas.ContactPlanVersionRow
-  alias Cadence.Persistence.Schemas.ContactRequirementVersionRow
+  alias Cadence.Management.Contacts.Store.ContactOpportunitySnapshotRow
+  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Management.Contacts.Store.ContactPlanningRunRow
+  alias Cadence.Management.Contacts.Store.ContactPlanningSearchRow
+  alias Cadence.Management.Contacts.Store.ContactPlanOpportunityRefRow
+  alias Cadence.Management.Contacts.Store.ContactPlanRequirementRefRow
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
+  alias Cadence.Management.Contacts.Store.ContactPlanRunRefRow
+  alias Cadence.Management.Contacts.Store.ContactPlanVersionRow
+  alias Cadence.Management.Contacts.Store.ContactRequirementVersionRow
 
   alias Cadence.Repo
 
@@ -213,6 +213,86 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> select([_ref, snapshot], snapshot)
     |> Repo.all()
     |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
+  end
+
+  @spec fetch_opportunity_snapshot(binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, :contact_opportunity_snapshot_not_found}
+  def fetch_opportunity_snapshot(organization_id, mission_id, snapshot_id) do
+    case Repo.get_by(ContactOpportunitySnapshotRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           contact_opportunity_snapshot_id: snapshot_id
+         ) do
+      nil -> {:error, :contact_opportunity_snapshot_not_found}
+      row -> {:ok, ContactOpportunitySnapshotRow.to_domain(row)}
+    end
+  end
+
+  @doc false
+  @spec start_execution_projection(binary(), binary(), binary(), DateTime.t()) ::
+          {:ok, ContactPlan.t()} | {:error, term()}
+  def start_execution_projection(organization_id, mission_id, plan_id, %DateTime{} = now) do
+    Repo.transaction(fn ->
+      case lock_plan(organization_id, mission_id, plan_id) do
+        {:ok, %ContactPlanRow{lifecycle_state: "reserved"} = row} ->
+          ContactPlanRow.to_domain(row)
+
+        {:ok, %ContactPlanRow{lifecycle_state: state} = row}
+        when state in ["approved", "executing", "partially_reserved", "failed"] ->
+          advance_execution_projection(row, now)
+
+        {:ok, _row} ->
+          Repo.rollback(:contact_plan_not_executable)
+
+        {:error, reason} ->
+          Repo.rollback(reason)
+      end
+    end)
+    |> normalize_single_result()
+  end
+
+  @doc false
+  @spec update_execution_projection(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          atom(),
+          binary(),
+          DateTime.t()
+        ) :: {:ok, ContactPlan.t()} | {:error, term()}
+  def update_execution_projection(
+        organization_id,
+        mission_id,
+        plan_id,
+        plan_version,
+        state,
+        reason,
+        %DateTime{} = now
+      ) do
+    Repo.transaction(fn ->
+      with {:ok, row} <- lock_plan(organization_id, mission_id, plan_id),
+           true <- row.approved_version == plan_version,
+           {:ok, updated} <-
+             row
+             |> ContactPlanRow.projection_changeset(%{
+               current_version: row.current_version,
+               lifecycle_state: Atom.to_string(state),
+               lifecycle_changed_by: row.approved_by,
+               lifecycle_changed_at: now,
+               lifecycle_reason: reason,
+               approved_version: row.approved_version,
+               approved_at: row.approved_at,
+               approved_by: row.approved_by
+             })
+             |> Repo.update() do
+        ContactPlanRow.to_domain(updated)
+      else
+        false -> Repo.rollback(:contact_plan_approved_version_changed)
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> normalize_single_result()
   end
 
   defp build_proposal(organization_id, mission_id, attrs, previous) do
@@ -798,6 +878,28 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       row -> {:ok, row}
     end
   end
+
+  defp advance_execution_projection(%ContactPlanRow{approved_version: version} = row, now)
+       when is_integer(version) do
+    case row
+         |> ContactPlanRow.projection_changeset(%{
+           current_version: row.current_version,
+           lifecycle_state: "executing",
+           lifecycle_changed_by: row.approved_by,
+           lifecycle_changed_at: now,
+           lifecycle_reason: "execution started",
+           approved_version: row.approved_version,
+           approved_at: row.approved_at,
+           approved_by: row.approved_by
+         })
+         |> Repo.update() do
+      {:ok, updated} -> ContactPlanRow.to_domain(updated)
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp advance_execution_projection(_row, _now),
+    do: Repo.rollback(:contact_plan_not_approved)
 
   defp fetch_version_row(row, version) do
     case Repo.get_by(ContactPlanVersionRow,

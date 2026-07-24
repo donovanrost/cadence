@@ -19,7 +19,6 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Projections.TelemetryLatestValues
 
-  alias Cadence.Persistence.Schemas.TelemetryObservationIdentityStateRow
   alias Cadence.Repo
   alias Cadence.Telemetry.Storage.ObservationEnvelope
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
@@ -27,6 +26,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow,
     as: TelemetryObservationIdentityDecisionEventRow
+
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
 
   @decisions [:mark_canonical, :mark_conflict, :mark_superseded, :mark_advisory]
 
@@ -184,6 +185,23 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
       asc: row.observation_identity_id
     )
     |> limit(^result_limit(opts))
+    |> Repo.all()
+    |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
+  end
+
+  @doc "Returns all identity states needed for effective telemetry selection."
+  @spec list_for_selection(binary(), keyword()) :: [ObservationIdentityState.t()]
+  def list_for_selection(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    TelemetryObservationIdentityStateRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> filter(:organization_id, Keyword.get(opts, :organization_id))
+    |> filter(:realm, Keyword.get(opts, :realm))
+    |> filter(:replay_run_id, Keyword.get(opts, :replay_run_id))
+    |> filter(:data_source_id, Keyword.get(opts, :data_source_id))
+    |> filter(:binding_id, Keyword.get(opts, :binding_id))
+    |> filter(:point_id, Keyword.get(opts, :point_id))
+    |> filter(:spacecraft_id, Keyword.get(opts, :spacecraft_id))
     |> Repo.all()
     |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
   end

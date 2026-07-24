@@ -4,7 +4,7 @@ defmodule Cadence.Contacts.ScheduledContactRevisions do
   import Ecto.Query
 
   alias Cadence.Contacts.{ScheduledContact, ScheduledContactRevision}
-  alias Cadence.Persistence.Schemas.ScheduledContactRevisionRow
+  alias Cadence.Control.Contacts.Store.ScheduledContactRevisionRow
   alias Cadence.Repo
 
   @spec ensure_initial(Ecto.Repo.t(), ScheduledContact.t()) ::

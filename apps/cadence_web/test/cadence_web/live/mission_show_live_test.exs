@@ -36,7 +36,7 @@ defmodule CadenceWeb.MissionShowLiveTest do
       TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
 
     assert {:ok, endpoint} =
-             Cadence.SpacecraftStore.ensure_managed_source_endpoint(
+             Cadence.SourceEndpoints.ensure_managed_source_endpoint(
                org.organization_id,
                spacecraft
              )

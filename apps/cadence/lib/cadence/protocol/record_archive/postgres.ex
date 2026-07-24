@@ -9,10 +9,10 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   alias Ecto.Multi
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Protocol.RecordArchive.Postgres.{
     PacketRecordRow,
-    RawEvidenceRow,
     TransferFrameRecordRow
   }
 
@@ -57,63 +57,37 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
 
   @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
-    records =
-      PacketRecordRow
-      |> join(:inner, [packet], evidence in RawEvidenceRow,
-        on: evidence.evidence_id == packet.evidence_id
-      )
-      |> where([packet, _evidence], packet.mission_id == ^mission_id)
-      |> maybe_filter_packet_scope(scope)
-      |> order_by([packet, _evidence], asc: packet.receipt_time, asc: packet.packet_id)
-      |> maybe_limit_scope(scope.limit)
-      |> Repo.all()
-      |> Enum.map(fn {packet_row, _evidence_row} -> packet_record_row_to_domain(packet_row) end)
+    with {:ok, evidence_ids} <- evidence_ids_for_scope(mission_id, scope) do
+      records =
+        PacketRecordRow
+        |> where(
+          [packet],
+          packet.mission_id == ^mission_id and packet.evidence_id in ^evidence_ids
+        )
+        |> order_by([packet], asc: packet.receipt_time, asc: packet.packet_id)
+        |> maybe_limit_scope(scope.limit)
+        |> Repo.all()
+        |> Enum.map(&packet_record_row_to_domain/1)
 
-    case scope.evidence_ids do
-      evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
-        if records == [] do
-          {:error, {:evidence_not_found, Enum.uniq(evidence_ids)}}
-        else
-          {:ok, records}
-        end
-
-      _other ->
-        case records do
-          [] -> {:error, :empty_replay_scope}
-          _ -> {:ok, records}
-        end
+      replay_scope_result(records, scope)
     end
   end
 
   @impl true
   def fetch_transfer_frame_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
-    records =
-      TransferFrameRecordRow
-      |> join(:inner, [frame], evidence in RawEvidenceRow,
-        on: evidence.evidence_id == frame.evidence_id
-      )
-      |> where([frame, _evidence], frame.mission_id == ^mission_id)
-      |> maybe_filter_frame_scope(scope)
-      |> order_by([frame, _evidence], asc: frame.receipt_time, asc: frame.frame_record_id)
-      |> maybe_limit_scope(scope.limit)
-      |> Repo.all()
-      |> Enum.map(fn {frame_row, _evidence_row} ->
-        transfer_frame_record_row_to_domain(frame_row)
-      end)
+    with {:ok, evidence_ids} <- evidence_ids_for_scope(mission_id, scope) do
+      records =
+        TransferFrameRecordRow
+        |> where(
+          [frame],
+          frame.mission_id == ^mission_id and frame.evidence_id in ^evidence_ids
+        )
+        |> order_by([frame], asc: frame.receipt_time, asc: frame.frame_record_id)
+        |> maybe_limit_scope(scope.limit)
+        |> Repo.all()
+        |> Enum.map(&transfer_frame_record_row_to_domain/1)
 
-    case scope.evidence_ids do
-      evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
-        if records == [] do
-          {:error, {:evidence_not_found, Enum.uniq(evidence_ids)}}
-        else
-          {:ok, records}
-        end
-
-      _other ->
-        case records do
-          [] -> {:error, :empty_replay_scope}
-          _ -> {:ok, records}
-        end
+      replay_scope_result(records, scope)
     end
   end
 
@@ -167,84 +141,19 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
     end)
   end
 
-  defp maybe_filter_packet_scope(query, %Scope{} = scope) do
-    query
-    |> maybe_filter_evidence_ids(scope.evidence_ids)
-    |> maybe_filter_from_receipt_time(scope.from_receipt_time)
-    |> maybe_filter_to_receipt_time(scope.to_receipt_time)
-    |> maybe_filter_spacecraft(scope.spacecraft_id)
-    |> maybe_filter_source_ref(scope.source_ref)
-    |> maybe_filter_realized_contact_id(scope.realized_contact_id)
-    |> maybe_filter_metadata_match(scope.metadata_match)
+  defp evidence_ids_for_scope(mission_id, %Scope{} = scope) do
+    case IngressArchive.fetch_raw_evidences(mission_id, %Scope{scope | limit: nil}) do
+      {:ok, evidences} -> {:ok, Enum.map(evidences, & &1.evidence_id)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
-  defp maybe_filter_frame_scope(query, %Scope{} = scope) do
-    query
-    |> maybe_filter_evidence_ids(scope.evidence_ids)
-    |> maybe_filter_from_receipt_time(scope.from_receipt_time)
-    |> maybe_filter_to_receipt_time(scope.to_receipt_time)
-    |> maybe_filter_spacecraft(scope.spacecraft_id)
-    |> maybe_filter_source_ref(scope.source_ref)
-    |> maybe_filter_realized_contact_id(scope.realized_contact_id)
-    |> maybe_filter_metadata_match(scope.metadata_match)
-  end
+  defp replay_scope_result([], %Scope{evidence_ids: evidence_ids})
+       when is_list(evidence_ids) and evidence_ids != [],
+       do: {:error, {:evidence_not_found, Enum.uniq(evidence_ids)}}
 
-  defp maybe_filter_evidence_ids(query, nil), do: query
-
-  defp maybe_filter_evidence_ids(query, evidence_ids)
-       when is_list(evidence_ids) and evidence_ids != [] do
-    where(query, [record, _evidence], record.evidence_id in ^Enum.uniq(evidence_ids))
-  end
-
-  defp maybe_filter_from_receipt_time(query, nil), do: query
-
-  defp maybe_filter_from_receipt_time(query, %DateTime{} = from_receipt_time) do
-    where(query, [record, _evidence], record.receipt_time >= ^from_receipt_time)
-  end
-
-  defp maybe_filter_to_receipt_time(query, nil), do: query
-
-  defp maybe_filter_to_receipt_time(query, %DateTime{} = to_receipt_time) do
-    where(query, [record, _evidence], record.receipt_time <= ^to_receipt_time)
-  end
-
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
-    where(query, [record, _evidence], record.spacecraft_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_source_ref(query, nil), do: query
-
-  defp maybe_filter_source_ref(query, source_ref) when is_binary(source_ref) do
-    where(query, [_record, evidence], evidence.source_ref == ^source_ref)
-  end
-
-  defp maybe_filter_realized_contact_id(query, nil), do: query
-
-  defp maybe_filter_realized_contact_id(query, realized_contact_id)
-       when is_binary(realized_contact_id) do
-    where(
-      query,
-      [_record, evidence],
-      fragment("? ->> 'realized_contact_id' = ?", evidence.metadata, ^realized_contact_id)
-    )
-  end
-
-  defp maybe_filter_metadata_match(query, nil), do: query
-
-  defp maybe_filter_metadata_match(query, metadata_match)
-       when is_map(metadata_match) and map_size(metadata_match) > 0 do
-    Enum.reduce(metadata_match, query, fn {key, value}, acc ->
-      where(
-        acc,
-        [_record, evidence],
-        fragment("? ->> ? = ?", evidence.metadata, ^to_string(key), ^to_string(value))
-      )
-    end)
-  end
-
-  defp maybe_filter_metadata_match(query, _metadata_match), do: query
+  defp replay_scope_result([], _scope), do: {:error, :empty_replay_scope}
+  defp replay_scope_result(records, _scope), do: {:ok, records}
 
   defp maybe_limit_scope(query, nil), do: query
   defp maybe_limit_scope(query, limit), do: limit(query, ^limit)

@@ -5,10 +5,8 @@ defmodule Cadence.Reads.LimitsTest do
   alias Cadence.Limits.{Definition, Event}
   alias Cadence.Limits.LimitDefinitionLifecycleEventRow
 
-  alias Cadence.Persistence.Schemas.{
-    TelemetryLatestLimitStateRow,
-    TelemetryLimitEventRow
-  }
+  alias Cadence.Limits.Store.LatestStateRow, as: TelemetryLatestLimitStateRow
+  alias Cadence.Limits.Store.LimitEventRow, as: TelemetryLimitEventRow
 
   alias Cadence.Repo
 

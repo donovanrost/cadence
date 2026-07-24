@@ -18,7 +18,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   alias Cadence.Missions
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     ContactRequirementOccurrenceRow,
     ContactRequirementTemplateRow,
     ContactRequirementTemplateVersionRow

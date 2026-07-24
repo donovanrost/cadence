@@ -144,7 +144,7 @@ defmodule Cadence.SpacecraftStoreTest do
              Cadence.SpacecraftStore.persist_spacecraft("org-spacecraft", spacecraft)
 
     assert {:ok, endpoint} =
-             Cadence.SpacecraftStore.ensure_managed_source_endpoint(
+             Cadence.SourceEndpoints.ensure_managed_source_endpoint(
                "org-spacecraft",
                persisted_spacecraft
              )
@@ -162,7 +162,7 @@ defmodule Cadence.SpacecraftStoreTest do
              Cadence.SpacecraftStore.update_spacecraft("org-spacecraft", updated)
 
     assert {:ok, updated_endpoint} =
-             Cadence.SpacecraftStore.ensure_managed_source_endpoint(
+             Cadence.SourceEndpoints.ensure_managed_source_endpoint(
                "org-spacecraft",
                persisted_update
              )

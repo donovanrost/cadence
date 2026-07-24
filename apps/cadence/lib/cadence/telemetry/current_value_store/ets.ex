@@ -80,6 +80,39 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
+  def replace_values_for_scope(mission_id, samples, opts)
+      when is_binary(mission_id) and is_list(samples) and is_list(opts) do
+    table = ensure_table!()
+    spacecraft_filter = Keyword.get(opts, :spacecraft_id)
+
+    :ets.foldl(
+      fn
+        {{^mission_id, stored_scope_id, _point_id, _realm, _data_source_id, _binding_id} = key,
+         %Sample{} = sample},
+        :ok ->
+          if (is_nil(spacecraft_filter) or
+                stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
+               SourceFilters.sample_matches?(sample, opts) do
+            true = :ets.delete(table, key)
+          end
+
+          :ok
+
+        _entry, :ok ->
+          :ok
+      end,
+      :ok,
+      table
+    )
+
+    Enum.each(samples, fn %Sample{} = sample ->
+      true = :ets.insert(table, {key(sample), sample})
+    end)
+
+    :ok
+  end
+
+  @impl true
   def latest_value(mission_id, point_id, opts) do
     table = ensure_table!()
     spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))

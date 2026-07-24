@@ -22,8 +22,8 @@ defmodule Cadence.CommandingTest do
 
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
   alias Cadence.OperationalEvents
-  alias Cadence.Persistence.Schemas.TransportActionRequestRow
   alias Cadence.Repo
+  alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.Sample

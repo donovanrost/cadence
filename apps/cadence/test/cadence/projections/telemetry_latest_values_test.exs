@@ -6,8 +6,10 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.Schemas.{PacketRecordRow, RawEvidenceRow, TelemetryLatestValueRow}
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
+  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage

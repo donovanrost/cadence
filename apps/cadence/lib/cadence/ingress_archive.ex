@@ -77,6 +77,16 @@ defmodule Cadence.IngressArchive do
     ensure_backend_loaded!(backend_module()).fetch_raw_evidences(mission_id, scope)
   end
 
+  @spec fetch_raw_evidence(binary(), binary()) :: {:ok, RawEvidence.t()} | {:error, term()}
+  def fetch_raw_evidence(mission_id, evidence_id)
+      when is_binary(mission_id) and is_binary(evidence_id) do
+    case fetch_raw_evidences(mission_id, Scope.new(%{evidence_ids: [evidence_id]})) do
+      {:ok, [%RawEvidence{} = evidence]} -> {:ok, evidence}
+      {:error, {:evidence_not_found, _ids}} -> {:error, :raw_evidence_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec flush(binary() | nil) :: :ok | {:error, term()}
   def flush(mission_id \\ nil) do
     backend = ensure_backend_loaded!(backend_module())

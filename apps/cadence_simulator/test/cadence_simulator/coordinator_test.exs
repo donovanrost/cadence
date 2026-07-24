@@ -5,10 +5,10 @@ defmodule CadenceSimulator.CoordinatorTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact}
-  alias Cadence.Persistence.Schemas.TelemetrySampleRow
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
   alias CadenceSimulator.Coordinator
   alias CadenceSimulator.Providers.DatabaseDynamics
 

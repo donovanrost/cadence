@@ -11,10 +11,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Contacts.ScheduledContact
+  alias Cadence.Control.Replay.Store.ReplayRunRow
   alias Cadence.Dashboards.Document
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
-  alias Cadence.Persistence.Schemas.ReplayRunRow
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures

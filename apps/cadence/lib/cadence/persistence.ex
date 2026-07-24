@@ -17,27 +17,16 @@ defmodule Cadence.Persistence do
   alias Cadence.Protocol.{ProtocolAnomaly, RecordArchive}
   alias Cadence.Repo
 
-  alias Cadence.Runtime.{
-    ManagedActionRequest,
-    ManagedCapabilityRecord,
-    ManagedTimerEvent,
-    TransportActionRequest,
-    TransportCapabilityRecord,
-    TransportTimerEvent
-  }
+  alias Cadence.Runtime.DownlinkRecords
+  alias Cadence.Runtime.ManagedRecords
+  alias Cadence.Runtime.TransportRecords
+  alias Cadence.Runtime.TransportTimerEvent
 
   alias Cadence.Telemetry.{Sample, Storage}
 
   alias Cadence.Persistence.Schemas.{
-    CombinedDownlinkRecordRow,
-    DownlinkDiagnosticRow,
     DownlinkObservationRow,
-    ManagedActionRequestRow,
-    ManagedCapabilityRecordRow,
-    ManagedTimerEventRow,
     ProtocolAnomalyRow,
-    TransportActionRequestRow,
-    TransportCapabilityRecordRow,
     TransportTimerEventRow
   }
 
@@ -251,57 +240,23 @@ defmodule Cadence.Persistence do
   end
 
   defp add_managed_capability_record_inserts(%Multi{} = multi, capability_records) do
-    Enum.reduce(capability_records, multi, fn %ManagedCapabilityRecord{} = capability_record,
-                                              %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:managed_capability_record, capability_record.capability_record_id},
-        ManagedCapabilityRecordRow.changeset(capability_record)
-      )
-    end)
+    ManagedRecords.add_capability_record_inserts(multi, capability_records)
   end
 
   defp add_managed_action_request_inserts(%Multi{} = multi, action_requests) do
-    Enum.reduce(action_requests, multi, fn %ManagedActionRequest{} = action_request,
-                                           %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:managed_action_request, action_request.action_request_id},
-        ManagedActionRequestRow.changeset(action_request)
-      )
-    end)
+    ManagedRecords.add_action_request_inserts(multi, action_requests)
   end
 
   defp add_managed_timer_event_inserts(%Multi{} = multi, timer_events) do
-    Enum.reduce(timer_events, multi, fn %ManagedTimerEvent{} = timer_event, %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:managed_timer_event, timer_event.timer_event_id},
-        ManagedTimerEventRow.changeset(timer_event)
-      )
-    end)
+    ManagedRecords.add_timer_event_inserts(multi, timer_events)
   end
 
   defp add_transport_capability_record_inserts(%Multi{} = multi, capability_records) do
-    Enum.reduce(capability_records, multi, fn %TransportCapabilityRecord{} = capability_record,
-                                              %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:transport_capability_record, capability_record.transport_record_id},
-        TransportCapabilityRecordRow.changeset(capability_record)
-      )
-    end)
+    TransportRecords.add_capability_record_inserts(multi, capability_records)
   end
 
   defp add_transport_action_request_inserts(%Multi{} = multi, action_requests) do
-    Enum.reduce(action_requests, multi, fn %TransportActionRequest{} = action_request,
-                                           %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:transport_action_request, action_request.action_request_id},
-        TransportActionRequestRow.changeset(action_request)
-      )
-    end)
+    TransportRecords.add_action_request_inserts(multi, action_requests)
   end
 
   defp add_transport_timer_event_inserts(%Multi{} = multi, timer_events) do
@@ -325,24 +280,11 @@ defmodule Cadence.Persistence do
   end
 
   defp add_combined_downlink_record_inserts(%Multi{} = multi, combined_records) do
-    Enum.reduce(combined_records, multi, fn %CombinedDownlinkRecord{} = combined_record,
-                                            %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:combined_downlink_record, combined_record.merged_record_id},
-        CombinedDownlinkRecordRow.changeset(combined_record)
-      )
-    end)
+    DownlinkRecords.add_combined_record_inserts(multi, combined_records)
   end
 
   defp add_downlink_diagnostic_inserts(%Multi{} = multi, diagnostics) do
-    Enum.reduce(diagnostics, multi, fn %DownlinkDiagnostic{} = diagnostic, %Multi{} = acc ->
-      Multi.insert(
-        acc,
-        {:downlink_diagnostic, diagnostic.diagnostic_id},
-        DownlinkDiagnosticRow.changeset(diagnostic)
-      )
-    end)
+    DownlinkRecords.add_diagnostic_inserts(multi, diagnostics)
   end
 
   defp persist_operational_events(events, repo) when is_list(events) do

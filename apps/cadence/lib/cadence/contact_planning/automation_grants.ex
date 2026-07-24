@@ -11,7 +11,7 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
     FleetPlanningPolicies
   }
 
-  alias Cadence.Persistence.Schemas.AutomationGrantRow
+  alias Cadence.Management.Contacts.Store.AutomationGrantRow
   alias Cadence.Repo
 
   @spec issue(Scope.t(), binary(), map(), keyword()) ::

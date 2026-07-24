@@ -20,10 +20,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
   alias Cadence.GroundNetworks.ProviderError
 
-  alias Cadence.Persistence.Schemas.{
-    ContactPlanExecutionItemRow,
-    ContactPlanRow
-  }
+  alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
 
   alias Cadence.Repo
   alias Cadence.Spacecraft

@@ -7,11 +7,13 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact}
-  alias Cadence.Persistence.Schemas.{RawEvidenceRow, TelemetrySampleRow, TransferFrameRecordRow}
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Protocol.RecordArchive.Postgres.TransferFrameRecordRow
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
   test "tcp provider ingests fixed-size TM frames into the active mission runtime" do
     organization_id = unique_id("org-tcp-provider")

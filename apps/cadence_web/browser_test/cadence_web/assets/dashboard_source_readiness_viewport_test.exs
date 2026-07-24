@@ -28,7 +28,7 @@ defmodule CadenceWeb.Assets.DashboardSourceReadinessViewportTest do
   alias Cadence.Dashboards.SourceHealth
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.OperationalEvents
-  alias Cadence.Persistence.Schemas.ReplayRunRow
+  alias Cadence.Control.Replay.Store.ReplayRunRow
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Replay.Run
   alias Cadence.Repo

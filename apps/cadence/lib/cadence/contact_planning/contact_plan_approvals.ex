@@ -13,7 +13,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     ContactPlanVersion
   }
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     ContactPlanApprovalRow,
     ContactPlanRow,
     ContactPlanVersionRow,

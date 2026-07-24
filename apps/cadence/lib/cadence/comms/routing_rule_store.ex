@@ -20,6 +20,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
   alias Cadence.Contacts.{LinkAssignment, PathTemplate}
   alias Cadence.Missions
   alias Cadence.Repo
+  alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
 
@@ -237,7 +238,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
              rule.spacecraft_id
            ),
          {:ok, source_endpoint} <-
-           SpacecraftStore.ensure_managed_source_endpoint(rule.organization_id, spacecraft),
+           SourceEndpoints.ensure_managed_source_endpoint(rule.organization_id, spacecraft),
          {:ok, %Transport{} = transport} <-
            TransportStore.fetch_transport_version(
              rule.organization_id,

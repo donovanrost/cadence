@@ -16,20 +16,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
 
   alias Cadence.Comms.{GroundStation, Transport}
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    RenderItem,
-    SourceHealth
-  }
-
+  alias Cadence.Control.Replay.Store.ReplayRunRow
+  alias Cadence.Dashboards.DataBinding
+  alias Cadence.Dashboards.DataSource
+  alias Cadence.Dashboards.DataSources
+  alias Cadence.Dashboards.Document
   alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+  alias Cadence.Dashboards.RenderItem
+  alias Cadence.Dashboards.SourceHealth
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Persistence.Schemas.ReplayRunRow
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint

@@ -15,7 +15,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
 
   alias Cadence.Missions
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Management.Contacts.Store.{
     FleetPlanningPolicyApprovalRow,
     FleetPlanningPolicyRow,
     FleetPlanningPolicyVersionRow

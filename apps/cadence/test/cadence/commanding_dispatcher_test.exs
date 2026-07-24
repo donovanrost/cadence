@@ -7,8 +7,8 @@ defmodule Cadence.CommandingDispatcherTest do
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.{CommandRequest, DispatchSupervisor}
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
-  alias Cadence.Persistence.Schemas.TransportActionRequestRow
   alias Cadence.Repo
+  alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
 

@@ -15,20 +15,24 @@ defmodule Cadence.ReplayTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Replay.{Run, Scope}
 
-  alias Cadence.Persistence.Schemas.{
+  alias Cadence.Runtime.ManagedRecords.{
     ManagedActionRequestRow,
     ManagedCapabilityRecordRow,
-    ManagedTimerEventRow,
-    RawEvidenceRow,
+    ManagedTimerEventRow
+  }
+
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
+  alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
+
+  alias Cadence.Control.Replay.Store.{
     ReplayDispatchDecisionRow,
     ReplayDispatchWorkItemRow,
     ReplayManagedActionRequestRow,
     ReplayManagedCapabilityRecordRow,
     ReplayManagedTimerEventRow,
     ReplayRunRow,
-    ReplayTelemetrySampleRow,
-    TelemetryLatestValueRow,
-    TelemetrySampleRow
+    ReplayTelemetrySampleRow
   }
 
   alias Cadence.SourceEndpoints.SourceEndpoint

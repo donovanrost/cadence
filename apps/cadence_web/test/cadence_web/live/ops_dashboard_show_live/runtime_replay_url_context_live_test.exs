@@ -18,7 +18,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
     RenderItem
   }
 
-  alias Cadence.Persistence.Schemas.ReplayRunRow
+  alias Cadence.Control.Replay.Store.ReplayRunRow
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures

@@ -11,7 +11,7 @@ defmodule Cadence.Contacts.ProviderChangeApprovals do
     ProviderReservationChanges
   }
 
-  alias Cadence.Persistence.Schemas.ProviderChangeApprovalRow
+  alias Cadence.Control.Contacts.Store.ProviderChangeApprovalRow
   alias Cadence.Repo
 
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::

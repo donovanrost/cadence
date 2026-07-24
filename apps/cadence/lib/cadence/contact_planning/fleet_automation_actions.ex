@@ -11,7 +11,7 @@ defmodule Cadence.ContactPlanning.FleetAutomationActions do
     FleetAutomationAction
   }
 
-  alias Cadence.Persistence.Schemas.FleetAutomationActionRow
+  alias Cadence.Control.Contacts.Store.FleetAutomationActionRow
   alias Cadence.Repo
 
   @document_limit 128 * 1_024

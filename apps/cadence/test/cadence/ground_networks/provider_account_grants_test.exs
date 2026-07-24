@@ -7,6 +7,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrantsTest do
   alias Cadence.Auth.Scope
   alias Cadence.Comms.Transport
   alias Cadence.Contacts.ProviderReservations
+  alias Cadence.Control.Providers, as: ControlProviders
 
   alias Cadence.GroundNetworks.{
     MissionProvider,
@@ -163,7 +164,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrantsTest do
     {:ok, reservation} = persist_nonterminal_reservation!(grant, provider, transport)
 
     assert {:ok, revoked} =
-             ProviderAccountGrants.revoke(
+             ControlProviders.revoke_account_grant(
                scope,
                grant.provider_account_grant_id,
                "Commercial authorization removed",

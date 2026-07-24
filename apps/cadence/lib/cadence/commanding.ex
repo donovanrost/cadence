@@ -5,8 +5,6 @@ defmodule Cadence.Commanding do
   release attempts.
   """
 
-  import Ecto.Query
-
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -42,10 +40,7 @@ defmodule Cadence.Commanding do
   alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
   alias Cadence.Telemetry.Sample
 
-  alias Cadence.Persistence.Schemas.{
-    TransportActionRequestRow,
-    TransportCapabilityRecordRow
-  }
+  alias Cadence.Runtime.TransportRecords
 
   alias Cadence.Repo
 
@@ -881,31 +876,13 @@ defmodule Cadence.Commanding do
        )
        when is_binary(organization_id) and is_binary(mission_id) and
               is_binary(command_release_attempt_id) do
-    transport_capability_records =
-      TransportCapabilityRecordRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          fragment(
-            "? ->> 'command_release_attempt_id' = ?",
-            row.metadata,
-            ^command_release_attempt_id
-          )
+    {transport_capability_records, transport_action_requests} =
+      TransportRecords.for_command_release_attempt(
+        repo,
+        organization_id,
+        mission_id,
+        command_release_attempt_id
       )
-      |> order_by([row], asc: row.recorded_at, asc: row.transport_record_id)
-      |> repo.all()
-      |> Enum.map(&TransportCapabilityRecordRow.to_domain/1)
-
-    transport_action_requests =
-      TransportActionRequestRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_release_attempt_id == ^command_release_attempt_id
-      )
-      |> order_by([row], asc: row.requested_at, asc: row.action_request_id)
-      |> repo.all()
-      |> Enum.map(&TransportActionRequestRow.to_domain/1)
 
     evaluate_transport_command_verifiers(
       repo,

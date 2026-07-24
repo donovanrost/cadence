@@ -4,20 +4,12 @@ defmodule Cadence.Reads.Limits do
   projection.
   """
 
-  import Ecto.Query
-
   alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycleEvent, Event}
+  alias Cadence.Limits.Store
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Telemetry.SourceFilters
-
-  alias Cadence.Persistence.Schemas.{
-    TelemetryLatestLimitStateRow,
-    TelemetryLimitEventRow
-  }
-
-  alias Cadence.Repo
 
   @mission_scope_key "__mission__"
 
@@ -71,90 +63,44 @@ defmodule Cadence.Reads.Limits do
          to_receipt_time,
          opts
        ) do
-    TelemetryLimitEventRow
-    |> scoped_event_query(organization_id, mission_id, point_id)
-    |> maybe_filter_event_spacecraft(spacecraft_id)
-    |> maybe_filter_to_receipt_time(to_receipt_time)
-    |> order_history(:desc)
-    |> Repo.all()
-    |> rows_to_events()
+    mission_id
+    |> Store.list_events(
+      organization_id: organization_id,
+      point_id: point_id,
+      spacecraft_id: spacecraft_id,
+      to_receipt_time: to_receipt_time,
+      order: :desc
+    )
     |> filter_source_events(opts)
     |> List.first()
   end
 
-  defp latest_projected_state(organization_id, mission_id, point_id, spacecraft_id, opts) do
-    TelemetryLatestLimitStateRow
-    |> scoped_latest_query(organization_id, mission_id, point_id)
-    |> maybe_filter_latest_spacecraft(spacecraft_id, opts)
-    |> order_by([state_row], desc: state_row.receipt_time, desc: state_row.limit_event_id)
-    |> Repo.all()
-    |> rows_to_events()
+  defp latest_projected_state(organization_id, mission_id, point_id, _spacecraft_id, opts) do
+    store_opts =
+      opts
+      |> Keyword.put(:organization_id, organization_id)
+      |> Keyword.put(:point_id, point_id)
+      |> Keyword.put(:order, :desc)
+
+    mission_id
+    |> Store.list_latest_states(store_opts)
     |> filter_source_events(opts)
     |> List.first()
-  end
-
-  defp scoped_event_query(query, nil, mission_id, point_id) do
-    where(
-      query,
-      [event_row],
-      event_row.mission_id == ^mission_id and event_row.point_id == ^point_id
-    )
-  end
-
-  defp scoped_event_query(query, organization_id, mission_id, point_id) do
-    where(
-      query,
-      [event_row],
-      event_row.organization_id == ^organization_id and event_row.mission_id == ^mission_id and
-        event_row.point_id == ^point_id
-    )
-  end
-
-  defp scoped_latest_query(query, nil, mission_id, point_id) do
-    where(
-      query,
-      [state_row],
-      state_row.mission_id == ^mission_id and state_row.point_id == ^point_id
-    )
-  end
-
-  defp scoped_latest_query(query, organization_id, mission_id, point_id) do
-    where(
-      query,
-      [state_row],
-      state_row.organization_id == ^organization_id and state_row.mission_id == ^mission_id and
-        state_row.point_id == ^point_id
-    )
   end
 
   @spec latest_states_for_mission(binary(), keyword()) :: [Event.t()]
   def latest_states_for_mission(mission_id, opts \\ [])
       when is_binary(mission_id) and is_list(opts) do
-    spacecraft_id = Keyword.get(opts, :spacecraft_id)
-
-    TelemetryLatestLimitStateRow
-    |> where([state_row], state_row.mission_id == ^mission_id)
-    |> maybe_filter_latest_spacecraft(spacecraft_id, opts)
-    |> order_by([state_row], asc: state_row.point_name)
-    |> Repo.all()
-    |> rows_to_events()
+    mission_id
+    |> Store.list_latest_states(opts)
     |> filter_source_events(opts)
   end
 
   @spec latest_states_for_mission(binary(), binary(), keyword()) :: [Event.t()]
   def latest_states_for_mission(organization_id, mission_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    spacecraft_id = Keyword.get(opts, :spacecraft_id)
-
-    TelemetryLatestLimitStateRow
-    |> where(
-      [state_row],
-      state_row.organization_id == ^organization_id and state_row.mission_id == ^mission_id
-    )
-    |> maybe_filter_latest_spacecraft(spacecraft_id, opts)
-    |> order_by([state_row], asc: state_row.point_name)
-    |> Repo.all()
-    |> rows_to_events()
+    mission_id
+    |> Store.list_latest_states(Keyword.put(opts, :organization_id, organization_id))
     |> filter_source_events(opts)
   end
 
@@ -163,14 +109,10 @@ defmodule Cadence.Reads.Limits do
       when is_binary(mission_id) and is_list(point_ids) and is_list(spacecraft_ids) do
     scope_ids = spacecraft_ids |> Enum.map(&spacecraft_scope_id/1) |> Enum.uniq()
 
-    TelemetryLatestLimitStateRow
-    |> where(
-      [state_row],
-      state_row.mission_id == ^mission_id and state_row.point_id in ^point_ids and
-        state_row.spacecraft_scope_id in ^scope_ids
+    Store.list_latest_states(mission_id,
+      point_ids: point_ids,
+      spacecraft_scope_ids: scope_ids
     )
-    |> Repo.all()
-    |> Enum.map(&TelemetryLatestLimitStateRow.to_domain/1)
   end
 
   @spec event_history(binary(), binary(), keyword()) :: [Event.t()]
@@ -182,14 +124,14 @@ defmodule Cadence.Reads.Limits do
     from_receipt_time = Keyword.get(opts, :from_receipt_time)
     to_receipt_time = Keyword.get(opts, :to_receipt_time)
 
-    TelemetryLimitEventRow
-    |> where([event_row], event_row.mission_id == ^mission_id and event_row.point_id == ^point_id)
-    |> maybe_filter_event_spacecraft(spacecraft_id)
-    |> maybe_filter_from_receipt_time(from_receipt_time)
-    |> maybe_filter_to_receipt_time(to_receipt_time)
-    |> order_history(order)
-    |> Repo.all()
-    |> rows_to_events()
+    mission_id
+    |> Store.list_events(
+      point_id: point_id,
+      spacecraft_id: spacecraft_id,
+      from_receipt_time: from_receipt_time,
+      to_receipt_time: to_receipt_time,
+      order: order
+    )
     |> filter_source_events(opts)
     |> Enum.take(limit)
   end
@@ -204,18 +146,15 @@ defmodule Cadence.Reads.Limits do
     from_receipt_time = Keyword.get(opts, :from_receipt_time)
     to_receipt_time = Keyword.get(opts, :to_receipt_time)
 
-    TelemetryLimitEventRow
-    |> where(
-      [event_row],
-      event_row.organization_id == ^organization_id and event_row.mission_id == ^mission_id and
-        event_row.point_id == ^point_id
+    mission_id
+    |> Store.list_events(
+      organization_id: organization_id,
+      point_id: point_id,
+      spacecraft_id: spacecraft_id,
+      from_receipt_time: from_receipt_time,
+      to_receipt_time: to_receipt_time,
+      order: order
     )
-    |> maybe_filter_event_spacecraft(spacecraft_id)
-    |> maybe_filter_from_receipt_time(from_receipt_time)
-    |> maybe_filter_to_receipt_time(to_receipt_time)
-    |> order_history(order)
-    |> Repo.all()
-    |> rows_to_events()
     |> filter_source_events(opts)
     |> Enum.take(limit)
   end
@@ -238,29 +177,8 @@ defmodule Cadence.Reads.Limits do
   @spec watermark_result(binary(), binary(), keyword()) :: {:ok, map()} | {:error, term()}
   def watermark_result(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    spacecraft_id = Keyword.get(opts, :spacecraft_id)
-
-    latest_projection =
-      TelemetryLatestLimitStateRow
-      |> where(
-        [state_row],
-        state_row.mission_id == ^mission_id and state_row.point_id == ^point_id
-      )
-      |> maybe_filter_latest_spacecraft(spacecraft_id, opts)
-      |> projection_watermark(:id)
-      |> Repo.one()
-
-    event_projection =
-      TelemetryLimitEventRow
-      |> where(
-        [event_row],
-        event_row.mission_id == ^mission_id and event_row.point_id == ^point_id
-      )
-      |> maybe_filter_event_spacecraft(spacecraft_id)
-      |> projection_watermark(:limit_event_id)
-      |> Repo.one()
-
-    {:ok, merge_projection_watermarks(latest_projection, event_projection)}
+    %{latest: latest, events: events} = Store.watermark(mission_id, point_id, opts)
+    {:ok, merge_projection_watermarks(latest, events)}
   end
 
   @spec watermark_result(binary(), binary(), binary(), keyword()) ::
@@ -268,60 +186,14 @@ defmodule Cadence.Reads.Limits do
   def watermark_result(organization_id, mission_id, point_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
              is_list(opts) do
-    spacecraft_id = Keyword.get(opts, :spacecraft_id)
-
-    latest_projection =
-      TelemetryLatestLimitStateRow
-      |> where(
-        [state_row],
-        state_row.organization_id == ^organization_id and state_row.mission_id == ^mission_id and
-          state_row.point_id == ^point_id
+    %{latest: latest, events: events} =
+      Store.watermark(
+        mission_id,
+        point_id,
+        Keyword.put(opts, :organization_id, organization_id)
       )
-      |> maybe_filter_latest_spacecraft(spacecraft_id, opts)
-      |> projection_watermark(:id)
-      |> Repo.one()
 
-    event_projection =
-      TelemetryLimitEventRow
-      |> where(
-        [event_row],
-        event_row.organization_id == ^organization_id and event_row.mission_id == ^mission_id and
-          event_row.point_id == ^point_id
-      )
-      |> maybe_filter_event_spacecraft(spacecraft_id)
-      |> projection_watermark(:limit_event_id)
-      |> Repo.one()
-
-    {:ok, merge_projection_watermarks(latest_projection, event_projection)}
-  end
-
-  defp maybe_filter_latest_spacecraft(query, spacecraft_id, opts) do
-    if Keyword.has_key?(opts, :spacecraft_id) do
-      where(
-        query,
-        [state_row],
-        state_row.spacecraft_scope_id == ^spacecraft_scope_id(spacecraft_id)
-      )
-    else
-      query
-    end
-  end
-
-  defp maybe_filter_event_spacecraft(query, nil), do: query
-
-  defp maybe_filter_event_spacecraft(query, spacecraft_id),
-    do: where(query, [event_row], event_row.spacecraft_id == ^spacecraft_id)
-
-  defp maybe_filter_from_receipt_time(query, nil), do: query
-
-  defp maybe_filter_from_receipt_time(query, %DateTime{} = from_receipt_time) do
-    where(query, [event_row], event_row.receipt_time >= ^from_receipt_time)
-  end
-
-  defp maybe_filter_to_receipt_time(query, nil), do: query
-
-  defp maybe_filter_to_receipt_time(query, %DateTime{} = to_receipt_time) do
-    where(query, [event_row], event_row.receipt_time <= ^to_receipt_time)
+    {:ok, merge_projection_watermarks(latest, events)}
   end
 
   defp definition_intervals_for_scope(organization_id, mission_id, point_id, opts) do
@@ -562,20 +434,6 @@ defmodule Cadence.Reads.Limits do
     starts_before_to? and ends_after_from?
   end
 
-  defp order_history(query, :asc),
-    do: order_by(query, [event_row], asc: event_row.receipt_time, asc: event_row.limit_event_id)
-
-  defp order_history(query, _order),
-    do: order_by(query, [event_row], desc: event_row.receipt_time, desc: event_row.limit_event_id)
-
-  defp rows_to_events(rows) when is_list(rows), do: Enum.map(rows, &row_to_event/1)
-
-  defp row_to_event(%TelemetryLatestLimitStateRow{} = state_row),
-    do: TelemetryLatestLimitStateRow.to_domain(state_row)
-
-  defp row_to_event(%TelemetryLimitEventRow{} = event_row),
-    do: TelemetryLimitEventRow.to_domain(event_row)
-
   defp filter_source_events(events, opts) do
     filters = SourceFilters.normalize(opts)
 
@@ -651,14 +509,6 @@ defmodule Cadence.Reads.Limits do
 
   defp spacecraft_scope_id(nil), do: @mission_scope_key
   defp spacecraft_scope_id(spacecraft_id), do: spacecraft_id
-
-  defp projection_watermark(query, count_field) do
-    select(query, [row], %{
-      latest_receipt_time: max(row.receipt_time),
-      retention_starts_at: min(row.receipt_time),
-      sample_count: count(field(row, ^count_field))
-    })
-  end
 
   defp merge_projection_watermarks(left, right) do
     latest_receipt_time = latest_datetime([left, right], :latest_receipt_time)

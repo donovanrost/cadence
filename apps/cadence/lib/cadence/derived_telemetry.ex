@@ -4,8 +4,6 @@ defmodule Cadence.DerivedTelemetry do
   telemetry sample log.
   """
 
-  import Ecto.Query
-
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -14,14 +12,10 @@ defmodule Cadence.DerivedTelemetry do
   alias Cadence.Governance
   alias Cadence.Jobs
 
-  alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryLatestValueRow,
-    DerivedTelemetrySampleRow,
-    TelemetrySampleRow
-  }
-
+  alias Cadence.DerivedTelemetry.Store
   alias Cadence.Repo
   alias Cadence.Telemetry.Sample, as: TelemetrySample
+  alias Cadence.Telemetry.SampleRecords
 
   @mission_scope_key "__mission__"
 
@@ -124,12 +118,10 @@ defmodule Cadence.DerivedTelemetry do
 
   defp fetch_source_samples(mission_id, spacecraft_id) do
     samples =
-      TelemetrySampleRow
-      |> where([sample_row], sample_row.mission_id == ^mission_id)
-      |> maybe_filter_spacecraft(spacecraft_id)
-      |> order_by([sample_row], asc: sample_row.receipt_time, asc: sample_row.sample_id)
-      |> Repo.all()
-      |> Enum.map(&TelemetrySampleRow.to_domain/1)
+      SampleRecords.list_samples(mission_id,
+        spacecraft_id: spacecraft_id,
+        order: :receipt_asc
+      )
 
     {:ok, samples}
   end
@@ -261,15 +253,7 @@ defmodule Cadence.DerivedTelemetry do
   end
 
   defp add_sample_inserts(%Multi{} = multi, derived_samples) do
-    Enum.reduce(derived_samples, multi, fn %Sample{} = derived_sample, acc ->
-      Multi.insert(
-        acc,
-        {:derived_sample, derived_sample.derived_sample_id},
-        DerivedTelemetrySampleRow.changeset(derived_sample),
-        on_conflict: :nothing,
-        conflict_target: [:derived_sample_id]
-      )
-    end)
+    Store.add_sample_inserts(multi, derived_samples)
   end
 
   defp insert_run(%Run{} = run) do
@@ -314,11 +298,6 @@ defmodule Cadence.DerivedTelemetry do
       spacecraft_id -> [spacecraft_id: spacecraft_id]
     end
   end
-
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id),
-    do: where(query, [sample_row], sample_row.spacecraft_id == ^spacecraft_id)
 
   defp build_evaluation_plan(definitions) when is_list(definitions) do
     with :ok <- ensure_unique_output_points(definitions),
@@ -605,67 +584,8 @@ defmodule Cadence.DerivedTelemetry do
   end
 
   defp persist_latest_values(repo, derived_samples) do
-    Enum.reduce_while(derived_samples, {:ok, []}, fn %Sample{} = sample, {:ok, acc} ->
-      case persist_latest_value(repo, sample) do
-        {:ok, latest_value_row} -> {:cont, {:ok, [latest_value_row | acc]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    Store.persist_latest_values(repo, derived_samples)
   end
-
-  defp persist_latest_value(repo, %Sample{} = sample) do
-    existing_row =
-      repo.get_by(DerivedTelemetryLatestValueRow,
-        mission_id: sample.mission_id,
-        spacecraft_scope_id: sample.spacecraft_id || @mission_scope_key,
-        point_id: sample.point_id
-      )
-
-    cond do
-      is_nil(existing_row) ->
-        %DerivedTelemetryLatestValueRow{}
-        |> DerivedTelemetryLatestValueRow.changeset(sample)
-        |> repo.insert()
-
-      sample_newer?(sample, existing_row) ->
-        existing_row
-        |> DerivedTelemetryLatestValueRow.changeset(sample)
-        |> repo.update()
-
-      true ->
-        {:ok, existing_row}
-    end
-  end
-
-  defp sample_newer?(%Sample{} = sample, %DerivedTelemetryLatestValueRow{} = latest_value_row) do
-    compare_sort_keys(sample_sort_key(sample), row_sort_key(latest_value_row)) == :gt
-  end
-
-  defp sample_sort_key(%Sample{} = sample) do
-    {sample.generation_time || sample.receipt_time, sample.receipt_time, sample.derived_sample_id}
-  end
-
-  defp row_sort_key(%DerivedTelemetryLatestValueRow{} = latest_value_row) do
-    {latest_value_row.generation_time || latest_value_row.receipt_time,
-     latest_value_row.receipt_time, latest_value_row.derived_sample_id}
-  end
-
-  defp compare_sort_keys({time_a, receipt_a, sample_id_a}, {time_b, receipt_b, sample_id_b}) do
-    case DateTime.compare(time_a, time_b) do
-      :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(sample_id_a, sample_id_b)
-          other -> other
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp compare_ids(id_a, id_b) when id_a > id_b, do: :gt
-  defp compare_ids(id_a, id_b) when id_a < id_b, do: :lt
-  defp compare_ids(_id_a, _id_b), do: :eq
 
   defp later_datetime(left, right) do
     case DateTime.compare(left, right) do
