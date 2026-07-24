@@ -30,7 +30,7 @@ defmodule Cadence.Dashboards.RuntimeCacheKey do
   defstruct [:layer, :fingerprint, parts: %{}]
 
   @spec fingerprint(term()) :: binary()
-  def fingerprint(value), do: value |> normalize() |> Fingerprint.url_sha256()
+  def fingerprint(value), do: Fingerprint.canonical_url_sha256(value)
 
   @spec plan(DashboardResolveRequest.t(), keyword()) :: t()
   def plan(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
@@ -195,43 +195,6 @@ defmodule Cadence.Dashboards.RuntimeCacheKey do
       freshness_state: watermark.freshness_state
     }
   end
-
-  defp normalize(%DateTime{} = value), do: DateTime.to_iso8601(value)
-
-  defp normalize(%_{} = value) do
-    value
-    |> Map.from_struct()
-    |> normalize()
-  end
-
-  defp normalize(map) when is_map(map) do
-    map
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Enum.map(fn {key, value} -> {normalize_key(key), normalize(value)} end)
-    |> Enum.sort_by(fn {key, _value} -> inspect(key) end)
-  end
-
-  defp normalize(list) when is_list(list) do
-    if Keyword.keyword?(list) do
-      list
-      |> Enum.map(fn {key, value} -> {normalize_key(key), normalize(value)} end)
-      |> Enum.sort_by(fn {key, _value} -> inspect(key) end)
-    else
-      Enum.map(list, &normalize/1)
-    end
-  end
-
-  defp normalize(tuple) when is_tuple(tuple) do
-    tuple
-    |> Tuple.to_list()
-    |> Enum.map(&normalize/1)
-    |> List.to_tuple()
-  end
-
-  defp normalize(value), do: value
-
-  defp normalize_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp normalize_key(key), do: key
 
   defp compact(map) when is_map(map) do
     Map.reject(map, fn {_key, value} -> is_nil(value) end)

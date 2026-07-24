@@ -1,7 +1,7 @@
 defmodule Cadence.Management.ManagedResources do
   @moduledoc "Management-plane boundary for desired managed-resource lifecycle."
 
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.Management.DataSources
   alias Cadence.Management.ManagedResources.ManagedResourceRequest
 
   @spec request_tsdb_backend(binary(), ManagedResourceRequest.operation(), map(), keyword()) ::
@@ -22,6 +22,24 @@ defmodule Cadence.Management.ManagedResources do
 
       {:ok,
        ManagedResourceRequest.new(source, operation, requested_at, Keyword.get(opts, :run_id))}
+    end
+  end
+
+  @spec reconcile_tsdb_backend(binary(), map(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def reconcile_tsdb_backend(data_source_id, attrs \\ %{}, opts \\ []) do
+    DataSources.reconcile_tsdb_backend(data_source_id, attrs, opts)
+  end
+
+  @spec complete_tsdb_backend(binary(), ManagedResourceRequest.operation(), map(), keyword()) ::
+          {:ok, struct()} | {:error, term()}
+  def complete_tsdb_backend(data_source_id, operation, attrs \\ %{}, opts \\ [])
+      when operation in [:provision, :deprovision] and is_map(attrs) and is_list(opts) do
+    case operation do
+      :provision ->
+        DataSources.complete_tsdb_backend_provisioning(data_source_id, attrs, opts)
+
+      :deprovision ->
+        DataSources.complete_tsdb_backend_deprovisioning(data_source_id, attrs, opts)
     end
   end
 

@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
   Source compatibility and dashboard focus contract evaluation for the data sources page.
   """
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, SourceCapabilities}
+  alias Cadence.Dashboards.{DataBinding, DataSource, DefaultSourceAdapters, SourceCapabilities}
 
   @spec compatible_sources([DataSource.t()], DataBinding.t()) :: [DataSource.t()]
   def compatible_sources(sources, %DataBinding{} = binding) when is_list(sources) do
@@ -62,10 +62,11 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
 
   @spec effective_capabilities(DataSource.t()) :: SourceCapabilities.t() | nil
   def effective_capabilities(%DataSource{adapter: adapter} = source) when is_atom(adapter) do
-    with {:module, ^adapter} <- Code.ensure_loaded(adapter),
-         true <- function_exported?(adapter, :capabilities, 0),
+    with {:ok, adapter_module} <- DefaultSourceAdapters.resolve(adapter),
+         {:module, ^adapter_module} <- Code.ensure_loaded(adapter_module),
+         true <- function_exported?(adapter_module, :capabilities, 0),
          %SourceCapabilities{} = capabilities <-
-           SourceCapabilities.normalize(adapter.capabilities()) do
+           SourceCapabilities.normalize(adapter_module.capabilities()) do
       SourceCapabilities.with_data_source_capabilities(capabilities, source)
     else
       _other -> nil
@@ -75,18 +76,8 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
   def effective_capabilities(%DataSource{}), do: nil
 
   @spec logical_source(DataSource.t()) :: atom() | nil
-  def logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Telemetry}),
-    do: :telemetry
-
-  def logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Limits}), do: :limits
-
-  def logical_source(%DataSource{
-        adapter: Cadence.Dashboards.Sources.OperationalObservables
-      }),
-      do: :operational_observables
-
-  def logical_source(%DataSource{adapter: Cadence.Dashboards.Sources.Events}), do: :events
-  def logical_source(%DataSource{}), do: nil
+  def logical_source(%DataSource{adapter: adapter}),
+    do: DefaultSourceAdapters.logical_source(adapter)
 
   @spec logical_source_text(DataSource.t()) :: binary()
   def logical_source_text(%DataSource{} = source), do: text(logical_source(source))

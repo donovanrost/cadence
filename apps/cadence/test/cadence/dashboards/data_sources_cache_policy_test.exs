@@ -20,6 +20,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
+  alias Cadence.Projections.DataSourceBindings
 
   setup do
     persist_mission_scope("org-dash-source", "mission-dash-source")
@@ -571,7 +572,9 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert resolved.data_source.isolation_level == :mission_isolated
     assert resolved.dataset == "mission-flight"
 
-    assert {:ok, context_resolved} = DataSources.resolve_binding(source_request())
+    assert {:ok, context_resolved} =
+             DataSourceBindings.resolve(source_request())
+
     assert context_resolved.binding.binding_id == "mission-flight-telemetry"
   end
 
@@ -581,7 +584,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
     assert data_source.data_source_id == "managed_questdb_primary"
     assert data_source.kind == :managed_tsdb
-    assert data_source.adapter == Cadence.Dashboards.Sources.Telemetry
+    assert data_source.adapter == :telemetry
     assert data_source.isolation_level == :shared
     assert data_source.metadata["bootstrap_default?"]
 
@@ -599,7 +602,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
              )
 
     assert limits_source.kind == :projection
-    assert limits_source.adapter == Cadence.Dashboards.Sources.Limits
+    assert limits_source.adapter == :limits
     assert limits_source.capabilities["latest_state?"]
     assert limits_source.capabilities["definition_intervals?"]
     assert limits_source.metadata["bootstrap_default?"]
@@ -623,7 +626,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
              )
 
     assert events_source.kind == :projection
-    assert events_source.adapter == Cadence.Dashboards.Sources.Events
+    assert events_source.adapter == :events
     assert events_source.capabilities["contact_intervals?"]
     assert events_source.capabilities["mission_timeline?"]
     assert events_source.capabilities["source_health_transitions?"]

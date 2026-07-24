@@ -11,7 +11,6 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
   alias Cadence.Dashboards.{
     DataBinding,
     DataSource,
-    DataSources,
     PlannedSourceRequest,
     SourceCredentialMaterial,
     SourceCredentials,
@@ -19,10 +18,12 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
   }
 
   alias Cadence.Dashboards.SourceCredentials.EnvMaterialResolver
+  alias Cadence.Management.DataSources
   alias Cadence.Missions
   alias Cadence.Missions.Mission
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
+  alias Cadence.Projections.DataSourceHealth
   alias Cadence.Repo
   alias Cadence.Telemetry.Sample
 
@@ -376,7 +377,7 @@ defmodule Cadence.Dashboards.BYOQuestDBSmoke do
           invalidate_runtime_cache?: false
         ] ++ maybe_questdb_exec_fun(opts)
 
-    case DataSources.probe_data_source(
+    case DataSourceHealth.probe(
            context.data_source_id,
            %{observed_at: context.timestamp},
            probe_opts

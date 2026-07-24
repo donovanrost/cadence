@@ -9,8 +9,9 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioning do
   lifecycle event payload.
   """
 
-  alias Cadence.Dashboards.{DataSource, DataSources}
+  alias Cadence.Dashboards.DataSource
   alias Cadence.Dashboards.Sources.Telemetry
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.Storage.QuestDB.SchemaMigrator
 
   @supported_isolation_levels [:org_isolated, :mission_isolated]

@@ -3,23 +3,13 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
   Selects default, overridden, or binding-owned source adapters.
   """
 
-  alias Cadence.Dashboards.ResolvedSourceBinding
-  alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}
+  alias Cadence.Dashboards.{DefaultSourceAdapters, ResolvedSourceBinding}
 
   @type adapter :: module()
 
-  @default_adapters %{
-    telemetry: Telemetry,
-    limits: Limits,
-    events: Events,
-    operational_observables: OperationalObservables
-  }
-
   @spec logical_sources() :: [atom()]
   def logical_sources do
-    @default_adapters
-    |> Map.keys()
-    |> Enum.sort()
+    DefaultSourceAdapters.logical_sources()
   end
 
   @spec for_logical_source(atom(), keyword()) :: {:ok, adapter()} | :error
@@ -28,7 +18,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
 
     case Map.fetch(adapters, logical_source) do
       {:ok, adapter} when is_atom(adapter) -> {:ok, adapter}
-      :error -> Map.fetch(@default_adapters, logical_source)
+      :error -> DefaultSourceAdapters.fetch(logical_source)
     end
   end
 
@@ -42,10 +32,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
         {:ok, adapter}
 
       :error ->
-        case resolved_binding.data_source.adapter do
-          adapter when is_atom(adapter) and not is_nil(adapter) -> {:ok, adapter}
-          _other -> :error
-        end
+        DefaultSourceAdapters.resolve(resolved_binding.data_source.adapter, logical_source)
     end
   end
 end

@@ -9,7 +9,6 @@ defmodule Cadence.Dashboards.SourceRegistry do
   alias Cadence.Dashboards.{
     DataLinks,
     DataSourceRegistry,
-    DataSources,
     Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
@@ -37,6 +36,8 @@ defmodule Cadence.Dashboards.SourceRegistry do
     SourceHealthLookup,
     WatermarkMerge
   }
+
+  alias Cadence.Management.DataSources
 
   @type adapter :: module()
   @type adapter_map :: %{optional(atom()) => adapter()}

@@ -15,10 +15,10 @@ defmodule Cadence do
   alias Cadence.ApplicationDispatch.DispatchDecision
   alias Cadence.ApplicationDispatch.Dispatcher
   alias Cadence.Dashboards
-  alias Cadence.Dashboards.DataSources, as: DashboardDataSources
   alias Cadence.Governance
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
+  alias Cadence.Management.DataSources, as: DashboardDataSources
   alias Cadence.Missions
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}

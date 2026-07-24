@@ -5,7 +5,8 @@ defmodule Cadence.Dashboards.DataSources.DataBindingRow do
 
   import Ecto.Changeset
 
-  alias Cadence.Dashboards.{DataBinding, SourceExecutionPolicy}
+  alias Cadence.Dashboards.DataBinding
+  alias Cadence.Management.DataSources.ExecutionPolicy
   alias Cadence.Persistence.JsonDocument
 
   @primary_key {:binding_id, :string, autogenerate: false}
@@ -133,7 +134,7 @@ defmodule Cadence.Dashboards.DataSources.DataBindingRow do
     changeset
     |> get_field(:metadata)
     |> JsonDocument.unwrap_value()
-    |> SourceExecutionPolicy.validate_metadata_policy()
+    |> ExecutionPolicy.validate_metadata()
     |> case do
       :ok -> changeset
       {:error, errors} -> Enum.reduce(errors, changeset, &add_error(&2, :metadata, &1))

@@ -5,7 +5,8 @@ defmodule Cadence.Dashboards.DataSources.DataSourceRow do
 
   import Ecto.Changeset
 
-  alias Cadence.Dashboards.{DataSource, SourceExecutionPolicy}
+  alias Cadence.Dashboards.DataSource
+  alias Cadence.Management.DataSources.ExecutionPolicy
   alias Cadence.Persistence.JsonDocument
 
   @primary_key {:data_source_id, :string, autogenerate: false}
@@ -161,7 +162,7 @@ defmodule Cadence.Dashboards.DataSources.DataSourceRow do
     changeset
     |> get_field(:metadata)
     |> JsonDocument.unwrap_value()
-    |> SourceExecutionPolicy.validate_metadata_policy()
+    |> ExecutionPolicy.validate_metadata()
     |> case do
       :ok -> changeset
       {:error, errors} -> Enum.reduce(errors, changeset, &add_error(&2, :metadata, &1))

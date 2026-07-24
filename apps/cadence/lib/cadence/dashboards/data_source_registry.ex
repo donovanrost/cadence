@@ -11,7 +11,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
     DataContext,
     DataLinks,
     DataSource,
-    DataSources,
+    DefaultSourceAdapters,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
@@ -26,6 +26,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
 
   alias Cadence.Dashboards.DataSourceRegistry.Facts
   alias Cadence.Dashboards.DataSourceRegistry.HistoricalResolver
+  alias Cadence.Management.DataSources
 
   @spec resolve(PlannedSourceRequest.t(), keyword()) ::
           {:ok, ResolvedSourceBinding.t()} | {:error, ResolveWarning.t()}
@@ -400,7 +401,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
        ) do
     with :ok <- validate_data_source_active(data_source, binding, request, selection),
          :ok <- validate_data_source_configuration(data_source, binding, request, selection) do
-      {:ok, data_source}
+      {:ok, DefaultSourceAdapters.materialize(data_source, binding.logical_source)}
     end
   end
 

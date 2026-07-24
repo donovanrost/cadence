@@ -17,6 +17,7 @@ defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
   }
 
   alias Cadence.OperationalEvents
+  alias Cadence.Projections.DataSourceBindings
 
   setup do
     persist_mission_scope("org-dash-source", "mission-dash-source")
@@ -287,7 +288,7 @@ defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
                invalidate_runtime_cache?: false
              )
 
-    assert {:ok, resolved} = DataSources.resolve_binding(source_request())
+    assert {:ok, resolved} = DataSourceBindings.resolve(source_request())
 
     assert resolved.binding.binding_id == "backup-health-flight"
     assert resolved.data_source.data_source_id == "backup-health-questdb"
@@ -347,7 +348,7 @@ defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
              )
 
     assert {:ok, resolved} =
-             DataSources.resolve_binding(source_request(),
+             DataSourceBindings.resolve(source_request(),
                source_readiness_policy: [
                  policy_id: :strict_ops,
                  block_source_health: [:unavailable, :degraded],

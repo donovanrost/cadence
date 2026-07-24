@@ -4,8 +4,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
 
   alias Cadence.Comms.{GroundStationStore, TransportStore}
 
-  alias Cadence.Dashboards.DataSources
   alias Cadence.Dashboards.OperationalObservable
+  alias Cadence.Management.DataSources
   alias Cadence.Ops.PointCatalog
 
   def load(scope, mission, opts \\ []) do

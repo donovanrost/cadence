@@ -44,6 +44,11 @@ defmodule Cadence.Control.ManagedResources do
     end
   end
 
+  @spec reconcile_tsdb_backend(binary(), map(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def reconcile_tsdb_backend(data_source_id, attrs \\ %{}, opts \\ []) do
+    ManagedResources.reconcile_tsdb_backend(data_source_id, attrs, opts)
+  end
+
   defdelegate list_managed_questdb_runs(mission_id, opts \\ []),
     to: ManagedQuestDBProvisioningRuns,
     as: :list_for_mission

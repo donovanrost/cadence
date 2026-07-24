@@ -8,12 +8,14 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   alias Cadence.Dashboards.{
     DataBinding,
     DataSource,
-    DataSources,
     SourceCredentials,
     SourceHealth,
     SourceReadiness,
     SourceWatermarks
   }
+
+  alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSourceHealth
 
   alias Cadence.Projections.ManagedResourceStatus
 
@@ -137,7 +139,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("reconcile_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case DataSources.reconcile_tsdb_backend(data_source_id, %{},
+    case ManagedResources.reconcile_tsdb_backend(data_source_id, %{},
            actor_id: current_user_id(scope),
            payload: source_action_payload(socket, %{data_source_id: data_source_id})
          ) do
@@ -203,7 +205,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     source = find_data_source(socket.assigns.data_sources, data_source_id)
 
-    case DataSources.probe_data_source(
+    case DataSourceHealth.probe(
            data_source_id,
            %{mission_id: mission.mission_id},
            [

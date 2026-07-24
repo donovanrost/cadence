@@ -6,10 +6,11 @@ defmodule Cadence.Dashboards.TSDBBackendLifecycleJobs do
   adapters are runtime configuration, not durable data.
   """
 
-  alias Cadence.Dashboards.{DataSource, DataSources, TSDBDeploymentStatus}
+  alias Cadence.Dashboards.{DataSource, TSDBDeploymentStatus}
   alias Cadence.Ids
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
+  alias Cadence.Management.ManagedResources
 
   @job_type :dashboard_tsdb_backend_lifecycle
 
@@ -34,8 +35,9 @@ defmodule Cadence.Dashboards.TSDBBackendLifecycleJobs do
           {:ok, DataSource.t(), Job.t()} | {:error, term()}
   def request_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    with {:ok, %DataSource{} = source} <-
-           DataSources.request_tsdb_backend_provisioning(data_source_id, attrs, opts),
+    with {:ok, request} <-
+           ManagedResources.request_tsdb_backend(data_source_id, :provision, attrs, opts),
+         %DataSource{} = source <- request.data_source,
          {:ok, %Job{} = job} <- enqueue_for_source(source, :provision, attrs, opts) do
       {:ok, source, job}
     end
@@ -45,8 +47,9 @@ defmodule Cadence.Dashboards.TSDBBackendLifecycleJobs do
           {:ok, DataSource.t(), Job.t()} | {:error, term()}
   def request_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    with {:ok, %DataSource{} = source} <-
-           DataSources.request_tsdb_backend_deprovisioning(data_source_id, attrs, opts),
+    with {:ok, request} <-
+           ManagedResources.request_tsdb_backend(data_source_id, :deprovision, attrs, opts),
+         %DataSource{} = source <- request.data_source,
          {:ok, %Job{} = job} <- enqueue_for_source(source, :deprovision, attrs, opts) do
       {:ok, source, job}
     end
@@ -148,8 +151,9 @@ defmodule Cadence.Dashboards.TSDBBackendLifecycleJobs do
   defp complete_job_lifecycle(%Job{} = job, executor_result) do
     case payload_value(job.payload, :operation) do
       "provision" ->
-        DataSources.complete_tsdb_backend_provisioning(
+        ManagedResources.complete_tsdb_backend(
           text(payload_value(job.payload, :data_source_id)),
+          :provision,
           %{
             job_id: job.job_id,
             run_id: job.run_id,
@@ -165,8 +169,9 @@ defmodule Cadence.Dashboards.TSDBBackendLifecycleJobs do
         )
 
       "deprovision" ->
-        DataSources.complete_tsdb_backend_deprovisioning(
+        ManagedResources.complete_tsdb_backend(
           text(payload_value(job.payload, :data_source_id)),
+          :deprovision,
           %{
             job_id: job.job_id,
             run_id: job.run_id,

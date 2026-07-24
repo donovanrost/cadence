@@ -12,13 +12,13 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
   alias Cadence.Dashboards.{
     DataBindingInterval,
     DataLink,
-    DataLinkInspector,
-    DataSources
+    DataLinkInspector
   }
 
   alias Cadence.Dashboards.DataSources.DataBindingEventRow
   alias Cadence.Dashboards.SourceHealth.EventRow, as: SourceHealthEventRow
   alias Cadence.Dashboards.SourceWatermarks.EventRow, as: SourceWatermarkEventRow
+  alias Cadence.Management.DataSources
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.EffectiveInterval
   alias Cadence.Repo

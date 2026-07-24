@@ -15,6 +15,8 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     SourceResult
   }
 
+  alias Cadence.Projections.DataSourceHealth
+
   setup do
     persist_mission_scope("org-dash-source", "mission-dash-source")
     :ok
@@ -198,7 +200,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, healthy_event, healthy_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "probe-questdb",
                %{observed_at: ~U[2026-06-21 21:00:00Z]},
                actor_id: "operator-5",
@@ -246,7 +248,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
              })
 
     assert {:ok, :unchanged, drift_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "probe-questdb",
                %{observed_at: ~U[2026-06-21 21:10:00Z]},
                actor_id: "operator-5",
@@ -267,7 +269,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
              )
 
     assert {:ok, unavailable_event, unavailable_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "probe-questdb",
                %{observed_at: ~U[2026-06-21 22:00:00Z]},
                actor_id: "operator-6",
@@ -300,7 +302,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     test_pid = self()
 
     assert {:ok, healthy_event, healthy_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "questdb-schema-probe",
                %{observed_at: ~U[2026-06-21 22:15:00Z]},
                actor_id: "operator-questdb",
@@ -348,7 +350,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, degraded_event, degraded_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "questdb-schema-old",
                %{observed_at: ~U[2026-06-21 22:17:00Z]},
                actor_id: "operator-questdb",
@@ -392,7 +394,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, degraded_event, degraded_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "questdb-schema-missing",
                %{observed_at: ~U[2026-06-21 22:20:00Z]},
                actor_id: "operator-questdb",
@@ -433,7 +435,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, unavailable_event, unavailable_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "questdb-connection-failed",
                %{observed_at: ~U[2026-06-21 22:22:00Z]},
                actor_id: "operator-questdb",
@@ -495,7 +497,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, unavailable_event, _unavailable_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "questdb-auth-failed",
                %{observed_at: ~U[2026-06-21 22:23:00Z]},
                actor_id: "operator-questdb",
@@ -539,7 +541,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, degraded_event, degraded_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "adapter-probe-source",
                %{observed_at: ~U[2026-06-21 21:15:00Z]},
                actor_id: "operator-7",
@@ -574,7 +576,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
 
     assert {:ok, healthy_event, healthy_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "adapter-reported-capability-source",
                %{observed_at: ~U[2026-06-21 21:20:00Z]},
                actor_id: "operator-8",
@@ -737,7 +739,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     test_pid = self()
 
     assert {:ok, healthy_event, healthy_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "byo-probe-questdb",
                %{observed_at: ~U[2026-06-21 22:25:00Z]},
                actor_id: "operator-byo-questdb",
@@ -831,7 +833,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     test_pid = self()
 
     assert {:ok, healthy_event, healthy_status} =
-             DataSources.probe_data_source(
+             DataSourceHealth.probe(
                "byo-material-questdb",
                %{observed_at: ~U[2026-06-27 20:05:00Z]},
                actor_id: "operator-byo-questdb",

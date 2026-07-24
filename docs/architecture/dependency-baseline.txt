@@ -18,16 +18,6 @@ context_direction|lib/cadence/ground_networks/provider_event_processor.ex|lib/ca
 plane_direction|lib/cadence/comms/routing_rule_store.ex|lib/cadence/contacts.ex
 plane_direction|lib/cadence/comms/transport_store.ex|lib/cadence/contacts.ex
 plane_direction|lib/cadence/comms/transport_store.ex|lib/cadence/ground_networks.ex
-plane_direction|lib/cadence/dashboards/byo_questdb_smoke.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/data_link_resolver/source_state_targets.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/data_source_registry.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/managed_questdb_provisioning.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/publish_readiness.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/source_execution_policy.ex|lib/cadence/dashboards/planned_source_request.ex
-plane_direction|lib/cadence/dashboards/source_probe_scheduler.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/source_registry.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/dashboards/tsdb_backend_lifecycle_jobs.ex|lib/cadence/dashboards/data_sources.ex
 plane_direction|lib/cadence/governance.ex|lib/cadence/capabilities/registry.ex
 plane_direction|lib/cadence/management/commanding.ex|lib/cadence/commanding.ex
-plane_direction|lib/cadence/management/managed_resources.ex|lib/cadence/dashboards/data_sources.ex
 plane_direction|lib/cadence/management/providers.ex|lib/cadence/ground_networks.ex

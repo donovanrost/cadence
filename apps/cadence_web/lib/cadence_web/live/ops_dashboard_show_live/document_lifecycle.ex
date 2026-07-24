@@ -6,12 +6,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DocumentLifecycle do
 
   alias Cadence.Dashboards.{
     DashboardLifecycleStatus,
-    DataSources,
     Document,
     PublishReadinessPayload,
     RenderItem,
     SourceHealth
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.Runtime
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery

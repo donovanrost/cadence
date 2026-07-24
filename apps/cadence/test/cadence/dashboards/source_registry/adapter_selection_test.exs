@@ -36,7 +36,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelectionTest do
              )
   end
 
-  test "binding selection prefers overrides and otherwise uses the data-source adapter" do
+  test "binding selection prefers overrides and otherwise uses the configured adapter" do
     resolved_binding = resolved_binding(Telemetry)
 
     assert {:ok, Telemetry} = AdapterSelection.for_binding(resolved_binding, [])

@@ -5,7 +5,9 @@ defmodule Cadence.Dashboards.SourceProbeScheduler do
 
   use GenServer
 
-  alias Cadence.Dashboards.{DataSource, DataSources, SourceHealth, SourceProbePolicy}
+  alias Cadence.Dashboards.{DataSource, SourceHealth, SourceProbePolicy}
+  alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSourceHealth
 
   @default_interval_ms 60_000
   @default_max_concurrency 4
@@ -163,7 +165,7 @@ defmodule Cadence.Dashboards.SourceProbeScheduler do
   end
 
   defp probe_source(%DataSource{} = source, opts) do
-    probe_fun = Keyword.get(opts, :probe_fun, &DataSources.probe_data_source/3)
+    probe_fun = Keyword.get(opts, :probe_fun, &DataSourceHealth.probe/3)
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     probe_policy = SourceProbePolicy.from_data_source(source)
 

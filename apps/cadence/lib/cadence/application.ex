@@ -6,7 +6,7 @@ defmodule Cadence.Application do
   use Application
 
   alias Cadence.Auth
-  alias Cadence.Dashboards.DataSources, as: DashboardDataSources
+  alias Cadence.Management.DataSources, as: DashboardDataSources
   @impl true
   def start(_type, _args) do
     Cadence.Observability.setup_repo_tracing()

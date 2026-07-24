@@ -11,12 +11,13 @@ defmodule Cadence.Dashboards.PublishReadiness do
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
     DashboardResolveResult,
-    DataSources,
     Document,
     Engine,
     ResolveWarning,
     ValidationResult
   }
+
+  alias Cadence.Management.DataSources
 
   @blocking_warning_codes [
     :missing_source_binding,

@@ -13,13 +13,10 @@ defmodule Cadence.Dashboards.DataSources do
     DataBindingInterval,
     DataSource,
     DataSourceEvent,
-    DataSourceRegistry,
     RuntimeInvalidation,
-    SourceCredentials,
-    SourceHealth
+    SourceCredentials
   }
 
-  alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Persistence.JsonDocument
@@ -28,10 +25,10 @@ defmodule Cadence.Dashboards.DataSources do
     DataBindingEventRow,
     DataBindingRow,
     DataSourceEventRow,
-    DataSourceRow,
-    SourceOperations
+    DataSourceRow
   }
 
+  alias Cadence.Management.DataSources.Lifecycle
   alias Cadence.Repo
 
   @default_data_source_id "managed_questdb_primary"
@@ -49,7 +46,7 @@ defmodule Cadence.Dashboards.DataSources do
       data_source_id: @default_data_source_id,
       owner: :cadence,
       kind: :managed_tsdb,
-      adapter: Telemetry,
+      adapter: :telemetry,
       isolation_level: :shared,
       capabilities: %{
         range_scan?: true,
@@ -68,7 +65,7 @@ defmodule Cadence.Dashboards.DataSources do
       data_source_id: @default_limits_data_source_id,
       owner: :cadence,
       kind: :projection,
-      adapter: Limits,
+      adapter: :limits,
       isolation_level: :shared,
       capabilities: %{
         latest_state?: true,
@@ -86,7 +83,7 @@ defmodule Cadence.Dashboards.DataSources do
       data_source_id: @default_operational_observables_data_source_id,
       owner: :cadence,
       kind: :projection,
-      adapter: OperationalObservables,
+      adapter: :operational_observables,
       isolation_level: :shared,
       capabilities: %{
         constellation_health?: true,
@@ -102,7 +99,7 @@ defmodule Cadence.Dashboards.DataSources do
       data_source_id: @default_events_data_source_id,
       owner: :cadence,
       kind: :projection,
-      adapter: Events,
+      adapter: :events,
       isolation_level: :shared,
       capabilities: %{
         contact_intervals?: true,
@@ -286,7 +283,7 @@ defmodule Cadence.Dashboards.DataSources do
           {:ok, DataSource.t()} | {:error, term()}
   def reconcile_tsdb_backend(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.reconcile_tsdb_backend(
+    Lifecycle.reconcile_tsdb_backend(
       data_source_id,
       attrs,
       opts,
@@ -298,7 +295,7 @@ defmodule Cadence.Dashboards.DataSources do
           {:ok, DataSource.t()} | {:error, term()}
   def request_tsdb_backend_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.request_tsdb_backend_deprovisioning(
+    Lifecycle.request_tsdb_backend_deprovisioning(
       data_source_id,
       attrs,
       opts,
@@ -310,7 +307,7 @@ defmodule Cadence.Dashboards.DataSources do
           {:ok, DataSource.t()} | {:error, term()}
   def request_tsdb_backend_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.request_tsdb_backend_provisioning(
+    Lifecycle.request_tsdb_backend_provisioning(
       data_source_id,
       attrs,
       opts,
@@ -322,7 +319,7 @@ defmodule Cadence.Dashboards.DataSources do
           {:ok, DataSource.t()} | {:error, term()}
   def complete_tsdb_backend_provisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.complete_tsdb_backend_provisioning(
+    Lifecycle.complete_tsdb_backend_provisioning(
       data_source_id,
       attrs,
       opts,
@@ -334,19 +331,7 @@ defmodule Cadence.Dashboards.DataSources do
           {:ok, DataSource.t()} | {:error, term()}
   def complete_tsdb_backend_deprovisioning(data_source_id, attrs \\ %{}, opts \\ [])
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.complete_tsdb_backend_deprovisioning(
-      data_source_id,
-      attrs,
-      opts,
-      source_operation_callbacks()
-    )
-  end
-
-  @spec probe_data_source(binary(), map(), keyword()) ::
-          SourceHealth.record_result() | {:error, term()}
-  def probe_data_source(data_source_id, attrs \\ %{}, opts \\ [])
-      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
-    SourceOperations.probe_data_source(
+    Lifecycle.complete_tsdb_backend_deprovisioning(
       data_source_id,
       attrs,
       opts,
@@ -486,31 +471,13 @@ defmodule Cadence.Dashboards.DataSources do
     end
   end
 
-  @spec resolve_binding(Cadence.Dashboards.PlannedSourceRequest.t(), keyword()) ::
-          {:ok, Cadence.Dashboards.ResolvedSourceBinding.t()}
-          | {:error, Cadence.Dashboards.ResolveWarning.t()}
-  def resolve_binding(request, opts \\ []) do
-    registry_opts =
-      [
-        data_sources: list_data_sources(request.organization_id, request.mission_id),
-        data_bindings: list_data_bindings(request.organization_id, request.mission_id),
-        source_health_statuses:
-          SourceHealth.list_source_health_statuses(request.organization_id, request.mission_id,
-            logical_source: request.logical_source
-          )
-      ]
-      |> Keyword.merge(opts)
-
-    DataSourceRegistry.resolve(request, registry_opts)
-  end
-
   defp maybe_invalidate_data_source(%DataSource{} = data_source) do
     with {:ok, runtime_cache} <- dashboard_runtime_invalidation_cache() do
       RuntimeInvalidation.data_source_binding_changed(
         %{
           organization_id: data_source.organization_id,
           mission_id: data_source.mission_id,
-          logical_source: logical_source_for_adapter(data_source.adapter),
+          logical_source: logical_source_for_adapter_id(data_source.adapter),
           data_source_id: data_source.data_source_id
         },
         runtime_cache: runtime_cache
@@ -945,11 +912,11 @@ defmodule Cadence.Dashboards.DataSources do
   defp normalize_enum(value) when is_atom(value), do: Atom.to_string(value)
   defp normalize_enum(value), do: value
 
-  defp logical_source_for_adapter(Telemetry), do: :telemetry
-  defp logical_source_for_adapter(Limits), do: :limits
-  defp logical_source_for_adapter(OperationalObservables), do: :operational_observables
-  defp logical_source_for_adapter(Events), do: :events
-  defp logical_source_for_adapter(_adapter), do: nil
+  defp logical_source_for_adapter_id(adapter)
+       when adapter in [:telemetry, :limits, :operational_observables, :events],
+       do: adapter
+
+  defp logical_source_for_adapter_id(_adapter), do: nil
 
   defp maybe_scope_organization(query, nil), do: query
 
