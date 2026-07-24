@@ -3,9 +3,10 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   import Phoenix.Component, only: [to_form: 2]
 
+  alias CadenceWeb.API.IdentityParams, as: IdentityParams
+
   alias Cadence.Auth.Scope
   alias CadenceWeb.AuthenticatedEntry
-  alias CadenceWeb.ControlPlaneParams
 
   def show(conn, %{"invitation_token" => invitation_token}) do
     case invitation_assigns(invitation_token) do
@@ -36,7 +37,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
         form = acceptance_form(acceptance_params)
 
         with {:ok, acceptance_attrs} <-
-               ControlPlaneParams.organization_invitation_acceptance(acceptance_params),
+               IdentityParams.organization_invitation_acceptance(acceptance_params),
              {:ok, acceptance_result} <-
                Cadence.Auth.accept_organization_invitation(invitation_token, acceptance_attrs) do
           finalize_acceptance(conn, acceptance_result)

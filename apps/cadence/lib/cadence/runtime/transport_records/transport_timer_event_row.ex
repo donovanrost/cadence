@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.TransportTimerEventRow do
+defmodule Cadence.Runtime.TransportRecords.TransportTimerEventRow do
   @moduledoc false
 
   use Ecto.Schema

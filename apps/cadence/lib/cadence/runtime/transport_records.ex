@@ -9,14 +9,26 @@ defmodule Cadence.Runtime.TransportRecords do
 
   alias Cadence.Repo
 
-  alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
+  alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord, TransportTimerEvent}
 
   alias Cadence.Runtime.TransportRecords.{
     TransportActionRequestRow,
-    TransportCapabilityRecordRow
+    TransportCapabilityRecordRow,
+    TransportTimerEventRow
   }
 
   alias Ecto.Multi
+
+  @spec add_timer_event_inserts(Multi.t(), [TransportTimerEvent.t()]) :: Multi.t()
+  def add_timer_event_inserts(%Multi{} = multi, timer_events) when is_list(timer_events) do
+    Enum.reduce(timer_events, multi, fn %TransportTimerEvent{} = timer_event, %Multi{} = acc ->
+      Multi.insert(
+        acc,
+        {:transport_timer_event, timer_event.timer_event_id},
+        TransportTimerEventRow.changeset(timer_event)
+      )
+    end)
+  end
 
   @spec add_capability_record_inserts(Multi.t(), [TransportCapabilityRecord.t()]) :: Multi.t()
   def add_capability_record_inserts(%Multi{} = multi, capability_records)

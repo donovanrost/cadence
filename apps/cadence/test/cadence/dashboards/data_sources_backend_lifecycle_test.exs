@@ -3,6 +3,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   import Cadence.Dashboards.DataSourcesFixtures
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Control.ManagedResources
 
   alias Cadence.Dashboards.{
@@ -295,7 +297,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}
@@ -402,7 +404,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}

@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageRetryLiveTest d
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -322,7 +324,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageRetryLiveTest d
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
 
-      assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+      assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
       assert completed_job.status == :completed
 
       events =

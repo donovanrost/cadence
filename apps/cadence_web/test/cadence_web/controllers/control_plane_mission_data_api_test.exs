@@ -8,6 +8,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Jobs
 
   setup do
@@ -630,7 +632,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              Jobs.claim_jobs(1)
              |> Enum.map(fn job -> {:ok, job} end)
 
-    assert {:ok, _completed_job} = Jobs.run_job(claimed_job.job_id)
+    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
 
     import_run_show_conn =
       conn
@@ -798,7 +800,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              Jobs.claim_jobs(1)
              |> Enum.map(fn job -> {:ok, job} end)
 
-    assert {:ok, _completed_job} = Jobs.run_job(claimed_job.job_id)
+    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
 
     import_run_show_conn =
       conn
@@ -1122,7 +1124,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              Jobs.claim_jobs(1)
              |> Enum.map(fn job -> {:ok, job} end)
 
-    assert {:ok, _completed_job} = Jobs.run_job(claimed_job.job_id)
+    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
 
     import_run_show_conn =
       conn

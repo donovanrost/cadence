@@ -3,9 +3,9 @@ defmodule Cadence.Limits.DefinitionLifecycleEvent do
   Append-only lifecycle event for a governed limit definition becoming effective.
   """
 
-  alias Cadence.Dashboards.RuntimeCacheKey
   alias Cadence.Ids
   alias Cadence.Limits.Definition
+  alias Cadence.Platform.Fingerprint
 
   @type event_type :: :registered | :activated | :superseded | :disabled | :retired | :unknown
 
@@ -122,7 +122,7 @@ defmodule Cadence.Limits.DefinitionLifecycleEvent do
   @spec definition_activation_key(map()) :: binary()
   def definition_activation_key(identity) when is_map(identity) do
     "limit_activation:" <>
-      RuntimeCacheKey.fingerprint(%{
+      Fingerprint.url_sha256(%{
         organization_id: get_attr(identity, :organization_id),
         mission_id: get_attr(identity, :mission_id),
         point_id: get_attr(identity, :point_id),

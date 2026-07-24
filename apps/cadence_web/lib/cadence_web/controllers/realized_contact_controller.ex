@@ -3,8 +3,12 @@ defmodule CadenceWeb.RealizedContactController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.ContactJSON, as: ContactJSON
+
+  alias CadenceWeb.API.ContactParams, as: ContactParams
+
   alias Cadence.Contacts.RealizedContact
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id}) do
     with {:ok, _mission} <-
@@ -15,7 +19,7 @@ defmodule CadenceWeb.RealizedContactController do
            ) do
       realized_contacts =
         Cadence.Contacts.list_realized_contacts(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.realized_contact/1)
+        |> Enum.map(&ContactJSON.realized_contact/1)
 
       json(conn, %{data: realized_contacts})
     end
@@ -38,7 +42,7 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id,
              realized_contact_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.realized_contact(realized_contact)})
+      json(conn, %{data: ContactJSON.realized_contact(realized_contact)})
     end
   end
 
@@ -54,12 +58,10 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ),
          {:ok, runtime_snapshot} <-
-           Cadence.realized_contact_snapshot(
-             organization_id,
-             mission_id,
-             realized_contact_id
-           ) do
-      json(conn, %{data: ControlPlaneJSON.realized_contact_runtime_snapshot(runtime_snapshot)})
+           Cadence.Runtime.realized_contact_snapshot(mission_id, realized_contact_id) do
+      json(conn, %{
+        data: ContactJSON.realized_contact_runtime_snapshot(runtime_snapshot)
+      })
     end
   end
 
@@ -76,13 +78,8 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ),
          {:ok, runtime_snapshot} <-
-           Cadence.path_runtime_snapshot(
-             organization_id,
-             mission_id,
-             realized_contact_id,
-             path_id
-           ) do
-      json(conn, %{data: ControlPlaneJSON.path_runtime_snapshot(runtime_snapshot)})
+           Cadence.Runtime.path_runtime_snapshot(mission_id, realized_contact_id, path_id) do
+      json(conn, %{data: ContactJSON.path_runtime_snapshot(runtime_snapshot)})
     end
   end
 
@@ -101,7 +98,7 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ),
          {:ok, termination_opts} <-
-           ControlPlaneParams.contact_action(Map.get(params, "termination", %{})),
+           ContactParams.contact_action(Map.get(params, "termination", %{})),
          {:ok, realized_contact} <-
            Cadence.Contacts.end_realized_contact_early(
              organization_id,
@@ -109,7 +106,7 @@ defmodule CadenceWeb.RealizedContactController do
              realized_contact_id,
              termination_opts
            ) do
-      json(conn, %{data: ControlPlaneJSON.realized_contact(realized_contact)})
+      json(conn, %{data: ContactJSON.realized_contact(realized_contact)})
     end
   end
 end

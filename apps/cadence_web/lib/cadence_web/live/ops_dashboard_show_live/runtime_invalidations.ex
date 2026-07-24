@@ -3,6 +3,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
 
   import Phoenix.Component, only: [assign: 3]
 
+  alias Cadence.Projections.DashboardRuntimeInvalidations, as: DashboardRuntimeInvalidations
+
+  alias Cadence.Telemetry.RuntimeHealth, as: RuntimeHealth
+
   alias Cadence.Dashboards.{Document, RuntimeInvalidation, RuntimeInvalidationRelevance}
   alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias CadenceWeb.OpsDashboardShowLive.Runtime
@@ -67,7 +71,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
   end
 
   def recent_events do
-    Cadence.runtime_health_snapshot().recent_events
+    RuntimeHealth.snapshot().recent_events
   rescue
     _error -> []
   catch
@@ -234,7 +238,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
 
       _missing ->
         RuntimeInvalidation.emit_decision(invalidation, decision, emit_opts)
-        Cadence.record_dashboard_runtime_invalidation_decision(invalidation, decision, emit_opts)
+
+        DashboardRuntimeInvalidations.record(
+          invalidation,
+          decision,
+          emit_opts
+        )
     end
   rescue
     _error -> :ok

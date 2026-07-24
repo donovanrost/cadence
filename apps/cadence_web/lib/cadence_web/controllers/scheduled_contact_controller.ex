@@ -3,8 +3,12 @@ defmodule CadenceWeb.ScheduledContactController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.ContactJSON, as: ContactJSON
+
+  alias CadenceWeb.API.ContactParams, as: ContactParams
+
   alias Cadence.Contacts.ScheduledContact
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id}) do
     with {:ok, _mission} <-
@@ -15,7 +19,7 @@ defmodule CadenceWeb.ScheduledContactController do
            ) do
       scheduled_contacts =
         Cadence.Contacts.list_scheduled_contacts(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.scheduled_contact/1)
+        |> Enum.map(&ContactJSON.scheduled_contact/1)
 
       json(conn, %{data: scheduled_contacts})
     end
@@ -33,7 +37,7 @@ defmodule CadenceWeb.ScheduledContactController do
              mission_id
            ),
          {:ok, %ScheduledContact{} = scheduled_contact} <-
-           ControlPlaneParams.scheduled_contact(
+           ContactParams.scheduled_contact(
              organization_id,
              mission_id,
              scheduled_contact_params
@@ -42,7 +46,7 @@ defmodule CadenceWeb.ScheduledContactController do
            Cadence.Contacts.persist_scheduled_contact(organization_id, scheduled_contact) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.scheduled_contact(persisted_scheduled_contact)})
+      |> json(%{data: ContactJSON.scheduled_contact(persisted_scheduled_contact)})
     end
   end
 
@@ -63,7 +67,7 @@ defmodule CadenceWeb.ScheduledContactController do
              mission_id,
              scheduled_contact_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.scheduled_contact(scheduled_contact)})
+      json(conn, %{data: ContactJSON.scheduled_contact(scheduled_contact)})
     end
   end
 
@@ -82,7 +86,7 @@ defmodule CadenceWeb.ScheduledContactController do
              mission_id
            ),
          {:ok, realization_opts} <-
-           ControlPlaneParams.realization(Map.get(params, "realization", %{})),
+           ContactParams.realization(Map.get(params, "realization", %{})),
          {:ok, realized_contact} <-
            Cadence.Contacts.realize_scheduled_contact(
              organization_id,
@@ -90,7 +94,7 @@ defmodule CadenceWeb.ScheduledContactController do
              scheduled_contact_id,
              realization_opts
            ) do
-      json(conn, %{data: ControlPlaneJSON.realized_contact(realized_contact)})
+      json(conn, %{data: ContactJSON.realized_contact(realized_contact)})
     end
   end
 
@@ -109,7 +113,7 @@ defmodule CadenceWeb.ScheduledContactController do
              mission_id
            ),
          {:ok, cancellation_opts} <-
-           ControlPlaneParams.contact_action(Map.get(params, "cancellation", %{})),
+           ContactParams.contact_action(Map.get(params, "cancellation", %{})),
          {:ok, scheduled_contact} <-
            Cadence.Contacts.cancel_scheduled_contact(
              organization_id,
@@ -117,7 +121,7 @@ defmodule CadenceWeb.ScheduledContactController do
              scheduled_contact_id,
              cancellation_opts
            ) do
-      json(conn, %{data: ControlPlaneJSON.scheduled_contact(scheduled_contact)})
+      json(conn, %{data: ContactJSON.scheduled_contact(scheduled_contact)})
     end
   end
 end

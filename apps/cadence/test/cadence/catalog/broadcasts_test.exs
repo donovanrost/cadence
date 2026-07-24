@@ -1,6 +1,8 @@
 defmodule Cadence.Catalog.BroadcastsTest do
   use Cadence.ConfigCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Catalog.{Artifact, Events}
 
   @organization_id "org-broadcasts"
@@ -42,7 +44,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
   defp run_enqueued_job(import_run_id) do
     {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, import_run_id)
     [_] = Cadence.Jobs.claim_jobs(1)
-    {:ok, completed_job} = Cadence.Jobs.run_job(job.job_id)
+    {:ok, completed_job} = JobRunner.run_job(job.job_id)
     completed_job
   end
 

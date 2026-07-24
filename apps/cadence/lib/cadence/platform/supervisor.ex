@@ -13,7 +13,8 @@ defmodule Cadence.Platform.Supervisor do
       observability_children() ++
         [
           Cadence.Repo,
-          {Phoenix.PubSub, name: Cadence.PubSub}
+          {Phoenix.PubSub, name: Cadence.PubSub},
+          Cadence.Platform.EventBus
         ]
 
     Supervisor.init(children, strategy: :one_for_one)

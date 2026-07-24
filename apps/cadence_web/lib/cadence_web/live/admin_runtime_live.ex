@@ -2,6 +2,8 @@ defmodule CadenceWeb.AdminRuntimeLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Projections.DashboardRuntimeInvalidations, as: DashboardRuntimeInvalidations
+
   @decision_limit 100
   @filter_defaults %{
     "dashboard_id" => "",
@@ -376,7 +378,7 @@ defmodule CadenceWeb.AdminRuntimeLive do
     decisions =
       filters
       |> decision_filter_opts()
-      |> Cadence.dashboard_runtime_invalidation_decisions()
+      |> DashboardRuntimeInvalidations.list()
 
     summary = summarize_decisions(decisions)
 
@@ -556,7 +558,7 @@ defmodule CadenceWeb.AdminRuntimeLive do
 
   defp durable_decision_rows(selected_decision_key, opts)
        when is_binary(selected_decision_key) and selected_decision_key != "" do
-    Cadence.durable_dashboard_runtime_invalidation_decisions(Keyword.put(opts, :limit, 1))
+    DashboardRuntimeInvalidations.list_durable(Keyword.put(opts, :limit, 1))
   end
 
   defp durable_decision_rows(_selected_decision_key, _opts), do: []

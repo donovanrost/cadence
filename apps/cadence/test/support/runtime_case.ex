@@ -3,6 +3,7 @@ defmodule Cadence.RuntimeCase do
 
   use ExUnit.CaseTemplate
 
+  alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.CurrentValueStore.ETS
 
@@ -26,10 +27,12 @@ defmodule Cadence.RuntimeCase do
   def setup_owned_runtime(tags) do
     Cadence.DataCase.ensure_cadence_started!()
     initial_mission_ids = MapSet.new(Cadence.Runtime.running_mission_ids())
+    initial_control_mission_ids = MapSet.new(ControlMissions.running_mission_ids())
 
     pid = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
 
     on_exit(fn ->
+      stop_owned_control_missions(initial_control_mission_ids)
       stop_owned_missions(initial_mission_ids)
 
       if Cadence.DataCase.telemetry_current_value_store_module() == ETS do
@@ -41,6 +44,13 @@ defmodule Cadence.RuntimeCase do
     end)
 
     :ok
+  end
+
+  defp stop_owned_control_missions(initial_mission_ids) do
+    ControlMissions.running_mission_ids()
+    |> MapSet.new()
+    |> MapSet.difference(initial_mission_ids)
+    |> Enum.each(&ControlMissions.stop/1)
   end
 
   defp stop_owned_missions(initial_mission_ids) do

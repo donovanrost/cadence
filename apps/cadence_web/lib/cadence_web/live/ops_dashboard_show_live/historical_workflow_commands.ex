@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
   @moduledoc false
 
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflowCorrectionRequestHandoff,
     HistoricalWorkflowGroupStageHandoff,
@@ -33,7 +35,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
          opts
        )
        when is_binary(event_id) and is_binary(source_event_id) do
-    Cadence.record_telemetry_historical_data_workflow_stage_transition(
+    DataManagement.record_historical_data_workflow_stage_transition(
       handoff.workflow,
       handoff.stage,
       event_id,
@@ -44,7 +46,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
 
   defp record_stage_event(%HistoricalWorkflowStageHandoff{event_id: event_id} = handoff, opts)
        when is_binary(event_id) do
-    Cadence.record_telemetry_historical_data_workflow_stage_transition(
+    DataManagement.record_historical_data_workflow_stage_transition(
       handoff.workflow,
       handoff.stage,
       event_id,
@@ -54,7 +56,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
   end
 
   defp record_stage_event(%HistoricalWorkflowStageHandoff{} = handoff, opts) do
-    Cadence.record_telemetry_historical_data_workflow_event(
+    DataManagement.record_historical_data_workflow_event(
       handoff.workflow,
       handoff.stage,
       handoff.attrs,
@@ -68,7 +70,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
            HistoricalWorkflowHandoff.group_stage(params, scope, mission),
          {:ok, group_transition_target} <- group_transition_target(handoff),
          {:ok, events, job_results} <-
-           Cadence.record_telemetry_historical_data_workflow_group_transition(
+           DataManagement.record_historical_data_workflow_group_transition(
              handoff.workflow,
              handoff.stage,
              group_transition_target,
@@ -92,7 +94,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
     with {:ok, %HistoricalWorkflowRequestHandoff{} = handoff} <-
            HistoricalWorkflowHandoff.request(params, scope, mission),
          {:ok, events} <-
-           Cadence.record_telemetry_historical_data_workflow_request(
+           DataManagement.record_historical_data_workflow_request(
              handoff.workflow,
              handoff.attrs,
              handoff.point_ids,
@@ -109,7 +111,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
     with {:ok, %HistoricalWorkflowCorrectionRequestHandoff{} = handoff} <-
            HistoricalWorkflowHandoff.correction_request(params, scope, mission),
          {:ok, event} <-
-           Cadence.record_telemetry_historical_data_workflow_correction_request(
+           DataManagement.record_historical_data_workflow_correction_request(
              handoff.workflow,
              handoff.attrs,
              handoff.correction_params,
@@ -130,7 +132,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
       when is_list(opts) do
     with {:ok, %HistoricalWorkflowRetryGroupFailedJobsHandoff{} = handoff} <-
            HistoricalWorkflowHandoff.retry_group_failed_jobs(request_group_id, scope, mission) do
-      Cadence.retry_telemetry_historical_data_workflow_group_failed_jobs(
+      DataManagement.retry_historical_data_workflow_group_failed_jobs(
         handoff.request_group_id,
         handoff.actor_attrs,
         opts
@@ -162,7 +164,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
         {:error, {:missing_field, :replacement_run_id}}
 
       true ->
-        Cadence.record_telemetry_historical_data_workflow_missing_replacement_inspection(
+        DataManagement.record_historical_data_workflow_missing_replacement_inspection(
           request_group_id,
           replacement_run_id,
           HistoricalWorkflowParams.actor_attrs(scope, mission),
@@ -185,7 +187,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
   end
 
   defp run_job_recovery(%HistoricalWorkflowJobRecoveryHandoff{action: :retry_job} = handoff, opts) do
-    Cadence.retry_telemetry_historical_data_workflow_job(
+    DataManagement.retry_historical_data_workflow_job(
       handoff.job_id,
       handoff.event_id,
       handoff.actor_attrs,
@@ -197,7 +199,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
          %HistoricalWorkflowJobRecoveryHandoff{action: :inspect_stale_replacement_job} = handoff,
          opts
        ) do
-    Cadence.record_telemetry_historical_data_workflow_stale_replacement_inspection(
+    DataManagement.record_historical_data_workflow_stale_replacement_inspection(
       handoff.job_id,
       handoff.event_id,
       handoff.actor_attrs,
@@ -209,7 +211,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
          %HistoricalWorkflowJobRecoveryHandoff{action: :requeue_stale_replacement_job} = handoff,
          opts
        ) do
-    Cadence.requeue_telemetry_historical_data_workflow_stale_replacement_job(
+    DataManagement.requeue_historical_data_workflow_stale_replacement_job(
       handoff.job_id,
       handoff.event_id,
       handoff.actor_attrs,
@@ -218,7 +220,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
   end
 
   defp maybe_start_job("started", workflow, attrs, opts) do
-    Cadence.start_telemetry_historical_data_workflow_job(workflow, attrs, opts)
+    DataManagement.start_historical_data_workflow_job(workflow, attrs, opts)
   end
 
   defp maybe_start_job(_stage, _workflow, _attrs, _opts), do: {:ok, nil}

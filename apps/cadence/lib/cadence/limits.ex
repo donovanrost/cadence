@@ -21,7 +21,7 @@ defmodule Cadence.Limits do
     TelemetryLimitEvaluationRunRow
   }
 
-  alias Cadence.Projections.MissionEvents, as: MissionEventProjection
+  alias Cadence.Limits.Facts
 
   alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
   alias Cadence.Limits.Store
@@ -370,24 +370,25 @@ defmodule Cadence.Limits do
   end
 
   defp persist_completed_run(%Run{} = run, limit_events) do
-    projected_events = MissionEventProjection.project_many(limit_events)
-
     Multi.new()
     |> Multi.run(:limit_run, fn repo, _changes ->
       repo_run_update(repo, run)
     end)
     |> add_event_inserts(limit_events)
-    |> Multi.run(:mission_events, fn repo, _changes ->
-      MissionEventProjection.persist_entries(repo, projected_events)
-    end)
     |> Multi.run(:latest_limit_states, fn repo, _changes ->
       persist_latest_states(repo, limit_events)
     end)
     |> Repo.transaction()
     |> case do
-      {:ok, _changes} -> {:ok, run}
-      {:error, _operation, %Changeset{} = changeset, _changes_so_far} -> {:error, changeset}
-      {:error, _operation, reason, _changes_so_far} -> {:error, reason}
+      {:ok, _changes} ->
+        Enum.each(limit_events, &Facts.publish/1)
+        {:ok, run}
+
+      {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+        {:error, changeset}
+
+      {:error, _operation, reason, _changes_so_far} ->
+        {:error, reason}
     end
   end
 

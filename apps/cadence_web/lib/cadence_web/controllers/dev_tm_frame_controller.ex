@@ -3,7 +3,13 @@ defmodule CadenceWeb.DevTMFrameController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias Cadence.Runtime.Ingress, as: RuntimeIngress
+
+  alias CadenceWeb.API.TelemetryJSON, as: TelemetryJSON
+
+  alias CadenceWeb.API.RuntimeIngressParams, as: RuntimeIngressParams
+
+  alias CadenceWeb.ControlPlaneAccess
 
   def create(conn, %{
         "organization_id" => organization_id,
@@ -17,9 +23,9 @@ defmodule CadenceWeb.DevTMFrameController do
              mission_id
            ),
          {:ok, raw_evidence} <-
-           ControlPlaneParams.dev_tm_frame_ingress(mission_id, tm_frame_params),
-         {:ok, processing_result} <- Cadence.process_and_persist_telemetry_ingress(raw_evidence) do
-      json(conn, %{data: ControlPlaneJSON.dev_ingress_result(processing_result)})
+           RuntimeIngressParams.dev_tm_frame_ingress(mission_id, tm_frame_params),
+         {:ok, processing_result} <- RuntimeIngress.process_and_persist(raw_evidence) do
+      json(conn, %{data: TelemetryJSON.dev_ingress_result(processing_result)})
     end
   end
 end

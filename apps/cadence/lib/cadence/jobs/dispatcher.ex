@@ -8,14 +8,15 @@ defmodule Cadence.Jobs.Dispatcher do
 
   @default_safety_poll_interval_ms 60_000
   @default_max_concurrency 4
+  @default_name :cadence_job_dispatcher
   @event_prefix [:cadence, :jobs, :dispatcher]
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, @default_name))
   end
 
   @spec notify_available(GenServer.server()) :: :ok
-  def notify_available(server \\ __MODULE__) do
+  def notify_available(server \\ @default_name) do
     case GenServer.whereis(server) do
       nil -> :ok
       pid when is_pid(pid) -> GenServer.cast(pid, :dispatch_available)

@@ -8,7 +8,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
   baseline, or lets the baseline review date expire.
   """
 
-  alias Cadence.Architecture.PlaneBoundary
+  alias Cadence.Architecture.{ContextBoundary, PlaneBoundary, WebBoundary}
 
   @root_facade "lib/cadence.ex"
   @schema_prefix "lib/cadence/persistence/schemas/"
@@ -189,10 +189,14 @@ defmodule Cadence.Architecture.DependencyBoundary do
   @type finding :: %{
           required(:kind) =>
             :context_schema
+            | :context_direction
             | :plane_direction
             | :plane_internal
             | :root_facade
-            | :persistence_schema,
+            | :persistence_schema
+            | :web_catch_all
+            | :unclassified_plane
+            | :unclassified_context,
           required(:source) => String.t(),
           required(:sink) => String.t(),
           required(:label) => String.t(),
@@ -208,10 +212,17 @@ defmodule Cadence.Architecture.DependencyBoundary do
 
   @spec findings(map()) :: [finding()]
   def findings(graph) when is_map(graph) do
-    graph
-    |> Enum.flat_map(fn {source, sinks} ->
-      Enum.flat_map(sinks, &edge_finding(source, &1))
-    end)
+    edge_findings =
+      Enum.flat_map(graph, fn {source, sinks} ->
+        Enum.flat_map(sinks, &edge_finding(source, &1))
+      end)
+
+    classification_findings =
+      graph
+      |> graph_paths()
+      |> Enum.flat_map(&classification_findings/1)
+
+    (edge_findings ++ classification_findings)
     |> Enum.sort_by(& &1.fingerprint)
   end
 
@@ -252,8 +263,15 @@ defmodule Cadence.Architecture.DependencyBoundary do
   end
 
   defp edge_finding(source, {sink, label}) do
-    PlaneBoundary.findings_for_edge(source, sink, label) ++
-      legacy_edge_findings(source, sink, label)
+    case legacy_edge_findings(source, sink, label) do
+      [] ->
+        ContextBoundary.findings_for_edge(source, sink, label) ++
+          PlaneBoundary.findings_for_edge(source, sink, label) ++
+          WebBoundary.findings_for_edge(source, sink, label)
+
+      ownership_findings ->
+        ownership_findings
+    end
   end
 
   defp legacy_edge_findings(source, sink, label) do
@@ -282,8 +300,43 @@ defmodule Cadence.Architecture.DependencyBoundary do
     }
   end
 
+  defp graph_paths(graph) do
+    graph
+    |> Enum.flat_map(fn {source, sinks} -> [source | Map.keys(sinks)] end)
+    |> Enum.uniq()
+  end
+
+  defp classification_findings(path) do
+    plane_findings =
+      if internal_production_path?(path) and is_nil(PlaneBoundary.classify(path)) do
+        [finding(:unclassified_plane, path, "(classification)", "unclassified")]
+      else
+        []
+      end
+
+    context_findings =
+      if core_context_path?(path) and is_nil(ContextBoundary.classify(path)) do
+        [finding(:unclassified_context, path, "(classification)", "unclassified")]
+      else
+        []
+      end
+
+    plane_findings ++ context_findings
+  end
+
+  defp internal_production_path?(path) do
+    path == @root_facade or String.starts_with?(path, "lib/cadence/") or
+      String.starts_with?(path, "lib/cadence_web/")
+  end
+
+  defp core_context_path?(path) do
+    path != @root_facade and String.starts_with?(path, "lib/cadence/")
+  end
+
   defp internal_cadence_source?(source) do
-    source != @root_facade and String.starts_with?(source, "lib/cadence/")
+    source != @root_facade and
+      (String.starts_with?(source, "lib/cadence/") or
+         String.starts_with?(source, "lib/cadence_web/"))
   end
 
   defp persistence_context?(source) do

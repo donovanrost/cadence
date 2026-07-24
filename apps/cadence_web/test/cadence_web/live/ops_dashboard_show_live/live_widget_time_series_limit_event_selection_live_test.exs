@@ -1,4 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectionLiveTest do
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
+
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
@@ -82,7 +84,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
              binding_set.binding_set_id,
              binding_set.version
            ) do
-      Cadence.Persistence.persist_processing_result(result, opts)
+      RuntimePersistence.persist_processing_result(result, opts)
     end
   end
 

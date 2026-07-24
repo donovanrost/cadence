@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedImportLiveTes
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -286,7 +288,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupedImportLiveTes
       assert MapSet.new(Enum.map(claimed_jobs, & &1.job_id)) ==
                MapSet.new([counter_job.job_id, voltage_job.job_id])
 
-      assert {:ok, completed_job} = Cadence.Jobs.run_job(counter_job.job_id)
+      assert {:ok, completed_job} = JobRunner.run_job(counter_job.job_id)
       assert completed_job.status == :completed
 
       import_events =

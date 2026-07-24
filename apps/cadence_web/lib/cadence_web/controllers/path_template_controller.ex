@@ -3,8 +3,12 @@ defmodule CadenceWeb.PathTemplateController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CommsJSON, as: CommsJSON
+
+  alias CadenceWeb.API.CommsParams, as: CommsParams
+
   alias Cadence.Contacts.PathTemplate
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id}) do
     with {:ok, _mission} <-
@@ -15,7 +19,7 @@ defmodule CadenceWeb.PathTemplateController do
            ) do
       path_templates =
         Cadence.Contacts.list_path_templates(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.path_template/1)
+        |> Enum.map(&CommsJSON.path_template/1)
 
       json(conn, %{data: path_templates})
     end
@@ -33,7 +37,7 @@ defmodule CadenceWeb.PathTemplateController do
              mission_id
            ),
          {:ok, %PathTemplate{} = path_template} <-
-           ControlPlaneParams.path_template(
+           CommsParams.path_template(
              organization_id,
              mission_id,
              path_template_params
@@ -42,7 +46,7 @@ defmodule CadenceWeb.PathTemplateController do
            Cadence.Contacts.persist_path_template(organization_id, path_template) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.path_template(persisted_path_template)})
+      |> json(%{data: CommsJSON.path_template(persisted_path_template)})
     end
   end
 
@@ -59,7 +63,7 @@ defmodule CadenceWeb.PathTemplateController do
            ),
          {:ok, %PathTemplate{} = path_template} <-
            Cadence.Contacts.fetch_path_template(organization_id, mission_id, path_template_id) do
-      json(conn, %{data: ControlPlaneJSON.path_template(path_template)})
+      json(conn, %{data: CommsJSON.path_template(path_template)})
     end
   end
 
@@ -80,7 +84,7 @@ defmodule CadenceWeb.PathTemplateController do
           mission_id,
           path_template_id
         )
-        |> Enum.map(&ControlPlaneJSON.path_template/1)
+        |> Enum.map(&CommsJSON.path_template/1)
 
       json(conn, %{data: path_templates})
     end
@@ -100,7 +104,7 @@ defmodule CadenceWeb.PathTemplateController do
              organization_id,
              mission_id
            ),
-         {:ok, version} <- ControlPlaneParams.resource_version(params),
+         {:ok, version} <- CommsParams.resource_version(params),
          {:ok, %PathTemplate{} = path_template} <-
            Cadence.Contacts.fetch_path_template_version(
              organization_id,
@@ -108,7 +112,7 @@ defmodule CadenceWeb.PathTemplateController do
              path_template_id,
              version
            ) do
-      json(conn, %{data: ControlPlaneJSON.path_template(path_template)})
+      json(conn, %{data: CommsJSON.path_template(path_template)})
     end
   end
 
@@ -128,7 +132,7 @@ defmodule CadenceWeb.PathTemplateController do
              organization_id,
              mission_id
            ),
-         {:ok, attrs} <- ControlPlaneParams.path_template_patch(path_template_params),
+         {:ok, attrs} <- CommsParams.path_template_patch(path_template_params),
          {:ok, %PathTemplate{} = path_template} <-
            Cadence.Contacts.version_path_template(
              organization_id,
@@ -136,7 +140,7 @@ defmodule CadenceWeb.PathTemplateController do
              path_template_id,
              attrs
            ) do
-      json(conn, %{data: ControlPlaneJSON.path_template(path_template)})
+      json(conn, %{data: CommsJSON.path_template(path_template)})
     end
   end
 
@@ -156,7 +160,7 @@ defmodule CadenceWeb.PathTemplateController do
              organization_id,
              mission_id
            ),
-         {:ok, attrs} <- ControlPlaneParams.path_template_patch(path_template_params),
+         {:ok, attrs} <- CommsParams.path_template_patch(path_template_params),
          {:ok, %PathTemplate{} = path_template} <-
            Cadence.Contacts.delete_path_template(
              organization_id,
@@ -164,7 +168,7 @@ defmodule CadenceWeb.PathTemplateController do
              path_template_id,
              Map.get(attrs, :metadata, %{})
            ) do
-      json(conn, %{data: ControlPlaneJSON.path_template(path_template)})
+      json(conn, %{data: CommsJSON.path_template(path_template)})
     end
   end
 end

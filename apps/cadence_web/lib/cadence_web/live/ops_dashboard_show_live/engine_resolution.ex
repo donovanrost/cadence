@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
 
   import Phoenix.Component, only: [assign: 3]
 
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
     Engine,
@@ -117,7 +119,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     |> put_default_source_opt(
       :telemetry,
       :backfill_lifecycle_events_fun,
-      &Cadence.list_telemetry_backfill_lifecycle_events/2
+      &TelemetryStorage.list_backfill_lifecycle_events/2
     )
   end
 

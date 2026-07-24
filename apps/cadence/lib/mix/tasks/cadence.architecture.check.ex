@@ -113,8 +113,12 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         "#{Map.get(counts, :root_facade, 0)} root-facade edges, " <>
         "#{Map.get(counts, :persistence_schema, 0)} schema edges, " <>
         "#{Map.get(counts, :context_schema, 0)} cross-context row edges, " <>
+        "#{Map.get(counts, :context_direction, 0)} reverse-context edges, " <>
         "#{Map.get(counts, :plane_direction, 0)} reverse-plane edges, " <>
         "#{Map.get(counts, :plane_internal, 0)} cross-plane internal edges, " <>
+        "#{Map.get(counts, :web_catch_all, 0)} web catch-all edges, " <>
+        "#{Map.get(counts, :unclassified_plane, 0)} unclassified plane modules, " <>
+        "#{Map.get(counts, :unclassified_context, 0)} unclassified context modules, " <>
         "#{length(result.new)} new, #{length(result.resolved)} resolved; " <>
         "owner #{result.owner}, review by #{result.review_by}."
     )
@@ -153,7 +157,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         System.cmd(
           "mix",
           ["xref", "graph", "--format", "json", "--output", output_path],
-          cd: Path.join(repo_root, "apps/cadence"),
+          cd: repo_root,
           env: [{"MIX_ENV", "dev"}],
           stderr_to_stdout: true
         )

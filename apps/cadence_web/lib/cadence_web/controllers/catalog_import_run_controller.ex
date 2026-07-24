@@ -3,8 +3,12 @@ defmodule CadenceWeb.CatalogImportRunController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
+
+  alias CadenceWeb.API.CatalogParams, as: CatalogParams
+
   alias Cadence.Catalog.ImportRun
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -13,10 +17,10 @@ defmodule CadenceWeb.CatalogImportRunController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.catalog_import_run_filters(params) do
+         {:ok, filters} <- CatalogParams.catalog_import_run_filters(params) do
       import_runs =
         Cadence.Catalog.list_import_runs(organization_id, mission_id, filters)
-        |> Enum.map(&ControlPlaneJSON.catalog_import_run/1)
+        |> Enum.map(&CatalogJSON.catalog_import_run/1)
 
       json(conn, %{data: import_runs})
     end
@@ -34,7 +38,7 @@ defmodule CadenceWeb.CatalogImportRunController do
              mission_id
            ),
          {:ok, {artifact_id, importer_key, opts}} <-
-           ControlPlaneParams.catalog_import_run_request(
+           CatalogParams.catalog_import_run_request(
              run_params,
              requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
            ),
@@ -48,7 +52,7 @@ defmodule CadenceWeb.CatalogImportRunController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.catalog_import_run(import_run)})
+      |> json(%{data: CatalogJSON.catalog_import_run(import_run)})
     end
   end
 
@@ -65,7 +69,7 @@ defmodule CadenceWeb.CatalogImportRunController do
            ),
          {:ok, %ImportRun{} = import_run} <-
            Cadence.Catalog.fetch_import_run(organization_id, mission_id, import_run_id) do
-      json(conn, %{data: ControlPlaneJSON.catalog_import_run(import_run)})
+      json(conn, %{data: CatalogJSON.catalog_import_run(import_run)})
     end
   end
 end

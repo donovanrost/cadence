@@ -1,6 +1,10 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommands do
   @moduledoc false
 
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   alias CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams
 
   def apply_decision(params, scope, mission, opts \\ [])
@@ -17,7 +21,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommands do
 
       {observation_identity_id, decision} ->
         with {:ok, state} <-
-               Cadence.apply_telemetry_observation_identity_decision(
+               DataManagement.apply_observation_identity_decision(
                  observation_identity_id,
                  decision,
                  attrs,
@@ -38,7 +42,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommands do
       |> Keyword.merge(Keyword.take(opts, [:dashboard_runtime_invalidation?]))
 
     observation_identity_id
-    |> Cadence.list_telemetry_observation_identity_decision_events(query_opts)
+    |> TelemetryStorage.list_observation_identity_decision_events(query_opts)
     |> List.last()
     |> case do
       nil -> {:error, :telemetry_revision_decision_event_not_found}

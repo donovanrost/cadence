@@ -6,9 +6,8 @@ defmodule CadenceWeb.StagedCommandItemController do
   alias Cadence.Commanding.CommandStage
   alias Cadence.Commanding.StagedCommandItem
   alias Cadence.Management.Commanding
+  alias CadenceWeb.API.{CommandingJSON, CommandingParams}
   alias CadenceWeb.ControlPlaneAccess
-  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
-  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(
         conn,

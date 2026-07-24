@@ -12,17 +12,16 @@ defmodule Cadence.Contacts.ContactStore do
   alias Cadence.Contacts.ContactStore.ContactActionRow
   alias Cadence.Contacts.ContactStore.RealizedContactRow
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
+  alias Cadence.Contacts.Facts
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.ScheduledContactRevisions
   alias Cadence.Contacts.Scheduler
   alias Cadence.Contacts.SchedulerReadModel
   alias Cadence.Contacts.Validation
-  alias Cadence.Control.Commanding
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Repo
 
   @spec persist_scheduled(ScheduledContact.t()) ::
@@ -227,8 +226,6 @@ defmodule Cadence.Contacts.ContactStore do
 
   @spec persist_action(ContactAction.t()) :: {:ok, ContactAction.t()} | {:error, term()}
   def persist_action(%ContactAction{} = contact_action) do
-    projected_events = MissionEventProjection.project(contact_action)
-
     Multi.new()
     |> Multi.insert(
       :contact_action,
@@ -236,9 +233,6 @@ defmodule Cadence.Contacts.ContactStore do
       on_conflict: :nothing,
       conflict_target: [:mission_id, :contact_action_id]
     )
-    |> Multi.run(:mission_events, fn repo, _changes ->
-      MissionEventProjection.persist_entries(repo, projected_events)
-    end)
     |> Multi.run(:contact_action_operational_event, fn repo, %{contact_action: row} ->
       row
       |> ContactActionRow.to_domain()
@@ -248,7 +242,9 @@ defmodule Cadence.Contacts.ContactStore do
     |> Repo.transaction()
     |> case do
       {:ok, %{contact_action: %ContactActionRow{} = row}} ->
-        {:ok, ContactActionRow.to_domain(row)}
+        contact_action = ContactActionRow.to_domain(row)
+        Facts.publish(contact_action)
+        {:ok, contact_action}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
         {:error, changeset}
@@ -536,13 +532,14 @@ defmodule Cadence.Contacts.ContactStore do
           {:ok, ScheduledContact.t() | RealizedContact.t()}
   def notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
     Scheduler.notify_contact_changed(scheduled_contact)
+    Facts.publish(scheduled_contact)
     invalidate_dashboard_events(scheduled_contact)
     {:ok, scheduled_contact}
   end
 
   def notify_contact_changed(%RealizedContact{} = realized_contact) do
     Scheduler.notify_contact_changed(realized_contact)
-    Commanding.notify_release_target_available(realized_contact)
+    Facts.publish(realized_contact)
     invalidate_dashboard_events(realized_contact)
     {:ok, realized_contact}
   end

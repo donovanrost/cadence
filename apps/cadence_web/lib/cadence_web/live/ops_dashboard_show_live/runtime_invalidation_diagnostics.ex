@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationDiagnostics do
   @moduledoc false
 
+  alias Cadence.Projections.DashboardRuntimeInvalidations, as: DashboardRuntimeInvalidations
+
   alias Cadence.Dashboards.{Document, RuntimeInvalidationRelevance}
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.DecisionProjection
@@ -307,7 +309,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationDiagnostics do
       limit: length(events)
     ]
 
-    case Cadence.durable_dashboard_runtime_invalidation_decisions(opts) do
+    case DashboardRuntimeInvalidations.list_durable(opts) do
       [] ->
         events
         |> DecisionProjection.list(opts)

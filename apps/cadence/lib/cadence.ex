@@ -21,12 +21,11 @@ defmodule Cadence do
   alias Cadence.Jobs
   alias Cadence.Missions
   alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
-  alias Cadence.Persistence
-  alias Cadence.Runtime
-  alias Cadence.SourceEndpoints
-
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
+  alias Cadence.Runtime
+  alias Cadence.Runtime.Persistence
+  alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
   alias Cadence.Telemetry.RuntimeHealth

@@ -1,6 +1,8 @@
 defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
   use Cadence.ConfigCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Dashboards.{DataSources, ManagedQuestDBProvisioningJobs, TSDBDeploymentStatus}
 
   @organization_id "org-managed-questdb-provisioning-jobs"
@@ -80,7 +82,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
     assert claimed_job.status == :running
     assert TSDBDeploymentStatus.from_job(claimed_job).status == :provisioning
 
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
     assert completed_job.attempt_count == 1
     assert completed_job.failure_reason == nil
@@ -105,7 +107,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
 
     assert failed_job.job_id == job.job_id
     assert failed_job.status == :failed
@@ -145,7 +147,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
 
     assert [claimed_failed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_failed_job.job_id == failed_job.job_id
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_failed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_failed_job.job_id)
 
     assert {:ok, queued_job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -204,7 +206,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
     assert failed_job.status == :failed
     assert_receive :provisioner_called
 
@@ -229,7 +231,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
     assert failed_job.status == :failed
 
     assert {:ok, retried_run} =

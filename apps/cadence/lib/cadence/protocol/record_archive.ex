@@ -11,7 +11,9 @@ defmodule Cadence.Protocol.RecordArchive do
   alias Ecto.Multi
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
+  alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TransferFrameRecord}
+  alias Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow
   alias Cadence.Replay.Scope
 
   @type stats :: %{
@@ -60,6 +62,42 @@ defmodule Cadence.Protocol.RecordArchive do
 
     if function_exported?(backend, :child_spec, 1) do
       backend.child_spec(backend_opts())
+    end
+  end
+
+  @spec add_anomaly_inserts(Multi.t(), [ProtocolAnomaly.t()]) :: Multi.t()
+  def add_anomaly_inserts(%Multi{} = multi, anomalies) when is_list(anomalies) do
+    inserted_at = DateTime.utc_now()
+
+    organization_id =
+      case anomalies do
+        [%ProtocolAnomaly{mission_id: mission_id} | _rest] ->
+          OrganizationScope.organization_id_for_mission(mission_id)
+
+        _other ->
+          nil
+      end
+
+    rows =
+      Enum.map(anomalies, fn %ProtocolAnomaly{} = anomaly ->
+        ProtocolAnomalyRow.row_attrs(
+          anomaly,
+          organization_id: organization_id,
+          inserted_at: inserted_at
+        )
+      end)
+
+    if rows == [] do
+      multi
+    else
+      Multi.insert_all(
+        multi,
+        :protocol_anomalies,
+        ProtocolAnomalyRow,
+        rows,
+        on_conflict: :nothing,
+        conflict_target: [:anomaly_id]
+      )
     end
   end
 

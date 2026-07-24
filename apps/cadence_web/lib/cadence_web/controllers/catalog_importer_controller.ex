@@ -3,7 +3,11 @@ defmodule CadenceWeb.CatalogImporterController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
+
+  alias CadenceWeb.API.CatalogParams, as: CatalogParams
+
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -12,10 +16,10 @@ defmodule CadenceWeb.CatalogImporterController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.catalog_importer_filters(params) do
+         {:ok, filters} <- CatalogParams.catalog_importer_filters(params) do
       importers =
         Cadence.Catalog.list_importers(filters)
-        |> Enum.map(&ControlPlaneJSON.catalog_importer/1)
+        |> Enum.map(&CatalogJSON.catalog_importer/1)
 
       json(conn, %{data: importers})
     end

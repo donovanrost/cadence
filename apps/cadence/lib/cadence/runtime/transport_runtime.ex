@@ -10,7 +10,7 @@ defmodule Cadence.Runtime.TransportRuntime do
   alias Cadence.Capabilities.{Descriptor, ExecutionContext, ExecutionResult}
   alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
   alias Cadence.Ids
-  alias Cadence.Persistence
+  alias Cadence.Runtime.Persistence
 
   alias Cadence.Runtime.{
     ActionExecutor,

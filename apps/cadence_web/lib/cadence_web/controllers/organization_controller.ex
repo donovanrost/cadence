@@ -3,7 +3,9 @@ defmodule CadenceWeb.OrganizationController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON}
+  alias CadenceWeb.API.IdentityJSON, as: IdentityJSON
+
+  alias CadenceWeb.ControlPlaneAccess
 
   def show(conn, %{"organization_id" => organization_id}) do
     with {:ok, organization} <-
@@ -12,7 +14,7 @@ defmodule CadenceWeb.OrganizationController do
              organization_id,
              :read_organization
            ) do
-      json(conn, %{data: ControlPlaneJSON.organization(organization)})
+      json(conn, %{data: IdentityJSON.organization(organization)})
     end
   end
 end

@@ -3,8 +3,12 @@ defmodule CadenceWeb.TransportProfileController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CommsJSON, as: CommsJSON
+
+  alias CadenceWeb.API.CommsParams, as: CommsParams
+
   alias Cadence.Contacts.TransportProfile
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id}) do
     with {:ok, _mission} <-
@@ -15,7 +19,7 @@ defmodule CadenceWeb.TransportProfileController do
            ) do
       transport_profiles =
         Cadence.Contacts.list_transport_profiles(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.transport_profile/1)
+        |> Enum.map(&CommsJSON.transport_profile/1)
 
       json(conn, %{data: transport_profiles})
     end
@@ -33,7 +37,7 @@ defmodule CadenceWeb.TransportProfileController do
              mission_id
            ),
          {:ok, %TransportProfile{} = transport_profile} <-
-           ControlPlaneParams.transport_profile(
+           CommsParams.transport_profile(
              organization_id,
              mission_id,
              transport_profile_params
@@ -42,7 +46,7 @@ defmodule CadenceWeb.TransportProfileController do
            Cadence.Contacts.persist_transport_profile(organization_id, transport_profile) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.transport_profile(persisted_transport_profile)})
+      |> json(%{data: CommsJSON.transport_profile(persisted_transport_profile)})
     end
   end
 
@@ -63,7 +67,7 @@ defmodule CadenceWeb.TransportProfileController do
              mission_id,
              transport_profile_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.transport_profile(transport_profile)})
+      json(conn, %{data: CommsJSON.transport_profile(transport_profile)})
     end
   end
 
@@ -84,7 +88,7 @@ defmodule CadenceWeb.TransportProfileController do
           mission_id,
           transport_profile_id
         )
-        |> Enum.map(&ControlPlaneJSON.transport_profile/1)
+        |> Enum.map(&CommsJSON.transport_profile/1)
 
       json(conn, %{data: transport_profiles})
     end
@@ -104,7 +108,7 @@ defmodule CadenceWeb.TransportProfileController do
              organization_id,
              mission_id
            ),
-         {:ok, version} <- ControlPlaneParams.resource_version(params),
+         {:ok, version} <- CommsParams.resource_version(params),
          {:ok, %TransportProfile{} = transport_profile} <-
            Cadence.Contacts.fetch_transport_profile_version(
              organization_id,
@@ -112,7 +116,7 @@ defmodule CadenceWeb.TransportProfileController do
              transport_profile_id,
              version
            ) do
-      json(conn, %{data: ControlPlaneJSON.transport_profile(transport_profile)})
+      json(conn, %{data: CommsJSON.transport_profile(transport_profile)})
     end
   end
 
@@ -132,7 +136,8 @@ defmodule CadenceWeb.TransportProfileController do
              organization_id,
              mission_id
            ),
-         {:ok, attrs} <- ControlPlaneParams.transport_profile_patch(transport_profile_params),
+         {:ok, attrs} <-
+           CommsParams.transport_profile_patch(transport_profile_params),
          {:ok, %TransportProfile{} = transport_profile} <-
            Cadence.Contacts.version_transport_profile(
              organization_id,
@@ -140,7 +145,7 @@ defmodule CadenceWeb.TransportProfileController do
              transport_profile_id,
              attrs
            ) do
-      json(conn, %{data: ControlPlaneJSON.transport_profile(transport_profile)})
+      json(conn, %{data: CommsJSON.transport_profile(transport_profile)})
     end
   end
 
@@ -160,7 +165,8 @@ defmodule CadenceWeb.TransportProfileController do
              organization_id,
              mission_id
            ),
-         {:ok, attrs} <- ControlPlaneParams.transport_profile_patch(transport_profile_params),
+         {:ok, attrs} <-
+           CommsParams.transport_profile_patch(transport_profile_params),
          {:ok, %TransportProfile{} = transport_profile} <-
            Cadence.Contacts.delete_transport_profile(
              organization_id,
@@ -168,7 +174,7 @@ defmodule CadenceWeb.TransportProfileController do
              transport_profile_id,
              Map.get(attrs, :metadata, %{})
            ) do
-      json(conn, %{data: ControlPlaneJSON.transport_profile(transport_profile)})
+      json(conn, %{data: CommsJSON.transport_profile(transport_profile)})
     end
   end
 end

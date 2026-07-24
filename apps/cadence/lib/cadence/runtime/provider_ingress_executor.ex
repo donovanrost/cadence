@@ -9,6 +9,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   use GenServer
 
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
+
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Observability
   alias Cadence.Observability.AsyncContext
@@ -728,7 +730,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       fn ->
         Instrumentation.trace_stage(
           "cadence.telemetry.ingress.extract_samples",
-          fn -> Cadence.Persistence.telemetry_samples(processing_result.outputs) end
+          fn -> RuntimePersistence.telemetry_samples(processing_result.outputs) end
         )
       end
     )

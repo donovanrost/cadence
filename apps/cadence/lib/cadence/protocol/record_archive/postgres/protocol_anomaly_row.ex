@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.ProtocolAnomalyRow do
+defmodule Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow do
   @moduledoc false
 
   use Ecto.Schema

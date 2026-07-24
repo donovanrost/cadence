@@ -3,6 +3,8 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
 
   import Cadence.Telemetry.DataManagementFixtures
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS
@@ -837,7 +839,7 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
     assert claimed_job.job_id == job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}
@@ -928,7 +930,7 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == job.job_id
 
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
     assert failed_job.status == :failed
     assert failed_job.failure_reason == %{"tuple" => ["missing_field", "point_id"]}
 

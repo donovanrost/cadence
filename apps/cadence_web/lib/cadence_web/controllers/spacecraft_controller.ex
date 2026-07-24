@@ -3,8 +3,12 @@ defmodule CadenceWeb.SpacecraftController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CommsJSON, as: CommsJSON
+
+  alias CadenceWeb.API.CommsParams, as: CommsParams
+
   alias Cadence.Spacecraft
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id}) do
     with {:ok, _mission} <-
@@ -15,7 +19,7 @@ defmodule CadenceWeb.SpacecraftController do
            ) do
       spacecraft =
         Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.spacecraft/1)
+        |> Enum.map(&CommsJSON.spacecraft/1)
 
       json(conn, %{data: spacecraft})
     end
@@ -33,12 +37,12 @@ defmodule CadenceWeb.SpacecraftController do
              mission_id
            ),
          {:ok, %Spacecraft{} = spacecraft} <-
-           ControlPlaneParams.spacecraft(organization_id, mission_id, spacecraft_params),
+           CommsParams.spacecraft(organization_id, mission_id, spacecraft_params),
          {:ok, %Spacecraft{} = persisted_spacecraft} <-
            Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.spacecraft(persisted_spacecraft)})
+      |> json(%{data: CommsJSON.spacecraft(persisted_spacecraft)})
     end
   end
 
@@ -55,7 +59,7 @@ defmodule CadenceWeb.SpacecraftController do
            ),
          {:ok, %Spacecraft{} = spacecraft} <-
            Cadence.SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
-      json(conn, %{data: ControlPlaneJSON.spacecraft(spacecraft)})
+      json(conn, %{data: CommsJSON.spacecraft(spacecraft)})
     end
   end
 end

@@ -16,7 +16,6 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   alias Cadence.Capabilities.{Descriptor, ExecutionResult}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence
   alias Cadence.Protocol.{PacketRecord, SpacePacketDecoder, TMFrameIngress, TMFramePipeline}
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
@@ -27,6 +26,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     MissionRuntime,
     MissionRuntimeSpec,
     PartitionKey,
+    Persistence,
     TimerService
   }
 

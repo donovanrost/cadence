@@ -15,11 +15,12 @@ defmodule Cadence.Activations do
     BindingSetActivationRow
   }
 
+  alias Cadence.Activations.Facts
+
   alias Cadence.Governance
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
 
   @doc false
@@ -183,14 +184,11 @@ defmodule Cadence.Activations do
     end
   end
 
-  defp persist_activation_mission_event(repo, %BindingSetActivation{} = activation) do
-    with {:ok, %OperationalEvent{} = event} <-
-           OperationalEvents.persist_event(
-             repo,
-             OperationalEvent.from_binding_set_activation(activation)
-           ) do
-      MissionEvents.persist_entries(repo, MissionEvents.project(event))
-    end
+  defp persist_activation_operational_event(repo, %BindingSetActivation{} = activation) do
+    OperationalEvents.persist_event(
+      repo,
+      OperationalEvent.from_binding_set_activation(activation)
+    )
   end
 
   defp persist_activation(attrs) do
@@ -207,13 +205,15 @@ defmodule Cadence.Activations do
     |> Multi.run(:active_basis_row, fn repo, %{activation_record: activation_record} ->
       maybe_upsert_active_basis(repo, activation_record)
     end)
-    |> Multi.run(:mission_event_projection, fn repo, %{activation_record: activation_record} ->
-      maybe_persist_activation_mission_event(repo, activation_record)
+    |> Multi.run(:operational_event, fn repo, %{activation_record: activation_record} ->
+      maybe_persist_activation_operational_event(repo, activation_record)
     end)
     |> Repo.transaction()
     |> case do
-      {:ok, %{activation_record: %{row: activation_row}}} ->
-        {:ok, BindingSetActivationRow.to_domain(activation_row)}
+      {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
+        activation = BindingSetActivationRow.to_domain(activation_row)
+        if inserted?, do: Facts.publish(activation)
+        {:ok, activation}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
         {:error, changeset}
@@ -254,11 +254,12 @@ defmodule Cadence.Activations do
 
   defp maybe_upsert_active_basis(_repo, %{inserted?: false}), do: {:ok, :unchanged}
 
-  defp maybe_persist_activation_mission_event(repo, %{row: row, inserted?: true}) do
-    persist_activation_mission_event(repo, BindingSetActivationRow.to_domain(row))
+  defp maybe_persist_activation_operational_event(repo, %{row: row, inserted?: true}) do
+    persist_activation_operational_event(repo, BindingSetActivationRow.to_domain(row))
   end
 
-  defp maybe_persist_activation_mission_event(_repo, %{inserted?: false}), do: {:ok, :unchanged}
+  defp maybe_persist_activation_operational_event(_repo, %{inserted?: false}),
+    do: {:ok, :unchanged}
 
   defp acquire_generation_lock(repo, mission_id) do
     case SQL.query(repo, "SELECT pg_advisory_xact_lock(hashtext($1))", [mission_id]) do

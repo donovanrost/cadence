@@ -1,4 +1,6 @@
 defmodule Cadence.ReplayTest do
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Jobs
   alias Cadence.Reads.Replay, as: ReplayReads
   alias Cadence.Replay
@@ -180,7 +182,7 @@ defmodule Cadence.ReplayTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.run_id == replay_run.replay_run_id
 
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} = ReplayReads.fetch_run(replay_run.replay_run_id)

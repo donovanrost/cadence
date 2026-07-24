@@ -1,6 +1,8 @@
 defmodule Cadence.Reads.MissionEventsTest do
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Activations.BindingSetActivationRow
 
   alias Cadence.ApplicationDispatch.{
@@ -552,7 +554,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
 
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} = MissionEvents.fetch_run(rebuild_run.rebuild_run_id)

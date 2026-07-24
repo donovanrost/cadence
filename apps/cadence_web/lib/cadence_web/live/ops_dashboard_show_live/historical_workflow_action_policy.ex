@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
   @moduledoc false
 
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicyAction,
     as: Action
 
@@ -8,7 +10,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
 
   def build(context) when is_map(context) do
     context
-    |> Cadence.telemetry_historical_data_workflow_action_policy()
+    |> DataManagement.historical_data_workflow_action_policy()
     |> Map.merge(%{
       retry_job: retry_job_action(context),
       retry_group_failed_jobs: retry_group_failed_jobs_action(context),
@@ -38,7 +40,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
 
   def stage_action(context, action_definition) when is_map(action_definition) do
     stage = Map.get(action_definition, :stage)
-    decision = Cadence.telemetry_historical_data_workflow_stage_action_policy(context, stage)
+
+    decision =
+      DataManagement.historical_data_workflow_stage_action_policy(
+        context,
+        stage
+      )
 
     action_definition
     |> Map.merge(decision)
@@ -55,7 +62,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
     stage = Map.get(action_definition, :stage)
 
     decision =
-      Cadence.telemetry_historical_data_workflow_group_stage_action_policy(context, stage)
+      DataManagement.historical_data_workflow_group_stage_action_policy(
+        context,
+        stage
+      )
 
     action_definition
     |> Map.merge(decision)
@@ -82,7 +92,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
   end
 
   def retry_job_action(context) when is_map(context) do
-    decision = Cadence.telemetry_historical_data_workflow_action_policy(context).retry_job
+    decision =
+      DataManagement.historical_data_workflow_action_policy(context).retry_job
 
     Map.merge(decision, %{
       label: "Retry job",
@@ -98,7 +109,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
 
   def retry_group_failed_jobs_action(context) when is_map(context) do
     decision =
-      Cadence.telemetry_historical_data_workflow_action_policy(context).retry_group_failed_jobs
+      DataManagement.historical_data_workflow_action_policy(context).retry_group_failed_jobs
 
     Map.merge(decision, %{
       label: "Retry failed items",
@@ -114,7 +125,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
 
   def correction_request_action(context) when is_map(context) do
     decision =
-      Cadence.telemetry_historical_data_workflow_action_policy(context).correction_request
+      DataManagement.historical_data_workflow_action_policy(context).correction_request
 
     Map.merge(decision, %{
       label: "Create corrected request",

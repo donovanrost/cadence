@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
 
   alias Cadence.Dashboards.DataSources
   alias Cadence.Dashboards.OperationalObservable
+  alias Cadence.Ops.PointCatalog
 
   def load(scope, mission, opts \\ []) do
     organization_id = scope.organization_id
@@ -33,7 +34,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_ops_telemetry_points(opts) do
-    Keyword.get(opts, :list_ops_telemetry_points, &Cadence.list_ops_telemetry_points/2)
+    Keyword.get(opts, :list_ops_telemetry_points, &PointCatalog.list_points/2)
   end
 
   defp list_operational_observables(opts) do
@@ -73,7 +74,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountResources do
   end
 
   defp list_dashboard_data_realms(opts) do
-    Keyword.get(opts, :list_dashboard_data_realms, &Cadence.list_dashboard_data_realms/2)
+    Keyword.get(opts, :list_dashboard_data_realms, &DataSources.list_data_realms/2)
   end
 
   defp list_data_bindings(opts) do

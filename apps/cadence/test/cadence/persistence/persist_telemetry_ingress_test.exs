@@ -5,6 +5,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
   import Ecto.Query
 
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
@@ -14,10 +16,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.OperationalEvents
   alias Cadence.Protocol.RecordArchive.FileSystem, as: ProtocolRecordArchiveFileSystem
 
-  alias Cadence.Persistence.Schemas.{
-    DispatchDecisionRow,
-    ProtocolAnomalyRow
-  }
+  alias Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow
+  alias Cadence.Runtime.DispatchRecords.DispatchDecisionRow
 
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.RecordArchive.Postgres.{PacketRecordRow, TransferFrameRecordRow}
@@ -688,13 +688,13 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert length(second_result.protocol_anomalies) == 2
 
     assert :ok =
-             Cadence.Persistence.persist_processing_results(
+             RuntimePersistence.persist_processing_results(
                [second_result],
                record_current_values?: false
              )
 
     assert :ok =
-             Cadence.Persistence.persist_processing_results(
+             RuntimePersistence.persist_processing_results(
                [second_result],
                record_current_values?: false
              )
@@ -764,7 +764,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two, binding_set)
 
     assert :ok =
-             Cadence.Persistence.persist_processing_results(
+             RuntimePersistence.persist_processing_results(
                [first_result, second_result],
                record_current_values?: false
              )

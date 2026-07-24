@@ -10,6 +10,8 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Dashboards.{
     DataSource,
     DataSources,
@@ -343,7 +345,7 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == failed_job.job_id
-    assert {:ok, _failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, _failed_job} = JobRunner.run_job(claimed_job.job_id)
 
     assert {:ok, running_job} =
              ManagedQuestDBProvisioningJobs.enqueue(%{

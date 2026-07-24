@@ -3,6 +3,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
   @moduletag :integration
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.CommandRequest
@@ -220,7 +222,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =

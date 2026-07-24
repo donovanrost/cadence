@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
+
   alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
@@ -86,7 +88,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
              binding_set.binding_set_id,
              binding_set.version
            ) do
-      Cadence.Persistence.persist_processing_result(result, opts)
+      RuntimePersistence.persist_processing_result(result, opts)
     end
   end
 

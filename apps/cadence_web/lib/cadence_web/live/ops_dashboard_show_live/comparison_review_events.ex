@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
 
   import Phoenix.Component, only: [assign: 3]
 
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   alias Cadence.Dashboards
   alias Cadence.Dashboards.ComparisonReviewQueue
   alias CadenceWeb.OpsDashboardShowLive.ComparisonReviewActionOutcome
@@ -574,7 +576,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
     Keyword.get(
       opts,
       :apply_comparison_review_bulk_decision,
-      &Cadence.apply_telemetry_observation_identity_decisions/4
+      &DataManagement.apply_observation_identity_decisions/4
     )
   end
 

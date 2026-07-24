@@ -3,15 +3,27 @@ defmodule Cadence.Runtime.DownlinkRecords do
 
   import Ecto.Query
 
-  alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic}
+  alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
   alias Cadence.Repo
 
   alias Cadence.Runtime.DownlinkRecords.{
     CombinedDownlinkRecordRow,
-    DownlinkDiagnosticRow
+    DownlinkDiagnosticRow,
+    DownlinkObservationRow
   }
 
   alias Ecto.Multi
+
+  @spec add_observation_inserts(Multi.t(), [DownlinkObservation.t()]) :: Multi.t()
+  def add_observation_inserts(%Multi{} = multi, observations) when is_list(observations) do
+    Enum.reduce(observations, multi, fn %DownlinkObservation{} = observation, %Multi{} = acc ->
+      Multi.insert(
+        acc,
+        {:downlink_observation, observation.observation_id},
+        DownlinkObservationRow.changeset(observation)
+      )
+    end)
+  end
 
   @spec add_combined_record_inserts(Multi.t(), [CombinedDownlinkRecord.t()]) :: Multi.t()
   def add_combined_record_inserts(%Multi{} = multi, records) when is_list(records) do

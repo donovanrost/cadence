@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DownlinkObservationRow do
+defmodule Cadence.Runtime.DownlinkRecords.DownlinkObservationRow do
   @moduledoc false
 
   use Ecto.Schema

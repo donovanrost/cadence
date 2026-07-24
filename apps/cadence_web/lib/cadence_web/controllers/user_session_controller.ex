@@ -1,12 +1,13 @@
 defmodule CadenceWeb.UserSessionController do
   use CadenceWeb, :controller
 
+  alias CadenceWeb.API.IdentityParams, as: IdentityParams
+
   alias Cadence.Auth.Scope
   alias CadenceWeb.AuthenticatedEntry
-  alias CadenceWeb.ControlPlaneParams
 
   def create(conn, %{"user" => credentials}) when is_map(credentials) do
-    with {:ok, {email, password}} <- ControlPlaneParams.durable_session(credentials),
+    with {:ok, {email, password}} <- IdentityParams.durable_session(credentials),
          {:ok, issued_session} <- Cadence.Auth.sign_in(email, password) do
       finalize_sign_in(conn, issued_session)
     else

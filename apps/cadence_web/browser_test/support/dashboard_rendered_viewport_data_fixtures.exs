@@ -33,6 +33,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias Cadence.Runtime.ManagedActionRequest
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
   alias Cadence.Telemetry.PacketDefinition
 
   def reset_runtime_health! do
@@ -244,7 +245,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         binding_set.version
       )
 
-    Cadence.Persistence.persist_processing_result(result, opts)
+    RuntimePersistence.persist_processing_result(result, opts)
   end
 
   def browser_retention_gap_watermark(_organization_id, _mission_id, _point_id, _opts) do

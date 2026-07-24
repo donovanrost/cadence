@@ -3,8 +3,12 @@ defmodule CadenceWeb.ServiceIdentityController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.IdentityJSON, as: IdentityJSON
+
+  alias CadenceWeb.API.IdentityParams, as: IdentityParams
+
   alias Cadence.Auth.ServiceIdentity
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id} = params) do
     with {:ok, _organization} <-
@@ -16,7 +20,7 @@ defmodule CadenceWeb.ServiceIdentityController do
       service_identities =
         organization_id
         |> Cadence.Auth.list_service_identities(mission_id: Map.get(params, "mission_id"))
-        |> Enum.map(&ControlPlaneJSON.service_identity/1)
+        |> Enum.map(&IdentityJSON.service_identity/1)
 
       json(conn, %{data: service_identities})
     end
@@ -33,14 +37,17 @@ defmodule CadenceWeb.ServiceIdentityController do
              :manage_service_identities
            ),
          {:ok, %ServiceIdentity{} = service_identity} <-
-           ControlPlaneParams.service_identity(organization_id, service_identity_params),
+           IdentityParams.service_identity(
+             organization_id,
+             service_identity_params
+           ),
          {:ok, %{service_identity: issued_service_identity, api_token: api_token}} <-
            Cadence.Auth.issue_service_identity(service_identity) do
       conn
       |> put_status(:created)
       |> json(%{
         data:
-          ControlPlaneJSON.issued_service_identity(%{
+          IdentityJSON.issued_service_identity(%{
             service_identity: issued_service_identity,
             api_token: api_token
           })

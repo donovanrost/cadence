@@ -3,8 +3,12 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
+
+  alias CadenceWeb.API.CatalogParams, as: CatalogParams
+
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -13,10 +17,10 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              organization_id,
              mission_id
            ),
-         {:ok, filters} <- ControlPlaneParams.catalog_telemetry_snapshot_filters(params) do
+         {:ok, filters} <- CatalogParams.catalog_telemetry_snapshot_filters(params) do
       snapshots =
         Cadence.Catalog.list_telemetry_snapshots(organization_id, mission_id, filters)
-        |> Enum.map(&ControlPlaneJSON.catalog_telemetry_snapshot_summary/1)
+        |> Enum.map(&CatalogJSON.catalog_telemetry_snapshot_summary/1)
 
       json(conn, %{data: snapshots})
     end
@@ -35,7 +39,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
            ),
          {:ok, %TelemetryCatalogSnapshot{} = snapshot} <-
            Cadence.Catalog.fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
-      json(conn, %{data: ControlPlaneJSON.catalog_telemetry_snapshot(snapshot)})
+      json(conn, %{data: CatalogJSON.catalog_telemetry_snapshot(snapshot)})
     end
   end
 
@@ -52,7 +56,9 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
            ),
          {:ok, compilation} <-
            Cadence.Catalog.recompile_telemetry_snapshot(organization_id, mission_id, snapshot_id) do
-      json(conn, %{data: ControlPlaneJSON.catalog_telemetry_recompile_result(compilation)})
+      json(conn, %{
+        data: CatalogJSON.catalog_telemetry_recompile_result(compilation)
+      })
     end
   end
 
@@ -73,7 +79,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
              mission_id,
              snapshot_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.catalog_telemetry_runtime_diff(diff_report)})
+      json(conn, %{data: CatalogJSON.catalog_telemetry_runtime_diff(diff_report)})
     end
   end
 
@@ -96,7 +102,9 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.catalog_telemetry_materialization_result(materialization)})
+      |> json(%{
+        data: CatalogJSON.catalog_telemetry_materialization_result(materialization)
+      })
     end
   end
 end

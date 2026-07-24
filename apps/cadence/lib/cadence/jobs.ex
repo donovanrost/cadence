@@ -7,19 +7,10 @@ defmodule Cadence.Jobs do
 
   alias Ecto.Changeset
 
-  alias Cadence.Catalog
-  alias Cadence.Dashboards.ManagedQuestDBProvisioningJobs
-  alias Cadence.Dashboards.TSDBBackendLifecycleJobs
-  alias Cadence.DerivedTelemetry
-  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
-  alias Cadence.Limits
-  alias Cadence.Projections.DerivedTelemetryLatestValues
-  alias Cadence.Projections.MissionEvents
-  alias Cadence.Projections.TelemetryLatestLimitStates
-  alias Cadence.Projections.TelemetryLatestValues
-  alias Cadence.Replay
+  alias Cadence.Jobs.{BackgroundJobRow, Job}
   alias Cadence.Repo
-  alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
+
+  @dispatcher_name :cadence_job_dispatcher
 
   @spec enqueue(Job.job_type(), binary(), binary(), map()) :: {:ok, Job.t()} | {:error, term()}
   def enqueue(job_type, mission_id, run_id, payload)
@@ -35,7 +26,7 @@ defmodule Cadence.Jobs do
     case Repo.insert(BackgroundJobRow.changeset(job)) do
       {:ok, %BackgroundJobRow{} = background_job_row} ->
         job = BackgroundJobRow.to_domain(background_job_row)
-        Dispatcher.notify_available()
+        notify_available()
         {:ok, job}
 
       {:error, %Changeset{} = changeset} ->
@@ -99,7 +90,7 @@ defmodule Cadence.Jobs do
                started_at: nil,
                completed_at: nil
            }) do
-      Dispatcher.notify_available()
+      notify_available()
       {:ok, retried_job}
     else
       {:ok, %Job{} = job} ->
@@ -121,7 +112,7 @@ defmodule Cadence.Jobs do
                started_at: nil,
                completed_at: nil
            }) do
-      Dispatcher.notify_available()
+      notify_available()
       {:ok, requeued_job}
     else
       {:ok, %Job{} = job} ->
@@ -172,22 +163,11 @@ defmodule Cadence.Jobs do
     end
   end
 
-  @spec run_job(binary()) :: {:ok, Job.t()} | {:error, term()}
-  def run_job(job_id) when is_binary(job_id) do
-    case fetch_job(job_id) do
-      {:ok, %Job{status: :running} = job} ->
-        case safe_dispatch(job) do
-          {:ok, _result} -> complete_job(job)
-          {:error, reason} -> fail_job(job, reason)
-        end
-
-      {:ok, %Job{} = job} ->
-        fail_job(job, {:job_not_running, job.status})
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
+  @doc false
+  @spec record_execution_result(Job.t(), {:ok, term()} | {:error, term()}) ::
+          {:ok, Job.t()} | {:error, term()}
+  def record_execution_result(%Job{} = job, {:ok, _result}), do: complete_job(job)
+  def record_execution_result(%Job{} = job, {:error, reason}), do: fail_job(job, reason)
 
   @spec requeue_running_jobs() :: non_neg_integer()
   def requeue_running_jobs do
@@ -256,61 +236,10 @@ defmodule Cadence.Jobs do
     end
   end
 
-  defp dispatch(%Job{job_type: :replay_telemetry_scope, run_id: replay_run_id}) do
-    Replay.execute_enqueued_run(replay_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :telemetry_latest_value_rebuild, run_id: rebuild_run_id}) do
-    TelemetryLatestValues.execute_enqueued_run(rebuild_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :derived_telemetry_evaluation, run_id: derived_run_id}) do
-    DerivedTelemetry.execute_enqueued_run(derived_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :derived_telemetry_latest_value_rebuild, run_id: rebuild_run_id}) do
-    DerivedTelemetryLatestValues.execute_enqueued_run(rebuild_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :telemetry_limit_evaluation, run_id: limit_run_id}) do
-    Limits.execute_enqueued_run(limit_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :telemetry_latest_limit_state_refresh, run_id: rebuild_run_id}) do
-    TelemetryLatestLimitStates.execute_enqueued_refresh_run(rebuild_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :telemetry_latest_limit_state_rebuild, run_id: rebuild_run_id}) do
-    TelemetryLatestLimitStates.execute_enqueued_run(rebuild_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :mission_event_rebuild, run_id: rebuild_run_id}) do
-    MissionEvents.execute_enqueued_run(rebuild_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :catalog_import_run, run_id: import_run_id}) do
-    Catalog.execute_enqueued_run(import_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :telemetry_historical_data_workflow, run_id: workflow_run_id}) do
-    TelemetryDataManagement.execute_enqueued_historical_data_workflow(workflow_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :managed_questdb_provisioning, run_id: provisioning_run_id}) do
-    ManagedQuestDBProvisioningJobs.execute_enqueued_run(provisioning_run_id)
-  end
-
-  defp dispatch(%Job{job_type: :dashboard_tsdb_backend_lifecycle, run_id: lifecycle_run_id}) do
-    TSDBBackendLifecycleJobs.execute_enqueued_run(lifecycle_run_id)
-  end
-
-  defp safe_dispatch(%Job{} = job) do
-    dispatch(job)
-  rescue
-    exception ->
-      {:error, {:exception, Exception.message(exception)}}
-  catch
-    kind, reason ->
-      {:error, {kind, reason}}
+  defp notify_available do
+    case Process.whereis(@dispatcher_name) do
+      nil -> :ok
+      pid when is_pid(pid) -> GenServer.cast(pid, :dispatch_available)
+    end
   end
 end

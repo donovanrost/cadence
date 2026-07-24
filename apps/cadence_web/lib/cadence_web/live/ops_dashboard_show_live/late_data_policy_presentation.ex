@@ -1,4 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentation do
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   @moduledoc false
 
   @sample_accept_effect "canonical history; refreshes current/latest projections"
@@ -99,7 +101,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentation do
 
   defp execution_mode(context) when is_map(context) do
     context
-    |> Cadence.telemetry_late_data_policy_execution_mode()
+    |> DataManagement.late_data_policy_execution_mode()
     |> Atom.to_string()
   end
 

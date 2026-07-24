@@ -4,7 +4,7 @@ tags:
   [developer, architecture, management-plane, control-plane, data-plane, target]
 status: active
 created: 2026-07-21
-updated: 2026-07-21
+updated: 2026-07-23
 owner: Cadence core architecture
 ---
 
@@ -560,6 +560,33 @@ transitional. Web code should call resource- and plane-specific boundaries such
 as management command parsing, control Contact execution, or telemetry query
 serialization rather than one API namespace that implies every endpoint is
 control-plane work.
+
+### Implementation Checkpoint: 2026-07-23
+
+The logical boundary is now executable in the current umbrella:
+
+- Management, Control, Runtime, Projections, and Platform have distinct
+  supervisors and focused boot-isolation suites;
+- plane and bounded-context classifiers cover every core production module,
+  classify `cadence_web` as an adapter, and reject unclassified additions;
+- Runtime owns its persistence boundary and row modules; Runtime transactions
+  no longer invoke Control or projection implementations;
+- producer-owned typed facts are published after authoritative commits through
+  the plane-neutral `Cadence.Platform.EventBus`, with Control and Projections
+  subscribing through their own consumers;
+- production web code no longer calls the root `Cadence` facade or the
+  catch-all params/JSON boundaries directly; resource-owned `CadenceWeb.API.*`
+  modules are the migration seam; and
+- the full context and plane dependency matrix is ratcheted by xref. The live
+  baseline contains 36 named direction/internal edges, while root-facade,
+  horizontal schema, cross-context row, web catch-all, and unclassified debt
+  are zero.
+
+The in-process event bus is a notification transport, not the durable source of
+truth. Producers commit first, subscriber failure cannot roll back that commit,
+and durable owners must retain idempotent reconciliation paths for missed
+delivery. A transactional outbox remains appropriate where recovery cannot be
+derived from the authoritative records.
 
 ### Possible Umbrella End State
 

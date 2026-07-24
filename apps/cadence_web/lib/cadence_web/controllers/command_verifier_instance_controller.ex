@@ -5,9 +5,8 @@ defmodule CadenceWeb.CommandVerifierInstanceController do
 
   alias Cadence.Commanding.CommandVerifierInstance
   alias Cadence.Projections.CommandStatus
+  alias CadenceWeb.API.{CommandingJSON, CommandingParams}
   alias CadenceWeb.ControlPlaneAccess
-  alias CadenceWeb.ControlPlaneJSON.Commanding, as: CommandingJSON
-  alias CadenceWeb.ControlPlaneParams.Commanding, as: CommandingParams
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-

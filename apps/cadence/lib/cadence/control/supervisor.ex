@@ -13,7 +13,9 @@ defmodule Cadence.Control.Supervisor do
       [
         {Registry, keys: :unique, name: Cadence.Control.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: Cadence.Control.MissionSupervisor},
-        Cadence.Control.MissionRecovery
+        Cadence.Control.MissionRecovery,
+        Cadence.Control.ContactFactConsumer,
+        Cadence.Control.RuntimeFactConsumer
       ] ++
         command_dispatcher_children() ++
         command_verifier_scheduler_children() ++

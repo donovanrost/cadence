@@ -3,8 +3,12 @@ defmodule CadenceWeb.BindingSetController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
+
+  alias CadenceWeb.API.CatalogParams, as: CatalogParams
+
   alias Cadence.ApplicationDispatch.BindingSet
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def create(conn, %{
         "organization_id" => organization_id,
@@ -18,7 +22,11 @@ defmodule CadenceWeb.BindingSetController do
              mission_id
            ),
          {:ok, %BindingSet{} = binding_set} <-
-           ControlPlaneParams.binding_set(organization_id, mission_id, binding_set_params),
+           CatalogParams.binding_set(
+             organization_id,
+             mission_id,
+             binding_set_params
+           ),
          {:ok, %BindingSet{} = persisted_binding_set} <-
            Cadence.Governance.persist_binding_set(organization_id, binding_set),
          {:ok, %BindingSet{} = hydrated_binding_set} <-
@@ -30,7 +38,7 @@ defmodule CadenceWeb.BindingSetController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.binding_set(hydrated_binding_set)})
+      |> json(%{data: CatalogJSON.binding_set(hydrated_binding_set)})
     end
   end
 
@@ -54,7 +62,7 @@ defmodule CadenceWeb.BindingSetController do
              binding_set_id,
              version
            ) do
-      json(conn, %{data: ControlPlaneJSON.binding_set(binding_set)})
+      json(conn, %{data: CatalogJSON.binding_set(binding_set)})
     else
       :error -> {:error, {:invalid_param, "version", :integer}}
       {:error, reason} -> {:error, reason}

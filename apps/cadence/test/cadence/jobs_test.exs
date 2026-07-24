@@ -1,6 +1,8 @@
 defmodule Cadence.JobsTest do
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Jobs.{BackgroundJobRow, Job}
 
   @dispatcher_event_prefix [:cadence, :jobs, :dispatcher]
@@ -72,7 +74,7 @@ defmodule Cadence.JobsTest do
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == job.job_id
 
-    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
     assert failed_job.status == :failed
     assert failed_job.attempt_count == 1
     assert failed_job.failure_reason

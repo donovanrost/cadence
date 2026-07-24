@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands do
   @moduledoc false
 
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams
 
   def record_decision(params, scope, mission, opts \\ [])
@@ -20,14 +22,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands do
   end
 
   defp record_decision_for_mode(decision, "sample_execution", attrs, opts) do
-    case Cadence.execute_telemetry_late_data_policy(decision, attrs, opts) do
+    case DataManagement.execute_late_data_policy(decision, attrs, opts) do
       {:ok, %{event: event}} -> {:ok, event}
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp record_decision_for_mode(decision, "event_only", attrs, opts) do
-    Cadence.record_telemetry_late_data_policy_decision(decision, attrs, opts)
+    DataManagement.record_late_data_policy_decision(decision, attrs, opts)
   end
 
   defp record_decision_for_mode(_decision, execution_mode, _attrs, _opts) do

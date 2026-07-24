@@ -12,7 +12,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Observability
-  alias Cadence.Persistence
+  alias Cadence.Runtime.Persistence
   alias Cadence.Runtime.ProcessedIngressBatch
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler

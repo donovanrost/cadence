@@ -6,7 +6,7 @@ tags:
   [adr, architecture, management-plane, control-plane, data-plane, runtime]
 status: accepted
 created: 2026-07-21
-updated: 2026-07-21
+updated: 2026-07-23
 ---
 
 # ADR-015: Management Plane, Control Plane, and Data Plane Architecture

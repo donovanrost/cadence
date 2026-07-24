@@ -22,6 +22,7 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.SourceHealth
   alias Cadence.Dashboards.WidgetDef
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
   alias CadenceWeb.TestFixtures
 
   @tag :browser
@@ -65,10 +66,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
              ingest!(mission, binding_set, spacecraft.spacecraft_id, 19, sample_unix + 1)
 
     assert {:ok, [first_sample]} =
-             Cadence.Persistence.telemetry_samples(first_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(first_ingest_result.outputs)
 
     assert {:ok, [second_sample]} =
-             Cadence.Persistence.telemetry_samples(second_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(second_ingest_result.outputs)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -374,10 +375,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
              )
 
     assert {:ok, [first_sample]} =
-             Cadence.Persistence.telemetry_samples(first_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(first_ingest_result.outputs)
 
     assert {:ok, [second_sample]} =
-             Cadence.Persistence.telemetry_samples(second_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(second_ingest_result.outputs)
 
     assert {:ok, source_health_event, _source_health_status} =
              SourceHealth.record_source_health(
@@ -558,10 +559,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
              )
 
     assert {:ok, [first_sample]} =
-             Cadence.Persistence.telemetry_samples(first_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(first_ingest_result.outputs)
 
     assert {:ok, [second_sample]} =
-             Cadence.Persistence.telemetry_samples(second_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(second_ingest_result.outputs)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -723,10 +724,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
              )
 
     assert {:ok, [first_sample]} =
-             Cadence.Persistence.telemetry_samples(first_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(first_ingest_result.outputs)
 
     assert {:ok, [second_sample]} =
-             Cadence.Persistence.telemetry_samples(second_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(second_ingest_result.outputs)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -888,10 +889,10 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
              )
 
     assert {:ok, [first_sample]} =
-             Cadence.Persistence.telemetry_samples(first_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(first_ingest_result.outputs)
 
     assert {:ok, [second_sample]} =
-             Cadence.Persistence.telemetry_samples(second_ingest_result.outputs)
+             RuntimePersistence.telemetry_samples(second_ingest_result.outputs)
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,

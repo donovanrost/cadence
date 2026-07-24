@@ -12,9 +12,9 @@ defmodule Cadence.Runtime.DownlinkCombiner do
     DownlinkObservation
   }
 
-  alias Cadence.Persistence
   alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Runtime.Persistence
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @type state :: %{

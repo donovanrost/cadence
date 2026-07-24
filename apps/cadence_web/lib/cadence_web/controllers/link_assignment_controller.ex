@@ -3,8 +3,12 @@ defmodule CadenceWeb.LinkAssignmentController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CommsJSON, as: CommsJSON
+
+  alias CadenceWeb.API.CommsParams, as: CommsParams
+
   alias Cadence.Contacts.LinkAssignment
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -16,7 +20,7 @@ defmodule CadenceWeb.LinkAssignmentController do
       link_assignments =
         Cadence.Contacts.list_link_assignments(organization_id, mission_id)
         |> filter_link_assignments(params)
-        |> Enum.map(&ControlPlaneJSON.link_assignment/1)
+        |> Enum.map(&CommsJSON.link_assignment/1)
 
       json(conn, %{data: link_assignments})
     end
@@ -34,7 +38,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              mission_id
            ),
          {:ok, %LinkAssignment{} = link_assignment} <-
-           ControlPlaneParams.link_assignment(
+           CommsParams.link_assignment(
              organization_id,
              mission_id,
              link_assignment_params
@@ -43,7 +47,7 @@ defmodule CadenceWeb.LinkAssignmentController do
            Cadence.Contacts.persist_link_assignment(organization_id, link_assignment) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.link_assignment(persisted_link_assignment)})
+      |> json(%{data: CommsJSON.link_assignment(persisted_link_assignment)})
     end
   end
 
@@ -60,7 +64,7 @@ defmodule CadenceWeb.LinkAssignmentController do
            ),
          {:ok, %LinkAssignment{} = link_assignment} <-
            Cadence.Contacts.fetch_link_assignment(organization_id, mission_id, link_assignment_id) do
-      json(conn, %{data: ControlPlaneJSON.link_assignment(link_assignment)})
+      json(conn, %{data: CommsJSON.link_assignment(link_assignment)})
     end
   end
 
@@ -80,7 +84,8 @@ defmodule CadenceWeb.LinkAssignmentController do
              organization_id,
              mission_id
            ),
-         {:ok, metadata} <- ControlPlaneParams.link_assignment_delete(link_assignment_params),
+         {:ok, metadata} <-
+           CommsParams.link_assignment_delete(link_assignment_params),
          {:ok, %LinkAssignment{} = link_assignment} <-
            Cadence.Contacts.delete_link_assignment(
              organization_id,
@@ -88,7 +93,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              link_assignment_id,
              metadata
            ) do
-      json(conn, %{data: ControlPlaneJSON.link_assignment(link_assignment)})
+      json(conn, %{data: CommsJSON.link_assignment(link_assignment)})
     end
   end
 
@@ -108,7 +113,7 @@ defmodule CadenceWeb.LinkAssignmentController do
              organization_id,
              mission_id
            ),
-         {:ok, attrs} <- ControlPlaneParams.link_template_application(application_params),
+         {:ok, attrs} <- CommsParams.link_template_application(application_params),
          {:ok, source_template} <-
            fetch_application_path_template(organization_id, mission_id, path_template_id, attrs),
          {:ok, spacecraft} <- application_spacecraft(organization_id, mission_id, attrs),
@@ -122,7 +127,7 @@ defmodule CadenceWeb.LinkAssignmentController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.link_template_application_result(result)})
+      |> json(%{data: CommsJSON.link_template_application_result(result)})
     end
   end
 

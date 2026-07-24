@@ -3,8 +3,12 @@ defmodule CadenceWeb.SourceEndpointController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias CadenceWeb.API.CommsJSON, as: CommsJSON
+
+  alias CadenceWeb.API.CommsParams, as: CommsParams
+
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{
         "organization_id" => organization_id,
@@ -24,7 +28,7 @@ defmodule CadenceWeb.SourceEndpointController do
           mission_id,
           spacecraft_id: spacecraft_id
         )
-        |> Enum.map(&ControlPlaneJSON.source_endpoint/1)
+        |> Enum.map(&CommsJSON.source_endpoint/1)
 
       json(conn, %{data: source_endpoints})
     end
@@ -39,7 +43,7 @@ defmodule CadenceWeb.SourceEndpointController do
            ) do
       source_endpoints =
         Cadence.SourceEndpoints.list_source_endpoints(organization_id, mission_id)
-        |> Enum.map(&ControlPlaneJSON.source_endpoint/1)
+        |> Enum.map(&CommsJSON.source_endpoint/1)
 
       json(conn, %{data: source_endpoints})
     end
@@ -62,7 +66,7 @@ defmodule CadenceWeb.SourceEndpointController do
              mission_id,
              source_endpoint_id
            ) do
-      json(conn, %{data: ControlPlaneJSON.source_endpoint(source_endpoint)})
+      json(conn, %{data: CommsJSON.source_endpoint(source_endpoint)})
     end
   end
 
@@ -80,7 +84,7 @@ defmodule CadenceWeb.SourceEndpointController do
              spacecraft_id
            ),
          {:ok, %SourceEndpoint{} = source_endpoint} <-
-           ControlPlaneParams.source_endpoint(
+           CommsParams.source_endpoint(
              organization_id,
              mission_id,
              spacecraft_id,
@@ -90,7 +94,7 @@ defmodule CadenceWeb.SourceEndpointController do
            Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.source_endpoint(persisted_source_endpoint)})
+      |> json(%{data: CommsJSON.source_endpoint(persisted_source_endpoint)})
     end
   end
 
@@ -106,12 +110,16 @@ defmodule CadenceWeb.SourceEndpointController do
              mission_id
            ),
          {:ok, %SourceEndpoint{} = source_endpoint} <-
-           ControlPlaneParams.source_endpoint(organization_id, mission_id, source_endpoint_params),
+           CommsParams.source_endpoint(
+             organization_id,
+             mission_id,
+             source_endpoint_params
+           ),
          {:ok, %SourceEndpoint{} = persisted_source_endpoint} <-
            Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint) do
       conn
       |> put_status(:created)
-      |> json(%{data: ControlPlaneJSON.source_endpoint(persisted_source_endpoint)})
+      |> json(%{data: CommsJSON.source_endpoint(persisted_source_endpoint)})
     end
   end
 

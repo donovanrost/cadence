@@ -208,7 +208,7 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
 
     assert claimed_started_job
 
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_started_job.job_id)
+    assert {:ok, completed_job} = Cadence.Jobs.Runner.run_job(claimed_started_job.job_id)
     assert completed_job.status == :completed
 
     assert [completed_event] =

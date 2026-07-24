@@ -10,7 +10,11 @@ defmodule Cadence.Projections.Supervisor do
   @impl true
   def init(_opts) do
     children =
-      [Cadence.Telemetry.RuntimeHealth] ++
+      [
+        Cadence.Telemetry.RuntimeHealth,
+        Cadence.Projections.RuntimeFactConsumer,
+        Cadence.Projections.DomainFactConsumer
+      ] ++
         dashboard_runtime_cache_children() ++
         dashboard_source_circuit_breaker_children() ++
         dashboard_source_probe_scheduler_children() ++

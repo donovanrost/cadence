@@ -17,6 +17,8 @@ defmodule Cadence.Dashboards.RuntimeCacheKey do
     SourceWatermark
   }
 
+  alias Cadence.Platform.Fingerprint
+
   @type layer :: :plan | :source_result | :frame
 
   @type t :: %__MODULE__{
@@ -28,13 +30,7 @@ defmodule Cadence.Dashboards.RuntimeCacheKey do
   defstruct [:layer, :fingerprint, parts: %{}]
 
   @spec fingerprint(term()) :: binary()
-  def fingerprint(value) do
-    value
-    |> normalize()
-    |> :erlang.term_to_binary()
-    |> then(&:crypto.hash(:sha256, &1))
-    |> Base.url_encode64(padding: false)
-  end
+  def fingerprint(value), do: value |> normalize() |> Fingerprint.url_sha256()
 
   @spec plan(DashboardResolveRequest.t(), keyword()) :: t()
   def plan(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do

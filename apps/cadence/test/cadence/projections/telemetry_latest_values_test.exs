@@ -1,4 +1,6 @@
 defmodule Cadence.Projections.TelemetryLatestValuesTest do
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Jobs
   alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Reads.Telemetry, as: TelemetryReads
@@ -342,7 +344,7 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.run_id == rebuild_run.rebuild_run_id
 
-    assert {:ok, rebuild_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert {:ok, rebuild_job} = JobRunner.run_job(claimed_job.job_id)
     assert rebuild_job.status == :completed
 
     assert {:ok, completed_run} = TelemetryLatestValues.fetch_run(rebuild_run.rebuild_run_id)

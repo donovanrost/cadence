@@ -11,6 +11,11 @@ config :cadence, Cadence.Repo,
   queue_interval: 10_000
 
 config :cadence, start_background_jobs: false
+
+config :cadence, :event_bus,
+  delivery: :sync,
+  before_notify: {Ecto.Adapters.SQL.Sandbox, :allow, [Cadence.Repo]}
+
 config :cadence, contact_scheduler: [enabled: false]
 config :cadence, contact_scheduler_global_safety: [enabled: false]
 config :cadence, provider_reservation_reconciler: [enabled: false]

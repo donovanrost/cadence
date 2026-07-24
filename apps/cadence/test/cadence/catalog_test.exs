@@ -1,6 +1,8 @@
 defmodule Cadence.CatalogTest do
   use Cadence.ConfigCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Database}
 
@@ -110,7 +112,7 @@ defmodule Cadence.CatalogTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
@@ -259,7 +261,7 @@ defmodule Cadence.CatalogTest do
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
-      assert {:ok, _completed_job} = Cadence.Jobs.run_job(job.job_id)
+      assert {:ok, _completed_job} = JobRunner.run_job(job.job_id)
 
       assert {:ok, completed_run} =
                Cadence.Catalog.fetch_import_run(
@@ -383,7 +385,7 @@ defmodule Cadence.CatalogTest do
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
-      assert {:ok, _completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+      assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
 
       assert RuntimeCache.get_plan(telemetry_plan_key, cache) == :miss
       assert RuntimeCache.get_plan(limits_plan_key, cache) == :miss

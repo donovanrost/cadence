@@ -1,4 +1,6 @@
 defmodule Cadence.Reads.TelemetryTest do
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
+
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.DataCase, async: false
 
@@ -194,7 +196,7 @@ defmodule Cadence.Reads.TelemetryTest do
                binding_set.version
              )
 
-    assert {:ok, samples} = Cadence.Persistence.telemetry_samples(result.outputs)
+    assert {:ok, samples} = RuntimePersistence.telemetry_samples(result.outputs)
     samples
   end
 

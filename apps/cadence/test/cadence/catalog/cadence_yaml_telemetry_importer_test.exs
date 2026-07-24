@@ -1,6 +1,8 @@
 defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
   use Cadence.ConfigCase, async: false
 
+  alias Cadence.Jobs.Runner, as: JobRunner
+
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
@@ -94,7 +96,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
@@ -292,7 +294,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
@@ -368,7 +370,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =

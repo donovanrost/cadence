@@ -1,6 +1,8 @@
 defmodule CadenceWeb.ActivationJSON do
   @moduledoc false
 
+  alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
+
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Control.Activations.ActivationExecution
@@ -104,7 +106,7 @@ defmodule CadenceWeb.ActivationJSON do
   def active_binding_set(%BindingSetActivation{} = activation, %BindingSet{} = binding_set) do
     %{
       activation: activation(activation),
-      binding_set: CadenceWeb.ControlPlaneJSON.binding_set(binding_set)
+      binding_set: CatalogJSON.binding_set(binding_set)
     }
   end
 

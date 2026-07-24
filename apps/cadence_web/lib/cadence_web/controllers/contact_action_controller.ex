@@ -3,7 +3,9 @@ defmodule CadenceWeb.ContactActionController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON}
+  alias CadenceWeb.API.ContactJSON, as: ContactJSON
+
+  alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -19,7 +21,7 @@ defmodule CadenceWeb.ContactActionController do
           scheduled_contact_id: string_param(params, "scheduled_contact_id"),
           realized_contact_id: string_param(params, "realized_contact_id")
         )
-        |> Enum.map(&ControlPlaneJSON.contact_action/1)
+        |> Enum.map(&ContactJSON.contact_action/1)
 
       json(conn, %{data: contact_actions})
     end

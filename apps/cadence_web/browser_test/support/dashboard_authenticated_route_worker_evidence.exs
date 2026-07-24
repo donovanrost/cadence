@@ -213,10 +213,12 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteWorkerEvidence do
     assert claimed_real_completed_job
     assert claimed_real_failed_job
 
-    assert {:ok, completed_real_job} = Cadence.Jobs.run_job(claimed_real_completed_job.job_id)
+    assert {:ok, completed_real_job} =
+             Cadence.Jobs.Runner.run_job(claimed_real_completed_job.job_id)
+
     assert completed_real_job.status == :completed
 
-    assert {:ok, failed_real_job} = Cadence.Jobs.run_job(claimed_real_failed_job.job_id)
+    assert {:ok, failed_real_job} = Cadence.Jobs.Runner.run_job(claimed_real_failed_job.job_id)
     assert failed_real_job.status == :failed
 
     assert [real_completed_event] =

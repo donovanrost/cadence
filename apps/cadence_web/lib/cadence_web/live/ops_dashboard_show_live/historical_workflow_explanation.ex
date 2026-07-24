@@ -1,10 +1,12 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowExplanation do
+  alias Cadence.Telemetry.DataManagement, as: DataManagement
+
   @moduledoc false
 
   def build(context) when is_map(context) do
     summary =
       context
-      |> Cadence.telemetry_historical_data_workflow_explanation_summary()
+      |> DataManagement.historical_data_workflow_explanation_summary()
       |> decorate_summary()
 
     %{

@@ -1,4 +1,4 @@
-defmodule Cadence.Persistence.Schemas.DispatchDecisionRow do
+defmodule Cadence.Runtime.DispatchRecords.DispatchDecisionRow do
   @moduledoc false
 
   use Ecto.Schema
