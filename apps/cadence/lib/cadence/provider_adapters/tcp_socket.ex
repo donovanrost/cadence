@@ -21,7 +21,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.{IngressPersistenceProjector, MissionRuntime, ProviderIngressExecutor}
-  alias Cadence.SourceEndpoints
   @tcp_socket_buffer 1_048_576
   @tcp_opts [
     :binary,
@@ -85,8 +84,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       path_id: path_id,
       provider_binding_id: provider_binding_id,
       source_endpoint_ref: source_endpoint_ref,
-      source_endpoint_spacecraft_id:
-        resolve_source_endpoint_spacecraft_id(mission_id, source_endpoint_ref),
+      source_endpoint_spacecraft_id: Keyword.get(opts, :source_endpoint_spacecraft_id),
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -181,6 +179,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         provider_binding_id: state.provider_binding_id,
         adapter_key: :tcp_socket,
         direction: state.direction,
+        source_endpoint_ref: state.source_endpoint_ref,
+        source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
         mode: state.mode,
         host: state.host,
         configured_port: state.configured_port,
@@ -804,17 +804,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     do: schedule_accept(state)
 
   defp maybe_schedule_accept_after_disconnect(state), do: state
-
-  defp resolve_source_endpoint_spacecraft_id(_mission_id, nil), do: nil
-  defp resolve_source_endpoint_spacecraft_id(_mission_id, ""), do: nil
-
-  defp resolve_source_endpoint_spacecraft_id(mission_id, source_endpoint_ref)
-       when is_binary(mission_id) and is_binary(source_endpoint_ref) do
-    case SourceEndpoints.fetch_source_endpoint(mission_id, source_endpoint_ref) do
-      {:ok, source_endpoint} -> source_endpoint.spacecraft_id
-      {:error, _reason} -> nil
-    end
-  end
 
   defp receiver_matches?(%{socket_receiver_pid: pid}, pid) when is_pid(pid), do: true
   defp receiver_matches?(_state, _pid), do: false

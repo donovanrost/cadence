@@ -1,7 +1,7 @@
 defmodule Cadence.DerivedTelemetryTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   use Cadence.DataCase, async: false
@@ -59,6 +59,16 @@ defmodule Cadence.DerivedTelemetryTest do
 
     assert {:ok, run} = DerivedTelemetryService.start_evaluate("mission-alpha")
     assert run.status == :running
+    assert length(run.metadata["definition_snapshot"]) == 2
+
+    revised_base_definition = %{
+      base_definition
+      | version: 2,
+        expression: "HK.counter * 3"
+    }
+
+    assert {:ok, ^revised_base_definition} =
+             Cadence.Governance.persist_derived_definition(revised_base_definition)
 
     assert {:ok, queued_job} =
              Jobs.fetch_job_for_run(:derived_telemetry_evaluation, run.derived_run_id)

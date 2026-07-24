@@ -27,12 +27,7 @@ plane_direction|lib/cadence/dashboards/source_execution_policy.ex|lib/cadence/da
 plane_direction|lib/cadence/dashboards/source_probe_scheduler.ex|lib/cadence/dashboards/data_sources.ex
 plane_direction|lib/cadence/dashboards/source_registry.ex|lib/cadence/dashboards/data_sources.ex
 plane_direction|lib/cadence/dashboards/tsdb_backend_lifecycle_jobs.ex|lib/cadence/dashboards/data_sources.ex
-plane_direction|lib/cadence/derived_telemetry.ex|lib/cadence/governance.ex
 plane_direction|lib/cadence/governance.ex|lib/cadence/capabilities/registry.ex
 plane_direction|lib/cadence/management/commanding.ex|lib/cadence/commanding.ex
 plane_direction|lib/cadence/management/managed_resources.ex|lib/cadence/dashboards/data_sources.ex
 plane_direction|lib/cadence/management/providers.ex|lib/cadence/ground_networks.ex
-plane_direction|lib/cadence/provider_adapters/tcp_socket.ex|lib/cadence/source_endpoints.ex
-plane_direction|lib/cadence/runtime/ingress.ex|lib/cadence/source_endpoints.ex
-plane_direction|lib/cadence/runtime/provider_ingress_executor.ex|lib/cadence/source_endpoints.ex
-plane_direction|lib/cadence/telemetry/storage/observation_identity_states.ex|lib/cadence/projections/telemetry_latest_values.ex

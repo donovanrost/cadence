@@ -9,7 +9,6 @@ defmodule Cadence.DerivedTelemetry do
 
   alias Cadence.DerivedTelemetry.{Definition, ExpressionEvaluator, Run, Sample}
   alias Cadence.DerivedTelemetry.EvaluationRunRow, as: DerivedTelemetryEvaluationRunRow
-  alias Cadence.Governance
   alias Cadence.Jobs
 
   alias Cadence.DerivedTelemetry.Store
@@ -21,18 +20,18 @@ defmodule Cadence.DerivedTelemetry do
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    run = build_run(mission_id, opts)
-
-    with {:ok, persisted_run} <- insert_run(run) do
-      execute_run(persisted_run, opts)
+    with {:ok, definitions} <- definitions_from_opts(mission_id, opts),
+         run = build_run(mission_id, definitions, opts),
+         {:ok, persisted_run} <- insert_run(run) do
+      execute_run(persisted_run, Keyword.put(opts, :definitions, definitions))
     end
   end
 
   @spec start_evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def start_evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    run = build_run(mission_id, opts)
-
-    with {:ok, %Run{} = persisted_run} <- insert_run(run) do
+    with {:ok, definitions} <- definitions_from_opts(mission_id, opts),
+         run = build_run(mission_id, definitions, opts),
+         {:ok, %Run{} = persisted_run} <- insert_run(run) do
       case Jobs.enqueue(
              :derived_telemetry_evaluation,
              mission_id,
@@ -71,21 +70,25 @@ defmodule Cadence.DerivedTelemetry do
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(derived_run_id) when is_binary(derived_run_id) do
-    with {:ok, %Run{} = run} <- fetch_run(derived_run_id) do
-      execute_run(run, opts_from_run(run))
+    with {:ok, %Run{} = run} <- fetch_run(derived_run_id),
+         {:ok, opts} <- opts_from_run(run) do
+      execute_run(run, opts)
     end
   end
 
-  defp build_run(mission_id, opts) do
+  defp build_run(mission_id, definitions, opts) do
     Run.new(%{
       mission_id: mission_id,
-      metadata: %{"spacecraft_id" => Keyword.get(opts, :spacecraft_id)}
+      metadata: %{
+        "spacecraft_id" => Keyword.get(opts, :spacecraft_id),
+        "definition_snapshot" => Enum.map(definitions, &definition_snapshot/1)
+      }
     })
   end
 
   defp execute_run(%Run{} = run, opts) do
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
-    definitions = Governance.list_derived_definitions(run.mission_id)
+    definitions = Keyword.fetch!(opts, :definitions)
 
     with {:ok, evaluation_plan} <- build_evaluation_plan(definitions),
          {:ok, telemetry_samples} <- fetch_source_samples(run.mission_id, spacecraft_id),
@@ -292,11 +295,91 @@ defmodule Cadence.DerivedTelemetry do
     end
   end
 
-  defp opts_from_run(%Run{metadata: metadata}) when is_map(metadata) do
-    case Map.get(metadata, "spacecraft_id", Map.get(metadata, :spacecraft_id)) do
-      nil -> []
-      spacecraft_id -> [spacecraft_id: spacecraft_id]
+  defp opts_from_run(%Run{mission_id: mission_id, metadata: metadata}) when is_map(metadata) do
+    snapshot = Map.get(metadata, "definition_snapshot", Map.get(metadata, :definition_snapshot))
+
+    with {:ok, definitions} <- build_definition_snapshot(mission_id, snapshot) do
+      opts =
+        case Map.get(metadata, "spacecraft_id", Map.get(metadata, :spacecraft_id)) do
+          nil -> []
+          spacecraft_id -> [spacecraft_id: spacecraft_id]
+        end
+
+      {:ok, Keyword.put(opts, :definitions, definitions)}
     end
+  end
+
+  defp definitions_from_opts(mission_id, opts) do
+    case Keyword.fetch(opts, :definitions) do
+      {:ok, definitions} -> build_definition_snapshot(mission_id, definitions)
+      :error -> {:error, :derived_definition_snapshot_required}
+    end
+  end
+
+  defp build_definition_snapshot(mission_id, definitions) when is_list(definitions) do
+    Enum.reduce_while(definitions, {:ok, []}, fn definition, {:ok, acc} ->
+      with {:ok, %Definition{} = definition} <- build_definition(definition),
+           :ok <- validate_definition_mission(definition, mission_id),
+           :ok <- Definition.validate(definition) do
+        {:cont, {:ok, [definition | acc]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp build_definition_snapshot(_mission_id, _definitions),
+    do: {:error, :invalid_derived_definition_snapshot}
+
+  defp build_definition(%Definition{} = definition), do: {:ok, definition}
+
+  defp build_definition(definition) when is_map(definition) do
+    {:ok,
+     Definition.new(%{
+       derived_definition_id: definition_value(definition, :derived_definition_id),
+       mission_id: definition_value(definition, :mission_id),
+       point_id: definition_value(definition, :point_id),
+       point_name: definition_value(definition, :point_name),
+       expression: definition_value(definition, :expression),
+       version: definition_value(definition, :version),
+       source_point_ids: definition_value(definition, :source_point_ids),
+       metadata: definition_value(definition, :metadata)
+     })}
+  rescue
+    KeyError -> {:error, :invalid_derived_definition_snapshot}
+  end
+
+  defp build_definition(_definition), do: {:error, :invalid_derived_definition_snapshot}
+
+  defp definition_snapshot(%Definition{} = definition) do
+    definition
+    |> Map.from_struct()
+    |> Map.take([
+      :derived_definition_id,
+      :mission_id,
+      :point_id,
+      :point_name,
+      :expression,
+      :version,
+      :source_point_ids,
+      :metadata
+    ])
+  end
+
+  defp definition_value(definition, key) do
+    Map.get(definition, key, Map.get(definition, Atom.to_string(key)))
+  end
+
+  defp validate_definition_mission(%Definition{mission_id: mission_id}, mission_id), do: :ok
+
+  defp validate_definition_mission(%Definition{} = definition, mission_id) do
+    {:error,
+     {:derived_definition_mission_mismatch, definition.derived_definition_id, mission_id,
+      definition.mission_id}}
   end
 
   defp build_evaluation_plan(definitions) when is_list(definitions) do

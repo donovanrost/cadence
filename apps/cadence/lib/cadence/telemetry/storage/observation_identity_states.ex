@@ -17,9 +17,9 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   alias Cadence.Ids
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Projections.TelemetryLatestValues
 
   alias Cadence.Repo
+  alias Cadence.Telemetry.{Facts, ObservationIdentitySelectionChanged}
   alias Cadence.Telemetry.Storage.ObservationEnvelope
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
   alias Cadence.Telemetry.Storage.ObservationIdentityState
@@ -73,10 +73,9 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
          {:ok, updated_row} <- persist_decision(row, attrs, decision, opts) do
       state = TelemetryObservationIdentityStateRow.to_domain(updated_row)
 
-      with :ok <- refresh_latest_value(state, opts) do
-        invalidate_revision_state_state(state, opts)
-        {:ok, state}
-      end
+      publish_latest_value_refresh(state, opts)
+      invalidate_revision_state_state(state, opts)
+      {:ok, state}
     end
   end
 
@@ -634,17 +633,23 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     :ok
   end
 
-  defp refresh_latest_value(%ObservationIdentityState{} = state, opts) do
+  defp publish_latest_value_refresh(%ObservationIdentityState{} = state, opts) do
     if Keyword.get(opts, :refresh_latest_value?, true) do
-      refresh_opts = Keyword.put(opts, :spacecraft_id, state.spacecraft_id)
-
-      case TelemetryLatestValues.refresh_point(state.mission_id, state.point_id, refresh_opts) do
-        {:ok, _sample_or_nil} -> :ok
-        {:error, reason} -> {:error, {:latest_value_refresh_failed, reason}}
-      end
-    else
-      :ok
+      Facts.publish(%ObservationIdentitySelectionChanged{
+        observation_identity_id: state.observation_identity_id,
+        organization_id: state.organization_id,
+        mission_id: state.mission_id,
+        point_id: state.point_id,
+        spacecraft_id: state.spacecraft_id,
+        realm: state.realm,
+        replay_run_id: state.replay_run_id,
+        data_source_id: state.data_source_id,
+        binding_id: state.binding_id,
+        committed_at: DateTime.utc_now()
+      })
     end
+
+    :ok
   end
 
   defp invalidate_revision_state_state(%ObservationIdentityState{} = state, opts) do

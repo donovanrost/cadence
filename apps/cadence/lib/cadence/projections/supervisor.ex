@@ -13,6 +13,7 @@ defmodule Cadence.Projections.Supervisor do
       [
         Cadence.Telemetry.RuntimeHealth,
         Cadence.Projections.RuntimeFactConsumer,
+        Cadence.Projections.TelemetryFactConsumer,
         Cadence.Projections.DomainFactConsumer
       ] ++
         dashboard_runtime_cache_children() ++

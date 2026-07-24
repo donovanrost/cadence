@@ -1,7 +1,7 @@
 defmodule Cadence.LimitsTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   alias Cadence.Reads.Limits, as: LimitReads

@@ -175,9 +175,11 @@ defmodule Cadence.Projections.TelemetryLatestValues do
   defp identity_rows_for_point(mission_id, point_id, opts) do
     mission_id
     |> ObservationIdentityStates.list_for_selection(
+      organization_id: Keyword.get(opts, :organization_id),
       point_id: point_id,
       spacecraft_id: Keyword.get(opts, :spacecraft_id),
       realm: Keyword.get(opts, :realm),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
       data_source_id: Keyword.get(opts, :data_source_id),
       binding_id: SourceFilters.binding_id(opts)
     )
@@ -186,8 +188,10 @@ defmodule Cadence.Projections.TelemetryLatestValues do
 
   defp identity_states_for_mission(mission_id, opts) do
     ObservationIdentityStates.list_for_selection(mission_id,
+      organization_id: Keyword.get(opts, :organization_id),
       spacecraft_id: Keyword.get(opts, :spacecraft_id),
       realm: Keyword.get(opts, :realm),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
       data_source_id: Keyword.get(opts, :data_source_id),
       binding_id: SourceFilters.binding_id(opts)
     )

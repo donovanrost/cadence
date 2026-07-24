@@ -16,9 +16,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   alias Cadence.Observability.AsyncContext
   alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime, as: RuntimeBoundary
-  alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
+  alias Cadence.Runtime.{IngressEvidence, IngressPersistenceProjector, ProcessedIngressBatch}
   alias Cadence.Runtime.ProviderIngressExecutor.Instrumentation
-  alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
@@ -528,7 +527,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp resolve_raw_evidence_in_span(%RawEvidence{} = raw_evidence) do
     Instrumentation.trace_stage(
       "cadence.telemetry.ingress.resolve",
-      fn -> SourceEndpoints.resolve_raw_evidence(raw_evidence) end
+      fn -> IngressEvidence.validate(raw_evidence) end
     )
   end
 

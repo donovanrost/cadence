@@ -16,6 +16,7 @@ defmodule Cadence.Control.Contacts do
   alias Cadence.Management.Contacts.ApprovedContactPlan
   alias Cadence.Runtime.Contacts, as: RuntimeContacts
   alias Cadence.Runtime.RealizedContactRuntimeSpec
+  alias Cadence.SourceEndpoints
 
   @spec accept_approved_plan(ApprovedContactPlan.t()) :: :ok | {:error, term()}
   def accept_approved_plan(%ApprovedContactPlan{} = approved_plan),
@@ -116,10 +117,59 @@ defmodule Cadence.Control.Contacts do
       scheduled_contact_id: realized_contact.scheduled_contact_id,
       source_endpoint_refs: realized_contact.source_endpoint_refs,
       contact_intents: realized_contact.contact_intents,
-      paths: realized_contact.paths,
+      paths: Enum.map(realized_contact.paths, &runtime_path(realized_contact, &1)),
       clock_mode: realized_contact.clock_mode,
       initial_time: realized_contact.initial_time,
       metadata: realized_contact.metadata
     })
+  end
+
+  defp runtime_path(realized_contact, path) do
+    source_endpoint_ref =
+      effective_source_endpoint_ref(
+        path.source_endpoint_ref,
+        realized_contact.source_endpoint_refs
+      )
+
+    path
+    |> Map.from_struct()
+    |> Map.put(:source_endpoint_ref, source_endpoint_ref)
+    |> Map.put(
+      :source_endpoint_spacecraft_id,
+      source_endpoint_spacecraft_id(realized_contact, source_endpoint_ref)
+    )
+  end
+
+  defp effective_source_endpoint_ref(source_endpoint_ref, _contact_source_endpoint_refs)
+       when is_binary(source_endpoint_ref) and source_endpoint_ref != "",
+       do: source_endpoint_ref
+
+  defp effective_source_endpoint_ref(_source_endpoint_ref, [source_endpoint_ref]),
+    do: source_endpoint_ref
+
+  defp effective_source_endpoint_ref(_source_endpoint_ref, _contact_source_endpoint_refs), do: nil
+
+  defp source_endpoint_spacecraft_id(_realized_contact, source_endpoint_ref)
+       when source_endpoint_ref in [nil, ""],
+       do: nil
+
+  defp source_endpoint_spacecraft_id(realized_contact, source_endpoint_ref) do
+    fetch_result =
+      case realized_contact.organization_id do
+        organization_id when is_binary(organization_id) and organization_id != "" ->
+          SourceEndpoints.fetch_source_endpoint(
+            organization_id,
+            realized_contact.mission_id,
+            source_endpoint_ref
+          )
+
+        _other ->
+          SourceEndpoints.fetch_source_endpoint(realized_contact.mission_id, source_endpoint_ref)
+      end
+
+    case fetch_result do
+      {:ok, source_endpoint} -> source_endpoint.spacecraft_id
+      {:error, _reason} -> nil
+    end
   end
 end

@@ -3,7 +3,7 @@ defmodule CadenceWeb.DevTMFrameController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias Cadence.Runtime.Ingress, as: RuntimeIngress
+  alias Cadence.Control.Ingress, as: ControlIngress
 
   alias CadenceWeb.API.TelemetryJSON, as: TelemetryJSON
 
@@ -24,7 +24,7 @@ defmodule CadenceWeb.DevTMFrameController do
            ),
          {:ok, raw_evidence} <-
            RuntimeIngressParams.dev_tm_frame_ingress(mission_id, tm_frame_params),
-         {:ok, processing_result} <- RuntimeIngress.process_and_persist(raw_evidence) do
+         {:ok, processing_result} <- ControlIngress.process_and_persist(raw_evidence) do
       json(conn, %{data: TelemetryJSON.dev_ingress_result(processing_result)})
     end
   end

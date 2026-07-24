@@ -1,7 +1,7 @@
 defmodule Cadence.Projections.DerivedTelemetryLatestValuesTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
+  alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
   alias Cadence.Projections.DerivedTelemetryLatestValues
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads

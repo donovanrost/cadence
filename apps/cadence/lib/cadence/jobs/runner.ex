@@ -8,8 +8,8 @@ defmodule Cadence.Jobs.Runner do
   """
 
   alias Cadence.Catalog
+  alias Cadence.Control.DerivedTelemetry
   alias Cadence.Dashboards.{ManagedQuestDBProvisioningJobs, TSDBBackendLifecycleJobs}
-  alias Cadence.DerivedTelemetry
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
   alias Cadence.Limits

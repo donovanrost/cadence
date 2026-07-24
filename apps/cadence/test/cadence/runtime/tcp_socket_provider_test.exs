@@ -150,6 +150,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     [provider_runtime_snapshot] = path_snapshot.provider_runtimes
     port = provider_runtime_snapshot.port
     assert is_integer(port) and port > 0
+    assert provider_runtime_snapshot.source_endpoint_spacecraft_id == spacecraft.spacecraft_id
     assert provider_runtime_snapshot.ingress_executor.queue_depth == 0
     assert provider_runtime_snapshot.ingress_executor.failed_count == 0
     assert provider_runtime_snapshot.ingress_persistence_projector.queue_depth == 0

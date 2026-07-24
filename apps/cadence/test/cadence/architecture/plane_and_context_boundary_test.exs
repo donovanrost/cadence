@@ -52,6 +52,9 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
                "lib/cadence/control/mission_runtime_reconciler.ex",
                "runtime"
              )
+
+    assert :telemetry == ContextBoundary.classify("lib/cadence/control/derived_telemetry.ex")
+    assert :telemetry == ContextBoundary.classify("lib/cadence/control/ingress.ex")
   end
 
   test "cross-plane callers use public resource boundaries, not owner internals" do
@@ -73,6 +76,13 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
              PlaneBoundary.findings_for_edge(
                "lib/cadence/replay.ex",
                "lib/cadence/runtime/replay_session.ex",
+               "runtime"
+             )
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/control/ingress.ex",
+               "lib/cadence/runtime/ingress.ex",
                "runtime"
              )
 

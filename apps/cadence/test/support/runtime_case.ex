@@ -26,14 +26,14 @@ defmodule Cadence.RuntimeCase do
 
   def setup_owned_runtime(tags) do
     Cadence.DataCase.ensure_cadence_started!()
-    initial_mission_ids = MapSet.new(Cadence.Runtime.running_mission_ids())
-    initial_control_mission_ids = MapSet.new(ControlMissions.running_mission_ids())
+    stop_all_control_missions()
+    Cadence.Runtime.stop_all_missions()
 
     pid = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
 
     on_exit(fn ->
-      stop_owned_control_missions(initial_control_mission_ids)
-      stop_owned_missions(initial_mission_ids)
+      stop_all_control_missions()
+      Cadence.Runtime.stop_all_missions()
 
       if Cadence.DataCase.telemetry_current_value_store_module() == ETS do
         CurrentValueStore.reset()
@@ -46,17 +46,8 @@ defmodule Cadence.RuntimeCase do
     :ok
   end
 
-  defp stop_owned_control_missions(initial_mission_ids) do
+  defp stop_all_control_missions do
     ControlMissions.running_mission_ids()
-    |> MapSet.new()
-    |> MapSet.difference(initial_mission_ids)
     |> Enum.each(&ControlMissions.stop/1)
-  end
-
-  defp stop_owned_missions(initial_mission_ids) do
-    Cadence.Runtime.running_mission_ids()
-    |> MapSet.new()
-    |> MapSet.difference(initial_mission_ids)
-    |> Enum.each(&Cadence.Runtime.stop_mission/1)
   end
 end

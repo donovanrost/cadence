@@ -68,6 +68,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/contact_planning/fleet_automation_actions.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_repairs.ex" => :contacts,
     "lib/cadence/control/contact_fact_consumer.ex" => :commanding,
+    "lib/cadence/control/derived_telemetry.ex" => :telemetry,
+    "lib/cadence/control/ingress.ex" => :telemetry,
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,

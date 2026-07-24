@@ -2,17 +2,19 @@ defmodule Cadence.Runtime.Ingress do
   @moduledoc """
   Public data-plane ingress boundary.
 
-  Callers provide raw evidence and, when bypassing mission reconciliation for a
-  deterministic component test, an exact immutable binding set. The boundary
-  owns decoding, dispatch, runtime execution, persistence, and ingress latency
-  instrumentation without routing through the historical root facade.
+  Callers provide exact raw evidence whose source-endpoint identity has already
+  been resolved by the control handoff and, when bypassing mission
+  reconciliation for a deterministic component test, an exact immutable
+  binding set. The boundary owns decoding, dispatch, runtime execution,
+  persistence, and ingress latency instrumentation without querying another
+  plane.
   """
 
   alias Cadence.ApplicationDispatch.{BindingSet, DispatchDecision, Dispatcher}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime
+  alias Cadence.Runtime.IngressEvidence
   alias Cadence.Runtime.Persistence
-  alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
@@ -39,7 +41,8 @@ defmodule Cadence.Runtime.Ingress do
   @spec process(RawEvidence.t(), BindingSet.t()) ::
           {:ok, processing_result()} | {:error, term()}
   def process(%RawEvidence{} = raw_evidence, %BindingSet{} = binding_set) do
-    with {:ok, %RawEvidence{} = resolved_raw_evidence} <- resolve_raw_evidence(raw_evidence),
+    with {:ok, %RawEvidence{} = resolved_raw_evidence} <-
+           IngressEvidence.validate(raw_evidence),
          :ok <- validate_binding_set_mission(resolved_raw_evidence, binding_set),
          {:ok, decode_result} <- decode_raw_evidence_packets(resolved_raw_evidence),
          {:ok, dispatch_result} <- execute_dispatches(decode_result, binding_set) do
@@ -49,7 +52,8 @@ defmodule Cadence.Runtime.Ingress do
 
   @spec process(RawEvidence.t()) :: {:ok, processing_result()} | {:error, term()}
   def process(%RawEvidence{} = raw_evidence) do
-    with {:ok, %RawEvidence{} = resolved_raw_evidence} <- resolve_raw_evidence(raw_evidence) do
+    with {:ok, %RawEvidence{} = resolved_raw_evidence} <-
+           IngressEvidence.validate(raw_evidence) do
       Runtime.process_telemetry_ingress(resolved_raw_evidence)
     end
   end
@@ -69,7 +73,7 @@ defmodule Cadence.Runtime.Ingress do
       ingress_started_at = System.monotonic_time()
 
       resolve_result =
-        TelemetryProfiler.with_stage(:resolve, fn -> resolve_raw_evidence(raw_evidence) end)
+        TelemetryProfiler.with_stage(:resolve, fn -> IngressEvidence.validate(raw_evidence) end)
 
       resolve_us = elapsed_us(ingress_started_at)
 
@@ -171,8 +175,6 @@ defmodule Cadence.Runtime.Ingress do
     do: receipt_time
 
   defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
-
-  defp resolve_raw_evidence(raw_evidence), do: SourceEndpoints.resolve_raw_evidence(raw_evidence)
 
   defp elapsed_us(started_at) do
     System.monotonic_time()

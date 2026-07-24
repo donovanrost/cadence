@@ -3,7 +3,7 @@ defmodule CadenceWeb.DevSpacePacketController do
 
   action_fallback CadenceWeb.FallbackController
 
-  alias Cadence.Runtime.Ingress, as: RuntimeIngress
+  alias Cadence.Control.Ingress, as: ControlIngress
 
   alias CadenceWeb.API.TelemetryJSON, as: TelemetryJSON
 
@@ -27,7 +27,7 @@ defmodule CadenceWeb.DevSpacePacketController do
              mission_id,
              space_packet_params
            ),
-         {:ok, processing_result} <- RuntimeIngress.process_and_persist(raw_evidence) do
+         {:ok, processing_result} <- ControlIngress.process_and_persist(raw_evidence) do
       json(conn, %{data: TelemetryJSON.dev_ingress_result(processing_result)})
     end
   end
