@@ -23,6 +23,7 @@ defmodule Cadence.CommandingTest do
   }
 
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.OperationalEvents
   alias Cadence.Repo
   alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
@@ -69,7 +70,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_stage} =
-             Cadence.Commanding.persist_command_stage(@organization_id, command_stage)
+             ManagementCommanding.persist_command_stage(@organization_id, command_stage)
 
     staged_command_item =
       StagedCommandItem.new(%{
@@ -85,7 +86,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %StagedCommandItem{} = persisted_item} =
-             Cadence.Commanding.persist_staged_command_item(@organization_id, staged_command_item)
+             ManagementCommanding.persist_staged_command_item(
+               @organization_id,
+               staged_command_item
+             )
 
     updated_item = %StagedCommandItem{
       persisted_item
@@ -95,7 +99,7 @@ defmodule Cadence.CommandingTest do
     }
 
     assert {:ok, fetched_stage} =
-             Cadence.Commanding.fetch_command_stage(
+             ManagementCommanding.fetch_command_stage(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id
@@ -104,14 +108,14 @@ defmodule Cadence.CommandingTest do
     assert fetched_stage.visibility == :shared
 
     assert {:ok, updated_persisted_item} =
-             Cadence.Commanding.update_staged_command_item(@organization_id, updated_item)
+             ManagementCommanding.update_staged_command_item(@organization_id, updated_item)
 
     assert updated_persisted_item.argument_values == %{"mode" => 3}
     assert updated_persisted_item.priority == 1
     assert updated_persisted_item.notes == "Reviewed by FDO"
 
     [listed_item] =
-      Cadence.Commanding.list_staged_command_items(
+      ManagementCommanding.list_staged_command_items(
         @organization_id,
         @mission_id,
         command_stage_id: persisted_stage.command_stage_id
@@ -136,7 +140,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_stage} =
-             Cadence.Commanding.persist_command_stage(@organization_id, command_stage)
+             ManagementCommanding.persist_command_stage(@organization_id, command_stage)
 
     staged_command_item =
       StagedCommandItem.new(%{
@@ -152,10 +156,13 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_item} =
-             Cadence.Commanding.persist_staged_command_item(@organization_id, staged_command_item)
+             ManagementCommanding.persist_staged_command_item(
+               @organization_id,
+               staged_command_item
+             )
 
     assert {:ok, [command_request]} =
-             Cadence.Commanding.submit_staged_command_items(
+             ManagementCommanding.submit_staged_command_items(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id,
@@ -177,7 +184,7 @@ defmodule Cadence.CommandingTest do
     assert command_request.requested_by == %{"user_id" => "user-789"}
 
     assert {:ok, fetched_item} =
-             Cadence.Commanding.fetch_staged_command_item(
+             ManagementCommanding.fetch_staged_command_item(
                @organization_id,
                @mission_id,
                persisted_item.staged_command_item_id
@@ -187,7 +194,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_item.submitted_command_request_id == command_request.command_request_id
 
     assert {:ok, fetched_stage} =
-             Cadence.Commanding.fetch_command_stage(
+             ManagementCommanding.fetch_command_stage(
                @organization_id,
                @mission_id,
                persisted_stage.command_stage_id
@@ -196,7 +203,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_stage.lifecycle_state == :submitted
 
     [listed_request] =
-      Cadence.Commanding.list_command_requests(
+      ManagementCommanding.list_command_requests(
         @organization_id,
         @mission_id,
         command_stage_id: persisted_stage.command_stage_id
@@ -220,14 +227,14 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             ManagementCommanding.persist_command_request(@organization_id, command_request)
 
     assert persisted_request.lifecycle_state == :approval_pending
 
     persisted_request_id = persisted_request.command_request_id
 
     assert {:error, {:command_request_self_approval_not_allowed, ^persisted_request_id}} =
-             Cadence.Management.Commanding.approve_command_request(
+             ManagementCommanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -248,7 +255,7 @@ defmodule Cadence.CommandingTest do
               command_request: approved_request,
               approved_command: approved_command
             }} =
-             Cadence.Management.Commanding.approve_command_request(
+             ManagementCommanding.approve_command_request(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -264,7 +271,7 @@ defmodule Cadence.CommandingTest do
     assert is_binary(approved_command.content_sha256)
 
     assert {:ok, fetched_approval} =
-             Cadence.Commanding.fetch_command_approval(
+             ManagementCommanding.fetch_command_approval(
                @organization_id,
                @mission_id,
                approval.command_approval_id
@@ -273,7 +280,7 @@ defmodule Cadence.CommandingTest do
     assert fetched_approval.command_request_id == persisted_request.command_request_id
 
     [listed_approval] =
-      Cadence.Commanding.list_command_approvals(
+      ManagementCommanding.list_command_approvals(
         @organization_id,
         @mission_id,
         command_request_id: persisted_request.command_request_id

@@ -25,6 +25,7 @@ defmodule Cadence.Commanding do
     ReleaseStore,
     ReleaseTargetSelection,
     RequestQueueStore,
+    RequestStore,
     RequestValidation,
     StagedCommandItem,
     StageStore,
@@ -103,20 +104,20 @@ defmodule Cadence.Commanding do
           {:ok, CommandRequest.t()} | {:error, term()}
   def persist_command_request(organization_id, %CommandRequest{} = command_request)
       when is_binary(organization_id) do
-    RequestQueueStore.persist_request(organization_id, command_request)
+    RequestStore.persist_request(organization_id, command_request)
   end
 
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
   def fetch_command_request(organization_id, mission_id, command_request_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_request_id) do
-    RequestQueueStore.fetch_request(organization_id, mission_id, command_request_id)
+    RequestStore.fetch_request(organization_id, mission_id, command_request_id)
   end
 
   @spec list_command_requests(binary(), binary(), keyword()) :: [CommandRequest.t()]
   def list_command_requests(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    RequestQueueStore.list_requests(organization_id, mission_id, opts)
+    RequestStore.list_requests(organization_id, mission_id, opts)
   end
 
   @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
@@ -131,7 +132,7 @@ defmodule Cadence.Commanding do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_request_id) and is_map(approved_by) and is_list(opts) do
-    RequestQueueStore.decide_request(
+    RequestStore.decide_request(
       organization_id,
       mission_id,
       command_request_id,
@@ -153,7 +154,7 @@ defmodule Cadence.Commanding do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_request_id) and is_map(rejected_by) and is_list(opts) do
-    RequestQueueStore.decide_request(
+    RequestStore.decide_request(
       organization_id,
       mission_id,
       command_request_id,
@@ -168,13 +169,13 @@ defmodule Cadence.Commanding do
   def fetch_command_approval(organization_id, mission_id, command_approval_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_approval_id) do
-    RequestQueueStore.fetch_approval(organization_id, mission_id, command_approval_id)
+    RequestStore.fetch_approval(organization_id, mission_id, command_approval_id)
   end
 
   @spec list_command_approvals(binary(), binary(), keyword()) :: [CommandApproval.t()]
   def list_command_approvals(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    RequestQueueStore.list_approvals(organization_id, mission_id, opts)
+    RequestStore.list_approvals(organization_id, mission_id, opts)
   end
 
   @spec enqueue_command_request(binary(), binary(), binary(), map(), keyword()) ::
@@ -306,7 +307,7 @@ defmodule Cadence.Commanding do
              attempted_at
            ),
          {:ok, %CommandRequestRow{} = request_row} <-
-           RequestQueueStore.fetch_request_row(
+           RequestStore.fetch_request_row(
              organization_id,
              mission_id,
              queue_entry_row.command_request_id
@@ -512,7 +513,7 @@ defmodule Cadence.Commanding do
              attempted_at
            ),
          {:ok, %CommandRequestRow{} = request_row} <-
-           RequestQueueStore.fetch_request_row(
+           RequestStore.fetch_request_row(
              organization_id,
              mission_id,
              queue_entry_row.command_request_id

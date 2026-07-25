@@ -179,6 +179,30 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
     assert :management ==
              PlaneBoundary.classify("lib/cadence/ground_networks/mission_providers.ex")
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/management/commanding.ex",
+               "lib/cadence/commanding/stage_store.ex",
+               "runtime"
+             )
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/management/commanding.ex",
+               "lib/cadence/commanding/request_store.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :plane_direction}] =
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/management/commanding.ex",
+               "lib/cadence/commanding.ex",
+               "runtime"
+             )
+
+    assert :management == PlaneBoundary.classify("lib/cadence/commanding/request_store.ex")
+    assert :management == PlaneBoundary.classify("lib/cadence/commanding/command_approval_row.ex")
   end
 
   test "web code reaches legacy catch-all namespaces only through resource adapters" do

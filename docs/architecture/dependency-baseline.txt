@@ -6,4 +6,3 @@
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
 context_direction|lib/cadence/contact_planning/fleet_planner.ex|lib/cadence/contact_planning/fleet_repairs.ex
-plane_direction|lib/cadence/management/commanding.ex|lib/cadence/commanding.ex
