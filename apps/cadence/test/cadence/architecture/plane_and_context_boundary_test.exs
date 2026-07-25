@@ -162,6 +162,23 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
     assert :shared ==
              PlaneBoundary.classify("lib/cadence/capabilities/definitions/uplink_gateway.ex")
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/management/providers.ex",
+               "lib/cadence/ground_networks/mission_providers.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :plane_direction}] =
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/management/providers.ex",
+               "lib/cadence/ground_networks.ex",
+               "runtime"
+             )
+
+    assert :management ==
+             PlaneBoundary.classify("lib/cadence/ground_networks/mission_providers.ex")
   end
 
   test "web code reaches legacy catch-all namespaces only through resource adapters" do

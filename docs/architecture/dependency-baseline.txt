@@ -7,4 +7,3 @@
 # stale resolved entries, and an expired review date.
 context_direction|lib/cadence/contact_planning/fleet_planner.ex|lib/cadence/contact_planning/fleet_repairs.ex
 plane_direction|lib/cadence/management/commanding.ex|lib/cadence/commanding.ex
-plane_direction|lib/cadence/management/providers.ex|lib/cadence/ground_networks.ex
