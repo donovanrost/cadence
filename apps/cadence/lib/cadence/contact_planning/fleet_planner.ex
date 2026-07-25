@@ -14,7 +14,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetOptimizer,
     FleetPlanningPolicies,
     FleetPlanningRuns,
-    FleetRepairs,
+    FleetRepairInputs,
     Planner
   }
 
@@ -121,7 +121,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
          {:ok, policy} <- exact_policy(run),
          {:ok, requirements} <- exact_requirements(run),
          {:ok, snapshots} <- planning_snapshots(run),
-         {:ok, locked_commitments} <- FleetRepairs.locked_commitments(run),
+         {:ok, locked_commitments} <- FleetRepairInputs.locked_commitments(run),
          {:ok, optimization} <-
            FleetOptimizer.optimize(
              requirements,

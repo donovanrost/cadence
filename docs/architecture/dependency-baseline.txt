@@ -5,4 +5,3 @@
 # Each entry is an existing dependency, not permission for new code. Remove an entry
 # in the same change that removes its edge. The architecture check rejects additions,
 # stale resolved entries, and an expired review date.
-context_direction|lib/cadence/contact_planning/fleet_planner.ex|lib/cadence/contact_planning/fleet_repairs.ex

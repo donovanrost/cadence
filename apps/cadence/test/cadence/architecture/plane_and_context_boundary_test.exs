@@ -105,6 +105,26 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
     assert :catalog ==
              ContextBoundary.classify("lib/cadence/capabilities/definition_registry.ex")
+
+    assert [] ==
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/contact_planning/fleet_planner.ex",
+               "lib/cadence/contact_planning/fleet_repair_inputs.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :context_direction}] =
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/contact_planning/fleet_planner.ex",
+               "lib/cadence/contact_planning/fleet_repairs.ex",
+               "runtime"
+             )
+
+    assert :contact_planning ==
+             ContextBoundary.classify("lib/cadence/contact_planning/fleet_repair_inputs.ex")
+
+    assert :contacts ==
+             ContextBoundary.classify("lib/cadence/contact_planning/fleet_repairs.ex")
   end
 
   test "cross-plane callers use public resource boundaries, not owner internals" do

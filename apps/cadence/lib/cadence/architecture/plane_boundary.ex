@@ -171,6 +171,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/fleet_planning_runs.ex" => :management,
     "lib/cadence/contact_planning/fleet_automation.ex" => :control,
     "lib/cadence/contact_planning/fleet_planner.ex" => :control,
+    "lib/cadence/contact_planning/fleet_repair_inputs.ex" => :control,
     "lib/cadence/contact_planning/fleet_repairs.ex" => :control,
     "lib/cadence/contact_planning/planner.ex" => :control,
     "lib/cadence/contact_planning/policy_narrowing.ex" => :management,
