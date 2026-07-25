@@ -67,8 +67,44 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
                "runtime"
              )
 
+    assert [] ==
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/control/providers.ex",
+               "lib/cadence/control/contacts/provider_grants.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :context_direction}] =
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/control/providers.ex",
+               "lib/cadence/contacts/provider_reservations.ex",
+               "runtime"
+             )
+
+    assert [] ==
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/governance.ex",
+               "lib/cadence/management/comms/source_endpoint_references.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :context_direction}] =
+             ContextBoundary.findings_for_edge(
+               "lib/cadence/governance.ex",
+               "lib/cadence/source_endpoints.ex",
+               "runtime"
+             )
+
     assert :telemetry == ContextBoundary.classify("lib/cadence/control/derived_telemetry.ex")
     assert :telemetry == ContextBoundary.classify("lib/cadence/control/ingress.ex")
+
+    assert :comms ==
+             ContextBoundary.classify(
+               "lib/cadence/management/comms/source_endpoint_references.ex"
+             )
+
+    assert :catalog ==
+             ContextBoundary.classify("lib/cadence/capabilities/definition_registry.ex")
   end
 
   test "cross-plane callers use public resource boundaries, not owner internals" do
@@ -106,6 +142,26 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
                "lib/cadence/runtime/partition_owner.ex",
                "runtime"
              )
+
+    assert [] ==
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/governance.ex",
+               "lib/cadence/capabilities/definition_registry.ex",
+               "runtime"
+             )
+
+    assert [%{kind: :plane_direction}] =
+             PlaneBoundary.findings_for_edge(
+               "lib/cadence/governance.ex",
+               "lib/cadence/capabilities/registry.ex",
+               "runtime"
+             )
+
+    assert :shared == PlaneBoundary.classify("lib/cadence/capabilities/definition_registry.ex")
+    assert :shared == PlaneBoundary.classify("lib/cadence/capabilities/descriptor.ex")
+
+    assert :shared ==
+             PlaneBoundary.classify("lib/cadence/capabilities/definitions/uplink_gateway.ex")
   end
 
   test "web code reaches legacy catch-all namespaces only through resource adapters" do

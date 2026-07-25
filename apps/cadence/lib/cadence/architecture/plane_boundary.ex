@@ -118,7 +118,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/application_dispatch/selector.ex" => :shared,
     "lib/cadence/application_dispatch/selector_match.ex" => :shared,
     "lib/cadence/application_dispatch/selector_scope.ex" => :shared,
+    "lib/cadence/capabilities/definition_registry.ex" => :shared,
+    "lib/cadence/capabilities/descriptor.ex" => :shared,
     "lib/cadence/capabilities/registry.ex" => :data,
+    "lib/cadence/capabilities/transport_extensions/uplink_gateway/configuration.ex" => :shared,
     "lib/cadence/capabilities/validation_context.ex" => :shared,
     "lib/cadence/catalog/ids.ex" => :shared,
     "lib/cadence/catalog/command/compiler/argument_spec.ex" => :shared,
@@ -252,7 +255,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
 
   @plane_prefix_overrides [
     shared: [
-      "lib/cadence/ccsds/"
+      "lib/cadence/ccsds/",
+      "lib/cadence/capabilities/definitions/"
     ],
     adapter: [
       "lib/cadence/operational_events/"

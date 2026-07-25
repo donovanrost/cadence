@@ -9,8 +9,16 @@ defmodule Cadence.Contacts.ProviderScheduling do
   """
 
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport, TransportStore}
-  alias Cadence.Contacts
-  alias Cadence.Contacts.{LinkAssignment, ProviderBooking, ProviderClients.Registry}
+
+  alias Cadence.Contacts.{
+    LinkAssignment,
+    LinkAssignmentStore,
+    PathTemplateStore,
+    ProfileStore,
+    ProviderClients.Registry
+  }
+
+  alias Cadence.Control.Providers, as: ProviderControl
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -122,7 +130,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
          :ok <- validate_window(starts_at, ends_at, opts),
          result_limit <- Keyword.get(opts, :result_limit, @default_result_limit),
          {:ok, response} <-
-           ProviderBooking.search(
+           ProviderControl.search_opportunities(
              organization_id,
              mission_id,
              route.provider_id,
@@ -268,7 +276,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
     rule
     |> materialized_assignment_ids()
     |> Enum.reduce_while({:error, :contact_link_assignment_not_found}, fn assignment_id, _acc ->
-      case Contacts.fetch_link_assignment(rule.organization_id, rule.mission_id, assignment_id) do
+      case LinkAssignmentStore.fetch(rule.organization_id, rule.mission_id, assignment_id) do
         {:ok, %LinkAssignment{direction: :downlink} = assignment} ->
           {:halt, {:ok, assignment}}
 
@@ -287,7 +295,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
   end
 
   defp path_template(rule, assignment) do
-    Contacts.fetch_path_template_version(
+    PathTemplateStore.fetch_version(
       rule.organization_id,
       rule.mission_id,
       assignment.path_template_id,
@@ -440,7 +448,11 @@ defmodule Cadence.Contacts.ProviderScheduling do
   defp runtime_profile(%Transport{materialized_provider_profile_id: id} = transport)
        when is_binary(id) and id != "" do
     with {:ok, profile} <-
-           Contacts.fetch_provider_profile(transport.organization_id, transport.mission_id, id),
+           ProfileStore.fetch_provider_profile(
+             transport.organization_id,
+             transport.mission_id,
+             id
+           ),
          true <- profile.metadata["materialized_from_transport_id"] == transport.transport_id,
          true <- profile.metadata["materialized_from_transport_version"] == transport.version do
       {:ok, profile}

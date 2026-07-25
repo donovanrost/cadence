@@ -16,6 +16,7 @@ defmodule Cadence.Contacts.ProviderBooking do
     ScheduledContact
   }
 
+  alias Cadence.Control.Providers, as: ProviderControl
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -45,17 +46,7 @@ defmodule Cadence.Contacts.ProviderBooking do
   @spec search(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def search(organization_id, mission_id, provider_id, params, opts \\ []) do
-    with {:ok, provider} <-
-           fetch_provider(
-             organization_id,
-             mission_id,
-             provider_id,
-             Keyword.get(opts, :provider_version)
-           ),
-         {:ok, context, call_opts} <- provider_context(provider, opts),
-         {:ok, client} <- resolve_client(context, opts) do
-      client.search_opportunities(context, params, call_opts)
-    end
+    ProviderControl.search_opportunities(organization_id, mission_id, provider_id, params, opts)
   end
 
   @spec reserve(binary(), binary(), binary(), map(), keyword()) ::

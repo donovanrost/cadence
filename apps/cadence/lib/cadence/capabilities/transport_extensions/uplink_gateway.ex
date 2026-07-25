@@ -12,6 +12,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   @behaviour Cadence.Capabilities.TransportExtension
 
   alias Cadence.ActionRequests.{CancelTimer, ProviderRequest, ScheduleTimer, UplinkRequest}
+  alias Cadence.Capabilities.Definitions.UplinkGateway, as: Definition
   alias Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SpacePacket
@@ -20,10 +21,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   alias Cadence.CCSDS.Transport.COP1.{CLCW, FOP}
 
   alias Cadence.Capabilities.{
-    Descriptor,
     ExecutionContext,
-    ExecutionResult,
-    ValidationContext
+    ExecutionResult
   }
 
   @cop1_timeout_timer_prefix "cop1:timeout:"
@@ -32,27 +31,10 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   @completion_timer_prefix "uplink:completion:"
 
   @impl true
-  def descriptor do
-    Descriptor.new(%{
-      family_key: :uplink_gateway,
-      kind: :transport_extension,
-      supported_scopes: [:path, :transport],
-      input_stages: [],
-      partition_affinity: :path,
-      config_schema: nil,
-      emitted_record_kinds: [],
-      emitted_action_kinds: [:uplink_request, :provider_request, :schedule_timer, :cancel_timer],
-      replay_mode: :deterministic,
-      state_mode: :stateful
-    })
-  end
+  defdelegate descriptor(), to: Definition
 
   @impl true
-  def validate_config(configuration, %ValidationContext{}) do
-    with {:ok, normalized_configuration} <- Configuration.normalize(configuration) do
-      Configuration.validate(normalized_configuration)
-    end
-  end
+  defdelegate validate_config(configuration, validation_context), to: Definition
 
   @impl true
   def build_instance(configuration, _activation_context) do

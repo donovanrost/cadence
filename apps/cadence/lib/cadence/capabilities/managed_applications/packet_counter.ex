@@ -10,54 +10,32 @@ defmodule Cadence.Capabilities.ManagedApplications.PacketCounter do
 
   alias Cadence.ActionRequests.ScheduleTimer
   alias Cadence.ApplicationDispatch.WorkItem
+  alias Cadence.Capabilities.Definitions.PacketCounter, as: Definition
 
   alias Cadence.Capabilities.{
-    Descriptor,
     ExecutionContext,
-    ExecutionResult,
-    ValidationContext
+    ExecutionResult
   }
 
   @flush_timer_key "flush"
 
   @impl true
-  def descriptor do
-    Descriptor.new(%{
-      family_key: :packet_counter,
-      kind: :managed_application,
-      supported_scopes: [:mission, :source_endpoint],
-      input_stages: [:space_packet],
-      partition_affinity: :source_endpoint,
-      config_schema: nil,
-      emitted_record_kinds: [],
-      emitted_action_kinds: [:schedule_timer, :cancel_timer],
-      replay_mode: :deterministic,
-      state_mode: :stateful
-    })
-  end
+  defdelegate descriptor(), to: Definition
 
   @impl true
   def handler_key, do: :packet_counter
 
   @impl true
-  def validate_config(configuration, %ValidationContext{}) do
-    with {:ok, normalized_configuration} <- normalize_configuration(configuration),
-         :ok <- validate_metric_name(normalized_configuration.metric_name),
-         :ok <- validate_flush_interval(normalized_configuration.flush_interval_ms) do
-      :ok
-    else
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defdelegate validate_config(configuration, validation_context), to: Definition
 
   @impl true
   def build_instance(configuration, _activation_context) do
-    normalize_configuration(configuration)
+    Definition.normalize_config(configuration)
   end
 
   @impl true
   def init_instance(configuration, %ExecutionContext{}) do
-    with {:ok, normalized_configuration} <- normalize_configuration(configuration) do
+    with {:ok, normalized_configuration} <- Definition.normalize_config(configuration) do
       {:ok,
        ExecutionResult.new(%{
          state: %{
@@ -133,31 +111,4 @@ defmodule Cadence.Capabilities.ManagedApplications.PacketCounter do
   def handle(_packet_record, %WorkItem{}) do
     {:error, :runtime_execution_required}
   end
-
-  defp normalize_configuration(%{metric_name: metric_name, flush_interval_ms: flush_interval_ms}) do
-    {:ok, %{metric_name: metric_name, flush_interval_ms: flush_interval_ms}}
-  end
-
-  defp normalize_configuration(%{
-         "metric_name" => metric_name,
-         "flush_interval_ms" => flush_interval_ms
-       }) do
-    {:ok, %{metric_name: metric_name, flush_interval_ms: flush_interval_ms}}
-  end
-
-  defp normalize_configuration(configuration) do
-    {:error, {:unsupported_packet_counter_configuration, configuration}}
-  end
-
-  defp validate_metric_name(metric_name) when is_binary(metric_name) and metric_name != "",
-    do: :ok
-
-  defp validate_metric_name(metric_name), do: {:error, {:invalid_metric_name, metric_name}}
-
-  defp validate_flush_interval(flush_interval_ms)
-       when is_integer(flush_interval_ms) and flush_interval_ms > 0,
-       do: :ok
-
-  defp validate_flush_interval(flush_interval_ms),
-    do: {:error, {:invalid_flush_interval_ms, flush_interval_ms}}
 end

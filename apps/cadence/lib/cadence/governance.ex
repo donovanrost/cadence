@@ -16,7 +16,7 @@ defmodule Cadence.Governance do
     Selector
   }
 
-  alias Cadence.Capabilities.{Registry, ValidationContext}
+  alias Cadence.Capabilities.{DefinitionRegistry, ValidationContext}
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
 
   alias Cadence.Governance.{
@@ -29,9 +29,9 @@ defmodule Cadence.Governance do
   }
 
   alias Cadence.Governance.Persistence, as: GovernancePersistence
+  alias Cadence.Management.Comms.SourceEndpointReferences
   alias Cadence.Missions
   alias Cadence.Repo
-  alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @spec persist_binding_set(binary(), BindingSet.t()) :: {:ok, BindingSet.t()} | {:error, term()}
@@ -250,16 +250,16 @@ defmodule Cadence.Governance do
        )
        when is_binary(mission_id) and mission_id != "" and is_list(rules) and
               is_list(capability_instances) do
-    capability_registry = Registry.default()
+    definition_registry = DefinitionRegistry.default()
 
     with {:ok, capability_instances_by_id} <-
-           validate_capability_instances(capability_instances, mission_id, capability_registry),
+           validate_capability_instances(capability_instances, mission_id, definition_registry),
          :ok <-
            validate_binding_rules(
              rules,
              mission_id,
              capability_instances_by_id,
-             capability_registry
+             definition_registry
            ) do
       validate_binding_set_instances(binding_set, capability_instances_by_id)
     end
@@ -282,14 +282,14 @@ defmodule Cadence.Governance do
   defp hydrate_binding_set_row(nil), do: {:error, :binding_set_not_found}
   defp hydrate_binding_set_row(%BindingSetRow{} = row), do: hydrate_binding_set(row)
 
-  defp validate_capability_instances(capability_instances, mission_id, capability_registry)
+  defp validate_capability_instances(capability_instances, mission_id, definition_registry)
        when is_list(capability_instances) do
     Enum.reduce_while(capability_instances, {:ok, %{}}, fn
       %CapabilityInstance{} = capability_instance, {:ok, acc} ->
         reduce_capability_instance_validation(
           capability_instance,
           mission_id,
-          capability_registry,
+          definition_registry,
           acc
         )
     end)
@@ -298,14 +298,14 @@ defmodule Cadence.Governance do
   defp reduce_capability_instance_validation(
          %CapabilityInstance{} = capability_instance,
          mission_id,
-         capability_registry,
+         definition_registry,
          acc
        ) do
     if Map.has_key?(acc, capability_instance.capability_instance_id) do
       {:halt,
        {:error, {:duplicate_capability_instance_id, capability_instance.capability_instance_id}}}
     else
-      case validate_capability_instance(capability_instance, mission_id, capability_registry) do
+      case validate_capability_instance(capability_instance, mission_id, definition_registry) do
         {:ok, %CapabilityInstance{} = resolved_capability_instance} ->
           {:cont,
            {:ok,
@@ -324,7 +324,7 @@ defmodule Cadence.Governance do
   defp validate_capability_instance(
          %CapabilityInstance{} = capability_instance,
          mission_id,
-         capability_registry
+         definition_registry
        ) do
     with :ok <- validate_capability_instance_scope(capability_instance, mission_id),
          {:ok, resolved_capability_instance} <-
@@ -337,8 +337,8 @@ defmodule Cadence.Governance do
              metadata: %{source_endpoint_ref: resolved_capability_instance.source_endpoint_ref}
            }),
          :ok <-
-           Registry.validate_capability_instance(
-             capability_registry,
+           DefinitionRegistry.validate_capability_instance(
+             definition_registry,
              resolved_capability_instance,
              validation_context
            ) do
@@ -349,14 +349,14 @@ defmodule Cadence.Governance do
     end
   end
 
-  defp validate_binding_rules(rules, mission_id, capability_instances_by_id, capability_registry)
+  defp validate_binding_rules(rules, mission_id, capability_instances_by_id, definition_registry)
        when is_list(rules) and is_map(capability_instances_by_id) do
     Enum.reduce_while(rules, :ok, fn %BindingRule{} = rule, :ok ->
       case validate_binding_rule(
              rule,
              mission_id,
              capability_instances_by_id,
-             capability_registry
+             definition_registry
            ) do
         :ok -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
@@ -368,7 +368,7 @@ defmodule Cadence.Governance do
          %BindingRule{} = binding_rule,
          mission_id,
          capability_instances_by_id,
-         capability_registry
+         definition_registry
        ) do
     with :ok <- validate_binding_rule_scope(binding_rule, mission_id),
          {:ok, resolved_binding_rule, resolved_capability_instance} <-
@@ -390,8 +390,8 @@ defmodule Cadence.Governance do
           }
         })
 
-      Registry.validate_binding_rule(
-        capability_registry,
+      DefinitionRegistry.validate_binding_rule(
+        definition_registry,
         resolved_binding_rule,
         validation_context
       )
@@ -913,8 +913,8 @@ defmodule Cadence.Governance do
     source_endpoint_ref = BindingRule.source_endpoint_ref(binding_rule)
 
     if is_binary(source_endpoint_ref) and source_endpoint_ref != "" do
-      case SourceEndpoints.fetch_source_endpoint(mission_id, source_endpoint_ref) do
-        {:ok, _source_endpoint} ->
+      case SourceEndpointReferences.ensure_exists(mission_id, source_endpoint_ref) do
+        :ok ->
           :ok
 
         {:error, :source_endpoint_not_found} ->
@@ -927,8 +927,8 @@ defmodule Cadence.Governance do
 
   defp validate_source_endpoint_ref(source_endpoint_ref, mission_id, scope_id) do
     if is_binary(source_endpoint_ref) and source_endpoint_ref != "" do
-      case SourceEndpoints.fetch_source_endpoint(mission_id, source_endpoint_ref) do
-        {:ok, _source_endpoint} ->
+      case SourceEndpointReferences.ensure_exists(mission_id, source_endpoint_ref) do
+        :ok ->
           :ok
 
         {:error, :source_endpoint_not_found} ->

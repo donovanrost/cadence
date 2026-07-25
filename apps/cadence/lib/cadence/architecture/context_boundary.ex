@@ -47,8 +47,10 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/application_dispatch/selector.ex" => :catalog,
     "lib/cadence/application_dispatch/selector_match.ex" => :catalog,
     "lib/cadence/application_dispatch/selector_scope.ex" => :catalog,
+    "lib/cadence/capabilities/definition_registry.ex" => :catalog,
     "lib/cadence/capabilities/descriptor.ex" => :catalog,
     "lib/cadence/capabilities/family.ex" => :catalog,
+    "lib/cadence/capabilities/transport_extensions/uplink_gateway/configuration.ex" => :catalog,
     "lib/cadence/capabilities/validation_context.ex" => :catalog,
     "lib/cadence/commanding/encoder.ex" => :runtime,
     "lib/cadence/contacts/combined_downlink_record.ex" => :runtime,
@@ -109,6 +111,9 @@ defmodule Cadence.Architecture.ContextBoundary do
     runtime: [
       "lib/cadence/action_requests/",
       "lib/cadence/provider_adapters/"
+    ],
+    catalog: [
+      "lib/cadence/capabilities/definitions/"
     ],
     comms: [
       "lib/cadence/contacts/link_assignment_store",
@@ -219,6 +224,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/management/activations",
       "lib/cadence/control/activations"
     ],
+    comms: ["lib/cadence/management/comms"],
     ground_networks: [
       "lib/cadence/management/providers",
       "lib/cadence/control/providers"
@@ -270,8 +276,8 @@ defmodule Cadence.Architecture.ContextBoundary do
   }
 
   # Cross-context orchestration remains explicit even when the general matrix
-  # points the other way. These are control-owned vertical handoffs through a
-  # named public service, not permission for arbitrary reverse dependencies.
+  # points the other way. These are named vertical handoffs through a public
+  # service, not permission for arbitrary reverse dependencies.
   @public_orchestration_edges MapSet.new([
                                 {"lib/cadence/control/activations.ex",
                                  "lib/cadence/control/mission_runtime_reconciler.ex"},
@@ -280,7 +286,11 @@ defmodule Cadence.Architecture.ContextBoundary do
                                 {"lib/cadence/control/mission_runtime.ex",
                                  "lib/cadence/contacts/scheduler.ex"},
                                 {"lib/cadence/ground_networks/provider_event_processor.ex",
-                                 "lib/cadence/control/contacts/provider_events.ex"}
+                                 "lib/cadence/control/contacts/provider_events.ex"},
+                                {"lib/cadence/control/providers.ex",
+                                 "lib/cadence/control/contacts/provider_grants.ex"},
+                                {"lib/cadence/governance.ex",
+                                 "lib/cadence/management/comms/source_endpoint_references.ex"}
                               ])
 
   @type context ::
