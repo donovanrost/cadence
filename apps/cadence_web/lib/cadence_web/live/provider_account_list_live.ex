@@ -3,6 +3,7 @@ defmodule CadenceWeb.ProviderAccountListLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ExtensionCatalog
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
 
   @impl true
@@ -152,8 +153,12 @@ defmodule CadenceWeb.ProviderAccountListLive do
   defp account_health_label(%{last_validated_at: %DateTime{}}), do: "Validated"
   defp account_health_label(_account), do: "Not validated"
 
-  defp provider_label(version),
-    do: version.provider_type |> Atom.to_string() |> String.capitalize()
+  defp provider_label(version) do
+    case ExtensionCatalog.fetch_provider_connector(Atom.to_string(version.provider_type)) do
+      {:ok, connector} -> connector.label
+      {:error, _reason} -> version.provider_type |> Atom.to_string() |> String.capitalize()
+    end
+  end
 
   defp credential_label(nil), do: "Unavailable"
 

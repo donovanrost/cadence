@@ -3,31 +3,28 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.Applications.{
+    ActionDispatcher,
+    ActionRequest,
+    ApplicationPreflight,
+    HostContext,
+    PreflightCheck,
+    PreflightReport
+  }
+
+  alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.APIDSelection
-  alias Cadence.Catalog
+  alias Cadence.ExtensionCatalog
+  alias Cadence.Reads.ApplicationReferences
   alias CadenceWeb.SpacecraftTelemetryDecomLive.Components
 
   @impl true
-  def mount(params, _session, socket) do
-    if supported_application?(Map.get(params, "application_key")) do
-      mount_application(socket)
-    else
-      {:ok,
-       socket
-       |> put_flash(:error, "Application not found.")
-       |> push_navigate(
-         to:
-           ~p"/missions/#{socket.assigns.current_mission.mission_id}/spacecraft/#{socket.assigns.current_spacecraft.spacecraft_id}/applications"
-       )}
-    end
-  end
+  def mount(_params, _session, socket), do: mount_surface(socket)
 
-  defp supported_application?(nil), do: true
-  defp supported_application?("telemetry_decom"), do: true
-  defp supported_application?(_application_key), do: false
-
-  defp mount_application(socket) do
+  @doc false
+  @spec mount_surface(Phoenix.LiveView.Socket.t()) :: {:ok, Phoenix.LiveView.Socket.t()}
+  def mount_surface(socket) do
     organization_id = socket.assigns.current_scope.organization_id
     mission_id = socket.assigns.current_mission.mission_id
     spacecraft_id = socket.assigns.current_spacecraft.spacecraft_id
@@ -38,7 +35,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
         {:error, :not_configured} -> nil
       end
 
-    revisions = list_telemetry_revisions(organization_id, mission_id)
+    definition = application_definition(socket.assigns)
+    surface = application_surface_definition(socket.assigns, definition)
+    {socket, revisions} = resolve_telemetry_revisions(socket, definition, surface)
     selected_revision_id = (config && config.catalog_revision_id) || first_option_value(revisions)
 
     {apid_rows, points_by_id} = load_apid_rows(organization_id, mission_id, selected_revision_id)
@@ -60,6 +59,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:filter, "")
      |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
+     |> assign(:activation_preflight, activation_preflight(socket, definition))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
      |> assign(
        :pending_activation_request,
@@ -145,17 +145,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     {:noreply, assign(socket, :expanded_apids, expanded)}
   end
 
-  def handle_event(
-        "enable",
-        _params,
-        %{assigns: %{current_scope: scope, current_mission: mission, current_spacecraft: sc}} =
-          socket
-      ) do
-    case TelemetryDecom.request_mission_apply(
-           scope,
-           mission.mission_id,
-           sc.spacecraft_id
-         ) do
+  def handle_event("enable", _params, socket) do
+    case dispatch_action(socket, "request_activation") do
       {:ok, %{config: config, activation_request: request}} ->
         {:noreply,
          socket
@@ -171,17 +162,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     end
   end
 
-  def handle_event(
-        "disable",
-        _params,
-        %{assigns: %{current_scope: scope, current_mission: mission, current_spacecraft: sc}} =
-          socket
-      ) do
-    case TelemetryDecom.disable(scope.organization_id, mission.mission_id, sc.spacecraft_id) do
+  def handle_event("disable", _params, socket) do
+    case dispatch_action(socket, "disable") do
       {:ok, config} ->
         {:noreply,
          socket
          |> assign(:config, config)
+         |> refresh_activation_preflight()
          |> put_flash(
            :info,
            "Telemetry Decom disabled for this spacecraft. Apply mission changes to remove it from the live mission."
@@ -206,7 +193,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   end
 
   defp save_and_refresh(socket, selection, opts \\ []) do
-    %{current_scope: scope, current_mission: mission, current_spacecraft: sc} = socket.assigns
     revision_id = Keyword.get(opts, :revision_id, socket.assigns.selected_revision_id)
 
     apids = selection |> Enum.sort()
@@ -217,22 +203,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
       {:noreply, assign(socket, :preview, nil)}
     else
       configure_result =
-        TelemetryDecom.configure(
-          scope.organization_id,
-          mission.mission_id,
-          sc.spacecraft_id,
+        dispatch_action(socket, "save_configuration", %{
           catalog_revision_id: revision_id,
           handled_apids: apids
-        )
+        })
 
       case configure_result do
         {:ok, config} ->
-          preview = preview_for(scope.organization_id, mission.mission_id, config)
+          preview = preview_for(config.organization_id, config.mission_id, config)
 
           {:noreply,
            socket
            |> assign(:config, config)
            |> assign(:preview, preview)
+           |> refresh_activation_preflight()
            |> assign(:saved_at, config.updated_at)}
 
         {:error, reason} ->
@@ -283,13 +267,18 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
             <div class="border-t border-base-300/30"></div>
 
             <Components.preview_section preview={@preview} />
-            <div class="border-t border-base-300/30"></div>
-
-            <Components.apply_section
-              config={@config}
-              pending_activation_request={@pending_activation_request}
-            />
           <% end %>
+
+          <div class="border-t border-base-300/30"></div>
+          <.application_preflight report={@activation_preflight} />
+          <div class="border-t border-base-300/30"></div>
+
+          <Components.apply_section
+            config={@config}
+            pending_activation_request={@pending_activation_request}
+            preflight={@activation_preflight}
+            lifecycle_contract={@application_definition.lifecycle_contract}
+          />
         </div>
       </.card>
     </div>
@@ -311,12 +300,25 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   defp first_option_value([]), do: nil
   defp first_option_value([{_, value} | _]), do: value
 
-  defp list_telemetry_revisions(organization_id, mission_id) do
-    Catalog.list_revisions(organization_id, mission_id)
-    |> Enum.filter(&(&1.telemetry_snapshot_id != nil))
-    |> Enum.map(fn revision ->
-      {"#{revision.revision_label} (##{revision.revision_number})", revision.catalog_revision_id}
-    end)
+  defp resolve_telemetry_revisions(socket, definition, surface) do
+    %{current_scope: scope, current_mission: mission, current_spacecraft: spacecraft} =
+      socket.assigns
+
+    case ApplicationReferences.resolve(
+           scope,
+           HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id),
+           definition.application_key,
+           definition.version,
+           surface,
+           "catalog_revision_id"
+         ) do
+      {:ok, page} ->
+        options = Enum.map(page.options, &{&1.label, &1.value})
+        {socket, options}
+
+      {:error, _reason} ->
+        {put_flash(socket, :error, "Catalog revisions could not be loaded. Try again."), []}
+    end
   end
 
   defp preview_for(_organization_id, _mission_id, nil), do: nil
@@ -352,11 +354,96 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     end
   end
 
+  defp dispatch_action(socket, action_id, params \\ %{}) do
+    %{current_scope: scope, current_mission: mission, current_spacecraft: spacecraft} =
+      socket.assigns
+
+    definition =
+      Map.get_lazy(socket.assigns, :application_definition, fn ->
+        {:ok, definition} = ExtensionCatalog.fetch_available_application("telemetry_decom")
+        definition
+      end)
+
+    request = %ActionRequest{
+      application_key: definition.application_key,
+      application_version: definition.version,
+      action_id: action_id,
+      params: params,
+      expected_configuration_version: installed_configuration_version(socket.assigns)
+    }
+
+    ActionDispatcher.dispatch(
+      scope,
+      HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id),
+      request
+    )
+  end
+
+  defp refresh_activation_preflight(socket) do
+    assign(
+      socket,
+      :activation_preflight,
+      activation_preflight(socket, application_definition(socket.assigns))
+    )
+  end
+
+  defp activation_preflight(socket, definition) do
+    %{current_scope: scope, current_mission: mission, current_spacecraft: spacecraft} =
+      socket.assigns
+
+    case ApplicationPreflight.load(
+           scope,
+           HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id),
+           definition
+         ) do
+      {:ok, report} -> report
+      {:error, _reason} -> unavailable_preflight(definition)
+    end
+  end
+
+  defp unavailable_preflight(definition) do
+    PreflightReport.new(definition, [
+      %PreflightCheck{
+        id: "host-readiness",
+        category: :configuration,
+        state: :blocked,
+        title: "Preflight unavailable",
+        detail: "Cadence could not verify activation readiness for this installation."
+      }
+    ])
+  end
+
+  defp application_definition(assigns) do
+    Map.get_lazy(assigns, :application_definition, fn ->
+      {:ok, definition} = ExtensionCatalog.fetch_available_application("telemetry_decom")
+      definition
+    end)
+  end
+
+  defp application_surface_definition(assigns, definition) do
+    Map.get_lazy(assigns, :application_surface_definition, fn ->
+      {:ok, surface} = ApplicationRegistry.fetch_default_surface(definition, :spacecraft)
+      surface
+    end)
+  end
+
+  defp installed_configuration_version(%{
+         application_installation: %{configuration_ref: %{version: version}}
+       }),
+       do: version
+
+  defp installed_configuration_version(_assigns), do: nil
+
   defp format_apids(apids), do: APIDSelection.format(apids)
 
   defp humanize_error({:missing_attr, attr}), do: "missing #{attr}"
   defp humanize_error(:handled_apids_required), do: "handled APIDs are required"
   defp humanize_error(:no_enabled_configs), do: "no enabled spacecraft configurations"
+
+  defp humanize_error({:application_preflight_blocked, _application_key}) do
+    "resolve the blocking activation checks first"
+  end
+
   defp humanize_error({:invalid_apid_token, token}), do: "invalid APID token #{inspect(token)}"
   defp humanize_error({:invalid_apid_range, token}), do: "invalid APID range #{inspect(token)}"
 

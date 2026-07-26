@@ -11,7 +11,7 @@ defmodule Cadence.Dashboards.WidgetRegistry do
   @type fetch_error :: :unknown_widget_type | :unsupported_widget_version
 
   @spec list_types() :: [WidgetType.t()]
-  def list_types, do: Map.values(types())
+  def list_types, do: ordered_types()
 
   @spec version() :: binary()
   def version do
@@ -72,6 +72,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.value_tile",
       version: 1,
+      form_value: "value_tile",
+      form_label: "Value tile",
       name: "Value Tile",
       category: :telemetry,
       icon: "hero-square-2-stack",
@@ -128,6 +130,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.time_series",
       version: 1,
+      form_value: "time_series",
+      form_label: "Time series chart",
       name: "Time Series",
       category: :telemetry,
       icon: "hero-chart-line",
@@ -187,6 +191,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.status_matrix",
       version: 1,
+      form_value: "status_matrix",
+      form_label: "Status matrix",
       name: "Status Matrix",
       category: :operations,
       icon: "hero-table-cells",
@@ -248,6 +254,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.data_table",
       version: 1,
+      form_value: "data_table",
+      form_label: "Data table",
       name: "Data Table",
       category: :operations,
       icon: "hero-table-cells",
@@ -311,6 +319,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.state_timeline",
       version: 1,
+      form_value: "state_timeline",
+      form_label: "State timeline",
       name: "State Timeline",
       category: :operations,
       icon: "hero-bars-3",
@@ -381,6 +391,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.event_timeline",
       version: 1,
+      form_value: "event_timeline",
+      form_label: "Event timeline",
       name: "Event Timeline",
       category: :operations,
       icon: "hero-bars-3-bottom-left",
@@ -449,6 +461,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
     %WidgetType{
       widget_type_id: "cadence.constellation_health",
       version: 1,
+      form_value: "constellation_health",
+      form_label: "Constellation health",
       name: "Constellation Health",
       category: :operations,
       icon: "hero-squares-2x2",

@@ -8,6 +8,7 @@ defmodule Cadence.Capabilities.Definitions.UplinkGateway do
   def descriptor do
     Descriptor.new(%{
       family_key: :uplink_gateway,
+      version: 1,
       kind: :transport_extension,
       supported_scopes: [:path, :transport],
       input_stages: [],

@@ -17,6 +17,7 @@ defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
     field(:mission_id, :string)
     field(:spacecraft_id, :string)
     field(:application_key, :string)
+    field(:configuration_version, :integer, default: 1)
     field(:catalog_revision_id, :string)
     field(:handled_apids, {:array, :integer}, default: [])
     field(:source_endpoint_id, :string)
@@ -40,12 +41,14 @@ defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
     :metadata
   ]
 
-  @spec changeset(ApplicationBinding.t()) :: Ecto.Changeset.t()
-  def changeset(%ApplicationBinding{} = binding) do
-    %__MODULE__{}
-    |> cast(domain_attrs(binding), all_fields())
+  @spec changeset(struct(), ApplicationBinding.t(), pos_integer()) :: Ecto.Changeset.t()
+  def changeset(%__MODULE__{} = row, %ApplicationBinding{} = binding, configuration_version)
+      when is_integer(configuration_version) and configuration_version > 0 do
+    row
+    |> cast(domain_attrs(binding, configuration_version), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> validate_number(:configuration_version, greater_than: 0)
     |> unique_constraint([:organization_id, :mission_id, :spacecraft_id, :application_key],
       name: :spacecraft_application_bindings_scope_idx
     )
@@ -59,6 +62,7 @@ defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
       mission_id: row.mission_id,
       spacecraft_id: row.spacecraft_id,
       application_key: row.application_key,
+      configuration_version: row.configuration_version,
       catalog_revision_id: row.catalog_revision_id,
       handled_apids: row.handled_apids || [],
       source_endpoint_id: row.source_endpoint_id,
@@ -71,13 +75,14 @@ defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
     }
   end
 
-  defp domain_attrs(%ApplicationBinding{} = binding) do
+  defp domain_attrs(%ApplicationBinding{} = binding, configuration_version) do
     %{
       application_binding_id: binding.application_binding_id,
       organization_id: binding.organization_id,
       mission_id: binding.mission_id,
       spacecraft_id: binding.spacecraft_id,
       application_key: binding.application_key,
+      configuration_version: configuration_version,
       catalog_revision_id: binding.catalog_revision_id,
       handled_apids: binding.handled_apids,
       source_endpoint_id: binding.source_endpoint_id,
@@ -96,6 +101,7 @@ defmodule Cadence.Applications.ApplicationBindingStore.BindingRow do
       :mission_id,
       :spacecraft_id,
       :application_key,
+      :configuration_version,
       :catalog_revision_id,
       :handled_apids,
       :source_endpoint_id,

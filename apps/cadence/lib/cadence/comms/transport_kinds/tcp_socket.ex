@@ -10,7 +10,14 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   @behaviour Cadence.Comms.TransportKind
 
   alias Cadence.Comms.Transport
+  alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Contacts.ProviderProfile
+
+  alias Cadence.Extensions.Presentation.{
+    ConfigurationDefinition,
+    FieldDefinition,
+    SectionDefinition
+  }
 
   @modes ["listen", "connect"]
   @direction_capabilities ["inbound", "outbound", "bidirectional"]
@@ -44,28 +51,122 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   }
 
   @impl true
-  def form_metadata do
-    %{
+  def definition do
+    %Definition{
       form_value: "tcp_socket",
+      version: 1,
+      kind: :tcp_socket,
+      adapter_key: :tcp_socket,
       label: "TCP socket",
-      configurable_sections: [:endpoint, :framing, :reliability],
-      modes: [{"TCP server (listen)", "listen"}, {"TCP client (connect)", "connect"}],
-      directions: [
-        {"Inbound", "inbound"},
-        {"Outbound", "outbound"},
-        {"Bidirectional", "bidirectional"}
-      ],
-      framing_modes: [
-        {"Raw bytes", "raw"},
-        {"Fixed-size frames", "fixed_size"},
-        {"Line-delimited", "line_delimited"}
-      ],
-      reconnect_policies: [
-        {"Always reconnect", "always"},
-        {"Reconnect after disconnect", "on_disconnect"},
-        {"Do not reconnect", "none"}
-      ],
-      tls_options: [{"Disabled", "false"}, {"Enabled", "true"}]
+      description: "Move framed or raw bytes over a directly managed TCP endpoint.",
+      module: __MODULE__,
+      configuration: %ConfigurationDefinition{
+        id: "transport-direct-configuration",
+        description: "Cadence owns this endpoint, framing boundary, and reconnect behavior.",
+        sections: [
+          %SectionDefinition{
+            id: "transport-capability-section",
+            number: "04",
+            title: "TCP Capability",
+            fields: [
+              %FieldDefinition{
+                field: :tcp_mode,
+                label: "TCP Mode",
+                type: :select,
+                required: true,
+                default: "listen",
+                options: [
+                  {"TCP server (listen)", "listen"},
+                  {"TCP client (connect)", "connect"}
+                ]
+              },
+              %FieldDefinition{
+                field: :direction_capability,
+                label: "Direction Capability",
+                type: :select,
+                required: true,
+                default: "inbound",
+                options: [
+                  {"Inbound", "inbound"},
+                  {"Outbound", "outbound"},
+                  {"Bidirectional", "bidirectional"}
+                ]
+              },
+              %FieldDefinition{
+                field: :host,
+                label: "Host or bind interface",
+                type: :text,
+                required: true,
+                default: "0.0.0.0",
+                placeholder: "0.0.0.0"
+              },
+              %FieldDefinition{
+                field: :port,
+                label: "TCP Port",
+                type: :number,
+                required: true,
+                min: 1,
+                max: 65_535
+              }
+            ]
+          },
+          %SectionDefinition{
+            id: "transport-framing-section",
+            number: "05",
+            title: "Framing",
+            fields: [
+              %FieldDefinition{
+                field: :framing_mode,
+                label: "Framing",
+                type: :select,
+                required: true,
+                default: "raw",
+                options: [
+                  {"Raw bytes", "raw"},
+                  {"Fixed-size frames", "fixed_size"},
+                  {"Line-delimited", "line_delimited"}
+                ]
+              },
+              %FieldDefinition{
+                field: :frame_size,
+                label: "Fixed Frame Size (bytes)",
+                type: :number,
+                required: true,
+                min: 1,
+                visible_when: %{field: :framing_mode, equals: "fixed_size"}
+              }
+            ]
+          },
+          %SectionDefinition{
+            id: "transport-reliability-section",
+            number: "05B",
+            title: "Reliability",
+            fields: [
+              %FieldDefinition{
+                field: :reconnect_policy,
+                label: "Reconnect Policy",
+                type: :select,
+                required: true,
+                default: "always",
+                options: [
+                  {"Always reconnect", "always"},
+                  {"Reconnect after disconnect", "on_disconnect"},
+                  {"Do not reconnect", "none"}
+                ],
+                visible_when: %{field: :tcp_mode, equals: "connect"}
+              },
+              %FieldDefinition{
+                field: :tls_enabled,
+                label: "TLS",
+                type: :select,
+                required: true,
+                default: "false",
+                options: [{"Disabled", "false"}, {"Enabled", "true"}]
+              }
+            ]
+          }
+        ]
+      }
     }
   end
 
@@ -134,6 +235,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   end
 
   @doc "Derives read-only TCP setup from a synchronized provider Delivery Profile."
+  @impl true
   @spec from_delivery_profile(map()) :: {:ok, map()} | {:error, binary()}
   def from_delivery_profile(profile) when is_map(profile) do
     diagnostics = value(profile, "diagnostics", %{})

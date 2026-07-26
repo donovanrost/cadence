@@ -42,9 +42,47 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
 
       assert has_element?(view, "#spacecraft-interpretation-overview")
       assert has_element?(view, "#spacecraft-overview-identity")
-      assert has_element?(view, "#spacecraft-overview-telemetry")
+      assert has_element?(view, "#spacecraft-overview-applications")
       assert has_element?(view, "#spacecraft-overview-readiness")
       assert has_element?(view, "#spacecraft-profile-binding")
+    end
+
+    test "renders profile applications from the host inventory contract" do
+      {conn, _user, _org, mission} = signed_in_org_and_mission()
+
+      profile =
+        TestFixtures.persist_spacecraft_profile!(mission,
+          display_name: "Extensible Bus",
+          applications: %{
+            "custom:thermal-alerting" => %{"display_name" => "Thermal Alerting"},
+            "telemetry_decom" => %{}
+          }
+        )
+
+      spacecraft =
+        TestFixtures.persist_spacecraft!(mission,
+          display_name: "Nova-1",
+          spacecraft_type_id: profile.spacecraft_type_id,
+          spacecraft_type_version: profile.version
+        )
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
+
+      assert has_element?(
+               view,
+               "#spacecraft-profile-application-telemetry_decom",
+               "Not installed"
+             )
+
+      assert has_element?(
+               view,
+               "#spacecraft-profile-application-custom-thermal-alerting",
+               "Unavailable"
+             )
+
+      refute has_element?(view, "#spacecraft-profile-applications a", "Manage")
+      assert has_element?(view, "#spacecraft-overview-applications", "0 of 2 ready")
     end
 
     test "unauthenticated redirects to /sign-in", %{conn: conn} do

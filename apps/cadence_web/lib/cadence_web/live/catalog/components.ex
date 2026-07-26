@@ -90,7 +90,7 @@ defmodule CadenceWeb.Catalog.Components do
     end
   end
 
-  alias Cadence.Catalog.Registry
+  alias Cadence.ExtensionCatalog
 
   @doc "Upload card with importer auto-detection."
   attr :uploads, :map, required: true
@@ -202,7 +202,7 @@ defmodule CadenceWeb.Catalog.Components do
 
   @doc "Detects an importer from a list of LiveView upload entries."
   def detect_importer_from_entries([%{client_name: name, client_type: type} | _]) do
-    Registry.detect_importer(name, type)
+    ExtensionCatalog.detect_catalog_importer(name, type)
   end
 
   def detect_importer_from_entries(_), do: nil

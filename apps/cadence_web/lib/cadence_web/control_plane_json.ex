@@ -196,6 +196,8 @@ defmodule CadenceWeb.ControlPlaneJSON do
     %{
       module: inspect(module),
       importer_key: descriptor.importer_key,
+      importer_version: descriptor.version,
+      trust: Atom.to_string(descriptor.trust),
       display_name: descriptor.display_name,
       catalog_family: Atom.to_string(descriptor.catalog_family),
       source_formats: descriptor.source_formats,
@@ -235,6 +237,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
       artifact_id: import_run.artifact_id,
       catalog_family: Atom.to_string(import_run.catalog_family),
       importer_key: import_run.importer_key,
+      importer_version: import_run.importer_version,
       status: Atom.to_string(import_run.status),
       imported_definition_count: import_run.imported_definition_count,
       diagnostics: Enum.map(import_run.diagnostics, &catalog_diagnostic/1),

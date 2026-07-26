@@ -28,6 +28,7 @@ defmodule Cadence.Architecture.ContextBoundary do
 
   @file_context_overrides %{
     "lib/cadence/application.ex" => :composition,
+    "lib/cadence/extension_catalog.ex" => :composition,
     "lib/cadence/jobs.ex" => :platform,
     "lib/cadence/jobs/runner.ex" => :composition,
     "lib/cadence/jobs/worker.ex" => :composition,
@@ -86,6 +87,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_evaluator.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_parser.ex" => :catalog,
+    "lib/cadence/cfdp/transaction_event.ex" => :telemetry,
     "lib/cadence/dashboards/secret_metadata.ex" => :platform,
     "lib/cadence/dashboards/runtime_cache.ex" => :adapter,
     "lib/cadence/dashboards/runtime_invalidation.ex" => :adapter,
@@ -112,8 +114,15 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/action_requests/",
       "lib/cadence/provider_adapters/"
     ],
+    platform: [
+      "lib/cadence/extensions/presentation/"
+    ],
     catalog: [
-      "lib/cadence/capabilities/definitions/"
+      "lib/cadence/capabilities/definitions/",
+      "lib/cadence/extensions/"
+    ],
+    ground_networks: [
+      "lib/cadence/contacts/provider_clients/"
     ],
     comms: [
       "lib/cadence/contacts/link_assignment_store",

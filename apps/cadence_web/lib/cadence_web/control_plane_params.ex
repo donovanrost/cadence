@@ -260,11 +260,13 @@ defmodule CadenceWeb.ControlPlaneParams do
           {:ok, {binary(), binary(), keyword()}} | {:error, term()}
   def catalog_import_run_request(params, opts \\ []) when is_map(params) and is_list(opts) do
     with {:ok, artifact_id} <- required_string(params, "artifact_id"),
-         {:ok, importer_key} <- required_string(params, "importer_key") do
+         {:ok, importer_key} <- required_string(params, "importer_key"),
+         {:ok, importer_version} <- optional_positive_integer(params, "importer_version") do
       {:ok,
        {artifact_id, importer_key,
         []
         |> Keyword.put(:requested_by, Keyword.get(opts, :requested_by, %{}))
+        |> maybe_put_opt(:importer_version, importer_version)
         |> maybe_put_opt(:catalog_database_id, string_value(params, "catalog_database_id"))
         |> Keyword.put(:metadata, map_value(params, "metadata"))}}
     end

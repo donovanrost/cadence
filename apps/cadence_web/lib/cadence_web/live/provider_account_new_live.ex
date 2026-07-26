@@ -3,19 +3,24 @@ defmodule CadenceWeb.ProviderAccountNewLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.ExtensionCatalog
+  alias Cadence.Extensions.Presentation.ConfigurationDefinition
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Ids
 
   @impl true
   def mount(_params, _session, socket) do
     account_id = Ids.new("provider_account")
+    connector = default_connector()
 
     {:ok,
      socket
      |> assign(:page_title, "New Provider Account")
      |> assign(:nav_item, :provider_accounts)
      |> assign(:selected_backend_type, "external")
-     |> assign(:form, to_form(default_params(account_id), as: :provider_account))}
+     |> assign(:provider_connector, connector)
+     |> assign(:provider_connector_options, provider_connector_options())
+     |> assign(:form, to_form(default_params(account_id, connector), as: :provider_account))}
   end
 
   @impl true
@@ -23,6 +28,7 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     {:noreply,
      socket
      |> assign(:selected_backend_type, params["backend_type"])
+     |> assign(:provider_connector, connector_for(params["provider_type"]))
      |> assign(:form, to_form(params, as: :provider_account))}
   end
 
@@ -75,45 +81,38 @@ defmodule CadenceWeb.ProviderAccountNewLive do
               field={@form[:provider_type]}
               type="select"
               label="Provider Type"
-              options={[{"Ground Network Simulator", "simulator"}]}
+              options={@provider_connector_options}
               required
             />
+            <div
+              id="provider-connector-summary"
+              data-provider-type={@provider_connector.form_value}
+              data-provider-client={Atom.to_string(@provider_connector.client_key)}
+              class="grid grid-cols-[0.3rem_minmax(0,1fr)_auto] gap-4 border-y border-base-300/70 bg-base-200/45 px-4 py-3"
+            >
+              <span class="rounded-full bg-info"></span>
+              <div>
+                <p class="hud-label">Compiled Provider Connector</p>
+                <p class="mt-1 font-medium">{@provider_connector.label}</p>
+                <p class="mt-1 text-xs text-base-content/60">
+                  {@provider_connector.description}
+                </p>
+              </div>
+              <span class="self-start font-mono text-[0.65rem] uppercase tracking-[0.12em] text-base-content/45">
+                {@provider_connector.client_key}
+              </span>
+            </div>
             <div id="provider-account-boundary-note" class="border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70">
               This account owns provider endpoint and credential configuration. Missions receive
               versioned grants and never copy those values.
             </div>
           </.form_section>
 
-          <.form_section number="02" title="Control Plane">
-            <.input
-              field={@form[:base_url]}
-              type="url"
-              label="Provider API Base URL"
-              placeholder="http://127.0.0.1:4101"
-              required
-            />
-            <div class="grid gap-4 sm:grid-cols-2">
-              <.input field={@form[:region_ref]} type="text" label="Region" placeholder="local" />
-              <.input
-                field={@form[:environment_ref]}
-                type="text"
-                label="Provider Environment"
-                placeholder="local-demo"
-                required
-              />
-            </div>
-            <.input
-              field={@form[:event_ingestion_mode]}
-              type="select"
-              label="Event Ingestion"
-              options={[
-                {"Polling", "polling"},
-                {"Polling + webhook", "hybrid"},
-                {"Disabled", "disabled"}
-              ]}
-              required
-            />
-          </.form_section>
+          <.extension_configuration
+            definition={@provider_connector.configuration}
+            form={@form}
+            kind="provider_connector"
+          />
 
           <.form_section number="03" title="Credential Registry">
             <.input
@@ -165,23 +164,16 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     """
   end
 
-  defp default_params(account_id) do
+  defp default_params(account_id, connector) do
     %{
       "provider_account_id" => account_id,
       "credential_ref" => "provider_credential_#{account_id}",
-      "display_name" => "Ground Network Simulator",
-      "provider_type" => "simulator",
-      "base_url" => "http://127.0.0.1:4101",
-      "region_ref" => "local",
-      "environment_ref" => "local-demo",
-      "event_ingestion_mode" => "polling",
+      "provider_type" => connector.form_value,
       "backend_type" => "external",
-      "backend_key" => "providers/simulator/control-plane",
-      "allowed_services" => "telemetry, tracking",
-      "allowed_directions" => "downlink, uplink",
-      "allowed_stations" => "",
-      "max_quota" => ""
+      "backend_key" => "providers/simulator/control-plane"
     }
+    |> Map.merge(connector.account_defaults)
+    |> Map.merge(ConfigurationDefinition.default_params(connector.configuration))
   end
 
   defp credential_attrs(params) do
@@ -198,7 +190,8 @@ defmodule CadenceWeb.ProviderAccountNewLive do
   end
 
   defp account_attrs(params) do
-    with {:ok, account_id} <- required(params, "provider_account_id", "Provider Account ID"),
+    with {:ok, connector} <- ExtensionCatalog.fetch_provider_connector(params["provider_type"]),
+         {:ok, account_id} <- required(params, "provider_account_id", "Provider Account ID"),
          {:ok, display_name} <- required(params, "display_name", "Display name"),
          {:ok, base_url} <- required(params, "base_url", "Provider API base URL"),
          {:ok, environment_ref} <- required(params, "environment_ref", "Environment"),
@@ -208,7 +201,8 @@ defmodule CadenceWeb.ProviderAccountNewLive do
        %{
          provider_account_id: account_id,
          display_name: display_name,
-         provider_type: params["provider_type"],
+         provider_type: connector.provider_type,
+         client_key: connector.client_key,
          base_url: base_url,
          region_ref: optional_text(params["region_ref"]),
          environment_ref: environment_ref,
@@ -278,4 +272,22 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     do: CadenceWeb.CommsComponents.format_error(changeset)
 
   defp format_error(reason), do: "Could not register provider account: #{inspect(reason)}"
+
+  defp connector_for(form_value) do
+    case ExtensionCatalog.fetch_provider_connector(form_value) do
+      {:ok, connector} -> connector
+      {:error, _reason} -> default_connector()
+    end
+  end
+
+  defp default_connector do
+    {:ok, connector} = ExtensionCatalog.fetch_provider_connector("simulator")
+    connector
+  end
+
+  defp provider_connector_options do
+    ExtensionCatalog.provider_connectors()
+    |> Enum.map(&{&1.label, &1.form_value})
+    |> Enum.sort()
+  end
 end

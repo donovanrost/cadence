@@ -3,7 +3,7 @@ title: How-To Guides
 tags: [how-to, developer, operations, tooling]
 status: active
 created: 2026-04-03
-updated: 2026-07-16
+updated: 2026-07-26
 ---
 
 # How-To Guides
@@ -23,6 +23,7 @@ out. Use these guides when you need to accomplish a specific task.
 ## Contribution Guides
 
 - [Understand the Runtime Substrate and Capabilities](understand-the-runtime-substrate-and-capabilities.md)
+- [Add a Product Application or Typed Extension](add-a-product-application-or-typed-extension.md)
 - [Add a Capability Family](add-a-capability-family.md)
 - [Add a Provider Adapter](add-a-provider-adapter.md)
 - [Add an Archive Backend](add-an-archive-backend.md)

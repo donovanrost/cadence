@@ -106,6 +106,17 @@ defmodule Cadence.CatalogTest do
              )
 
     assert queued_run.status == :running
+    assert queued_run.importer_key == "fake_tm_json"
+    assert queued_run.importer_version == 1
+
+    assert {:error, :catalog_importer_version_not_found} =
+             Cadence.Catalog.start_import_run(
+               organization_id(),
+               mission_id(),
+               persisted_artifact.artifact_id,
+               "fake_tm_json",
+               importer_version: 2
+             )
 
     assert {:ok, queued_job} =
              Cadence.Jobs.fetch_job_for_run(:catalog_import_run, queued_run.import_run_id)
@@ -123,6 +134,7 @@ defmodule Cadence.CatalogTest do
              )
 
     assert completed_run.status == :completed
+    assert completed_run.importer_version == 1
     assert completed_run.snapshot_id == "telemetry_snapshot:" <> queued_run.import_run_id
     assert completed_run.imported_definition_count == 2
     assert completed_run.result_document["packet_names"] == ["HK_PACKET", "EVENT_PACKET"]

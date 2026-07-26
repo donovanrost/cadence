@@ -15,6 +15,7 @@ defmodule Cadence.Applications.ApplicationBinding do
           mission_id: binary(),
           spacecraft_id: binary(),
           application_key: binary(),
+          configuration_version: pos_integer(),
           catalog_revision_id: binary(),
           handled_apids: [non_neg_integer()],
           source_endpoint_id: binary(),
@@ -32,6 +33,7 @@ defmodule Cadence.Applications.ApplicationBinding do
     :mission_id,
     :spacecraft_id,
     :application_key,
+    :configuration_version,
     :catalog_revision_id,
     :source_endpoint_id,
     :applied_binding_set_id,
@@ -63,6 +65,8 @@ defmodule Cadence.Applications.ApplicationBinding do
       mission_id: fetch_attr!(attrs, :mission_id),
       spacecraft_id: spacecraft_id,
       application_key: application_key,
+      configuration_version:
+        Map.get(attrs, :configuration_version, Map.get(attrs, "configuration_version", 1)),
       catalog_revision_id:
         Map.get(attrs, :catalog_revision_id, Map.get(attrs, "catalog_revision_id")),
       handled_apids: Map.get(attrs, :handled_apids, Map.get(attrs, "handled_apids", [])),

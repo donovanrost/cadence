@@ -106,6 +106,14 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
     assert :catalog ==
              ContextBoundary.classify("lib/cadence/capabilities/definition_registry.ex")
 
+    assert :platform ==
+             ContextBoundary.classify(
+               "lib/cadence/extensions/presentation/configuration_definition.ex"
+             )
+
+    assert :ground_networks ==
+             ContextBoundary.classify("lib/cadence/contacts/provider_clients/definition.ex")
+
     assert [] ==
              ContextBoundary.findings_for_edge(
                "lib/cadence/contact_planning/fleet_planner.ex",
@@ -179,6 +187,23 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
     assert :shared == PlaneBoundary.classify("lib/cadence/capabilities/definition_registry.ex")
     assert :shared == PlaneBoundary.classify("lib/cadence/capabilities/descriptor.ex")
+
+    assert :shared ==
+             PlaneBoundary.classify("lib/cadence/applications/resource_claim_definition.ex")
+
+    assert :shared ==
+             PlaneBoundary.classify("lib/cadence/applications/preflight_report.ex")
+
+    assert :shared ==
+             PlaneBoundary.classify("lib/cadence/applications/status_placement.ex")
+
+    assert :management ==
+             PlaneBoundary.classify("lib/cadence/applications/application_preflight.ex")
+
+    assert :management ==
+             PlaneBoundary.classify(
+               "lib/cadence/applications/application_preflights/telemetry_decom.ex"
+             )
 
     assert :shared ==
              PlaneBoundary.classify("lib/cadence/capabilities/definitions/uplink_gateway.ex")

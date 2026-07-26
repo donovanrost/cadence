@@ -5,6 +5,18 @@ defmodule Cadence.Capabilities.DefinitionRegistryTest do
   alias Cadence.Capabilities.{DefinitionRegistry, Registry, ValidationContext}
   alias Cadence.Capabilities.Definitions.DefinitionBoundTelemetry
 
+  test "resolves exact capability family versions" do
+    definitions = DefinitionRegistry.default()
+
+    assert {:ok, descriptor} =
+             DefinitionRegistry.fetch_descriptor(definitions, :cfdp_receive, 1)
+
+    assert descriptor.version == 1
+
+    assert {:error, {:unsupported_capability_family_version, :cfdp_receive, 2}} =
+             DefinitionRegistry.fetch_descriptor(definitions, :cfdp_receive, 2)
+  end
+
   test "registers definitions without exposing executable runtime handlers" do
     definitions = DefinitionRegistry.default()
 

@@ -7,33 +7,18 @@ defmodule Cadence.Applications.ApplicationBindingStore do
 
   alias Cadence.Applications.ApplicationBinding
   alias Cadence.Applications.ApplicationBindingStore.BindingRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
   @type app_key :: atom() | binary()
 
-  @spec upsert(ApplicationBinding.t()) :: {:ok, ApplicationBinding.t()} | {:error, term()}
-  def upsert(%ApplicationBinding{} = binding) do
-    changeset = BindingRow.changeset(binding)
+  @spec upsert(ApplicationBinding.t(), keyword()) ::
+          {:ok, ApplicationBinding.t()} | {:error, term()}
+  def upsert(%ApplicationBinding{} = binding, opts \\ []) when is_list(opts) do
+    versioning = Keyword.get(opts, :versioning, :configuration)
 
-    upsert_opts = [
-      on_conflict:
-        {:replace,
-         [
-           :catalog_revision_id,
-           :handled_apids,
-           :source_endpoint_id,
-           :enabled,
-           :metadata,
-           :applied_binding_set_id,
-           :applied_binding_set_version,
-           :applied_at,
-           :updated_at
-         ]},
-      conflict_target: [:organization_id, :mission_id, :spacecraft_id, :application_key]
-    ]
-
-    case Repo.insert(changeset, upsert_opts) do
-      {:ok, row} -> {:ok, BindingRow.to_domain(row)}
+    case Repo.transaction(fn -> locked_upsert(binding, versioning) end) do
+      {:ok, %ApplicationBinding{} = persisted} -> {:ok, persisted}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -92,6 +77,50 @@ defmodule Cadence.Applications.ApplicationBindingStore do
 
   defp maybe_filter(query, field, value) do
     where(query, [row], field(row, ^field) == ^value)
+  end
+
+  defp locked_upsert(%ApplicationBinding{} = binding, versioning)
+       when versioning in [:configuration, :preserve] do
+    row =
+      BindingRow
+      |> where(
+        [row],
+        row.organization_id == ^binding.organization_id and row.mission_id == ^binding.mission_id and
+          row.spacecraft_id == ^binding.spacecraft_id and
+          row.application_key == ^binding.application_key
+      )
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+
+    configuration_version = next_configuration_version(row, binding, versioning)
+
+    case Repo.insert_or_update(
+           BindingRow.changeset(row || %BindingRow{}, binding, configuration_version)
+         ) do
+      {:ok, persisted_row} -> BindingRow.to_domain(persisted_row)
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp next_configuration_version(nil, _binding, _versioning), do: 1
+
+  defp next_configuration_version(%BindingRow{} = row, _binding, :preserve),
+    do: row.configuration_version
+
+  defp next_configuration_version(%BindingRow{} = row, binding, :configuration) do
+    if configuration_changed?(row, binding) do
+      row.configuration_version + 1
+    else
+      row.configuration_version
+    end
+  end
+
+  defp configuration_changed?(%BindingRow{} = row, %ApplicationBinding{} = binding) do
+    row.catalog_revision_id != binding.catalog_revision_id or
+      row.handled_apids != binding.handled_apids or
+      row.source_endpoint_id != binding.source_endpoint_id or
+      row.enabled != binding.enabled or
+      JsonDocument.unwrap_value(row.metadata) != binding.metadata
   end
 
   defp normalize_optional_application_key(nil), do: nil

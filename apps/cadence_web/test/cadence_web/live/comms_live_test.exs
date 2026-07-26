@@ -8,17 +8,33 @@ defmodule CadenceWeb.CommsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
+  alias Cadence.Auth.Scope
   alias Cadence.Comms.TransportStore
 
   alias Cadence.Comms.Transport
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
+    {conn, org, mission, _scope} = signed_in_scope_and_mission()
+    {conn, org, mission}
+  end
+
+  defp signed_in_scope_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
+    membership = TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: org.organization_id,
+        organization: org,
+        organization_membership: membership
+      })
+
+    {TestFixtures.member_conn(user), org, mission, scope}
   end
 
   describe "overview" do
@@ -107,6 +123,69 @@ defmodule CadenceWeb.CommsLiveTest do
 
       refute render(view) =~ "Link Template"
       refute render(view) =~ "Link Assignments"
+    end
+
+    test "projects required application installation status into Comms Validation" do
+      {conn, _org, mission, _scope} = signed_in_scope_and_mission()
+      profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
+
+      spacecraft =
+        TestFixtures.persist_spacecraft!(mission,
+          display_name: "Nova-1",
+          spacecraft_type_id: profile.spacecraft_type_id,
+          spacecraft_type_version: profile.version
+        )
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+
+      finding_id =
+        "#comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
+
+      assert has_element?(view, finding_id)
+      assert has_element?(view, "#{finding_id} h3", "Nova-1 — Telemetry Decom: Not installed")
+
+      assert has_element?(
+               view,
+               "#{finding_id} a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications']",
+               "Review applications"
+             )
+    end
+
+    test "projects installed application status without application-specific Comms code" do
+      {conn, _org, mission, scope} = signed_in_scope_and_mission()
+      profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
+
+      spacecraft =
+        TestFixtures.persist_spacecraft!(mission,
+          display_name: "Nova-1",
+          spacecraft_type_id: profile.spacecraft_type_id,
+          spacecraft_type_version: profile.version
+        )
+
+      assert {:ok, _installation} =
+               ApplicationInstallations.install(
+                 scope,
+                 HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id),
+                 "telemetry_decom"
+               )
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+
+      finding_id =
+        "#comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
+
+      assert has_element?(view, finding_id)
+      assert has_element?(view, "#{finding_id} h3", "Nova-1 — Telemetry Decom: Not configured")
+
+      assert has_element?(
+               view,
+               "#{finding_id} a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom']",
+               "Review application"
+             )
+
+      refute has_element?(view, finding_id, "Configure telemetry")
     end
 
     test "leaves the Comms section collapsed when not on a /comms route" do

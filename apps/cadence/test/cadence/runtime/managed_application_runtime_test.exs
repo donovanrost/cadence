@@ -131,7 +131,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
 
     packet_counter_binding_set =
       packet_counter_binding_set(mission_id, source_endpoint.source_endpoint_id, 1,
-        flush_interval_ms: 250
+        flush_interval_ms: 5_000
       )
 
     telemetry_binding_set = telemetry_binding_set(mission_id, 2)

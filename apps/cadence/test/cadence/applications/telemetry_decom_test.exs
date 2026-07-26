@@ -3,8 +3,20 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Applications.ApplicationBinding
-  alias Cadence.Applications.ApplicationBindingStore
+
+  alias Cadence.Applications.{
+    ActionDispatcher,
+    ActionRequest,
+    ApplicationBinding,
+    ApplicationBindingStore,
+    ApplicationDependency,
+    ApplicationInstallations,
+    ApplicationPreflight,
+    HostContext,
+    PreflightReport,
+    Registry
+  }
+
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
@@ -43,6 +55,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert config.handled_apids == [42]
       assert config.source_endpoint_id == endpoint.source_endpoint_id
       assert config.enabled
+      assert config.configuration_version == 1
 
       assert {:ok, fetched} =
                TelemetryDecom.fetch_config(
@@ -53,6 +66,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
       assert fetched.catalog_revision_id == revision.catalog_revision_id
       assert fetched.handled_apids == [42]
+      assert fetched.configuration_version == 1
 
       assert [listed] = TelemetryDecom.list_configs(@organization_id, @mission_id)
       assert listed.spacecraft_id == spacecraft.spacecraft_id
@@ -151,6 +165,45 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
       refute edited.enabled
     end
+
+    test "increments configuration versions only for semantic configuration changes" do
+      {spacecraft, revision, endpoint} = setup_mission()
+
+      attrs = [
+        catalog_revision_id: revision.catalog_revision_id,
+        handled_apids: [42],
+        source_endpoint_id: endpoint.source_endpoint_id
+      ]
+
+      assert {:ok, first} =
+               TelemetryDecom.configure(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id,
+                 attrs
+               )
+
+      assert first.configuration_version == 1
+
+      assert {:ok, unchanged} =
+               TelemetryDecom.configure(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id,
+                 attrs
+               )
+
+      assert unchanged.configuration_version == 1
+
+      assert {:ok, disabled} =
+               TelemetryDecom.disable(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id
+               )
+
+      assert disabled.configuration_version == 2
+    end
   end
 
   describe "governed mission apply" do
@@ -205,6 +258,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert applied.applied_binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
       assert applied.applied_binding_set_version == 1
       assert %DateTime{} = applied.applied_at
+      assert applied.configuration_version == 1
 
       assert {:ok, activation} =
                Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
@@ -536,6 +590,127 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                @mission_id,
                spacecraft.spacecraft_id
              ) == %{42 => "Event Reporting"}
+    end
+  end
+
+  describe "activation preflight" do
+    test "blocks an unconfigured installation and becomes ready after compilation" do
+      {spacecraft, revision, endpoint} = setup_mission()
+      scope = user_scope("preflight-ready")
+      host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
+
+      assert {:ok, _installation} =
+               ApplicationInstallations.install(scope, host_context, "telemetry_decom")
+
+      assert {:ok, definition} = Registry.fetch_available("telemetry_decom")
+      assert {:ok, blocked} = ApplicationPreflight.load(scope, host_context, definition)
+
+      refute PreflightReport.ready?(blocked)
+      assert blocked.state == :blocked
+
+      assert Enum.map(blocked.checks, & &1.id) == [
+               "configuration",
+               "packet-apid-claim",
+               "runtime-compilation"
+             ]
+
+      assert {:ok, _config} =
+               TelemetryDecom.configure(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id,
+                 catalog_revision_id: revision.catalog_revision_id,
+                 handled_apids: [42],
+                 source_endpoint_id: endpoint.source_endpoint_id
+               )
+
+      assert {:ok, ready} = ApplicationPreflight.load(scope, host_context, definition)
+      assert PreflightReport.ready?(ready)
+      assert ready.state == :ready
+      assert Enum.all?(ready.checks, &(&1.state == :ready))
+    end
+
+    test "blocks a conflicting packet claim in both preflight and action dispatch" do
+      {spacecraft, revision, endpoint} = setup_mission()
+      scope = user_scope("preflight-conflict")
+      host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
+
+      assert {:ok, _installation} =
+               ApplicationInstallations.install(scope, host_context, "telemetry_decom")
+
+      assert {:ok, _config} =
+               TelemetryDecom.configure(
+                 @organization_id,
+                 @mission_id,
+                 spacecraft.spacecraft_id,
+                 catalog_revision_id: revision.catalog_revision_id,
+                 handled_apids: [42],
+                 source_endpoint_id: endpoint.source_endpoint_id
+               )
+
+      assert {:ok, _binding} =
+               ApplicationBindingStore.upsert(
+                 ApplicationBinding.new(%{
+                   organization_id: @organization_id,
+                   mission_id: @mission_id,
+                   spacecraft_id: spacecraft.spacecraft_id,
+                   application_key: :event_reporting,
+                   catalog_revision_id: revision.catalog_revision_id,
+                   handled_apids: [42],
+                   source_endpoint_id: endpoint.source_endpoint_id
+                 })
+               )
+
+      assert {:ok, definition} = Registry.fetch_available("telemetry_decom")
+      assert {:ok, report} = ApplicationPreflight.load(scope, host_context, definition)
+
+      assert %{state: :blocked, value: "1 conflicts"} =
+               Enum.find(report.checks, &(&1.id == "packet-apid-claim"))
+
+      request = %ActionRequest{
+        application_key: "telemetry_decom",
+        application_version: 1,
+        action_id: "request_activation"
+      }
+
+      assert {:error, {:application_preflight_blocked, "telemetry_decom"}} =
+               ActionDispatcher.dispatch(scope, host_context, request)
+    end
+
+    test "evaluates mission dependencies from a spacecraft host without product coupling" do
+      {spacecraft, _revision, _endpoint} = setup_mission()
+      scope = user_scope("preflight-dependency")
+      spacecraft_host = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
+
+      dependency = %ApplicationDependency{
+        application_key: "derived_telemetry",
+        minimum_version: 1,
+        scope: :mission,
+        description: "A fixture dependency used to prove host-scope resolution."
+      }
+
+      assert {:ok, [missing]} =
+               ApplicationPreflight.evaluate_dependencies(scope, spacecraft_host, [dependency])
+
+      assert missing.state == :blocked
+
+      assert {:ok, _installation} =
+               ApplicationInstallations.install(
+                 scope,
+                 HostContext.mission(@mission_id),
+                 "derived_telemetry"
+               )
+
+      assert {:ok, [ready]} =
+               ApplicationPreflight.evaluate_dependencies(scope, spacecraft_host, [dependency])
+
+      assert ready.state == :ready
+      assert ready.value == "v1"
+
+      advisory = %ApplicationDependency{dependency | minimum_version: 2, required: false}
+
+      assert {:ok, [%{state: :attention}]} =
+               ApplicationPreflight.evaluate_dependencies(scope, spacecraft_host, [advisory])
     end
   end
 

@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-07-21
+updated: 2026-07-25
 status: active
 ---
 
@@ -35,6 +35,7 @@ Legacy ADRs remain under
 | [ADR-012](012-provider-adapter-and-ground-station-simulator-model.md) | Provider Adapter and Ground Station Simulator Model | Accepted |
 | [ADR-014](014-shared-ccsds-library-boundary.md) | Shared CCSDS Library Boundary | Accepted |
 | [ADR-015](015-management-control-data-plane-architecture.md) | Management Plane, Control Plane, and Data Plane Architecture | Accepted |
+| [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
 
 ## Superseded Decisions
 
@@ -44,4 +45,4 @@ Legacy ADRs remain under
 
 ## Planned Decisions
 
-- Future mission-supplied plugin ABI
+- Future mission-supplied package ABI, signing, and sandboxing

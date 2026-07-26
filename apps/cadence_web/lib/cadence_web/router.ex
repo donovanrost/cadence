@@ -88,6 +88,16 @@ defmodule CadenceWeb.Router do
       ],
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id", MissionShowLive, :show
+
+      live "/missions/:mission_id/applications", MissionApplicationsLive, :index
+
+      live "/missions/:mission_id/applications/:application_key",
+           ApplicationHostLive,
+           :show
+
+      live "/missions/:mission_id/applications/:application_key/:surface_id",
+           ApplicationHostLive,
+           :show
     end
 
     live_session :spacecraft,
@@ -136,19 +146,15 @@ defmodule CadenceWeb.Router do
            :index
 
       live "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key",
-           SpacecraftTelemetryDecomLive,
+           ApplicationHostLive,
            :show
 
-      live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
-           SpacecraftTelemetryDecomLive,
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
+           ApplicationHostLive,
            :show
 
       live "/missions/:mission_id/spacecraft/:spacecraft_id/commanding",
            SpacecraftCommandingLive,
-           :show
-
-      live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry_decom",
-           SpacecraftTelemetryDecomLive,
            :show
     end
 
@@ -340,6 +346,17 @@ defmodule CadenceWeb.Router do
            OpsActivationRequestsLive,
            :index
     end
+
+    # Legacy application URLs redirect to the generic application host. Keep
+    # compatibility mappings out of ApplicationHostLive so new applications do
+    # not require host actions or routes.
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
+        LegacyApplicationRedirectController,
+        :telemetry_decom
+
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry_decom",
+        LegacyApplicationRedirectController,
+        :telemetry_decom
 
     # Legacy comms URL aliases -- 301 redirect to canonical paths so old
     # bookmarks (and any unmigrated outbound links) still resolve.

@@ -112,6 +112,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         spacecraft_id: spacecraft_id,
         organization_id: organization_id,
         mission_id: mission_id,
+        configuration_version: existing && existing.configuration_version,
         catalog_revision_id: catalog_revision_id,
         handled_apids: handled_apids,
         source_endpoint_id: source_endpoint_id,
@@ -179,6 +180,7 @@ defmodule Cadence.Applications.TelemetryDecom do
       mission_id: config.mission_id,
       spacecraft_id: config.spacecraft_id,
       application_key: @application_key,
+      configuration_version: config.configuration_version,
       catalog_revision_id: config.catalog_revision_id,
       handled_apids: config.handled_apids,
       source_endpoint_id: config.source_endpoint_id,
@@ -196,6 +198,7 @@ defmodule Cadence.Applications.TelemetryDecom do
       spacecraft_id: binding.spacecraft_id,
       organization_id: binding.organization_id,
       mission_id: binding.mission_id,
+      configuration_version: binding.configuration_version,
       catalog_revision_id: binding.catalog_revision_id,
       handled_apids: binding.handled_apids,
       source_endpoint_id: binding.source_endpoint_id,
@@ -543,7 +546,7 @@ defmodule Cadence.Applications.TelemetryDecom do
 
       case updated
            |> config_to_binding()
-           |> ApplicationBindingStore.upsert() do
+           |> ApplicationBindingStore.upsert(versioning: :preserve) do
         {:ok, _binding} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end

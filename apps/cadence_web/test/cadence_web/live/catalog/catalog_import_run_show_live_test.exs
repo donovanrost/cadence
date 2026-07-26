@@ -24,11 +24,12 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
     artifact = TestFixtures.persist_catalog_artifact!(mission)
     run = TestFixtures.persist_catalog_import_run!(artifact)
 
-    {:ok, _view, html} =
+    {:ok, view, html} =
       live(conn, ~p"/missions/#{mission.mission_id}/catalog/imports/#{run.import_run_id}")
 
     assert html =~ "Running"
     refute html =~ "Telemetry snapshot"
+    assert has_element?(view, "#catalog-importer-version", "cadence_yaml v1")
   end
 
   test "re-renders snapshot summary after an async completion broadcast" do

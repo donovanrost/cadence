@@ -86,14 +86,24 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert has_element?(view, "#transport-origin-section")
       assert has_element?(view, "#transport-source-section")
       assert has_element?(view, "#transport-capability-section")
-      assert has_element?(view, "#transport-direct-endpoint-fields")
+
+      assert has_element?(
+               view,
+               "#transport-direct-configuration[data-extension-presentation='transport_kind']"
+             )
+
+      assert has_element?(view, "#transport-capability-section-fields")
       assert has_element?(view, "#transport-framing-section")
       assert has_element?(view, "#transport-reliability-section")
       assert has_element?(view, "#transport-summary-section")
       assert has_element?(view, "#transport-admin-diagnostics")
       assert has_element?(view, "#create-transport-button[disabled]")
       refute has_element?(view, "#transport-provider")
-      refute has_element?(view, "#transport-frame-size")
+
+      refute has_element?(
+               view,
+               "#transport-direct-configuration-input-frame-size"
+             )
 
       view
       |> form("#transport-form",
@@ -111,8 +121,8 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       )
       |> render_change()
 
-      assert has_element?(view, "#transport-frame-size")
-      assert has_element?(view, "#transport-reconnect-policy")
+      assert has_element?(view, "#transport-direct-configuration-input-frame-size")
+      assert has_element?(view, "#transport-direct-configuration-input-reconnect-policy")
 
       view
       |> form("#transport-form", transport: direct_transport_params())
@@ -163,13 +173,14 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       |> render_change()
 
       assert has_element?(view, "#transport-provider")
+      assert has_element?(view, "#transport-kind-provider-managed[value='tcp_socket']")
       assert has_element?(view, "#transport-service-profile")
       assert has_element?(view, "#transport-delivery-profile")
       assert has_element?(view, "#transport-provider-operator-summary", "Streaming to Cadence")
       assert has_element?(view, "#transport-provider-derived-section")
       assert has_element?(view, "#transport-provider-derived-configuration", "127.0.0.1:5100")
       assert has_element?(view, "#create-transport-button:not([disabled])")
-      refute has_element?(view, "#transport-direct-endpoint-fields")
+      refute has_element?(view, "#transport-direct-configuration")
       refute has_element?(view, "#transport-framing-section")
       refute has_element?(view, "#transport-reliability-section")
 

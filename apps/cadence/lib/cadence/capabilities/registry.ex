@@ -5,7 +5,7 @@ defmodule Cadence.Capabilities.Registry do
 
   alias Cadence.ApplicationDispatch.{BindingRule, CapabilityInstance}
   alias Cadence.Capabilities.{DefinitionRegistry, Descriptor, ValidationContext}
-  alias Cadence.Capabilities.ManagedApplications.PacketCounter
+  alias Cadence.Capabilities.ManagedApplications.{CFDPReceive, PacketCounter}
   alias Cadence.Capabilities.TransportExtensions.{HeartbeatMonitor, UplinkGateway}
   alias Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler
 
@@ -15,6 +15,7 @@ defmodule Cadence.Capabilities.Registry do
   def default do
     %{
       definition_bound_telemetry: DefinitionBoundTelemetryHandler,
+      cfdp_receive: CFDPReceive,
       packet_counter: PacketCounter,
       heartbeat_monitor: HeartbeatMonitor,
       uplink_gateway: UplinkGateway

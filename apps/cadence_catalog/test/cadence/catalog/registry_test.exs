@@ -1,7 +1,37 @@
 defmodule Cadence.Catalog.RegistryTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Catalog.Registry
+  alias Cadence.Catalog.{ImporterDescriptor, Registry}
+
+  test "publishes an exact validated first-party built-in definition" do
+    assert [%{descriptor: descriptor}] = Registry.list_builtin_importers()
+    assert descriptor.importer_key == "cadence_yaml"
+    assert descriptor.version == 1
+    assert descriptor.trust == :first_party
+    assert :ok = ImporterDescriptor.validate(descriptor)
+
+    assert {:ok, %{descriptor: ^descriptor}} =
+             Registry.fetch_builtin_importer("cadence_yaml", 1)
+
+    assert {:error, :catalog_importer_version_not_found} =
+             Registry.fetch_builtin_importer("cadence_yaml", 2)
+
+    assert {:error, :catalog_importer_not_found} =
+             Registry.fetch_builtin_importer("unknown")
+  end
+
+  test "rejects malformed descriptors" do
+    assert {:error, :invalid_catalog_importer_descriptor} =
+             ImporterDescriptor.validate(%ImporterDescriptor{
+               importer_key: "cadence.invalid",
+               version: 0,
+               trust: :first_party,
+               display_name: "Invalid",
+               catalog_family: :combined,
+               source_formats: ["invalid"],
+               media_types: ["application/octet-stream"]
+             })
+  end
 
   describe "detect_importer/2" do
     test "matches by media type" do

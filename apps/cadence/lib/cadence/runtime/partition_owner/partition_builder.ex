@@ -166,6 +166,12 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
              capability_instance.runtime_configuration,
              execution_context
            ),
+         {:ok, state_snapshot} <-
+           CapabilityRegistry.snapshot_managed_state(
+             capability_instance.family_key,
+             execution_result.state,
+             execution_context
+           ),
          {:ok, %{timer_service: next_timer_service, timer_events: timer_events}} <-
            execute_managed_application_init_actions(
              execution_result,
@@ -183,7 +189,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
             execution_context,
             execution_result,
             execution_result.action_requests,
-            timer_events
+            timer_events,
+            state_snapshot: state_snapshot
           )
         )}}
     else

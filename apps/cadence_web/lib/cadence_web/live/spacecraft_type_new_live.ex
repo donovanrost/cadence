@@ -2,7 +2,8 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Applications.Catalog, as: ApplicationCatalog
+  alias Cadence.Applications.ApplicationDefinition
+  alias Cadence.ExtensionCatalog
   alias Cadence.SpacecraftType
   alias Phoenix.HTML.Form
 
@@ -12,7 +13,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
      socket
      |> assign(:page_title, "New Spacecraft Profile")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:applications, ApplicationCatalog.all())
+     |> assign(:applications, ExtensionCatalog.applications_for_scope(:spacecraft))
      |> assign(:form, to_form(empty_form_params(), as: :spacecraft_type))}
   end
 
@@ -179,7 +180,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           :for={app <- @applications}
           class={[
             "flex items-start gap-3 rounded border p-3 transition-colors",
-            if(app.available?,
+            if(application_available?(app),
               do:
                 "border-base-300 bg-base-100/40 border-l-2 border-l-primary/40 hover:border-l-primary cursor-pointer",
               else: "border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed"
@@ -187,17 +188,18 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           ]}
         >
           <input
+            id={"spacecraft-profile-application-#{app.application_key}"}
             type="checkbox"
-            name={"spacecraft_type[applications][#{app.key}]"}
+            name={"spacecraft_type[applications][#{app.application_key}]"}
             value="1"
-            checked={application_checked?(@form, app.key)}
-            disabled={not app.available?}
+            checked={application_checked?(@form, app.application_key)}
+            disabled={not application_available?(app)}
             class="checkbox checkbox-primary mt-0.5"
           />
           <div>
             <div class="font-medium text-base-content">
               {app.display_name}
-              <span :if={not app.available?} class="hud-label ml-2">
+              <span :if={not application_available?(app)} class="hud-label ml-2">
                 Roadmap
               </span>
             </div>
@@ -301,8 +303,10 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
   defp applications_from_params(params) do
     available_by_param =
-      ApplicationCatalog.available()
-      |> Map.new(fn application -> {application.key, application.key} end)
+      ExtensionCatalog.available_applications_for_scope(:spacecraft)
+      |> Map.new(fn application ->
+        {application.application_key, application.application_key}
+      end)
 
     applications =
       params
@@ -322,6 +326,10 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
       nil -> {:error, message}
       text -> {:ok, text}
     end
+  end
+
+  defp application_available?(application) do
+    ApplicationDefinition.available?(application)
   end
 
   defp positive_integer(value, label) do

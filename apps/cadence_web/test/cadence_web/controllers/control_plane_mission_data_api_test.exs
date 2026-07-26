@@ -609,6 +609,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
           "catalog_import_run" => %{
             "artifact_id" => "artifact-alpha",
             "importer_key" => "fake_tm_json",
+            "importer_version" => 1,
             "metadata" => %{"reason" => "bootstrap"}
           }
         }
@@ -621,6 +622,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "mission_id" => ^mission_id,
                "artifact_id" => "artifact-alpha",
                "importer_key" => "fake_tm_json",
+               "importer_version" => 1,
                "status" => "running",
                "requested_by" => %{
                  "service_identity_id" => "svc-bootstrap"

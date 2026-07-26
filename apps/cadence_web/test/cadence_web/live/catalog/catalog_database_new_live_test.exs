@@ -49,6 +49,49 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     assert html =~ "mission.bin"
   end
 
+  test "discovers packaged built-ins independently of configured runtime importers" do
+    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
+    Application.put_env(:cadence_catalog, :catalog_importers, [])
+
+    on_exit(fn ->
+      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
+    end)
+
+    {conn, _org, mission} = signed_in_org_and_mission()
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
+
+    uploads =
+      file_input(view, "#catalog-upload-form", :artifact, [
+        %{
+          name: "mission.yaml",
+          content: """
+          packets:
+            - name: HEALTH
+              items:
+                - name: mode
+                  data_type: uint
+                  bit_offset: 0
+                  bit_size: 8
+          commands: []
+          """,
+          type: "application/yaml",
+          last_modified: 1_700_000_000_000
+        }
+      ])
+
+    _ = render_upload(uploads, "mission.yaml")
+
+    assert render(view) =~ "Cadence YAML Database"
+
+    result =
+      render_submit(view, "save", %{
+        "catalog_database" => %{"name" => "Packaged DB", "revision_label" => "Rev A"}
+      })
+
+    assert {:error, {:live_redirect, %{to: to}}} = result
+    assert to =~ ~r"/missions/.+/catalog/imports/"
+  end
+
   test "uploading a valid YAML file creates a database revision import and navigates to the run" do
     {conn, _org, mission} = signed_in_org_and_mission()
 

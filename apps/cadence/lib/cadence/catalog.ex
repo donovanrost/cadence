@@ -186,7 +186,7 @@ defmodule Cadence.Catalog do
              is_binary(importer_key) and is_list(opts) do
     with {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
-           Registry.fetch_importer(importer_key),
+           Registry.fetch_importer(importer_key, Keyword.get(opts, :importer_version, :latest)),
          :ok <- ensure_catalog_family_match(artifact.catalog_family, descriptor.catalog_family),
          catalog_database_id <-
            Keyword.get(opts, :catalog_database_id, artifact.catalog_database_id),
@@ -195,7 +195,7 @@ defmodule Cadence.Catalog do
          run <-
            build_run(
              %Artifact{artifact | catalog_database_id: catalog_database_id},
-             importer_key,
+             descriptor,
              opts
            ),
          {:ok, %ImportRun{} = persisted_run} <- insert_run(run) do
@@ -230,7 +230,7 @@ defmodule Cadence.Catalog do
          {:ok, %Artifact{} = artifact} <-
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
-           Registry.fetch_importer(run.importer_key),
+           Registry.fetch_importer(run.importer_key, run.importer_version),
          :ok <- ensure_catalog_family_match(artifact.catalog_family, descriptor.catalog_family),
          :ok <- validate_artifact(importer_module, artifact) do
       execute_run(run, artifact, importer_module)
@@ -587,14 +587,15 @@ defmodule Cadence.Catalog do
     end
   end
 
-  defp build_run(%Artifact{} = artifact, importer_key, opts) do
+  defp build_run(%Artifact{} = artifact, descriptor, opts) do
     ImportRun.new(%{
       organization_id: artifact.organization_id,
       mission_id: artifact.mission_id,
       catalog_database_id: artifact.catalog_database_id,
       artifact_id: artifact.artifact_id,
       catalog_family: artifact.catalog_family,
-      importer_key: importer_key,
+      importer_key: descriptor.importer_key,
+      importer_version: descriptor.version,
       requested_by: Keyword.get(opts, :requested_by, %{}),
       metadata: Keyword.get(opts, :metadata, %{})
     })

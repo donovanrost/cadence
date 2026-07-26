@@ -256,11 +256,14 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
   @tag timeout: 30_000
   test "a modification response lost after commit recovers idempotently", context do
     fixture =
-      TestProviderFixtures.create_contact!(%{
-        "fault_profile" => %{
-          "contact_modification_response_loss_after_commit_count" => 1
-        }
-      })
+      TestProviderFixtures.create_contact!(
+        %{
+          "fault_profile" => %{
+            "contact_modification_response_loss_after_commit_count" => 1
+          }
+        },
+        search_starts_at: DateTime.utc_now() |> DateTime.add(600) |> DateTime.truncate(:second)
+      )
 
     provider_context = provider_context(context.base_url, fixture.run["id"])
 
@@ -270,6 +273,9 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
         _other -> false
       end
     end)
+
+    assert {:ok, %{"state" => "paused"}} =
+             Provider.transition_run(fixture.run["id"], "pause")
 
     {:ok, current_contact} = Contacts.fetch_internal(fixture.contact["id"])
 

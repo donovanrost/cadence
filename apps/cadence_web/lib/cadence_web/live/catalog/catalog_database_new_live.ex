@@ -98,6 +98,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
                  artifact,
                  descriptor.importer_key,
                  requested_by: uploaded_by,
+                 importer_version: descriptor.version,
                  metadata: revision_metadata(form_params)
                ) do
           {:noreply,

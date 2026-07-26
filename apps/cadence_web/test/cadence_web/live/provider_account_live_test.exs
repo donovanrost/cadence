@@ -67,6 +67,19 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
     assert has_element?(view, "#provider-account-form")
     assert has_element?(view, "#provider-account-boundary-note")
+
+    assert has_element?(
+             view,
+             "#provider-connector-summary[data-provider-type='simulator'][data-provider-client='simulator_http']"
+           )
+
+    assert has_element?(
+             view,
+             "#provider-connector-configuration[data-extension-presentation='provider_connector']"
+           )
+
+    assert has_element?(view, "#provider-account-control-plane-section-fields")
+    assert has_element?(view, "#provider-connector-configuration-input-base-url")
     assert has_element?(view, "select[name='provider_account[backend_type]']")
     assert has_element?(view, "input[name='provider_account[backend_key]']")
     refute has_element?(view, "input[name='provider_account[secret_material]']")
@@ -95,6 +108,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert target =~ "/provider-accounts/"
     assert [{account, version}] = ProviderAccounts.list_for_system(organization.organization_id)
     assert account.display_name == "Local Ground Network Simulator"
+    assert version.provider_type == :simulator
+    assert version.client_key == :simulator_http
     assert version.guardrails["allowed_stations"] == ["station-alpha"]
   end
 

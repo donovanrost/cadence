@@ -3,8 +3,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.Applications.Catalog, as: ApplicationCatalog
-  alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
+  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryCard, ApplicationInventoryLifecycle}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -12,24 +12,55 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       socket.assigns
 
     type_binding = load_type_binding(scope.organization_id, mission.mission_id, spacecraft)
-    telemetry_status = telemetry_status(scope.organization_id, mission.mission_id, spacecraft)
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+    applications = application_rows(scope, type_binding, host_context)
 
     {:ok,
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Applications")
      |> assign(:nav_item, :spacecraft)
      |> assign(:type_binding, type_binding)
-     |> assign(:telemetry_decom_status, telemetry_status)
-     |> assign(:applications, application_rows(type_binding, telemetry_status))}
+     |> assign(:application_host_context, host_context)
+     |> assign(:applications_empty?, applications == [])
+     |> stream_configure(:applications,
+       dom_id: fn application ->
+         ApplicationInventoryCard.dom_id(host_context, application.application_key)
+       end
+     )
+     |> stream(:applications, applications)}
+  end
+
+  @impl true
+  def handle_event("install_application", %{"key" => application_key}, socket) do
+    %{current_scope: scope, type_binding: type_binding, application_host_context: host_context} =
+      socket.assigns
+
+    decision = install_decision(scope, type_binding, host_context, application_key)
+
+    ApplicationInventoryLifecycle.install(
+      socket,
+      application_key,
+      decision,
+      &refresh_applications/1
+    )
+  end
+
+  def handle_event("disable_application", %{"key" => application_key}, socket) do
+    ApplicationInventoryLifecycle.disable(socket, application_key, &refresh_applications/1)
+  end
+
+  def handle_event("uninstall_application", %{"key" => application_key}, socket) do
+    ApplicationInventoryLifecycle.uninstall(socket, application_key, &refresh_applications/1)
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="spacecraft-applications-page" class="space-y-6">
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="spacecraft-applications-page" class="space-y-6">
       <.page_header
         title="Applications"
-        subtitle="Spacecraft-scoped application setup for packet claims and runtime publication."
+        subtitle="Install profile-declared product applications and open their host-rendered workspaces."
         breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
@@ -57,7 +88,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       >
         <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
         <p class="mt-1 text-sm text-base-content/70">
-          Select a Spacecraft Profile before configuring application packet claims.
+          Select a Spacecraft Profile before installing profile-declared applications.
         </p>
         <.button
           navigate={
@@ -86,104 +117,68 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       </.card>
 
       <section
-        :if={@type_binding}
+        :if={@type_binding || not @applications_empty?}
         id="spacecraft-applications-list"
         class="grid gap-4 lg:grid-cols-2"
+        phx-update="stream"
       >
-        <.application_card
-          :for={app <- @applications}
+        <ApplicationInventoryCard.application_inventory_card
+          :for={{dom_id, app} <- @streams.applications}
+          id={dom_id}
           app={app}
-          mission={@current_mission}
-          spacecraft={@current_spacecraft}
+          host_context={@application_host_context}
+          manage_path={
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications/#{app.application_key}"
+          }
         />
       </section>
-    </div>
+      </div>
+    </Layouts.app>
     """
   end
 
-  attr :app, :map, required: true
-  attr :mission, :map, required: true
-  attr :spacecraft, :map, required: true
-
-  defp application_card(assigns) do
-    ~H"""
-    <.card id={@app.dom_id}>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label">Application</p>
-          <h2 class="mt-2 text-base font-semibold">{@app.display_name}</h2>
-        </div>
-        <.status_badge status={panel_status(@app.status)} label={@app.status_label} />
-      </div>
-      <p class="mt-3 text-sm text-base-content/70">{@app.description}</p>
-      <div class="mt-5 space-y-1">
-        <.detail_row label="Packet claims" value={@app.claims_label} />
-        <.detail_row label="Publication" value={@app.publication_label} />
-      </div>
-      <.button
-        :if={@app.available?}
-        navigate={
-          ~p"/missions/#{@mission.mission_id}/spacecraft/#{@spacecraft.spacecraft_id}/applications/#{@app.key}"
-        }
-        class="mt-5"
-      >
-        Manage
-      </.button>
-      <p :if={not @app.available?} class="mt-5 text-xs text-base-content/50">
-        Not available yet.
-      </p>
-    </.card>
-    """
+  defp application_rows(scope, nil, host_context) do
+    load_application_rows(scope, host_context, %{})
   end
 
-  defp application_rows(nil, _telemetry_status), do: []
-
-  defp application_rows(%{pinned: %{applications: applications}}, telemetry_status) do
-    entries_by_key = Map.new(ApplicationCatalog.all(), &{&1.key, &1})
-
-    applications
-    |> Enum.sort()
-    |> Enum.map(fn {key, config} ->
-      entry = Map.get(entries_by_key, key, custom_application_entry(key, config))
-      application_row(entry, telemetry_status)
-    end)
+  defp application_rows(
+         scope,
+         %{pinned: %{applications: applications}},
+         %HostContext{} = host_context
+       ) do
+    load_application_rows(scope, host_context, applications)
   end
 
-  defp application_row(%{key: "telemetry_decom"} = entry, telemetry_status) do
-    %{
-      key: "telemetry_decom",
-      dom_id: application_dom_id("telemetry_decom"),
-      display_name: entry.display_name,
-      description: entry.description,
-      available?: entry.available?,
-      status: telemetry_status,
-      status_label: telemetry_status_label(telemetry_status),
-      claims_label: claims_label(telemetry_status),
-      publication_label: publication_label(telemetry_status)
-    }
+  defp load_application_rows(scope, host_context, applications) do
+    case ApplicationInventory.declared(scope, host_context, applications) do
+      {:ok, application_inventory} -> application_inventory
+      {:error, _reason} -> []
+    end
   end
 
-  defp application_row(entry, _telemetry_status) do
-    %{
-      key: entry.key,
-      dom_id: application_dom_id(entry.key),
-      display_name: entry.display_name,
-      description: entry.description,
-      available?: entry.available?,
-      status: :not_configured,
-      status_label: if(entry.available?, do: "Not configured", else: "Roadmap"),
-      claims_label: "None",
-      publication_label: "Not published"
-    }
+  defp desired_application?(%{pinned: %{applications: applications}}, application_key),
+    do: Map.has_key?(applications, application_key)
+
+  defp desired_application?(_type_binding, _application_key), do: false
+
+  defp install_allowed?(scope, type_binding, host_context, application_key) do
+    desired_application?(type_binding, application_key) or
+      retained_application?(scope, host_context, application_key)
   end
 
-  defp custom_application_entry(key, config) do
-    %{
-      key: key,
-      display_name: Map.get(config, "display_name", humanize_application_key(key)),
-      description: Map.get(config, "description", "Custom spacecraft application."),
-      available?: false
-    }
+  defp install_decision(scope, type_binding, host_context, application_key) do
+    if install_allowed?(scope, type_binding, host_context, application_key) do
+      :allowed
+    else
+      {:denied, "Application is neither declared by this profile nor retained at this scope."}
+    end
+  end
+
+  defp retained_application?(scope, host_context, application_key) do
+    case ApplicationInstallations.fetch(scope, host_context, application_key) do
+      {:ok, _installation} -> true
+      {:error, _reason} -> false
+    end
   end
 
   defp load_type_binding(_organization_id, _mission_id, %{spacecraft_type_id: nil}), do: nil
@@ -220,59 +215,16 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     end
   end
 
-  defp telemetry_status(organization_id, mission_id, spacecraft) do
-    config =
-      case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft.spacecraft_id) do
-        {:ok, config} -> config
-        {:error, :not_configured} -> nil
-      end
+  defp refresh_applications(socket) do
+    applications =
+      application_rows(
+        socket.assigns.current_scope,
+        socket.assigns.type_binding,
+        socket.assigns.application_host_context
+      )
 
-    active =
-      case Cadence.Activations.fetch_active_activation(organization_id, mission_id) do
-        {:ok, activation} ->
-          %{
-            binding_set_id: activation.binding_set_id,
-            binding_set_version: activation.binding_set_version
-          }
-
-        {:error, _reason} ->
-          nil
-      end
-
-    TelemetryDecom.status(config, active)
-  end
-
-  defp panel_status(:applied), do: :ready
-  defp panel_status(:configured), do: :attention
-  defp panel_status(:outdated), do: :attention
-  defp panel_status(:disabled), do: :blocked
-  defp panel_status(_status), do: :blocked
-
-  defp telemetry_status_label(:applied), do: "Applied"
-  defp telemetry_status_label(:configured), do: "Configured"
-  defp telemetry_status_label(:outdated), do: "Out of date"
-  defp telemetry_status_label(:disabled), do: "Disabled"
-  defp telemetry_status_label(:not_configured), do: "Not configured"
-
-  defp claims_label(:not_configured), do: "None"
-  defp claims_label(:disabled), do: "Disabled"
-  defp claims_label(_status), do: "Configured"
-
-  defp publication_label(:applied), do: "Live"
-  defp publication_label(:configured), do: "Saved, not live"
-  defp publication_label(:outdated), do: "Needs apply"
-  defp publication_label(:disabled), do: "Disabled"
-  defp publication_label(:not_configured), do: "Not published"
-
-  defp humanize_application_key(key) do
-    key
-    |> String.replace(["_", "-", ":"], " ")
-    |> String.split(" ", trim: true)
-    |> Enum.map_join(" ", &String.capitalize/1)
-  end
-
-  defp application_dom_id(key) do
-    safe_key = String.replace(key, ~r/[^A-Za-z0-9_-]+/, "-")
-    "spacecraft-application-#{safe_key}"
+    socket
+    |> assign(:applications_empty?, applications == [])
+    |> stream(:applications, applications, reset: true)
   end
 end

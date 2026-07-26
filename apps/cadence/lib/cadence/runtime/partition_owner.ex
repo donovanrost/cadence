@@ -576,6 +576,12 @@ defmodule Cadence.Runtime.PartitionOwner do
              execution_result.action_requests,
              capability_instance.capability_instance_id,
              state.timer_service
+           ),
+         {:ok, state_snapshot} <-
+           CapabilityRegistry.snapshot_managed_state(
+             capability_instance.family_key,
+             execution_result.state,
+             execution_context
            ) do
       {:ok, execution_result.records,
        put_managed_application_state(
@@ -591,7 +597,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          execution_result,
          execution_result.action_requests,
          timer_events,
-         packet_record
+         packet_record: packet_record,
+         state_snapshot: state_snapshot
        )}
     end
   end
@@ -627,6 +634,12 @@ defmodule Cadence.Runtime.PartitionOwner do
              execution_result.action_requests,
              capability_instance.capability_instance_id,
              state.timer_service
+           ),
+         {:ok, state_snapshot} <-
+           CapabilityRegistry.snapshot_managed_state(
+             capability_instance.family_key,
+             execution_result.state,
+             execution_context
            ) do
       runtime_records =
         managed_execution_runtime_records(
@@ -644,8 +657,8 @@ defmodule Cadence.Runtime.PartitionOwner do
             }
             | timer_events
           ],
-          nil,
-          timer_key
+          timer_key: timer_key,
+          state_snapshot: state_snapshot
         )
 
       {:ok,
@@ -746,8 +759,7 @@ defmodule Cadence.Runtime.PartitionOwner do
          execution_result,
          action_requests,
          timer_events,
-         packet_record,
-         timer_key \\ nil
+         opts
        ) do
     RuntimeRecords.for_execution(
       event_kind,
@@ -756,8 +768,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       execution_result,
       action_requests,
       timer_events,
-      packet_record,
-      timer_key
+      opts
     )
   end
 

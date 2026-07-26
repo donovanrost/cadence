@@ -28,7 +28,7 @@ defmodule CadenceWeb.Components.FormInputs do
   attr :class, :string, default: nil
 
   attr :rest, :global,
-    include: ~w(autocomplete autofocus disabled max maxlength min minlength pattern step)
+    include: ~w(autocomplete autofocus disabled list max maxlength min minlength pattern step)
 
   def input(%{field: %FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
@@ -147,5 +147,6 @@ defmodule CadenceWeb.Components.FormInputs do
     Keyword.get(attrs, :title)
   end
 
-  defp option_title(%{} = option), do: Map.get(option, :title)
+  defp option_title(%{} = option),
+    do: Map.get(option, :title, Map.get(option, :description))
 end

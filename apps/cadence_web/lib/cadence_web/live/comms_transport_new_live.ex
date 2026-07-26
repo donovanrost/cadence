@@ -2,11 +2,11 @@ defmodule CadenceWeb.CommsTransportNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Comms.{Transport, TransportKind}
-  alias Cadence.Comms.TransportKinds.TCPSocket
+  alias Cadence.Comms.Transport
+  alias Cadence.ExtensionCatalog
+  alias Cadence.Extensions.Presentation.ConfigurationDefinition
   alias Cadence.Management.Providers
   alias Cadence.Management.Transports
-  alias Phoenix.HTML.Form
 
   @impl true
   def mount(_params, _session, socket) do
@@ -19,6 +19,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
      |> assign(:nav_item, :comms_transports)
      |> assign(:return_to, ~p"/missions/#{mission.mission_id}/comms/transports")
      |> assign(:providers, providers)
+     |> assign(:transport_kind_options, transport_kind_options())
      |> assign(:form_error, nil)
      |> assign_form_state(default_form_params())}
   end
@@ -62,7 +63,8 @@ defmodule CadenceWeb.CommsTransportNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-transport-new-page" class="mx-auto max-w-4xl space-y-6">
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="comms-transport-new-page" class="mx-auto max-w-4xl space-y-6">
       <.page_header
         title="New Transport"
         subtitle="Describe a durable byte-moving capability. This setup does not mean a connection is currently open."
@@ -123,10 +125,15 @@ defmodule CadenceWeb.CommsTransportNewLive do
               field={@form[:transport_kind]}
               type="select"
               label="Transport Kind"
-              options={TransportKind.form_options()}
+              options={@transport_kind_options}
               required
             />
           <% else %>
+            <.input
+              id="transport-kind-provider-managed"
+              field={@form[:transport_kind]}
+              type="hidden"
+            />
             <.input
               id="transport-provider"
               field={@form[:mission_provider_id]}
@@ -152,10 +159,14 @@ defmodule CadenceWeb.CommsTransportNewLive do
           <% end %>
         </.form_section>
 
-        <.form_section id="transport-capability-section" number="04" title="Capability">
-          <%= if @selected_origin == "direct" do %>
-            <.direct_endpoint_fields form={@form} kind_entry={@kind_entry} />
-          <% else %>
+        <%= if @selected_origin == "direct" do %>
+          <.extension_configuration
+            definition={@kind_entry.configuration}
+            form={@form}
+            kind="transport_kind"
+          />
+        <% else %>
+          <.form_section id="transport-capability-section" number="04" title="Capability">
             <.provider_profile_fields
               form={@form}
               selected_provider={@selected_provider}
@@ -165,12 +176,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
               derived_summary={@derived_summary}
               derivation_error={@derivation_error}
             />
-          <% end %>
-        </.form_section>
-
-        <%= if @selected_origin == "direct" do %>
-          <.direct_configuration_fields form={@form} kind_entry={@kind_entry} />
-        <% else %>
+          </.form_section>
           <section id="transport-provider-derived-section" class="space-y-4">
             <div class="flex items-center gap-3">
               <span class="hud-label text-primary/70">05</span>
@@ -180,7 +186,10 @@ defmodule CadenceWeb.CommsTransportNewLive do
             <p class="text-sm text-base-content/65">
               Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only.
             </p>
-            <.derived_configuration configuration={@derived_configuration} />
+            <.derived_configuration
+              configuration={@derived_configuration}
+              kind_entry={@kind_entry}
+            />
           </section>
         <% end %>
 
@@ -248,51 +257,12 @@ defmodule CadenceWeb.CommsTransportNewLive do
           </.button>
         </div>
       </.form>
-    </div>
+      </div>
+    </Layouts.app>
     """
   end
 
-  attr :form, Form, required: true
-  attr :kind_entry, :map, required: true
-
-  defp direct_endpoint_fields(assigns) do
-    ~H"""
-    <div id="transport-direct-endpoint-fields" class="space-y-4">
-      <.input
-        id="transport-tcp-mode"
-        field={@form[:tcp_mode]}
-        type="select"
-        label="TCP Mode"
-        options={@kind_entry.form.modes}
-        required
-      />
-      <.input
-        id="transport-direction-capability"
-        field={@form[:direction_capability]}
-        type="select"
-        label="Direction Capability"
-        options={@kind_entry.form.directions}
-        required
-      />
-      <.input
-        id="transport-host"
-        field={@form[:host]}
-        type="text"
-        label={host_label(@form)}
-        required
-      />
-      <.input
-        id="transport-port"
-        field={@form[:port]}
-        type="number"
-        label={port_label(@form)}
-        required
-      />
-    </div>
-    """
-  end
-
-  attr :form, Form, required: true
+  attr :form, Phoenix.HTML.Form, required: true
   attr :selected_provider, :map, default: nil
   attr :service_profiles, :list, required: true
   attr :delivery_profiles, :list, required: true
@@ -353,60 +323,13 @@ defmodule CadenceWeb.CommsTransportNewLive do
     """
   end
 
-  attr :form, Form, required: true
-  attr :kind_entry, :map, required: true
-
-  defp direct_configuration_fields(assigns) do
-    ~H"""
-    <div id="transport-direct-configuration" class="space-y-8">
-      <.form_section id="transport-framing-section" number="05" title="Framing">
-        <.input
-          id="transport-framing-mode"
-          field={@form[:framing_mode]}
-          type="select"
-          label="Framing"
-          options={@kind_entry.form.framing_modes}
-          required
-        />
-        <.input
-          :if={Form.input_value(@form, :framing_mode) == "fixed_size"}
-          id="transport-frame-size"
-          field={@form[:frame_size]}
-          type="number"
-          label="Fixed Frame Size (bytes)"
-          required
-        />
-      </.form_section>
-
-      <.form_section id="transport-reliability-section" number="05B" title="Reliability">
-        <.input
-          :if={Form.input_value(@form, :tcp_mode) == "connect"}
-          id="transport-reconnect-policy"
-          field={@form[:reconnect_policy]}
-          type="select"
-          label="Reconnect Policy"
-          options={@kind_entry.form.reconnect_policies}
-          required
-        />
-        <.input
-          id="transport-tls-enabled"
-          field={@form[:tls_enabled]}
-          type="select"
-          label="TLS"
-          options={@kind_entry.form.tls_options}
-          required
-        />
-      </.form_section>
-    </div>
-    """
-  end
-
   attr :configuration, :map, default: nil
+  attr :kind_entry, :map, required: true
 
   defp derived_configuration(assigns) do
     summary =
       if assigns.configuration,
-        do: TCPSocket.display_summary(assigns.configuration),
+        do: assigns.kind_entry.module.display_summary(assigns.configuration),
         else: nil
 
     assigns = assign(assigns, :summary, summary)
@@ -414,7 +337,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
     ~H"""
     <.card id="transport-provider-derived-configuration">
       <div :if={@summary} class="divide-y divide-base-300">
-        <.detail_row label="Actual kind" value="TCP SOCKET" />
+        <.detail_row label="Actual kind" value={@kind_entry.label} />
         <.detail_row label="Mode" value={human_text(@summary.mode)} />
         <.detail_row label="Direction" value={human_text(@summary.direction_capability)} />
         <.detail_row label="Endpoint" value={@summary.endpoint} mono />
@@ -431,11 +354,11 @@ defmodule CadenceWeb.CommsTransportNewLive do
   defp assign_form_state(socket, raw_params) do
     params = normalize_form_params(raw_params)
     selected_origin = params["origin"]
-    {:ok, kind_entry} = TransportKind.resolve_form_value(params["transport_kind"])
+    {:ok, kind_entry} = ExtensionCatalog.fetch_transport_kind(params["transport_kind"])
 
     {params, selected_provider, service_profiles, selected_service, delivery_profiles,
      selected_delivery} =
-      provider_form_state(params, socket.assigns.providers)
+      provider_form_state(params, socket.assigns.providers, kind_entry)
 
     {derived_configuration, derived_summary, derivation_error} =
       derive_configuration(selected_origin, params, selected_delivery, kind_entry)
@@ -464,8 +387,8 @@ defmodule CadenceWeb.CommsTransportNewLive do
 
   defp normalize_form_params(params) do
     transport_kind =
-      case TransportKind.resolve_form_value(params["transport_kind"] || "tcp_socket") do
-        {:ok, entry} -> entry.form.form_value
+      case ExtensionCatalog.fetch_transport_kind(params["transport_kind"] || "tcp_socket") do
+        {:ok, entry} -> entry.form_value
         {:error, _reason} -> "tcp_socket"
       end
 
@@ -478,7 +401,11 @@ defmodule CadenceWeb.CommsTransportNewLive do
     |> Map.put("transport_kind", transport_kind)
   end
 
-  defp provider_form_state(%{"origin" => "provider_managed"} = params, providers) do
+  defp provider_form_state(
+         %{"origin" => "provider_managed"} = params,
+         providers,
+         kind_entry
+       ) do
     selected_provider =
       select_provider(providers, params["mission_provider_id"]) ||
         Enum.find(providers, &provider_ready?/1)
@@ -491,7 +418,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
     selected_service = select_profile(service_profiles, params["service_profile_id"])
     selected_service = selected_service || List.first(service_profiles)
 
-    delivery_profiles = compatible_deliveries(selected_provider, selected_service)
+    delivery_profiles = compatible_deliveries(selected_provider, selected_service, kind_entry)
     selected_delivery = select_profile(delivery_profiles, params["delivery_profile_id"])
     selected_delivery = selected_delivery || List.first(delivery_profiles)
 
@@ -505,12 +432,13 @@ defmodule CadenceWeb.CommsTransportNewLive do
      selected_delivery}
   end
 
-  defp provider_form_state(params, _providers), do: {params, nil, [], nil, [], nil}
+  defp provider_form_state(params, _providers, _kind_entry),
+    do: {params, nil, [], nil, [], nil}
 
-  defp derive_configuration("provider_managed", _params, delivery_profile, _kind_entry) do
-    case TCPSocket.from_delivery_profile(delivery_profile) do
+  defp derive_configuration("provider_managed", _params, delivery_profile, kind_entry) do
+    case kind_entry.module.from_delivery_profile(delivery_profile) do
       {:ok, configuration} ->
-        {configuration, TCPSocket.display_summary(configuration), nil}
+        {configuration, kind_entry.module.display_summary(configuration), nil}
 
       {:error, message} ->
         {nil, nil, message}
@@ -528,7 +456,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
   end
 
   defp build_transport(%{"origin" => "direct"} = params, _providers, mission, display_name) do
-    with {:ok, entry} <- TransportKind.resolve_form_value(params["transport_kind"]),
+    with {:ok, entry} <- ExtensionCatalog.fetch_transport_kind(params["transport_kind"]),
          {:ok, configuration} <- entry.module.normalize_config(direct_config_params(params)) do
       {:ok,
        Transport.new(%{
@@ -549,22 +477,23 @@ defmodule CadenceWeb.CommsTransportNewLive do
          mission,
          display_name
        ) do
-    with %{} = provider <- select_provider(providers, params["mission_provider_id"]),
+    with {:ok, entry} <- ExtensionCatalog.fetch_transport_kind(params["transport_kind"]),
+         %{} = provider <- select_provider(providers, params["mission_provider_id"]),
          true <- provider_ready?(provider),
          service_profiles <- profile_items(provider, "service_profiles"),
          %{} = service_profile <- select_profile(service_profiles, params["service_profile_id"]),
-         delivery_profiles <- compatible_deliveries(provider, service_profile),
+         delivery_profiles <- compatible_deliveries(provider, service_profile, entry),
          %{} = delivery_profile <-
            select_profile(delivery_profiles, params["delivery_profile_id"]),
-         {:ok, configuration} <- TCPSocket.from_delivery_profile(delivery_profile) do
+         {:ok, configuration} <- entry.module.from_delivery_profile(delivery_profile) do
       {:ok,
        Transport.new(%{
          mission_id: mission.mission_id,
          display_name: display_name,
          origin: :provider_managed,
-         transport_kind: :tcp_socket,
-         adapter_key: :tcp_socket,
-         direction_capability: :inbound,
+         transport_kind: entry.kind,
+         adapter_key: entry.adapter_key,
+         direction_capability: configuration["direction_capability"],
          configuration: configuration,
          mission_provider_id: provider.provider_id,
          mission_provider_version: provider.version,
@@ -581,16 +510,16 @@ defmodule CadenceWeb.CommsTransportNewLive do
   defp build_transport(_params, _providers, _mission, _display_name),
     do: {:error, :invalid_transport_origin}
 
-  defp compatible_deliveries(nil, _service), do: []
-  defp compatible_deliveries(_provider, nil), do: []
+  defp compatible_deliveries(nil, _service, _kind_entry), do: []
+  defp compatible_deliveries(_provider, nil, _kind_entry), do: []
 
-  defp compatible_deliveries(provider, service) do
+  defp compatible_deliveries(provider, service, kind_entry) do
     provider
     |> profile_items("delivery_profiles")
     |> Enum.filter(fn delivery ->
       delivery["state"] == "ready" and delivery["direction"] == "downlink" and
         service["id"] in (delivery["supported_service_profile_refs"] || []) and
-        match?({:ok, _configuration}, TCPSocket.from_delivery_profile(delivery))
+        match?({:ok, _configuration}, kind_entry.module.from_delivery_profile(delivery))
     end)
   end
 
@@ -645,19 +574,22 @@ defmodule CadenceWeb.CommsTransportNewLive do
   end
 
   defp default_form_params do
-    %{
-      "display_name" => "",
-      "origin" => "direct",
-      "transport_kind" => "tcp_socket",
-      "tcp_mode" => "listen",
-      "direction_capability" => "inbound",
-      "host" => "0.0.0.0",
-      "port" => "",
-      "framing_mode" => "raw",
-      "frame_size" => "",
-      "reconnect_policy" => "always",
-      "tls_enabled" => "false"
-    }
+    {:ok, definition} = ExtensionCatalog.fetch_transport_kind("tcp_socket")
+
+    Map.merge(
+      %{
+        "display_name" => "",
+        "origin" => "direct",
+        "transport_kind" => definition.form_value
+      },
+      ConfigurationDefinition.default_params(definition.configuration)
+    )
+  end
+
+  defp transport_kind_options do
+    ExtensionCatalog.transport_kinds()
+    |> Enum.map(&{&1.label, &1.form_value})
+    |> Enum.sort()
   end
 
   defp provider_options(providers) do
@@ -734,18 +666,6 @@ defmodule CadenceWeb.CommsTransportNewLive do
       "display_name" => provider.display_name,
       "environment_ref" => provider.environment_ref
     }
-  end
-
-  defp host_label(form) do
-    if Form.input_value(form, :tcp_mode) == "connect",
-      do: "Remote Host",
-      else: "Bind Host / Interface"
-  end
-
-  defp port_label(form) do
-    if Form.input_value(form, :tcp_mode) == "connect",
-      do: "Remote Port",
-      else: "Listen Port"
   end
 
   defp required_text(value, message) do

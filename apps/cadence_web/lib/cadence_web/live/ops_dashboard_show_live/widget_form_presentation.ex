@@ -6,11 +6,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
     Placement,
     PlacementEditor,
     ScopeContext,
-    Sources.OperationalObservables,
-    WidgetFrameContract,
-    WidgetRegistry
+    WidgetFrameContract
   }
 
+  alias Cadence.ExtensionCatalog
   alias Phoenix.HTML.Form
 
   @point_widget_types [
@@ -22,16 +21,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
   ]
 
   @multi_point_widget_types ["status_matrix", "data_table"]
-
-  @type_options [
-    {"Value tile", "value_tile"},
-    {"Time series chart", "time_series"},
-    {"Status matrix", "status_matrix"},
-    {"Data table", "data_table"},
-    {"State timeline", "state_timeline"},
-    {"Event timeline", "event_timeline"},
-    {"Constellation health", "constellation_health"}
-  ]
 
   @mode_options [
     {"Follow dashboard context", "context"},
@@ -278,7 +267,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
 
   def form_value(form, field), do: Form.input_value(form, field)
 
-  def type_options, do: @type_options
+  def type_options do
+    Enum.map(ExtensionCatalog.widget_types(), &{&1.form_label, &1.form_value})
+  end
 
   def non_point_widget_help(form) do
     case form_value(form, :type) do
@@ -362,7 +353,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
   defp fetch_widget_supported_sources(nil), do: [:telemetry]
 
   defp fetch_widget_supported_sources(widget_type_id) do
-    case WidgetRegistry.fetch_type(widget_type_id, :latest) do
+    case ExtensionCatalog.fetch_widget_type(widget_type_id, :latest) do
       {:ok, widget_type} ->
         widget_type
         |> WidgetFrameContract.primary_supported_sources()
@@ -401,14 +392,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
 
   defp form_widget_type_id(form), do: widget_type_id_for_form_type(form_value(form, :type))
 
-  defp widget_type_id_for_form_type("value_tile"), do: "cadence.value_tile"
-  defp widget_type_id_for_form_type("time_series"), do: "cadence.time_series"
-  defp widget_type_id_for_form_type("status_matrix"), do: "cadence.status_matrix"
-  defp widget_type_id_for_form_type("data_table"), do: "cadence.data_table"
-  defp widget_type_id_for_form_type("state_timeline"), do: "cadence.state_timeline"
-  defp widget_type_id_for_form_type("event_timeline"), do: "cadence.event_timeline"
-  defp widget_type_id_for_form_type("constellation_health"), do: "cadence.constellation_health"
-  defp widget_type_id_for_form_type(_type), do: nil
+  defp widget_type_id_for_form_type(form_value) when is_binary(form_value) do
+    case Enum.find(ExtensionCatalog.widget_types(), &(&1.form_value == form_value)) do
+      nil -> nil
+      widget_type -> widget_type.widget_type_id
+    end
+  end
+
+  defp widget_type_id_for_form_type(_form_value), do: nil
 
   defp filter_operational_observables_for_widget(observables, widget_type) do
     case widget_type_id_for_form_type(widget_type) do
@@ -416,7 +407,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
         observables
 
       widget_type_id ->
-        case WidgetRegistry.fetch_type(widget_type_id, :latest) do
+        case ExtensionCatalog.fetch_widget_type(widget_type_id, :latest) do
           {:ok, widget_type} ->
             Enum.filter(
               observables,
@@ -483,7 +474,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
   defp metric_history_contract_for_observable(_observable_id), do: nil
 
   defp metric_history_contracts do
-    OperationalObservables.capabilities().metadata
+    {:ok, adapter_definition} =
+      ExtensionCatalog.fetch_source_adapter(:operational_observables)
+
+    adapter_definition.module.capabilities().metadata
     |> get_attr(:metric_history_contracts)
     |> List.wrap()
     |> Enum.map(&normalize_metric_history_contract/1)

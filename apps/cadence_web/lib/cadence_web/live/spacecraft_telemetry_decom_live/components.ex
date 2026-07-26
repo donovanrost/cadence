@@ -3,6 +3,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   use CadenceWeb, :html
 
+  alias Cadence.Applications.LifecycleContract
+  alias Cadence.Applications.PreflightReport
+  alias Cadence.Applications.SurfaceElements.{Diagnostic, Diagnostics}
   alias Cadence.Applications.TelemetryDecom
   alias CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable
 
@@ -112,6 +115,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   end
 
   def preview_section(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :diagnostics,
+        compiler_diagnostics(assigns.preview.compilation.compiler_result.diagnostics)
+      )
+
     ~H"""
     <div>
       <p class="hud-label mb-2">Preview</p>
@@ -127,34 +137,17 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
           value={length(@preview.compilation.compiler_result.diagnostics)}
         />
       </div>
-      <.diagnostics_list diagnostics={@preview.compilation.compiler_result.diagnostics} />
+      <div :if={@diagnostics} class="mt-3">
+        <.application_diagnostics definition={@diagnostics} />
+      </div>
     </div>
-    """
-  end
-
-  attr :diagnostics, :list, default: []
-
-  defp diagnostics_list(%{diagnostics: []} = assigns), do: ~H""
-
-  defp diagnostics_list(assigns) do
-    ~H"""
-    <ul class="space-y-1 text-sm mt-3" id="telemetry-decom-diagnostics">
-      <li :for={d <- Enum.take(@diagnostics, 20)} class="flex items-start gap-2">
-        <.status_dot status={diagnostic_dot(d.severity)} size={:sm} class="mt-1.5" />
-        <span>
-          <span class="font-mono text-xs text-base-content/60">{d.code}</span>
-          <span class="ml-1">{d.message}</span>
-        </span>
-      </li>
-      <li :if={length(@diagnostics) > 20} class="text-xs text-base-content/60 mt-2">
-        {length(@diagnostics) - 20} more omitted.
-      </li>
-    </ul>
     """
   end
 
   attr :config, :any, default: nil
   attr :pending_activation_request, :any, default: nil
+  attr :preflight, PreflightReport, required: true
+  attr :lifecycle_contract, LifecycleContract, required: true
 
   def apply_section(%{config: nil} = assigns) do
     ~H"""
@@ -179,22 +172,22 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         is waiting for approval from a different mission administrator.
       </.callout>
       <div class="flex justify-end gap-2">
-        <.button
+        <.application_lifecycle_action
           :if={@config.enabled}
-          variant={:ghost}
-          phx-click="disable"
+          action_id="disable"
+          contract={@lifecycle_contract}
+          event="disable"
           id="telemetry-decom-disable-button"
-          data-confirm="Disable Telemetry Decom for this spacecraft?"
-        >
-          Disable
-        </.button>
-        <.button
-          phx-click="enable"
+        />
+        <.application_lifecycle_action
+          action_id="request_activation"
+          contract={@lifecycle_contract}
+          event="enable"
           id="telemetry-decom-enable-button"
-          disabled={not is_nil(@pending_activation_request)}
-        >
-          Request mission changes
-        </.button>
+          disabled={
+            not is_nil(@pending_activation_request) or not PreflightReport.ready?(@preflight)
+          }
+        />
       </div>
     </div>
     """
@@ -277,9 +270,50 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   defp status_description(:not_configured),
     do: "Choose a catalog revision and packet claims, then apply mission changes."
 
-  defp diagnostic_dot(:error), do: :blocked
-  defp diagnostic_dot(:warning), do: :attention
-  defp diagnostic_dot(_), do: :info
+  defp compiler_diagnostics([]), do: nil
+
+  defp compiler_diagnostics(diagnostics) do
+    items =
+      diagnostics
+      |> Enum.sort_by(fn diagnostic ->
+        {severity_rank(diagnostic.severity), diagnostic.code, diagnostic.path}
+      end)
+      |> Enum.take(20)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {diagnostic, index} ->
+        %Diagnostic{
+          id: "compiler-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}",
+          code: diagnostic.code,
+          severity: diagnostic.severity,
+          title: diagnostic_title(diagnostic.code),
+          detail: diagnostic.message,
+          value: diagnostic_path(diagnostic.path)
+        }
+      end)
+
+    %Diagnostics{
+      id: "telemetry-decom-diagnostics",
+      title: "Compiler findings",
+      description: "Exceptional conditions from the selected packet compilation preview.",
+      items: items,
+      total_count: length(diagnostics)
+    }
+  end
+
+  defp severity_rank(:error), do: 0
+  defp severity_rank(:warning), do: 1
+  defp severity_rank(:info), do: 2
+
+  defp diagnostic_title(code) do
+    code
+    |> String.split(".")
+    |> List.last()
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp diagnostic_path([]), do: nil
+  defp diagnostic_path(path), do: Enum.join(path, " / ")
 
   defp format_relative(%DateTime{} = dt) do
     diff = DateTime.diff(DateTime.utc_now(), dt, :second)

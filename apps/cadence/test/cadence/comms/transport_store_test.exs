@@ -4,7 +4,9 @@ defmodule Cadence.Comms.TransportStoreTest do
   alias Cadence.Comms.TransportStore
 
   alias Cadence.Comms.{Transport, TransportKind}
+  alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Comms.TransportKinds.TCPSocket
+  alias Cadence.Extensions.Presentation.ConfigurationDefinition
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.Management.Transports
@@ -55,10 +57,25 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert [{"TCP socket", "tcp_socket"}] = TransportKind.form_options()
 
       assert {:ok, entry} = TransportKind.resolve_form_value("tcp_socket")
+      assert entry.version == 1
       assert entry.kind == :tcp_socket
       assert entry.adapter_key == :tcp_socket
       assert entry.module == TCPSocket
-      assert entry.form.configurable_sections == [:endpoint, :framing, :reliability]
+      assert %ConfigurationDefinition{} = entry.configuration
+
+      assert Enum.map(entry.configuration.sections, & &1.id) == [
+               "transport-capability-section",
+               "transport-framing-section",
+               "transport-reliability-section"
+             ]
+
+      assert ConfigurationDefinition.default_params(entry.configuration)["tcp_mode"] ==
+               "listen"
+
+      assert :ok = Definition.validate(entry)
+
+      assert {:error, :unsupported_transport_kind_version} =
+               TransportKind.resolve_form_value("tcp_socket", 2)
 
       assert {:error, :unsupported_transport_kind} =
                TransportKind.resolve_form_value("invented")

@@ -20,6 +20,7 @@ defmodule Cadence.Catalog.ImportRunRow do
     field(:artifact_id, :string)
     field(:catalog_family, :string)
     field(:importer_key, :string)
+    field(:importer_version, :integer)
     field(:status, :string)
     field(:imported_definition_count, :integer)
     field(:diagnostics, :map)
@@ -39,6 +40,7 @@ defmodule Cadence.Catalog.ImportRunRow do
     :artifact_id,
     :catalog_family,
     :importer_key,
+    :importer_version,
     :status,
     :imported_definition_count,
     :started_at
@@ -55,6 +57,7 @@ defmodule Cadence.Catalog.ImportRunRow do
     |> cast(domain_attrs(run), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> validate_number(:importer_version, greater_than: 0)
   end
 
   @spec to_domain(struct()) :: ImportRun.t()
@@ -68,6 +71,7 @@ defmodule Cadence.Catalog.ImportRunRow do
       artifact_id: row.artifact_id,
       catalog_family: catalog_family(row.catalog_family),
       importer_key: row.importer_key,
+      importer_version: row.importer_version,
       status: status(row.status),
       imported_definition_count: row.imported_definition_count,
       diagnostics:
@@ -93,6 +97,7 @@ defmodule Cadence.Catalog.ImportRunRow do
       artifact_id: run.artifact_id,
       catalog_family: Atom.to_string(run.catalog_family),
       importer_key: run.importer_key,
+      importer_version: run.importer_version,
       status: Atom.to_string(run.status),
       imported_definition_count: run.imported_definition_count,
       diagnostics: JsonDocument.wrap_items(run.diagnostics),
@@ -115,6 +120,7 @@ defmodule Cadence.Catalog.ImportRunRow do
       :artifact_id,
       :catalog_family,
       :importer_key,
+      :importer_version,
       :status,
       :imported_definition_count,
       :diagnostics,

@@ -8,6 +8,7 @@ defmodule Cadence.Capabilities.Definitions.DefinitionBoundTelemetry do
   def descriptor do
     Descriptor.new(%{
       family_key: :definition_bound_telemetry,
+      version: 1,
       kind: :semantic_handler,
       supported_scopes: [:mission, :source_endpoint],
       input_stages: [:space_packet],

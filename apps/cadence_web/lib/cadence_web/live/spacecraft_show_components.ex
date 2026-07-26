@@ -94,40 +94,53 @@ defmodule CadenceWeb.SpacecraftShowComponents do
   end
 
   attr :type_binding, :any, required: true
-  attr :telemetry_decom_status, :atom, required: true
+  attr :applications, :any, required: true
+  attr :applications_empty?, :boolean, required: true
   attr :mission_id, :string, required: true
   attr :spacecraft_id, :string, required: true
 
   def applications_card(assigns) do
     ~H"""
-    <.card :if={@type_binding} id="spacecraft-applications" title="Applications">
+    <.card
+      :if={@type_binding || not @applications_empty?}
+      id="spacecraft-applications"
+      title="Applications"
+    >
       <div class="mt-3 space-y-3">
-        <p class="text-sm text-base-content/70">
+        <p :if={@type_binding} class="text-sm text-base-content/70">
           Platform applications enabled by this spacecraft's profile. Per-application configuration is set per spacecraft.
         </p>
-        <%= if map_size(@type_binding.pinned.applications) == 0 do %>
+        <p :if={is_nil(@type_binding)} class="text-sm text-base-content/70">
+          Retained spacecraft installations. Select a profile to restore desired application declarations.
+        </p>
+        <%= if @applications_empty? do %>
           <.empty_state compact title="No applications enabled by this profile." />
         <% else %>
-          <div class="grid gap-3 md:grid-cols-2">
+          <div
+            id="spacecraft-profile-applications"
+            class="grid gap-3 md:grid-cols-2"
+            phx-update="stream"
+          >
             <div
-              :for={{app_key, _config} <- Enum.sort(@type_binding.pinned.applications)}
+              :for={{dom_id, application} <- @applications}
+              id={dom_id}
               class="rounded border border-base-300 bg-base-100/40 p-4"
             >
               <div class="flex items-start justify-between gap-3">
-                <p class="font-medium">{humanize_application_key(app_key)}</p>
+                <p class="font-medium">{application.display_name}</p>
                 <.link
-                  :if={app_key == "telemetry_decom"}
+                  :if={application.manageable?}
                   navigate={
-                    ~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/applications/#{app_key}"
+                    ~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/applications/#{application.application_key}"
                   }
                   class="text-xs text-primary hover:underline"
                 >
                   Manage
                 </.link>
               </div>
-              <p class="mt-1 text-xs text-base-content/60">
-                {application_status_hint(app_key, @telemetry_decom_status)}
-              </p>
+              <div class="mt-2">
+                <.status_badge status={application.status.tone} label={application.status.label} />
+              </div>
             </div>
           </div>
         <% end %>
@@ -141,22 +154,4 @@ defmodule CadenceWeb.SpacecraftShowComponents do
     </.card>
     """
   end
-
-  defp humanize_application_key(key) when is_atom(key),
-    do: humanize_application_key(Atom.to_string(key))
-
-  defp humanize_application_key(key) when is_binary(key) do
-    key
-    |> String.split("_")
-    |> Enum.map_join(" ", &String.capitalize/1)
-  end
-
-  defp application_status_hint("telemetry_decom", status), do: telemetry_decom_status_hint(status)
-  defp application_status_hint(_other, _status), do: "Coming soon."
-
-  defp telemetry_decom_status_hint(:applied), do: "Configured and live."
-  defp telemetry_decom_status_hint(:configured), do: "Configured. Not yet applied."
-  defp telemetry_decom_status_hint(:outdated), do: "Configured but out of date."
-  defp telemetry_decom_status_hint(:disabled), do: "Disabled for this spacecraft."
-  defp telemetry_decom_status_hint(:not_configured), do: "Not configured yet."
 end

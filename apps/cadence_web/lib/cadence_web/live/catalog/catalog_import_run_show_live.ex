@@ -238,7 +238,9 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
       <div class="text-sm space-y-1">
         <div class="flex items-center gap-2">
           <span class="text-base-content/60">Importer</span>
-          <span class="font-mono">{@run.importer_key}</span>
+          <span id="catalog-importer-version" class="font-mono">
+            {@run.importer_key} v{@run.importer_version}
+          </span>
         </div>
         <div class="flex items-center gap-2">
           <span class="text-base-content/60">Started</span>

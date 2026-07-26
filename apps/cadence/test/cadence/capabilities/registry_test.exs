@@ -14,6 +14,7 @@ defmodule Cadence.Capabilities.RegistryTest do
              Registry.fetch_descriptor(registry, :definition_bound_telemetry)
 
     assert descriptor.family_key == :definition_bound_telemetry
+    assert descriptor.version == 1
     assert descriptor.kind == :semantic_handler
     assert descriptor.supported_scopes == [:mission, :source_endpoint]
     assert descriptor.input_stages == [:space_packet]

@@ -4,7 +4,9 @@ defmodule CadenceWeb.SpacecraftShowLive do
 
   import CadenceWeb.SpacecraftShowComponents, only: [type_binding_card: 1, applications_card: 1]
 
-  alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.HostContext
+  alias CadenceWeb.ApplicationInventory
+  alias CadenceWeb.SpacecraftApplicationSummary
   alias CadenceWeb.SpacecraftCommsReadiness
 
   @impl true
@@ -16,34 +18,36 @@ defmodule CadenceWeb.SpacecraftShowLive do
     runtime_identity =
       SpacecraftCommsReadiness.runtime_identity(organization_id, mission_id, spacecraft)
 
-    config =
-      case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft.spacecraft_id) do
-        {:ok, config} -> config
-        {:error, :not_configured} -> nil
-      end
-
-    active =
-      case Cadence.Activations.fetch_active_activation(mission_id) do
-        {:ok, activation} ->
-          %{
-            binding_set_id: activation.binding_set_id,
-            binding_set_version: activation.binding_set_version
-          }
-
-        {:error, _} ->
-          nil
-      end
-
     type_binding = load_type_binding(organization_id, mission_id, spacecraft)
+    host_context = HostContext.spacecraft(mission_id, spacecraft.spacecraft_id)
+    applications = load_applications(socket.assigns.current_scope, type_binding, host_context)
+    application_summary = SpacecraftApplicationSummary.build(type_binding, applications)
 
     {:ok,
      socket
      |> assign(:page_title, spacecraft.display_name)
      |> assign(:nav_item, :spacecraft)
-     |> assign(:telemetry_decom_config, config)
-     |> assign(:telemetry_decom_status, TelemetryDecom.status(config, active))
+     |> assign(:applications_empty?, applications == [])
+     |> assign(:application_summary, application_summary)
      |> assign(:runtime_identity, runtime_identity)
-     |> assign(:type_binding, type_binding)}
+     |> assign(:type_binding, type_binding)
+     |> stream_configure(:profile_applications, dom_id: &application_dom_id/1)
+     |> stream(:profile_applications, applications)}
+  end
+
+  defp load_applications(scope, nil, host_context) do
+    load_declared_applications(scope, host_context, %{})
+  end
+
+  defp load_applications(scope, %{pinned: %{applications: declarations}}, host_context) do
+    load_declared_applications(scope, host_context, declarations)
+  end
+
+  defp load_declared_applications(scope, host_context, declarations) do
+    case ApplicationInventory.declared(scope, host_context, declarations) do
+      {:ok, applications} -> applications
+      {:error, _reason} -> []
+    end
   end
 
   defp load_type_binding(_organization_id, _mission_id, %{spacecraft_type_id: nil}), do: nil
@@ -83,7 +87,8 @@ defmodule CadenceWeb.SpacecraftShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <div id="spacecraft-show-page" class="space-y-6">
       <.page_header
         title={@current_spacecraft.display_name}
         breadcrumbs={[
@@ -110,7 +115,8 @@ defmodule CadenceWeb.SpacecraftShowLive do
 
       <.applications_card
         type_binding={@type_binding}
-        telemetry_decom_status={@telemetry_decom_status}
+        applications={@streams.profile_applications}
+        applications_empty?={@applications_empty?}
         mission_id={@current_mission.mission_id}
         spacecraft_id={@current_spacecraft.spacecraft_id}
       />
@@ -128,22 +134,22 @@ defmodule CadenceWeb.SpacecraftShowLive do
           action_label="Edit Identity"
         />
         <.workflow_card
-          id="spacecraft-overview-telemetry"
+          id="spacecraft-overview-applications"
           title="Applications"
-          value={label(@telemetry_decom_status)}
-          description={description(@telemetry_decom_status)}
-          status={telemetry_panel_status(@telemetry_decom_status)}
+          value={@application_summary.status.label}
+          description={@application_summary.description}
+          status={@application_summary.status.tone}
           navigate={
             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"
           }
-          action_label={configure_label(@telemetry_decom_status)}
+          action_label={@application_summary.action_label}
         />
         <.workflow_card
           id="spacecraft-overview-readiness"
           title="Readiness"
-          value={overall_readiness_label(@current_spacecraft, @telemetry_decom_status)}
-          description="Identity and interpretation status at a glance."
-          status={overall_status(@current_spacecraft, @telemetry_decom_status)}
+          value={overall_readiness_label(@current_spacecraft, @application_summary)}
+          description="Identity and application status at a glance."
+          status={overall_status(@current_spacecraft, @application_summary)}
           navigate={
             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
           }
@@ -156,6 +162,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
         current_mission={@current_mission}
       />
     </div>
+    </Layouts.app>
     """
   end
 
@@ -234,51 +241,26 @@ defmodule CadenceWeb.SpacecraftShowLive do
   defp identity_summary(_spacecraft, nil), do: "Runtime identity missing"
   defp identity_summary(spacecraft, _runtime_identity), do: "SCID #{spacecraft.scid} configured"
 
-  defp telemetry_panel_status(:applied), do: :ready
-  defp telemetry_panel_status(:configured), do: :attention
-  defp telemetry_panel_status(:outdated), do: :attention
-  defp telemetry_panel_status(:disabled), do: :blocked
-  defp telemetry_panel_status(:not_configured), do: :blocked
-
-  defp overall_status(spacecraft, telemetry_status) do
-    if SpacecraftCommsReadiness.identity_ready?(spacecraft) and telemetry_status == :applied do
+  defp overall_status(spacecraft, application_summary) do
+    if SpacecraftCommsReadiness.identity_ready?(spacecraft) and application_summary.ready? do
       :ready
     else
       :attention
     end
   end
 
-  defp overall_readiness_label(spacecraft, telemetry_status) do
-    if overall_status(spacecraft, telemetry_status) == :ready do
+  defp overall_readiness_label(spacecraft, application_summary) do
+    if overall_status(spacecraft, application_summary) == :ready do
       "Ready"
     else
       "Needs review"
     end
   end
 
-  defp label(:applied), do: "Applied"
-  defp label(:configured), do: "Configured — not yet applied"
-  defp label(:outdated), do: "Out of date"
-  defp label(:disabled), do: "Disabled"
-  defp label(:not_configured), do: "Not configured"
-
-  defp description(:applied),
-    do: "The saved configuration is live on the mission."
-
-  defp description(:configured),
-    do: "Configuration is saved. Apply it to go live."
-
-  defp description(:outdated),
-    do: "Configuration has changed since it was last applied. Re-apply to publish the latest."
-
-  defp description(:disabled),
-    do: "Telemetry interpretation is disabled for this spacecraft."
-
-  defp description(:not_configured),
-    do: "Configure application packet claims for this spacecraft."
-
-  defp configure_label(:not_configured), do: "Configure"
-  defp configure_label(_), do: "Manage"
+  defp application_dom_id(application) do
+    safe_key = String.replace(application.application_key, ~r/[^A-Za-z0-9_-]+/, "-")
+    "spacecraft-profile-application-#{safe_key}"
+  end
 
   defp format_scid(nil), do: "Not set"
   defp format_scid(scid), do: Integer.to_string(scid)

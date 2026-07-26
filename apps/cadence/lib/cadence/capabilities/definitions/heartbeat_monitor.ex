@@ -7,6 +7,7 @@ defmodule Cadence.Capabilities.Definitions.HeartbeatMonitor do
   def descriptor do
     Descriptor.new(%{
       family_key: :heartbeat_monitor,
+      version: 1,
       kind: :transport_extension,
       supported_scopes: [:path, :transport],
       input_stages: [],

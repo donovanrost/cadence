@@ -7,6 +7,7 @@ defmodule Cadence.Capabilities.Definitions.PacketCounter do
   def descriptor do
     Descriptor.new(%{
       family_key: :packet_counter,
+      version: 1,
       kind: :managed_application,
       supported_scopes: [:mission, :source_endpoint],
       input_stages: [:space_packet],

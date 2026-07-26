@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
   """
 
   alias Cadence.Dashboards.DataSource
+  alias Cadence.ExtensionCatalog
 
   @spec defaults() :: map()
   def defaults do
@@ -52,16 +53,18 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
 
   @spec data_source(map()) :: DataSource.t()
   def data_source(attrs) when is_map(attrs) do
+    {:ok, adapter_definition} = ExtensionCatalog.fetch_source_adapter(attrs.logical_source)
+
     %DataSource{
       data_source_id: attrs.data_source_id,
       owner: attrs.owner,
       kind: attrs.kind,
-      adapter: source_adapter(attrs.logical_source),
+      adapter: adapter_definition.module,
       organization_id: attrs.organization_id,
       mission_id: attrs.mission_id,
       isolation_level: attrs.isolation_level,
       credentials_ref: attrs.credentials_ref,
-      capabilities: source_capabilities(attrs.logical_source),
+      capabilities: adapter_definition.default_data_source_capabilities,
       metadata:
         %{
           storage: attrs.storage,
@@ -99,12 +102,9 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
 
   @spec logical_source_options() :: [{binary(), binary()}]
   def logical_source_options do
-    [
-      {"Telemetry", "telemetry"},
-      {"Limits", "limits"},
-      {"Operational observables", "operational_observables"},
-      {"Events", "events"}
-    ]
+    Enum.map(ExtensionCatalog.source_adapters(), fn definition ->
+      {definition.label, Atom.to_string(definition.logical_source)}
+    end)
   end
 
   @spec source_kind_options() :: [{binary(), binary()}]
@@ -173,10 +173,16 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
 
   defp optional_text(_value), do: nil
 
-  defp parse_logical_source("telemetry"), do: {:ok, :telemetry}
-  defp parse_logical_source("limits"), do: {:ok, :limits}
-  defp parse_logical_source("operational_observables"), do: {:ok, :operational_observables}
-  defp parse_logical_source("events"), do: {:ok, :events}
+  defp parse_logical_source(value) when is_binary(value) do
+    case Enum.find(
+           ExtensionCatalog.source_adapters(),
+           &(Atom.to_string(&1.logical_source) == value)
+         ) do
+      nil -> {:error, "Choose a logical source."}
+      definition -> {:ok, definition.logical_source}
+    end
+  end
+
   defp parse_logical_source(_value), do: {:error, "Choose a logical source."}
 
   defp parse_source_kind("managed_tsdb"), do: {:ok, :managed_tsdb}
@@ -212,45 +218,6 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
 
   defp credential_kind(:byo_tsdb), do: :byo_tsdb_connection
   defp credential_kind(:managed_tsdb), do: :managed_tsdb_connection
-
-  defp source_adapter(:telemetry), do: Cadence.Dashboards.Sources.Telemetry
-  defp source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
-
-  defp source_adapter(:operational_observables),
-    do: Cadence.Dashboards.Sources.OperationalObservables
-
-  defp source_adapter(:events), do: Cadence.Dashboards.Sources.Events
-
-  defp source_capabilities(:telemetry) do
-    %{
-      latest?: true,
-      range_scan?: true,
-      bounded_history?: true,
-      watermarks?: true,
-      native_decimation?: false
-    }
-  end
-
-  defp source_capabilities(:limits) do
-    %{latest_state?: true, event_history?: true, definition_intervals?: true, watermarks?: true}
-  end
-
-  defp source_capabilities(:operational_observables) do
-    %{constellation_health?: true, watermarks?: false}
-  end
-
-  defp source_capabilities(:events) do
-    %{
-      contact_intervals?: true,
-      mission_timeline?: true,
-      source_health_transitions?: true,
-      source_watermark_events?: true,
-      source_capability_postures?: true,
-      telemetry_backfill_lifecycle?: true,
-      telemetry_revision_decisions?: true,
-      watermarks?: false
-    }
-  end
 
   defp compact(params) do
     params

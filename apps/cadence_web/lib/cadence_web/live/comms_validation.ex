@@ -12,14 +12,15 @@ defmodule CadenceWeb.CommsValidation do
 
   import CadenceWeb.CommsComponents, only: [display_name: 2, human_atom: 1]
 
+  alias Cadence.Applications.StatusPlacement
+  alias Cadence.Auth.Scope
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
+  alias Cadence.Reads.Applications.InventoryItem
+  alias CadenceWeb.{ApplicationInventory, SpacecraftCommsReadiness}
 
-  alias Cadence.Applications.TelemetryDecom
-  alias CadenceWeb.SpacecraftCommsReadiness
-
-  def findings_for_mission(organization_id, mission_id) do
+  def findings_for_mission(%Scope{organization_id: organization_id} = current_scope, mission_id) do
     findings_for_resources(
-      organization_id,
+      current_scope,
       mission_id,
       %{
         spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
@@ -35,7 +36,7 @@ defmodule CadenceWeb.CommsValidation do
   end
 
   def findings_for_resources(
-        organization_id,
+        %Scope{organization_id: organization_id} = current_scope,
         mission_id,
         spacecraft,
         source_endpoints,
@@ -44,7 +45,7 @@ defmodule CadenceWeb.CommsValidation do
         transport_profiles
       ) do
     findings_for_resources(
-      organization_id,
+      current_scope,
       mission_id,
       %{
         spacecraft: spacecraft,
@@ -58,7 +59,12 @@ defmodule CadenceWeb.CommsValidation do
     )
   end
 
-  def findings_for_resources(organization_id, mission_id, resources) when is_map(resources) do
+  def findings_for_resources(
+        %Scope{organization_id: organization_id} = current_scope,
+        mission_id,
+        resources
+      )
+      when is_map(resources) do
     spacecraft = Map.fetch!(resources, :spacecraft)
     source_endpoints = Map.fetch!(resources, :source_endpoints)
     path_templates = Map.fetch!(resources, :path_templates)
@@ -87,12 +93,6 @@ defmodule CadenceWeb.CommsValidation do
         mission_id
       )
 
-    telemetry_configs_by_spacecraft =
-      organization_id
-      |> TelemetryDecom.list_configs(mission_id)
-      |> Map.new(&{&1.spacecraft_id, &1})
-
-    active_telemetry = active_telemetry_activation(organization_id, mission_id)
     link_assignments = Cadence.Contacts.list_link_assignments(organization_id, mission_id)
 
     findings(
@@ -125,8 +125,7 @@ defmodule CadenceWeb.CommsValidation do
     |> Kernel.++(
       spacecraft_setup_findings(
         spacecraft,
-        telemetry_configs_by_spacecraft,
-        active_telemetry,
+        current_scope,
         mission_id
       )
     )
@@ -585,15 +584,11 @@ defmodule CadenceWeb.CommsValidation do
   end
 
   defp spacecraft_setup_findings(
-         spacecraft,
-         telemetry_configs_by_spacecraft,
-         active_telemetry,
+         spacecraft_list,
+         current_scope,
          mission_id
        ) do
-    Enum.flat_map(spacecraft, fn spacecraft ->
-      telemetry_config = Map.get(telemetry_configs_by_spacecraft, spacecraft.spacecraft_id)
-      telemetry_status = TelemetryDecom.status(telemetry_config, active_telemetry)
-
+    Enum.flat_map(spacecraft_list, fn spacecraft ->
       []
       |> add_if(is_nil(spacecraft.scid), %{
         owner: :spacecraft_setup,
@@ -612,69 +607,117 @@ defmodule CadenceWeb.CommsValidation do
         action_label: "Select profile",
         action_navigate: spacecraft_identity_path(mission_id, spacecraft)
       })
-      |> Kernel.++(telemetry_interpretation_findings(spacecraft, telemetry_status, mission_id))
+      |> Kernel.++(application_status_findings(current_scope, spacecraft, mission_id))
     end)
   end
 
-  defp telemetry_interpretation_findings(_spacecraft, :applied, _mission_id), do: []
+  defp application_status_findings(%Scope{} = current_scope, spacecraft, mission_id) do
+    case ApplicationInventory.spacecraft(current_scope, spacecraft) do
+      {:ok, applications} ->
+        Enum.flat_map(applications, fn application ->
+          status_placement_findings(application, spacecraft, mission_id)
+        end)
 
-  defp telemetry_interpretation_findings(spacecraft, telemetry_status, mission_id) do
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp status_placement_findings(
+         %InventoryItem{definition: nil},
+         _spacecraft,
+         _mission_id
+       ),
+       do: []
+
+  defp status_placement_findings(%InventoryItem{} = application, spacecraft, mission_id) do
+    if status_contributor?(application) do
+      Enum.flat_map(application.definition.status_placements, fn
+        %StatusPlacement{placement: :comms_validation, scope: :spacecraft} = placement ->
+          status_finding(application, placement, spacecraft, mission_id)
+
+        %StatusPlacement{} ->
+          []
+      end)
+    else
+      []
+    end
+  end
+
+  defp status_contributor?(%InventoryItem{} = application) do
+    application.declared? or application.lifecycle_state in [:installed, :disabled]
+  end
+
+  defp status_finding(
+         %InventoryItem{status: %{tone: :ready}},
+         %StatusPlacement{},
+         _spacecraft,
+         _mission_id
+       ),
+       do: []
+
+  defp status_finding(
+         %InventoryItem{status: %{state: state}},
+         %StatusPlacement{required?: false},
+         _spacecraft,
+         _mission_id
+       )
+       when state in [:not_installed, :uninstalled],
+       do: []
+
+  defp status_finding(
+         %InventoryItem{} = application,
+         %StatusPlacement{} = placement,
+         spacecraft,
+         mission_id
+       ) do
     [
       %{
+        id:
+          "comms-validation-application-#{safe_dom_id(spacecraft.spacecraft_id)}-#{safe_dom_id(application.application_key)}",
         owner: :spacecraft_setup,
-        severity: telemetry_finding_severity(telemetry_status),
+        application_key: application.application_key,
+        severity: application_finding_severity(application, placement),
         title:
-          "#{spacecraft.display_name} telemetry application #{telemetry_status_label(telemetry_status)}",
-        body: telemetry_finding_body(telemetry_status),
-        action_label: telemetry_action_label(telemetry_status),
-        action_navigate: spacecraft_telemetry_path(mission_id, spacecraft)
+          "#{spacecraft.display_name} — #{application.display_name}: #{application.status.label}",
+        body:
+          "#{application.display_name} reports #{String.downcase(application.status.label)} for this spacecraft. Review the application before treating Comms setup as ready.",
+        action_label: application_action_label(application),
+        action_navigate: application_action_path(application, mission_id, spacecraft)
       }
     ]
   end
 
-  defp telemetry_finding_severity(:not_configured), do: :blocked
-  defp telemetry_finding_severity(:disabled), do: :blocked
-  defp telemetry_finding_severity(_status), do: :attention
+  defp application_finding_severity(
+         %InventoryItem{status: %{tone: :info}},
+         %StatusPlacement{required?: true}
+       ),
+       do: :blocked
 
-  defp telemetry_status_label(:not_configured), do: "is not configured"
-  defp telemetry_status_label(:configured), do: "is not applied"
-  defp telemetry_status_label(:outdated), do: "is out of date"
-  defp telemetry_status_label(:disabled), do: "is disabled"
+  defp application_finding_severity(%InventoryItem{status: %{tone: :blocked}}, _placement),
+    do: :blocked
 
-  defp telemetry_finding_body(:not_configured),
-    do: "Configure catalog binding and APID ownership for this spacecraft application."
+  defp application_finding_severity(%InventoryItem{}, %StatusPlacement{}), do: :attention
 
-  defp telemetry_finding_body(:configured),
-    do: "Telemetry application setup is saved but has not been applied."
+  defp application_action_label(%InventoryItem{manageable?: true}), do: "Review application"
+  defp application_action_label(%InventoryItem{}), do: "Review applications"
 
-  defp telemetry_finding_body(:outdated),
-    do: "Telemetry application setup has changed since it was last applied."
-
-  defp telemetry_finding_body(:disabled),
-    do: "Telemetry interpretation is disabled for this spacecraft."
-
-  defp telemetry_action_label(:not_configured), do: "Configure telemetry"
-  defp telemetry_action_label(_status), do: "Review telemetry"
-
-  defp active_telemetry_activation(organization_id, mission_id) do
-    case Cadence.Activations.fetch_active_activation(organization_id, mission_id) do
-      {:ok, activation} ->
-        %{
-          binding_set_id: activation.binding_set_id,
-          binding_set_version: activation.binding_set_version
-        }
-
-      {:error, _reason} ->
-        nil
-    end
+  defp application_action_path(
+         %InventoryItem{manageable?: true, application_key: application_key},
+         mission_id,
+         spacecraft
+       ) do
+    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/#{application_key}"
   end
+
+  defp application_action_path(%InventoryItem{}, mission_id, spacecraft) do
+    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+  end
+
+  defp safe_dom_id(value), do: String.replace(value, ~r/[^A-Za-z0-9_-]+/, "-")
 
   defp spacecraft_identity_path(mission_id, spacecraft) do
     ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
-  end
-
-  defp spacecraft_telemetry_path(mission_id, spacecraft) do
-    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
   end
 
   defp spacecraft_routing_path(mission_id, spacecraft) do

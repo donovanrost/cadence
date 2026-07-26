@@ -2,27 +2,34 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.HostContext
+  alias CadenceWeb.ApplicationInventory
+  alias CadenceWeb.SpacecraftApplicationSummary
 
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission, current_spacecraft: spacecraft} =
       socket.assigns
 
-    telemetry_status = telemetry_status(scope.organization_id, mission.mission_id, spacecraft)
     type_binding = load_type_binding(scope.organization_id, mission.mission_id, spacecraft)
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+    applications = load_applications(scope, type_binding, host_context)
+    application_summary = SpacecraftApplicationSummary.build(type_binding, applications)
 
     {:ok,
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Readiness")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:telemetry_status, telemetry_status)
-     |> assign(:type_binding, type_binding)}
+     |> assign(:application_summary, application_summary)
+     |> assign(:type_binding, type_binding)
+     |> stream_configure(:readiness_applications, dom_id: &application_dom_id/1)
+     |> stream(:readiness_applications, applications)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div id="spacecraft-readiness-page" class="space-y-6">
       <.page_header
         title="Readiness"
@@ -38,7 +45,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
         <:title_suffix>&middot; {@current_spacecraft.display_name}</:title_suffix>
         <:actions>
           <.status_badge status={
-            overall_status(@current_spacecraft, @telemetry_status, @type_binding)
+            overall_status(@current_spacecraft, @application_summary, @type_binding)
           } />
         </:actions>
       </.page_header>
@@ -75,15 +82,25 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
         <.readiness_panel
           id="spacecraft-readiness-applications"
           title="Applications"
-          status={telemetry_panel_status(@telemetry_status)}
-          status_label={telemetry_status_label(@telemetry_status)}
-          description={telemetry_description(@telemetry_status)}
-          action_label={telemetry_action_label(@telemetry_status)}
+          status={@application_summary.status.tone}
+          status_label={@application_summary.status.label}
+          description={@application_summary.description}
+          action_label={@application_summary.action_label}
           action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications/telemetry_decom"
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"
           }
         >
-          <:detail label="Telemetry Decom" value={telemetry_status_label(@telemetry_status)} />
+          <div id="spacecraft-readiness-application-list" phx-update="stream">
+            <p
+              id="spacecraft-readiness-applications-empty"
+              class="hidden only:block text-sm text-base-content/60"
+            >
+              No profile applications declared.
+            </p>
+            <div :for={{dom_id, application} <- @streams.readiness_applications} id={dom_id}>
+              <.detail_row label={application.display_name} value={application.status.label} />
+            </div>
+          </div>
         </.readiness_panel>
 
         <.readiness_panel
@@ -101,6 +118,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
         </.readiness_panel>
       </div>
     </div>
+    </Layouts.app>
     """
   end
 
@@ -117,6 +135,8 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     attr :value, :string, required: true
   end
 
+  slot :inner_block
+
   defp readiness_panel(assigns) do
     ~H"""
     <.card id={@id}>
@@ -129,6 +149,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
 
       <div class="mt-5 space-y-1">
         <.detail_row :for={detail <- @detail} label={detail.label} value={detail.value} />
+        {render_slot(@inner_block)}
       </div>
 
       <.button :if={@action_navigate} navigate={@action_navigate} class="mt-5">
@@ -138,26 +159,19 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     """
   end
 
-  defp telemetry_status(organization_id, mission_id, spacecraft) do
-    config =
-      case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft.spacecraft_id) do
-        {:ok, config} -> config
-        {:error, :not_configured} -> nil
-      end
+  defp load_applications(scope, nil, host_context) do
+    load_declared_applications(scope, host_context, %{})
+  end
 
-    active =
-      case Cadence.Activations.fetch_active_activation(mission_id) do
-        {:ok, activation} ->
-          %{
-            binding_set_id: activation.binding_set_id,
-            binding_set_version: activation.binding_set_version
-          }
+  defp load_applications(scope, %{pinned: %{applications: declarations}}, host_context) do
+    load_declared_applications(scope, host_context, declarations)
+  end
 
-        {:error, _reason} ->
-          nil
-      end
-
-    TelemetryDecom.status(config, active)
+  defp load_declared_applications(scope, host_context, declarations) do
+    case ApplicationInventory.declared(scope, host_context, declarations) do
+      {:ok, applications} -> applications
+      {:error, _reason} -> []
+    end
   end
 
   defp load_type_binding(_organization_id, _mission_id, %{spacecraft_type_id: nil}), do: nil
@@ -194,9 +208,9 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     end
   end
 
-  defp overall_status(spacecraft, telemetry_status, type_binding) do
+  defp overall_status(spacecraft, application_summary, type_binding) do
     if identity_status(spacecraft) == :ready and profile_status(type_binding) == :ready and
-         telemetry_panel_status(telemetry_status) in [:ready, :attention] do
+         application_summary.ready? do
       :ready
     else
       :attention
@@ -241,35 +255,10 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     "#{profile.display_name} v#{profile.version}"
   end
 
-  defp telemetry_panel_status(:applied), do: :ready
-  defp telemetry_panel_status(:configured), do: :attention
-  defp telemetry_panel_status(:outdated), do: :attention
-  defp telemetry_panel_status(:disabled), do: :blocked
-  defp telemetry_panel_status(:not_configured), do: :blocked
-
-  defp telemetry_status_label(:applied), do: "Applied"
-  defp telemetry_status_label(:configured), do: "Configured"
-  defp telemetry_status_label(:outdated), do: "Out of date"
-  defp telemetry_status_label(:disabled), do: "Disabled"
-  defp telemetry_status_label(:not_configured), do: "Not configured"
-
-  defp telemetry_description(:applied),
-    do: "Telemetry interpretation is configured for this spacecraft."
-
-  defp telemetry_description(:configured),
-    do: "Telemetry interpretation is saved and ready for mission application."
-
-  defp telemetry_description(:outdated),
-    do: "Telemetry interpretation has changed since it was last applied."
-
-  defp telemetry_description(:disabled),
-    do: "Telemetry interpretation is disabled for this spacecraft."
-
-  defp telemetry_description(:not_configured),
-    do: "Configure catalog binding and APID ownership for this spacecraft application."
-
-  defp telemetry_action_label(:not_configured), do: "Configure Telemetry"
-  defp telemetry_action_label(_status), do: "Manage Telemetry"
+  defp application_dom_id(application) do
+    safe_key = String.replace(application.application_key, ~r/[^A-Za-z0-9_-]+/, "-")
+    "spacecraft-readiness-application-#{safe_key}"
+  end
 
   defp format_scid(nil), do: "Not set"
   defp format_scid(scid), do: Integer.to_string(scid)

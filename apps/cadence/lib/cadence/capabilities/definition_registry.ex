@@ -11,6 +11,7 @@ defmodule Cadence.Capabilities.DefinitionRegistry do
   alias Cadence.Capabilities.{Descriptor, ValidationContext}
 
   alias Cadence.Capabilities.Definitions.{
+    CFDPReceive,
     DefinitionBoundTelemetry,
     HeartbeatMonitor,
     PacketCounter,
@@ -22,6 +23,7 @@ defmodule Cadence.Capabilities.DefinitionRegistry do
   @spec default() :: t()
   def default do
     %{
+      cfdp_receive: CFDPReceive,
       definition_bound_telemetry: DefinitionBoundTelemetry,
       packet_counter: PacketCounter,
       heartbeat_monitor: HeartbeatMonitor,
@@ -38,7 +40,8 @@ defmodule Cadence.Capabilities.DefinitionRegistry do
   def fetch_descriptor(registry, family_key) when is_map(registry) and is_atom(family_key) do
     with {:ok, family_module} <- fetch_or_error(registry, family_key),
          %Descriptor{} = descriptor <- family_module.descriptor(),
-         true <- descriptor.family_key == family_key do
+         true <- descriptor.family_key == family_key,
+         :ok <- Descriptor.validate(descriptor) do
       {:ok, descriptor}
     else
       false ->
@@ -49,6 +52,19 @@ defmodule Cadence.Capabilities.DefinitionRegistry do
 
       _other ->
         {:error, {:invalid_capability_descriptor, family_key}}
+    end
+  end
+
+  @spec fetch_descriptor(t(), atom(), pos_integer()) ::
+          {:ok, Descriptor.t()} | {:error, term()}
+  def fetch_descriptor(registry, family_key, version)
+      when is_map(registry) and is_atom(family_key) and is_integer(version) do
+    with {:ok, %Descriptor{} = descriptor} <- fetch_descriptor(registry, family_key),
+         true <- descriptor.version == version do
+      {:ok, descriptor}
+    else
+      false -> {:error, {:unsupported_capability_family_version, family_key, version}}
+      {:error, reason} -> {:error, reason}
     end
   end
 

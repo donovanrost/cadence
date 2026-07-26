@@ -20,6 +20,7 @@ defmodule CadenceWeb.CommsOverviewLive do
   @impl true
   def render(assigns) do
     ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div id="comms-overview-page" class="space-y-6">
       <.page_header title={@current_mission.display_name} eyebrow="Communications">
         <:title_suffix>&middot; Mission Comms</:title_suffix>
@@ -36,6 +37,7 @@ defmodule CadenceWeb.CommsOverviewLive do
         finding_groups={@finding_groups}
       />
     </div>
+    </Layouts.app>
     """
   end
 
@@ -159,7 +161,7 @@ defmodule CadenceWeb.CommsOverviewLive do
 
   defp finding_row(assigns) do
     ~H"""
-    <div class="border border-base-300 bg-base-100/40 p-4">
+    <div id={Map.get(@finding, :id)} class="border border-base-300 bg-base-100/40 p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="font-semibold">{@finding.title}</h3>
@@ -206,7 +208,7 @@ defmodule CadenceWeb.CommsOverviewLive do
 
     findings =
       CommsValidation.findings_for_resources(
-        scope.organization_id,
+        scope,
         mission.mission_id,
         %{
           spacecraft: spacecraft,

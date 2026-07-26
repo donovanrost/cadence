@@ -7,7 +7,7 @@ defmodule CadenceWeb.CommsValidationLive do
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    findings = CommsValidation.findings_for_mission(scope.organization_id, mission.mission_id)
+    findings = CommsValidation.findings_for_mission(scope, mission.mission_id)
 
     {:ok,
      socket
@@ -20,6 +20,7 @@ defmodule CadenceWeb.CommsValidationLive do
   @impl true
   def render(assigns) do
     ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div id="comms-validation-page" class="space-y-6">
       <.page_header
         title="Validation"
@@ -62,6 +63,7 @@ defmodule CadenceWeb.CommsValidationLive do
         </div>
       <% end %>
     </div>
+    </Layouts.app>
     """
   end
 
@@ -69,7 +71,7 @@ defmodule CadenceWeb.CommsValidationLive do
 
   defp finding_row(assigns) do
     ~H"""
-    <div class="px-4 py-4">
+    <div id={Map.get(@finding, :id)} class="px-4 py-4">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="font-semibold">{@finding.title}</h3>

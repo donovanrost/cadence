@@ -55,6 +55,7 @@ defmodule CadenceUmbrella.MixProject do
         "format",
         "compile --warnings-as-errors",
         "credo --strict",
+        "cadence.extensions.check",
         "cadence.architecture.check --summary",
         "test.planes",
         "test"

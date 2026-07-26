@@ -30,9 +30,12 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
         %ExecutionResult{} = execution_result,
         action_requests,
         timer_events,
-        packet_record \\ nil,
-        timer_key \\ nil
+        opts \\ []
       ) do
+    packet_record = Keyword.get(opts, :packet_record)
+    timer_key = Keyword.get(opts, :timer_key)
+    state_snapshot = Keyword.get(opts, :state_snapshot)
+
     %{
       capability_records: [
         build_managed_capability_record(
@@ -42,7 +45,8 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
           execution_result,
           action_requests,
           packet_record,
-          timer_key
+          timer_key,
+          state_snapshot
         )
       ],
       action_requests:
@@ -73,7 +77,8 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
          %ExecutionResult{} = execution_result,
          action_requests,
          packet_record,
-         timer_key
+         timer_key,
+         state_snapshot
        ) do
     %ManagedCapabilityRecord{
       capability_record_id: Ids.new("capability_record"),
@@ -92,7 +97,7 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
       emitted_record_kinds: Enum.map(execution_result.records, &record_kind/1),
       emitted_record_count: length(execution_result.records),
       action_request_count: length(action_requests),
-      state_snapshot: execution_result.state || %{},
+      state_snapshot: state_snapshot || execution_result.state || %{},
       recorded_at: execution_context.current_time,
       metadata: execution_context.metadata
     }

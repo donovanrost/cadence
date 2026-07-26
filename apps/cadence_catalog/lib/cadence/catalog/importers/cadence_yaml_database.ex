@@ -50,6 +50,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
   def descriptor do
     ImporterDescriptor.new(%{
       importer_key: "cadence_yaml",
+      version: 1,
+      trust: :first_party,
       display_name: "Cadence YAML Database",
       catalog_family: :combined,
       source_formats: @supported_format_keys,

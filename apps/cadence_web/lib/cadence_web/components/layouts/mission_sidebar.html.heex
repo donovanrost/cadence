@@ -97,6 +97,13 @@
           />
           <.nav_item
             :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/applications"}
+            icon="hero-squares-2x2"
+            label="Applications"
+            active={assigns[:nav_item] == :mission_applications}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
             navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
             icon="hero-circle-stack"
             label="Catalog"

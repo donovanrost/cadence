@@ -98,6 +98,8 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       assert has_element?(view, "#spacecraft-profile-new-page")
       assert has_element?(view, "#spacecraft-profile-form")
+      assert has_element?(view, "#spacecraft-profile-application-telemetry_decom")
+      refute has_element?(view, "#spacecraft-profile-application-cfdp")
 
       assert {:error, {:live_redirect, %{to: target}}} =
                view
