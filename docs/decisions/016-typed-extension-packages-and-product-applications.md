@@ -1130,24 +1130,35 @@ activation, and operator contracts.
 11. Revisit declarative user-authored surfaces and sandboxed runtime components
     only after the first-party contracts have multiple real consumers.
 
-## Open Questions
+## Deferred Decision Triggers
 
-1. Which initial installation scopes are required beyond mission, spacecraft,
-   and source endpoint?
-2. What exact configuration-schema and presentation-schema formats should be
-   stored durably?
-3. Which progress, paginated-reference, and standalone domain-action-bar primitives should follow the
-   implemented summary, generated-form, bounded-table, diagnostic-list,
-   numeric-field, select and query-backed reference, and streamed-activity
-   contracts without becoming a general layout DSL?
-4. Should Limits and Alarming be represented as an explicit default installation
-   or as a system-provided application whose installation is implicit?
-5. Which additional resource-claim families need domain preflight providers
-   after the implemented Telemetry Decom APID-claim proof?
-6. What compatibility guarantees must a future signed or mission-supplied
-   package satisfy?
-7. Which application-owned subjects require stable deep links in the first host,
-   and what identifier contract should those links expose?
+The following decisions are not required to complete this ADR. Reopen one only
+when a concrete product or distribution requirement supplies the missing
+evidence; they are not a backlog for speculative application-host expansion.
+
+1. **Additional installation scopes** — decide on another scope only when a real
+   application cannot be placed honestly at mission, spacecraft, or source
+   endpoint scope.
+2. **Durable schema formats** — standardize stored configuration and presentation
+   schemas only when multiple owning domains require host-managed schema
+   persistence, compatibility, and migration rather than domain-owned versioned
+   configuration.
+3. **Additional surface primitives** — add progress, paginated-reference,
+   standalone domain-action-bar, or other primitives only when a first-party
+   workflow cannot fit the implemented bounded grammar and demonstrates a
+   reusable host behavior rather than application-specific layout.
+4. **Limits installation semantics** — choose explicit default installation or
+   implicit system-provided availability when deployment and onboarding behavior
+   require one consistent product rule.
+5. **Additional resource claims** — add a claim family and domain preflight
+   provider when another application has a concrete exclusivity, capacity, or
+   conflict contract beyond Telemetry Decom's APID ownership.
+6. **Signed or mission-supplied packages** — define compatibility, distribution,
+   signing, and sandboxing guarantees only after Cadence chooses to accept code
+   or declarations outside the compiled first-party package set.
+7. **Application-subject deep links** — define stable subject identifiers and
+   routes when an operator workflow needs bookmarkable, version-resilient links
+   below an application's registered surface.
 
 ## See Also
 

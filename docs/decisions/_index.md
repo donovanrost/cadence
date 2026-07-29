@@ -37,6 +37,12 @@ Legacy ADRs remain under
 | [ADR-015](015-management-control-data-plane-architecture.md) | Management Plane, Control Plane, and Data Plane Architecture | Accepted |
 | [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
 
+## Proposed Decisions
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-017](017-multi-tenant-identity-federation-and-credential-model.md) | Multi-Tenant Identity Federation and Credential Model | Proposed |
+
 ## Superseded Decisions
 
 | ADR | Title | Status |
