@@ -250,14 +250,14 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
     assert :management == PlaneBoundary.classify("lib/cadence/commanding/command_approval_row.ex")
   end
 
-  test "web code reaches legacy catch-all namespaces only through resource adapters" do
+  test "web catch-all and resource-adapter migration debt are distinguished" do
     findings =
       DependencyBoundary.findings(%{
         "lib/cadence_web/controllers/command_request_controller.ex" => %{
-          "lib/cadence_web/control_plane_params/commanding.ex" => "runtime"
+          "lib/cadence_web/control_plane_params.ex" => "runtime"
         },
-        "lib/cadence_web/api/commanding_params.ex" => %{
-          "lib/cadence_web/control_plane_params/commanding.ex" => "runtime"
+        "lib/cadence_web/api/catalog_params.ex" => %{
+          "lib/cadence_web/control_plane_params/catalog.ex" => "runtime"
         }
       })
 
@@ -265,7 +265,12 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
              %{
                kind: :web_catch_all,
                source: "lib/cadence_web/controllers/command_request_controller.ex",
-               sink: "lib/cadence_web/control_plane_params/commanding.ex"
+               sink: "lib/cadence_web/control_plane_params.ex"
+             },
+             %{
+               kind: :web_legacy_adapter,
+               source: "lib/cadence_web/api/catalog_params.ex",
+               sink: "lib/cadence_web/control_plane_params/catalog.ex"
              }
            ] = findings
   end

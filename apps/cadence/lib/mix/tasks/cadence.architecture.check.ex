@@ -117,6 +117,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         "#{Map.get(counts, :plane_direction, 0)} reverse-plane edges, " <>
         "#{Map.get(counts, :plane_internal, 0)} cross-plane internal edges, " <>
         "#{Map.get(counts, :web_catch_all, 0)} web catch-all edges, " <>
+        "#{Map.get(counts, :web_legacy_adapter, 0)} API legacy-adapter edges, " <>
         "#{Map.get(counts, :unclassified_plane, 0)} unclassified plane modules, " <>
         "#{Map.get(counts, :unclassified_context, 0)} unclassified context modules, " <>
         "#{length(result.new)} new, #{length(result.resolved)} resolved; " <>

@@ -1,8 +1,8 @@
 defmodule Cadence.Architecture.WebBoundary do
   @moduledoc """
   Prevents production web code from depending on historical catch-all boundary
-  modules. Resource-owned API adapters may delegate during the migration; new
-  controllers and LiveViews must depend on those resource adapters directly.
+  modules. Controllers and LiveViews must depend on resource-owned adapters;
+  any reintroduced adapter dependency is reported separately as regression.
   """
 
   @legacy_prefixes [
@@ -10,30 +10,28 @@ defmodule Cadence.Architecture.WebBoundary do
     "lib/cadence_web/control_plane_params"
   ]
 
-  @guarded_sinks MapSet.new([
-                   "lib/cadence_web/control_plane_json.ex",
-                   "lib/cadence_web/control_plane_json/commanding.ex",
-                   "lib/cadence_web/control_plane_json/operations.ex",
-                   "lib/cadence_web/control_plane_params.ex",
-                   "lib/cadence_web/control_plane_params/commanding.ex"
-                 ])
-
   @spec findings_for_edge(String.t(), String.t(), term()) :: [map()]
   def findings_for_edge(source, sink, label) do
-    if MapSet.member?(@guarded_sinks, sink) and production_caller?(source) and
-         not resource_adapter?(source) do
-      [
-        %{
-          kind: :web_catch_all,
-          source: source,
-          sink: sink,
-          label: to_string(label),
-          fingerprint: Enum.join([:web_catch_all, source, sink], "|")
-        }
-      ]
-    else
-      []
+    cond do
+      not legacy_boundary?(sink) or not production_caller?(source) ->
+        []
+
+      resource_adapter?(source) ->
+        [finding(:web_legacy_adapter, source, sink, label)]
+
+      true ->
+        [finding(:web_catch_all, source, sink, label)]
     end
+  end
+
+  defp finding(kind, source, sink, label) do
+    %{
+      kind: kind,
+      source: source,
+      sink: sink,
+      label: to_string(label),
+      fingerprint: Enum.join([kind, source, sink], "|")
+    }
   end
 
   defp production_caller?(source),

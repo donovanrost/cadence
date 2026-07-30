@@ -561,7 +561,7 @@ as management command parsing, control Contact execution, or telemetry query
 serialization rather than one API namespace that implies every endpoint is
 control-plane work.
 
-### Implementation Checkpoint: 2026-07-23
+### Implementation Checkpoint: 2026-07-28
 
 The logical boundary is now executable in the current umbrella:
 
@@ -576,11 +576,13 @@ The logical boundary is now executable in the current umbrella:
   subscribing through their own consumers;
 - production web code no longer calls the root `Cadence` facade or the
   catch-all params/JSON boundaries directly; resource-owned `CadenceWeb.API.*`
-  modules are the migration seam; and
+  modules are the migration seam;
+- every product API family owns its request parsing and response serialization,
+  and shared HTTP parameter primitives live under `CadenceWeb.API`; and
 - the full context and plane dependency matrix is ratcheted by xref. The live
-  baseline contains 31 named direction edges, while root-facade,
-  horizontal schema, cross-context row, web catch-all, and unclassified debt
-  are zero.
+  baseline contains no API-to-catch-all migration edges; root-facade,
+  horizontal schema, cross-context row, direct web catch-all, and unclassified
+  debt are also zero.
 
 The in-process event bus is a notification transport, not the durable source of
 truth. Producers commit first, subscriber failure cannot roll back that commit,
@@ -714,8 +716,8 @@ requiring a broad product rewrite.
 
 ### Phase 6: Read Side And Web Boundaries
 
-- Replace catch-all control-plane params and JSON modules with resource-owned
-  boundary modules.
+- Keep request parsing and response serialization in resource-owned
+  `CadenceWeb.API` boundary modules; do not reintroduce catch-all web facades.
 - Make dashboard and operator pages consume explicit read models.
 - Show desired, operational, applied, and observed state without conflating
   them.

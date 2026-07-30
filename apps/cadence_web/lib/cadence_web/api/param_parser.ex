@@ -1,5 +1,5 @@
-defmodule CadenceWeb.ControlPlaneParams.Parser do
-  @moduledoc false
+defmodule CadenceWeb.API.ParamParser do
+  @moduledoc "Shared primitives for parsing product HTTP API parameters."
 
   @service_identity_lifecycle_states [:active, :disabled]
   @direction_values [:uplink, :downlink]

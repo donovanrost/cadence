@@ -1,7 +1,7 @@
 defmodule CadenceWeb.ActivationParams do
   @moduledoc false
 
-  import CadenceWeb.ControlPlaneParams.Parser
+  import CadenceWeb.API.ParamParser
 
   @change_classes [
     :observational,

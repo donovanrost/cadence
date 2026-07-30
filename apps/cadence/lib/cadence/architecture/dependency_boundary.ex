@@ -1,7 +1,7 @@
 defmodule Cadence.Architecture.DependencyBoundary do
   @moduledoc """
   Ratchets transitional root-facade, persistence-schema, cross-context schema,
-  and cross-plane dependencies.
+  cross-plane, and web-boundary dependencies.
 
   The checked-in baseline is debt, not permission for new code. A change fails
   when it adds an unlisted dependency, leaves a resolved dependency in the
@@ -195,6 +195,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
             | :root_facade
             | :persistence_schema
             | :web_catch_all
+            | :web_legacy_adapter
             | :unclassified_plane
             | :unclassified_context,
           required(:source) => String.t(),
