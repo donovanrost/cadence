@@ -7,7 +7,9 @@ defmodule CadenceWeb.NotificationsBellTest do
   alias CadenceWeb.TestFixtures
 
   defp socket_for(user) do
-    {:ok, scope} = Cadence.Auth.authenticate_api_token(TestFixtures.member_session_token!(user))
+    {:ok, scope} =
+      Cadence.Auth.authenticate_browser_session(TestFixtures.member_session_token!(user))
+
     %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_scope: scope, flash: %{}}}
   end
 

@@ -55,7 +55,9 @@ defmodule CadenceWeb.UserAuthTest do
       _ = CadenceWeb.TestFixtures.grant_membership!(user, org)
 
       {:ok, scope} =
-        Cadence.Auth.authenticate_api_token(CadenceWeb.TestFixtures.member_session_token!(user))
+        Cadence.Auth.authenticate_browser_session(
+          CadenceWeb.TestFixtures.member_session_token!(user)
+        )
 
       socket = %Phoenix.LiveView.Socket{
         assigns: %{__changed__: %{}, current_scope: scope}
@@ -76,7 +78,9 @@ defmodule CadenceWeb.UserAuthTest do
       user = CadenceWeb.TestFixtures.persist_user!(capabilities: [:platform_admin])
 
       {:ok, scope} =
-        Cadence.Auth.authenticate_api_token(CadenceWeb.TestFixtures.member_session_token!(user))
+        Cadence.Auth.authenticate_browser_session(
+          CadenceWeb.TestFixtures.member_session_token!(user)
+        )
 
       socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_scope: scope}}
 

@@ -6,8 +6,15 @@ defmodule CadenceWeb.AuthenticatedEntryTest do
   alias CadenceWeb.AuthenticatedEntry
 
   describe "entry_path/1" do
-    test "platform admin scope routes to /admin" do
-      scope = %Scope{capabilities: MapSet.new([:platform_admin])}
+    test "scope in admin mode routes to /admin" do
+      user = %User{capabilities: [:platform_admin]}
+
+      scope = %Scope{
+        user: user,
+        admin_mode?: true,
+        capabilities: MapSet.new([:platform_admin])
+      }
+
       assert AuthenticatedEntry.entry_path(scope) == "/admin"
     end
 
@@ -16,9 +23,9 @@ defmodule CadenceWeb.AuthenticatedEntryTest do
       assert AuthenticatedEntry.entry_path(scope) == "/"
     end
 
-    test "platform admin user routes to /admin" do
+    test "admin-eligible user without an authenticated scope routes normally" do
       user = %User{capabilities: [:platform_admin]}
-      assert AuthenticatedEntry.entry_path(user) == "/admin"
+      assert AuthenticatedEntry.entry_path(user) == "/"
     end
 
     test "non-admin user routes to /" do
@@ -42,7 +49,7 @@ defmodule CadenceWeb.AuthenticatedEntryTest do
 
     test "falls back to entry path when return_to is nil" do
       user = %User{capabilities: [:platform_admin]}
-      assert AuthenticatedEntry.redirect_path(nil, user) == "/admin"
+      assert AuthenticatedEntry.redirect_path(nil, user) == "/"
     end
   end
 end

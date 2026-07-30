@@ -20,29 +20,29 @@ The intended process model is:
 The simulator is never run inside the Cadence server process. The profiler is a
 short-lived Cadence developer task.
 
-## 1. Prepare bootstrap admin env
+## 1. Prepare the environment administrator
 
-For local development, it is convenient to keep the bootstrap admin env in
+For local development, it is convenient to keep the administrator credentials in
 `mise.toml` or your shell profile.
 
 Required:
 
 ```toml
 [env]
-CADENCE_BOOTSTRAP_ADMIN_ENABLED = "true"
-CADENCE_BOOTSTRAP_ADMIN_EMAIL = "bootstrap@example.com"
-CADENCE_BOOTSTRAP_ADMIN_PASSWORD = "change-me"
+CADENCE_ADMIN_EMAIL = "admin@example.com"
+CADENCE_ADMIN_PASSWORD = "change-me"
 ```
 
 Optional:
 
 ```toml
-CADENCE_BOOTSTRAP_ADMIN_USER_ID = "bootstrap-admin"
-CADENCE_BOOTSTRAP_ADMIN_DISPLAY_NAME = "Bootstrap Admin"
-CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS = "86400"
+CADENCE_ADMIN_DISPLAY_NAME = "Cadence Administrator"
+CADENCE_ADMIN_MODE_TTL_SECONDS = "3600"
 ```
 
-This creates a real persisted bootstrap admin user for first-boot setup.
+This makes the reserved environment administrator available through the normal
+sign-in page and enters admin mode immediately. Removing both required variables
+removes that access the next time Cadence starts.
 
 ## 2. Prepare the database
 

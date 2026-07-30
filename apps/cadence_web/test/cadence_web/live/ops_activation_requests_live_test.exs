@@ -49,7 +49,11 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
 
     assert {:ok, request} =
              Activations.request(
-               Scope.new(%{user: requester, organization_id: organization.organization_id}),
+               Scope.new(%{
+                 user: requester,
+                 organization_id: organization.organization_id,
+                 admin_mode?: true
+               }),
                mission.mission_id,
                binding_set.binding_set_id,
                binding_set.version

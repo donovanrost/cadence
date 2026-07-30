@@ -6,37 +6,6 @@ defmodule CadenceWeb.API.IdentityJSON do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
 
-  @spec bootstrap(map()) :: map()
-  def bootstrap(%{
-        organization: %Organization{} = organization,
-        mission: mission,
-        service_identity: %ServiceIdentity{} = service_identity,
-        api_token: api_token
-      }) do
-    %{
-      organization: organization(organization),
-      mission: if(mission, do: mission(mission), else: nil),
-      service_identity:
-        issued_service_identity(%{
-          service_identity: service_identity,
-          api_token: api_token
-        })
-    }
-  end
-
-  @spec bootstrap_admin_session(map()) :: map()
-  def bootstrap_admin_session(%{
-        user: %User{} = user,
-        session_token: session_token,
-        expires_at: %DateTime{} = expires_at
-      }) do
-    %{
-      user: user(user),
-      session_token: session_token,
-      expires_at: iso8601(expires_at)
-    }
-  end
-
   @spec current_scope(Scope.t()) :: map()
   def current_scope(%Scope{} = current_scope) do
     %{
@@ -50,6 +19,7 @@ defmodule CadenceWeb.API.IdentityJSON do
           do: service_identity(current_scope.service_identity),
           else: nil
         ),
+      admin_mode: current_scope.admin_mode?,
       capabilities: current_scope.capabilities |> MapSet.to_list() |> Enum.map(&Atom.to_string/1)
     }
   end
@@ -111,6 +81,4 @@ defmodule CadenceWeb.API.IdentityJSON do
       api_token: api_token
     }
   end
-
-  defp iso8601(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
 end

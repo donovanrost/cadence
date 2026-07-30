@@ -125,7 +125,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
       assert Repo.all(Cadence.Notifications.NotificationRow) == []
     end
 
-    test ":invited with existing non-durable user (e.g. bootstrap admin) still dispatches",
+    test ":invited with an existing non-durable user still dispatches",
          %{inviter: admin, org: org} do
       email = "bootstrap-#{System.unique_integer([:positive])}@example.com"
 

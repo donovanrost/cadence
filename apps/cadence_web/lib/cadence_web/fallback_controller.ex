@@ -135,14 +135,6 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "no_active_binding_set")
   end
 
-  def call(conn, {:error, :bootstrap_already_completed}) do
-    error_response(conn, :conflict, "bootstrap_already_completed")
-  end
-
-  def call(conn, {:error, :bootstrap_admin_disabled}) do
-    error_response(conn, :forbidden, "bootstrap_admin_disabled")
-  end
-
   def call(conn, {:error, :invalid_credentials}) do
     error_response(conn, :unauthorized, "invalid_credentials")
   end

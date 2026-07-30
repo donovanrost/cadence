@@ -125,7 +125,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp redirect_target(acceptance_result) do
     current_scope =
-      case Cadence.Auth.authenticate_api_token(acceptance_result.session_token,
+      case Cadence.Auth.authenticate_browser_session(acceptance_result.session_token,
              current_organization_id: acceptance_result.current_organization_id
            ) do
         {:ok, %Scope{} = current_scope} -> current_scope

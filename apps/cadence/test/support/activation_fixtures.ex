@@ -101,6 +101,6 @@ defmodule Cadence.ActivationFixtures do
         capabilities: [:platform_admin]
       })
 
-    Scope.new(%{user: user, organization_id: organization_id})
+    Scope.new(%{user: user, organization_id: organization_id, admin_mode?: true})
   end
 end

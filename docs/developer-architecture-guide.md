@@ -366,21 +366,22 @@ Run the server as a named node when you want to use the profiler tasks:
 iex --sname cadence -S mix phx.server
 ```
 
-### 8.2 Optional bootstrap admin
+### 8.2 Optional environment administrator
 
-Cadence supports an env-driven bootstrap admin user for first-boot workflows.
+Cadence supports an environment-backed platform administrator for development
+and operator-directed administration.
 
 Relevant environment variables:
 
-- `CADENCE_BOOTSTRAP_ADMIN_ENABLED`
-- `CADENCE_BOOTSTRAP_ADMIN_EMAIL`
-- `CADENCE_BOOTSTRAP_ADMIN_PASSWORD`
-- `CADENCE_BOOTSTRAP_ADMIN_USER_ID`
-- `CADENCE_BOOTSTRAP_ADMIN_DISPLAY_NAME`
-- `CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS`
+- `CADENCE_ADMIN_EMAIL`
+- `CADENCE_ADMIN_PASSWORD`
+- `CADENCE_ADMIN_DISPLAY_NAME` (optional)
+- `CADENCE_ADMIN_MODE_TTL_SECONDS` (optional)
 
-This is a real persisted user account, not a hidden bypass. The bootstrap login
-path exists only while the env configuration is enabled.
+Email and password must be set together. The reserved administrator exists only
+while they are configured, signs in through the normal browser form, and enters
+admin mode immediately. Durable users granted platform-admin eligibility must
+reauthenticate before entering admin mode.
 
 ### 8.3 Run the external simulator
 

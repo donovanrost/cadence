@@ -115,26 +115,28 @@ if config_env() != :test and is_binary(logs_endpoint) do
     timeout_ms: parse_positive_integer.("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT", 5_000)
 end
 
-bootstrap_admin_enabled? =
-  System.get_env("CADENCE_BOOTSTRAP_ADMIN_ENABLED", "false")
-  |> String.downcase()
-  |> then(&(&1 in ["1", "true", "yes", "on"]))
+admin_email = System.get_env("CADENCE_ADMIN_EMAIL")
+admin_password = System.get_env("CADENCE_ADMIN_PASSWORD")
 
-if bootstrap_admin_enabled? do
-  config :cadence, :bootstrap_admin,
-    enabled: true,
-    user_id: System.get_env("CADENCE_BOOTSTRAP_ADMIN_USER_ID", "user_bootstrap_admin"),
-    email:
-      System.get_env("CADENCE_BOOTSTRAP_ADMIN_EMAIL") ||
-        raise("CADENCE_BOOTSTRAP_ADMIN_EMAIL is required when bootstrap admin is enabled"),
-    display_name: System.get_env("CADENCE_BOOTSTRAP_ADMIN_DISPLAY_NAME", "Bootstrap Admin"),
-    password:
-      System.get_env("CADENCE_BOOTSTRAP_ADMIN_PASSWORD") ||
-        raise("CADENCE_BOOTSTRAP_ADMIN_PASSWORD is required when bootstrap admin is enabled"),
-    session_ttl_seconds:
-      System.get_env("CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS", "86400")
-      |> String.to_integer()
+case {admin_email, admin_password} do
+  {nil, nil} ->
+    config :cadence, :environment_admin, enabled: false
+
+  {email, password}
+  when is_binary(email) and email != "" and is_binary(password) and password != "" ->
+    config :cadence, :environment_admin,
+      enabled: true,
+      email: email,
+      display_name: System.get_env("CADENCE_ADMIN_DISPLAY_NAME", "Cadence Administrator"),
+      password: password
+
+  _partial_configuration ->
+    raise("CADENCE_ADMIN_EMAIL and CADENCE_ADMIN_PASSWORD must be set together")
 end
+
+config :cadence_web,
+       :admin_mode_ttl_seconds,
+       System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()
 
 case System.get_env("CADENCE_TELEMETRY_CURRENT_VALUE_STORE", "ets") |> String.downcase() do
   "postgres" ->

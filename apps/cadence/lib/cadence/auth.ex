@@ -1,76 +1,22 @@
 defmodule Cadence.Auth do
   @moduledoc """
-  Service-identity authentication and bootstrap helpers for the control-plane
-  API.
+  Browser and service authentication for Cadence actors.
   """
 
   import Ecto.Query
-
-  alias Ecto.Changeset
-  alias Ecto.Multi
 
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationMembership
   alias Cadence.Auth.{Scope, ServiceIdentity, ServiceIdentityRow}
   alias Cadence.Missions
-  alias Cadence.Missions.Mission
   alias Cadence.Organizations
-  alias Cadence.Organizations.Organization
   alias Cadence.Repo
+  alias Ecto.Changeset
 
   @type issued_service_identity :: %{
           service_identity: ServiceIdentity.t(),
           api_token: binary()
         }
-
-  @spec bootstrap(Organization.t(), ServiceIdentity.t(), Mission.t() | nil) ::
-          {:ok,
-           %{
-             organization: Organization.t(),
-             mission: Mission.t() | nil,
-             service_identity: ServiceIdentity.t(),
-             api_token: binary()
-           }}
-          | {:error, term()}
-  def bootstrap(
-        %Organization{} = organization,
-        %ServiceIdentity{} = service_identity,
-        mission \\ nil
-      ) do
-    if Organizations.count_organizations() > 0 do
-      {:error, :bootstrap_already_completed}
-    else
-      api_token = generate_api_token()
-
-      Multi.new()
-      |> Multi.run(:organization, fn _repo, _changes ->
-        Organizations.persist_organization(organization)
-      end)
-      |> maybe_insert_bootstrap_mission(mission)
-      |> Multi.run(:service_identity, fn repo, _changes ->
-        insert_service_identity(repo, service_identity, api_token)
-      end)
-      |> Repo.transaction()
-      |> case do
-        {:ok,
-         %{organization: persisted_organization, service_identity: persisted_service_identity} =
-             changes} ->
-          {:ok,
-           %{
-             organization: persisted_organization,
-             mission: Map.get(changes, :mission),
-             service_identity: persisted_service_identity,
-             api_token: api_token
-           }}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
-    end
-  end
 
   @spec issue_service_identity(ServiceIdentity.t()) ::
           {:ok, issued_service_identity()} | {:error, term()}
@@ -82,9 +28,8 @@ defmodule Cadence.Auth do
     end
   end
 
-  @spec authenticate_api_token(binary(), keyword()) :: {:ok, Scope.t()} | {:error, term()}
-  def authenticate_api_token(api_token, opts \\ [])
-      when is_binary(api_token) and is_list(opts) do
+  @spec authenticate_api_token(binary()) :: {:ok, Scope.t()} | {:error, term()}
+  def authenticate_api_token(api_token) when is_binary(api_token) do
     token_digest = digest_api_token(api_token)
 
     service_identity_row =
@@ -113,7 +58,31 @@ defmodule Cadence.Auth do
         end
 
       nil ->
-        authenticate_user_session_token(api_token, opts)
+        {:error, :unauthenticated}
+    end
+  end
+
+  @spec authenticate_browser_session(binary(), keyword()) ::
+          {:ok, Scope.t()} | {:error, term()}
+  def authenticate_browser_session(session_token, opts \\ [])
+      when is_binary(session_token) and is_list(opts) do
+    with {:ok, %{user: user, session_context: :browser}} <-
+           Accounts.authenticate_user_session(session_token),
+         admin_mode? <- Keyword.get(opts, :admin_mode?, false),
+         {:ok, organization_membership, organization} <-
+           browser_organization_context(
+             user,
+             Keyword.get(opts, :current_organization_id),
+             admin_mode?
+           ) do
+      {:ok,
+       Scope.new(%{
+         user: user,
+         organization_id: organization && organization.organization_id,
+         organization: organization,
+         organization_membership: organization_membership,
+         admin_mode?: admin_mode?
+       })}
     end
   end
 
@@ -122,11 +91,11 @@ defmodule Cadence.Auth do
     Accounts.sign_in(email, password)
   end
 
-  @spec login_bootstrap_admin(binary(), binary()) ::
-          {:ok, Accounts.issued_bootstrap_admin_session()} | {:error, term()}
-  def login_bootstrap_admin(email, password)
+  @spec login_environment_admin(binary(), binary()) ::
+          {:ok, Accounts.issued_user_session()} | {:error, term()}
+  def login_environment_admin(email, password)
       when is_binary(email) and is_binary(password) do
-    Accounts.login_bootstrap_admin(email, password)
+    Accounts.login_environment_admin(email, password)
   end
 
   @spec login_user(binary(), binary()) :: {:ok, Accounts.issued_user_session()} | {:error, term()}
@@ -134,14 +103,17 @@ defmodule Cadence.Auth do
     Accounts.login_user(email, password)
   end
 
-  @spec ensure_bootstrap_admin() :: {:ok, Cadence.Accounts.User.t()} | {:error, term()}
-  def ensure_bootstrap_admin do
-    Accounts.ensure_bootstrap_admin()
+  @spec verify_user_password(Cadence.Accounts.User.t(), binary()) ::
+          :ok | {:error, :invalid_credentials}
+  def verify_user_password(%Cadence.Accounts.User{} = user, password)
+      when is_binary(password) do
+    Accounts.verify_user_password(user, password)
   end
 
-  @spec revoke_bootstrap_admin_session(binary()) :: :ok
-  def revoke_bootstrap_admin_session(session_token) when is_binary(session_token) do
-    Accounts.revoke_bootstrap_admin_session(session_token)
+  @spec reconcile_environment_admin() ::
+          {:ok, Cadence.Accounts.User.t() | nil} | {:error, term()}
+  def reconcile_environment_admin do
+    Accounts.reconcile_environment_admin()
   end
 
   @spec revoke_user_session(binary()) :: :ok
@@ -161,43 +133,39 @@ defmodule Cadence.Auth do
     Accounts.accept_organization_invitation(invitation_token, attrs)
   end
 
-  @spec bootstrap_admin_enabled?() :: boolean()
-  def bootstrap_admin_enabled? do
-    Accounts.bootstrap_admin_enabled?()
+  defp browser_organization_context(user, organization_id, true)
+       when is_binary(organization_id) do
+    case Organizations.fetch_organization(organization_id) do
+      {:ok, organization} ->
+        organization_membership =
+          case Accounts.fetch_user_membership(user.user_id, organization_id) do
+            {:ok, %OrganizationMembership{} = membership} -> membership
+            {:error, :not_found} -> nil
+          end
+
+        {:ok, organization_membership, organization}
+
+      {:error, :organization_not_found} ->
+        default_browser_organization_context(user)
+    end
   end
 
-  defp authenticate_user_session_token(api_token, opts) do
-    with {:ok, %{user: user, session_context: _session_context}} <-
-           Accounts.authenticate_user_session(api_token),
-         {:ok, organization_membership} <-
-           Accounts.preferred_organization_membership(
-             user.user_id,
-             Keyword.get(opts, :current_organization_id)
-           ),
+  defp browser_organization_context(user, organization_id, _admin_mode?) do
+    with {:ok, organization_membership} <-
+           Accounts.preferred_organization_membership(user.user_id, organization_id),
          {:ok, organization} <- fetch_scope_organization(organization_membership) do
-      {:ok,
-       Scope.new(%{
-         user: user,
-         organization_id: organization && organization.organization_id,
-         organization: organization,
-         organization_membership: organization_membership,
-         role: scope_role(user, organization_membership)
-       })}
+      {:ok, organization_membership, organization}
     end
+  end
+
+  defp default_browser_organization_context(user) do
+    browser_organization_context(user, nil, false)
   end
 
   defp fetch_scope_organization(nil), do: {:ok, nil}
 
   defp fetch_scope_organization(%OrganizationMembership{} = organization_membership) do
     Organizations.fetch_organization(organization_membership.organization_id)
-  end
-
-  defp scope_role(%Cadence.Accounts.User{capabilities: capabilities}, nil) do
-    if :platform_admin in capabilities, do: :platform_admin, else: nil
-  end
-
-  defp scope_role(_user, %OrganizationMembership{} = organization_membership) do
-    organization_membership.role
   end
 
   defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token) do
@@ -249,14 +217,6 @@ defmodule Cadence.Auth do
     |> order_by([service_identity_row], asc: service_identity_row.display_name)
     |> Repo.all()
     |> Enum.map(&ServiceIdentityRow.to_domain/1)
-  end
-
-  defp maybe_insert_bootstrap_mission(multi, nil), do: multi
-
-  defp maybe_insert_bootstrap_mission(multi, %Mission{} = mission) do
-    Multi.run(multi, :mission, fn _repo, _changes ->
-      Missions.persist_mission(mission)
-    end)
   end
 
   defp validate_service_identity_scope(%ServiceIdentity{} = service_identity) do

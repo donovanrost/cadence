@@ -34,15 +34,15 @@ defmodule CadenceWeb.UserSessionController do
   end
 
   def update(conn, %{"organization_id" => organization_id}) when is_binary(organization_id) do
-    user_id = conn.assigns.current_scope.user.user_id
+    current_scope = conn.assigns.current_scope
 
-    case Cadence.Accounts.fetch_user_membership(user_id, organization_id) do
-      {:ok, _membership} ->
+    case authorize_organization_selection(current_scope, organization_id) do
+      :ok ->
         conn
         |> put_session(:current_organization_id, organization_id)
         |> redirect(to: ~p"/")
 
-      {:error, :not_found} ->
+      {:error, _reason} ->
         conn
         |> put_flash(:error, "You do not have access to that organization.")
         |> redirect(to: ~p"/")
@@ -61,14 +61,16 @@ defmodule CadenceWeb.UserSessionController do
     |> put_session(:user_session_token, issued_session.session_token)
     |> maybe_put_browser_test_sandbox_owner_key()
     |> maybe_put_current_organization(issued_session.current_organization_id)
+    |> maybe_enable_admin_mode(issued_session)
     |> put_flash(:info, "Signed in.")
     |> redirect(to: redirect_target(conn, issued_session))
   end
 
   defp redirect_target(conn, issued_session) do
     current_scope =
-      case Cadence.Auth.authenticate_api_token(issued_session.session_token,
-             current_organization_id: issued_session.current_organization_id
+      case Cadence.Auth.authenticate_browser_session(issued_session.session_token,
+             current_organization_id: issued_session.current_organization_id,
+             admin_mode?: issued_session.admin_mode?
            ) do
         {:ok, %Scope{} = scope} -> scope
         {:error, _reason} -> issued_session.user
@@ -85,6 +87,28 @@ defmodule CadenceWeb.UserSessionController do
 
   defp maybe_put_current_organization(conn, _other) do
     delete_session(conn, :current_organization_id)
+  end
+
+  defp maybe_enable_admin_mode(conn, %{admin_mode?: true}) do
+    put_session(conn, :admin_mode_expires_at, CadenceWeb.AdminMode.expires_at())
+  end
+
+  defp maybe_enable_admin_mode(conn, _issued_session) do
+    delete_session(conn, :admin_mode_expires_at)
+  end
+
+  defp authorize_organization_selection(%Scope{} = current_scope, organization_id) do
+    if Scope.admin_mode?(current_scope) do
+      case Cadence.Organizations.fetch_organization(organization_id) do
+        {:ok, _organization} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      case Cadence.Accounts.fetch_user_membership(current_scope.user.user_id, organization_id) do
+        {:ok, _membership} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    end
   end
 
   defp maybe_put_browser_test_sandbox_owner_key(conn) do

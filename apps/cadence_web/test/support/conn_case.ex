@@ -48,7 +48,7 @@ defmodule CadenceWeb.ConnCase do
 
   defp maybe_put_ownership_timeout(options, _timeout), do: options
 
-  def reset_bootstrap_state! do
+  def reset_control_plane_state! do
     SQL.query!(Cadence.Repo, "TRUNCATE organizations CASCADE", [])
   end
 end

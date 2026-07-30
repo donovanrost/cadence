@@ -47,7 +47,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
       assert socket.redirected == {:redirect, %{to: "/no-organization", status: 302}}
     end
 
-    test "redirects platform admin to /admin even without org membership" do
+    test "admin-eligible user without admin mode follows normal organization access" do
       user =
         CadenceWeb.TestFixtures.persist_user!(
           email: "admin-#{System.unique_integer([:positive])}@example.com",
@@ -66,21 +66,24 @@ defmodule CadenceWeb.OrganizationAuthTest do
                  %Phoenix.LiveView.Socket{}
                )
 
-      assert socket.redirected == {:redirect, %{to: "/admin", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/no-organization", status: 302}}
     end
 
-    test "continues for platform admin with an organization membership" do
+    test "admin mode can open an organization without membership" do
       user =
         TestFixtures.persist_user!(
-          email: "admin-with-org-#{System.unique_integer([:positive])}@example.com",
+          email: "elevated-admin-#{System.unique_integer([:positive])}@example.com",
           capabilities: [:platform_admin]
         )
 
       org = TestFixtures.persist_org!(display_name: "Admin Org", slug: "admin-org")
-      _membership = TestFixtures.grant_membership!(user, org)
       token = TestFixtures.member_session_token!(user)
 
-      session = %{"user_session_token" => token}
+      session = %{
+        "user_session_token" => token,
+        "current_organization_id" => org.organization_id,
+        "admin_mode_expires_at" => CadenceWeb.AdminMode.expires_at()
+      }
 
       assert {:cont, socket} =
                OrganizationAuth.on_mount(
@@ -91,7 +94,12 @@ defmodule CadenceWeb.OrganizationAuthTest do
                )
 
       assert socket.assigns.nav_context == :organization
-      assert %Scope{organization: %{slug: "admin-org"}} = socket.assigns.current_scope
+
+      assert %Scope{
+               organization: %{slug: "admin-org"},
+               organization_membership: nil,
+               admin_mode?: true
+             } = socket.assigns.current_scope
     end
 
     test "redirects to /sign-in when there is no session token" do

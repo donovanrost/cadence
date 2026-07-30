@@ -9,16 +9,12 @@ defmodule CadenceWeb.AuthenticatedEntry do
 
   @spec entry_path(Scope.t() | User.t()) :: binary()
   def entry_path(%Scope{} = scope) do
-    if MapSet.member?(scope.capabilities, :platform_admin),
+    if Scope.admin_mode?(scope),
       do: @admin_path,
       else: @organization_path
   end
 
-  def entry_path(%User{} = user) do
-    if :platform_admin in user.capabilities,
-      do: @admin_path,
-      else: @organization_path
-  end
+  def entry_path(%User{}), do: @organization_path
 
   @spec redirect_path(binary() | nil, Scope.t() | User.t()) :: binary()
   def redirect_path(return_to, actor) when is_binary(return_to) do

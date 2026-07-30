@@ -100,7 +100,7 @@ config :cadence,
     safety_poll_interval_ms: 60_000,
     lane_safety_poll_interval_ms: 60_000
   ],
-  bootstrap_admin: [enabled: false],
+  environment_admin: [enabled: false],
   command_verifier_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
   generators: [timestamp_type: :utc_datetime_usec]
 
@@ -120,6 +120,7 @@ config :cadence_web, CadenceWeb.Endpoint,
 config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 
 config :cadence_web, dashboard_live_refresh_ms: 1_000
+config :cadence_web, :admin_mode_ttl_seconds, 3_600
 
 config :tailwind,
   version: "4.1.12",

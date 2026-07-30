@@ -142,9 +142,10 @@ defmodule CadenceWeb.UITest do
         )
 
       refute html =~ "System administration"
+      refute html =~ "Enter admin mode"
     end
 
-    test "renders the system administration link when platform_admin? is true" do
+    test "renders the admin-mode entry link for an eligible user" do
       html =
         render_component(&UI.user_menu/1,
           id: "user-menu",
@@ -153,8 +154,26 @@ defmodule CadenceWeb.UITest do
           platform_admin?: true
         )
 
+      assert html =~ "Enter admin mode"
+      assert html =~ ~s|href="/admin-mode"|
+      refute html =~ "Leave admin mode"
+    end
+
+    test "renders administration and exit actions while admin mode is active" do
+      admin_scope = %{scope(user_fixture()) | admin_mode?: true}
+
+      html =
+        render_component(&UI.user_menu/1,
+          id: "user-menu",
+          scope: admin_scope,
+          memberships: [],
+          platform_admin?: true
+        )
+
       assert html =~ "System administration"
       assert html =~ ~s|href="/admin"|
+      assert html =~ "Leave admin mode"
+      assert html =~ ~s|action="/admin-mode"|
     end
 
     test "identity block wrapper is a div so it doesn't trigger menu hover" do

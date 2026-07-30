@@ -1,88 +1,77 @@
 defmodule CadenceWeb.ControlPlaneApiFixtures do
   @moduledoc false
 
-  @endpoint CadenceWeb.Endpoint
-  @bootstrap_admin_email "bootstrap-admin@example.com"
-  @bootstrap_admin_password "bootstrap-password-123"
-
   import ExUnit.Assertions
-  import Phoenix.ConnTest
   import Plug.Conn
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Auth.ServiceIdentity
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
   def bootstrap(conn) do
-    bootstrap_admin_token = bootstrap_admin_login(conn)
-
-    bootstrap_conn =
-      conn
-      |> authorize(bootstrap_admin_token)
-      |> post("/api/bootstrap", %{
-        "bootstrap" => %{
-          "organization" => %{
-            "organization_id" => "org-alpha",
-            "slug" => "org-alpha",
-            "display_name" => "Org Alpha"
-          },
-          "mission" => %{
-            "mission_id" => "mission-alpha",
-            "slug" => "mission-alpha",
-            "display_name" => "Mission Alpha"
-          },
-          "service_identity" => %{
-            "service_identity_id" => "svc-bootstrap",
-            "display_name" => "Bootstrap Service"
-          }
-        }
+    organization =
+      Organization.new(%{
+        organization_id: "org-alpha",
+        slug: "org-alpha",
+        display_name: "Org Alpha"
       })
 
-    %{
-      "data" => %{
-        "organization" => %{"organization_id" => organization_id},
-        "mission" => %{"mission_id" => mission_id},
-        "service_identity" => %{"api_token" => api_token}
-      }
-    } = json_response(bootstrap_conn, 201)
+    assert {:ok, organization} = Cadence.Organizations.persist_organization(organization)
+
+    mission =
+      Mission.new(%{
+        mission_id: "mission-alpha",
+        organization_id: organization.organization_id,
+        slug: "mission-alpha",
+        display_name: "Mission Alpha"
+      })
+
+    assert {:ok, mission} = Cadence.Missions.persist_mission(mission)
+
+    service_identity =
+      ServiceIdentity.new(%{
+        service_identity_id: "svc-bootstrap",
+        organization_id: organization.organization_id,
+        display_name: "Control Plane Test Service",
+        capabilities: [:organization_admin]
+      })
+
+    assert {:ok, %{api_token: api_token}} = Cadence.Auth.issue_service_identity(service_identity)
 
     %{
       conn: conn,
       api_token: api_token,
-      organization_id: organization_id,
-      mission_id: mission_id
+      organization_id: organization.organization_id,
+      mission_id: mission.mission_id
     }
-  end
-
-  def bootstrap_admin_login(conn) do
-    login_conn =
-      post(conn, "/api/bootstrap_admin/login", %{
-        "bootstrap_admin_session" => %{
-          "email" => @bootstrap_admin_email,
-          "password" => @bootstrap_admin_password
-        }
-      })
-
-    %{"data" => %{"session_token" => session_token}} = json_response(login_conn, 201)
-    session_token
   end
 
   def authorize(conn, api_token) do
     put_req_header(conn, "authorization", "Bearer " <> api_token)
   end
 
-  def organization_admin_token(organization_id) when is_binary(organization_id) do
-    {:ok, organization} = Cadence.Organizations.fetch_organization(organization_id)
+  def organization_admin_scope(organization_id) when is_binary(organization_id) do
+    assert {:ok, organization} = Cadence.Organizations.fetch_organization(organization_id)
     user = TestFixtures.persist_user!()
     _membership = TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-    TestFixtures.member_session_token!(user)
+    session_token = TestFixtures.member_session_token!(user)
+
+    assert {:ok, scope} =
+             Cadence.Auth.authenticate_browser_session(session_token,
+               current_organization_id: organization_id
+             )
+
+    scope
   end
 
   def fetch_command_id(command_snapshot, command_name) do

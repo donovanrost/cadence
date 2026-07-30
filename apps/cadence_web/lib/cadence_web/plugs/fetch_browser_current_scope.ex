@@ -12,8 +12,10 @@ defmodule CadenceWeb.Plugs.FetchBrowserCurrentScope do
 
     case get_session(conn, :user_session_token) do
       session_token when is_binary(session_token) ->
-        case Cadence.Auth.authenticate_api_token(session_token,
-               current_organization_id: get_session(conn, :current_organization_id)
+        case Cadence.Auth.authenticate_browser_session(session_token,
+               current_organization_id: get_session(conn, :current_organization_id),
+               admin_mode?:
+                 CadenceWeb.AdminMode.active?(get_session(conn, :admin_mode_expires_at))
              ) do
           {:ok, current_scope} ->
             conn
@@ -24,6 +26,7 @@ defmodule CadenceWeb.Plugs.FetchBrowserCurrentScope do
             conn
             |> delete_session(:user_session_token)
             |> delete_session(:current_organization_id)
+            |> delete_session(:admin_mode_expires_at)
             |> assign(:current_scope, nil)
         end
 

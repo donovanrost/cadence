@@ -161,13 +161,26 @@ defmodule CadenceWeb.UI do
 
         <li :if={@platform_admin?} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
           <.link
-            navigate={~p"/admin"}
+            navigate={if(@scope.admin_mode?, do: ~p"/admin", else: ~p"/admin-mode")}
             role="menuitem"
             class="flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/70 hover:text-primary"
           >
             <span class="hero-cog-6-tooth h-4 w-4 opacity-80"></span>
-            System administration
+            {if(@scope.admin_mode?, do: "System administration", else: "Enter admin mode")}
           </.link>
+        </li>
+
+        <li :if={@scope.admin_mode?} role="presentation">
+          <.form for={%{}} as={:admin_mode} action={~p"/admin-mode"} method="delete">
+            <button
+              type="submit"
+              role="menuitem"
+              class="flex w-full items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/70 hover:text-primary"
+            >
+              <span class="hero-lock-closed h-4 w-4 opacity-80"></span>
+              Leave admin mode
+            </button>
+          </.form>
         </li>
 
         <li role="presentation" class="border-t border-primary/10 mt-1 pt-1">

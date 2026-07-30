@@ -173,7 +173,7 @@ defmodule Cadence.ActivationVerticalSliceTest do
         capabilities: [:platform_admin]
       })
 
-    Scope.new(%{user: user, organization_id: organization_id})
+    Scope.new(%{user: user, organization_id: organization_id, admin_mode?: true})
   end
 
   defp unique(prefix), do: "#{prefix}-#{System.unique_integer([:positive])}"

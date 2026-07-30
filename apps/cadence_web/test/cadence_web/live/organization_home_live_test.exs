@@ -90,7 +90,7 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
       assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/")
     end
 
-    test "redirects platform admin to /admin even from /" do
+    test "admin-eligible user without admin mode follows normal organization access" do
       user =
         TestFixtures.persist_user!(
           email: "admin-root@example.com",
@@ -98,6 +98,25 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
         )
 
       conn = TestFixtures.member_conn(user)
+
+      assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/")
+    end
+
+    test "active admin mode redirects to /admin even from /" do
+      user =
+        TestFixtures.persist_user!(
+          email: "elevated-admin-root@example.com",
+          capabilities: [:platform_admin]
+        )
+
+      token = TestFixtures.member_session_token!(user)
+
+      conn =
+        Phoenix.ConnTest.build_conn()
+        |> Plug.Test.init_test_session(%{
+          user_session_token: token,
+          admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
+        })
 
       assert {:error, {:redirect, %{to: "/admin"}}} = live(conn, ~p"/")
     end

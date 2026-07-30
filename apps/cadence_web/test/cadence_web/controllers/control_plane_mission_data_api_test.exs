@@ -3,9 +3,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   @moduletag :config
 
-  @bootstrap_admin_email "bootstrap-admin@example.com"
-  @bootstrap_admin_password "bootstrap-password-123"
-
   import CadenceWeb.ControlPlaneApiFixtures
 
   alias Cadence.Jobs.Runner, as: JobRunner
@@ -14,27 +11,15 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   setup do
     previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-    previous_bootstrap_admin = Application.get_env(:cadence, :bootstrap_admin, [])
 
     Application.put_env(:cadence_catalog, :catalog_importers, [
       CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
     ])
 
-    Application.put_env(:cadence, :bootstrap_admin,
-      enabled: true,
-      user_id: "user_bootstrap_admin",
-      email: @bootstrap_admin_email,
-      display_name: "Bootstrap Admin",
-      password: @bootstrap_admin_password,
-      session_ttl_seconds: 3600
-    )
-
-    reset_bootstrap_state!()
-    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
+    reset_control_plane_state!()
 
     on_exit(fn ->
       Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-      Application.put_env(:cadence, :bootstrap_admin, previous_bootstrap_admin)
     end)
 
     :ok
@@ -983,20 +968,18 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              }
            } = json_response(activation_conn, 202)
 
-    approval_conn =
-      conn
-      |> authorize(organization_admin_token(organization_id))
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}/approve",
-        %{"decision" => %{"reason" => "approved for mission data test"}}
-      )
+    admin_scope = organization_admin_scope(organization_id)
 
-    assert %{
-             "data" => %{
-               "request" => %{"state" => "approved"},
-               "execution" => %{"status" => "succeeded", "generation" => 1}
-             }
-           } = json_response(approval_conn, 200)
+    assert {:ok, approved_request, _decision, approved_activation} =
+             Cadence.Management.Activations.approve(
+               admin_scope,
+               activation_request_id,
+               "approved by a browser-authenticated organization administrator"
+             )
+
+    assert approved_request.state == :approved
+    assert {:ok, execution} = Cadence.Control.Activations.execute(approved_activation)
+    assert execution.status == :succeeded
 
     assert_dev_telemetry_ingress(
       conn,

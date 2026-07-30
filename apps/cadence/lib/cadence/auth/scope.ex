@@ -23,6 +23,7 @@ defmodule Cadence.Auth.Scope do
           organization_membership: OrganizationMembership.t() | nil,
           service_identity: ServiceIdentity.t() | nil,
           role: atom() | nil,
+          admin_mode?: boolean(),
           capabilities: MapSet.t(capability())
         }
 
@@ -36,6 +37,7 @@ defmodule Cadence.Auth.Scope do
     :organization_membership,
     :service_identity,
     :role,
+    admin_mode?: false,
     capabilities: MapSet.new()
   ]
 
@@ -59,6 +61,7 @@ defmodule Cadence.Auth.Scope do
       mission_id: (mission && mission.mission_id) || service_identity.mission_id,
       mission: mission,
       service_identity: service_identity,
+      admin_mode?: false,
       capabilities:
         service_identity.capabilities
         |> MapSet.new()
@@ -68,6 +71,7 @@ defmodule Cadence.Auth.Scope do
   defp user_scope(attrs) do
     user = Map.fetch!(attrs, :user)
     organization_membership = Map.get(attrs, :organization_membership)
+    admin_mode? = Map.get(attrs, :admin_mode?, false) and platform_admin_user?(user)
 
     %__MODULE__{
       actor_kind: :user,
@@ -83,19 +87,37 @@ defmodule Cadence.Auth.Scope do
       user: user,
       organization_membership: organization_membership,
       service_identity: nil,
-      role: Map.get(attrs, :role, default_user_role(user, organization_membership)),
+      role: Map.get(attrs, :role, default_user_role(user, organization_membership, admin_mode?)),
+      admin_mode?: admin_mode?,
       capabilities:
-        user.capabilities
+        user
+        |> effective_user_capabilities(admin_mode?)
         |> MapSet.new()
         |> MapSet.union(MapSet.new(OrganizationMembership.capabilities(organization_membership)))
     }
   end
 
-  defp default_user_role(%User{capabilities: capabilities}, nil) do
-    if :platform_admin in capabilities, do: :platform_admin, else: nil
-  end
+  @spec platform_admin_eligible?(t()) :: boolean()
+  def platform_admin_eligible?(%__MODULE__{user: %User{} = user}), do: platform_admin_user?(user)
+  def platform_admin_eligible?(%__MODULE__{}), do: false
 
-  defp default_user_role(_user, %OrganizationMembership{} = organization_membership) do
+  @spec admin_mode?(t()) :: boolean()
+  def admin_mode?(%__MODULE__{admin_mode?: true} = scope), do: platform_admin_eligible?(scope)
+  def admin_mode?(%__MODULE__{}), do: false
+
+  defp default_user_role(_user, nil, true), do: :platform_admin
+  defp default_user_role(_user, nil, false), do: nil
+
+  defp default_user_role(_user, %OrganizationMembership{} = organization_membership, _admin_mode?) do
     organization_membership.role
   end
+
+  defp effective_user_capabilities(%User{capabilities: capabilities}, true), do: capabilities
+
+  defp effective_user_capabilities(%User{capabilities: capabilities}, false) do
+    List.delete(capabilities, :platform_admin)
+  end
+
+  defp platform_admin_user?(%User{capabilities: capabilities}),
+    do: :platform_admin in capabilities
 end

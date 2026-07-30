@@ -36,10 +36,8 @@ defmodule CadenceWeb.UserAuth do
 
   defp memberships_for(_socket), do: []
 
-  defp platform_admin?(%{assigns: %{current_scope: %Scope{capabilities: capabilities}}})
-       when not is_nil(capabilities) do
-    MapSet.member?(capabilities, :platform_admin)
-  end
+  defp platform_admin?(%{assigns: %{current_scope: %Scope{} = scope}}),
+    do: Scope.platform_admin_eligible?(scope)
 
   defp platform_admin?(_socket), do: false
 end

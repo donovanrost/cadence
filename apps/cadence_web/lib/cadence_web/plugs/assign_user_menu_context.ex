@@ -24,12 +24,8 @@ defmodule CadenceWeb.Plugs.AssignUserMenuContext do
 
   defp memberships_for(_conn), do: []
 
-  defp platform_admin?(%Plug.Conn{
-         assigns: %{current_scope: %Scope{capabilities: capabilities}}
-       })
-       when not is_nil(capabilities) do
-    MapSet.member?(capabilities, :platform_admin)
-  end
+  defp platform_admin?(%Plug.Conn{assigns: %{current_scope: %Scope{} = scope}}),
+    do: Scope.platform_admin_eligible?(scope)
 
   defp platform_admin?(_conn), do: false
 end

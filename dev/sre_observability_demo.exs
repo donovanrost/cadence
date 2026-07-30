@@ -148,9 +148,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   end
 
   defp ensure_browser_access(ids) do
-    browser_email =
-      System.get_env("CADENCE_SRE_DEMO_BROWSER_EMAIL") ||
-        System.get_env("CADENCE_BOOTSTRAP_ADMIN_EMAIL")
+    browser_email = System.get_env("CADENCE_SRE_DEMO_BROWSER_EMAIL")
 
     with email when is_binary(email) <- browser_email,
          {:ok, user} <- Cadence.Accounts.fetch_user_by_email(email) do

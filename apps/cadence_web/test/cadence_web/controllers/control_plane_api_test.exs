@@ -5,32 +5,17 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
-  @bootstrap_admin_email "bootstrap-admin@example.com"
-  @bootstrap_admin_password "bootstrap-password-123"
-
   setup do
     previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-    previous_bootstrap_admin = Application.get_env(:cadence, :bootstrap_admin, [])
 
     Application.put_env(:cadence_catalog, :catalog_importers, [
       CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
     ])
 
-    Application.put_env(:cadence, :bootstrap_admin,
-      enabled: true,
-      user_id: "user_bootstrap_admin",
-      email: @bootstrap_admin_email,
-      display_name: "Bootstrap Admin",
-      password: @bootstrap_admin_password,
-      session_ttl_seconds: 3600
-    )
-
-    reset_bootstrap_state!()
-    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
+    reset_control_plane_state!()
 
     on_exit(fn ->
       Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-      Application.put_env(:cadence, :bootstrap_admin, previous_bootstrap_admin)
     end)
 
     :ok
@@ -427,21 +412,19 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     assert %{"errors" => [%{"reason" => "human_activation_approver_required"}]} =
              json_response(service_approval_conn, 422)
 
-    approval_conn =
-      conn
-      |> authorize(organization_admin_token(organization_id))
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/activation_requests/#{activation_request_id}/approve",
-        %{"decision" => %{"reason" => "approved for API bootstrap"}}
-      )
+    admin_scope = organization_admin_scope(organization_id)
 
-    assert %{
-             "data" => %{
-               "request" => %{"state" => "approved"},
-               "decision" => %{"decision" => "approved"},
-               "execution" => %{"status" => "succeeded", "generation" => 1}
-             }
-           } = json_response(approval_conn, 200)
+    assert {:ok, approved_request, decision, approved_activation} =
+             Cadence.Management.Activations.approve(
+               admin_scope,
+               activation_request_id,
+               "approved by a browser-authenticated organization administrator"
+             )
+
+    assert approved_request.state == :approved
+    assert decision.decision == :approved
+    assert {:ok, execution} = Cadence.Control.Activations.execute(approved_activation)
+    assert execution.status == :succeeded
 
     active_conn =
       conn
@@ -464,104 +447,14 @@ defmodule CadenceWeb.ControlPlaneApiTest do
            } = json_response(active_conn, 200)
   end
 
-  test "bootstrap admin logs in and can bootstrap the first organization", %{conn: conn} do
-    bootstrap_admin_token = bootstrap_admin_login(conn)
+  test "browser session tokens are rejected as API bearer credentials", %{conn: conn} do
+    user = CadenceWeb.TestFixtures.persist_user!()
+    session_token = CadenceWeb.TestFixtures.member_session_token!(user)
 
-    current_scope_conn =
-      conn
-      |> authorize(bootstrap_admin_token)
-      |> get("/api/current_scope")
+    current_scope_conn = conn |> authorize(session_token) |> get("/api/current_scope")
 
-    assert %{
-             "data" => %{
-               "actor_kind" => "user",
-               "organization" => nil,
-               "mission" => nil,
-               "user" => %{
-                 "user_id" => "user_bootstrap_admin",
-                 "email" => @bootstrap_admin_email
-               },
-               "service_identity" => nil,
-               "capabilities" => ["platform_admin"]
-             }
-           } = json_response(current_scope_conn, 200)
-
-    bootstrap_conn =
-      conn
-      |> authorize(bootstrap_admin_token)
-      |> post("/api/bootstrap", %{
-        "bootstrap" => %{
-          "organization" => %{
-            "organization_id" => "org-alpha",
-            "slug" => "org-alpha",
-            "display_name" => "Org Alpha"
-          },
-          "mission" => %{
-            "mission_id" => "mission-alpha",
-            "slug" => "mission-alpha",
-            "display_name" => "Mission Alpha"
-          },
-          "service_identity" => %{
-            "service_identity_id" => "svc-bootstrap",
-            "display_name" => "Bootstrap Service"
-          }
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "organization" => %{
-                 "organization_id" => "org-alpha",
-                 "slug" => "org-alpha"
-               },
-               "mission" => %{
-                 "mission_id" => "mission-alpha",
-                 "organization_id" => "org-alpha"
-               },
-               "service_identity" => %{
-                 "service_identity" => %{
-                   "service_identity_id" => "svc-bootstrap",
-                   "organization_id" => "org-alpha",
-                   "capabilities" => ["organization_admin"]
-                 },
-                 "api_token" => api_token
-               }
-             }
-           } = json_response(bootstrap_conn, 201)
-
-    org_scope_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/current_scope")
-
-    assert %{
-             "data" => %{
-               "actor_kind" => "service",
-               "organization" => %{"organization_id" => "org-alpha"},
-               "mission" => nil,
-               "service_identity" => %{"service_identity_id" => "svc-bootstrap"},
-               "capabilities" => ["organization_admin"]
-             }
-           } = json_response(org_scope_conn, 200)
-  end
-
-  test "bootstrap endpoint rejects unauthenticated callers", %{conn: conn} do
-    bootstrap_conn =
-      post(conn, "/api/bootstrap", %{
-        "bootstrap" => %{
-          "organization" => %{
-            "organization_id" => "org-alpha",
-            "slug" => "org-alpha",
-            "display_name" => "Org Alpha"
-          },
-          "service_identity" => %{
-            "service_identity_id" => "svc-bootstrap",
-            "display_name" => "Bootstrap Service"
-          }
-        }
-      })
-
-    assert %{"errors" => [%{"reason" => "unauthenticated"}]} = json_response(bootstrap_conn, 401)
+    assert %{"errors" => [%{"reason" => "unauthenticated"}]} =
+             json_response(current_scope_conn, 401)
   end
 
   test "org-scoped control-plane token can manage missions and mission resources", %{conn: conn} do

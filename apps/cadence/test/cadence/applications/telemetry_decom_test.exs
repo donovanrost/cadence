@@ -744,7 +744,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         capabilities: [:platform_admin]
       })
 
-    Scope.new(%{user: user, organization_id: organization_id})
+    Scope.new(%{user: user, organization_id: organization_id, admin_mode?: true})
   end
 
   defp setup_mission do

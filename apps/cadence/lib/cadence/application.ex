@@ -25,11 +25,8 @@ defmodule Cadence.Application do
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
-        case bootstrap_after_start() do
-          {:ok, _user} ->
-            {:ok, pid}
-
-          {:error, :bootstrap_admin_disabled} ->
+        case initialize_after_start() do
+          {:ok, _environment_admin} ->
             {:ok, pid}
 
           {:error, reason} ->
@@ -42,10 +39,10 @@ defmodule Cadence.Application do
     end
   end
 
-  defp bootstrap_after_start do
+  defp initialize_after_start do
     maybe_bootstrap_dashboard_data_sources()
 
-    Auth.ensure_bootstrap_admin()
+    Auth.reconcile_environment_admin()
   end
 
   defp maybe_bootstrap_dashboard_data_sources do

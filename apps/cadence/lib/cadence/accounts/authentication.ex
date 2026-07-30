@@ -18,75 +18,62 @@ defmodule Cadence.Accounts.Authentication do
   alias Cadence.Ids
   alias Cadence.Repo
 
-  @bootstrap_provider_key "bootstrap_env"
+  @environment_admin_provider_key "environment_admin"
+  @environment_admin_user_id "user_environment_admin"
+  @legacy_bootstrap_provider_key "bootstrap_env"
+  @legacy_bootstrap_user_id "user_bootstrap_admin"
   @password_provider_key "password"
-  @bootstrap_session_context "bootstrap_admin"
   @browser_session_context "browser"
-  @default_bootstrap_admin_display_name "Bootstrap Admin"
-  @default_bootstrap_admin_session_ttl_seconds 86_400
+  @default_environment_admin_display_name "Cadence Administrator"
   @default_browser_session_ttl_seconds 2_592_000
 
-  @type user_session_context :: :bootstrap_admin | :browser
+  @type user_session_context :: :browser
 
   @type issued_user_session :: %{
           user: User.t(),
           session_token: binary(),
           expires_at: DateTime.t(),
-          current_organization_id: binary() | nil
+          current_organization_id: binary() | nil,
+          admin_mode?: boolean()
         }
 
-  @spec bootstrap_admin_enabled?() :: boolean()
-  def bootstrap_admin_enabled? do
-    bootstrap_admin_config()
-    |> Keyword.get(:enabled, false)
+  @spec environment_admin_enabled?() :: boolean()
+  def environment_admin_enabled? do
+    config = environment_admin_config()
+
+    Keyword.get(config, :enabled, false) and
+      present?(Keyword.get(config, :email)) and
+      present?(Keyword.get(config, :password))
   end
 
-  @spec ensure_bootstrap_admin() :: {:ok, User.t()} | {:error, term()}
-  def ensure_bootstrap_admin do
-    if bootstrap_admin_enabled?() do
-      persist_bootstrap_admin(bootstrap_admin_config())
-    else
-      {:error, :bootstrap_admin_disabled}
-    end
+  @spec reconcile_environment_admin() :: {:ok, User.t() | nil} | {:error, term()}
+  def reconcile_environment_admin do
+    Repo.transaction(&reconcile_environment_admin_transaction/0)
   end
 
   @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   def sign_in(email, password) when is_binary(email) and is_binary(password) do
-    with {:ok, user} <- fetch_active_user_by_email(email),
-         {:ok, credential_kind} <- resolve_credential_kind(user) do
-      case credential_kind do
-        :durable -> login_user(email, password)
-        :bootstrap_admin -> login_bootstrap_admin(email, password)
-      end
+    if environment_admin_email?(email) do
+      login_environment_admin(email, password)
+    else
+      login_user(email, password)
     end
   end
 
-  @spec login_bootstrap_admin(binary(), binary()) ::
+  @spec login_environment_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
-  def login_bootstrap_admin(email, password)
+  def login_environment_admin(email, password)
       when is_binary(email) and is_binary(password) do
-    with :ok <- ensure_bootstrap_admin_enabled(),
-         normalized_email <- User.normalize_email(email),
+    with :ok <- ensure_environment_admin_enabled(),
+         true <- environment_admin_email?(email),
          %UserRow{} = user_row <-
            Repo.get_by(UserRow,
-             email: normalized_email,
+             user_id: @environment_admin_user_id,
              lifecycle_state: Atom.to_string(:active)
            ),
-         {:ok, %User{} = user} <- ensure_platform_admin(UserRow.to_domain(user_row)),
-         %UserLocalCredentialRow{} = credential_row <-
-           Repo.get_by(UserLocalCredentialRow,
-             user_id: user.user_id,
-             provider_key: @bootstrap_provider_key,
-             lifecycle_state: Atom.to_string(:active)
-           ),
-         true <-
-           Password.verify_password(
-             password,
-             credential_row.password_hash,
-             credential_row.password_salt,
-             credential_row.password_iterations
-           ) do
-      issue_user_session(user, @bootstrap_session_context, nil)
+         %User{} = user <- UserRow.to_domain(user_row),
+         :ok <- verify_environment_admin_password(user, password) do
+      issue_user_session(user, @browser_session_context, nil, admin_mode?: true)
     else
       nil -> {:error, :invalid_credentials}
       false -> {:error, :invalid_credentials}
@@ -96,36 +83,27 @@ defmodule Cadence.Accounts.Authentication do
 
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   def login_user(email, password) when is_binary(email) and is_binary(password) do
-    with normalized_email <- User.normalize_email(email),
-         %UserRow{} = user_row <-
-           Repo.get_by(UserRow,
-             email: normalized_email,
-             lifecycle_state: Atom.to_string(:active)
-           ),
-         %User{} = user <- UserRow.to_domain(user_row),
+    with {:ok, %User{} = user} <- fetch_active_user_by_email(email),
          :ok <- ensure_durable_login_user(user),
-         %UserLocalCredentialRow{} = credential_row <-
-           Repo.get_by(UserLocalCredentialRow,
-             user_id: user.user_id,
-             provider_key: @password_provider_key,
-             lifecycle_state: Atom.to_string(:active)
-           ),
-         true <-
-           Password.verify_password(
-             password,
-             credential_row.password_hash,
-             credential_row.password_salt,
-             credential_row.password_iterations
-           ) do
+         :ok <- verify_durable_password(user, password) do
       issue_user_session(
         user,
         @browser_session_context,
         default_user_organization_id(user.user_id)
       )
-    else
-      nil -> {:error, :invalid_credentials}
-      false -> {:error, :invalid_credentials}
-      {:error, _reason} = error -> error
+    end
+  end
+
+  @spec verify_user_password(User.t(), binary()) :: :ok | {:error, :invalid_credentials}
+  def verify_user_password(%User{user_id: @environment_admin_user_id} = user, password)
+      when is_binary(password) do
+    verify_environment_admin_password(user, password)
+  end
+
+  def verify_user_password(%User{} = user, password) when is_binary(password) do
+    case ensure_durable_login_user(user) do
+      :ok -> verify_durable_password(user, password)
+      {:error, :invalid_credentials} = error -> error
     end
   end
 
@@ -134,6 +112,7 @@ defmodule Cadence.Accounts.Authentication do
   def authenticate_user_session(session_token) when is_binary(session_token) do
     with %UserSessionTokenRow{} = token_row <- active_session_token_row(session_token),
          {:ok, session_context} <- normalize_session_context(token_row.context),
+         :ok <- ensure_session_principal_available(token_row.user_id),
          %UserRow{} = user_row <-
            Repo.get_by(UserRow,
              user_id: token_row.user_id,
@@ -159,7 +138,7 @@ defmodule Cadence.Accounts.Authentication do
 
   @spec durable_user_by_email(binary()) :: {:ok, User.t()} | :not_found
   def durable_user_by_email(email) when is_binary(email) do
-    case Repo.get_by(UserRow, email: email) do
+    case Repo.get_by(UserRow, email: User.normalize_email(email)) do
       %UserRow{} = row ->
         user = UserRow.to_domain(row)
 
@@ -222,46 +201,120 @@ defmodule Cadence.Accounts.Authentication do
     issue_user_session(user, @browser_session_context, current_organization_id)
   end
 
-  defp persist_bootstrap_admin(config) when is_list(config) do
-    email = Keyword.fetch!(config, :email)
-    display_name = Keyword.get(config, :display_name, @default_bootstrap_admin_display_name)
+  defp persist_environment_admin(config) when is_list(config) do
+    email = config |> Keyword.fetch!(:email) |> User.normalize_email()
+    display_name = Keyword.get(config, :display_name, @default_environment_admin_display_name)
     password = Keyword.fetch!(config, :password)
 
-    Repo.transaction(fn ->
-      with {:ok, persisted_user} <- upsert_bootstrap_admin_user(email, display_name),
-           :ok <-
-             upsert_local_credential(
-               Repo,
-               persisted_user.user_id,
-               @bootstrap_provider_key,
-               password,
-               setup_access_metadata()
-             ) do
-        persisted_user
-      else
+    user =
+      User.new(%{
+        user_id: @environment_admin_user_id,
+        email: email,
+        display_name: display_name,
+        capabilities: [:platform_admin],
+        confirmed_at: DateTime.utc_now(),
+        lifecycle_state: :active,
+        metadata: %{"environment_admin" => true}
+      })
+
+    with {:ok, persisted_user} <- upsert_environment_admin_user(user),
+         :ok <-
+           upsert_local_credential(
+             Repo,
+             persisted_user.user_id,
+             @environment_admin_provider_key,
+             password,
+             %{"environment_admin" => true}
+           ) do
+      {:ok, persisted_user}
+    end
+  end
+
+  defp reconcile_environment_admin_transaction do
+    remove_legacy_bootstrap_admin()
+
+    if environment_admin_enabled?() do
+      case persist_environment_admin(environment_admin_config()) do
+        {:ok, %User{} = user} -> user
         {:error, reason} -> Repo.rollback(reason)
       end
-    end)
-    |> case do
-      {:ok, %User{} = persisted_user} -> {:ok, persisted_user}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp ensure_bootstrap_admin_enabled do
-    if bootstrap_admin_enabled?(), do: :ok, else: {:error, :bootstrap_admin_disabled}
-  end
-
-  defp ensure_platform_admin(%User{} = user) do
-    if :platform_admin in user.capabilities do
-      {:ok, user}
     else
-      {:error, :forbidden}
+      :ok = remove_environment_admin()
+      nil
     end
   end
+
+  defp upsert_environment_admin_user(%User{} = user) do
+    case Repo.get(UserRow, @environment_admin_user_id) do
+      nil ->
+        case Repo.insert(UserRow.changeset(user)) do
+          {:ok, %UserRow{} = row} -> {:ok, UserRow.to_domain(row)}
+          {:error, %Changeset{} = changeset} -> {:error, changeset}
+        end
+
+      %UserRow{} = row ->
+        attrs = %{
+          email: user.email,
+          display_name: user.display_name,
+          capabilities: [Atom.to_string(:platform_admin)],
+          confirmed_at: user.confirmed_at,
+          lifecycle_state: Atom.to_string(:active),
+          metadata: user.metadata
+        }
+
+        case Repo.update(UserRow.update_changeset(row, attrs)) do
+          {:ok, %UserRow{} = updated_row} -> {:ok, UserRow.to_domain(updated_row)}
+          {:error, %Changeset{} = changeset} -> {:error, changeset}
+        end
+    end
+  end
+
+  defp remove_environment_admin do
+    case Repo.get(UserRow, @environment_admin_user_id) do
+      %UserRow{} = row ->
+        case Repo.delete(row) do
+          {:ok, %UserRow{}} -> :ok
+          {:error, %Changeset{} = changeset} -> Repo.rollback(changeset)
+        end
+
+      nil ->
+        :ok
+    end
+  end
+
+  defp remove_legacy_bootstrap_admin do
+    legacy_credential =
+      Repo.get_by(UserLocalCredentialRow,
+        user_id: @legacy_bootstrap_user_id,
+        provider_key: @legacy_bootstrap_provider_key
+      )
+
+    case {Repo.get(UserRow, @legacy_bootstrap_user_id), legacy_credential} do
+      {%UserRow{} = row, %UserLocalCredentialRow{}} ->
+        case Repo.delete(row) do
+          {:ok, %UserRow{}} -> :ok
+          {:error, %Changeset{} = changeset} -> Repo.rollback(changeset)
+        end
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp ensure_environment_admin_enabled do
+    if environment_admin_enabled?(), do: :ok, else: {:error, :invalid_credentials}
+  end
+
+  defp ensure_session_principal_available(@environment_admin_user_id),
+    do: ensure_environment_admin_enabled()
+
+  defp ensure_session_principal_available(_user_id), do: :ok
 
   defp ensure_durable_login_user(%User{} = user) do
     cond do
+      user.user_id == @environment_admin_user_id ->
+        {:error, :invalid_credentials}
+
       user.lifecycle_state != :active ->
         {:error, :invalid_credentials}
 
@@ -273,60 +326,54 @@ defmodule Cadence.Accounts.Authentication do
     end
   end
 
-  defp upsert_bootstrap_admin_user(email, display_name) do
-    normalized_email = User.normalize_email(email)
-
-    case Repo.get_by(UserRow, email: normalized_email) do
-      nil ->
-        user =
-          User.new(%{
-            user_id: bootstrap_admin_config() |> Keyword.get(:user_id, "user_bootstrap_admin"),
-            email: normalized_email,
-            display_name: display_name,
-            capabilities: [:platform_admin],
-            lifecycle_state: :active,
-            metadata: setup_access_metadata()
-          })
-
-        upsert_user(Repo, user)
-
-      %UserRow{} = row ->
-        existing_user = UserRow.to_domain(row)
-
-        user =
-          User.new(%{
-            user_id: existing_user.user_id,
-            email: existing_user.email,
-            display_name:
-              if(User.confirmed?(existing_user),
-                do: existing_user.display_name,
-                else: display_name
-              ),
-            capabilities: add_platform_admin_capability(existing_user.capabilities),
-            confirmed_at: existing_user.confirmed_at,
-            lifecycle_state: :active,
-            metadata:
-              if(User.confirmed?(existing_user),
-                do: existing_user.metadata,
-                else: Map.merge(existing_user.metadata, setup_access_metadata())
-              )
-          })
-
-        upsert_user(Repo, user)
+  defp verify_environment_admin_password(%User{user_id: @environment_admin_user_id}, password) do
+    with :ok <- ensure_environment_admin_enabled(),
+         %UserLocalCredentialRow{} = credential_row <-
+           active_local_credential(@environment_admin_user_id, @environment_admin_provider_key),
+         true <- verify_password(password, credential_row) do
+      :ok
+    else
+      _other -> {:error, :invalid_credentials}
     end
   end
 
+  defp verify_environment_admin_password(%User{}, _password),
+    do: {:error, :invalid_credentials}
+
+  defp verify_durable_password(%User{user_id: user_id}, password) do
+    with %UserLocalCredentialRow{} = credential_row <-
+           active_local_credential(user_id, @password_provider_key),
+         true <- verify_password(password, credential_row) do
+      :ok
+    else
+      _other -> {:error, :invalid_credentials}
+    end
+  end
+
+  defp verify_password(password, credential_row) do
+    Password.verify_password(
+      password,
+      credential_row.password_hash,
+      credential_row.password_salt,
+      credential_row.password_iterations
+    )
+  end
+
   defp durable_user?(%User{} = user) do
-    user.lifecycle_state == :active and User.confirmed?(user) and
-      active_password_credential?(user.user_id)
+    user.user_id != @environment_admin_user_id and user.lifecycle_state == :active and
+      User.confirmed?(user) and active_password_credential?(user.user_id)
   end
 
   defp active_password_credential?(user_id) when is_binary(user_id) do
+    not is_nil(active_local_credential(user_id, @password_provider_key))
+  end
+
+  defp active_local_credential(user_id, provider_key) do
     Repo.get_by(UserLocalCredentialRow,
       user_id: user_id,
-      provider_key: @password_provider_key,
+      provider_key: provider_key,
       lifecycle_state: Atom.to_string(:active)
-    ) != nil
+    )
   end
 
   defp fetch_active_user_by_email(email) when is_binary(email) do
@@ -339,38 +386,6 @@ defmodule Cadence.Accounts.Authentication do
       %UserRow{} = row -> {:ok, UserRow.to_domain(row)}
       nil -> {:error, :invalid_credentials}
     end
-  end
-
-  defp resolve_credential_kind(%User{user_id: user_id}) do
-    has_password = active_credential?(user_id, @password_provider_key)
-    has_bootstrap = active_credential?(user_id, @bootstrap_provider_key)
-
-    cond do
-      has_password ->
-        {:ok, :durable}
-
-      has_bootstrap and bootstrap_admin_enabled?() ->
-        {:ok, :bootstrap_admin}
-
-      true ->
-        {:error, :invalid_credentials}
-    end
-  end
-
-  defp active_credential?(user_id, provider_key)
-       when is_binary(user_id) and is_binary(provider_key) do
-    Repo.get_by(UserLocalCredentialRow,
-      user_id: user_id,
-      provider_key: provider_key,
-      lifecycle_state: Atom.to_string(:active)
-    ) != nil
-  end
-
-  defp add_platform_admin_capability(capabilities) when is_list(capabilities) do
-    capabilities
-    |> List.wrap()
-    |> Kernel.++([:platform_admin])
-    |> Enum.uniq()
   end
 
   defp default_user_organization_id(user_id) when is_binary(user_id) do
@@ -407,9 +422,10 @@ defmodule Cadence.Accounts.Authentication do
     |> Repo.one()
   end
 
-  defp issue_user_session(%User{} = user, session_context, current_organization_id) do
+  defp issue_user_session(user, session_context, current_organization_id, opts \\ [])
+       when is_list(opts) do
     session_token = Token.generate()
-    expires_at = DateTime.utc_now() |> DateTime.add(session_ttl_seconds(session_context), :second)
+    expires_at = DateTime.utc_now() |> DateTime.add(@default_browser_session_ttl_seconds, :second)
 
     attrs = %{
       session_token_id: Ids.new("sess"),
@@ -418,8 +434,7 @@ defmodule Cadence.Accounts.Authentication do
       token_digest: Token.digest(session_token),
       token_hint: Token.hint(session_token),
       expires_at: expires_at,
-      metadata:
-        if(session_context == @bootstrap_session_context, do: setup_access_metadata(), else: %{})
+      metadata: %{}
     }
 
     case Repo.insert(UserSessionTokenRow.changeset(attrs)) do
@@ -429,7 +444,8 @@ defmodule Cadence.Accounts.Authentication do
            user: user,
            session_token: session_token,
            expires_at: expires_at,
-           current_organization_id: current_organization_id
+           current_organization_id: current_organization_id,
+           admin_mode?: Keyword.get(opts, :admin_mode?, false)
          }}
 
       {:error, %Changeset{} = changeset} ->
@@ -437,24 +453,20 @@ defmodule Cadence.Accounts.Authentication do
     end
   end
 
-  defp normalize_session_context(@bootstrap_session_context), do: {:ok, :bootstrap_admin}
   defp normalize_session_context(@browser_session_context), do: {:ok, :browser}
   defp normalize_session_context(_other), do: {:error, :unauthenticated}
 
-  defp bootstrap_admin_config do
-    Application.get_env(:cadence, :bootstrap_admin, [])
+  defp environment_admin_config do
+    Application.get_env(:cadence, :environment_admin, [])
   end
 
-  defp setup_access_metadata do
-    %{"bootstrap_admin" => true, "setup_access" => true}
+  defp environment_admin_email?(email) when is_binary(email) do
+    environment_admin_enabled?() and
+      User.normalize_email(email) ==
+        environment_admin_config() |> Keyword.fetch!(:email) |> User.normalize_email()
   end
 
-  defp session_ttl_seconds(@bootstrap_session_context) do
-    bootstrap_admin_config()
-    |> Keyword.get(:session_ttl_seconds, @default_bootstrap_admin_session_ttl_seconds)
-  end
-
-  defp session_ttl_seconds(@browser_session_context), do: @default_browser_session_ttl_seconds
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
   defp local_credential_attrs(user_id, provider_key, password, metadata) do
     password_document = Password.hash_password(password)

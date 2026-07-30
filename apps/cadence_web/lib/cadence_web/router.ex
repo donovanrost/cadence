@@ -51,6 +51,9 @@ defmodule CadenceWeb.Router do
 
     delete "/session", UserSessionController, :delete
     put "/session/organization", UserSessionController, :update
+    get "/admin-mode", AdminModeController, :new
+    post "/admin-mode", AdminModeController, :create
+    delete "/admin-mode", AdminModeController, :delete
     get "/no-organization", NoOrganizationController, :show
 
     get "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
@@ -461,14 +464,12 @@ defmodule CadenceWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :show
-    post "/bootstrap_admin/login", BootstrapAdminSessionController, :create
   end
 
   scope "/api", CadenceWeb do
     pipe_through [:api, :authenticated_api]
 
     get "/current_scope", CurrentScopeController, :show
-    post "/bootstrap", BootstrapController, :create
 
     scope "/organizations/:organization_id" do
       get "/", OrganizationController, :show

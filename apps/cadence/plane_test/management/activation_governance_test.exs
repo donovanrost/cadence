@@ -111,7 +111,7 @@ defmodule Cadence.Management.ActivationGovernanceTest do
         capabilities: [:platform_admin]
       })
 
-    Scope.new(%{user: user, organization_id: organization_id})
+    Scope.new(%{user: user, organization_id: organization_id, admin_mode?: true})
   end
 
   defp service_scope(organization_id, mission_id, service_identity_id) do

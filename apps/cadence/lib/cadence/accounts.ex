@@ -32,8 +32,6 @@ defmodule Cadence.Accounts do
 
   @type issued_user_session :: Authentication.issued_user_session()
 
-  @type issued_bootstrap_admin_session :: issued_user_session()
-
   @type organization_access_result ::
           %{
             mode: :granted,
@@ -46,21 +44,24 @@ defmodule Cadence.Accounts do
               invitation_token: binary()
             }
 
-  @spec bootstrap_admin_enabled?() :: boolean()
-  defdelegate bootstrap_admin_enabled?(), to: Authentication
+  @spec environment_admin_enabled?() :: boolean()
+  defdelegate environment_admin_enabled?(), to: Authentication
 
-  @spec ensure_bootstrap_admin() :: {:ok, User.t()} | {:error, term()}
-  defdelegate ensure_bootstrap_admin(), to: Authentication
+  @spec reconcile_environment_admin() :: {:ok, User.t() | nil} | {:error, term()}
+  defdelegate reconcile_environment_admin(), to: Authentication
 
   @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   defdelegate sign_in(email, password), to: Authentication
 
-  @spec login_bootstrap_admin(binary(), binary()) ::
+  @spec login_environment_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
-  defdelegate login_bootstrap_admin(email, password), to: Authentication
+  defdelegate login_environment_admin(email, password), to: Authentication
 
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   defdelegate login_user(email, password), to: Authentication
+
+  @spec verify_user_password(User.t(), binary()) :: :ok | {:error, :invalid_credentials}
+  defdelegate verify_user_password(user, password), to: Authentication
 
   @spec authenticate_user_session(binary()) ::
           {:ok, %{user: User.t(), session_context: user_session_context()}} | {:error, term()}
@@ -68,11 +69,6 @@ defmodule Cadence.Accounts do
 
   @spec revoke_user_session(binary()) :: :ok
   defdelegate revoke_user_session(session_token), to: Authentication
-
-  @spec revoke_bootstrap_admin_session(binary()) :: :ok
-  defdelegate revoke_bootstrap_admin_session(session_token),
-    to: Authentication,
-    as: :revoke_user_session
 
   @spec fetch_user(binary()) :: {:ok, User.t()} | {:error, term()}
   def fetch_user(user_id) when is_binary(user_id) do

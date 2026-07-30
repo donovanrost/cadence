@@ -14,7 +14,7 @@ runtime, local tooling, and production deployment.
 Use this as a quick reference when you need to answer:
 
 - which backend is Cadence using by default?
-- which env vars matter for bootstrap admin and production?
+- which env vars matter for the environment administrator and production?
 - what fields exist in a dev profile?
 - how do profiler tasks attach to a named node?
 
@@ -141,28 +141,28 @@ plus stale-timer and safety-activity totals and a bounded recent-event list.
 This view is intentionally in memory only; it is suitable for a runtime health
 page or alert adapter, not as durable audit history.
 
-## 2. Bootstrap admin env in `config/runtime.exs`
+## 2. Environment administrator in `config/runtime.exs`
 
-Bootstrap admin is configured in:
+The environment administrator is configured in:
 
 - [`config/runtime.exs`](../../config/runtime.exs)
 
 Primary env vars:
 
-- `CADENCE_BOOTSTRAP_ADMIN_ENABLED`
-- `CADENCE_BOOTSTRAP_ADMIN_EMAIL`
-- `CADENCE_BOOTSTRAP_ADMIN_PASSWORD`
+- `CADENCE_ADMIN_EMAIL`
+- `CADENCE_ADMIN_PASSWORD`
 
 Optional env vars:
 
-- `CADENCE_BOOTSTRAP_ADMIN_USER_ID`
-- `CADENCE_BOOTSTRAP_ADMIN_DISPLAY_NAME`
-- `CADENCE_BOOTSTRAP_ADMIN_SESSION_TTL_SECONDS`
+- `CADENCE_ADMIN_DISPLAY_NAME`
+- `CADENCE_ADMIN_MODE_TTL_SECONDS`
 
 Behavior:
 
-- when enabled, Cadence ensures a real persisted bootstrap admin user exists
-- when disabled, that bootstrap login path is not available
+- email and password must be configured together
+- the reserved administrator is available only while those credentials are configured
+- it uses the normal browser sign-in flow and enters admin mode immediately
+- durable platform administrators reauthenticate to enter time-bounded admin mode
 
 ## 3. Production env in `config/runtime.exs`
 

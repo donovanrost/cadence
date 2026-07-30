@@ -18,27 +18,25 @@ defmodule CadenceWeb.AdminLiveTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  @bootstrap_admin_email "bootstrap-admin@example.com"
-  @bootstrap_admin_password "bootstrap-password-123"
+  @environment_admin_email "environment-admin@example.com"
+  @environment_admin_password "environment-admin-password-123"
 
   setup do
-    previous_bootstrap_admin = Application.get_env(:cadence, :bootstrap_admin, [])
+    previous_environment_admin = Application.get_env(:cadence, :environment_admin, [])
 
-    Application.put_env(:cadence, :bootstrap_admin,
+    Application.put_env(:cadence, :environment_admin,
       enabled: true,
-      user_id: "user_bootstrap_admin",
-      email: @bootstrap_admin_email,
-      display_name: "Bootstrap Admin",
-      password: @bootstrap_admin_password,
-      session_ttl_seconds: 3600
+      email: @environment_admin_email,
+      display_name: "Environment Admin",
+      password: @environment_admin_password
     )
 
-    reset_bootstrap_state!()
-    assert {:ok, _user} = Cadence.Auth.ensure_bootstrap_admin()
+    reset_control_plane_state!()
+    assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
     flush_mailbox()
 
     on_exit(fn ->
-      Application.put_env(:cadence, :bootstrap_admin, previous_bootstrap_admin)
+      Application.put_env(:cadence, :environment_admin, previous_environment_admin)
       flush_mailbox()
     end)
 
@@ -65,6 +63,21 @@ defmodule CadenceWeb.AdminLiveTest do
 
       assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin")
       assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/runtime")
+    end
+
+    test "admin-eligible durable user without admin mode is redirected to reauthenticate" do
+      password = "durable-admin-password-123"
+
+      persist_durable_user!(
+        email: "eligible-admin@example.com",
+        password: password,
+        capabilities: [:platform_admin]
+      )
+
+      {:ok, session} = Cadence.Auth.sign_in("eligible-admin@example.com", password)
+      conn = build_conn() |> init_test_session(%{user_session_token: session.session_token})
+
+      assert {:error, {:redirect, %{to: "/admin-mode"}}} = live(conn, ~p"/admin")
     end
 
     test "platform admin can access the dashboard" do
@@ -103,9 +116,34 @@ defmodule CadenceWeb.AdminLiveTest do
 
     test "admin can view organization detail with no members" do
       org = create_test_org!("Cadence Ops", "cadence-ops")
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
+      {:ok, view, html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
       assert html =~ "Cadence Ops"
       assert html =~ "No members yet"
+      assert has_element?(view, "#admin-service-identities")
+      assert has_element?(view, "#service-identity-form")
+      assert has_element?(view, ~s(form[action="/session/organization"]))
+    end
+
+    test "admin can issue the first product API service credential" do
+      org = create_test_org!("Cadence Ops", "cadence-ops")
+      {:ok, view, _html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
+
+      view
+      |> form("#service-identity-form",
+        service_identity: %{
+          display_name: "Operations Automation",
+          service_identity_id: "svc-operations"
+        }
+      )
+      |> render_submit()
+
+      assert has_element?(view, "#issued-service-token code")
+      assert has_element?(view, "#service-identities-table", "Operations Automation")
+
+      assert {:ok, identity} =
+               Cadence.Auth.fetch_service_identity(org.organization_id, "svc-operations")
+
+      assert identity.capabilities == [:organization_admin]
     end
   end
 
@@ -542,8 +580,13 @@ defmodule CadenceWeb.AdminLiveTest do
   ## Helpers
 
   defp admin_conn do
-    token = bootstrap_admin_session_token()
-    build_conn() |> init_test_session(%{user_session_token: token})
+    issued_session = environment_admin_session()
+
+    build_conn()
+    |> init_test_session(%{
+      user_session_token: issued_session.session_token,
+      admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
+    })
   end
 
   defp reset_runtime_health! do
@@ -554,11 +597,14 @@ defmodule CadenceWeb.AdminLiveTest do
     end)
   end
 
-  defp bootstrap_admin_session_token do
+  defp environment_admin_session do
     assert {:ok, issued_session} =
-             Cadence.Auth.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
+             Cadence.Auth.login_environment_admin(
+               @environment_admin_email,
+               @environment_admin_password
+             )
 
-    issued_session.session_token
+    issued_session
   end
 
   defp persist_durable_user!(opts) when is_list(opts) do

@@ -7,10 +7,6 @@ defmodule Cadence.Auth.Policy do
   alias Cadence.Auth.Scope
 
   @spec authorize(Scope.t(), atom(), map()) :: :ok | {:error, term()}
-  def authorize(%Scope{} = current_scope, :bootstrap_platform, _params) do
-    authorize_platform_admin(current_scope)
-  end
-
   def authorize(%Scope{} = current_scope, :read_organization, %{organization_id: organization_id}) do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
@@ -194,12 +190,4 @@ defmodule Cadence.Auth.Policy do
 
   defp authorize_service_mission(%Scope{}, _organization_id, _mission_id),
     do: {:error, :forbidden}
-
-  defp authorize_platform_admin(%Scope{} = current_scope) do
-    if MapSet.member?(current_scope.capabilities, :platform_admin) do
-      :ok
-    else
-      {:error, :forbidden}
-    end
-  end
 end
