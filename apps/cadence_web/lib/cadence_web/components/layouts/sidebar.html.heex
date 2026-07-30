@@ -147,4 +147,8 @@
   </div>
 </div>
 
-<.flash_stack flash={@flash} />
+<LiveToast.toast_group
+  flash={@flash}
+  connected={assigns[:socket] != nil}
+  toasts_sync={assigns[:toasts_sync]}
+/>

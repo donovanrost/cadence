@@ -19,6 +19,14 @@ defmodule CadenceWeb.UserSessionLiveTest do
       assert html =~ "password"
     end
 
+    test "mounts the LiveToast host in the shared auth layout", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sign-in")
+
+      assert has_element?(view, "#toast-group[data-live-toast-group='true']")
+      assert has_element?(view, "#toast-group #client-error[phx-hook='LiveToast']")
+      assert has_element?(view, "#toast-group #server-error[phx-hook='LiveToast']")
+    end
+
     test "renders no setup-access-specific UI", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/sign-in")
 

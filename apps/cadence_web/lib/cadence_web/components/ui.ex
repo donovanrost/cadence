@@ -15,31 +15,6 @@ defmodule CadenceWeb.UI do
     statics: CadenceWeb.static_paths()
 
   @doc """
-  Fixed-position flash stack. Renders :info and :error entries from the
-  controller/LiveView flash map. Emits nothing when both are absent.
-  """
-  attr :flash, :map, required: true
-
-  def flash_stack(assigns) do
-    ~H"""
-    <div class="fixed top-5 right-5 max-md:top-auto max-md:bottom-3 max-md:left-3 max-md:right-3 z-[var(--z-toast)] grid gap-3">
-      <p
-        :if={info = Phoenix.Flash.get(@flash, :info)}
-        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-success/40 rounded-[2px] bg-base-200/95 text-sm text-base-content shadow-lg"
-      >
-        {info}
-      </p>
-      <p
-        :if={error = Phoenix.Flash.get(@flash, :error)}
-        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-error/40 rounded-[2px] bg-base-200/95 text-sm text-base-content shadow-lg"
-      >
-        {error}
-      </p>
-    </div>
-    """
-  end
-
-  @doc """
   Bell icon with unread badge and recent-notifications dropdown.
 
   Attrs:

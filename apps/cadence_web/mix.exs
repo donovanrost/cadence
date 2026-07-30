@@ -54,6 +54,7 @@ defmodule CadenceWeb.MixProject do
        depth: 1},
       {:jason, "~> 1.4"},
       {:lazy_html, ">= 0.1.0", only: :test},
+      {:live_toast, "~> 0.9.0"},
       {:opentelemetry_bandit, "~> 0.3.0"},
       {:opentelemetry_phoenix, "~> 2.0"},
       {:phoenix, "~> 1.8.1"},

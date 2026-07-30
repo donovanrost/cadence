@@ -1,6 +1,7 @@
 import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
+import {createLiveToastHook} from "../../../../deps/live_toast"
 import ClipboardButton from "./hooks/clipboard_button"
 import DashboardGrid from "./hooks/dashboard_grid"
 import DropdownMenu from "./hooks/dropdown_menu"
@@ -14,6 +15,7 @@ const Hooks = {
   ClipboardButton,
   DashboardGrid,
   DropdownMenu,
+  LiveToast: createLiveToastHook(),
   NavRail,
   Overlay,
   ResizablePanel,
