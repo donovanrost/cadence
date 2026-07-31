@@ -389,8 +389,10 @@ defmodule CadenceSimulator.CLITest do
   test "cadence is test-only while CCSDS is a production dependency" do
     mix_source = File.read!(Path.expand("../../mix.exs", __DIR__))
 
-    assert mix_source =~ "{:cadence, in_umbrella: true, only: :test}"
-    assert mix_source =~ "{:cadence_ccsds, in_umbrella: true}"
+    assert mix_source =~ ~s|{:cadence, path: "../cadence", env: Mix.env(), only: :test}|
+
+    assert mix_source =~
+             ~s|{:cadence_ccsds, path: "../cadence_ccsds", env: Mix.env()}|
   end
 
   defp write_config!(yaml_content) do

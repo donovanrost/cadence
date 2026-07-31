@@ -4,6 +4,7 @@ defmodule CadenceCCSDS.MixProject do
   def project do
     [
       app: :cadence_ccsds,
+      workspace: workspace(),
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -22,4 +23,11 @@ defmodule CadenceCCSDS.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
+
+  defp workspace do
+    [
+      tags: [{:layer, :foundation}],
+      affected_by: ["../../mix.exs", "../../mix.lock", "../../config"]
+    ]
+  end
 end

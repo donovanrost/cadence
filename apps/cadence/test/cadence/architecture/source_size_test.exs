@@ -53,7 +53,7 @@ defmodule Cadence.Architecture.SourceSizeTest do
              )
   end
 
-  test "finds the umbrella root from a child application" do
+  test "finds the workspace root from a child application" do
     repo_root = SourceSize.repo_root!()
 
     assert SourceSize.repo_root!(Path.join(repo_root, "apps/cadence")) == repo_root

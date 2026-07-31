@@ -4,6 +4,7 @@ defmodule CadenceCatalog.MixProject do
   def project do
     [
       app: :cadence_catalog,
+      workspace: workspace(),
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -18,6 +19,13 @@ defmodule CadenceCatalog.MixProject do
   def application do
     [
       extra_applications: [:crypto, :logger]
+    ]
+  end
+
+  defp workspace do
+    [
+      tags: [{:layer, :foundation}],
+      affected_by: ["../../mix.exs", "../../mix.lock", "../../config"]
     ]
   end
 

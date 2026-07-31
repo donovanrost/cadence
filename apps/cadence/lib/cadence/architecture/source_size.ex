@@ -57,7 +57,7 @@ defmodule Cadence.Architecture.SourceSize do
     |> ancestor_paths()
     |> Enum.find(&repo_root?/1)
     |> case do
-      nil -> raise ArgumentError, "could not find the Cadence umbrella root"
+      nil -> raise ArgumentError, "could not find the Cadence workspace root"
       path -> path
     end
   end

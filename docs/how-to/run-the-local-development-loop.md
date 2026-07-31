@@ -3,7 +3,7 @@ title: Run the Local Development Loop
 tags: [how-to, developer, simulator, profiler, provider]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-30
 ---
 
 # Run the Local Development Loop
@@ -131,3 +131,45 @@ provider surface used by a commercial ground-station provider, use:
 - [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 
 The simulator does not create or administer Cadence mission resources.
+
+## 9. Run commit checks
+
+The default hk pre-commit hook runs the shared quality checks and tests only
+the Mix projects affected by the staged changes:
+
+```bash
+mix precommit.affected
+```
+
+Workspace follows the declared path dependencies transitively. For
+example, a `cadence_ccsds` change also tests `cadence`, `cadence_simulator`, and
+`cadence_web`, while a `cadence_web`-only change tests only `cadence_web`.
+Changes to the root `mix.exs`, `mix.lock`, or shared `config` affect every
+project.
+
+Inspect the current selection and package graph with:
+
+```bash
+mix workspace.run -t test --affected
+mix workspace.status
+mix workspace.graph
+mix workspace.check
+```
+
+`mix workspace.check` enforces the package-level foundation, domain, and
+application dependency boundaries. The existing `mix
+cadence.architecture.check` remains responsible for the finer module-level
+plane and context boundaries inside the core application.
+
+Before merging, run the authoritative aggregate gate explicitly:
+
+```bash
+mix precommit
+```
+
+To make hk run that full gate instead of the affected gate, enable its `full`
+profile:
+
+```bash
+hk run pre-commit --profile full
+```

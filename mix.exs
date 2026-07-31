@@ -1,9 +1,11 @@
-defmodule CadenceUmbrella.MixProject do
+defmodule CadenceWorkspace.MixProject do
   use Mix.Project
 
   def project do
     [
-      apps_path: "apps",
+      app: :cadence_workspace,
+      workspace: [type: :workspace],
+      elixirc_paths: [],
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -17,6 +19,7 @@ defmodule CadenceUmbrella.MixProject do
     [
       preferred_envs: [
         precommit: :test,
+        "precommit.affected": :test,
         "test.fast": :test,
         "test.runtime": :test,
         "test.management": :test,
@@ -33,7 +36,10 @@ defmodule CadenceUmbrella.MixProject do
 
   defp deps do
     [
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:cadence_simulator, path: "apps/cadence_simulator", env: Mix.env(), runtime: false},
+      {:cadence_web, path: "apps/cadence_web", env: Mix.env()},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:workspace, "~> 0.3", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -51,16 +57,42 @@ defmodule CadenceUmbrella.MixProject do
       "test.integration": [&run_integration_tests/1],
       "test.browser": [&run_browser_tests/1],
       "test.browser.full": [&run_full_browser_tests/1],
-      precommit: [
+      "precommit.checks": [
         "format",
-        "compile --warnings-as-errors",
+        "workspace.run -t compile --env-var MIX_ENV=test -- --warnings-as-errors",
         "credo --strict",
+        "workspace.check",
         "cadence.extensions.check",
-        "cadence.architecture.check --summary",
+        "cadence.architecture.check --summary"
+      ],
+      precommit: [
+        "precommit.checks",
         "test.planes",
         "test"
-      ]
+      ],
+      "precommit.affected": ["precommit.checks", &run_affected_tests/1]
     ]
+  end
+
+  defp run_affected_tests(_args) do
+    affected_apps =
+      __DIR__
+      |> Workspace.new!(Path.join(__DIR__, ".workspace.exs"))
+      |> Workspace.Status.affected()
+
+    case affected_apps do
+      [] ->
+        Mix.shell().info("No Cadence applications are affected; skipping application tests.")
+
+      apps ->
+        Mix.shell().info("Affected Cadence applications: #{Enum.join(apps, ", ")}")
+
+        if :cadence in apps do
+          run_all_plane_tests([])
+        end
+
+        Mix.Task.run("workspace.run", ["-t", "test", "--affected"])
+    end
   end
 
   defp run_fast_tests(args) do
@@ -105,8 +137,12 @@ defmodule CadenceUmbrella.MixProject do
   end
 
   defp run_child_tests(args) do
-    args_by_app = child_test_args(args)
+    args
+    |> child_test_args()
+    |> run_child_tests_by_app()
+  end
 
+  defp run_child_tests_by_app(args_by_app) do
     if args = Map.get(args_by_app, :cadence) do
       run_child_mix_command(:cadence, ["db.setup.test"])
       run_child_test_command(:cadence, cadence_test_args(args))

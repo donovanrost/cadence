@@ -14,9 +14,16 @@ hooks {
                 check = "mix format --check-formatted {{files}}"
                 fix = "mix format {{files}}"
             }
-            ["precommit"] {
+            ["precommit-affected"] {
+                profiles = List("!full")
+                check = "mix precommit.affected"
+                stdin = ""
+                exclusive = true
+            }
+            ["precommit-full"] {
                 profiles = List("full")
                 check = "mix precommit"
+                stdin = ""
                 exclusive = true
             }
         }

@@ -1,9 +1,12 @@
 defmodule Cadence.MixProject do
   use Mix.Project
 
+  alias Mix.Tasks.Test, as: TestTask
+
   def project do
     [
       app: :cadence,
+      workspace: workspace(),
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -28,11 +31,18 @@ defmodule Cadence.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
+  defp workspace do
+    [
+      tags: [{:layer, :domain}],
+      affected_by: ["../../mix.exs", "../../mix.lock", "../../config"]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:cadence_catalog, in_umbrella: true},
-      {:cadence_ccsds, in_umbrella: true},
+      {:cadence_catalog, path: "../cadence_catalog", env: Mix.env()},
+      {:cadence_ccsds, path: "../cadence_ccsds", env: Mix.env()},
       {:ecto_sql, "~> 3.13"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
@@ -49,7 +59,21 @@ defmodule Cadence.MixProject do
 
   defp aliases do
     [
-      "db.setup.test": ["ecto.create --quiet", "ecto.migrate --quiet"]
+      "db.setup.test": ["ecto.create --quiet", "ecto.migrate --quiet"],
+      test: [&run_tests/1]
     ]
+  end
+
+  defp run_tests(args) do
+    Mix.Task.run("db.setup.test")
+    TestTask.run(cadence_test_args(args))
+  end
+
+  defp cadence_test_args(args) do
+    if Enum.any?(args, &String.starts_with?(&1, "--max-cases")) do
+      args
+    else
+      ["--max-cases", "1" | args]
+    end
   end
 end
