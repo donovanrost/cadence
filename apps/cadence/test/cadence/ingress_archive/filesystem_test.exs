@@ -3,6 +3,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
+  alias Cadence.IngressArchive.{Batch, Receipt}
   alias Cadence.IngressArchive.FileSystem
   alias Cadence.IngressArchive.FileSystem.EvidenceEntryRow, as: IngressArchiveEvidenceEntryRow
   alias Cadence.Replay.Scope
@@ -37,7 +38,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
     mission_id = "mission-archive-" <> Integer.to_string(System.unique_integer([:positive]))
     persist_mission_scope(organization_id, mission_id)
 
-    %{mission_id: mission_id}
+    %{mission_id: mission_id, base_path: base_path}
   end
 
   test "archives raw evidence to segment files and replays by evidence, source, contact, and metadata",
@@ -159,6 +160,76 @@ defmodule Cadence.IngressArchive.FileSystemTest do
              )
 
     assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+  end
+
+  test "batch archive receipt is durable only after deterministic object and index exist", %{
+    mission_id: mission_id,
+    base_path: base_path
+  } do
+    raw_evidence =
+      RawEvidence.new(%{
+        evidence_id: "evidence-durable-batch",
+        mission_id: mission_id,
+        protocol_family: :tm,
+        direction: :downlink,
+        raw: :binary.copy(<<9>>, 128),
+        receipt_time: DateTime.from_unix!(1_700_800_000, :second)
+      })
+
+    batch = Batch.new("journal-stream-alpha", 0, 128, [raw_evidence])
+
+    assert {:ok, %Receipt{completion: :durable} = first_receipt} =
+             IngressArchive.persist_batch(batch)
+
+    assert first_receipt.batch_id == batch.batch_id
+    assert first_receipt.end_offset == 128
+
+    assert {:ok, [fetched]} =
+             IngressArchive.fetch_raw_evidences(
+               mission_id,
+               Scope.new(%{evidence_ids: [raw_evidence.evidence_id]})
+             )
+
+    assert fetched.raw == raw_evidence.raw
+
+    object_paths = Path.wildcard(Path.join(base_path, "**/*.bin"))
+    assert length(object_paths) == 1
+
+    assert {:ok, %Receipt{completion: :durable} = replay_receipt} =
+             IngressArchive.persist_batch(batch)
+
+    assert replay_receipt.batch_id == first_receipt.batch_id
+    assert Path.wildcard(Path.join(base_path, "**/*.bin")) == object_paths
+    assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+  end
+
+  test "retries a deterministic batch after its object was written before its index", %{
+    mission_id: mission_id,
+    base_path: base_path
+  } do
+    raw_evidence =
+      RawEvidence.new(%{
+        evidence_id: "evidence-object-before-index",
+        mission_id: mission_id,
+        protocol_family: :tm,
+        direction: :downlink,
+        raw: :binary.copy(<<8>>, 64),
+        receipt_time: DateTime.from_unix!(1_700_850_000, :second)
+      })
+
+    batch = Batch.new("journal-stream-crash", 64, 128, [raw_evidence])
+
+    assert {:ok, object_key, _bytes} =
+             FileSystem.store_segment_object(batch.batch_id, batch.raw_evidences,
+               base_path: base_path
+             )
+
+    assert File.exists?(Path.join(base_path, object_key))
+    assert 0 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+
+    assert {:ok, %Receipt{completion: :durable}} = IngressArchive.persist_batch(batch)
+    assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+    assert length(Path.wildcard(Path.join(base_path, "**/*.bin"))) == 1
   end
 
   test "stats and flush tolerate legacy writer state without buffer sizes", %{

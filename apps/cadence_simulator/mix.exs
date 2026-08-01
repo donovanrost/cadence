@@ -13,7 +13,7 @@ defmodule CadenceSimulator.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      escript: [main_module: CadenceSimulator.CLI],
+      escript: [main_module: CadenceSimulator.CLI, app: nil],
       deps: deps()
     ]
   end

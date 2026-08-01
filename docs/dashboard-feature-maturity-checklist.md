@@ -1005,6 +1005,12 @@ history source frames filter by contact, status-matrix rows preserve endpoint
 identity plus `contact_id`, and browser coverage proves contact-scope filtering,
 resolved row contact DataLinks, timestamp-less URL-selected contact DataLink
 state, and contact-scoped frame evidence/copy payloads.
+ADR-019 makes the per-result operational-event backing in this evidence a
+migration dependency rather than the target architecture. This checklist stays
+open for ingress latency until equivalent latest/history, scope, freshness, and
+DataLink proof runs against runtime health plus the metrics/time-series source
+without requiring one operational event per sample.
+
 The shared ops context rail now has focused component proof for its reusable
 server-rendered contract: rail hook metadata, stable collapsed/expanded section
 keys, per-section status/count metadata, hidden-section filtering, and the

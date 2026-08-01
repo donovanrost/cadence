@@ -22,6 +22,13 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
              PlaneBoundary.classify("lib/cadence_web/live/ops_dashboard_show_live.ex")
   end
 
+  test "ingress journal belongs to the telemetry data plane" do
+    path = "lib/cadence/ingress_journal/file_system.ex"
+
+    assert :data == PlaneBoundary.classify(path)
+    assert :telemetry == ContextBoundary.classify(path)
+  end
+
   test "unclassified core modules fail closed" do
     findings =
       DependencyBoundary.findings(%{

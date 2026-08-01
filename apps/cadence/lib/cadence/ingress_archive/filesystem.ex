@@ -3,8 +3,9 @@ defmodule Cadence.IngressArchive.FileSystem do
   @moduledoc """
   Local filesystem ingress archive backend.
 
-  Raw evidence is buffered in memory, flushed into segment files, and indexed in
-  Postgres with lightweight metadata rows for replay lookup.
+  Legacy callers may buffer raw evidence in memory before a flush. Journal
+  consumers use the batch-native API, which writes and indexes a deterministic
+  segment before returning a durable receipt.
   """
 
   import Ecto.Query
@@ -13,8 +14,10 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive.{Batch, Receipt}
   alias Cadence.IngressArchive.FileSystem.EvidenceEntryRow, as: IngressArchiveEvidenceEntryRow
   alias Cadence.IngressArchive.FileSystem.Writer
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -32,6 +35,28 @@ defmodule Cadence.IngressArchive.FileSystem do
   @impl true
   def persist_raw_evidence(%RawEvidence{} = raw_evidence) do
     Writer.enqueue(raw_evidence)
+  end
+
+  @impl true
+  def persist_batch(%Batch{} = batch) do
+    mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
+    organization_id = OrganizationScope.organization_id_for_mission(mission_id)
+
+    if archived_evidence_ids?(batch.raw_evidences) do
+      {:ok, Receipt.for_batch(batch, :durable)}
+    else
+      with {:ok, object_key, _segment_size_bytes} <-
+             store_segment_object(batch.batch_id, batch.raw_evidences,
+               base_path: Keyword.fetch!(backend_opts(), :base_path)
+             ),
+           :ok <-
+             persist_segment(batch.batch_id, batch.raw_evidences,
+               object_key: object_key,
+               organization_id: organization_id
+             ) do
+        {:ok, Receipt.for_batch(batch, :durable)}
+      end
+    end
   end
 
   def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
@@ -165,14 +190,25 @@ defmodule Cadence.IngressArchive.FileSystem do
       |> then(fn entries -> %{version: 1, entries: entries} end)
       |> :erlang.term_to_binary(compressed: 6)
 
-    with :ok <- File.mkdir_p(Path.dirname(absolute_path)),
-         :ok <- File.write(temp_path, payload, [:binary]),
-         :ok <- File.rename(temp_path, absolute_path) do
-      {:ok, object_key, byte_size(payload)}
-    else
+    case File.read(absolute_path) do
+      {:ok, ^payload} ->
+        {:ok, object_key, byte_size(payload)}
+
+      {:ok, _different_payload} ->
+        {:error, {:archive_segment_identity_collision, absolute_path}}
+
+      {:error, :enoent} ->
+        with :ok <- File.mkdir_p(Path.dirname(absolute_path)),
+             :ok <- write_synced_segment(temp_path, absolute_path, payload) do
+          {:ok, object_key, byte_size(payload)}
+        else
+          {:error, reason} ->
+            _ = File.rm(temp_path)
+            {:error, {:archive_segment_write_failed, absolute_path, reason}}
+        end
+
       {:error, reason} ->
-        _ = File.rm(temp_path)
-        {:error, {:archive_segment_write_failed, absolute_path, reason}}
+        {:error, {:archive_segment_read_failed, absolute_path, reason}}
     end
   end
 
@@ -370,7 +406,10 @@ defmodule Cadence.IngressArchive.FileSystem do
   defp archived_evidence_ids?(rows) do
     expected_ids =
       rows
-      |> Enum.map(&Map.fetch!(&1, :evidence_id))
+      |> Enum.map(fn
+        %RawEvidence{} = raw_evidence -> raw_evidence.evidence_id
+        row -> Map.fetch!(row, :evidence_id)
+      end)
       |> Enum.uniq()
 
     found_ids =
@@ -385,4 +424,17 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   @spec new_segment_id() :: binary()
   def new_segment_id, do: Ids.new("ingress_segment")
+
+  defp write_synced_segment(temp_path, absolute_path, payload) do
+    with :ok <- File.write(temp_path, payload, [:binary]),
+         {:ok, file} <- :file.open(temp_path, [:read, :write, :binary, :raw]) do
+      sync_result = :file.sync(file)
+      close_result = :file.close(file)
+
+      with :ok <- sync_result,
+           :ok <- close_result do
+        File.rename(temp_path, absolute_path)
+      end
+    end
+  end
 end

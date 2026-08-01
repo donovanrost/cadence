@@ -23,19 +23,23 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
 
     assert eventually(fn ->
              {:ok, snapshot} = ProviderIngressExecutor.snapshot(name)
-             snapshot.queue_depth == 1
+             snapshot.queue_depth == 1 and snapshot.queue_bytes == byte_size(raw_evidence.raw)
            end)
+
+    assert {:ok, queued_snapshot} = ProviderIngressExecutor.snapshot(name)
+    assert queued_snapshot.oldest_queued_age_ms >= 0
 
     state = :sys.get_state(pid)
 
     assert [
-             {:telemetry, ^raw_evidence, %AsyncContext{} = async_context}
+             {:telemetry, ^raw_evidence, %AsyncContext{} = async_context, nil}
            ] = :queue.to_list(state.queue)
 
     parent_span_context = Tracer.current_span_ctx(async_context.parent_context)
 
     assert Span.is_valid(parent_span_context)
     assert AsyncContext.queue_wait_ms(async_context) >= 0
+    assert :queue.len(state.telemetry_enqueued_at_queue) == 1
   end
 
   test "notify_when_below replies immediately when executor queue is below threshold" do
@@ -84,14 +88,20 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
     assert canceled_snapshot.capacity_waiter_count == 0
   end
 
-  test "executor waits on projector capacity notification when projector is backpressured" do
+  test "executor uses local persistence credits without querying a busy projector" do
     projector_name = :"ingress_projector_for_executor_test_#{System.unique_integer([:positive])}"
     projector_pid = start_projector!(projector_name)
 
     executor_name = :"provider_ingress_executor_test_#{System.unique_integer([:positive])}"
     executor_pid = start_executor!(executor_name, persistence_projector_name: projector_name)
 
-    :sys.replace_state(projector_pid, &%{&1 | queue_depth: 9_000})
+    :sys.replace_state(executor_pid, fn state ->
+      %{
+        state
+        | persistence_projector_pid: projector_pid,
+          projector_in_flight_count: 9_000
+      }
+    end)
 
     send(executor_pid, :process_queue)
 
@@ -99,19 +109,20 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
              {:ok, executor_snapshot} = ProviderIngressExecutor.snapshot(executor_name)
 
              executor_snapshot.projector_backpressured? and
-               executor_snapshot.projector_capacity_waiting?
+               executor_snapshot.projector_in_flight_count == 9_000 and
+               not executor_snapshot.projector_capacity_waiting?
            end)
 
     assert {:ok, projector_snapshot} = IngressPersistenceProjector.snapshot(projector_name)
-    assert projector_snapshot.capacity_waiter_count == 1
+    assert projector_snapshot.capacity_waiter_count == 0
 
-    send(projector_pid, :process_queue)
+    send(executor_pid, {:ingress_persistence_completed, projector_pid, 8_000})
 
     assert eventually(fn ->
              {:ok, executor_snapshot} = ProviderIngressExecutor.snapshot(executor_name)
 
              not executor_snapshot.projector_backpressured? and
-               not executor_snapshot.projector_capacity_waiting?
+               executor_snapshot.projector_in_flight_count == 1_000
            end)
   end
 

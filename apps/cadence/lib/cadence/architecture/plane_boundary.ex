@@ -65,6 +65,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/ingress/",
       "lib/cadence/ingress_archive.ex",
       "lib/cadence/ingress_archive/",
+      "lib/cadence/ingress_journal/",
       "lib/cadence/limits.ex",
       "lib/cadence/limits/",
       "lib/cadence/operational_events.ex",

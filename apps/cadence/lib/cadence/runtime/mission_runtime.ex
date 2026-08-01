@@ -128,6 +128,47 @@ defmodule Cadence.Runtime.MissionRuntime do
       {:provider_ingress_executor, mission_id, realized_contact_id, path_id, provider_binding_id}}}
   end
 
+  @spec provider_ingress_journal_name(binary(), binary(), binary(), binary()) ::
+          {:via, Registry, {module(), term()}}
+  def provider_ingress_journal_name(
+        mission_id,
+        realized_contact_id,
+        path_id,
+        provider_binding_id
+      ) do
+    {:via, Registry,
+     {Cadence.Runtime.Registry,
+      {:provider_ingress_journal, mission_id, realized_contact_id, path_id, provider_binding_id}}}
+  end
+
+  @spec provider_ingress_journal_consumer_name(binary(), binary(), binary(), binary()) ::
+          {:via, Registry, {module(), term()}}
+  def provider_ingress_journal_consumer_name(
+        mission_id,
+        realized_contact_id,
+        path_id,
+        provider_binding_id
+      ) do
+    {:via, Registry,
+     {Cadence.Runtime.Registry,
+      {:provider_ingress_journal_consumer, mission_id, realized_contact_id, path_id,
+       provider_binding_id}}}
+  end
+
+  @spec provider_ingress_archive_consumer_name(binary(), binary(), binary(), binary()) ::
+          {:via, Registry, {module(), term()}}
+  def provider_ingress_archive_consumer_name(
+        mission_id,
+        realized_contact_id,
+        path_id,
+        provider_binding_id
+      ) do
+    {:via, Registry,
+     {Cadence.Runtime.Registry,
+      {:provider_ingress_archive_consumer, mission_id, realized_contact_id, path_id,
+       provider_binding_id}}}
+  end
+
   @spec provider_persistence_projector_name(binary(), binary(), binary(), binary()) ::
           {:via, Registry, {module(), term()}}
   def provider_persistence_projector_name(

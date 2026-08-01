@@ -32,7 +32,7 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
 
     {:ok,
      %PacketRecord{
-       packet_id: Ids.new("packet"),
+       packet_id: Keyword.get_lazy(opts, :packet_id, fn -> Ids.new("packet") end),
        evidence_id: raw_evidence.evidence_id,
        mission_id: raw_evidence.mission_id,
        source_endpoint_ref: raw_evidence.source_endpoint_ref,

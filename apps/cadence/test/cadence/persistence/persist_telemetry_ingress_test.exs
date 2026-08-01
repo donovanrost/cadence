@@ -472,7 +472,32 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         raw: build_tm_single_frame(42, 2, <<0, 32>>, frame_size, 3)
       })
 
-    assert {:ok, _first_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence_one)
+    assert {:ok, first_result} = Cadence.process_telemetry_ingress(raw_evidence_one)
+
+    handler_id = "persistence-empty-multi-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :repo, :query],
+        fn _event, _measurements, metadata, test_pid ->
+          send(test_pid, {:unexpected_persistence_query, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> _ = :telemetry.detach(handler_id) end)
+
+    assert :ok =
+             RuntimePersistence.persist_processing_results(
+               [%{first_result | outputs: []}],
+               organization_id: "org-test",
+               record_current_values?: false
+             )
+
+    refute_receive {:unexpected_persistence_query, _metadata}, 100
+    :ok = :telemetry.detach(handler_id)
+
     assert {:ok, second_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence_two)
 
     assert Enum.map(second_result.protocol_anomalies, & &1.anomaly_kind) == [
@@ -489,48 +514,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         order: :asc
       )
 
-    assert length(latency_events) == 2
-
-    assert Enum.all?(
-             latency_events,
-             &(Map.get(&1.payload, "observable_id") == "ingress.processing_latency_ms")
-           )
-
-    assert Enum.all?(latency_events, &(Map.get(&1.payload, "scope_kind") == "source_endpoint"))
-
-    assert Enum.all?(
-             latency_events,
-             &(Map.get(&1.payload, "source_endpoint_id") == "endpoint-archived-gap")
-           )
-
-    assert Enum.all?(
-             latency_events,
-             &(Map.get(&1.payload, "spacecraft_id") == "sc-archived-gap")
-           )
-
-    assert Enum.all?(latency_events, &(Map.get(&1.payload, "unit") == "ms"))
-    assert Enum.all?(latency_events, &is_number(Map.get(&1.payload, "value")))
-    assert Enum.all?(latency_events, &(Map.get(&1.payload, "value") > 0))
-
-    assert Enum.map(latency_events, &Map.get(&1.metadata, "evidence_id")) == [
-             raw_evidence_one.evidence_id,
-             raw_evidence_two.evidence_id
-           ]
-
-    assert Enum.all?(latency_events, &(Map.get(&1.metadata, "end_to_end_us") > 0))
-
-    latency_samples =
-      Cadence.OperationalEvents.operational_observable_metric_samples("mission-alpha",
-        observable_id: "ingress.processing_latency_ms",
-        source_endpoint_id: "endpoint-archived-gap",
-        order: :asc
-      )
-
-    assert length(latency_samples) == 2
-    assert Enum.all?(latency_samples, &(&1.source_endpoint_id == "endpoint-archived-gap"))
-    assert Enum.all?(latency_samples, &(&1.spacecraft_id == "sc-archived-gap"))
-    assert Enum.all?(latency_samples, &(&1.unit == "ms"))
-    assert Enum.all?(latency_samples, &(&1.value > 0))
+    assert latency_events == []
 
     anomaly_rows =
       ProtocolAnomalyRow

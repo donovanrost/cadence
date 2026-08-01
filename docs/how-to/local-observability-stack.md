@@ -207,6 +207,13 @@ Grafana also provisions:
 
 - **Cadence / SRE Overview** at
   <http://localhost:3000/d/cadence-sre-overview/cadence-sre-overview>.
+- **Cadence / Ingress Load Test** at
+  <http://localhost:3000/d/cadence-ingress-load-test/cadence-ingress-load-test>.
+  It refreshes every five seconds and exposes bounded service, direction, and
+  protocol filters plus an editable target-rate line. Its capture-journal row
+  shows retained bytes versus capacity, independent processing/archive lag,
+  the highest active journal utilization, admitted bitrate, and p50/p99 append
+  latency split by the bounded durability profile.
 - Alert rules for HTTP errors, expected-contact telemetry misses, command
   deadline misses, ingress backpressure, and OTLP export failures.
 - Operator response guidance in
@@ -220,3 +227,21 @@ Grafana also provisions:
 
 Data persists in `./var/greptimedb`, `./var/loki`, `./var/tempo`, and
 `./var/grafana`; delete those directories for a clean slate.
+
+When the laptop ingress overlay is included, those mutable data paths are
+replaced with size-capped tmpfs mounts. The observability history is then
+intentionally lost when the containers stop, and the host `./var` directories
+are not used.
+
+For a durable server, Compose, or Kubernetes deployment, enable the candidate
+only with an explicitly provisioned filesystem:
+
+- `CADENCE_INGRESS_JOURNAL_ENABLED=true`
+- `CADENCE_INGRESS_JOURNAL_PATH=/mounted/cadence/ingress-journal`
+- `CADENCE_INGRESS_JOURNAL_MAX_BYTES` (default 8 GiB)
+- `CADENCE_INGRESS_JOURNAL_SEGMENT_BYTES` (default 256 MiB)
+- `CADENCE_INGRESS_JOURNAL_DURABILITY=sync` for a durability boundary, or
+  `page_cache` only for an explicitly volatile test profile
+
+The bounded load-test Compose profile overrides the path to
+`/benchmark/journal` on tmpfs so it cannot consume laptop disk space.

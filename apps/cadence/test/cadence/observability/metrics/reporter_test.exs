@@ -16,7 +16,9 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
     %{handler_id: handler_id}
   end
 
-  test "aggregates telemetry events and exports delta metric points", %{handler_id: handler_id} do
+  test "aggregates telemetry events and exports cumulative metric points", %{
+    handler_id: handler_id
+  } do
     parent = self()
 
     {:ok, reporter} =
@@ -59,10 +61,34 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
             }} = histogram.data
 
     assert %{
-             series_count: 0,
+             series_count: 2,
              exported_data_point_count: 2,
              failed_data_point_count: 0
            } = Reporter.status(reporter)
+
+    :telemetry.execute(@event, %{count: 4, duration: 0.4}, %{outcome: :ok})
+
+    assert :ok = Reporter.flush(reporter)
+    assert_receive {:metric_payload, cumulative_payload}
+
+    cumulative_metrics = decode_metrics(cumulative_payload)
+    cumulative_counter = Enum.find(cumulative_metrics, &(&1.name == "cadence.test.item"))
+    cumulative_histogram = Enum.find(cumulative_metrics, &(&1.name == "cadence.test.duration"))
+
+    assert {:sum, %{data_points: [%{value: {:as_int, 9}}]}} = cumulative_counter.data
+
+    assert {:histogram,
+            %{
+              data_points: [
+                %{
+                  count: 3,
+                  sum: 1.4,
+                  min: 0.2,
+                  max: 0.8,
+                  bucket_counts: [1, 2, 0]
+                }
+              ]
+            }} = cumulative_histogram.data
   end
 
   test "retains points after export failure and bounds series cardinality", %{

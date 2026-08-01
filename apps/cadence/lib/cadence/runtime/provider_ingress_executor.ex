@@ -14,7 +14,6 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Observability
   alias Cadence.Observability.AsyncContext
-  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime, as: RuntimeBoundary
   alias Cadence.Runtime.{IngressEvidence, IngressPersistenceProjector, ProcessedIngressBatch}
   alias Cadence.Runtime.ProviderIngressExecutor.Instrumentation
@@ -25,13 +24,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   @max_drain_batch 512
   @projector_high_watermark 8_192
   @projector_low_watermark 2_048
-  @projector_capacity_retry_ms 1_000
-
   @type executor_item ::
-          {:telemetry, RawEvidence.t(), AsyncContext.t()}
+          {:telemetry, RawEvidence.t(), AsyncContext.t(), {pid(), reference()} | nil}
           | {:transport_event, binary(), term(), keyword()}
 
   @type state :: %{
+          organization_id: binary() | nil,
           mission_id: binary(),
           realized_contact_id: binary(),
           path_id: binary(),
@@ -41,9 +39,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           persistence_projector_monitor_ref: reference() | nil,
           projector_backpressured?: boolean(),
           projector_capacity_wait_ref: reference() | nil,
+          projector_in_flight_count: non_neg_integer(),
           pending_persistence_batches: [ProcessedIngressBatch.t()],
           queue: :queue.queue(executor_item()),
           queue_depth: non_neg_integer(),
+          telemetry_queue_bytes: non_neg_integer(),
+          telemetry_enqueued_at_queue: :queue.queue(integer()),
           processing?: boolean(),
           enqueued_count: non_neg_integer(),
           processed_count: non_neg_integer(),
@@ -74,19 +75,24 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     }
   end
 
-  @spec enqueue_telemetry(GenServer.server(), RawEvidence.t()) :: :ok | {:error, term()}
-  def enqueue_telemetry(executor, %RawEvidence{} = raw_evidence) do
+  @spec enqueue_telemetry(GenServer.server(), RawEvidence.t(), keyword()) ::
+          :ok | {:error, term()}
+  def enqueue_telemetry(executor, %RawEvidence{} = raw_evidence, opts \\ [])
+      when is_list(opts) do
+    completion = Keyword.get(opts, :completion)
+
     Instrumentation.trace_enqueue([raw_evidence], fn async_context ->
-      enqueue(executor, {:telemetry, raw_evidence, async_context})
+      enqueue(executor, {:telemetry, raw_evidence, async_context, completion})
     end)
   end
 
-  @spec enqueue_many_telemetry(GenServer.server(), [RawEvidence.t()]) :: :ok | {:error, term()}
+  @spec enqueue_many_telemetry(GenServer.server(), [RawEvidence.t()]) ::
+          :ok | {:error, term()}
   def enqueue_many_telemetry(_executor, []), do: :ok
 
   def enqueue_many_telemetry(executor, raw_evidences) when is_list(raw_evidences) do
     Instrumentation.trace_enqueue(raw_evidences, fn async_context ->
-      items = Enum.map(raw_evidences, &{:telemetry, &1, async_context})
+      items = Enum.map(raw_evidences, &{:telemetry, &1, async_context, nil})
       enqueue_many(executor, items)
     end)
   end
@@ -146,6 +152,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   def init(opts) do
     {:ok,
      %{
+       organization_id: Keyword.get(opts, :organization_id),
        mission_id: Keyword.fetch!(opts, :mission_id),
        realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
        path_id: Keyword.fetch!(opts, :path_id),
@@ -155,9 +162,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
        persistence_projector_monitor_ref: nil,
        projector_backpressured?: false,
        projector_capacity_wait_ref: nil,
+       projector_in_flight_count: 0,
        pending_persistence_batches: [],
        queue: :queue.new(),
        queue_depth: 0,
+       telemetry_queue_bytes: 0,
+       telemetry_enqueued_at_queue: :queue.new(),
        processing?: false,
        enqueued_count: 0,
        processed_count: 0,
@@ -177,10 +187,13 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       %{
         provider_binding_id: state.provider_binding_id,
         queue_depth: state.queue_depth,
+        queue_bytes: state.telemetry_queue_bytes,
+        oldest_queued_age_ms: oldest_queued_age_ms(state.telemetry_enqueued_at_queue),
         processing?: state.processing?,
         backpressured?: state.projector_backpressured?,
         projector_backpressured?: state.projector_backpressured?,
         projector_capacity_waiting?: is_reference(state.projector_capacity_wait_ref),
+        projector_in_flight_count: state.projector_in_flight_count,
         pending_persistence_batch_count: length(state.pending_persistence_batches),
         enqueued_count: state.enqueued_count,
         processed_count: state.processed_count,
@@ -270,37 +283,31 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
        state
        | persistence_projector_pid: nil,
          persistence_projector_monitor_ref: nil,
-         projector_capacity_wait_ref: nil
+         projector_capacity_wait_ref: nil,
+         projector_in_flight_count: 0,
+         projector_backpressured?: false
      }}
   end
 
   def handle_info(
-        {:ingress_persistence_capacity_available, projector_pid, ref, queue_depth},
-        %{persistence_projector_pid: projector_pid, projector_capacity_wait_ref: ref} = state
-      ) do
-    Instrumentation.emit(:capacity_waiter_released, state, %{queue_depth: state.queue_depth}, %{
-      downstream: :ingress_persistence_projector,
-      downstream_queue_depth: queue_depth
-    })
+        {:ingress_persistence_completed, projector_pid, completed_count},
+        %{persistence_projector_pid: projector_pid} = state
+      )
+      when is_integer(completed_count) and completed_count > 0 do
+    in_flight_count = max(state.projector_in_flight_count - completed_count, 0)
 
-    send(self(), :process_queue)
-    {:noreply, %{state | projector_capacity_wait_ref: nil, processing?: true}}
+    next_state =
+      state
+      |> Map.put(:projector_in_flight_count, in_flight_count)
+      |> maybe_release_local_projector_backpressure()
+
+    {:noreply, next_state}
   end
 
   def handle_info(
-        {:ingress_persistence_capacity_available, _projector_pid, _stale_ref, _queue_depth},
+        {:ingress_persistence_completed, _projector_pid, _completed_count},
         state
       ) do
-    {:noreply, state}
-  end
-
-  def handle_info({:projector_capacity_check, ref}, %{projector_capacity_wait_ref: ref} = state) do
-    state = cancel_projector_capacity_waiter(state, ref)
-    send(self(), :process_queue)
-    {:noreply, %{state | projector_capacity_wait_ref: nil, processing?: true}}
-  end
-
-  def handle_info({:projector_capacity_check, _stale_ref}, state) do
     {:noreply, state}
   end
 
@@ -329,17 +336,75 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp enqueue_items(state, items) do
-    {queue, count} =
-      Enum.reduce(items, {state.queue, 0}, fn item, {queue, count} ->
-        {:queue.in(item, queue), count + 1}
-      end)
+    {queue, enqueued_at_queue, byte_count, count} =
+      Enum.reduce(
+        items,
+        {state.queue, state.telemetry_enqueued_at_queue, 0, 0},
+        fn item, {queue, enqueued_at_queue, byte_count, count} ->
+          {
+            :queue.in(item, queue),
+            enqueue_timestamp(enqueued_at_queue, item),
+            byte_count + item_raw_byte_count(item),
+            count + 1
+          }
+        end
+      )
 
     %{
       state
       | queue: queue,
         queue_depth: state.queue_depth + count,
+        telemetry_queue_bytes: state.telemetry_queue_bytes + byte_count,
+        telemetry_enqueued_at_queue: enqueued_at_queue,
         enqueued_count: state.enqueued_count + count
     }
+  end
+
+  defp enqueue_timestamp(
+         queue,
+         {:telemetry, _raw_evidence, %AsyncContext{} = async_context, _completion}
+       ) do
+    :queue.in(async_context.enqueued_at, queue)
+  end
+
+  defp enqueue_timestamp(queue, _item), do: queue
+
+  defp item_raw_byte_count(
+         {:telemetry, %RawEvidence{} = raw_evidence, _async_context, _completion}
+       ) do
+    byte_size(raw_evidence.raw || <<>>)
+  end
+
+  defp item_raw_byte_count(_item), do: 0
+
+  defp dequeue_item_metrics(
+         state,
+         {:telemetry, %RawEvidence{} = raw_evidence, _async_context, _completion}
+       ) do
+    enqueued_at_queue =
+      case :queue.out(state.telemetry_enqueued_at_queue) do
+        {{:value, _enqueued_at}, rest} -> rest
+        {:empty, queue} -> queue
+      end
+
+    %{
+      state
+      | telemetry_queue_bytes:
+          max(state.telemetry_queue_bytes - byte_size(raw_evidence.raw || <<>>), 0),
+        telemetry_enqueued_at_queue: enqueued_at_queue
+    }
+  end
+
+  defp dequeue_item_metrics(state, _item), do: state
+
+  defp oldest_queued_age_ms(queue) do
+    case :queue.peek(queue) do
+      {:value, enqueued_at} ->
+        AsyncContext.queue_wait_ms(%AsyncContext{enqueued_at: enqueued_at})
+
+      :empty ->
+        0.0
+    end
   end
 
   defp drain_batch(state, 0, current_batch, batches) do
@@ -354,17 +419,18 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       {{:value, item}, rest} ->
         base_state =
           state
+          |> dequeue_item_metrics(item)
           |> Map.put(:queue, rest)
           |> Map.put(:queue_depth, state.queue_depth - 1)
 
         case execute_item(item, base_state) do
-          {:ok, {:telemetry, processing_result, span_context}} ->
+          {:ok, {:telemetry, processing_result, span_context, completion}} ->
             next_state = apply_execution_result(base_state, {:ok, :telemetry})
 
             drain_batch(
               next_state,
               remaining - 1,
-              [{processing_result, span_context} | current_batch],
+              [{processing_result, span_context, completion} | current_batch],
               batches
             )
 
@@ -384,13 +450,17 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         end
 
       {:empty, _queue} ->
-        {%{state | queue_depth: 0},
-         Enum.reverse(finalize_persistence_batches(state, current_batch, batches))}
+        {%{
+           state
+           | queue_depth: 0,
+             telemetry_queue_bytes: 0,
+             telemetry_enqueued_at_queue: :queue.new()
+         }, Enum.reverse(finalize_persistence_batches(state, current_batch, batches))}
     end
   end
 
   defp execute_item(
-         {:telemetry, %RawEvidence{} = raw_evidence, %AsyncContext{} = async_context},
+         {:telemetry, %RawEvidence{} = raw_evidence, %AsyncContext{} = async_context, completion},
          state
        ) do
     attributes =
@@ -399,12 +469,22 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       |> Map.merge(Instrumentation.executor_attributes(state))
       |> Map.put("cadence.queue.wait.duration_ms", AsyncContext.queue_wait_ms(async_context))
 
-    Observability.with_span(
-      async_context.parent_context,
-      "cadence.telemetry.ingress.process",
-      %{kind: :consumer, attributes: attributes},
-      fn -> process_telemetry_in_span(raw_evidence) end
-    )
+    result =
+      Observability.with_span(
+        async_context.parent_context,
+        "cadence.telemetry.ingress.process",
+        %{kind: :consumer, attributes: attributes},
+        fn -> process_telemetry_in_span(raw_evidence, state.organization_id) end
+      )
+
+    case result do
+      {:ok, {:telemetry, processing_result, span_context}} ->
+        {:ok, {:telemetry, processing_result, span_context, completion}}
+
+      {:error, _kind, reason} = error ->
+        notify_completion_failed(completion, reason)
+        error
+    end
   end
 
   defp execute_item({:transport_event, transport_binding_id, event, opts}, _state) do
@@ -429,8 +509,10 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     end
   end
 
-  defp process_telemetry_in_span(%RawEvidence{} = raw_evidence) do
-    case Instrumentation.run_ingress(fn -> process_telemetry_item(raw_evidence) end) do
+  defp process_telemetry_in_span(%RawEvidence{} = raw_evidence, organization_id) do
+    case Instrumentation.run_ingress(fn ->
+           process_telemetry_item(raw_evidence, organization_id)
+         end) do
       {:ok, {:ok, processing_result}} ->
         result_attributes = Instrumentation.processing_result_attributes(processing_result)
         _ = Observability.set_attributes(result_attributes)
@@ -492,7 +574,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     }
   end
 
-  defp process_telemetry_item(%RawEvidence{} = raw_evidence) do
+  defp process_telemetry_item(%RawEvidence{} = raw_evidence, organization_id) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
       ingress_started_at = System.monotonic_time()
 
@@ -507,6 +589,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         {:ok, %RawEvidence{} = resolved_raw_evidence} ->
           handle_resolved_telemetry_item(
             resolved_raw_evidence,
+            organization_id,
             ingress_started_at,
             resolve_us
           )
@@ -626,6 +709,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp handle_resolved_telemetry_item(
          %RawEvidence{} = resolved_raw_evidence,
+         organization_id,
          ingress_started_at,
          resolve_us
        ) do
@@ -638,6 +722,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         finalize_processed_telemetry_item(
           resolved_raw_evidence,
           processing_result,
+          organization_id,
           ingress_started_at,
           resolve_us,
           runtime_us
@@ -678,6 +763,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp finalize_processed_telemetry_item(
          %RawEvidence{} = resolved_raw_evidence,
          processing_result,
+         organization_id,
          ingress_started_at,
          resolve_us,
          runtime_us
@@ -687,7 +773,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
          :ok <-
            maybe_record_current_values(
              resolved_raw_evidence,
-             telemetry_samples
+             telemetry_samples,
+             organization_id
            ) do
       _ =
         Observability.set_attributes(%{
@@ -695,7 +782,6 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         })
 
       end_to_end_us = elapsed_us(ingress_started_at)
-      processing_result = put_ingress_latency_metric(processing_result, end_to_end_us, false)
 
       TelemetryProfiler.record_ingress_result(
         resolved_raw_evidence,
@@ -735,36 +821,48 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     )
   end
 
-  defp maybe_record_current_values(%RawEvidence{}, telemetry_samples)
+  defp maybe_record_current_values(%RawEvidence{}, telemetry_samples, _organization_id)
        when telemetry_samples == [],
        do: :ok
 
-  defp maybe_record_current_values(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
+  defp maybe_record_current_values(
+         %RawEvidence{} = resolved_raw_evidence,
+         telemetry_samples,
+         organization_id
+       ) do
     if CurrentValueStore.hot_path_safe?() do
-      record_hot_path_current_values(resolved_raw_evidence, telemetry_samples)
+      record_hot_path_current_values(resolved_raw_evidence, telemetry_samples, organization_id)
     else
       :ok
     end
   end
 
-  defp record_hot_path_current_values(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
+  defp record_hot_path_current_values(
+         %RawEvidence{} = resolved_raw_evidence,
+         telemetry_samples,
+         organization_id
+       ) do
     TelemetryProfiler.with_runtime_component(
       resolved_raw_evidence.mission_id,
       :current_value_record,
       fn ->
         Instrumentation.trace_stage("cadence.telemetry.ingress.record_current_values", fn ->
           resolved_raw_evidence
-          |> enriched_current_samples(telemetry_samples)
+          |> enriched_current_samples(telemetry_samples, organization_id)
           |> record_enriched_current_values()
         end)
       end
     )
   end
 
-  defp enriched_current_samples(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
+  defp enriched_current_samples(
+         %RawEvidence{} = resolved_raw_evidence,
+         telemetry_samples,
+         organization_id
+       ) do
     TelemetryStorage.enrich_samples(
       telemetry_samples,
-      current_value_storage_opts(resolved_raw_evidence)
+      current_value_storage_opts(resolved_raw_evidence, organization_id)
     )
   end
 
@@ -774,33 +872,15 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp record_enriched_current_values({:error, reason}), do: {:error, reason}
 
-  defp current_value_storage_opts(%RawEvidence{} = resolved_raw_evidence) do
+  defp current_value_storage_opts(%RawEvidence{} = resolved_raw_evidence, organization_id) do
     [
-      organization_id:
-        OrganizationScope.organization_id_for_mission(resolved_raw_evidence.mission_id),
+      organization_id: organization_id,
       source_endpoint_id:
         resolved_raw_evidence.source_endpoint_ref || resolved_raw_evidence.source_ref,
       recorded_at: resolved_raw_evidence.receipt_time
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
   end
-
-  defp put_ingress_latency_metric(processing_result, end_to_end_us, error?)
-       when is_map(processing_result) and is_integer(end_to_end_us) and end_to_end_us >= 0 do
-    raw_evidence = Map.get(processing_result, :raw_evidence)
-
-    Map.put(processing_result, :ingress_latency_metric, %{
-      value_ms: end_to_end_us / 1000.0,
-      end_to_end_us: end_to_end_us,
-      observed_at: ingress_latency_observed_at(raw_evidence),
-      error?: error?
-    })
-  end
-
-  defp ingress_latency_observed_at(%RawEvidence{receipt_time: %DateTime{} = receipt_time}),
-    do: receipt_time
-
-  defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
 
   defp elapsed_us(started_at) do
     System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)
@@ -822,14 +902,21 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       provider_binding_id: state.provider_binding_id,
       enqueued_at: System.monotonic_time(),
       processing_results: Enum.map(entries, &elem(&1, 0)),
-      trace_contexts: Enum.map(entries, &elem(&1, 1))
+      trace_contexts: Enum.map(entries, &elem(&1, 1)),
+      completions: entries |> Enum.map(&elem(&1, 2)) |> Enum.reject(&is_nil/1),
+      producer_receipts: [{self(), length(entries)}]
     })
   end
 
   defp enqueue_persistence_batch(state, %ProcessedIngressBatch{} = batch) do
     with {:ok, next_state} <- ensure_persistence_projector(state),
          :ok <- IngressPersistenceProjector.enqueue(next_state.persistence_projector_pid, batch) do
-      {:ok, next_state}
+      {:ok,
+       %{
+         next_state
+         | projector_in_flight_count:
+             next_state.projector_in_flight_count + ProcessedIngressBatch.size(batch)
+       }}
     end
   end
 
@@ -875,70 +962,27 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp ensure_persistence_projector(state), do: resolve_persistence_projector(state)
 
   defp maybe_gate_on_projector_pressure(state) do
-    with {:ok, next_state} <- ensure_persistence_projector(state),
-         {:ok, snapshot} <-
-           IngressPersistenceProjector.snapshot(next_state.persistence_projector_pid) do
-      queue_depth = Map.get(snapshot, :queue_depth, 0)
+    threshold =
+      if state.projector_backpressured?,
+        do: @projector_low_watermark,
+        else: @projector_high_watermark
 
-      threshold =
-        if next_state.projector_backpressured? do
-          @projector_low_watermark
-        else
-          @projector_high_watermark
-        end
+    if state.projector_in_flight_count >= threshold do
+      next_state =
+        state
+        |> maybe_emit_projector_backpressure_entered(state.projector_in_flight_count)
+        |> Map.put(:projector_backpressured?, true)
 
-      if queue_depth >= threshold do
-        state =
-          next_state
-          |> maybe_emit_projector_backpressure_entered(queue_depth)
-          |> register_projector_capacity_waiter()
-          |> Map.put(:projector_backpressured?, true)
+      {:blocked, next_state}
+    else
+      next_state =
+        state
+        |> maybe_emit_projector_backpressure_released(state.projector_in_flight_count)
+        |> Map.put(:projector_backpressured?, false)
 
-        {:blocked, state}
-      else
-        state =
-          next_state
-          |> maybe_emit_projector_backpressure_released(queue_depth)
-          |> Map.put(:projector_backpressured?, false)
-
-        {:ok, state}
-      end
+      {:ok, next_state}
     end
   end
-
-  defp register_projector_capacity_waiter(%{projector_capacity_wait_ref: ref} = state)
-       when is_reference(ref) do
-    state
-  end
-
-  defp register_projector_capacity_waiter(state) do
-    ref = make_ref()
-
-    _ =
-      IngressPersistenceProjector.notify_when_below(
-        state.persistence_projector_pid,
-        @projector_low_watermark,
-        self(),
-        ref
-      )
-
-    Process.send_after(self(), {:projector_capacity_check, ref}, @projector_capacity_retry_ms)
-
-    Instrumentation.emit(:capacity_waiter_registered, state, %{queue_depth: state.queue_depth}, %{
-      downstream: :ingress_persistence_projector,
-      downstream_low_watermark: @projector_low_watermark
-    })
-
-    %{state | projector_capacity_wait_ref: ref}
-  end
-
-  defp cancel_projector_capacity_waiter(%{persistence_projector_pid: pid} = state, ref)
-       when is_pid(pid) and is_reference(ref) do
-    _ = IngressPersistenceProjector.cancel_notify_when_below(pid, ref)
-    state
-  end
-
-  defp cancel_projector_capacity_waiter(state, _ref), do: state
 
   defp maybe_emit_projector_backpressure_entered(
          %{projector_backpressured?: false} = state,
@@ -969,6 +1013,28 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp maybe_emit_projector_backpressure_released(state, _downstream_queue_depth), do: state
+
+  defp maybe_release_local_projector_backpressure(
+         %{projector_backpressured?: true, projector_in_flight_count: in_flight_count} = state
+       )
+       when in_flight_count < @projector_low_watermark do
+    next_state =
+      state
+      |> maybe_emit_projector_backpressure_released(in_flight_count)
+      |> Map.put(:projector_backpressured?, false)
+
+    send(self(), :process_queue)
+    %{next_state | processing?: true}
+  end
+
+  defp maybe_release_local_projector_backpressure(state), do: state
+
+  defp notify_completion_failed({pid, ref}, reason) when is_pid(pid) and is_reference(ref) do
+    send(pid, {:provider_ingress_failed, self(), ref, reason})
+    :ok
+  end
+
+  defp notify_completion_failed(_completion, _reason), do: :ok
 
   defp resolve_persistence_projector(state) do
     with {:ok, pid} <- IngressPersistenceProjector.lookup(state.persistence_projector_name) do

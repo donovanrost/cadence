@@ -3,7 +3,7 @@ title: Decide Where New Data Belongs
 tags: [how-to, developer, architecture, persistence, storage]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-31
 ---
 
 # Decide Where New Data Belongs
@@ -13,6 +13,7 @@ This guide describes how to decide whether a new piece of data belongs in:
 - runtime state
 - Postgres
 - an archive backend
+- a metrics or time-series backend
 - an event stream or transient bus
 
 This is one of the most important architectural decisions in Cadence. Getting
@@ -110,7 +111,30 @@ The working pattern is:
 - keep a lightweight index for discovery
 - rebuild richer views from the archive when needed
 
-## 5. Use a transient event stream for live visibility
+## 5. Use a metrics or time-series backend for numerical observations
+
+Use the observability metrics pipeline when the question is:
+
+> how is the system behaving over time?
+
+Examples include:
+
+- ingress throughput and processing latency
+- queue and consumer lag
+- batch size and write duration
+- resource saturation and error rates
+
+Use counters, gauges, and histograms with bounded dimensions. If the product
+needs durable numerical history, read it through a time-series/history boundary
+or persist bounded interval summaries. Do not insert one operational-event row
+per measurement merely to make a chart queryable.
+
+An operationally significant transition derived from a metric may still become
+a sparse event. For example, emit one event when sustained latency enters an
+alarm state and one when it clears, rather than one event for every latency
+sample.
+
+## 6. Use a transient event stream for live visibility
 
 Some data should be visible live without becoming durable OLTP state.
 
@@ -128,7 +152,7 @@ Examples:
 Do not make a transient bus the only durable persistence mechanism for
 important data. It is for live fan-out, not primary archival truth.
 
-## 6. Ask whether the data is primary truth or derived projection
+## 7. Ask whether the data is primary truth or derived projection
 
 This is the fastest architecture test.
 
@@ -149,7 +173,7 @@ Examples:
 - latest value is a derived runtime projection
 - many dispatch work items are execution artifacts, not durable truth
 
-## 7. Ask whether it belongs on the hot path
+## 8. Ask whether it belongs on the hot path
 
 If the data must be recorded for correctness, ask whether it must be written
 before the ordered ingress lane can move on.
@@ -158,28 +182,30 @@ In general:
 
 - latest-value runtime updates may belong on the hot path
 - archive and Postgres writes usually do not
-- projections should prefer the async projector lane
+- durable projections should prefer their explicit async sink lane
 
 If a new feature requires high-rate synchronous writes in the live executor,
 assume the burden of proof is on that feature.
 
-## 8. Use this rule of thumb
+## 9. Use this rule of thumb
 
 If you are unsure, use this default:
 
 - latest mutable operational view -> runtime state
 - high-rate historical stream -> archive
+- numerical behavior over time -> metrics or time-series backend
 - low-rate operational fact or control-plane state -> Postgres
 - live observation only -> event stream
 
 That rule is better than "put it in Postgres because that is easy."
 
-## 9. Examples from the current architecture
+## 10. Examples from the current architecture
 
 Good current placements:
 
 - current telemetry values -> ETS
 - telemetry sample history -> pluggable history store, default `Noop`
+- ingress performance and sink health -> OpenTelemetry metrics
 - raw ingress evidence -> ingress archive
 - packet/frame records -> protocol archive
 - protocol anomalies -> Postgres
@@ -194,16 +220,19 @@ Recent decisions that moved data out of OLTP Postgres:
 Those moves were driven by performance and by a better distinction between
 control-plane data and archive data.
 
-## 10. A quick review checklist
+## 11. A quick review checklist
 
 Before adding a new persisted record, ask:
 
-- is this latest state, historical stream, or control-plane fact?
+- is this latest state, a historical stream, a numerical observation, an
+  operational transition, or a control-plane fact?
 - is the data primary truth or derived?
 - what user or system query requires it later?
 - does it need durable retention, or just live visibility?
 - does it have to be written on the hot path?
 - if archived, what lightweight index or replay filter is needed?
+- if numerical, does it need a raw product-history series, a bounded aggregate,
+  or only an OpenTelemetry histogram?
 
 If you cannot answer those questions clearly, the data model decision is not
 ready yet.

@@ -24,6 +24,25 @@ config :cadence, provider_local_credentials: [enabled: true]
 config :cadence, command_dispatcher: [enabled: false]
 config :cadence, command_verifier_scheduler: [enabled: false]
 config :cadence, password_hash_iterations: 1_000
+
+config :cadence,
+  ingress_journal: [
+    enabled?: true,
+    base_path:
+      Path.join(
+        System.tmp_dir!(),
+        "cadence-ingress-journal-test-#{System.pid()}-#{System.get_env("MIX_TEST_PARTITION", "0")}"
+      ),
+    max_bytes: 64 * 1_024 * 1_024,
+    segment_bytes: 1 * 1_024 * 1_024,
+    capture_record_bytes: 256 * 1_024,
+    processing_max_batch_entries: 1,
+    processing_max_batch_bytes: 256 * 1_024,
+    durability: :page_cache,
+    checkpoint_interval_ms: 25,
+    consumers: [:processing, :archive]
+  ]
+
 config :cadence, ingress_archive: [module: Cadence.IngressArchive.Postgres]
 config :cadence, protocol_record_archive: [module: Cadence.Protocol.RecordArchive.Postgres]
 

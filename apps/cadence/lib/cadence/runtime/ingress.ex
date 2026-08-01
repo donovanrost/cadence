@@ -20,13 +20,6 @@ defmodule Cadence.Runtime.Ingress do
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
   alias Cadence.Protocol.SpacePacketDecoder
 
-  @type ingress_latency_metric :: %{
-          value_ms: number(),
-          end_to_end_us: non_neg_integer(),
-          observed_at: DateTime.t(),
-          error?: boolean()
-        }
-
   @type processing_result :: %{
           required(:raw_evidence) => RawEvidence.t(),
           required(:packet_records) => [PacketRecord.t()],
@@ -34,8 +27,7 @@ defmodule Cadence.Runtime.Ingress do
           required(:protocol_anomalies) => [ProtocolAnomaly.t()],
           required(:dispatch_decisions) => [DispatchDecision.t()],
           required(:outputs) => [term()],
-          required(:runtime_records) => map(),
-          optional(:ingress_latency_metric) => ingress_latency_metric()
+          required(:runtime_records) => map()
         }
 
   @spec process(RawEvidence.t(), BindingSet.t()) ::
@@ -106,9 +98,6 @@ defmodule Cadence.Runtime.Ingress do
 
     case runtime_result do
       {:ok, processing_result} ->
-        processing_result =
-          put_ingress_latency_metric(processing_result, elapsed_us(ingress_started_at), false)
-
         finalize_persisted_ingress(
           resolved_raw_evidence,
           processing_result,
@@ -159,22 +148,6 @@ defmodule Cadence.Runtime.Ingress do
 
     persistence_result
   end
-
-  defp put_ingress_latency_metric(processing_result, end_to_end_us, error?) do
-    raw_evidence = Map.get(processing_result, :raw_evidence)
-
-    Map.put(processing_result, :ingress_latency_metric, %{
-      value_ms: end_to_end_us / 1000.0,
-      end_to_end_us: end_to_end_us,
-      observed_at: ingress_latency_observed_at(raw_evidence),
-      error?: error?
-    })
-  end
-
-  defp ingress_latency_observed_at(%RawEvidence{receipt_time: %DateTime{} = receipt_time}),
-    do: receipt_time
-
-  defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
 
   defp elapsed_us(started_at) do
     System.monotonic_time()

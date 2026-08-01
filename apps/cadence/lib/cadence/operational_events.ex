@@ -40,6 +40,22 @@ defmodule Cadence.OperationalEvents do
     end
   end
 
+  @spec persist_events(module(), [Event.t()]) :: {:ok, [Event.t()]} | {:error, term()}
+  def persist_events(_repo, []), do: {:ok, []}
+
+  def persist_events(repo, events) when is_atom(repo) and is_list(events) do
+    inserted_at = DateTime.utc_now()
+    rows = Enum.map(events, &OperationalEventRow.insert_attrs(&1, inserted_at))
+
+    case repo.insert_all(OperationalEventRow, rows,
+           on_conflict: {:replace, OperationalEventRow.upsert_fields()},
+           conflict_target: [:event_id]
+         ) do
+      {count, _returned} when count >= 0 -> {:ok, events}
+      other -> {:error, other}
+    end
+  end
+
   @spec fetch_event(binary()) :: {:ok, Event.t()} | {:error, :not_found}
   defdelegate fetch_event(event_id), to: EventQuery
 

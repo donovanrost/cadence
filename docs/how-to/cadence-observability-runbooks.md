@@ -9,6 +9,43 @@ Cadence mission-health alerts are state-aware: telemetry silence is an incident
 only while an active, live realized contact declares the
 `telemetry_downlink` intent. Silence outside that state is nominal.
 
+## Ingress load-test monitoring
+
+Use **Cadence / Ingress Load Test** at
+`http://localhost:3000/d/cadence-ingress-load-test`. Set `Target Mb/s` to the
+current traffic phase and select the Cadence service, direction, and protocol
+before traffic starts. Add dashboard annotations at explicit phase boundaries;
+do not infer warmup, measure, recovery, or drain phases only from visual rate
+changes.
+
+1. Verify the receive-rate curve follows the target, then compare socket receive
+   with journal admission and semantic processing. A receive/admission gap is a
+   capture problem; an admission/processing gap should appear first as journal
+   consumer lag, then as retained journal bytes and utilization.
+2. Check the processing and archive cursor lag separately. The slower cursor
+   governs reclamation. Confirm the journal durability profile before claiming
+   that received bytes survived anything stronger than a process-local or
+   page-cache boundary.
+3. Check backpressure and executor depth, then inspect every available sink lag
+   independently. The current generic persistence depth is a migration signal,
+   not proof that raw archive, protocol archive, history, and operational-event
+   effects share one atomic completion. Backpressure is a symptom that Cadence
+   is protecting a bounded downstream path; named cursor advancement is the
+   evidence that its required downstream work completed.
+4. Compare receive-size, journal append, and ingress-processing percentiles.
+   Then compare persistence latency and semantic output rates to locate the
+   stage where throughput stops scaling. Rising append p99 with flat processing
+   latency implicates the journal backing volume or durability mode.
+5. Check scheduler utilization, run queue, reductions, garbage collection, and
+   memory before attributing a ceiling to framing or persistence.
+6. Keep the metrics exporter panel visible. A growing in-flight series count or
+   failed export rate invalidates claims based on an apparently quiet graph.
+
+The `ingress-source-capacity` smoke profile sends to its validating sink and
+does not exercise Cadence, so an empty Cadence ingress dashboard is expected for
+that profile. Use this dashboard when the bounded source is pointed at a real
+Cadence TCP ingress endpoint with OTLP metrics enabled.
+
 ## HTTP error ratio
 
 1. Split `http.server.request.duration` by `http.route`, method, status, and
@@ -53,8 +90,11 @@ only while an active, live realized contact declares the
 
 ## Ingress backpressure
 
-1. Identify whether the executor or persistence projector queue is growing.
-2. Compare ingress processing duration with persistence duration and queue wait.
+1. Identify whether the executor or a specific sink queue is growing. During
+   migration, inspect the generic persistence projector too, but do not stop
+   there.
+2. Compare ingress processing duration with each sink's batch size, dwell time,
+   write duration, queue wait, and oldest uncommitted age.
 3. Check BEAM memory, scheduler run queue, process utilization, database latency,
    and database errors.
 4. Reduce provider intake only when the bounded queues are not recovering.

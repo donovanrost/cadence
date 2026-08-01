@@ -10,6 +10,8 @@ defmodule Cadence.Runtime.ProcessedIngressBatch do
           provider_binding_id: binary(),
           processing_results: [Cadence.processing_result()],
           trace_contexts: [OpenTelemetry.span_ctx()],
+          completions: [{pid(), reference()}],
+          producer_receipts: [{pid(), pos_integer()}],
           enqueued_at: integer() | nil
         }
 
@@ -20,6 +22,8 @@ defmodule Cadence.Runtime.ProcessedIngressBatch do
     :provider_binding_id,
     :enqueued_at,
     trace_contexts: [],
+    completions: [],
+    producer_receipts: [],
     processing_results: []
   ]
 
@@ -32,6 +36,8 @@ defmodule Cadence.Runtime.ProcessedIngressBatch do
       provider_binding_id: Map.fetch!(attrs, :provider_binding_id),
       enqueued_at: Map.get(attrs, :enqueued_at),
       trace_contexts: Map.get(attrs, :trace_contexts, []),
+      completions: Map.get(attrs, :completions, []),
+      producer_receipts: Map.get(attrs, :producer_receipts, []),
       processing_results: Map.get(attrs, :processing_results, [])
     }
   end

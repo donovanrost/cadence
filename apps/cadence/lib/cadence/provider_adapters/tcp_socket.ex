@@ -20,7 +20,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Runtime.{IngressPersistenceProjector, MissionRuntime, ProviderIngressExecutor}
+  alias Cadence.IngressJournal.FileSystem, as: IngressJournal
+  alias Cadence.ProviderAdapters.TCPSocket.Instrumentation
+
+  alias Cadence.Runtime.{
+    IngressArchiveConsumer,
+    IngressJournalConsumer,
+    IngressPersistenceProjector,
+    MissionRuntime,
+    ProviderIngressExecutor
+  }
+
   @tcp_socket_buffer 1_048_576
   @tcp_opts [
     :binary,
@@ -34,6 +44,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @executor_high_watermark 8_192
   @executor_low_watermark 2_048
   @executor_capacity_retry_ms 1_000
+  @journal_capacity_retry_ms 25
 
   @type mode :: :connect | :listen
 
@@ -94,6 +105,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       fixed_message_bytes: configuration.fixed_message_bytes,
       ingress_transport_binding_id: configuration.ingress_transport_binding_id,
       ingress_executor_name: Keyword.fetch!(opts, :ingress_executor_name),
+      ingress_journal_name: Keyword.get(opts, :ingress_journal_name),
       ingress_executor_pid: nil,
       ingress_executor_monitor_ref: nil,
       socket_receiver_pid: nil,
@@ -114,12 +126,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       reads_paused?: false
     }
 
-    case ensure_ingress_executor(base_state) do
+    case ensure_ingress_dependencies(base_state) do
       {:ok, base_state} ->
         start_socket_provider(configuration, base_state, provider_binding_id)
 
       {:error, reason} ->
-        {:stop, {:tcp_provider_missing_ingress_executor, provider_binding_id, reason}}
+        {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
     end
   end
 
@@ -173,6 +185,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         {:error, reason} -> %{error: inspect(reason)}
       end
 
+    ingress_journal = ingress_journal_snapshot(state)
+    ingress_journal_consumer = ingress_journal_consumer_snapshot(state)
+    ingress_archive_consumer = ingress_archive_consumer_snapshot(state)
+
     {:reply,
      {:ok,
       %{
@@ -205,6 +221,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         last_ingress_at: state.last_ingress_at,
         last_ingress_error: state.last_ingress_error,
         reads_paused?: state.reads_paused?,
+        ingress_journal: ingress_journal,
+        ingress_journal_consumer: ingress_journal_consumer,
+        ingress_archive_consumer: ingress_archive_consumer,
         ingress_executor: ingress_executor,
         ingress_persistence_projector: ingress_persistence_projector
       }}, state}
@@ -532,6 +551,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       provider_pid: self(),
       provider_binding_id: state.provider_binding_id,
       ingress_executor_name: state.ingress_executor_name,
+      ingress_journal_name: state.ingress_journal_name,
       mission_id: state.mission_id,
       realized_contact_id: state.realized_contact_id,
       path_id: state.path_id,
@@ -545,16 +565,19 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ingress_metadata: state.ingress_metadata,
       socket: nil,
       receive_buffer: <<>>,
+      message_remainder_bytes: 0,
       reads_paused?: false,
       capacity_wait_ref: nil
     }
   end
 
-  defp socket_receiver_loop(state) do
+  defp socket_receiver_loop(%{ingress_journal_name: nil} = state) do
     state = maybe_wait_for_executor_capacity(state)
+    receive_started_at = System.monotonic_time()
 
     case :gen_tcp.recv(state.socket, 0) do
       {:ok, data} ->
+        Instrumentation.record_receive(state, data, elapsed_us(receive_started_at))
         receipt_time = DateTime.utc_now()
         {next_state, batch_status} = consume_socket_data(state, data, receipt_time)
         send(state.provider_pid, {:tcp_receiver_batch, self(), batch_status})
@@ -564,6 +587,101 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         send(state.provider_pid, {:tcp_receiver_closed, self(), reason})
         :ok
     end
+  end
+
+  defp socket_receiver_loop(state) do
+    receive_started_at = System.monotonic_time()
+
+    case :gen_tcp.recv(state.socket, 0) do
+      {:ok, data} ->
+        Instrumentation.record_receive(state, data, elapsed_us(receive_started_at))
+        receipt_time = DateTime.utc_now()
+        next_state = capture_socket_data(state, data, receipt_time)
+        socket_receiver_loop(next_state)
+
+      {:error, reason} ->
+        send(state.provider_pid, {:tcp_receiver_closed, self(), reason})
+        :ok
+    end
+  end
+
+  defp capture_socket_data(state, data, receipt_time) do
+    case IngressJournal.append_stream(
+           state.ingress_journal_name,
+           data,
+           receipt_time,
+           journal_metadata(state)
+         ) do
+      {:ok, _entries} ->
+        {message_count, message_remainder_bytes} = journal_message_count(state, data)
+
+        if state.reads_paused? do
+          send(state.provider_pid, {:tcp_receiver_reads_paused, self(), false})
+        end
+
+        send(
+          state.provider_pid,
+          {:tcp_receiver_batch, self(),
+           %{
+             bytes_received: byte_size(data),
+             read_count: 1,
+             message_count: message_count,
+             last_ingress_at: receipt_time,
+             last_ingress_error: nil
+           }}
+        )
+
+        %{state | reads_paused?: false, message_remainder_bytes: message_remainder_bytes}
+
+      {:error, :ingress_journal_full} ->
+        if not state.reads_paused? do
+          send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
+        end
+
+        receive do
+        after
+          @journal_capacity_retry_ms ->
+            capture_socket_data(%{state | reads_paused?: true}, data, receipt_time)
+        end
+
+      {:error, reason} ->
+        send(
+          state.provider_pid,
+          {:tcp_receiver_batch, self(),
+           %{
+             bytes_received: byte_size(data),
+             read_count: 1,
+             message_count: 0,
+             last_ingress_at: receipt_time,
+             last_ingress_error: inspect(reason)
+           }}
+        )
+
+        exit({:ingress_journal_append_failed, reason})
+    end
+  end
+
+  defp journal_message_count(%{fixed_message_bytes: bytes} = state, data)
+       when is_integer(bytes) and bytes > 0 do
+    total_bytes = state.message_remainder_bytes + byte_size(data)
+    {div(total_bytes, bytes), rem(total_bytes, bytes)}
+  end
+
+  defp journal_message_count(state, _data), do: {0, state.message_remainder_bytes}
+
+  defp journal_metadata(state) do
+    %{
+      mission_id: state.mission_id,
+      realized_contact_id: state.realized_contact_id,
+      path_id: state.path_id,
+      provider_binding_id: state.provider_binding_id,
+      source_endpoint_ref: state.source_endpoint_ref,
+      spacecraft_id: state.source_endpoint_spacecraft_id,
+      protocol_family: state.ingress_protocol_family,
+      direction: state.direction,
+      source_ref: state.source_ref || state.provider_binding_id,
+      ingress_metadata: state.ingress_metadata || %{}
+    }
   end
 
   defp maybe_wait_for_executor_capacity(state) do
@@ -719,6 +837,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
      }}
   end
 
+  defp elapsed_us(started_at) do
+    System.monotonic_time()
+    |> Kernel.-(started_at)
+    |> System.convert_time_unit(:native, :microsecond)
+  end
+
   defp enqueue_telemetry_messages(_state, _protocol_family, [], _receipt_time), do: {0, nil}
 
   defp enqueue_telemetry_messages(state, protocol_family, messages, receipt_time) do
@@ -827,7 +951,64 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp maybe_demonitor_socket_receiver(state), do: state
 
-  defp ensure_ingress_executor(state), do: resolve_ingress_executor(state)
+  defp ingress_journal_snapshot(%{ingress_journal_name: nil}), do: nil
+
+  defp ingress_journal_snapshot(state) do
+    case IngressJournal.snapshot(state.ingress_journal_name) do
+      {:ok, snapshot} -> snapshot
+      {:error, reason} -> %{error: inspect(reason)}
+    end
+  end
+
+  defp ingress_journal_consumer_snapshot(%{ingress_journal_name: nil}), do: nil
+
+  defp ingress_journal_consumer_snapshot(state) do
+    name =
+      MissionRuntime.provider_ingress_journal_consumer_name(
+        state.mission_id,
+        state.realized_contact_id,
+        state.path_id,
+        state.provider_binding_id
+      )
+
+    case IngressJournalConsumer.snapshot(name) do
+      {:ok, snapshot} -> snapshot
+      {:error, reason} -> %{error: inspect(reason)}
+    end
+  end
+
+  defp ingress_archive_consumer_snapshot(%{ingress_journal_name: nil}), do: nil
+
+  defp ingress_archive_consumer_snapshot(state) do
+    name =
+      MissionRuntime.provider_ingress_archive_consumer_name(
+        state.mission_id,
+        state.realized_contact_id,
+        state.path_id,
+        state.provider_binding_id
+      )
+
+    case IngressArchiveConsumer.snapshot(name) do
+      {:ok, snapshot} -> snapshot
+      {:error, reason} -> %{error: inspect(reason)}
+    end
+  end
+
+  defp ensure_ingress_dependencies(state) do
+    with {:ok, state} <- resolve_ingress_executor(state),
+         :ok <- ensure_ingress_journal(state) do
+      {:ok, state}
+    end
+  end
+
+  defp ensure_ingress_journal(%{ingress_journal_name: nil}), do: :ok
+
+  defp ensure_ingress_journal(state) do
+    case IngressJournal.lookup(state.ingress_journal_name) do
+      {:ok, _pid} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp resolve_ingress_executor(state) do
     with {:ok, pid} <- ProviderIngressExecutor.lookup(state.ingress_executor_name) do

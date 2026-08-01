@@ -3,7 +3,7 @@ title: Archive Backlog and Backpressure
 tags: [how-to, operations, archive, backpressure, runtime, profiling]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-31
 ---
 
 # Archive Backlog and Backpressure
@@ -38,6 +38,12 @@ The intended flow is:
 
 Backpressure should prefer bounded flow and queue growth limits over unbounded
 memory growth.
+
+The generic projector shown here is the current migration implementation.
+ADR-019's target replaces its single backlog with separately observable raw
+archive, protocol archive, telemetry history, and sparse operational-event sink
+lags. During migration, never interpret a generic projector acknowledgement as
+proof that all of those outputs share one atomic commit.
 
 ## 2. Start with the profiler
 

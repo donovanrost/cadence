@@ -2,8 +2,14 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
   @moduledoc """
   Resolves latest and historical ingress processing-latency products.
 
-  The family owns durable/runtime source selection, replay isolation, overlay
+  The family owns history/runtime source selection, replay isolation, overlay
   precedence, row materialization, freshness, frame production, and revisions.
+
+  The default history reader is a compatibility path for operational-event
+  rows produced before ADR-019. New live ingress latency is sourced from
+  `Cadence.Telemetry.RuntimeHealth`; deployments can inject a metrics-history
+  reader through `:durable_ingress_processing_latency_snapshots_fun` while the
+  dedicated history boundary is migrated.
   """
 
   alias Cadence.Dashboards.{Frame, PlannedSourceRequest, RuntimeCacheKey}
@@ -70,7 +76,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
         Keyword.get(
           opts,
           :durable_ingress_processing_latency_snapshots_fun,
-          &default_durable_snapshots/3
+          &legacy_operational_event_snapshots/3
         )
       )
 
@@ -131,7 +137,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
       Keyword.get(
         opts,
         :durable_ingress_processing_latency_snapshots_fun,
-        &default_durable_snapshots/3
+        &legacy_operational_event_snapshots/3
       )
 
     durable_snapshots = durable_snapshots_fun.(organization_id, mission_id, opts)
@@ -153,7 +159,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
     end
   end
 
-  defp default_durable_snapshots(organization_id, mission_id, opts) do
+  defp legacy_operational_event_snapshots(organization_id, mission_id, opts) do
     OperationalEventSnapshots.ingress_latency(organization_id, mission_id, opts)
   end
 

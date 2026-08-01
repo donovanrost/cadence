@@ -11,6 +11,7 @@ defmodule Cadence.IngressArchive do
   alias Ecto.Multi
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive.{Batch, Receipt}
   alias Cadence.Replay.Scope
 
   @type stats :: %{
@@ -30,6 +31,7 @@ defmodule Cadence.IngressArchive do
   @callback child_spec(keyword()) :: Supervisor.child_spec() | nil
   @callback persist_raw_evidence_multi(Multi.t(), RawEvidence.t()) :: Multi.t()
   @callback persist_raw_evidence(RawEvidence.t()) :: :ok | {:error, term()}
+  @callback persist_batch(Batch.t()) :: {:ok, Receipt.t()} | {:error, term()}
   @callback fetch_raw_evidences(binary(), Scope.t()) ::
               {:ok, [RawEvidence.t()]} | {:error, term()}
   @callback flush(binary() | nil) :: :ok | {:error, term()}
@@ -54,6 +56,20 @@ defmodule Cadence.IngressArchive do
   @spec persist_raw_evidence(RawEvidence.t()) :: :ok | {:error, term()}
   def persist_raw_evidence(%RawEvidence{} = raw_evidence) do
     ensure_backend_loaded!(backend_module()).persist_raw_evidence(raw_evidence)
+  end
+
+  @spec persist_batch(Batch.t()) :: {:ok, Receipt.t()} | {:error, term()}
+  def persist_batch(%Batch{} = batch) do
+    backend = ensure_backend_loaded!(backend_module())
+
+    with {:ok, %Receipt{} = receipt} <- backend.persist_batch(batch),
+         true <- Receipt.valid_for_batch?(receipt, batch) do
+      {:ok, receipt}
+    else
+      false -> {:error, :archive_receipt_does_not_match_batch}
+      {:error, reason} -> {:error, reason}
+      _other -> {:error, :invalid_archive_receipt}
+    end
   end
 
   @spec persist_raw_evidences([RawEvidence.t()]) :: :ok | {:error, term()}

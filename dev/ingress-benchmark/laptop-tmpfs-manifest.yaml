@@ -1,0 +1,58 @@
+schema_version: 1
+run_id: laptop-source-capacity-smoke
+scenario: source_capacity
+variant: deterministic_pattern_tcp
+source_revision: working-tree
+
+deployment:
+  kind: compose
+  topology: laptop_source_to_validating_sink
+  cadence_instances: 0
+  containers:
+    preflight: {memory_limit_bytes: 268435456}
+    traffic_source: {memory_limit_bytes: 268435456}
+    validating_sink: {memory_limit_bytes: 268435456}
+    questdb: {memory_limit_bytes: 402653184}
+    questdb_customer: {memory_limit_bytes: 402653184}
+    greptimedb: {memory_limit_bytes: 536870912}
+    tempo: {memory_limit_bytes: 268435456}
+    loki: {memory_limit_bytes: 268435456}
+    otel_collector: {memory_limit_bytes: 134217728}
+    grafana: {memory_limit_bytes: 201326592}
+
+storage:
+  profile: laptop_tmpfs
+  filesystem: tmpfs
+  mount_options: size-capped
+  max_bytes: 1342177280
+  tmpfs_mounts:
+    - {path: /benchmark/corpus, max_bytes: 16777216}
+    - {path: /benchmark/results, max_bytes: 4194304}
+    - {path: /benchmark/scratch, max_bytes: 16777216}
+    - {path: /tmp, max_bytes: 16777216}
+
+traffic:
+  corpus_id: deterministic-pattern-v1
+  seed: 381746
+  minimum_rate_ratio: 0.99
+  pattern_size_bytes: 65536
+  block_size_bytes: 65536
+  phases:
+    - {name: warmup, duration_seconds: 1, target_bps: 4000000}
+    - {name: measure, duration_seconds: 2, target_bps: 8000000}
+
+observability:
+  mode: minimal
+  metric_sample_interval_ms: 1000
+  trace_sampling_policy: disabled
+
+processing:
+  target_cap_bps: null
+
+safety:
+  max_source_bytes: 3000000
+  max_wall_clock_seconds: 5
+  max_artifact_bytes: 1048576
+  docker_memory_budget_bytes: 4294967296
+  docker_overhead_bytes: 536870912
+  process_headroom_bytes: 134217728

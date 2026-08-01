@@ -9,7 +9,9 @@ defmodule Cadence.IngressArchive.Postgres do
   alias Ecto.Multi
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive.{Batch, Receipt}
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -23,12 +25,41 @@ defmodule Cadence.IngressArchive.Postgres do
     Multi.insert(
       multi,
       {:raw_evidence, raw_evidence.evidence_id},
-      RawEvidenceRow.changeset(raw_evidence)
+      RawEvidenceRow.changeset(raw_evidence),
+      on_conflict: :nothing,
+      conflict_target: [:evidence_id]
     )
   end
 
   @impl true
   def persist_raw_evidence(_raw_evidence), do: :ok
+
+  @impl true
+  def persist_batch(%Batch{} = batch) do
+    inserted_at = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
+    organization_id = OrganizationScope.organization_id_for_mission(mission_id)
+
+    rows =
+      Enum.map(batch.raw_evidences, fn %RawEvidence{} = raw_evidence ->
+        RawEvidenceRow.insert_attrs(raw_evidence, organization_id, inserted_at)
+      end)
+
+    case Repo.insert_all(RawEvidenceRow, rows,
+           on_conflict: :nothing,
+           conflict_target: [:evidence_id]
+         ) do
+      {count, _rows} when count == length(rows) ->
+        {:ok, Receipt.for_batch(batch, :durable)}
+
+      {_count, _rows} ->
+        if persisted_evidence_ids?(batch.raw_evidences) do
+          {:ok, Receipt.for_batch(batch, :durable)}
+        else
+          {:error, {:raw_archive_insert_mismatch, batch.batch_id}}
+        end
+    end
+  end
 
   def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
     case Enum.all?(raw_evidences, &match?(%RawEvidence{}, &1)) do
@@ -177,5 +208,19 @@ defmodule Cadence.IngressArchive.Postgres do
     |> Enum.sort_by(fn %RawEvidence{} = raw_evidence ->
       Map.fetch!(evidence_order, raw_evidence.evidence_id)
     end)
+  end
+
+  defp persisted_evidence_ids?(raw_evidences) do
+    expected_ids = raw_evidences |> Enum.map(& &1.evidence_id) |> MapSet.new()
+    evidence_ids = MapSet.to_list(expected_ids)
+
+    found_ids =
+      RawEvidenceRow
+      |> where([row], row.evidence_id in ^evidence_ids)
+      |> select([row], row.evidence_id)
+      |> Repo.all()
+      |> MapSet.new()
+
+    MapSet.equal?(found_ids, expected_ids)
   end
 end

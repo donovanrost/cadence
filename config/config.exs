@@ -28,11 +28,31 @@ config :cadence,
     safety_poll_interval_ms: 60_000,
     max_concurrency: 4
   ],
+  ingress_journal: [
+    enabled?: false,
+    base_path: Path.expand("../var/ingress_journal", __DIR__),
+    max_bytes: 8 * 1_024 * 1_024 * 1_024,
+    segment_bytes: 256 * 1_024 * 1_024,
+    capture_record_bytes: 256 * 1_024,
+    processing_max_batch_entries: 8,
+    processing_max_batch_bytes: 2 * 1_024 * 1_024,
+    durability: :sync,
+    checkpoint_interval_ms: 250,
+    consumers: [:processing, :archive]
+  ],
   ingress_archive: [
     module: Cadence.IngressArchive.FileSystem,
     base_path: Path.expand("../var/ingress_archive", __DIR__),
     flush_interval_ms: 250,
     flush_count: 100
+  ],
+  ingress_archive_consumer: [
+    required_completion: :durable,
+    max_batch_entries: 128,
+    max_batch_bytes: 8 * 1_024 * 1_024,
+    max_dwell_ms: 25,
+    retry_initial_ms: 50,
+    retry_max_ms: 5_000
   ],
   protocol_record_archive: [
     module: Cadence.Protocol.RecordArchive.FileSystem,

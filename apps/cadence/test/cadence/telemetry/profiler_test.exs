@@ -12,6 +12,20 @@ defmodule Cadence.Telemetry.ProfilerTest do
     mission_id = "mission-profile"
     Profiler.reset(mission_id)
 
+    handler_id = "profiler-raw-byte-test-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        Profiler.ingress_result_event(),
+        fn event, measurements, metadata, test_pid ->
+          send(test_pid, {:ingress_result_event, event, measurements, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
     spacecraft =
       Spacecraft.new(%{
         spacecraft_id: "sc-profile",
@@ -75,6 +89,14 @@ defmodule Cadence.Telemetry.ProfilerTest do
 
     assert {:ok, processing_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence)
     assert length(processing_result.outputs) == 2
+
+    assert_receive {:ingress_result_event, event, measurements, metadata}
+    assert event == Profiler.ingress_result_event()
+    assert measurements.raw_byte_count == byte_size(raw_evidence.raw)
+    assert measurements.end_to_end_us > 0
+    assert metadata.error? == false
+    assert metadata.source_endpoint_id == "endpoint-profile"
+    refute Map.has_key?(processing_result, :ingress_latency_metric)
 
     snapshot = Profiler.snapshot(mission_id)
 

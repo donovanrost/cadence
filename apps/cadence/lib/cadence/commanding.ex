@@ -370,6 +370,8 @@ defmodule Cadence.Commanding do
 
   @spec evaluate_command_verifiers([Sample.t()]) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_command_verifiers([]), do: {:ok, []}
+
   def evaluate_command_verifiers(telemetry_samples) when is_list(telemetry_samples) do
     case Repo.transaction(fn -> evaluate_command_verifiers(Repo, telemetry_samples) end) do
       {:ok, {:ok, verifier_instances}} ->
@@ -402,6 +404,8 @@ defmodule Cadence.Commanding do
           [TransportActionRequest.t()]
         ) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_transport_command_verifiers([], []), do: {:ok, []}
+
   def evaluate_transport_command_verifiers(
         transport_capability_records,
         transport_action_requests

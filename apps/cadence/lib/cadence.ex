@@ -31,13 +31,6 @@ defmodule Cadence do
   alias Cadence.Telemetry.RuntimeHealth
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
-  @type ingress_latency_metric :: %{
-          value_ms: number(),
-          end_to_end_us: non_neg_integer(),
-          observed_at: DateTime.t(),
-          error?: boolean()
-        }
-
   @type processing_result :: %{
           raw_evidence: RawEvidence.t(),
           packet_records: [PacketRecord.t()],
@@ -45,8 +38,7 @@ defmodule Cadence do
           protocol_anomalies: [ProtocolAnomaly.t()],
           dispatch_decisions: [DispatchDecision.t()],
           outputs: [term()],
-          runtime_records: map(),
-          ingress_latency_metric: ingress_latency_metric() | nil
+          runtime_records: map()
         }
 
   @spec list_ops_telemetry_points(binary(), binary()) :: [OpsPointCatalog.point_info()]
@@ -180,13 +172,6 @@ defmodule Cadence do
 
     case runtime_result do
       {:ok, processing_result} ->
-        processing_result =
-          put_ingress_latency_metric(
-            processing_result,
-            elapsed_us(ingress_started_at),
-            false
-          )
-
         finalize_persisted_ingress(
           resolved_raw_evidence,
           processing_result,
@@ -240,23 +225,6 @@ defmodule Cadence do
 
   defp normalize_persistence_result({:ok, persisted_result}), do: {:ok, persisted_result}
   defp normalize_persistence_result({:error, reason}), do: {:error, reason}
-
-  defp put_ingress_latency_metric(processing_result, end_to_end_us, error?)
-       when is_map(processing_result) and is_integer(end_to_end_us) and end_to_end_us >= 0 do
-    raw_evidence = Map.get(processing_result, :raw_evidence)
-
-    Map.put(processing_result, :ingress_latency_metric, %{
-      value_ms: end_to_end_us / 1000.0,
-      end_to_end_us: end_to_end_us,
-      observed_at: ingress_latency_observed_at(raw_evidence),
-      error?: error?
-    })
-  end
-
-  defp ingress_latency_observed_at(%RawEvidence{receipt_time: %DateTime{} = receipt_time}),
-    do: receipt_time
-
-  defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
 
   @spec realized_contact_snapshot(binary(), binary()) :: {:ok, map()} | {:error, term()}
   def realized_contact_snapshot(mission_id, realized_contact_id)

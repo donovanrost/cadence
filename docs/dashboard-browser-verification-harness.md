@@ -284,6 +284,14 @@ warning metadata. With degraded source-health arguments, it proves the mixed
 table keeps ready row data while surfacing degraded widget source status, opens
 source evidence from the source badge, opens the row source-health event
 DataLink, and preserves the command/ingress row DataLinks and frame evidence.
+
+The canonical metric-sample event assertion above describes the current
+migration implementation. ADR-019 removes per-result ingress-latency events;
+the successor browser contract must preserve the row, scope, freshness, and
+resource DataLinks while sourcing live data from runtime health and historical
+data from the metrics/time-series boundary. It must not require an invented
+operational-event evidence reference for each numerical point.
+
 `operational-ingress-latency` opens a source-endpoint scoped status matrix
 seeded through the telemetry ingress persistence write path, verifies the
 durable selected endpoint latency renders while a second endpoint is filtered

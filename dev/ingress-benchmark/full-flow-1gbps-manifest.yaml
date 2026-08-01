@@ -1,0 +1,64 @@
+schema_version: 1
+run_id: laptop-full-flow-1gbps-150s
+scenario: capture_first_ingress_steady_state
+variant: journaled_semantic_path_ephemeral_archives
+source_revision: working-tree
+
+deployment:
+  kind: compose
+  topology: isolated_source_to_cadence_tcp_ingress
+  cadence_instances: 1
+  containers:
+    preflight: {memory_limit_bytes: 268435456}
+    traffic_source: {memory_limit_bytes: 402653184}
+    cadence: {memory_limit_bytes: 1342177280}
+    postgres: {memory_limit_bytes: 3221225472}
+    greptimedb: {memory_limit_bytes: 536870912}
+    otel_collector: {memory_limit_bytes: 134217728}
+    grafana: {memory_limit_bytes: 268435456}
+
+storage:
+  profile: laptop_tmpfs
+  filesystem: tmpfs
+  mount_options: size-capped
+  max_bytes: 1140850688
+  tmpfs_mounts:
+    - {path: /benchmark/corpus, max_bytes: 16777216}
+    - {path: /benchmark/results, max_bytes: 8388608}
+    - {path: /benchmark/scratch, max_bytes: 16777216}
+    - {path: /benchmark/journal, max_bytes: 1073741824}
+    - {path: /tmp, max_bytes: 16777216}
+  component_tmpfs_paths:
+    traffic_source:
+      - /benchmark/corpus
+      - /benchmark/results
+      - /benchmark/scratch
+      - /tmp
+
+traffic:
+  corpus_id: ccsds-tm-frame-v1
+  seed: 381746
+  minimum_rate_ratio: 0.99
+  pattern_size_bytes: 62500
+  block_size_bytes: 62500
+  phases:
+    - {name: measure, duration_seconds: 150, target_bps: 1000000000}
+
+observability:
+  mode: metrics
+  metric_sample_interval_ms: 1000
+  trace_sampling_policy: disabled
+
+processing:
+  target_cap_bps: null
+  ingress_journal: capture_first_page_cache_tmpfs
+  ingress_archive: ephemeral_counting_ack
+  protocol_record_archive: ephemeral_counting_ack
+
+safety:
+  max_source_bytes: 18750000000
+  max_wall_clock_seconds: 210
+  max_artifact_bytes: 4194304
+  docker_memory_budget_bytes: 8394457088
+  docker_overhead_bytes: 805306368
+  process_headroom_bytes: 134217728

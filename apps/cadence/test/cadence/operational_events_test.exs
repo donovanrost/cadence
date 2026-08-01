@@ -104,6 +104,40 @@ defmodule Cadence.OperationalEventsTest do
     assert listed_event.event_id == event.event_id
   end
 
+  test "bulk upserts canonical operational events", %{
+    organization_id: organization_id,
+    mission_id: mission_id
+  } do
+    occurred_at = DateTime.from_unix!(1_700_060_100, :second)
+
+    events =
+      Enum.map(1..2, fn ordinal ->
+        Event.new(%{
+          event_id: "operational_event:bulk:#{ordinal}",
+          organization_id: organization_id,
+          mission_id: mission_id,
+          occurred_at: occurred_at,
+          recorded_at: occurred_at,
+          category: :runtime,
+          kind: :operational_observable_metric_sampled,
+          actor: %{kind: :system},
+          payload: %{ordinal: ordinal}
+        })
+      end)
+
+    assert {:ok, ^events} = OperationalEvents.persist_events(Cadence.Repo, events)
+    assert {:ok, ^events} = OperationalEvents.persist_events(Cadence.Repo, events)
+
+    assert Enum.map(events, & &1.event_id) ==
+             organization_id
+             |> OperationalEvents.list_events(mission_id,
+               category: :runtime,
+               kind: :operational_observable_metric_sampled
+             )
+             |> Enum.map(& &1.event_id)
+             |> Enum.sort()
+  end
+
   test "upserts by event id without duplicating the source record", %{
     mission_id: mission_id
   } do

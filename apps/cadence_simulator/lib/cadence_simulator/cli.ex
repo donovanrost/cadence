@@ -5,6 +5,7 @@ defmodule CadenceSimulator.CLI do
 
   alias Cadence.CCSDS.Transport.COP1.FARM
   alias CadenceSimulator.CadenceRuntimeBootstrap
+  alias CadenceSimulator.IngressBenchmark.CLI, as: IngressBenchmarkCLI
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
 
   @telemetry_switches [
@@ -69,6 +70,10 @@ defmodule CadenceSimulator.CLI do
   }
 
   @spec main([String.t()]) :: no_return()
+  def main(["ingress_preflight" | args]), do: IngressBenchmarkCLI.main(:preflight, args)
+  def main(["ingress_source" | args]), do: IngressBenchmarkCLI.main(:source, args)
+  def main(["ingress_sink" | args]), do: IngressBenchmarkCLI.main(:sink, args)
+
   def main(args) do
     case parse_args(args) do
       {:help, usage} ->
@@ -101,10 +106,16 @@ defmodule CadenceSimulator.CLI do
       cadence_simulator --config PATH
       cadence_simulator [telemetry] --definitions PATH [options]
       cadence_simulator cop1_loopback --tcp HOST:PORT --tc-frame-size BYTES [options]
+      cadence_simulator ingress_preflight --manifest PATH
+      cadence_simulator ingress_source --manifest PATH --tcp HOST:PORT
+      cadence_simulator ingress_sink --manifest PATH --listen HOST:PORT
 
     Runtime Modes:
       telemetry      Generate downlink packet or TM frame output (default)
       cop1_loopback  Connect to a TCP uplink provider and reply with CLCW reports
+      ingress_preflight  Validate laptop budgets and tmpfs mounts without running traffic
+      ingress_source     Send deterministic, byte-budgeted TCP traffic
+      ingress_sink       Validate deterministic TCP bytes and emit a checksum report
 
     Run `cadence_simulator telemetry --help` or
     `cadence_simulator cop1_loopback --help` for mode-specific options.

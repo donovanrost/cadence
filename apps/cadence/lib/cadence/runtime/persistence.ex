@@ -11,7 +11,6 @@ defmodule Cadence.Runtime.Persistence do
   alias Cadence.IngressArchive
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Platform.ContentHash
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Repo
@@ -48,13 +47,20 @@ defmodule Cadence.Runtime.Persistence do
   @spec persist_processing_results([map()], keyword()) :: :ok | {:error, term()}
   def persist_processing_results(processing_results, opts \\ [])
       when is_list(processing_results) and is_list(opts) do
-    with {:ok, prepared_results} <- prepare_processing_results(processing_results),
-         :ok <- persist_canonical_processing_results(prepared_results),
-         :ok <-
-           IngressArchive.persist_raw_evidences(Enum.map(prepared_results, & &1.raw_evidence)),
-         :ok <- RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
-         :ok <- Storage.persist_prepared_results(prepared_results, opts) do
-      publish_processing_results(prepared_results)
+    with {:ok, prepared_results} <- prepare_processing_results(processing_results) do
+      persist_prepared_processing_results(prepared_results, opts, archive_raw_evidence?: true)
+    end
+  end
+
+  @doc """
+  Persists only semantic outputs for evidence already owned by a capture
+  journal. The independent raw-archive consumer owns archive completion.
+  """
+  @spec persist_semantic_processing_results([map()], keyword()) :: :ok | {:error, term()}
+  def persist_semantic_processing_results(processing_results, opts \\ [])
+      when is_list(processing_results) and is_list(opts) do
+    with {:ok, prepared_results} <- prepare_processing_results(processing_results) do
+      persist_prepared_processing_results(prepared_results, opts, archive_raw_evidence?: false)
     end
   end
 
@@ -244,6 +250,23 @@ defmodule Cadence.Runtime.Persistence do
     end)
   end
 
+  defp persist_prepared_processing_results(prepared_results, opts,
+         archive_raw_evidence?: archive?
+       ) do
+    with :ok <- persist_canonical_processing_results(prepared_results),
+         :ok <- maybe_archive_raw_evidence(prepared_results, archive?),
+         :ok <- RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
+         :ok <- Storage.persist_prepared_results(prepared_results, opts) do
+      publish_processing_results(prepared_results)
+    end
+  end
+
+  defp maybe_archive_raw_evidence(_prepared_results, false), do: :ok
+
+  defp maybe_archive_raw_evidence(prepared_results, true) do
+    IngressArchive.persist_raw_evidences(Enum.map(prepared_results, & &1.raw_evidence))
+  end
+
   defp prepare_processing_results(processing_results) do
     Enum.reduce_while(processing_results, {:ok, []}, fn
       %{
@@ -252,14 +275,12 @@ defmodule Cadence.Runtime.Persistence do
         transfer_frame_records: transfer_frame_records,
         protocol_anomalies: protocol_anomalies,
         outputs: outputs
-      } = processing_result,
+      },
       {:ok, acc}
       when is_list(packet_records) and is_list(transfer_frame_records) and
              is_list(protocol_anomalies) and is_list(outputs) ->
         case telemetry_samples(outputs) do
           {:ok, telemetry_samples} ->
-            ingress_latency_metric = Map.get(processing_result, :ingress_latency_metric)
-
             {:cont,
              {:ok,
               [
@@ -268,8 +289,7 @@ defmodule Cadence.Runtime.Persistence do
                   packet_records: packet_records,
                   transfer_frame_records: transfer_frame_records,
                   protocol_anomalies: protocol_anomalies,
-                  telemetry_samples: telemetry_samples,
-                  ingress_latency_metric: ingress_latency_metric
+                  telemetry_samples: telemetry_samples
                 }
                 | acc
               ]}}
@@ -288,14 +308,26 @@ defmodule Cadence.Runtime.Persistence do
   end
 
   defp persist_canonical_processing_results(prepared_results) do
-    Multi.new()
-    |> add_prepared_processing_result_inserts(prepared_results)
-    |> RecordArchive.add_anomaly_inserts(protocol_anomalies_from_prepared(prepared_results))
-    |> Multi.run(:ingress_latency_operational_events, fn repo, _changes ->
-      prepared_results
-      |> ingress_latency_operational_events()
-      |> persist_operational_events(repo)
-    end)
+    multi =
+      Multi.new()
+      |> add_prepared_processing_result_inserts(prepared_results)
+      |> RecordArchive.add_anomaly_inserts(protocol_anomalies_from_prepared(prepared_results))
+
+    persist_non_empty_multi(multi)
+  end
+
+  defp persist_non_empty_multi(%Multi{} = multi) do
+    case Multi.to_list(multi) do
+      [] ->
+        :ok
+
+      _operations ->
+        run_multi(multi)
+    end
+  end
+
+  defp run_multi(%Multi{} = multi) do
+    multi
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
@@ -336,101 +368,5 @@ defmodule Cadence.Runtime.Persistence do
 
   defp protocol_anomalies_from_prepared(prepared_results) when is_list(prepared_results) do
     Enum.flat_map(prepared_results, & &1.protocol_anomalies)
-  end
-
-  defp ingress_latency_operational_events(prepared_results) when is_list(prepared_results) do
-    prepared_results
-    |> Enum.flat_map(&ingress_latency_operational_event/1)
-  end
-
-  defp ingress_latency_operational_event(%{
-         raw_evidence: %RawEvidence{} = raw_evidence,
-         ingress_latency_metric: %{value_ms: value_ms} = metric
-       })
-       when is_number(value_ms) do
-    [
-      OperationalEvent.from_operational_observable_metric_sample(%{
-        sample_id: ingress_latency_sample_id(raw_evidence),
-        organization_id: OrganizationScope.organization_id_for_mission(raw_evidence.mission_id),
-        mission_id: raw_evidence.mission_id,
-        observable_id: "ingress.processing_latency_ms",
-        resource_id: ingress_latency_resource_id(raw_evidence),
-        scope_kind: ingress_latency_scope_kind(raw_evidence),
-        spacecraft_id: raw_evidence.spacecraft_id,
-        source_endpoint_id: raw_evidence.source_endpoint_ref || raw_evidence.source_ref,
-        contact_id: ingress_latency_contact_id(raw_evidence),
-        scheduled_contact_id: ingress_latency_scheduled_contact_id(raw_evidence),
-        realized_contact_id: ingress_latency_realized_contact_id(raw_evidence),
-        value: value_ms,
-        unit: "ms",
-        observed_at: Map.get(metric, :observed_at) || raw_evidence.receipt_time,
-        metadata: ingress_latency_metadata(raw_evidence, metric)
-      })
-    ]
-  end
-
-  defp ingress_latency_operational_event(_prepared_result), do: []
-
-  defp ingress_latency_sample_id(%RawEvidence{} = raw_evidence) do
-    raw_evidence.evidence_id <> ":ingress_processing_latency"
-  end
-
-  defp ingress_latency_resource_id(%RawEvidence{} = raw_evidence) do
-    raw_evidence.source_endpoint_ref ||
-      raw_evidence.source_ref ||
-      raw_evidence.spacecraft_id ||
-      raw_evidence.mission_id
-  end
-
-  defp ingress_latency_scope_kind(%RawEvidence{source_endpoint_ref: source_endpoint_ref})
-       when is_binary(source_endpoint_ref) and source_endpoint_ref != "",
-       do: :source_endpoint
-
-  defp ingress_latency_scope_kind(%RawEvidence{source_ref: source_ref})
-       when is_binary(source_ref) and source_ref != "",
-       do: :source_endpoint
-
-  defp ingress_latency_scope_kind(%RawEvidence{spacecraft_id: spacecraft_id})
-       when is_binary(spacecraft_id) and spacecraft_id != "",
-       do: :spacecraft
-
-  defp ingress_latency_scope_kind(%RawEvidence{}), do: :mission
-
-  defp ingress_latency_contact_id(%RawEvidence{} = raw_evidence) do
-    ingress_latency_metadata_value(raw_evidence, :contact_id) ||
-      ingress_latency_scheduled_contact_id(raw_evidence) ||
-      ingress_latency_realized_contact_id(raw_evidence)
-  end
-
-  defp ingress_latency_scheduled_contact_id(%RawEvidence{} = raw_evidence) do
-    ingress_latency_metadata_value(raw_evidence, :scheduled_contact_id)
-  end
-
-  defp ingress_latency_realized_contact_id(%RawEvidence{} = raw_evidence) do
-    ingress_latency_metadata_value(raw_evidence, :realized_contact_id)
-  end
-
-  defp ingress_latency_metadata_value(%RawEvidence{metadata: metadata}, key)
-       when is_map(metadata) do
-    Map.get(metadata, key) || Map.get(metadata, Atom.to_string(key))
-  end
-
-  defp ingress_latency_metadata_value(%RawEvidence{}, _key), do: nil
-
-  defp ingress_latency_metadata(%RawEvidence{} = raw_evidence, metric) do
-    %{
-      evidence_id: raw_evidence.evidence_id,
-      source_endpoint_ref: raw_evidence.source_endpoint_ref,
-      source_ref: raw_evidence.source_ref,
-      contact_id: ingress_latency_contact_id(raw_evidence),
-      scheduled_contact_id: ingress_latency_scheduled_contact_id(raw_evidence),
-      realized_contact_id: ingress_latency_realized_contact_id(raw_evidence),
-      protocol_family: raw_evidence.protocol_family,
-      direction: raw_evidence.direction,
-      error?: Map.get(metric, :error?, false),
-      end_to_end_us: Map.get(metric, :end_to_end_us)
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
   end
 end

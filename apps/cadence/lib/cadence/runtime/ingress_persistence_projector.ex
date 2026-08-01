@@ -26,6 +26,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           realized_contact_id: binary(),
           path_id: binary(),
           provider_binding_id: binary(),
+          organization_id: binary() | nil,
           queue: :queue.queue(ProcessedIngressBatch.t()),
           queue_depth: non_neg_integer(),
           processing?: boolean(),
@@ -115,6 +116,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
        path_id: Keyword.fetch!(opts, :path_id),
        provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
+       organization_id: Keyword.get(opts, :organization_id),
        queue: :queue.new(),
        queue_depth: 0,
        processing?: false,
@@ -203,7 +205,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp persist_batch(
          %ProcessedIngressBatch{
            processing_results: processing_results
-         } = batch
+         } = batch,
+         organization_id
        )
        when is_list(processing_results) and processing_results != [] do
     links = Observability.links(batch.trace_contexts)
@@ -217,7 +220,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       },
       fn ->
         started_at = System.monotonic_time()
-        result = do_persist_batch(batch)
+        result = do_persist_batch(batch, organization_id)
         emit_persist_result(result, batch, elapsed_us(started_at))
         _ = mark_persistence_result(result, batch)
         result
@@ -225,19 +228,22 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     )
   end
 
-  defp persist_batch(%ProcessedIngressBatch{}), do: {:error, :empty_batch}
+  defp persist_batch(%ProcessedIngressBatch{}, _organization_id), do: {:error, :empty_batch}
 
-  defp do_persist_batch(%ProcessedIngressBatch{
-         mission_id: mission_id,
-         processing_results: processing_results
-       }) do
+  defp do_persist_batch(
+         %ProcessedIngressBatch{
+           mission_id: mission_id,
+           processing_results: processing_results
+         },
+         organization_id
+       ) do
     persistence_started_at = System.monotonic_time()
 
     result =
       run_persistence(fn ->
         raw_evidence = first_raw_evidence(processing_results)
 
-        persist_processing_results(raw_evidence, processing_results)
+        persist_processing_results(raw_evidence, processing_results, organization_id)
       end)
 
     case result do
@@ -264,8 +270,10 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp first_raw_evidence([]), do: raise(ArgumentError, "processed ingress batch is empty")
 
   defp handle_dequeued_persist_batch(state, %ProcessedIngressBatch{} = batch, rest, batch_size) do
-    case persist_batch(batch) do
+    case persist_batch(batch, state.organization_id) do
       :ok ->
+        notify_batch_completed(batch)
+
         next_state = %{
           state
           | queue: rest,
@@ -372,17 +380,22 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     end
   end
 
-  defp persist_processing_results(%RawEvidence{} = raw_evidence, processing_results) do
+  defp persist_processing_results(
+         %RawEvidence{} = raw_evidence,
+         processing_results,
+         organization_id
+       ) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
-      persist_processing_results_with_stage(processing_results)
+      persist_processing_results_with_stage(processing_results, organization_id)
     end)
   end
 
-  defp persist_processing_results_with_stage(processing_results) do
+  defp persist_processing_results_with_stage(processing_results, organization_id) do
     TelemetryProfiler.with_stage(:persistence, fn ->
-      Persistence.persist_processing_results(
+      Persistence.persist_semantic_processing_results(
         processing_results,
-        record_current_values?: not CurrentValueStore.hot_path_safe?()
+        record_current_values?: not CurrentValueStore.hot_path_safe?(),
+        organization_id: organization_id
       )
     end)
   end
@@ -460,6 +473,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        provider_binding_id: state.provider_binding_id,
        processing_results: processing_results,
        trace_contexts: Enum.flat_map(batches, & &1.trace_contexts),
+       completions: Enum.flat_map(batches, & &1.completions),
+       producer_receipts: Enum.flat_map(batches, & &1.producer_receipts),
        enqueued_at: oldest_enqueued_at(batches)
      }), queue, size}
   end
@@ -472,6 +487,16 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       [] -> nil
       enqueued_at_values -> Enum.min(enqueued_at_values)
     end
+  end
+
+  defp notify_batch_completed(%ProcessedIngressBatch{} = batch) do
+    Enum.each(batch.producer_receipts, fn {producer_pid, count} ->
+      send(producer_pid, {:ingress_persistence_completed, self(), count})
+    end)
+
+    Enum.each(batch.completions, fn {subscriber_pid, ref} ->
+      send(subscriber_pid, {:provider_ingress_persisted, self(), ref})
+    end)
   end
 
   defp persistence_span_attributes(%ProcessedIngressBatch{} = batch, links) do

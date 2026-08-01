@@ -7,12 +7,15 @@ defmodule Cadence.Runtime.PathCoordinator do
   use GenServer
 
   alias Cadence.Capabilities.Descriptor
+  alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.ProviderAdapters
 
   alias Cadence.Runtime.{
     ActivationContext,
     CapabilityRegistry,
     ContactPathSpec,
+    IngressArchiveConsumer,
+    IngressJournalConsumer,
     IngressPersistenceProjector,
     MissionRuntime,
     PartitionKey,
@@ -24,6 +27,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   alias Cadence.Runtime.TransportRuntime
 
   @type state :: %{
+          organization_id: binary() | nil,
           mission_id: binary(),
           realized_contact_id: binary(),
           path: ContactPathSpec.t(),
@@ -88,6 +92,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     initial_time = Keyword.get(opts, :initial_time, DateTime.utc_now())
 
     state = %{
+      organization_id: Keyword.get(opts, :organization_id),
       mission_id: mission_id,
       realized_contact_id: realized_contact_id,
       path: path,
@@ -178,8 +183,13 @@ defmodule Cadence.Runtime.PathCoordinator do
     Enum.reduce_while(state.path.provider_bindings, :ok, fn %ProviderBindingSpec{} =
                                                               provider_binding,
                                                             :ok ->
-      with {:ok, _projector} <- start_provider_persistence_projector(state, provider_binding),
+      with {:ok, _journal} <- maybe_start_provider_ingress_journal(state, provider_binding),
+           {:ok, _projector} <- start_provider_persistence_projector(state, provider_binding),
            {:ok, _executor} <- start_provider_ingress_executor(state, provider_binding),
+           {:ok, _consumer} <-
+             maybe_start_provider_ingress_journal_consumer(state, provider_binding),
+           {:ok, _archive_consumer} <-
+             maybe_start_provider_ingress_archive_consumer(state, provider_binding),
            {:ok, provider_module} <-
              Cadence.ProviderAdapters.Registry.fetch_module(provider_binding.adapter_key),
            {:ok, _provider_runtime} <-
@@ -192,6 +202,99 @@ defmodule Cadence.Runtime.PathCoordinator do
     end)
   end
 
+  defp maybe_start_provider_ingress_journal(state, %ProviderBindingSpec{} = provider_binding) do
+    if journaled_provider?(state, provider_binding) do
+      child_spec =
+        {IngressJournal,
+         name:
+           MissionRuntime.provider_ingress_journal_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           ),
+         mission_id: state.mission_id,
+         realized_contact_id: state.realized_contact_id,
+         path_id: state.path.path_id,
+         provider_binding_id: provider_binding.provider_binding_id}
+
+      start_provider_child(state, child_spec)
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp maybe_start_provider_ingress_journal_consumer(
+         state,
+         %ProviderBindingSpec{} = provider_binding
+       ) do
+    if journaled_provider?(state, provider_binding) do
+      child_spec =
+        {IngressJournalConsumer,
+         name:
+           MissionRuntime.provider_ingress_journal_consumer_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           ),
+         mission_id: state.mission_id,
+         realized_contact_id: state.realized_contact_id,
+         path_id: state.path.path_id,
+         provider_binding_id: provider_binding.provider_binding_id,
+         journal_name:
+           MissionRuntime.provider_ingress_journal_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           ),
+         executor_name:
+           MissionRuntime.provider_ingress_executor_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           )}
+
+      start_provider_child(state, child_spec)
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp maybe_start_provider_ingress_archive_consumer(
+         state,
+         %ProviderBindingSpec{} = provider_binding
+       ) do
+    if journaled_provider?(state, provider_binding) do
+      child_spec =
+        {IngressArchiveConsumer,
+         name:
+           MissionRuntime.provider_ingress_archive_consumer_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           ),
+         mission_id: state.mission_id,
+         realized_contact_id: state.realized_contact_id,
+         path_id: state.path.path_id,
+         provider_binding_id: provider_binding.provider_binding_id,
+         journal_name:
+           MissionRuntime.provider_ingress_journal_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id
+           )}
+
+      start_provider_child(state, child_spec)
+    else
+      {:ok, nil}
+    end
+  end
+
   defp start_provider_persistence_projector(state, %ProviderBindingSpec{} = provider_binding) do
     child_spec =
       {IngressPersistenceProjector,
@@ -202,6 +305,7 @@ defmodule Cadence.Runtime.PathCoordinator do
            state.path.path_id,
            provider_binding.provider_binding_id
          ),
+       organization_id: state.organization_id,
        mission_id: state.mission_id,
        realized_contact_id: state.realized_contact_id,
        path_id: state.path.path_id,
@@ -231,6 +335,7 @@ defmodule Cadence.Runtime.PathCoordinator do
            state.path.path_id,
            provider_binding.provider_binding_id
          ),
+       organization_id: state.organization_id,
        mission_id: state.mission_id,
        realized_contact_id: state.realized_contact_id,
        path_id: state.path.path_id,
@@ -258,8 +363,8 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   defp start_provider_runtime(state, %ProviderBindingSpec{} = provider_binding, provider_module) do
-    child_spec =
-      provider_module.child_spec(
+    provider_opts =
+      [
         name:
           MissionRuntime.provider_runtime_name(
             state.mission_id,
@@ -282,7 +387,10 @@ defmodule Cadence.Runtime.PathCoordinator do
             provider_binding.provider_binding_id
           ),
         configuration: provider_binding.configuration
-      )
+      ]
+      |> maybe_put_ingress_journal_name(state, provider_binding)
+
+    child_spec = provider_module.child_spec(provider_opts)
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
@@ -295,6 +403,62 @@ defmodule Cadence.Runtime.PathCoordinator do
       {:ok, provider_runtime} -> {:ok, provider_runtime}
       {:error, {:already_started, provider_runtime}} -> {:ok, provider_runtime}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_put_ingress_journal_name(opts, state, provider_binding) do
+    if journaled_provider?(state, provider_binding) do
+      Keyword.put(
+        opts,
+        :ingress_journal_name,
+        MissionRuntime.provider_ingress_journal_name(
+          state.mission_id,
+          state.realized_contact_id,
+          state.path.path_id,
+          provider_binding.provider_binding_id
+        )
+      )
+    else
+      opts
+    end
+  end
+
+  defp start_provider_child(state, child_spec) do
+    case DynamicSupervisor.start_child(
+           MissionRuntime.provider_supervisor_name(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id
+           ),
+           child_spec
+         ) do
+      {:ok, child} -> {:ok, child}
+      {:error, {:already_started, child}} -> {:ok, child}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp journaled_provider?(state, %ProviderBindingSpec{} = provider_binding) do
+    ingress_journal_enabled?() and state.path.direction == :downlink and
+      provider_binding.adapter_key == :tcp_socket and
+      provider_protocol_family(provider_binding.configuration) in [:tm, :tm_transfer_frame]
+  end
+
+  defp ingress_journal_enabled? do
+    :cadence
+    |> Application.get_env(:ingress_journal, [])
+    |> Keyword.get(:enabled?, false)
+  end
+
+  defp provider_protocol_family(configuration) when is_map(configuration) do
+    case Map.get(
+           configuration,
+           :ingress_protocol_family,
+           Map.get(configuration, "ingress_protocol_family")
+         ) do
+      "tm" -> :tm
+      "tm_transfer_frame" -> :tm_transfer_frame
+      value -> value
     end
   end
 

@@ -3,7 +3,7 @@ title: Dashboards & Telemetry Visualization Engine — Design
 tags: [design, dashboards, telemetry, visualization, tsdb, query-engine, ops-console]
 status: draft
 created: 2026-06-13
-updated: 2026-07-02
+updated: 2026-07-31
 ---
 
 # Dashboards & Telemetry Visualization Engine — Design
@@ -17,6 +17,14 @@ updated: 2026-07-02
 > ADR wins. This is a **long-term technical vision**, not a single-slice
 > implementation plan; §13 names sequencing, not a requirement to build every
 > capability at once.
+
+> **ADR-019 correction:** Historical implementation notes below describe
+> `ingress.processing_latency_ms` as a canonical per-result operational-event
+> sample. [ADR-019](decisions/019-telemetry-data-plane-persistence-and-projection-topology.md)
+> supersedes that storage choice. The observable remains part of the dashboard
+> contract, but live values come from bounded runtime health and durable history
+> comes from a metrics/time-series source. Per-result operational-event rows are
+> migration evidence, not the target backing store.
 
 ## 1. Purpose
 
@@ -4939,12 +4947,12 @@ current frame-sync snapshot produce degraded `unknown` rows with
 DataLinks instead of implying synchronized state from setup existence.
 
 Recent rendered ingress-latency coverage proves
-`ingress.processing_latency_ms` as an ingress/runtime operational observable:
-telemetry ingress persistence emits durable metric samples for two source
-endpoints and the rendered dashboard shows only the selected endpoint under
-source-endpoint scope, the row opens a source-endpoint DataLink inspector and
-copy payload, and frame evidence/copy routes preserve placement, source
-request, logical source, data source, source binding, and source-endpoint scope.
+`ingress.processing_latency_ms` as an ingress/runtime operational observable.
+The current migration implementation seeds durable metric-event samples for two
+source endpoints and proves filtering, DataLinks, frame evidence, and copied
+scope. ADR-019 retains those source and presentation contracts while replacing
+the per-result operational-event backing with runtime-health and metrics/history
+sources.
 Latest ingress latency also preserves endpoint row identity under
 multi-spacecraft scope: source and rendered browser coverage seed alpha, beta,
 and unselected gamma endpoint samples through the telemetry write path, filter
@@ -4953,8 +4961,9 @@ rather than spacecraft aggregates, and preserve the surrounding spacecraft
 `scope_ids`/`selected_scope_ids` through endpoint DataLinks, frame evidence,
 routes, and copy payloads.
 Contact-scoped ingress latency is now an explicit source and rendered contract.
-Telemetry ingress can promote contact ids from raw-evidence metadata into the
-canonical operational-observable metric sample event, the source filters latest
+The current migration path promotes contact ids from raw-evidence metadata into
+metric samples; the target metrics/history source must preserve the same query
+context without using high-cardinality metric labels. The source filters latest
 and raw-series history frames by contact id, and status-matrix rows preserve both
 the endpoint resource identity and `contact_id`. Rendered browser coverage opens
 a dashboard with `scope_kind=contact`, proves unrelated contact samples are
@@ -5997,7 +6006,7 @@ Next maturity slices:
    default-reader replay-scoped canonical-event filtering, and
    transport-execution evidence refs; `commanding.queue_depth` can resolve from
    pending command queue entries at mission or source-endpoint scope; and
-   `ingress.processing_latency_ms` can resolve from canonical operational-observable metric sample events keyed by mission/source endpoint as both latest rows and raw-series history wide Frames, with runtime-health ingress profiler samples overlaid for live reads and preserving promoted transport, source-endpoint, ground-station, and link context when profiler metadata provides it. Latest contact,
+   `ingress.processing_latency_ms` currently resolves from migration-era operational-observable metric sample events plus runtime-health ingress profiler samples; ADR-019 moves latest reads to bounded runtime health and durable history to a metrics/time-series source while preserving source and resource context through query metadata rather than unbounded metric labels. Latest contact,
    connection, antenna-pointing, transport-metric, command-queue, and ingress rows now evaluate
    their observation time against dashboard freshness policy and propagate
    `freshness_state`, `age_ms`, `freshness_policy`, `freshness_checked_at`, and

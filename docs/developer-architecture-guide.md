@@ -3,7 +3,7 @@ title: Developer Architecture Guide
 tags: [developer, architecture, runtime, persistence, simulator, onboarding]
 status: active
 created: 2026-04-03
-updated: 2026-07-21
+updated: 2026-07-31
 ---
 
 # Developer Architecture Guide
@@ -165,12 +165,15 @@ Current flow:
 
 This ordered lane is the place where latency matters most.
 
-### 4.2 Async persistence lane
+### 4.2 Async sink lanes
 
-`Cadence.Runtime.IngressPersistenceProjector` owns durable side effects that do
-not need to block ordered mission execution.
+The current implementation routes several durable side effects through
+`Cadence.Runtime.IngressPersistenceProjector`. ADR-019 accepts a more explicit
+target: raw archive replication, protocol archive, telemetry history, and sparse
+operational-event projection have separate sink contracts, acknowledgements,
+retry state, and observability.
 
-That includes:
+Those responsibilities include:
 
 - archive writes
 - protocol anomaly writes
@@ -178,8 +181,13 @@ That includes:
 - current-value fallback writes for non-hot-path-safe backends
 - other low-rate projections that are not required to complete inline
 
-The projector is backpressured by queue depth. The provider and executor are
-expected to prefer bounded flow over unbounded memory growth.
+Each required sink is backpressured by bytes, items, and oldest-work age. The
+provider and executor prefer bounded flow over unbounded memory growth, while a
+slow sink remains identifiable instead of disappearing behind one generic
+projector backlog.
+
+The generic projector remains migration code while these sink contracts are
+introduced. Do not add another high-rate effect to it.
 
 ### 4.3 Why this split exists
 
@@ -209,6 +217,7 @@ Cadence now uses multiple storage tiers.
 | Raw ingress evidence | `Cadence.IngressArchive.FileSystem` | Async projector | Filesystem archive plus lightweight index rows |
 | Packet and frame records | `Cadence.Protocol.RecordArchive.FileSystem` | Async projector | Archive-oriented, not default OLTP rows |
 | Protocol anomalies | Postgres | Async projector | Low-rate operational facts worth querying live |
+| Numerical ingress/runtime metrics | OpenTelemetry metrics backend | No | Histograms, counters, and gauges; never one operational-event row per observation |
 | Management/control records | Postgres | N/A | Missions, governed configuration, approvals, activations, reservations, queues, and lifecycle state |
 
 ### 5.1 Current value store
@@ -253,6 +262,11 @@ As a working rule:
 - high-rate per-packet/per-frame decisions are usually archive or event-stream
   data
 - low-rate anomalies and control-plane state are good Postgres candidates
+
+`ingress.processing_latency_ms` is a numerical observation. It belongs in
+runtime health and the metrics/time-series boundary. Only a sparse transition,
+such as entering or clearing a sustained latency alarm, belongs in the
+operational event spine.
 
 This rule is more important than any one backend implementation.
 

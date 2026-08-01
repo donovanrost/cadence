@@ -70,12 +70,15 @@ defmodule Cadence.Observability.OtlpMetricsTest do
            ]
 
     [counter, gauge, histogram] = scope_metrics.metrics
-    assert {:sum, %{aggregation_temporality: :AGGREGATION_TEMPORALITY_DELTA}} = counter.data
+
+    assert {:sum, %{aggregation_temporality: :AGGREGATION_TEMPORALITY_CUMULATIVE}} =
+             counter.data
+
     assert {:gauge, %{data_points: [%{value: {:as_double, 0.5}}]}} = gauge.data
 
     assert {:histogram,
             %{
-              aggregation_temporality: :AGGREGATION_TEMPORALITY_DELTA,
+              aggregation_temporality: :AGGREGATION_TEMPORALITY_CUMULATIVE,
               data_points: [
                 %{
                   count: 2,

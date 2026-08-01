@@ -204,6 +204,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
       child_spec =
         Supervisor.child_spec(
           {PathRuntime,
+           organization_id: realized_contact.organization_id,
            mission_id: realized_contact.mission_id,
            realized_contact_id: realized_contact.realized_contact_id,
            path: path,

@@ -45,6 +45,14 @@ defmodule Cadence.IngressArchive.Postgres.RawEvidenceRow do
     |> validate_required(@required_fields)
   end
 
+  @spec insert_attrs(RawEvidence.t(), binary() | nil, DateTime.t()) :: map()
+  def insert_attrs(%RawEvidence{} = raw_evidence, organization_id, %DateTime{} = inserted_at) do
+    raw_evidence
+    |> domain_attrs()
+    |> Map.put(:organization_id, organization_id)
+    |> Map.put(:inserted_at, inserted_at)
+  end
+
   @spec to_domain(struct()) :: RawEvidence.t()
   def to_domain(%__MODULE__{} = raw_evidence_row) do
     %RawEvidence{

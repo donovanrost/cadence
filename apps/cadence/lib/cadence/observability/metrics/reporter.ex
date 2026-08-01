@@ -331,8 +331,7 @@ defmodule Cadence.Observability.Metrics.Reporter do
          :ok <- send_payload(payload, state) do
       %{
         state
-        | series: retain_gauges(state),
-          exported_data_point_count: state.exported_data_point_count + data_point_count,
+        | exported_data_point_count: state.exported_data_point_count + data_point_count,
           last_export_at: DateTime.utc_now(),
           last_error: nil
       }
@@ -362,13 +361,6 @@ defmodule Cadence.Observability.Metrics.Reporter do
             Map.put(series, :attributes, attributes)
           end)
       }
-    end)
-  end
-
-  defp retain_gauges(state) do
-    Map.filter(state.series, fn {{name, _attributes}, _series} ->
-      definition = Map.fetch!(state.definitions, name)
-      definition.type in [:gauge, :up_down_counter]
     end)
   end
 

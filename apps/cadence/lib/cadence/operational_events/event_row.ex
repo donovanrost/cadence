@@ -108,6 +108,23 @@ defmodule Cadence.OperationalEvents.EventRow do
     (@required_fields ++ @optional_fields) -- [:event_id]
   end
 
+  @doc false
+  @spec insert_attrs(Event.t(), DateTime.t()) :: map()
+  def insert_attrs(%Event{} = event, %DateTime{} = inserted_at) do
+    event
+    |> domain_attrs()
+    |> Map.update!(:occurred_at, &with_usec_precision/1)
+    |> Map.update!(:recorded_at, &with_usec_precision/1)
+    |> Map.update!(:effective_at, &with_usec_precision/1)
+    |> Map.put(:inserted_at, with_usec_precision(inserted_at))
+  end
+
+  defp with_usec_precision(nil), do: nil
+
+  defp with_usec_precision(%DateTime{microsecond: {microsecond, _precision}} = date_time) do
+    %{date_time | microsecond: {microsecond, 6}}
+  end
+
   defp domain_attrs(%Event{} = event) do
     %{
       event_id: event.event_id,

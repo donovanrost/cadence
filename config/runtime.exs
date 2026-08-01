@@ -21,6 +21,42 @@ parse_positive_integer = fn name, default ->
   end
 end
 
+journal_path = System.get_env("CADENCE_INGRESS_JOURNAL_PATH")
+journal_enabled = System.get_env("CADENCE_INGRESS_JOURNAL_ENABLED")
+
+if config_env() == :prod or (is_binary(journal_path) and journal_path != "") or
+     (is_binary(journal_enabled) and journal_enabled != "") do
+  enabled? =
+    case journal_enabled || "false" do
+      value when value in ["true", "1"] -> true
+      value when value in ["false", "0"] -> false
+      invalid -> raise "invalid CADENCE_INGRESS_JOURNAL_ENABLED: #{inspect(invalid)}"
+    end
+
+  durability =
+    case System.get_env("CADENCE_INGRESS_JOURNAL_DURABILITY", "sync") do
+      "sync" -> :sync
+      "page_cache" -> :page_cache
+      invalid -> raise "invalid CADENCE_INGRESS_JOURNAL_DURABILITY: #{inspect(invalid)}"
+    end
+
+  config :cadence, :ingress_journal,
+    enabled?: enabled?,
+    base_path: journal_path || "/var/lib/cadence/ingress_journal",
+    max_bytes: parse_positive_integer.("CADENCE_INGRESS_JOURNAL_MAX_BYTES", 8_589_934_592),
+    segment_bytes: parse_positive_integer.("CADENCE_INGRESS_JOURNAL_SEGMENT_BYTES", 268_435_456),
+    capture_record_bytes:
+      parse_positive_integer.("CADENCE_INGRESS_JOURNAL_CAPTURE_RECORD_BYTES", 262_144),
+    processing_max_batch_entries:
+      parse_positive_integer.("CADENCE_INGRESS_JOURNAL_PROCESSING_MAX_BATCH_ENTRIES", 8),
+    processing_max_batch_bytes:
+      parse_positive_integer.("CADENCE_INGRESS_JOURNAL_PROCESSING_MAX_BATCH_BYTES", 2_097_152),
+    durability: durability,
+    checkpoint_interval_ms:
+      parse_positive_integer.("CADENCE_INGRESS_JOURNAL_CHECKPOINT_INTERVAL_MS", 250),
+    consumers: [:processing, :archive]
+end
+
 parse_headers = fn encoded_headers ->
   encoded_headers
   |> to_string()

@@ -9,6 +9,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Observability.Metrics.Definition
+  alias Cadence.ProviderAdapters.TCPSocket.Instrumentation, as: TCPSocketInstrumentation
   alias Cadence.Telemetry.Profiler
 
   @forbidden_attributes MapSet.new([
@@ -38,7 +39,37 @@ defmodule Cadence.Observability.Metrics.Catalog do
                           ])
 
   @duration_buckets [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
-  @queue_buckets [0, 1, 10, 100, 500, 1_000, 2_048, 4_096, 8_192]
+  @journal_duration_buckets [
+    0.000_01,
+    0.000_05,
+    0.000_1,
+    0.000_25,
+    0.000_5,
+    0.001,
+    0.002_5,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5
+  ]
+  @receive_size_buckets [
+    64,
+    256,
+    1_024,
+    4_096,
+    16_384,
+    65_536,
+    262_144,
+    1_048_576,
+    2_097_152,
+    4_194_304
+  ]
+  @queue_buckets [0, 1, 2, 4, 8, 10, 100, 500, 1_000, 2_048, 4_096, 8_192]
 
   @spec definitions() :: [Definition.t()]
   def definitions do
@@ -117,6 +148,39 @@ defmodule Cadence.Observability.Metrics.Catalog do
         "beam.scheduler.run_queue",
         "{process}",
         "Number of runnable BEAM processes and ports.",
+        []
+      ),
+      gauge(
+        "beam.scheduler.utilization",
+        "1",
+        "Fraction of normal BEAM scheduler wall time spent active during the sample interval.",
+        []
+      ),
+      counter(
+        "beam.reductions",
+        nil,
+        nil,
+        "{reduction}",
+        "BEAM reductions executed during the sample interval.",
+        [],
+        []
+      ),
+      counter(
+        "beam.gc.collection",
+        nil,
+        nil,
+        "{collection}",
+        "BEAM garbage collections completed during the sample interval.",
+        [],
+        []
+      ),
+      counter(
+        "beam.gc.reclaimed",
+        nil,
+        nil,
+        "{word}",
+        "BEAM words reclaimed by garbage collection during the sample interval.",
+        [],
         []
       ),
       gauge(
@@ -275,6 +339,188 @@ defmodule Cadence.Observability.Metrics.Catalog do
         measurement: &microseconds_to_seconds/2
       ),
       counter(
+        "cadence.telemetry.ingress.received",
+        TCPSocketInstrumentation.receive_event(),
+        :byte_count,
+        "By",
+        "Bytes returned by successful telemetry transport receive operations.",
+        ["cadence.telemetry.direction", "cadence.telemetry.protocol_family"],
+        tag_values: &receive_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.receive.operation.duration",
+        TCPSocketInstrumentation.receive_event(),
+        :duration_us,
+        "s",
+        "Duration of blocking telemetry transport receive operations that returned bytes.",
+        ["cadence.telemetry.direction", "cadence.telemetry.protocol_family"],
+        @duration_buckets,
+        measurement: &duration_us_to_seconds/2,
+        tag_values: &receive_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.receive.size",
+        TCPSocketInstrumentation.receive_event(),
+        :byte_count,
+        "By",
+        "Bytes returned by each successful telemetry transport receive operation.",
+        ["cadence.telemetry.direction", "cadence.telemetry.protocol_family"],
+        @receive_size_buckets,
+        tag_values: &receive_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.appended",
+        [:cadence, :ingress_journal, :append],
+        :bytes,
+        "By",
+        "Ingress bytes admitted to a path-local journal.",
+        ["durability"],
+        tag_values: &journal_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.append.duration",
+        [:cadence, :ingress_journal, :append],
+        :duration_us,
+        "s",
+        "Duration of a journal append through its configured durability boundary.",
+        ["durability"],
+        @journal_duration_buckets,
+        measurement: &duration_us_to_seconds/2,
+        tag_values: &journal_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.append.queue_wait.duration",
+        [:cadence, :ingress_journal, :append],
+        :queue_wait_us,
+        "s",
+        "Time a journal append waited for the journal process before service began.",
+        ["durability"],
+        @journal_duration_buckets,
+        measurement: &queue_wait_us_to_seconds/2,
+        tag_values: &journal_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.record.size",
+        [:cadence, :ingress_journal, :record],
+        :bytes,
+        "By",
+        "Payload bytes in each bounded logical ingress journal record.",
+        ["durability"],
+        @receive_size_buckets,
+        tag_values: &journal_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.processing.batch.size",
+        [:cadence, :ingress_journal, :processing_batch],
+        :bytes,
+        "By",
+        "Raw bytes grouped into each bounded semantic processing work item.",
+        [],
+        @receive_size_buckets,
+        []
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.processing.batch.entry.count",
+        [:cadence, :ingress_journal, :processing_batch],
+        :entries,
+        "{entry}",
+        "Journal capture records grouped into each semantic processing work item.",
+        [],
+        @queue_buckets,
+        []
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.capacity.exhaustion",
+        [:cadence, :ingress_journal, :capacity_exhausted],
+        nil,
+        "{event}",
+        "Journal admission attempts rejected because bounded capacity was exhausted.",
+        ["durability"],
+        measurement: fn _measurements, _metadata -> 1 end,
+        tag_values: &journal_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.reclaimed",
+        [:cadence, :ingress_journal, :reclaim],
+        :bytes,
+        "By",
+        "Journal segment bytes reclaimed after all durable consumer cursors advanced.",
+        ["durability"],
+        tag_values: &journal_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.reclaimed.entry",
+        [:cadence, :ingress_journal, :reclaim],
+        :entries,
+        "{entry}",
+        "Journal index entries removed with reclaimed segments.",
+        ["durability"],
+        tag_values: &journal_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.reclaimed.segment",
+        [:cadence, :ingress_journal, :reclaim],
+        :segments,
+        "{segment}",
+        "Journal segments reclaimed after all durable consumer cursors advanced.",
+        ["durability"],
+        tag_values: &journal_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.maintenance.duration",
+        [:cadence, :ingress_journal, :maintenance],
+        :duration_us,
+        "s",
+        "Total duration of a journal cursor checkpoint and reclamation cycle.",
+        ["durability", "outcome"],
+        @journal_duration_buckets,
+        measurement: &duration_us_to_seconds/2,
+        tag_values: &journal_maintenance_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.maintenance.queue_wait.duration",
+        [:cadence, :ingress_journal, :maintenance],
+        :queue_wait_us,
+        "s",
+        "Delay between a scheduled journal maintenance cycle and its execution.",
+        ["durability", "outcome"],
+        @journal_duration_buckets,
+        measurement: &queue_wait_us_to_seconds/2,
+        tag_values: &journal_maintenance_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.checkpoint.duration",
+        [:cadence, :ingress_journal, :maintenance],
+        :checkpoint_duration_us,
+        "s",
+        "Duration of the durable journal consumer-cursor checkpoint.",
+        ["durability", "outcome"],
+        @journal_duration_buckets,
+        measurement: &checkpoint_duration_us_to_seconds/2,
+        tag_values: &journal_maintenance_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.journal.reclaim.duration",
+        [:cadence, :ingress_journal, :maintenance],
+        :reclaim_duration_us,
+        "s",
+        "Duration of journal segment deletion and index-prefix reclamation.",
+        ["durability", "outcome"],
+        @journal_duration_buckets,
+        measurement: &reclaim_duration_us_to_seconds/2,
+        tag_values: &journal_maintenance_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.processed",
+        Profiler.ingress_result_event(),
+        :raw_byte_count,
+        "By",
+        "Raw bytes successfully handled by semantic telemetry ingress processing.",
+        ["cadence.telemetry.direction", "cadence.telemetry.protocol_family"],
+        keep: fn _measurements, metadata -> not metadata[:error?] end,
+        tag_values: &ingress_tags/1
+      ),
+      counter(
         "cadence.telemetry.ingress.backpressure.transition",
         [:cadence, :runtime, :provider_ingress_executor, :backpressure_entered],
         :transition_count,
@@ -341,6 +587,18 @@ defmodule Cadence.Observability.Metrics.Catalog do
         []
       ),
       gauge(
+        "cadence.telemetry.ingress.queue.size",
+        "By",
+        "Raw telemetry bytes represented by provider ingress executor queues.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.queue.oldest.age",
+        "s",
+        "Age of the oldest raw telemetry item in provider ingress executor queues.",
+        []
+      ),
+      gauge(
         "cadence.telemetry.persistence.projector.count",
         "{projector}",
         "Number of running ingress persistence projectors.",
@@ -357,6 +615,124 @@ defmodule Cadence.Observability.Metrics.Catalog do
         "{waiter}",
         "Number of executors waiting for persistence capacity.",
         []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.count",
+        "{journal}",
+        "Number of running path-local ingress journals.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.entry.count",
+        "{entry}",
+        "Number of indexed records retained by running ingress journals.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.segment.count",
+        "{segment}",
+        "Number of filesystem segments retained by running ingress journals.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.mailbox.depth",
+        "{message}",
+        "Messages waiting in ingress journal process mailboxes.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.checkpoint.inflight",
+        "{checkpoint}",
+        "Ingress journal cursor checkpoints currently performing filesystem I/O.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.retained",
+        "By",
+        "Filesystem bytes retained by ingress journals.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.capacity",
+        "By",
+        "Configured ingress journal byte capacity.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.utilization",
+        "1",
+        "Largest fraction of configured journal capacity currently retained.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.journal.lag",
+        "By",
+        "Captured bytes not yet acknowledged by each required journal consumer.",
+        ["consumer"]
+      ),
+      gauge(
+        "cadence.telemetry.ingress.archive.consumer.count",
+        "{consumer}",
+        "Number of running independent raw-archive consumers.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.archive.queue.depth",
+        "{evidence}",
+        "Evidence items held in raw-archive retry batches.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.archive.queue.size",
+        "By",
+        "Raw bytes held in raw-archive retry batches.",
+        []
+      ),
+      gauge(
+        "cadence.telemetry.ingress.archive.queue.oldest.age",
+        "s",
+        "Age of the oldest evidence held for raw-archive retry.",
+        []
+      ),
+      counter(
+        "cadence.telemetry.ingress.archive.attempt",
+        [:cadence, :runtime, :ingress_archive_consumer, :persist_result],
+        :attempt_count,
+        "{attempt}",
+        "Raw-archive batch attempts.",
+        ["outcome", "completion", "error.type", "retry"],
+        tag_values: &archive_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.archive.archived",
+        [:cadence, :runtime, :ingress_archive_consumer, :persist_result],
+        :byte_count,
+        "By",
+        "Journal bytes durably archived or explicitly accepted by the configured policy.",
+        ["completion"],
+        keep: &successful_archive_result?/2,
+        tag_values: &archive_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.archive.duration",
+        [:cadence, :runtime, :ingress_archive_consumer, :persist_result],
+        :duration_us,
+        "s",
+        "Duration of raw-archive persistence and cursor acknowledgement attempts.",
+        ["outcome", "completion", "error.type", "retry"],
+        @duration_buckets,
+        measurement: &duration_us_to_seconds/2,
+        tag_values: &archive_tags/1
+      ),
+      histogram(
+        "cadence.telemetry.ingress.archive.batch.size",
+        [:cadence, :runtime, :ingress_archive_consumer, :persist_result],
+        :batch_size,
+        "{evidence}",
+        "Evidence items represented by each raw-archive attempt.",
+        ["outcome", "retry"],
+        @queue_buckets,
+        tag_values: &archive_tags/1
       ),
       counter(
         "cadence.telemetry.persistence.evidence",
@@ -769,12 +1145,41 @@ defmodule Cadence.Observability.Metrics.Catalog do
     }
   end
 
+  defp receive_tags(metadata) do
+    %{
+      "cadence.telemetry.direction" => metadata[:direction],
+      "cadence.telemetry.protocol_family" => metadata[:protocol_family]
+    }
+  end
+
+  defp journal_tags(metadata) do
+    %{"durability" => metadata[:durability]}
+  end
+
+  defp journal_maintenance_tags(metadata) do
+    %{
+      "durability" => metadata[:durability],
+      "outcome" => metadata[:outcome]
+    }
+  end
+
   defp persistence_tags(metadata) do
     %{
       "outcome" => metadata[:outcome],
       "error.type" => metadata[:error_type]
     }
   end
+
+  defp archive_tags(metadata) do
+    %{
+      "outcome" => metadata[:outcome],
+      "completion" => metadata[:completion],
+      "error.type" => metadata[:error_type],
+      "retry" => metadata[:retry]
+    }
+  end
+
+  defp successful_archive_result?(_measurements, metadata), do: metadata[:outcome] == :ok
 
   defp http_tags(metadata) do
     conn = Map.get(metadata, :conn, %{})
@@ -833,6 +1238,24 @@ defmodule Cadence.Observability.Metrics.Catalog do
   defp duration_us_to_seconds(measurements, _metadata) do
     measurements
     |> Map.get(:duration_us)
+    |> divide_if_number(1_000_000)
+  end
+
+  defp queue_wait_us_to_seconds(measurements, _metadata) do
+    measurements
+    |> Map.get(:queue_wait_us)
+    |> divide_if_number(1_000_000)
+  end
+
+  defp checkpoint_duration_us_to_seconds(measurements, _metadata) do
+    measurements
+    |> Map.get(:checkpoint_duration_us)
+    |> divide_if_number(1_000_000)
+  end
+
+  defp reclaim_duration_us_to_seconds(measurements, _metadata) do
+    measurements
+    |> Map.get(:reclaim_duration_us)
     |> divide_if_number(1_000_000)
   end
 

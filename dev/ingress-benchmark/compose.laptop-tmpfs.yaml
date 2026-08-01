@@ -1,0 +1,159 @@
+x-bounded-logging: &bounded-logging
+  driver: local
+  options:
+    max-size: 1m
+    max-file: "1"
+    compress: "false"
+
+x-harness-service: &harness-service
+  build:
+    context: .
+    dockerfile: dev/ingress-benchmark/Dockerfile
+  image: cadence-ingress-harness:local
+  read_only: true
+  init: true
+  restart: "no"
+  mem_limit: 256m
+  cpus: 2.0
+  volumes:
+    - type: bind
+      source: ./dev/ingress-benchmark/laptop-tmpfs-manifest.yaml
+      target: /benchmark/config/run-manifest.yaml
+      read_only: true
+    - type: tmpfs
+      target: /benchmark/corpus
+      tmpfs: {size: 16777216, mode: 448}
+    - type: tmpfs
+      target: /benchmark/results
+      tmpfs: {size: 4194304, mode: 448}
+    - type: tmpfs
+      target: /benchmark/scratch
+      tmpfs: {size: 16777216, mode: 448}
+    - type: tmpfs
+      target: /tmp
+      tmpfs: {size: 16777216, mode: 511}
+  logging: *bounded-logging
+
+services:
+  ingress_preflight:
+    <<: *harness-service
+    profiles: [ingress-preflight]
+    command:
+      - ingress_preflight
+      - --manifest
+      - /benchmark/config/run-manifest.yaml
+      - --component
+      - preflight
+      - --pretty
+
+  validating_sink:
+    <<: *harness-service
+    profiles: [ingress-source-capacity]
+    command:
+      - ingress_sink
+      - --manifest
+      - /benchmark/config/run-manifest.yaml
+      - --component
+      - validating_sink
+      - --listen
+      - 0.0.0.0:4600
+      - --timeout-ms
+      - "10000"
+      - --pretty
+
+  traffic_source:
+    <<: *harness-service
+    profiles: [ingress-source-capacity]
+    depends_on:
+      validating_sink:
+        condition: service_started
+    command:
+      - ingress_source
+      - --manifest
+      - /benchmark/config/run-manifest.yaml
+      - --component
+      - traffic_source
+      - --tcp
+      - validating_sink:4600
+      - --connect-timeout-ms
+      - "5000"
+      - --pretty
+
+  questdb:
+    read_only: true
+    mem_limit: 384m
+    volumes:
+      - type: tmpfs
+        target: /var/lib/questdb
+        tmpfs: {size: 134217728, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging
+
+  questdb_customer:
+    read_only: true
+    mem_limit: 384m
+    volumes:
+      - type: tmpfs
+        target: /var/lib/questdb
+        tmpfs: {size: 134217728, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging
+
+  greptimedb:
+    read_only: true
+    mem_limit: 512m
+    volumes:
+      - type: tmpfs
+        target: /greptimedb_data
+        tmpfs: {size: 268435456, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging
+
+  tempo:
+    read_only: true
+    mem_limit: 256m
+    volumes:
+      - type: tmpfs
+        target: /var/tempo
+        tmpfs: {size: 134217728, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging
+
+  loki:
+    read_only: true
+    mem_limit: 256m
+    volumes:
+      - type: tmpfs
+        target: /loki
+        tmpfs: {size: 134217728, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging
+
+  otel_collector:
+    read_only: true
+    mem_limit: 128m
+    tmpfs:
+      - /tmp:size=16777216,mode=1777
+    logging: *bounded-logging
+
+  grafana:
+    read_only: true
+    mem_limit: 192m
+    volumes:
+      - type: tmpfs
+        target: /var/lib/grafana
+        tmpfs: {size: 67108864, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    logging: *bounded-logging

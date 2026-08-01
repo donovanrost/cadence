@@ -9,6 +9,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact}
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.RecordArchive.Postgres.TransferFrameRecordRow
+  alias Cadence.ProviderAdapters.TCPSocket.Instrumentation, as: TCPSocketInstrumentation
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -16,6 +17,20 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
   test "tcp provider ingests fixed-size TM frames into the active mission runtime" do
+    handler_id = "tcp-receive-test-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        TCPSocketInstrumentation.receive_event(),
+        fn event, measurements, metadata, test_pid ->
+          send(test_pid, {:tcp_receive_event, event, measurements, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
     organization_id = unique_id("org-tcp-provider")
     fixture_id = Integer.to_string(System.unique_integer([:positive]))
     mission_id = "mission-tcp-provider-" <> fixture_id
@@ -169,8 +184,26 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 1
     end)
 
-    assert count_for_mission(RawEvidenceRow, :evidence_id, mission_id) == 2
     assert count_for_mission(TransferFrameRecordRow, :frame_record_id, mission_id) == 2
+
+    first_frame_rows =
+      TransferFrameRecordRow
+      |> where([row], row.mission_id == ^mission_id)
+      |> order_by([row], asc: row.raw_frame_offset_bytes)
+      |> select([row], {row.frame_record_id, row.raw_frame_offset_bytes})
+      |> Repo.all()
+
+    assert [{"frame_" <> _, 0}, {"frame_" <> _, 10}] = first_frame_rows
+
+    receive_events = assert_receive_bytes(byte_size(frame_one <> frame_two))
+
+    assert Enum.all?(receive_events, fn {_measurements, metadata} ->
+             metadata == %{direction: :downlink, protocol_family: :tm}
+           end)
+
+    assert Enum.all?(receive_events, fn {measurements, _metadata} ->
+             measurements.byte_count > 0 and measurements.duration_us >= 0
+           end)
 
     assert {:ok, refreshed_snapshot} =
              Cadence.path_runtime_snapshot(
@@ -181,12 +214,44 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
              )
 
     [refreshed_provider_runtime_snapshot] = refreshed_snapshot.provider_runtimes
-    assert refreshed_provider_runtime_snapshot.ingress_executor.processed_count == 2
+    captured_entry_count = refreshed_provider_runtime_snapshot.ingress_journal.appended_entries
+
+    semantic_batch_count =
+      refreshed_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
+
+    captured_bytes = byte_size(frame_one <> frame_two)
+
+    assert count_for_mission(RawEvidenceRow, :evidence_id, mission_id) == semantic_batch_count
+
+    assert refreshed_provider_runtime_snapshot.ingress_executor.processed_count ==
+             semantic_batch_count
+
     assert refreshed_provider_runtime_snapshot.ingress_executor.failed_count == 0
-    assert refreshed_provider_runtime_snapshot.ingress_persistence_projector.persisted_count == 2
+
+    assert refreshed_provider_runtime_snapshot.ingress_persistence_projector.persisted_count ==
+             semantic_batch_count
+
     assert refreshed_provider_runtime_snapshot.ingress_persistence_projector.failed_count == 0
     assert refreshed_provider_runtime_snapshot.tcp_read_count >= 1
     assert refreshed_provider_runtime_snapshot.avg_tcp_read_bytes > 0.0
+
+    assert refreshed_provider_runtime_snapshot.ingress_journal.next_offset == captured_bytes
+
+    assert refreshed_provider_runtime_snapshot.ingress_journal.cursors.processing ==
+             captured_bytes
+
+    assert refreshed_provider_runtime_snapshot.ingress_journal.cursors.archive == captured_bytes
+
+    assert refreshed_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_entries ==
+             captured_entry_count
+
+    assert refreshed_provider_runtime_snapshot.ingress_archive_consumer.archived_entries ==
+             captured_entry_count
+
+    assert refreshed_provider_runtime_snapshot.ingress_archive_consumer.archived_bytes ==
+             captured_bytes
+
+    assert refreshed_provider_runtime_snapshot.ingress_archive_consumer.failed_count == 0
 
     sample_row =
       TelemetrySampleRow
@@ -213,8 +278,24 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     [final_provider_runtime_snapshot] = final_snapshot.provider_runtimes
     assert final_provider_runtime_snapshot.downlink_message_count == 4
     assert final_provider_runtime_snapshot.tcp_read_count >= 2
-    assert final_provider_runtime_snapshot.ingress_executor.processed_count == 4
-    assert final_provider_runtime_snapshot.ingress_persistence_projector.persisted_count == 4
+
+    assert final_provider_runtime_snapshot.ingress_executor.processed_count ==
+             final_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
+
+    assert final_provider_runtime_snapshot.ingress_executor.queue_bytes == 0
+    assert final_provider_runtime_snapshot.ingress_executor.oldest_queued_age_ms == 0.0
+
+    assert final_provider_runtime_snapshot.ingress_persistence_projector.persisted_count ==
+             final_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
+
+    assert final_provider_runtime_snapshot.ingress_journal.cursors.processing == 4 * frame_size
+    assert final_provider_runtime_snapshot.ingress_journal.cursors.archive == 4 * frame_size
+
+    assert TransferFrameRecordRow
+           |> where([row], row.mission_id == ^mission_id)
+           |> order_by([row], asc: row.raw_frame_offset_bytes)
+           |> select([row], row.raw_frame_offset_bytes)
+           |> Repo.all() == [0, 10, 20, 30]
   end
 
   test "tcp provider listen mode recovers when the socket receiver exits unexpectedly" do
@@ -416,11 +497,30 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     [recovered_provider_runtime_snapshot] = recovered_snapshot.provider_runtimes
     assert recovered_provider_runtime_snapshot.connected? == true
     assert recovered_provider_runtime_snapshot.downlink_message_count == 2
-    assert recovered_provider_runtime_snapshot.ingress_executor.processed_count == 2
-    assert recovered_provider_runtime_snapshot.ingress_persistence_projector.persisted_count == 2
+
+    assert recovered_provider_runtime_snapshot.ingress_executor.processed_count ==
+             recovered_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
+
+    assert recovered_provider_runtime_snapshot.ingress_persistence_projector.persisted_count ==
+             recovered_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
+
+    assert_eventually(fn ->
+      {:ok, snapshot} =
+        Cadence.path_runtime_snapshot(
+          organization_id,
+          mission_id,
+          realized_contact.realized_contact_id,
+          path_id
+        )
+
+      [provider_snapshot] = snapshot.provider_runtimes
+
+      provider_snapshot.ingress_journal.cursors.processing == byte_size(frame_one <> frame_two) and
+        provider_snapshot.ingress_journal.cursors.archive == byte_size(frame_one <> frame_two)
+    end)
   end
 
-  test "tcp backpressure waits on executor capacity notifications instead of sleeping" do
+  test "tcp capture uses journal admission while legacy paths retain capacity notifications" do
     source =
       __DIR__
       |> Elixir.Path.join("../../../lib/cadence/provider_adapters/tcp_socket.ex")
@@ -431,6 +531,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     refute source =~ "@backpressure_poll_ms"
     assert source =~ "ProviderIngressExecutor.notify_when_below"
     assert source =~ ":provider_ingress_capacity_available"
+    assert source =~ "IngressJournal.append_stream"
   end
 
   defp assert_eventually(fun, attempts \\ 20)
@@ -443,6 +544,33 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     else
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_receive_bytes(expected_bytes, received_bytes \\ 0, events \\ [])
+
+  defp assert_receive_bytes(expected_bytes, received_bytes, events)
+       when received_bytes == expected_bytes,
+       do: Enum.reverse(events)
+
+  defp assert_receive_bytes(expected_bytes, received_bytes, events) do
+    receive do
+      {:tcp_receive_event, [:cadence, :provider_adapters, :tcp_socket, :receive], measurements,
+       metadata} ->
+        next_received_bytes = received_bytes + measurements.byte_count
+
+        if next_received_bytes > expected_bytes do
+          flunk("received telemetry reported more bytes than the sent payload")
+        end
+
+        assert_receive_bytes(
+          expected_bytes,
+          next_received_bytes,
+          [{measurements, metadata} | events]
+        )
+    after
+      1_000 ->
+        flunk("did not observe #{expected_bytes} received bytes; saw #{received_bytes}")
     end
   end
 

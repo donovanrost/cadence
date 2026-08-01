@@ -69,7 +69,7 @@ defmodule Cadence.Observability.OtlpMetrics do
   defp sum(points) do
     %{
       data_points: Enum.map(points, &number_point/1),
-      aggregation_temporality: :AGGREGATION_TEMPORALITY_DELTA,
+      aggregation_temporality: :AGGREGATION_TEMPORALITY_CUMULATIVE,
       is_monotonic: true
     }
   end
@@ -85,7 +85,7 @@ defmodule Cadence.Observability.OtlpMetrics do
   defp histogram(points) do
     %{
       data_points: Enum.map(points, &histogram_point/1),
-      aggregation_temporality: :AGGREGATION_TEMPORALITY_DELTA
+      aggregation_temporality: :AGGREGATION_TEMPORALITY_CUMULATIVE
     }
   end
 

@@ -3,7 +3,7 @@ title: Understand the Runtime Substrate and Capabilities
 tags: [how-to, developer, runtime, capabilities, architecture]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-07-31
 ---
 
 # Understand the Runtime Substrate and Capabilities
@@ -123,6 +123,12 @@ persistence.
   - archive raw ingress and protocol artifacts
   - persist anomalies and other low-rate projections
   - keep the ordered live lane from blocking on storage
+
+This is the current migration shape. ADR-019 replaces the generic projector as
+an architectural boundary with explicit raw-archive, protocol-archive,
+telemetry-history, and sparse operational-event sink contracts. Those contracts
+may temporarily share supervision, but their queues, acknowledgements, retries,
+and lag remain independent.
 
 ### TransportRuntime
 

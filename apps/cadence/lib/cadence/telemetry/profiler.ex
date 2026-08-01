@@ -729,6 +729,7 @@ defmodule Cadence.Telemetry.Profiler do
   defp emit_ingress_result(%RawEvidence{} = raw_evidence, opts) do
     measurements =
       %{
+        raw_byte_count: byte_size(raw_evidence.raw || <<>>),
         resolve_us: Keyword.get(opts, :resolve_us),
         runtime_us: Keyword.get(opts, :runtime_us),
         persistence_us: Keyword.get(opts, :persistence_us),

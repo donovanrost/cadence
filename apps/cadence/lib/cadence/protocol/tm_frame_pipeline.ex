@@ -66,34 +66,38 @@ defmodule Cadence.Protocol.TMFramePipeline do
 
   defp reduce_frames(frame_infos, decode_anomalies, rest, state, ctx) do
     frame_infos
-    |> Enum.reduce({[], [], decode_anomalies, state}, fn frame_info,
-                                                         {acc_sdu_octets, kept_frames, anomalies,
-                                                          current_state} ->
+    |> Enum.reduce({[], [], Enum.reverse(decode_anomalies), state}, fn frame_info,
+                                                                       {acc_sdu_octets,
+                                                                        kept_frames, anomalies,
+                                                                        current_state} ->
       case Reassembly.ingest_detailed(frame_info.frame, ctx, current_state) do
         {:ok, sdu_octets, reassembly_anomalies, next_state} ->
-          {acc_sdu_octets ++ sdu_octets, kept_frames ++ [frame_info],
-           anomalies ++ locate_anomalies(reassembly_anomalies, frame_info), next_state}
+          {Enum.reverse(sdu_octets, acc_sdu_octets), [frame_info | kept_frames],
+           reassembly_anomalies
+           |> locate_anomalies(frame_info)
+           |> Enum.reverse(anomalies), next_state}
 
         {:error, reason, reassembly_anomalies, next_state} ->
+          error_anomaly = %{
+            anomaly_kind: :frame_reassembly_error,
+            scid: frame_info.frame.scid,
+            vcid: frame_info.frame.vcid,
+            map_id: frame_info.frame.map_id,
+            frame_seq: frame_info.frame.frame_seq,
+            raw_frame_offset_bytes: frame_info.raw_frame_offset_bytes,
+            raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
+            metadata: %{reason: reason, frame_meta: frame_info.frame.meta}
+          }
+
+          located_anomalies = locate_anomalies(reassembly_anomalies, frame_info)
+
           {acc_sdu_octets, kept_frames,
-           anomalies ++
-             locate_anomalies(reassembly_anomalies, frame_info) ++
-             [
-               %{
-                 anomaly_kind: :frame_reassembly_error,
-                 scid: frame_info.frame.scid,
-                 vcid: frame_info.frame.vcid,
-                 map_id: frame_info.frame.map_id,
-                 frame_seq: frame_info.frame.frame_seq,
-                 raw_frame_offset_bytes: frame_info.raw_frame_offset_bytes,
-                 raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
-                 metadata: %{reason: reason, frame_meta: frame_info.frame.meta}
-               }
-             ], next_state}
+           [error_anomaly | Enum.reverse(located_anomalies, anomalies)], next_state}
       end
     end)
     |> then(fn {sdu_octets, kept_frames, anomalies, next_state} ->
-      {:ok, sdu_octets, kept_frames, anomalies, rest, next_state}
+      {:ok, Enum.reverse(sdu_octets), Enum.reverse(kept_frames), Enum.reverse(anomalies), rest,
+       next_state}
     end)
   end
 

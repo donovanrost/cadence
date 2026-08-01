@@ -3,7 +3,7 @@ title: Operational Event Timeline — Design
 tags: [design, events, timeline, audit, catalog, dashboards, replay, operations]
 status: draft
 created: 2026-06-15
-updated: 2026-06-29
+updated: 2026-07-31
 ---
 
 # Operational Event Timeline — Design
@@ -697,23 +697,22 @@ end-times and typed evidence refs back to the projected transport-execution
 interval plus the source operational event. Broader connection/link semantics
 now have native read projections on top of typed state facts; richer
 runtime-derived views remain to model from those intervals.
-Operational-observable metric samples now use the same store boundary for
-low-rate dashboard metrics such as `comms.transport.downlink_bitrate`,
-`link.snr_db`, `link.eb_n0_db`, and `ingress.processing_latency_ms`. They are canonical event
-facts, not high-volume telemetry samples: payloads preserve
-observable/resource identity, scoped transport/link/source-endpoint/
-spacecraft/ground-station context, observed time, unit/value aliases, and
-optional replay causality. Dashboard default metric readers can therefore filter
-live, selected replay-run, and unrelated replay data through the event store
-without treating setup existence or optional runtime snapshots as authoritative
-metric values. Dashboard latest and metric-history frames carry the selected
-canonical metric sample events as operational-event evidence refs, so rendered
-evidence panels can explain value tiles and charts from the same event spine
-used by replay readers.
-Successful telemetry ingress persistence now emits durable
-`ingress.processing_latency_ms` metric sample events from the timed ingress
-processing result, so dashboards can read ingress latency from the canonical
-event store instead of depending only on the process-local runtime-health window.
+Operational-observable metric samples may use the event-store boundary only
+when each sample is a deliberately low-rate, individually meaningful domain
+fact. Payloads preserve observable/resource identity, scoped transport/link/
+source-endpoint/spacecraft/ground-station context, observed time, unit/value
+aliases, and optional replay causality. Such facts can provide dashboard
+evidence refs and replay-scoped history without treating configured resources
+as observed state.
+
+High-rate numerical observations follow
+[ADR-019](decisions/019-telemetry-data-plane-persistence-and-projection-topology.md)
+instead. In particular, successful telemetry ingress no longer emits one
+durable `ingress.processing_latency_ms` operational event per processing
+result. Live ingress latency comes from bounded runtime health and OpenTelemetry
+histograms; durable numerical history comes from the configured metrics or
+time-series boundary. Sparse transitions such as a sustained latency breach
+entering or clearing an alarm state remain appropriate operational events.
 
 It already has useful properties:
 

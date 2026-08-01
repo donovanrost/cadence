@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-07-25
+updated: 2026-07-31
 status: active
 ---
 
@@ -36,12 +36,14 @@ Legacy ADRs remain under
 | [ADR-014](014-shared-ccsds-library-boundary.md) | Shared CCSDS Library Boundary | Accepted |
 | [ADR-015](015-management-control-data-plane-architecture.md) | Management Plane, Control Plane, and Data Plane Architecture | Accepted |
 | [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
+| [ADR-019](019-telemetry-data-plane-persistence-and-projection-topology.md) | Telemetry Data-Plane Persistence and Projection Topology | Accepted |
 
 ## Proposed Decisions
 
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-017](017-multi-tenant-identity-federation-and-credential-model.md) | Multi-Tenant Identity Federation and Credential Model | Proposed |
+| [ADR-018](018-capture-first-telemetry-ingress-journal.md) | Capture-First Telemetry Ingress Journal | Proposed |
 
 ## Superseded Decisions
 
