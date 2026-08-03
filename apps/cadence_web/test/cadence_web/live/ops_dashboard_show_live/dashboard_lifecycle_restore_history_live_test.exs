@@ -114,73 +114,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleRestoreHistoryLiveTe
 
     assert has_element?(view, "h1", "Published Power")
 
-    view |> element("#dashboard-versions-button") |> render_click()
+    {:ok, activity, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
+      )
 
-    assert has_element?(view, "#dashboard-versions-panel")
-    assert has_element?(view, ~s(#dashboard-version-2 [data-version-pointer="published"]))
-    assert has_element?(view, ~s(#dashboard-version-2 [data-version-pointer="latest"]))
-    refute has_element?(view, ~s(#dashboard-version-2 [data-version-pointer="draft"]))
+    assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="2"]))
+    assert has_element?(activity, "#dashboard-version-1")
+    assert has_element?(activity, ~s([data-dashboard-activity-type="published"]))
+    assert has_element?(activity, ~s(#dashboard-activity-restore[disabled]))
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-version-2[data-version-publish-available="false"][data-version-publish-reason="already_published"][data-version-restore-available="false"][data-version-restore-reason="already_latest"])
-           )
+    activity |> element("#dashboard-version-1") |> render_click()
+    refute has_element?(activity, ~s(#dashboard-activity-restore[disabled]))
+    activity |> element("#dashboard-activity-restore") |> render_click()
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-version-1[data-version-publish-available="true"][data-version-publish-reason="available"][data-version-restore-available="true"][data-version-restore-reason="available"])
-           )
+    assert has_element?(activity, ~s([data-dashboard-activity-type="reverted"]))
 
-    assert has_element?(view, ~s(#publish-version-2[disabled]))
-    assert has_element?(view, ~s(#restore-version-2[disabled]))
-    refute has_element?(view, ~s(#publish-version-1[disabled]))
-    refute has_element?(view, ~s(#restore-version-1[disabled]))
-    assert has_element?(view, "#dashboard-version-1", "draft save")
-    assert has_element?(view, "#dashboard-activity-list")
-    assert has_element?(view, ~s([data-lifecycle-event-type="published"]))
+    {:ok, restored_view, _html} = live(conn, show_path(mission, dashboard))
+    render_dashboard_async(restored_view)
 
     assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="published"] [data-activity-field="Published"]),
-             "- -> v2"
+             restored_view,
+             ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="3"])
            )
 
-    view |> element("#restore-version-1") |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-document-mode="draft"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="3"][data-dashboard-draft-ahead="true"])
-           )
-
-    assert has_element?(view, "#edit-paused-note")
-    refute has_element?(view, "#dashboard-versions-panel")
-    assert has_element?(view, "h1", "Original Power")
-
-    view |> element("#dashboard-versions-button") |> render_click()
-
-    assert has_element?(view, ~s([data-lifecycle-event-type="reverted"]))
-
-    assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="reverted"][data-lifecycle-source-version="1"][data-lifecycle-reverted-version="3"])
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="reverted"] [data-activity-field="Source"]),
-             "v1"
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="reverted"] [data-activity-field="New draft"]),
-             "v3"
-           )
+    assert has_element?(restored_view, "h1", "Published Power")
 
     assert {:ok, %Document{} = latest_document} =
              Cadence.Dashboards.fetch_document(

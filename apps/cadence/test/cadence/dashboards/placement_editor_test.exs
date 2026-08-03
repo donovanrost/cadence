@@ -65,7 +65,107 @@ defmodule Cadence.Dashboards.PlacementEditorTest do
     assert placement.widget_def.binding.scope_mode == :override
     assert placement.widget_def.binding.sampling == :raw_series
     assert placement.widget_def.binding.overlays == [:limits, :events, :quality]
-    assert placement.widget_def.options == %{precision: 2, window_seconds: 900}
+
+    assert placement.widget_def.options == %{
+             precision: 2,
+             window_seconds: 900,
+             show_min_max_band: true,
+             legend_mode: "auto",
+             line_width: "normal",
+             fill_opacity: 0,
+             span_gaps: false,
+             show_points: false,
+             axis_mode: "unit",
+             shared_tooltip: true
+           }
+  end
+
+  test "authors catalog-bounded repeat declarations and chart presentation options" do
+    assert {:ok, %Placement{} = placement} =
+             PlacementEditor.build_placement(
+               %{
+                 "type" => "time_series",
+                 "title" => "Fleet voltage",
+                 "mode" => "repeat",
+                 "repeat_over" => "spacecraft",
+                 "repeat_layout" => "wrap_grid",
+                 "repeat_max_instances" => "8",
+                 "precision" => "3",
+                 "window_seconds" => "900",
+                 "legend_mode" => "always",
+                 "line_width" => "bold",
+                 "fill_opacity" => "16",
+                 "span_gaps" => "true",
+                 "show_points" => "true",
+                 "axis_mode" => "shared",
+                 "shared_tooltip" => "false"
+               },
+               "EPS.voltage",
+               :add_widget
+             )
+
+    assert placement.repeat == %{
+             axis: :scope,
+             over: :spacecraft,
+             layout: :wrap_grid,
+             max_instances: 8
+           }
+
+    assert placement.widget_def.binding.scope_mode == :repeat
+
+    assert placement.widget_def.options == %{
+             precision: 3,
+             window_seconds: 900,
+             show_min_max_band: true,
+             legend_mode: "always",
+             line_width: "bold",
+             fill_opacity: 16,
+             span_gaps: true,
+             show_points: true,
+             axis_mode: "shared",
+             shared_tooltip: false
+           }
+
+    params = PlacementEditor.to_form_params(%Placement{placement | section_id: "power"})
+    assert params["mode"] == "repeat"
+    assert params["repeat_over"] == "spacecraft"
+    assert params["repeat_max_instances"] == "8"
+    assert params["section_id"] == "power"
+  end
+
+  test "rejects repeat mode for unsupported widget types" do
+    assert {:error, {:invalid_binding, message}} =
+             PlacementEditor.build_placement(
+               %{"type" => "value_tile", "title" => "Voltage", "mode" => "repeat"},
+               "EPS.voltage",
+               :add_widget
+             )
+
+    assert message =~ "does not support repeat"
+  end
+
+  test "rejects invalid repeat domains, layouts, and safety limits" do
+    base = %{
+      "type" => "time_series",
+      "title" => "Fleet voltage",
+      "mode" => "repeat",
+      "repeat_over" => "spacecraft",
+      "repeat_layout" => "wrap_grid",
+      "repeat_max_instances" => "8"
+    }
+
+    for {field, value, expected_message} <- [
+          {"repeat_over", "organization", "repeat domain is invalid"},
+          {"repeat_layout", "diagonal", "repeat layout is invalid"},
+          {"repeat_max_instances", "many", "repeat safety limit must be between 1 and 24"}
+        ] do
+      assert {:error, {:invalid_binding, ^expected_message}} =
+               PlacementEditor.build_placement(
+                 Map.put(base, field, value),
+                 "EPS.voltage",
+                 :add_widget
+               )
+    end
   end
 
   test "builds pinned non-spacecraft scope placements with a canonical scope override" do
@@ -361,7 +461,20 @@ defmodule Cadence.Dashboards.PlacementEditorTest do
       }
     }
 
-    assert PlacementEditor.to_form_params(placement) == %{
+    params = PlacementEditor.to_form_params(placement)
+
+    assert Map.take(params, [
+             "type",
+             "title",
+             "mode",
+             "spacecraft_id",
+             "scope_kind",
+             "scope_id",
+             "binding_source",
+             "precision",
+             "window_seconds",
+             "point_q"
+           ]) == %{
              "type" => "time_series",
              "title" => "Counter Trend",
              "mode" => "fixed",
@@ -394,7 +507,20 @@ defmodule Cadence.Dashboards.PlacementEditorTest do
       }
     }
 
-    assert PlacementEditor.to_form_params(placement) == %{
+    params = PlacementEditor.to_form_params(placement)
+
+    assert Map.take(params, [
+             "type",
+             "title",
+             "mode",
+             "spacecraft_id",
+             "scope_kind",
+             "scope_id",
+             "binding_source",
+             "precision",
+             "window_seconds",
+             "point_q"
+           ]) == %{
              "type" => "state_timeline",
              "title" => "Ground State",
              "mode" => "scope",

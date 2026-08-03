@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
 
   def page(assigns) do
     ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div
       id="ops-telemetry-explore-page"
       class="flex flex-1 min-h-0"
@@ -47,13 +48,79 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
             <.link
               :if={@explore_context.source_dashboard_id}
               id="telemetry-explore-back-to-dashboard"
-              navigate={dashboard_path(@current_mission.mission_id, @explore_context.source_dashboard_id)}
+              navigate={dashboard_path(@current_mission.mission_id, @explore_context.source_dashboard_id, @explore_context)}
               class="btn btn-ghost btn-sm"
             >
               <.icon name="hero-arrow-left" class="h-4 w-4" /> Dashboard
             </.link>
           </div>
         </div>
+
+        <section id="telemetry-explore-questions" class="mt-5 border border-primary/20 bg-primary/[0.035] p-4">
+          <div class="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p class="hud-label">Start with an operational question</p>
+              <p class="mt-1 text-sm text-base-content/60">
+                Presets establish typed time, revision, source, and follow-on context. Refine the exact point below.
+              </p>
+            </div>
+            <span :if={@explore_context.question} class="badge badge-sm badge-primary badge-outline">
+              {question_label(@explore_context.question)}
+            </span>
+          </div>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button
+              :for={question <- investigation_questions()}
+              id={"telemetry-explore-question-#{question.id}"}
+              type="button"
+              phx-click="apply_question"
+              phx-value-question={question.id}
+              class={[
+                "group border p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5",
+                @explore_context.question == question.id && "border-primary/60 bg-primary/10",
+                @explore_context.question != question.id && "border-base-300 bg-base-100/45"
+              ]}
+            >
+              <span class="flex items-center gap-2 text-sm font-semibold">
+                <.icon name={question.icon} class="h-4 w-4 text-primary" /> {question.label}
+              </span>
+              <span class="mt-1 block text-xs leading-relaxed text-base-content/55">{question.description}</span>
+            </button>
+          </div>
+          <div
+            :if={question_briefing(@explore_context.question)}
+            id="telemetry-explore-question-briefing"
+            class="mt-3 flex flex-col gap-3 border-t border-primary/15 pt-3 text-xs lg:flex-row lg:items-center"
+            data-explore-question={@explore_context.question}
+          >
+            <p class="min-w-0 flex-1 text-base-content/65">{question_briefing(@explore_context.question)}</p>
+            <div class="flex flex-wrap gap-2">
+              <.link
+                id="telemetry-explore-question-timeline"
+                navigate={timeline_path(@current_mission.mission_id, @explore_context)}
+                class="btn btn-xs btn-outline"
+              >
+                <.icon name="hero-clock" class="h-3.5 w-3.5" /> Timeline
+              </.link>
+              <.link
+                :if={@explore_context.question == "link_degradation"}
+                id="telemetry-explore-question-contacts"
+                navigate={~p"/missions/#{@current_mission.mission_id}/ops/contacts"}
+                class="btn btn-xs btn-outline"
+              >
+                <.icon name="hero-signal" class="h-3.5 w-3.5" /> Contacts
+              </.link>
+              <.link
+                :if={@explore_context.question == "missing_history"}
+                id="telemetry-explore-question-data-operations"
+                navigate={data_operations_path(@current_mission.mission_id, @explore_context)}
+                class="btn btn-xs btn-outline"
+              >
+                <.icon name="hero-circle-stack" class="h-3.5 w-3.5" /> Data Operations
+              </.link>
+            </div>
+          </div>
+        </section>
 
         <.form
           for={@filter_form}
@@ -64,6 +131,12 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
           <input type="hidden" name="explore[source_dashboard_id]" value={@explore_context.source_dashboard_id || ""} />
           <input type="hidden" name="explore[sample_id]" value={@explore_context.sample_id || ""} />
           <input type="hidden" name="explore[selected_time]" value={@explore_context.selected_time || ""} />
+          <input type="hidden" name="explore[question]" value={@explore_context.question || ""} />
+          <input type="hidden" name="explore[scope_kind]" value={@explore_context.scope_kind || ""} />
+          <input type="hidden" name="explore[scope_id]" value={@explore_context.scope_id || ""} />
+          <input type="hidden" name="explore[time_axis]" value={@explore_context.time_axis || ""} />
+          <input type="hidden" name="explore[replay_run_id]" value={@explore_context.replay_run_id || ""} />
+          <input type="hidden" name="explore[limit_mode]" value={@explore_context.limit_mode || ""} />
 
           <div class="grid gap-3 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,1fr)_9rem_10rem_10rem_8rem_auto] lg:items-end">
             <.input
@@ -226,6 +299,43 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
               <p :if={!@point && @explore_context.point_id} class="mt-3 text-sm text-warning">
                 Point is not present in the active operator point catalog.
               </p>
+
+              <.form
+                :if={@point && @dashboard_author?}
+                for={@add_to_dashboard_form}
+                id="telemetry-explore-add-to-dashboard-form"
+                phx-submit="add_to_dashboard"
+                class="mt-4 space-y-3 border-t border-base-300/70 pt-4"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="hud-label">Stage in dashboard</h3>
+                  <span class="font-mono text-[0.65rem] text-base-content/45">no direct write</span>
+                </div>
+                <.input
+                  field={@add_to_dashboard_form[:dashboard_id]}
+                  type="select"
+                  label="Dashboard"
+                  options={dashboard_options(@ops_dashboards, @explore_context.source_dashboard_id)}
+                  compact
+                />
+                <.input
+                  field={@add_to_dashboard_form[:widget_type]}
+                  type="select"
+                  label="Visualization"
+                  options={[{"Time series", "time_series"}, {"Value tile", "value_tile"}]}
+                  compact
+                />
+                <.input
+                  field={@add_to_dashboard_form[:title]}
+                  type="text"
+                  label="Title"
+                  placeholder={default_widget_title(@explore_context.point_id)}
+                  compact
+                />
+                <.button id="telemetry-explore-add-to-dashboard" type="submit" size={:sm} class="w-full">
+                  <.icon name="hero-plus" class="h-4 w-4" /> Open staged candidate
+                </.button>
+              </.form>
             </section>
 
             <section
@@ -300,6 +410,24 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
                   </dd>
                 <% end %>
               </dl>
+              <div class="mt-3 grid gap-2">
+                <.link
+                  :if={source_detail_path(@current_mission.mission_id, @source_context)}
+                  id="telemetry-explore-open-source"
+                  navigate={source_detail_path(@current_mission.mission_id, @source_context)}
+                  class="btn btn-xs btn-outline justify-start"
+                >
+                  <.icon name="hero-circle-stack" class="h-3.5 w-3.5" /> Open source posture
+                </.link>
+                <.link
+                  :if={@explore_context.source_dashboard_id}
+                  id="telemetry-explore-open-dashboard-diagnostics"
+                  navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@explore_context.source_dashboard_id}/diagnostics"}
+                  class="btn btn-xs btn-outline justify-start"
+                >
+                  <.icon name="hero-wrench-screwdriver" class="h-3.5 w-3.5" /> Dashboard diagnostics
+                </.link>
+              </div>
             </section>
 
             <section
@@ -445,19 +573,23 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
         </div>
         </div>
       </div>
-      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
+    </Layouts.app>
     """
   end
 
   defp context_rows(context) do
     [
       row("Spacecraft", context.spacecraft_id),
+      row("Scope kind", context.scope_kind),
+      row("Scope", context.scope_id),
       row("Sample", context.sample_id),
       row("Selected time", context.selected_time),
       row("Mode", context.time_mode),
+      row("Time axis", context.time_axis),
       row("From", context.from_text),
       row("To", context.to_text),
+      row("Replay", context.replay_run_id),
       row("Order", context.order_text),
       row("Limit", context.limit_text),
       row("Selection", context.selection_view_text),
@@ -465,7 +597,8 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
       row("Realm", context.realm),
       row("Logical source", context.logical_source_text),
       row("Data source", context.data_source_id),
-      row("Source binding", context.source_binding_id)
+      row("Source binding", context.source_binding_id),
+      row("Limit semantics", context.limit_mode)
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -531,9 +664,38 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
   defp row(_label, ""), do: nil
   defp row(label, value), do: %{label: label, value: value}
 
-  defp dashboard_path(mission_id, dashboard_id) do
-    ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}"
+  defp dashboard_path(mission_id, dashboard_id, context) do
+    query =
+      %{
+        "spacecraft_id" => context.spacecraft_id,
+        "scope_kind" => context.scope_kind,
+        "scope_id" => context.scope_id,
+        "time_mode" => dashboard_time_mode(context.time_mode),
+        "time_axis" => context.time_axis,
+        "from" => context.from_text,
+        "to" => context.to_text,
+        "replay_run_id" => context.replay_run_id,
+        "realm" => context.realm,
+        "data_view" => context.selection_view_text,
+        "data_source_id" => context.data_source_id,
+        "source_binding_id" => context.source_binding_id,
+        "limit_mode" => context.limit_mode,
+        "selected_target" => selected_target(context),
+        "selected_id" => context.sample_id || context.point_id
+      }
+      |> compact_query()
+
+    ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}?#{query}"
   end
+
+  defp dashboard_time_mode("latest"), do: "live"
+  defp dashboard_time_mode(mode), do: mode
+
+  defp selected_target(%{sample_id: sample_id}) when is_binary(sample_id),
+    do: "telemetry_sample"
+
+  defp selected_target(%{point_id: point_id}) when is_binary(point_id), do: "telemetry_point"
+  defp selected_target(_context), do: nil
 
   defp format_datetime(nil), do: "none"
   defp format_datetime(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
@@ -578,10 +740,18 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
         "selected_target" => "telemetry_sample",
         "selected_id" => sample.sample_id,
         "spacecraft_id" => context.spacecraft_id,
-        "time_mode" => context.time_mode,
+        "time_mode" => dashboard_time_mode(context.time_mode),
+        "time_axis" => context.time_axis,
         "from" => context.from_text,
         "to" => context.to_text,
-        "realm" => context.realm
+        "replay_run_id" => context.replay_run_id,
+        "realm" => context.realm,
+        "data_view" => context.selection_view_text,
+        "data_source_id" => context.data_source_id,
+        "source_binding_id" => context.source_binding_id,
+        "scope_kind" => context.scope_kind,
+        "scope_id" => context.scope_id,
+        "limit_mode" => context.limit_mode
       }
       |> compact_query()
 
@@ -645,7 +815,8 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
       {"Last 5 minutes", "last_5m"},
       {"Last 15 minutes", "last_15m"},
       {"Last hour", "last_1h"},
-      {"Explicit range", "archive"}
+      {"Explicit range", "archive"},
+      {"Replay run", "replay_run"}
     ]
   end
 
@@ -671,8 +842,143 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
 
   defp logical_source_options do
     [
-      {"Telemetry", "telemetry"}
+      {"Telemetry", "telemetry"},
+      {"Limits", "limits"},
+      {"Events", "events"},
+      {"Operational observables", "operational_observables"}
     ]
+  end
+
+  defp investigation_questions do
+    [
+      %{
+        id: "recent_anomalies",
+        label: "What is anomalous?",
+        description:
+          "Inspect recent values alongside duplicate, conflict, and supersession evidence.",
+        icon: "hero-exclamation-triangle"
+      },
+      %{
+        id: "what_changed",
+        label: "What changed?",
+        description:
+          "Compare the last hour across revisions and correlate changes with mission events.",
+        icon: "hero-arrows-right-left"
+      },
+      %{
+        id: "missing_history",
+        label: "Why is history missing?",
+        description:
+          "Inspect physical-versus-selected reads, then continue into repair and source posture.",
+        icon: "hero-magnifying-glass"
+      },
+      %{
+        id: "link_degradation",
+        label: "Is the link degrading?",
+        description:
+          "Correlate operational observables with contacts, transport facts, and the timeline.",
+        icon: "hero-signal"
+      }
+    ]
+  end
+
+  defp question_label(question) do
+    investigation_questions()
+    |> Enum.find(&(&1.id == question))
+    |> case do
+      nil -> question
+      preset -> preset.label
+    end
+  end
+
+  defp question_briefing("recent_anomalies"),
+    do:
+      "All revisions are visible so identity conflicts cannot disappear behind the canonical sample."
+
+  defp question_briefing("what_changed"),
+    do:
+      "The one-hour window and mission Timeline share enough context to correlate telemetry changes with operations."
+
+  defp question_briefing("missing_history"),
+    do:
+      "Read diagnostics distinguish no physical samples from samples excluded by selection policy."
+
+  defp question_briefing("link_degradation"),
+    do:
+      "Follow the same time window through operational observables, Contacts, and the canonical Timeline."
+
+  defp question_briefing(_question), do: nil
+
+  defp timeline_path(mission_id, context) do
+    query =
+      %{
+        "return_to" => "explore",
+        "source_dashboard_id" => context.source_dashboard_id,
+        "spacecraft_id" => context.spacecraft_id,
+        "scope_kind" => context.scope_kind,
+        "scope_id" => context.scope_id,
+        "time_mode" => context.time_mode,
+        "time_axis" => context.time_axis,
+        "from" => context.from_text,
+        "to" => context.to_text,
+        "replay_run_id" => context.replay_run_id,
+        "realm" => context.realm,
+        "data_view" => context.selection_view_text,
+        "data_source_id" => context.data_source_id,
+        "source_binding_id" => context.source_binding_id,
+        "limit_mode" => context.limit_mode
+      }
+      |> compact_query()
+
+    ~p"/missions/#{mission_id}/ops/timeline?#{query}"
+  end
+
+  defp data_operations_path(mission_id, context) do
+    query =
+      %{
+        "dashboard_id" => context.source_dashboard_id,
+        "point_id" => context.point_id,
+        "point_ids" => context.point_id,
+        "dashboard_time_mode" => context.time_mode,
+        "dashboard_data_view" => context.selection_view_text,
+        "dashboard_replay_run_id" => context.replay_run_id,
+        "scope_kind" => context.scope_kind,
+        "scope_id" => context.scope_id,
+        "time_axis" => context.time_axis,
+        "limit_mode" => context.limit_mode,
+        "realm" => context.realm,
+        "data_source_id" => context.data_source_id,
+        "source_binding_id" => context.source_binding_id
+      }
+      |> compact_query()
+
+    ~p"/missions/#{mission_id}/ops/data-operations?#{query}"
+  end
+
+  defp dashboard_options(dashboards, selected_dashboard_id) do
+    options =
+      dashboards
+      |> Enum.filter(&(&1.lifecycle_state == "active"))
+      |> Enum.map(&{&1.name, &1.dashboard_id})
+
+    [{"Choose a dashboard", ""}] ++ ensure_option(options, selected_dashboard_id)
+  end
+
+  defp default_widget_title(nil), do: "Telemetry trend"
+
+  defp default_widget_title(point_id) do
+    point_id
+    |> String.replace(["_", "."], " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp source_detail_path(mission_id, source_context) do
+    source_id = source_context.matched_data_source_id || source_context.data_source_id
+
+    if is_binary(source_id) do
+      ~p"/missions/#{mission_id}/ops/data-sources/#{source_id}"
+    end
   end
 
   defp data_source_options(data_sources, data_bindings, context) do

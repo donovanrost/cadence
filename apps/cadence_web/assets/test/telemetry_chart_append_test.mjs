@@ -12,7 +12,7 @@ const testableSource = source
   .replace('import uPlot from "../../vendor/uplot/uPlot.esm"\n', "const uPlot = class {}\n")
   .replace("export default TelemetryChart", "globalThis.TelemetryChart = TelemetryChart")
 
-const context = { console }
+const context = { console, setTimeout: (callback) => callback() }
 vm.createContext(context)
 vm.runInContext(testableSource, context, { filename: hookPath })
 
@@ -75,10 +75,115 @@ function chartWithPlot(limitMarkers = []) {
     },
   }
   chart.markerLayer = fakeElement("div")
+  chart.eventLayer = fakeElement("div")
   chart.selectionLayer = fakeElement("div")
   chart.pushedEvents = []
   chart.pushEvent = (name, payload) => chart.pushedEvents.push({ name, payload })
   return chart
+}
+
+{
+  const chart = chartWithMarkers()
+  const markers = chart.collapseSourceWatermarkMarkers([
+    {
+      marker_type: "source_watermark_event",
+      marker_id: "event-1",
+      timestamp_ms: 1000,
+      logical_source: "telemetry",
+      data_source_id: "questdb",
+      source_binding_id: "flight",
+    },
+    {
+      marker_type: "source_watermark_event",
+      marker_id: "event-2",
+      timestamp_ms: 2000,
+      logical_source: "telemetry",
+      data_source_id: "questdb",
+      source_binding_id: "flight",
+    },
+    {
+      marker_type: "source_watermark_cursor",
+      marker_id: "cursor-1",
+      timestamp_ms: 3000,
+      logical_source: "telemetry",
+      data_source_id: "questdb",
+      source_binding_id: "flight",
+    },
+    { marker_type: "mission_event", marker_id: "mission-event-1", timestamp_ms: 1500 },
+  ])
+
+  assert.deepEqual(
+    plain(markers.map((marker) => [marker.marker_type, marker.marker_id])),
+    [
+      ["mission_event", "mission-event-1"],
+      ["source_watermark_cursor", "cursor-1"],
+    ]
+  )
+}
+
+{
+  const chart = chartWithMarkers()
+  const markers = chart.collapseSourceWatermarkMarkers([
+    {
+      marker_type: "source_watermark_event",
+      marker_id: "event-1",
+      timestamp_ms: 1000,
+      logical_source: "telemetry",
+    },
+    {
+      marker_type: "source_watermark_event",
+      marker_id: "event-2",
+      timestamp_ms: 2000,
+      logical_source: "telemetry",
+    },
+  ])
+
+  assert.deepEqual(plain(markers.map((marker) => marker.marker_id)), ["event-2"])
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+
+  chart.renderSourceWatermarkCursor({
+    marker_type: "source_watermark_cursor",
+    marker_id: "cursor-fresh",
+    timestamp_ms: 1781697719000,
+    display_mode: "status",
+    freshness_state: "fresh",
+    target_id: "telemetry-request",
+  })
+
+  assert.equal(chart.eventLayer.children.length, 1)
+  const status = chart.eventLayer.children[0]
+  assert.equal(status.dataset.sourceWatermarkStatus, "complete")
+  assert.equal(status.dataset.sourceWatermarkLagMs, "1000")
+  assert.equal(status.textContent, "Complete · 1.0s behind")
+  assert.equal(chart.el.dataset.watermarkBoundaryVisible, "false")
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+
+  chart.renderSourceWatermarkCursor({
+    marker_type: "source_watermark_cursor",
+    marker_id: "cursor-stale",
+    timestamp_ms: 1781697660000,
+    display_mode: "boundary",
+    freshness_state: "stale",
+    target_id: "telemetry-request",
+  })
+
+  assert.equal(chart.eventLayer.children.length, 3)
+  const [region, boundary, status] = chart.eventLayer.children
+  assert.equal(region.dataset.sourceWatermarkIncompleteRegion, "stale")
+  assert.equal(region.style.left, "160px")
+  assert.equal(region.style.width, "150px")
+  assert.equal(boundary.dataset.watermarkBoundary, "stale")
+  assert.equal(status.dataset.sourceWatermarkStatus, "incomplete")
+  assert.equal(status.textContent, "Incomplete · 1m behind")
+  assert.equal(chart.el.dataset.watermarkBoundaryVisible, "true")
 }
 
 {
@@ -608,6 +713,65 @@ function chartWithPlot(limitMarkers = []) {
 
   assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
   assert.equal(chart.advanceLiveWindow(1781697960000), false)
+}
+
+{
+  const chart = chartWithMarkers()
+  chart.lineWidth = "thin"
+  assert.equal(chart.lineWidthValue(), 1)
+  chart.lineWidth = "normal"
+  assert.equal(chart.lineWidthValue(), 2)
+  chart.lineWidth = "bold"
+  assert.equal(chart.lineWidthValue(), 3)
+  chart.fillOpacity = 16
+  assert.equal(chart.seriesFillColor("rgba(45, 212, 191, 0.92)"), "rgba(45, 212, 191, 0.16)")
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.legendMode = "always"
+  chart.hiddenSeriesIds = new Set()
+  chart.seriesList = [{ id: "battery_voltage", label: "Battery voltage", unit: "V" }]
+
+  const legend = chart.buildLegendLayer()
+
+  assert.equal(legend.style.top, undefined)
+  assert.equal(legend.style.bottom, "0")
+  assert.equal(legend.style.left, "0")
+  assert.equal(legend.style.right, "0")
+  assert.equal(chart.legendHeight(), 28)
+  assert.deepEqual(plain(chart.chartSize()), { width: 320, height: 152 })
+
+  chart.legendMode = "hidden"
+  assert.equal(chart.legendHeight(), 0)
+  assert.deepEqual(plain(chart.chartSize()), { width: 320, height: 180 })
+}
+
+{
+  const chart = chartWithPlot()
+  const overlay = fakeElement("div")
+  chart.el.dataset.editMode = "false"
+  chart.el.querySelector = (selector) => (selector === ".u-over" ? overlay : null)
+  chart.chart.select = { left: 10, width: 20 }
+  chart.chart.posToVal = (position) => 1781697600 + position
+  chart.chart.setSelect = (selection) => {
+    chart.clearedSelection = selection
+  }
+
+  chart.installRangeSelection()
+  overlay.listeners.mouseup()
+
+  assert.deepEqual(plain(chart.pushedEvents), [
+    {
+      name: "set_chart_time_range",
+      payload: {
+        from: "2026-06-17T12:00:10.000Z",
+        to: "2026-06-17T12:00:30.000Z",
+      },
+    },
+  ])
+  assert.equal(chart.clearedSelection.width, 0)
 }
 
 console.log("telemetry_chart_append_test passed")

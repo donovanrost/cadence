@@ -16,7 +16,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
       <span class="font-mono text-3xl font-bold tabular-nums" data-widget-value>
         {format_value(@data.sample, @widget.options.precision)}
       </span>
-      <span :if={value_tile_unit(@data, @point)} class="text-base text-base-content/70">
+      <span
+        :if={show_unit?(@widget) and value_tile_unit(@data, @point)}
+        class="text-base text-base-content/70"
+      >
         {value_tile_unit(@data, @point)}
       </span>
     </div>
@@ -51,6 +54,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_axis, :string, default: nil
+  attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
   attr :data_realm, :string, default: nil
   attr :data_view, :string, default: nil
@@ -59,53 +63,78 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   attr :source_binding_id, :string, default: nil
   attr :context_spacecraft_id, :string, required: true
   attr :chart_epoch, :integer, required: true
+  attr :edit_mode?, :boolean, default: false
 
   def time_series_chart(assigns) do
     ~H"""
-    <WidgetDataManagementComponents.chart_data_management_strip
-      data={@data}
-      backfill={@backfill}
-      compare_data={@compare_data}
-      compare_backfill={@compare_backfill}
-      data_view={@data_view}
-      compare_data_view={@compare_data_view}
-    />
     <div
-      id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch)}
-      phx-hook="TelemetryChart"
-      phx-update="ignore"
-      data-widget-id={@widget.widget_id}
-      data-placement-id={@placement_id}
-      data-window-seconds={@widget.options.window_seconds}
-      data-label={@widget.title}
-      data-unit={(@point && @point.unit) || ""}
-      data-backfill={Jason.encode!(@backfill || [])}
-      data-compare-backfill={Jason.encode!(@compare_backfill || [])}
-      data-limit-markers={Jason.encode!(@limit_markers || [])}
-      data-event-markers={Jason.encode!(@event_markers || [])}
-      data-selected-ref={Jason.encode!(@selected_data_ref)}
-      data-time-mode={@time_mode || ""}
-      data-time-axis={@time_axis || ""}
-      data-replay-run-id={@replay_run_id || ""}
-      data-data-realm={@data_realm || ""}
-      data-data-view={@data_view || ""}
-      data-compare-data-view={@compare_data_view || ""}
-      data-data-source-id={@data_source_id || chart_payload_context_value(@backfill, :data_source_id)}
-      data-source-binding-id={
-        @source_binding_id || chart_payload_context_value(@backfill, :source_binding_id)
-      }
-      data-data-management-badges={
-        WidgetDataManagementComponents.widget_data_management_badge_codes([@data, @backfill])
-      }
-      data-compare-data-management-badges={
-        WidgetDataManagementComponents.widget_data_management_badge_codes([
-          @compare_data,
-          @compare_backfill
-        ])
-      }
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-      class="min-h-0 flex-1"
+      class={[
+        "cadence-time-series-stage",
+        "relative flex min-h-0 flex-1"
+      ]}
+      data-dashboard-time-series-stage
     >
+      <WidgetDataManagementComponents.chart_data_management_strip
+        data={@data}
+        backfill={@backfill}
+        compare_data={@compare_data}
+        compare_backfill={@compare_backfill}
+        data_view={@data_view}
+        compare_data_view={@compare_data_view}
+      />
+      <div
+        id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch)}
+        phx-hook="TelemetryChart"
+        phx-update="ignore"
+        data-widget-id={@widget.widget_id}
+        data-placement-id={@placement_id}
+        data-window-seconds={@window_seconds || @widget.options.window_seconds}
+        data-correlation-group="cadence-dashboard-time"
+        data-edit-mode={to_string(@edit_mode?)}
+        data-show-min-max-band={option_text(@widget, :show_min_max_band, true)}
+        data-legend-mode={option_text(@widget, :legend_mode, "auto")}
+        data-line-width={option_text(@widget, :line_width, "normal")}
+        data-fill-opacity={option_text(@widget, :fill_opacity, 8)}
+        data-span-gaps={option_text(@widget, :span_gaps, false)}
+        data-show-points={option_text(@widget, :show_points, false)}
+        data-axis-mode={option_text(@widget, :axis_mode, "unit")}
+        data-shared-tooltip={option_text(@widget, :shared_tooltip, true)}
+        data-label={@widget.title}
+        data-unit={(@point && @point.unit) || ""}
+        data-backfill={Jason.encode!(@backfill || [])}
+        data-compare-backfill={Jason.encode!(@compare_backfill || [])}
+        data-limit-markers={Jason.encode!(@limit_markers || [])}
+        data-event-markers={Jason.encode!(@event_markers || [])}
+        data-selected-ref={Jason.encode!(@selected_data_ref)}
+        data-time-mode={@time_mode || ""}
+        data-time-axis={@time_axis || ""}
+        data-replay-run-id={@replay_run_id || ""}
+        data-data-realm={@data_realm || ""}
+        data-data-view={@data_view || ""}
+        data-compare-data-view={@compare_data_view || ""}
+        data-data-source-id={
+          @data_source_id || chart_payload_context_value(@backfill, :data_source_id)
+        }
+        data-source-binding-id={
+          @source_binding_id || chart_payload_context_value(@backfill, :source_binding_id)
+        }
+        data-data-management-badges={
+          WidgetDataManagementComponents.widget_data_management_badge_codes([@data, @backfill])
+        }
+        data-compare-data-management-badges={
+          WidgetDataManagementComponents.widget_data_management_badge_codes([
+            @compare_data,
+            @compare_backfill
+          ])
+        }
+        data-engine-backed={if engine_backed?(@data), do: "true"}
+        data-panel-presentation="grafana"
+        class={[
+          "cadence-time-series-chart",
+          "min-h-0 flex-1 overflow-hidden"
+        ]}
+      >
+      </div>
     </div>
     """
   end
@@ -222,6 +251,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   defp value_tile_unit(%{unit: unit}, _point) when is_binary(unit) and unit != "", do: unit
   defp value_tile_unit(_data, %{unit: unit}) when is_binary(unit) and unit != "", do: unit
   defp value_tile_unit(_data, _point), do: nil
+
+  defp show_unit?(widget), do: option_value(widget, :show_unit, true) == true
+
+  defp option_text(widget, key, default), do: widget |> option_value(key, default) |> to_string()
+
+  defp option_value(%{options: options}, key, default) when is_map(options) do
+    Map.get(options, key, Map.get(options, to_string(key), default))
+  end
+
+  defp option_value(_widget, _key, default), do: default
 
   defp data_view_options do
     [

@@ -19,7 +19,7 @@ defmodule Cadence.Dashboards.RenderWidget do
 
   @type binding :: %{
           source: :telemetry | :limits | :operational_observables | :events,
-          mode: :fixed | :context | :constellation,
+          mode: :fixed | :context | :repeat | :constellation,
           spacecraft_id: binary() | nil,
           point_id: binary() | nil,
           point_ids: [binary()]
@@ -114,6 +114,7 @@ defmodule Cadence.Dashboards.RenderWidget do
     cond do
       fixed_spacecraft_id(placement) -> :fixed
       Map.get(widget_def.binding, :scope_mode) == :override -> :fixed
+      Map.get(widget_def.binding, :scope_mode) == :repeat -> :repeat
       true -> :context
     end
   end
@@ -146,14 +147,23 @@ defmodule Cadence.Dashboards.RenderWidget do
   defp options_from_widget_def(:value_tile, widget_def) do
     %{
       precision: get_option(widget_def.options, :precision, 2),
-      window_seconds: get_option(widget_def.options, :window_seconds, 300)
+      window_seconds: get_option(widget_def.options, :window_seconds, 300),
+      show_unit: get_option(widget_def.options, :show_unit, true)
     }
   end
 
   defp options_from_widget_def(:time_series, widget_def) do
     %{
       precision: get_option(widget_def.options, :precision, 2),
-      window_seconds: get_option(widget_def.options, :window_seconds, 300)
+      window_seconds: get_option(widget_def.options, :window_seconds, 300),
+      show_min_max_band: get_option(widget_def.options, :show_min_max_band, true),
+      legend_mode: legend_mode(widget_def.options),
+      line_width: get_option(widget_def.options, :line_width, "normal"),
+      fill_opacity: get_option(widget_def.options, :fill_opacity, 0),
+      span_gaps: get_option(widget_def.options, :span_gaps, false),
+      show_points: get_option(widget_def.options, :show_points, false),
+      axis_mode: get_option(widget_def.options, :axis_mode, "unit"),
+      shared_tooltip: get_option(widget_def.options, :shared_tooltip, true)
     }
   end
 
@@ -175,5 +185,12 @@ defmodule Cadence.Dashboards.RenderWidget do
 
   defp get_option(options, key, default) when is_map(options) do
     Map.get(options, key, Map.get(options, to_string(key), default))
+  end
+
+  defp legend_mode(options) when is_map(options) do
+    case get_option(options, :legend_mode, nil) do
+      nil -> if(get_option(options, :legend, false), do: "always", else: "auto")
+      mode -> mode
+    end
   end
 end

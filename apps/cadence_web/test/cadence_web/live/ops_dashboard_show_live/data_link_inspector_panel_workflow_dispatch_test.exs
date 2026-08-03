@@ -102,41 +102,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
 
     assert_outcome_metadata(document)
 
-    assert ["replacement_jobs"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-retry-scope")
-
-    assert ["info"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-kind")
-
-    assert ["run-nonretryable"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-retry-nonretryable-run-ids")
-
-    assert ["failed-event-skipped"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-retry-skipped-event-ids")
-
-    assert ["run-004-corrected"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-retry-error-run-ids")
-
-    assert ["2"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-queued-jobs")
-
-    assert ["retry-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
-             |> LazyHTML.attribute("data-workflow-action-result-event-ids")
-
     assert ["dispatch_failed"] =
              document
              |> LazyHTML.query("#dashboard-workflow-explanation")
@@ -152,67 +117,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
              |> LazyHTML.query("#dashboard-workflow-explanation-summary")
              |> selected_text()
 
-    assert ["job-1"] =
+    assert [data_operations_path] =
              document
-             |> LazyHTML.query("#dashboard-historical-workflow-job-status")
-             |> LazyHTML.attribute("data-historical-workflow-job-id")
+             |> LazyHTML.query("#dashboard-workflow-open-data-operations")
+             |> LazyHTML.attribute("href")
 
-    assert ["failed"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-job-status")
-             |> LazyHTML.attribute("data-historical-workflow-job-status")
+    uri = URI.parse(data_operations_path)
+    query = URI.decode_query(uri.query)
 
-    assert document
-           |> LazyHTML.query("#dashboard-historical-workflow-job-status")
-           |> LazyHTML.text()
-           |> String.contains?("dispatcher unavailable")
-
-    assert ["retry_historical_workflow_job"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-retry-job")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["job-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-retry-job")
-             |> LazyHTML.attribute("phx-value-job-id")
-
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-retry-job")
-             |> LazyHTML.attribute("phx-value-event-id")
-
-    assert ["dashboard-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-dashboard-id")
-             |> LazyHTML.attribute("value")
-
-    assert ["replay-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-dashboard-replay-run-id")
-             |> LazyHTML.attribute("value")
-
-    assert ["observed"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-dashboard-limit-mode")
-             |> LazyHTML.attribute("value")
-
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-retry-job")
-             |> LazyHTML.attribute("data-workflow-action-eligible")
-
-    assert [
-             "job job-1; status failed; retryable true; recovery unknown"
-           ] =
-             document
-             |> LazyHTML.query(~s([data-workflow-action-explanation-id="correction_request"]))
-             |> LazyHTML.attribute("data-workflow-action-explanation-state")
-
-    assert document
-           |> LazyHTML.query(~s([data-workflow-action-explanation-id="correction_request"]))
-           |> LazyHTML.text()
-           |> String.contains?("job job-1; status failed; retryable true; recovery unknown")
+    assert uri.path == "/missions/mission-1/ops/data-operations"
+    assert query["dashboard_id"] == "dashboard-1"
+    assert query["dashboard_replay_run_id"] == "replay-1"
+    assert query["dashboard_limit_mode"] == "observed"
+    assert query["run_id"] == "backfill-run-1"
 
     assert ["retry_job"] =
              document
@@ -233,31 +150,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
              document
              |> LazyHTML.query("#dashboard-data-link-action-outcome")
              |> LazyHTML.attribute("data-data-link-action-outcome-target-run-id")
-
-    assert ["job-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
-             |> LazyHTML.attribute("data-workflow-latest-action-job-id")
-
-    assert ["retry-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
-             |> LazyHTML.attribute("data-workflow-latest-action-result-event-ids")
-
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
-             |> LazyHTML.attribute("data-workflow-latest-action-target-event-id")
-
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
-             |> LazyHTML.attribute("data-workflow-latest-action-target-run-id")
-
-    assert document
-           |> LazyHTML.query("#dashboard-historical-workflow-latest-action")
-           |> LazyHTML.text()
-           |> String.contains?("retry-event-1")
 
     assert %{
              "job_id" => "job-1",

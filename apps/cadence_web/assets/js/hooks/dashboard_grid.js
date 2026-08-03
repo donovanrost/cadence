@@ -48,6 +48,17 @@ const DashboardGrid = {
 
     this.grid.on("change", () => this.scheduleLayoutPush())
     this.syncEditMode()
+    this.sectionDetails = this.el.closest && this.el.closest("details[data-dashboard-section]")
+    if (this.sectionDetails) {
+      this.handleSectionToggle = () => {
+        if (!this.sectionDetails.open) return
+        requestAnimationFrame(() => {
+          this.grid.prevWidth = undefined
+          this.grid.onResize()
+        })
+      }
+      this.sectionDetails.addEventListener("toggle", this.handleSectionToggle)
+    }
   },
 
   updated() {
@@ -58,6 +69,9 @@ const DashboardGrid = {
 
   destroyed() {
     clearTimeout(this.pushTimer)
+    if (this.sectionDetails && this.handleSectionToggle) {
+      this.sectionDetails.removeEventListener("toggle", this.handleSectionToggle)
+    }
     if (this.grid) this.grid.destroy(false)
   },
 

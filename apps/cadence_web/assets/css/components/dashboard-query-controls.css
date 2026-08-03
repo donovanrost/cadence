@@ -1,0 +1,141 @@
+@layer components {
+  .cadence-dashboard-query-strip {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .cadence-dashboard-query-trigger {
+    height: 1.75rem;
+    min-width: 0;
+    gap: 0.4rem;
+    border: 1px solid oklch(from var(--color-base-content) l c h / 0.15);
+    border-radius: 0.15rem;
+    background: oklch(from var(--color-base-100) l c h / 0.58);
+    padding-inline: 0.55rem;
+    color: oklch(from var(--color-base-content) l c h / 0.78);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.025);
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .cadence-dashboard-query-trigger:is(:hover, :focus-visible),
+  .cadence-overlay[data-overlay-open] > .cadence-dashboard-query-trigger {
+    border-color: oklch(from var(--color-base-content) l c h / 0.28);
+    background: oklch(from var(--color-base-200) l c h / 0.92);
+    color: var(--color-base-content);
+    outline: none;
+  }
+
+  .cadence-dashboard-query-trigger-label {
+    color: oklch(from var(--color-base-content) l c h / 0.46);
+    font-size: 0.61rem;
+    font-weight: 650;
+    letter-spacing: 0.075em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .cadence-dashboard-query-trigger-value {
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.68rem;
+    font-weight: 550;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cadence-overlay[data-query-state="live"] > .cadence-dashboard-query-trigger {
+    border-color: oklch(from var(--color-success) l c h / 0.24);
+  }
+
+  .cadence-overlay[data-query-overrides="true"] > .cadence-dashboard-query-trigger {
+    border-color: oklch(from var(--color-primary) l c h / 0.35);
+  }
+
+  .cadence-dashboard-query-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    flex: none;
+    border-radius: 999px;
+    background: var(--color-info);
+  }
+
+  .cadence-overlay[data-query-state="live"] .cadence-dashboard-query-dot {
+    background: var(--color-success);
+    box-shadow: 0 0 0 2px oklch(from var(--color-success) l c h / 0.1);
+  }
+
+  .cadence-dashboard-query-panel-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    border-bottom: 1px solid oklch(from var(--color-base-content) l c h / 0.11);
+    padding: 0.7rem 0.8rem 0.65rem;
+  }
+
+  .cadence-dashboard-query-panel-body {
+    padding: 0.8rem;
+  }
+
+  .cadence-dashboard-query-section + .cadence-dashboard-query-section {
+    margin-top: 0.9rem;
+    border-top: 1px solid oklch(from var(--color-base-content) l c h / 0.09);
+    padding-top: 0.8rem;
+  }
+
+  .cadence-dashboard-time-mode-switch {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid oklch(from var(--color-base-content) l c h / 0.14);
+    border-radius: 0.15rem;
+    background: oklch(from var(--color-base-100) l c h / 0.5);
+  }
+
+  .cadence-dashboard-time-mode-choice {
+    display: flex;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: 0;
+    border-right: 1px solid oklch(from var(--color-base-content) l c h / 0.11);
+    background: transparent;
+    color: oklch(from var(--color-base-content) l c h / 0.58);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cadence-dashboard-time-mode-choice:last-child {
+    border-right: 0;
+  }
+
+  .cadence-dashboard-time-mode-choice:is(:hover, :focus-visible),
+  .cadence-dashboard-time-mode-choice[aria-pressed="true"] {
+    background: oklch(from var(--color-primary) l c h / 0.1);
+    color: var(--color-primary);
+    outline: none;
+  }
+
+  .cadence-dashboard-time-mode-choice:disabled {
+    cursor: default;
+  }
+
+  @media (max-width: 52rem) {
+    .cadence-dashboard-query-trigger-label,
+    .cadence-dashboard-query-data-value {
+      display: none;
+    }
+
+    .cadence-dashboard-query-trigger {
+      padding-inline: 0.45rem;
+    }
+  }
+}

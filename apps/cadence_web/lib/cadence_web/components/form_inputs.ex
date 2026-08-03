@@ -22,6 +22,7 @@ defmodule CadenceWeb.Components.FormInputs do
   attr :placeholder, :string, default: nil
   attr :options, :list, default: []
   attr :required, :boolean, default: false
+  attr :multiple, :boolean, default: false
   attr :errors, :list, default: []
   attr :compact, :boolean, default: false, doc: "drops the wrapper margin for toolbar use"
   attr :description, :string, default: nil, doc: "helper text under a checkbox label"
@@ -79,6 +80,7 @@ defmodule CadenceWeb.Components.FormInputs do
             id={@id}
             name={@name}
             required={@required}
+            multiple={@multiple}
             class={["w-full select", @errors != [] && "select-error", @class]}
             {@rest}
           >
@@ -86,7 +88,7 @@ defmodule CadenceWeb.Components.FormInputs do
             <option
               :for={option <- @options}
               value={option_value(option)}
-              selected={to_string(@value) == to_string(option_value(option))}
+              selected={option_selected?(@value, option)}
               disabled={option_disabled?(option)}
               title={option_title(option)}
             >
@@ -124,6 +126,14 @@ defmodule CadenceWeb.Components.FormInputs do
     <% end %>
     """
   end
+
+  defp option_selected?(values, option) when is_list(values) do
+    option_value = to_string(option_value(option))
+    Enum.any?(values, &(to_string(&1) == option_value))
+  end
+
+  defp option_selected?(value, option),
+    do: to_string(value) == to_string(option_value(option))
 
   defp option_label({label, _value}), do: label
   defp option_label({label, _value, _attrs}), do: label

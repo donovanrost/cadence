@@ -28,6 +28,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
     {"Pin to one spacecraft", "fixed"}
   ]
 
+  @repeat_option {"Repeat for selected resources", "repeat"}
+
   @window_options [
     {"5 minutes", "300"},
     {"15 minutes", "900"},
@@ -284,12 +286,52 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation do
   def mode_options, do: @mode_options
 
   def mode_options(form) do
-    if operational_observable_widget?(form) do
-      Enum.reject(@mode_options, fn {_label, value} -> value == "fixed" end)
+    options =
+      if operational_observable_widget?(form) do
+        Enum.reject(@mode_options, fn {_label, value} -> value == "fixed" end)
+      else
+        @mode_options
+      end
+
+    if repeat_supported?(form), do: options ++ [@repeat_option], else: options
+  end
+
+  def repeat_supported?(form) do
+    with widget_type_id when is_binary(widget_type_id) <- form_widget_type_id(form),
+         {:ok, widget_type} <- ExtensionCatalog.fetch_widget_type(widget_type_id, :latest) do
+      :repeat in widget_type.binding_schema.scope_modes
     else
-      @mode_options
+      _missing -> false
     end
   end
+
+  def repeat_over_options do
+    [
+      {"Spacecraft", "spacecraft"},
+      {"Contacts", "contact"},
+      {"Ground stations", "ground_station"},
+      {"Transports", "transport"},
+      {"Links", "link"}
+    ]
+  end
+
+  def repeat_layout_options do
+    [{"Wrap grid", "wrap_grid"}, {"Single row", "row"}, {"Single column", "column"}]
+  end
+
+  def repeat_max_options, do: Enum.map([4, 8, 12, 16, 24], &{"Up to #{&1}", to_string(&1)})
+
+  def legend_mode_options,
+    do: [{"Auto", "auto"}, {"Always", "always"}, {"Hidden", "hidden"}]
+
+  def line_width_options,
+    do: [{"Thin", "thin"}, {"Normal", "normal"}, {"Bold", "bold"}]
+
+  def fill_opacity_options,
+    do: [{"None", "0"}, {"Subtle", "8"}, {"Medium", "16"}, {"Strong", "30"}]
+
+  def axis_mode_options,
+    do: [{"Group by engineering unit", "unit"}, {"Shared value axis", "shared"}]
 
   def scope_override_kind(scope_context) do
     scope_context

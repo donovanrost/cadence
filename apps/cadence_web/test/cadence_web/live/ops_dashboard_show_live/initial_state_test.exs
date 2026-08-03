@@ -59,6 +59,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialStateTest do
     assert socket.assigns.tick_count == 0
     assert socket.assigns.edit_mode? == false
     assert socket.assigns.panel == nil
+    assert socket.assigns.comparison_inspector_open? == false
     assert socket.assigns.dashboard_selection_state == "none"
     assert socket.assigns.dashboard_evidence_query == nil
     assert socket.assigns.chart_epoch == 0

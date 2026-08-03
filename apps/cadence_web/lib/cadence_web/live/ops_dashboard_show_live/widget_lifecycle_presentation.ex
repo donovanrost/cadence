@@ -7,9 +7,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecyclePresentation do
   @spec put(map(), PlacementFrames.t(), Frame.t() | [Frame.t()] | nil, atom(), boolean()) :: map()
   def put(data, %PlacementFrames{} = placement_frames, frames, data_state, stale?)
       when is_map(data) do
+    primary_placement_frames = primary_placement_frames(placement_frames, frames)
+
     lifecycle =
       classify(%{
-        warnings: placement_frames.warnings,
+        warnings: primary_placement_frames.warnings,
         warning_codes: frame_warning_codes(frames),
         data_state: data_state,
         stale?: stale?
@@ -21,7 +23,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecyclePresentation do
     |> Map.put(:stale?, Map.get(data, :stale?, false) or lifecycle.state == :stale)
     |> Map.put(
       :source_status,
-      WidgetSourceStatus.summarize(placement_frames, frames, data_state, stale?)
+      WidgetSourceStatus.summarize(primary_placement_frames, frames, data_state, stale?)
     )
   end
 
@@ -72,4 +74,52 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecyclePresentation do
   end
 
   def normalize_warning_code(_code), do: nil
+
+  defp primary_placement_frames(%PlacementFrames{} = placement_frames, frames) do
+    primary_sources =
+      frames
+      |> List.wrap()
+      |> Enum.flat_map(fn
+        %Frame{source: source, meta: meta} ->
+          [source, frame_logical_source(meta)]
+          |> Enum.filter(&is_atom/1)
+
+        _frame ->
+          []
+      end)
+      |> MapSet.new()
+
+    if MapSet.size(primary_sources) == 0 do
+      placement_frames
+    else
+      warnings =
+        Enum.reject(placement_frames.warnings, &secondary_source_warning?(&1, primary_sources))
+
+      %{placement_frames | warnings: warnings}
+    end
+  end
+
+  defp secondary_source_warning?(warning, primary_sources) do
+    case warning_logical_source(warning) do
+      nil -> false
+      logical_source -> not MapSet.member?(primary_sources, logical_source)
+    end
+  end
+
+  defp warning_logical_source(%{details: details}) when is_map(details) do
+    details
+    |> context_value(:logical_source)
+    |> normalize_warning_code()
+  end
+
+  defp warning_logical_source(_warning), do: nil
+
+  defp frame_logical_source(meta) when is_map(meta) do
+    meta
+    |> context_value(:source_request_context)
+    |> context_value(:logical_source)
+    |> normalize_warning_code()
+  end
+
+  defp frame_logical_source(_meta), do: nil
 end

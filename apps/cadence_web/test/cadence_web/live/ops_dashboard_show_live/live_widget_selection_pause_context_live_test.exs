@@ -390,9 +390,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       assert paused_html =~ "Yellow"
       refute paused_html =~ "Pick a spacecraft context"
 
-      assert has_element?(view, "#dashboard-resume-live:not([disabled])")
+      assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")
 
-      view |> element("#dashboard-resume-live") |> render_click()
+      view |> element("#dashboard-time-preset-live") |> render_click()
 
       assert_patch(view)
       render_dashboard_async(view)

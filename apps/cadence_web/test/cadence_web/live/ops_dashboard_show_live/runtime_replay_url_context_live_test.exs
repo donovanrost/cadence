@@ -181,7 +181,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="replay_run"][data-dashboard-replay-run-id="replay_run_001"][data-dashboard-data-realm="replay"][data-engine-time-mode="replay_run"][data-engine-replay-run-id="replay_run_001"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
            )
 
-    assert has_element?(view, ~s(#dashboard-time-mode option[value="replay_run"]))
+    assert has_element?(
+             view,
+             ~s(#dashboard-active-time-range[data-dashboard-time-mode="replay_run"])
+           )
 
     assert has_element?(
              view,
@@ -195,23 +198,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
 
     refute has_element?(view, "#dashboard-replay-metadata-warning")
 
-    view
-    |> element("#dashboard-historical-workflow-request-button")
-    |> render_click()
-
     assert has_element?(
              view,
-             ~s(input[name="historical_workflow_request[dashboard_time_mode]"][value="replay_run"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(input[name="historical_workflow_request[dashboard_replay_run_id]"][value="replay_run_001"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(input[name="historical_workflow_request[dashboard_limit_mode]"][value="observed"])
+             ~s(#dashboard-historical-workflow-request-button[href*="/ops/data-operations"][href*="dashboard_time_mode=replay_run"][href*="dashboard_replay_run_id=replay_run_001"][href*="dashboard_limit_mode=observed"])
            )
 
     view

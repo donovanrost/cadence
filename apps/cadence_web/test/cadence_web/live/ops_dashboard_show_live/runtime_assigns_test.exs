@@ -34,7 +34,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeAssignsTest do
              data_source_id: "questdb-rehearsal",
              source_binding_id: "rehearsal-binding",
              default_source_binding_id: "flight-binding",
-             limit_mode: "observed"
+             limit_mode: "observed",
+             hidden_markers: nil
            }
   end
 

@@ -22,6 +22,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssigns do
       dashboard_publish_validation_freshness:
         Map.get(assigns, :dashboard_publish_validation_freshness),
       edit_mode?: Map.get(assigns, :edit_mode?, false),
+      editor_route?: Map.get(assigns, :editor_route?, false),
+      editor_dirty?: Map.get(assigns, :editor_dirty?, false),
+      editor_conflict: Map.get(assigns, :editor_conflict),
+      dashboard_author?: Map.get(assigns, :dashboard_author?, false),
       show_context?: RenderWidgetAssigns.context_widgets?(render_items),
       current_mission: Map.get(assigns, :current_mission),
       spacecraft: Map.get(assigns, :spacecraft, []),
@@ -51,7 +55,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssigns do
       replay_runs: Map.get(assigns, :dashboard_replay_runs, []),
       limit_mode: Map.get(assigns, :dashboard_limit_mode),
       limit_mode_fallback: Map.get(assigns, :dashboard_limit_mode_fallback),
+      hidden_marker_categories: Map.get(assigns, :dashboard_hidden_marker_categories, []),
       selected_data_ref: Map.get(assigns, :dashboard_selected_data_ref),
+      time_quick_query: Map.get(assigns, :dashboard_time_quick_query, ""),
+      time_recent_ranges: Map.get(assigns, :dashboard_time_recent_ranges, []),
       query: Map.get(assigns, :context_query, "")
     }
   end

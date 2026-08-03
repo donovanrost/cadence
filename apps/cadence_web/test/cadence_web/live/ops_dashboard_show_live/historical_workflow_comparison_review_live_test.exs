@@ -163,6 +163,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
       render_dashboard_async(view)
 
+      view
+      |> element("#dashboard-comparison-toggle")
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "#dashboard-comparison-inspector"
+             )
+
       assert has_element?(
                view,
                ~s(#dashboard-comparison-rollup[data-dashboard-comparison-open="1"])

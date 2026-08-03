@@ -23,6 +23,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssigns do
       selected_data_ref: Map.get(assigns, :dashboard_selected_data_ref),
       time_mode: Map.get(assigns, :dashboard_time_mode),
       time_axis: Map.get(time_context, "axis"),
+      window_seconds: Map.get(time_context, "window_seconds"),
+      hidden_marker_categories: Map.get(assigns, :dashboard_hidden_marker_categories, []),
       replay_run_id: Map.get(assigns, :dashboard_replay_run_id),
       data_realm: Map.get(assigns, :dashboard_data_realm),
       data_view: Map.get(assigns, :dashboard_data_view),
@@ -42,10 +44,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssigns do
 
   def widget_content_class(edit_mode?) when is_boolean(edit_mode?) do
     [
-      "grid-stack-item-content bg-base-200 border flex flex-col overflow-hidden",
+      "grid-stack-item-content cadence-dashboard-panel border flex flex-col overflow-hidden",
       if(edit_mode?,
         do: "border-primary/40 ring-1 ring-primary/20 cursor-move",
-        else: "border-base-300 hover:border-primary/60"
+        else: "border-base-300/80"
       )
     ]
   end
@@ -64,6 +66,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssigns do
   def context_widgets?(_render_items), do: false
 
   defp context_widget?(%{widget: %{binding: %{mode: :context}}}), do: true
+  defp context_widget?(%{widget: %{binding: %{mode: :repeat}}}), do: true
   defp context_widget?(_item), do: false
 
   defp review_focus(%{dashboard_activity_filter: :open_comparison_reviews} = assigns) do

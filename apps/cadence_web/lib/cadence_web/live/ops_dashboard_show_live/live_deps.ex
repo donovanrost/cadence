@@ -12,6 +12,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveDeps do
   alias CadenceWeb.OpsDashboardShowLive.DocumentLifecycle
   alias CadenceWeb.OpsDashboardShowLive.OperationalResourceScopePolicy
   alias CadenceWeb.OpsDashboardShowLive.RouteHydration
+  alias CadenceWeb.OpsDashboardShowLive.StagedEditor
   alias CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents
 
   def historical_workflow_event_opts, do: []
@@ -71,8 +72,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveDeps do
     ]
   end
 
+  def staged_widget_editing_event_opts do
+    [
+      dashboard_list_path: &dashboard_list_path/1,
+      persist_document: &StagedEditor.stage/3,
+      refresh_widget_data: &WidgetEditingEvents.refresh_widget_data/1,
+      assign_runtime_context: &assign_runtime_context_for_document/2
+    ]
+  end
+
   def rename_flow_opts do
     [persist_document: &persist_document/3]
+  end
+
+  def staged_rename_flow_opts do
+    [persist_document: &StagedEditor.stage/3]
   end
 
   def lifecycle_event_opts do

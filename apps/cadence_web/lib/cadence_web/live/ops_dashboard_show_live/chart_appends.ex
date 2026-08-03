@@ -9,6 +9,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
   import Phoenix.LiveView, only: [push_event: 3]
 
   alias CadenceWeb.OpsDashboardShowLive.{
+    MarkerCategories,
     RuntimeResult,
     TimeSeriesData,
     TimeSeriesWidgetMarkers
@@ -17,6 +18,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
   @spec push(Phoenix.LiveView.Socket.t(), map(), map()) :: Phoenix.LiveView.Socket.t()
   def push(socket, previous_data, previous_marker_snapshots \\ %{}) do
     engine_frames_by_placement = current_engine_frames_by_placement(socket)
+    hidden_markers = Map.get(socket.assigns, :dashboard_hidden_marker_categories, [])
 
     chart_items =
       socket.assigns.dashboard_render_items
@@ -30,11 +32,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
         payload = chart_append_payload(item, previous_data, engine_frames_by_placement)
 
         markers =
-          TimeSeriesWidgetMarkers.append_markers(
-            placement_frames,
+          placement_frames
+          |> TimeSeriesWidgetMarkers.append_markers(
             item.widget,
             Map.get(previous_marker_snapshots, item.placement_id, %{})
           )
+          |> reject_hidden_markers(hidden_markers)
 
         {
           maybe_put_series_append(series_acc, item.placement_id, payload),
@@ -75,6 +78,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
     end)
     |> Enum.reject(fn {_placement_id, snapshot} -> snapshot == %{} end)
     |> Map.new()
+  end
+
+  # Snapshots stay unfiltered so append diffing is stable across toggles;
+  # un-hiding a category re-renders via the chart_epoch remount instead.
+  defp reject_hidden_markers(markers, []), do: markers
+
+  defp reject_hidden_markers(markers, hidden_markers) do
+    markers
+    |> Map.replace_lazy(
+      :limit_markers,
+      &MarkerCategories.filter_limit_markers(&1, hidden_markers)
+    )
+    |> Map.replace_lazy(
+      :event_markers,
+      &MarkerCategories.filter_event_markers(&1, hidden_markers)
+    )
+    |> Map.reject(fn {_key, filtered} -> filtered == [] end)
   end
 
   defp chart_append_payload(item, previous_data, engine_frames_by_placement) do

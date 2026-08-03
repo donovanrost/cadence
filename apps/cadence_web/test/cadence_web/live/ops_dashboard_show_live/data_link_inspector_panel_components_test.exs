@@ -177,7 +177,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-data-link-explore")
              |> LazyHTML.attribute("href")
 
-    assert explore_href =~ "/missions/mission-1/ops/telemetry/explore"
+    assert explore_href =~ "/missions/mission-1/ops/explore"
     assert explore_href =~ "point_id=HK.counter"
     assert explore_href =~ "source_dashboard_id=dashboard-1"
   end

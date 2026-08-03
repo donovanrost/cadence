@@ -62,15 +62,18 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS=1000 \
 CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS=1000 \
 CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS=1000 \
-mix run --no-start dev/sre_observability_demo.exs
+mix run --no-start dev/dashboard_ops_demo.exs
 ```
 
 The script persists a uniquely named organization, mission, spacecraft, source
-endpoint, packet binding, native live dashboard, and scheduled telemetry
-contact. The normal contact scheduler realizes the contact, opens a real TCP
-downlink adapter on an ephemeral port, and connects the Cadence simulator at
-2 Hz. The resulting TM frames travel through CCSDS extraction, ingress
-archives, current-value projection, and telemetry persistence.
+endpoint, packet binding, two published native dashboards, dashboard-management
+assets, operational context, and a scheduled telemetry contact. The normal
+contact scheduler realizes the contact, opens a real TCP downlink adapter on an
+ephemeral port, and connects the Cadence simulator at 2 Hz. The resulting TM
+frames travel through CCSDS extraction, ingress archives, current-value
+projection, and telemetry persistence. See
+[Run the Dashboard and Ops Demo](run-dashboard-ops-demo.md) for the presenter
+walkthrough.
 
 The standalone demo uses the Postgres compatibility ingress archive, protocol
 record archive, and current-value backend. This keeps the shared live

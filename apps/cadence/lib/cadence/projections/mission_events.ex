@@ -284,6 +284,63 @@ defmodule Cadence.Projections.MissionEvents do
 
   def project(_record), do: []
 
+  @spec project_operational_event(OperationalEvent.t()) :: [Entry.t()]
+  def project_operational_event(%OperationalEvent{} = event) do
+    case project(event) do
+      [] -> project_generic_operational_event(event)
+      entries -> entries
+    end
+  end
+
+  # The durable mission-events projection intentionally remains selective.
+  # Timeline reads use this fallback for canonical operational events that do
+  # not yet warrant their own eagerly maintained projection clause.
+  defp project_generic_operational_event(%OperationalEvent{} = event) do
+    subject = event.subject || %{}
+
+    [
+      Entry.new(%{
+        mission_event_id: "mission_event:#{event.event_id}",
+        mission_id: event.mission_id,
+        occurred_at: event.effective_at || event.occurred_at,
+        category: timeline_category(event.category),
+        kind: event.kind,
+        severity: event.severity || :info,
+        status: generic_status(event),
+        title: humanize_kind(event.kind),
+        summary: generic_summary(event),
+        source_record_kind: :operational_event,
+        source_record_id: event.event_id,
+        subject_kind: map_value(subject, :kind),
+        subject_id: map_value(subject, :id),
+        correlation_key: causality_text(event, :correlation_id),
+        spacecraft_id: operational_event_text(event, :spacecraft_id),
+        source_endpoint_ref: operational_event_text(event, :source_endpoint_ref),
+        scheduled_contact_id: operational_event_text(event, :scheduled_contact_id),
+        realized_contact_id: operational_event_text(event, :realized_contact_id),
+        path_id: operational_event_text(event, :path_id),
+        capability_instance_id: operational_event_text(event, :capability_instance_id),
+        activation_id: operational_event_text(event, :activation_id),
+        actor: event.actor,
+        metadata:
+          event.metadata
+          |> Map.merge(%{
+            "operational_event_id" => event.event_id,
+            "operational_category" => Atom.to_string(event.category),
+            "source_record_kind" => causality_text(event, :source_record_kind),
+            "source_record_id" => causality_text(event, :source_record_id),
+            "job_id" => causality_text(event, :job_id),
+            "replay_run_id" => causality_text(event, :replay_run_id),
+            "scope" => event.scope,
+            "payload" => event.payload,
+            "previous" => event.previous,
+            "current" => event.current
+          })
+          |> compact_metadata()
+      })
+    ]
+  end
+
   @spec project_many([term()]) :: [Entry.t()]
   def project_many(records) when is_list(records) do
     records
@@ -515,6 +572,52 @@ defmodule Cadence.Projections.MissionEvents do
     if payload_text(event, :partition_affinity) == "source_endpoint" do
       payload_text(event, :partition_value)
     end
+  end
+
+  defp timeline_category(category) when category in [:contact, :commanding, :dashboard],
+    do: :operations
+
+  defp timeline_category(category) when category in [:limits, :data_source, :source_credential],
+    do: :health
+
+  defp timeline_category(category) when category in [:comms], do: :transport
+  defp timeline_category(_category), do: :runtime
+
+  defp generic_status(%OperationalEvent{} = event) do
+    (map_value(event.current, :status) ||
+       map_value(event.current, :state) ||
+       payload_value(event, :status) ||
+       payload_value(event, :state) ||
+       payload_value(event, :event_type))
+    |> text_value()
+  end
+
+  defp generic_summary(%OperationalEvent{} = event) do
+    (payload_value(event, :reason) ||
+       map_value(event.current, :reason) ||
+       payload_value(event, :message) ||
+       map_value(event.current, :message) ||
+       generic_scope_summary(event))
+    |> text_value()
+  end
+
+  defp generic_scope_summary(%OperationalEvent{} = event) do
+    [
+      operational_event_text(event, :spacecraft_id),
+      operational_event_text(event, :data_source_id),
+      operational_event_text(event, :point_id),
+      causality_text(event, :correlation_id)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  defp humanize_kind(kind) when is_atom(kind) do
+    kind
+    |> Atom.to_string()
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   defp compact_metadata(map) when is_map(map) do

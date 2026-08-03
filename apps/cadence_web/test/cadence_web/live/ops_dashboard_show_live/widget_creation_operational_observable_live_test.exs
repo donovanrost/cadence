@@ -88,6 +88,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
 
       render_dashboard_async(view)
       refute has_element?(view, "#dashboard-panel")
+      view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)
@@ -122,7 +123,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
   end
 
   defp show_path(mission, dashboard) do
-    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/edit"
   end
 
   defp fetch_dashboard_document!(org, mission, dashboard) do

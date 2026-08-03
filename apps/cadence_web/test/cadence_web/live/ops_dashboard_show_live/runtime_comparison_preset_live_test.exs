@@ -38,6 +38,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
 
     render_dashboard_async(view)
 
+    view
+    |> element("#dashboard-comparison-toggle")
+    |> render_click()
+
+    assert has_element?(view, "#dashboard-comparison-inspector")
     assert has_element?(view, "#dashboard-comparison-preset-form")
 
     view

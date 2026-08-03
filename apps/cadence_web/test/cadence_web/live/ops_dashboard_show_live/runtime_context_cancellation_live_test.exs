@@ -221,35 +221,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextCancellationLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-time-mode="archive"][data-engine-time-mode="archive"][data-dashboard-limit-mode="current"][data-engine-limit-mode="current"])
              )
 
-      view
-      |> element("#dashboard-diagnostics-button")
-      |> render_click()
-
       assert has_element?(
                view,
-               ~s(#dashboard-diagnostics-panel[data-runtime-refresh-status="settled"][data-runtime-refresh-reason="accepted"][data-runtime-visible-refresh-action="accept_result"][data-runtime-refresh-starts*="runtime_context_changed:1"][data-runtime-refresh-cancellations*="runtime_context_changed:1"][data-runtime-canceled-resolves="1"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-diagnostics-panel[data-runtime-last-refresh-duration-ms])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-diagnostics-panel [data-diagnostics-field="Refresh status"]),
-               "settled"
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-diagnostics-panel [data-diagnostics-field="Last refresh duration ms"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-diagnostics-panel [data-diagnostics-field="Refresh cancellations"]),
-               "runtime_context_changed:1"
+               ~s(#dashboard-diagnostics-button[href*="/diagnostics"])
              )
     end
   end

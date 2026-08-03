@@ -14,6 +14,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssignsTest do
       dashboard_publish_validation: nil,
       dashboard_publish_validation_freshness: nil,
       edit_mode?: true,
+      editor_route?: false,
+      editor_dirty?: false,
+      editor_conflict: nil,
+      dashboard_author?: false,
       show_context?: true,
       current_mission: %{mission_id: "mission-1", display_name: "Lunar Demo"},
       spacecraft: [%{spacecraft_id: "SC-1"}],
@@ -47,7 +51,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssignsTest do
         "applied_mode" => "observed",
         "reason" => "unsupported_limit_semantics_mode"
       },
+      hidden_marker_categories: [],
       selected_data_ref: selected_data_ref(),
+      time_quick_query: "",
+      time_recent_ranges: [],
       query: "temp"
     }
 
@@ -64,6 +71,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssignsTest do
              dashboard_publish_validation: nil,
              dashboard_publish_validation_freshness: nil,
              edit_mode?: false,
+             editor_route?: false,
+             editor_dirty?: false,
+             editor_conflict: nil,
+             dashboard_author?: false,
              show_context?: false,
              current_mission: nil,
              spacecraft: [],
@@ -93,7 +104,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssignsTest do
              replay_runs: [],
              limit_mode: nil,
              limit_mode_fallback: nil,
+             hidden_marker_categories: [],
              selected_data_ref: nil,
+             time_quick_query: "",
+             time_recent_ranges: [],
              query: ""
            }
   end

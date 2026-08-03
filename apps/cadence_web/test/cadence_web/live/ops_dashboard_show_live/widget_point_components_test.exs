@@ -73,6 +73,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
              |> LazyHTML.attribute("data-widget-compare-delta")
   end
 
+  test "value_tile honors the catalog show-unit option" do
+    html =
+      render_component(&WidgetPointComponents.value_tile/1,
+        widget: put_in(widget(:value_tile), [:options, :show_unit], false),
+        data: point_data(42),
+        compare_data: nil,
+        point: %{unit: "V"},
+        compare_data_view: nil
+      )
+
+    refute html =~ ">V<"
+  end
+
   test "time_series_chart exposes chart hook payload and data-management attrs" do
     html =
       render_component(&WidgetPointComponents.time_series_chart/1,
@@ -112,7 +125,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
     assert ["canonical"] = LazyHTML.attribute(chart, "data-compare-data-view")
     assert ["questdb-rehearsal"] = LazyHTML.attribute(chart, "data-data-source-id")
     assert ["binding-rehearsal"] = LazyHTML.attribute(chart, "data-source-binding-id")
+    assert ["cadence-dashboard-time"] = LazyHTML.attribute(chart, "data-correlation-group")
+    assert ["false"] = LazyHTML.attribute(chart, "data-edit-mode")
+    assert ["auto"] = LazyHTML.attribute(chart, "data-legend-mode")
+    assert ["8"] = LazyHTML.attribute(chart, "data-fill-opacity")
+    assert ["grafana"] = LazyHTML.attribute(chart, "data-panel-presentation")
     assert ["all_revisions,corrected"] = LazyHTML.attribute(chart, "data-data-management-badges")
+
+    assert [""] =
+             document
+             |> LazyHTML.query("[data-dashboard-time-series-stage]")
+             |> LazyHTML.attribute("data-dashboard-time-series-stage")
 
     assert ["recomputed,backfill"] =
              LazyHTML.attribute(chart, "data-compare-data-management-badges")

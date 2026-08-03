@@ -26,7 +26,7 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
 
     {TestFixtures.member_conn(user), user, org, mission}
@@ -211,7 +211,7 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-rehearsal-questdb", source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", selected_target: "transport", selected_id: "transport-alpha", transport_id: "transport-alpha", source_endpoint_id: "endpoint-alpha", ground_station_id: "dss-14", link_id: link_id}}"
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-rehearsal-questdb/settings?#{%{source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", selected_target: "transport", selected_id: "transport-alpha", transport_id: "transport-alpha", source_endpoint_id: "endpoint-alpha", ground_station_id: "dss-14", link_id: link_id}}"
       )
 
     assert has_element?(
@@ -304,7 +304,7 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-rehearsal-questdb", source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_empty_reason: "stale_data", selected_evidence_kind: "source", selected_source_evidence_mode: "health", selected_source_evidence_state: "stale", source_dashboard_id: "dashboard-return-1", source_return_activity_event: "dashboard-readiness-event-1", source_return_activity_filter: "publish_readiness", source_return_panel: "versions"}}"
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-rehearsal-questdb/settings?#{%{source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_empty_reason: "stale_data", selected_evidence_kind: "source", selected_source_evidence_mode: "health", selected_source_evidence_state: "stale", source_dashboard_id: "dashboard-return-1", source_return_activity_event: "dashboard-readiness-event-1", source_return_activity_filter: "publish_readiness", source_return_panel: "versions"}}"
       )
 
     assert has_element?(
@@ -373,7 +373,7 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{logical_source: "telemetry", realm: "rehearsal", scope_kind: "spacecraft", scope_id: "spacecraft-1", source_dashboard_id: "dashboard-return-1", source_empty_reason: "missing_source_binding", source_return_activity_event: "dashboard-readiness-event-1", source_return_activity_filter: "publish_readiness", source_return_panel: "versions"}}"
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new?#{%{logical_source: "telemetry", realm: "rehearsal", scope_kind: "spacecraft", scope_id: "spacecraft-1", source_dashboard_id: "dashboard-return-1", source_empty_reason: "missing_source_binding", source_return_activity_event: "dashboard-readiness-event-1", source_return_activity_filter: "publish_readiness", source_return_panel: "versions"}}"
       )
 
     assert has_element?(
@@ -392,10 +392,6 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
              view,
              ~s(#source-focus-dashboard-return[data-source-focus-dashboard-return="dashboard-return-1"][data-source-focus-dashboard-return-panel="versions"][data-source-focus-dashboard-return-activity-filter="publish_readiness"][data-source-focus-dashboard-return-activity-event="dashboard-readiness-event-1"][href*="/ops/dashboards/dashboard-return-1"][href*="panel=versions"][href*="activity_filter=publish_readiness"][href*="activity_event=dashboard-readiness-event-1"][href*="refresh_readiness=source_return"])
            )
-
-    view
-    |> element("#source-focus-register-source")
-    |> render_click()
 
     assert has_element?(view, "#register-source-panel")
   end

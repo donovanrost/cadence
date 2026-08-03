@@ -20,14 +20,24 @@ const TelemetryChart = {
     this.seriesList = primarySeries.concat(compareSeries)
     this.el.dataset.compareSeriesCount = `${compareSeries.length}`
     this.hiddenSeriesIds = new Set()
-    this.axisMode = "unit"
+    this.axisMode = this.el.dataset.axisMode === "shared" ? "shared" : "unit"
+    this.legendMode = this.el.dataset.legendMode || "auto"
+    this.lineWidth = this.el.dataset.lineWidth || "normal"
+    this.fillOpacity = Math.max(0, Math.min(30, parseInt(this.el.dataset.fillOpacity, 10) || 0))
+    this.spanGaps = this.el.dataset.spanGaps === "true"
+    this.showPoints = this.el.dataset.showPoints === "true"
+    this.showMinMaxBand = this.el.dataset.showMinMaxBand !== "false"
+    this.sharedTooltip = this.el.dataset.sharedTooltip !== "false"
     this.rebuildPlotData()
     this.limitMarkers = JSON.parse(this.el.dataset.limitMarkers || "[]")
-    this.eventMarkers = JSON.parse(this.el.dataset.eventMarkers || "[]")
+    this.eventMarkers = this.collapseSourceWatermarkMarkers(
+      JSON.parse(this.el.dataset.eventMarkers || "[]")
+    )
     this.selectedRef = JSON.parse(this.el.dataset.selectedRef || "null")
 
     this.el.style.position = "relative"
     this.chart = new uPlot(this.chartOptions(), this.plotData(), this.el)
+    this.installRangeSelection()
     this.eventLayer = this.buildEventLayer()
     this.el.appendChild(this.eventLayer)
     this.markerLayer = this.buildMarkerLayer()
@@ -39,6 +49,8 @@ const TelemetryChart = {
     this.renderEventMarkers()
     this.renderLimitMarkers()
     this.renderLegend()
+    this.tooltipLayer = this.buildTooltipLayer()
+    this.el.appendChild(this.tooltipLayer)
     this.renderSelection()
     this.handleClick = (event) => this.openPointInspector(event)
     this.el.addEventListener("click", this.handleClick)
@@ -72,10 +84,10 @@ const TelemetryChart = {
     })
 
     this.resizeObserver = new ResizeObserver(() => {
+      this.renderLegend()
       this.chart.setSize(this.chartSize())
       this.renderEventMarkers()
       this.renderLimitMarkers()
-      this.renderLegend()
       this.renderSelection()
     })
     this.resizeObserver.observe(this.el)
@@ -84,6 +96,9 @@ const TelemetryChart = {
   destroyed() {
     if (this.handleClick) this.el.removeEventListener("click", this.handleClick)
     if (this.resizeObserver) this.resizeObserver.disconnect()
+    if (this.rangeSelectionOverlay && this.handleRangeSelection) {
+      this.rangeSelectionOverlay.removeEventListener("mouseup", this.handleRangeSelection)
+    }
     if (this.chart) this.chart.destroy()
   },
 
@@ -105,7 +120,9 @@ const TelemetryChart = {
     }
 
     if (eventMarkerAppends.length > 0) {
-      this.eventMarkers = this.dedupeMarkers(this.eventMarkers.concat(eventMarkerAppends))
+      this.eventMarkers = this.collapseSourceWatermarkMarkers(
+        this.dedupeMarkers(this.eventMarkers.concat(eventMarkerAppends))
+      )
       appended = true
     }
 
@@ -116,10 +133,12 @@ const TelemetryChart = {
     if (this.chart) this.chart.destroy()
 
     this.chart = new uPlot(this.chartOptions(), this.plotData(), this.el)
+    this.installRangeSelection()
     this.el.appendChild(this.eventLayer)
     this.el.appendChild(this.markerLayer)
     this.el.appendChild(this.selectionLayer)
     this.el.appendChild(this.legendLayer)
+    if (this.tooltipLayer) this.el.appendChild(this.tooltipLayer)
     this.renderEventMarkers()
     this.renderLimitMarkers()
     this.renderLegend()
@@ -310,7 +329,7 @@ const TelemetryChart = {
       this.seriesPointMeta.push(xs.map((x) => (pointsByTime.has(x) ? pointsByTime.get(x).metadata : {})))
       this.plotSeries.push({ kind: "line", seriesIndex })
 
-      if (series.envelope) {
+      if (series.envelope && this.showMinMaxBand) {
         const envelopeByTime = new Map(
           series.envelope.points.map(([timestampMs, min, max]) => [
             timestampMs / 1000,
@@ -372,6 +391,7 @@ const TelemetryChart = {
   },
 
   openPointInspector(event) {
+    if (this.rangeSelectionInFlight) return
     const index = this.pointIndexFromEvent(event)
     if (index === null || index === undefined) return
 
@@ -486,6 +506,7 @@ const TelemetryChart = {
     Object.assign(layer.style, {
       position: "absolute",
       inset: "0",
+      bottom: `${this.legendHeight()}px`,
       pointerEvents: "none",
       zIndex: "3",
     })
@@ -499,6 +520,7 @@ const TelemetryChart = {
     Object.assign(layer.style, {
       position: "absolute",
       inset: "0",
+      bottom: `${this.legendHeight()}px`,
       pointerEvents: "none",
       zIndex: "2",
     })
@@ -511,6 +533,7 @@ const TelemetryChart = {
     Object.assign(layer.style, {
       position: "absolute",
       inset: "0",
+      bottom: `${this.legendHeight()}px`,
       pointerEvents: "none",
       zIndex: "4",
     })
@@ -523,25 +546,83 @@ const TelemetryChart = {
     layer.dataset.chartLegend = "series"
     Object.assign(layer.style, {
       position: "absolute",
-      top: "4px",
-      right: "6px",
+      left: "0",
+      right: "0",
+      bottom: "0",
+      minHeight: `${this.legendHeight()}px`,
       display: "flex",
       flexWrap: "wrap",
-      justifyContent: "flex-end",
-      gap: "4px",
-      maxWidth: "70%",
+      alignItems: "center",
+      justifyContent: "flex-start",
+      gap: "10px",
+      overflow: "hidden",
+      padding: "4px 8px",
       pointerEvents: "none",
       zIndex: "5",
     })
     return layer
   },
 
+  buildTooltipLayer() {
+    const layer = document.createElement("div")
+    layer.dataset.chartSharedTooltip = "true"
+    Object.assign(layer.style, {
+      position: "absolute",
+      left: "6px",
+      top: "4px",
+      display: "none",
+      maxWidth: "55%",
+      border: "1px solid rgba(204, 204, 220, 0.2)",
+      borderRadius: "2px",
+      background: "rgba(17, 18, 23, 0.96)",
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.35)",
+      color: "rgba(230, 230, 235, 0.94)",
+      font: "11px ui-sans-serif, system-ui, sans-serif",
+      lineHeight: "1.45",
+      padding: "6px 8px",
+      pointerEvents: "none",
+      zIndex: "6",
+    })
+    return layer
+  },
+
+  renderSharedTooltip(u) {
+    if (!this.tooltipLayer || !this.sharedTooltip) return
+
+    const index = u && u.cursor && u.cursor.idx
+    if (!Number.isInteger(index) || !Number.isFinite(this.xs[index])) {
+      this.tooltipLayer.style.display = "none"
+      return
+    }
+
+    const rows = this.seriesList.flatMap((series, seriesIndex) => {
+      if (!this.seriesVisible(series)) return []
+      const value = this.seriesYs[seriesIndex] && this.seriesYs[seriesIndex][index]
+      if (!Number.isFinite(value)) return []
+      return [`${series.label || series.id}: ${value}${series.unit ? ` ${series.unit}` : ""}`]
+    })
+
+    if (rows.length === 0) {
+      this.tooltipLayer.style.display = "none"
+      return
+    }
+
+    const timestamp = new Date(this.xs[index] * 1000).toISOString()
+    this.tooltipLayer.textContent = `${timestamp}\n${rows.join("  ·  ")}`
+    this.tooltipLayer.style.whiteSpace = "pre-wrap"
+    this.tooltipLayer.style.display = "block"
+  },
+
   renderLegend() {
     if (!this.legendLayer) return
 
     this.legendLayer.replaceChildren()
+    const visible = this.legendVisible()
+    this.legendLayer.dataset.chartLegendVisible = visible ? "true" : "false"
+    this.legendLayer.style.display = visible ? "flex" : "none"
+    if (!visible) return
+
     const sourceUnitGroups = this.sourceUnitGroups()
-    if (this.seriesList.length < 2 && sourceUnitGroups.length < 2) return
 
     const palette = this.chartPalette()
 
@@ -565,9 +646,9 @@ const TelemetryChart = {
 
       const swatch = document.createElement("span")
       Object.assign(swatch.style, {
-        width: "7px",
-        height: "7px",
-        borderRadius: "999px",
+        width: "14px",
+        height: "2px",
+        borderRadius: "1px",
         background: this.seriesLegendColor(series, index, palette),
         flex: "0 0 auto",
       })
@@ -591,15 +672,15 @@ const TelemetryChart = {
         display: "inline-flex",
         alignItems: "center",
         gap: "4px",
-        maxWidth: "150px",
-        border: "1px solid rgba(192, 202, 245, 0.18)",
-        borderRadius: "4px",
-        background: "rgba(15, 23, 42, 0.72)",
-        color: visible ? "rgba(226, 232, 240, 0.88)" : "rgba(148, 163, 184, 0.62)",
+        maxWidth: "220px",
+        border: "0",
+        borderRadius: "2px",
+        background: "transparent",
+        color: visible ? "rgba(204, 204, 220, 0.9)" : "rgba(153, 153, 170, 0.62)",
         cursor: "pointer",
-        font: "10px ui-monospace, SFMono-Regular, Menlo, monospace",
+        font: "500 11px ui-sans-serif, system-ui, sans-serif",
         lineHeight: "1",
-        padding: "3px 5px",
+        padding: "2px 0",
         opacity: visible ? "1" : "0.58",
         pointerEvents: "auto",
       })
@@ -633,14 +714,14 @@ const TelemetryChart = {
     button.setAttribute("aria-label", button.title)
     button.textContent = this.axisMode === "unit" ? "Axis: unit" : "Axis: shared"
     Object.assign(button.style, {
-      border: "1px solid rgba(125, 211, 252, 0.26)",
-      borderRadius: "4px",
-      background: "rgba(8, 47, 73, 0.76)",
-      color: "rgba(186, 230, 253, 0.94)",
+      border: "0",
+      borderRadius: "2px",
+      background: "transparent",
+      color: "rgba(204, 204, 220, 0.72)",
       cursor: "pointer",
-      font: "10px ui-monospace, SFMono-Regular, Menlo, monospace",
+      font: "500 11px ui-sans-serif, system-ui, sans-serif",
       lineHeight: "1",
-      padding: "3px 5px",
+      padding: "2px 0",
       pointerEvents: "auto",
     })
 
@@ -673,6 +754,17 @@ const TelemetryChart = {
     return this.seriesList.filter((series) => this.seriesVisible(series)).length
   },
 
+  legendVisible() {
+    if (this.legendMode === "hidden") return false
+    if (this.legendMode === "always") return this.seriesList.length > 0
+
+    return this.seriesList.length > 1 || this.sourceUnitGroups().length > 1
+  },
+
+  legendHeight() {
+    return this.legendVisible() ? 28 : 0
+  },
+
   seriesVisible(series) {
     return !series || !series.id || !this.hiddenSeriesIds.has(series.id)
   },
@@ -686,6 +778,9 @@ const TelemetryChart = {
     if (!this.eventLayer || !this.chart) return
 
     this.eventLayer.replaceChildren()
+    delete this.el.dataset.watermarkState
+    delete this.el.dataset.watermarkLagMs
+    delete this.el.dataset.watermarkBoundaryVisible
 
     this.eventMarkers.forEach((marker) => {
       if (marker.marker_type === "contact_interval") {
@@ -896,7 +991,18 @@ const TelemetryChart = {
     if (!marker.marker_id || !marker.timestamp_ms) return
 
     const left = this.markerLeft(marker)
-    if (left === null || left === undefined || Number.isNaN(left)) return
+    const boundaryVisible = marker.display_mode !== "status"
+
+    if (boundaryVisible && left !== null && left !== undefined && !Number.isNaN(left)) {
+      this.renderSourceWatermarkIncompleteRegion(marker, left)
+      this.renderSourceWatermarkBoundary(marker, left)
+    }
+
+    this.renderSourceWatermarkStatus(marker, boundaryVisible)
+  },
+
+  renderSourceWatermarkBoundary(marker, left) {
+    const plotTop = this.chart.bbox.top || 0
 
     const button = document.createElement("button")
     button.type = "button"
@@ -905,10 +1011,11 @@ const TelemetryChart = {
     button.dataset.eventMarkerTarget = "source watermark"
     button.dataset.eventMarkerId = marker.source_watermark_event_id || marker.target_id || marker.data_source_id || ""
     button.dataset.eventMarkerRef = marker.marker_id || ""
+    button.dataset.watermarkBoundary = marker.freshness_state || "unknown"
     Object.assign(button.style, {
       position: "absolute",
       left: `${left}px`,
-      top: `${this.chart.bbox.top || 0}px`,
+      top: `${plotTop}px`,
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       width: "14px",
       transform: "translateX(-7px)",
@@ -930,7 +1037,78 @@ const TelemetryChart = {
     })
     button.appendChild(line)
 
-    button.addEventListener("click", (event) => {
+    this.installSourceWatermarkAction(button, marker)
+    this.eventLayer.appendChild(button)
+  },
+
+  renderSourceWatermarkIncompleteRegion(marker, left) {
+    const plotLeft = this.chart.bbox.left || 0
+    const plotRight = plotLeft + (this.chart.bbox.width || this.el.clientWidth)
+    const regionLeft = Math.max(plotLeft, Math.min(plotRight, left))
+    const width = Math.max(0, plotRight - regionLeft)
+    if (width <= 0) return
+
+    const region = document.createElement("div")
+    region.dataset.sourceWatermarkIncompleteRegion = marker.freshness_state || "unknown"
+    Object.assign(region.style, {
+      position: "absolute",
+      left: `${regionLeft}px`,
+      top: `${this.chart.bbox.top || 0}px`,
+      width: `${width}px`,
+      height: `${this.chart.bbox.height || this.el.clientHeight}px`,
+      borderLeft: `1px dashed ${this.sourceWatermarkCursorColor(marker)}`,
+      backgroundColor: this.sourceWatermarkRegionColor(marker),
+      backgroundImage:
+        "repeating-linear-gradient(135deg, transparent 0, transparent 8px, rgba(148, 163, 184, 0.07) 8px, rgba(148, 163, 184, 0.07) 9px)",
+      pointerEvents: "none",
+    })
+    this.eventLayer.appendChild(region)
+  },
+
+  renderSourceWatermarkStatus(marker, boundaryVisible) {
+    const lagMs = this.sourceWatermarkLagMs(marker)
+    const state = boundaryVisible ? "incomplete" : "complete"
+    const status = document.createElement("button")
+    const statusText = this.sourceWatermarkStatusText(marker, lagMs, boundaryVisible)
+
+    status.type = "button"
+    status.title = this.sourceWatermarkStatusTitle(marker, lagMs, boundaryVisible)
+    status.setAttribute("aria-label", status.title)
+    status.dataset.eventMarkerTarget = "source watermark status"
+    status.dataset.eventMarkerId = marker.source_watermark_event_id || marker.target_id || marker.data_source_id || ""
+    status.dataset.eventMarkerRef = marker.marker_id || ""
+    status.dataset.sourceWatermarkStatus = state
+    status.dataset.sourceWatermarkLagMs = `${lagMs}`
+    status.textContent = statusText
+
+    Object.assign(status.style, {
+      position: "absolute",
+      left: `${(this.chart.bbox.left || 0) + 10}px`,
+      top: `${(this.chart.bbox.top || 0) + 8}px`,
+      border: `1px solid ${this.sourceWatermarkStatusBorder(marker, boundaryVisible)}`,
+      borderRadius: "3px",
+      background: boundaryVisible ? "rgba(30, 23, 10, 0.90)" : "rgba(6, 31, 31, 0.86)",
+      color: boundaryVisible ? "rgba(253, 230, 138, 0.96)" : "rgba(153, 246, 228, 0.94)",
+      cursor: "pointer",
+      font: "600 10px ui-monospace, SFMono-Regular, Menlo, monospace",
+      letterSpacing: "0.06em",
+      lineHeight: "1",
+      padding: "4px 6px",
+      pointerEvents: "auto",
+      textTransform: "uppercase",
+      whiteSpace: "nowrap",
+    })
+
+    this.el.dataset.watermarkState = state
+    this.el.dataset.watermarkLagMs = `${lagMs}`
+    this.el.dataset.watermarkBoundaryVisible = `${boundaryVisible}`
+
+    this.installSourceWatermarkAction(status, marker)
+    this.eventLayer.appendChild(status)
+  },
+
+  installSourceWatermarkAction(control, marker) {
+    control.addEventListener("click", (event) => {
       event.preventDefault()
       event.stopPropagation()
       const dataLinkPayload = this.sourceWatermarkDataLinkPayload(marker)
@@ -960,8 +1138,97 @@ const TelemetryChart = {
         "placement-id": this.placementId,
       })
     })
+  },
 
-    this.eventLayer.appendChild(button)
+  sourceWatermarkLagMs(marker) {
+    const windowEnd = this.chartWindowEnd()
+    if (!Number.isFinite(windowEnd)) return 0
+    return Math.max(0, Math.round(windowEnd * 1000 - Number(marker.timestamp_ms)))
+  },
+
+  sourceWatermarkStatusText(marker, lagMs, boundaryVisible) {
+    const prefix = marker.freshness_state === "retention_gap"
+      ? "Retention gap"
+      : boundaryVisible
+        ? "Incomplete"
+        : "Complete"
+    return `${prefix} · ${this.formatSourceWatermarkLag(lagMs)}`
+  },
+
+  sourceWatermarkStatusTitle(marker, lagMs, boundaryVisible) {
+    const timestamp = new Date(Number(marker.timestamp_ms)).toLocaleString()
+    const prefix = boundaryVisible ? "Data is complete through" : "Data complete through"
+    return `${prefix} ${timestamp} · ${this.formatSourceWatermarkLag(lagMs)}`
+  },
+
+  formatSourceWatermarkLag(lagMs) {
+    if (lagMs < 1_000) return "current"
+    if (lagMs < 10_000) return `${(lagMs / 1_000).toFixed(1)}s behind`
+    if (lagMs < 60_000) return `${Math.round(lagMs / 1_000)}s behind`
+    if (lagMs < 3_600_000) return `${Math.round(lagMs / 60_000)}m behind`
+    return `${Math.round(lagMs / 3_600_000)}h behind`
+  },
+
+  sourceWatermarkStatusBorder(marker, boundaryVisible) {
+    if (!boundaryVisible) return "rgba(45, 212, 191, 0.36)"
+    return this.sourceWatermarkCursorColor(marker)
+  },
+
+  sourceWatermarkRegionColor(marker) {
+    if (marker.freshness_state === "retention_gap") return "rgba(127, 29, 29, 0.10)"
+    if (marker.freshness_state === "stale") return "rgba(120, 53, 15, 0.10)"
+    return "rgba(51, 65, 85, 0.10)"
+  },
+
+  collapseSourceWatermarkMarkers(markers) {
+    if (!Array.isArray(markers)) return []
+
+    const latestCursors = this.latestSourceWatermarkMarkers(
+      markers.filter((marker) => marker.marker_type === "source_watermark_cursor")
+    )
+    const cursorIdentities = new Set(
+      latestCursors.map((marker) => this.sourceWatermarkIdentity(marker))
+    )
+    const fallbackEvents = this.latestSourceWatermarkMarkers(
+      markers.filter((marker) => marker.marker_type === "source_watermark_event")
+    ).filter((marker) => !cursorIdentities.has(this.sourceWatermarkIdentity(marker)))
+
+    return markers
+      .filter(
+        (marker) =>
+          marker.marker_type !== "source_watermark_cursor" &&
+          marker.marker_type !== "source_watermark_event"
+      )
+      .concat(latestCursors, fallbackEvents)
+  },
+
+  latestSourceWatermarkMarkers(markers) {
+    const latest = new Map()
+
+    markers.forEach((marker) => {
+      const identity = this.sourceWatermarkIdentity(marker)
+      const current = latest.get(identity)
+      if (!current || this.sourceWatermarkTimestamp(marker) >= this.sourceWatermarkTimestamp(current)) {
+        latest.set(identity, marker)
+      }
+    })
+
+    return Array.from(latest.values())
+  },
+
+  sourceWatermarkIdentity(marker) {
+    return [
+      marker.logical_source || "",
+      marker.data_source_id || "",
+      marker.source_binding_id || "",
+      marker.dataset || "",
+      marker.realm || "",
+      marker.replay_run_id || "",
+    ].join(":")
+  },
+
+  sourceWatermarkTimestamp(marker) {
+    return Number(marker.timestamp_ms || marker.complete_through_ms || marker.observed_at_ms || 0)
   },
 
   renderSourceHealthTransition(marker) {
@@ -1997,8 +2264,13 @@ const TelemetryChart = {
   },
 
   chartSize() {
-    // Fill the widget body; GridStack resizes flow in via the ResizeObserver.
-    return { width: this.el.clientWidth, height: this.el.clientHeight || 180 }
+    // Keep Grafana-style legends in a fixed footer rather than layering them
+    // over the plot or making the panel itself scroll.
+    const containerHeight = this.el.clientHeight || 180
+    return {
+      width: this.el.clientWidth,
+      height: Math.max(containerHeight - this.legendHeight(), 80),
+    }
   },
 
   chartPalette() {
@@ -2017,18 +2289,22 @@ const TelemetryChart = {
     // hardcoding palette values.
     const palette = this.chartPalette()
     const axis = {
-      stroke: "rgba(192, 202, 245, 0.6)",
-      grid: { stroke: "rgba(192, 202, 245, 0.08)" },
-      ticks: { stroke: "rgba(192, 202, 245, 0.15)" },
+      stroke: "rgba(204, 204, 220, 0.62)",
+      grid: { stroke: "rgba(204, 204, 220, 0.08)" },
+      ticks: { stroke: "rgba(204, 204, 220, 0.12)" },
+      font: "11px ui-sans-serif, system-ui, sans-serif",
     }
 
     return {
       ...this.chartSize(),
       legend: { show: false },
-      // Drag-zoom is disabled: uPlot's selection overlay is styled by its
-      // vendor CSS for light themes (near-invisible on the dark HUD), and a
-      // live strip chart re-anchors to "now" anyway.
-      cursor: { drag: { x: false, y: false } },
+      cursor: {
+        drag: { x: this.el.dataset.editMode !== "true", y: false },
+        sync: { key: this.el.dataset.correlationGroup || "cadence-dashboard-time" },
+      },
+      hooks: {
+        setCursor: [(u) => this.renderSharedTooltip(u)],
+      },
       scales: this.chartScales(),
       series: [{}].concat(this.chartSeriesOptions(palette)),
       bands: this.chartBands(palette),
@@ -2098,7 +2374,7 @@ const TelemetryChart = {
       ...unitGroups.map((unit, index) => ({
         ...axis,
         scale: this.unitScaleKey(unit),
-        label: unit || this.el.dataset.unit || "Value",
+        label: unit || this.el.dataset.unit || undefined,
         side: index % 2 === 0 ? 3 : 1,
       })),
     ]
@@ -2144,9 +2420,11 @@ const TelemetryChart = {
           show: this.seriesVisible(series),
           scale: this.unitScaleKey(series.unit),
           stroke: compare ? this.compareSeriesColor(color) : color,
-          width: compare ? 1.1 : 1.5,
+          width: compare ? Math.max(this.lineWidthValue() - 0.4, 0.8) : this.lineWidthValue(),
           dash: compare ? [6, 4] : undefined,
-          spanGaps: false,
+          spanGaps: this.spanGaps,
+          fill: this.fillOpacity > 0 ? this.seriesFillColor(color) : undefined,
+          points: { show: this.showPoints, size: 4 },
         }
       }
 
@@ -2169,6 +2447,52 @@ const TelemetryChart = {
 
   compareSeriesColor(_color) {
     return "rgba(203, 213, 225, 0.76)"
+  },
+
+  lineWidthValue() {
+    if (this.lineWidth === "thin") return 1
+    if (this.lineWidth === "bold") return 3
+    return 2
+  },
+
+  seriesFillColor(color) {
+    const alpha = this.fillOpacity / 100
+    if (color.startsWith("rgba(")) {
+      const parts = color.slice(5, -1).split(",")
+      if (parts.length >= 3) return `rgba(${parts.slice(0, 3).join(",")}, ${alpha})`
+    }
+    return `rgba(125, 211, 252, ${alpha})`
+  },
+
+  installRangeSelection() {
+    if (!this.chart || this.el.dataset.editMode === "true") return
+
+    const overlay = this.el.querySelector(".u-over")
+    if (!overlay) return
+
+    if (this.rangeSelectionOverlay && this.handleRangeSelection) {
+      this.rangeSelectionOverlay.removeEventListener("mouseup", this.handleRangeSelection)
+    }
+
+    this.rangeSelectionOverlay = overlay
+    this.handleRangeSelection = () => {
+      const selection = this.chart && this.chart.select
+      if (!selection || selection.width < 8) return
+
+      const fromSeconds = this.chart.posToVal(selection.left, "x")
+      const toSeconds = this.chart.posToVal(selection.left + selection.width, "x")
+      if (!Number.isFinite(fromSeconds) || !Number.isFinite(toSeconds)) return
+
+      const from = new Date(Math.min(fromSeconds, toSeconds) * 1000).toISOString()
+      const to = new Date(Math.max(fromSeconds, toSeconds) * 1000).toISOString()
+      this.rangeSelectionInFlight = true
+      this.pushEvent("set_chart_time_range", { from, to })
+      this.chart.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false)
+      setTimeout(() => {
+        this.rangeSelectionInFlight = false
+      }, 0)
+    }
+    overlay.addEventListener("mouseup", this.handleRangeSelection)
   },
 
   chartBands(palette) {

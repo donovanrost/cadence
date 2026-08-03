@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
   import Phoenix.Component, only: [assign: 3, to_form: 2]
 
   alias Cadence.Dashboards.{ComparisonReviewQueue, Document}
+  alias CadenceWeb.OpsDashboardShowLive.DashboardSectionEditing
   alias CadenceWeb.OpsDashboardShowLive.DocumentLifecycle
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults
@@ -66,6 +67,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
     |> assign(:dashboard_time_axis, "generation_time")
     |> assign(:dashboard_replay_run_id, nil)
     |> assign(:dashboard_time_validation, "ok")
+    |> assign(:dashboard_time_quick_query, "")
+    |> assign(:dashboard_time_recent_ranges, [])
     |> assign(:dashboard_data_realms, data_realms)
     |> assign(:dashboard_data_bindings, data_bindings)
     |> assign(:dashboard_replay_runs, replay_runs)
@@ -76,6 +79,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
     |> assign(:dashboard_source_binding_id, nil)
     |> assign(:dashboard_limit_mode, "observed")
     |> assign(:dashboard_limit_mode_fallback, nil)
+    |> assign(:dashboard_hidden_marker_categories, [])
     |> assign(:dashboard_time_context, %{"mode" => "live", "axis" => "generation_time"})
     |> assign(:dashboard_data_context, %{
       "realm" => default_realm,
@@ -96,7 +100,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
     |> assign(:dashboard_readiness_return_intent, nil)
     |> assign(:dashboard_selected_publish_issue_id, nil)
     |> assign(:dashboard_comparison_review_action_outcome, nil)
+    |> assign(:comparison_inspector_open?, false)
     |> assign(:widget_error, nil)
+    |> assign(:widget_binding_preview, nil)
+    |> assign(:section_error, nil)
+    |> assign(:section_form, to_form(DashboardSectionEditing.form_defaults(), as: :section))
     |> assign(:selected_point_id, nil)
     |> assign(:selected_point_ids, [])
     |> assign(:dashboard_selected_data_ref, nil)

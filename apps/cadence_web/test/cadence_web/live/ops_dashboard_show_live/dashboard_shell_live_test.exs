@@ -33,7 +33,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
       assert has_element?(view, "#ops-dashboards-page")
-      assert render(view) =~ "No dashboards"
+      assert has_element?(view, "#dashboard-directory-empty")
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 
@@ -59,12 +59,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
 
       assert document.name == "Power Overview"
       assert document.placements == []
-      assert_redirect(view, show_path(mission, summary))
+      assert_redirect(view, show_path(mission, summary) <> "/edit")
     end
 
     test "lists dashboards as navigation cards and in the rail" do
-      {conn, _org, mission} = signed_in_org_and_mission()
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
       dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Thermal")
+
+      assert {:ok, _preference} =
+               Cadence.Dashboards.set_dashboard_starred(
+                 org.organization_id,
+                 mission.mission_id,
+                 user.user_id,
+                 dashboard.dashboard_id,
+                 true
+               )
 
       {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
@@ -77,6 +86,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
       assert html =~ "Thermal"
       assert html =~ "0 widgets"
       assert has_element?(view, "#ops-utc-clock")
+    end
+
+    test "the shared Ops shell renders exactly one context rail across representative routes" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      paths = [
+        ~p"/missions/#{mission.mission_id}/ops/dashboards",
+        ~p"/missions/#{mission.mission_id}/ops/planning",
+        ~p"/missions/#{mission.mission_id}/ops/contacts",
+        ~p"/missions/#{mission.mission_id}/ops/data-sources"
+      ]
+
+      for path <- paths do
+        {:ok, view, _html} = live(conn, path)
+        document = view |> render() |> LazyHTML.from_fragment()
+
+        assert ["ops-context-rail"] =
+                 document
+                 |> LazyHTML.query("#ops-context-rail")
+                 |> LazyHTML.attribute("id")
+
+        assert ["cadence-ops-context-rail"] =
+                 document
+                 |> LazyHTML.query("#ops-context-rail")
+                 |> LazyHTML.attribute("data-storage-key")
+
+        assert ["alarms", "commands", "fleet_health"] =
+                 document
+                 |> LazyHTML.query("[data-ops-context-collapsed-section]")
+                 |> LazyHTML.attribute("data-ops-context-collapsed-section")
+      end
     end
 
     test "requires a signed-in member" do

@@ -130,6 +130,80 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
     assert html =~ "This widget cannot load because its source failed."
   end
 
+  test "no-data widgets explain the active scope mismatch and expose recovery actions" do
+    data =
+      :no_data
+      |> lifecycle_point_data()
+      |> Map.put(:source_status, %{empty_reason: :contact_scope_no_data})
+
+    html =
+      render_component(&Components.widget/1,
+        widget: value_tile(),
+        placement_id: "placement-1",
+        data: data,
+        compare_data: nil,
+        point: %{unit: "V"},
+        spacecraft: [],
+        backfill: nil,
+        limit_markers: [],
+        event_markers: [],
+        selected_data_ref: nil,
+        context_spacecraft_id: "spacecraft-1",
+        chart_epoch: 1,
+        edit_mode?: false,
+        warnings: []
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["true"] =
+             document
+             |> LazyHTML.query("[data-widget-body-notice]")
+             |> LazyHTML.attribute("data-widget-empty-actionable")
+
+    assert [""] =
+             document
+             |> LazyHTML.query("[data-widget-empty-adjust-context]")
+             |> LazyHTML.attribute("data-widget-empty-adjust-context")
+
+    assert [""] =
+             document
+             |> LazyHTML.query("[data-widget-empty-investigate]")
+             |> LazyHTML.attribute("data-widget-empty-investigate")
+
+    assert html =~ "no rows matched this contact and source-endpoint scope"
+  end
+
+  test "blocking lifecycle notices take precedence over an incidental empty reason" do
+    data =
+      :retention_gap
+      |> lifecycle_point_data()
+      |> Map.put(:source_status, %{empty_reason: :scope_no_data})
+
+    html =
+      render_component(&Components.widget/1,
+        widget: value_tile(),
+        placement_id: "placement-1",
+        data: data,
+        compare_data: nil,
+        point: %{unit: "V"},
+        spacecraft: [],
+        backfill: nil,
+        limit_markers: [],
+        event_markers: [],
+        selected_data_ref: nil,
+        context_spacecraft_id: "spacecraft-1",
+        chart_epoch: 1,
+        edit_mode?: false,
+        warnings: []
+      )
+
+    assert html =~
+             "This widget cannot load because the selected time range is outside available source retention."
+
+    refute html =~ "no rows matched the active dashboard scope"
+  end
+
   test "partial data table keeps rows visible and reduces degraded coverage to an indicator" do
     html =
       render_component(&Components.widget/1,
@@ -165,6 +239,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
              document
              |> LazyHTML.query("[data-data-table-row]")
              |> LazyHTML.attribute("data-data-table-row")
+
+    assert html =~ "This widget is showing partial data"
+  end
+
+  test "partial time series keeps its chart and shows a compact coverage notice" do
+    html =
+      render_component(&Components.widget/1,
+        widget: time_series(),
+        placement_id: "placement-1",
+        data: lifecycle_point_data(:partial),
+        compare_data: nil,
+        point: %{unit: "V"},
+        spacecraft: [],
+        backfill: nil,
+        limit_markers: [],
+        event_markers: [],
+        selected_data_ref: nil,
+        context_spacecraft_id: "spacecraft-1",
+        chart_epoch: 1,
+        edit_mode?: false,
+        warnings: []
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["partial"] =
+             document
+             |> LazyHTML.query("[data-widget-body-notice]")
+             |> LazyHTML.attribute("data-widget-body-notice")
+
+    assert ["TelemetryChart"] =
+             document
+             |> LazyHTML.query(~s([phx-hook="TelemetryChart"]))
+             |> LazyHTML.attribute("phx-hook")
 
     assert html =~ "This widget is showing partial data"
   end

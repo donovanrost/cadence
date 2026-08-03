@@ -295,8 +295,8 @@ defmodule CadenceWeb.Assets.DashboardTelemetryLifecycleViewportTest do
       :dashboard_source_health_events,
       enabled?: true,
       freshness: [
-        default_max_age_ms: 3_000_000_000,
-        projection: [postgres_projection: 3_000_000_000]
+        default_max_age_ms: 31_536_000_000,
+        projection: [postgres_projection: 31_536_000_000]
       ]
     )
 

@@ -22,7 +22,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
 
     {TestFixtures.member_conn(user), user, org, mission}
@@ -330,7 +330,13 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              ~s(#dashboard-source-health-events [data-event-probe-diagnostic-kind="connection_unreachable"][data-event-probe-diagnostic-stage="connection_test"][data-event-probe-remediation="check_questdb_endpoint"])
            )
 
-    change_binding_to_managed!(view, user)
+    {:ok, settings_view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/rehearsal-questdb/settings"
+      )
+
+    change_binding_to_managed!(settings_view, user)
 
     render_async(dashboard_view, 1_000)
 

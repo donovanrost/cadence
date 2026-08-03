@@ -18,6 +18,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarModel do
           context.dashboard_publish_validation_freshness
         ),
       edit_mode?: context.edit_mode?,
+      editor_route?: context.editor_route?,
+      editor_dirty?: context.editor_dirty?,
+      editor_conflict: context.editor_conflict,
+      dashboard_author?: context.dashboard_author?,
       show_context?: context.show_context?,
       current_mission: context.current_mission,
       spacecraft: context.spacecraft,
@@ -48,7 +52,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarModel do
       selected_replay_run: selected_replay_run(context.replay_runs, context.replay_run_id),
       limit_mode: context.limit_mode,
       limit_mode_fallback: context.limit_mode_fallback,
+      hidden_marker_categories: context.hidden_marker_categories,
       selected_data_ref: context.selected_data_ref,
+      time_quick_query: context.time_quick_query,
+      time_recent_ranges: context.time_recent_ranges,
       query: context.query
     }
   end

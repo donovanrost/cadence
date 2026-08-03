@@ -1,7 +1,15 @@
 defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{Document, PlacementFrames}
+  alias Cadence.Dashboards.{
+    Document,
+    Field,
+    Frame,
+    PlacementFrames,
+    RenderWidget,
+    ResolveWarning
+  }
+
   alias CadenceWeb.OpsDashboardShowLive.DataViewComparison
   alias CadenceWeb.OpsDashboardShowLive.EngineResolution
   alias CadenceWeb.OpsDashboardShowLive.RuntimeDataRequest
@@ -85,6 +93,71 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
 
     assert socket.assigns.dashboard_compare_engine_frames_by_placement ==
              comparison_result.frames_by_placement
+  end
+
+  test "live ticks present merged primary data when an optional overlay request fails" do
+    placement_id = "placement-power"
+
+    telemetry_frame = %Frame{
+      source: :telemetry,
+      shape: :scalar,
+      scope: %{primary: %{ids: ["spacecraft-alpha"]}},
+      fields: [
+        %Field{name: "time", kind: :time, values: [~U[2026-08-01 23:40:00Z]]},
+        %Field{name: "HK.voltage", kind: :number, values: [28.4]}
+      ],
+      meta: %{
+        observable_id: "HK.voltage",
+        warning_codes: [],
+        source_request_context: %{logical_source: :telemetry}
+      }
+    }
+
+    previous_frames = %{
+      placement_id => %PlacementFrames{primary: [telemetry_frame]}
+    }
+
+    limits_warning = %ResolveWarning{
+      code: :source_unavailable,
+      severity: :error,
+      message: "Limits source unavailable",
+      details: %{logical_source: :limits, source_request_id: "source-req-limits"}
+    }
+
+    result = %{
+      resolve_mode: :live_tick,
+      frames_by_placement: %{
+        placement_id => %PlacementFrames{warnings: [limits_warning]}
+      }
+    }
+
+    socket =
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          dashboard_engine_frames_by_placement: previous_frames,
+          dashboard_render_items: [
+            %{
+              placement_id: placement_id,
+              widget: %RenderWidget{type: :value_tile, binding: %{mode: :fixed}}
+            }
+          ],
+          widget_data: %{}
+        }
+      }
+      |> EngineResolution.apply_result(result)
+
+    assert %PlacementFrames{
+             primary: [^telemetry_frame],
+             warnings: [^limits_warning]
+           } = socket.assigns.dashboard_engine_frames_by_placement[placement_id]
+
+    assert %{
+             lifecycle_state: :ready,
+             lifecycle: %{state: :ready, warning_codes: []},
+             source_status: %{state: :fresh, warning_codes: []},
+             sample: %{engineering_value: 28.4}
+           } = socket.assigns.widget_data[placement_id]
   end
 
   test "refresh_ms uses positive dashboard document refresh defaults" do

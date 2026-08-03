@@ -60,6 +60,14 @@ defmodule CadenceWeb.Router do
         CatalogArtifactDownloadController,
         :show
 
+    get "/missions/:mission_id/ops/telemetry/explore",
+        LegacyOpsRedirectController,
+        :telemetry_explore
+
+    get "/missions/:mission_id/ops/dashboards/:dashboard_id/export",
+        DashboardExportController,
+        :show
+
     live_session :organization,
       on_mount: [
         {CadenceWeb.OrganizationAuth, :require_organization_scope},
@@ -263,6 +271,36 @@ defmodule CadenceWeb.Router do
            :show
     end
 
+    live_session :ops_dashboard_author,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.DashboardAuthorAuth, :require_dashboard_author},
+        {CadenceWeb.UserAuth, :attach_user_menu},
+        {CadenceWeb.OpsShellHook, :default}
+      ],
+      layout: {CadenceWeb.Layouts, :ops} do
+      live "/missions/:mission_id/ops/dashboards/new",
+           OpsDashboardNewLive,
+           :new
+
+      live "/missions/:mission_id/ops/dashboards/library",
+           OpsDashboardLibraryLive,
+           :index
+
+      live "/missions/:mission_id/ops/dashboards/playlists",
+           OpsDashboardPlaylistsLive,
+           :index
+
+      live "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
+           OpsDashboardShowLive,
+           :edit
+
+      live "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
+           OpsDashboardSettingsLive,
+           :show
+    end
+
     live_session :ops,
       on_mount: [
         {CadenceWeb.OrganizationAuth, :require_organization_scope},
@@ -275,12 +313,28 @@ defmodule CadenceWeb.Router do
            OpsDashboardListLive,
            :index
 
-      live "/missions/:mission_id/ops/dashboards/new",
-           OpsDashboardNewLive,
-           :new
+      live "/missions/:mission_id/ops/dashboard-shares/:share_id",
+           OpsDashboardShareLive,
+           :show
+
+      live "/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id",
+           OpsDashboardSnapshotLive,
+           :show
+
+      live "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
+           OpsDashboardPlaylistPresentLive,
+           :show
 
       live "/missions/:mission_id/ops/data-sources",
            OpsDataSourcesLive,
+           :index
+
+      live "/missions/:mission_id/ops/data-sources/:data_source_id",
+           OpsDataSourcesLive,
+           :show
+
+      live "/missions/:mission_id/ops/data-operations",
+           OpsDataOperationsLive,
            :index
 
       live "/missions/:mission_id/ops/planning",
@@ -327,8 +381,28 @@ defmodule CadenceWeb.Router do
            OpsContactDetailLive,
            :show
 
-      live "/missions/:mission_id/ops/telemetry/explore",
+      live "/missions/:mission_id/ops/alarms",
+           OpsAlarmsLive,
+           :index
+
+      live "/missions/:mission_id/ops/timeline",
+           OpsTimelineLive,
+           :index
+
+      live "/missions/:mission_id/ops/commands",
+           OpsCommandsLive,
+           :index
+
+      live "/missions/:mission_id/ops/explore",
            OpsTelemetryExploreLive,
+           :show
+
+      live "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
+           OpsDashboardActivityLive,
+           :show
+
+      live "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
+           OpsDashboardDiagnosticsLive,
            :show
 
       live "/missions/:mission_id/ops/dashboards/:dashboard_id",
@@ -348,6 +422,18 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/ops/activations",
            OpsActivationRequestsLive,
            :index
+
+      live "/missions/:mission_id/ops/data-sources/registration/new",
+           OpsDataSourcesLive,
+           :new
+
+      live "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
+           OpsDataSourcesLive,
+           :settings
+
+      live "/missions/:mission_id/ops/data-operations/manage",
+           OpsDataOperationsLive,
+           :manage
     end
 
     # Legacy application URLs redirect to the generic application host. Keep

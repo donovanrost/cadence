@@ -38,7 +38,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
   end
 
   defp show_path(mission, dashboard) do
-    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
   end
 
   defp replace_dashboard_row_document!(org, mission, %Document{} = document) do
@@ -118,14 +118,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-publication-state="unpublished"][data-dashboard-publishable-version="1"][data-dashboard-publish-available="true"])
-             )
-
-      view |> element(~s(#dashboard-menu button[phx-click="publish_dashboard"])) |> render_click()
-
-      assert has_element?(view, "#dashboard-versions-panel")
+      view |> element("#dashboard-activity-publish") |> render_click()
 
       assert has_element?(
                view,
@@ -180,8 +173,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view |> element("#dashboard-versions-button") |> render_click()
-
       assert has_element?(
                view,
                ~s(#dashboard-publish-validation[data-publish-validation-status="warnings"])
@@ -192,11 +183,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
                ~s([data-publish-validation-severity="warning"][data-publish-validation-code="unknown_widget_type"])
              )
 
-      view |> element(~s(#dashboard-menu button[phx-click="publish_dashboard"])) |> render_click()
-      render_dashboard_async(view)
+      view |> element("#dashboard-activity-publish") |> render_click()
+
+      {:ok, viewer, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+        )
+
+      render_dashboard_async(viewer)
 
       assert has_element?(
-               view,
+               viewer,
                ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"])
              )
 

@@ -45,6 +45,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
              :"gs-w" => 5,
              :"gs-h" => 4,
              :"gs-auto-position" => "true",
+             :"data-dashboard-widget-type" => "value_tile",
              "data-widget-lifecycle-state" => "no_data",
              "data-widget-lifecycle-severity" => "info",
              "data-widget-lifecycle-reasons" => "no_data",
@@ -77,7 +78,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
 
     assert Enum.member?(
              widget_item.content_class,
-             "grid-stack-item-content bg-base-200 border flex flex-col overflow-hidden"
+             "grid-stack-item-content cadence-dashboard-panel border flex flex-col overflow-hidden"
            )
 
     assert Enum.member?(
@@ -96,7 +97,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
 
     assert Enum.member?(
              locked_widget_item.content_class,
-             "border-base-300 hover:border-primary/60"
+             "border-base-300/80"
            )
   end
 
@@ -151,6 +152,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
              selected_data_ref: selected_ref,
              time_mode: "replay_run",
              time_axis: "receipt_time",
+             window_seconds: nil,
              replay_run_id: "replay-run-1",
              data_realm: "rehearsal",
              data_view: "canonical",

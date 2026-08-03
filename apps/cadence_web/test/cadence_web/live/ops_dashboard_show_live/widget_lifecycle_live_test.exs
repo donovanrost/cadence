@@ -18,11 +18,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
+  setup do
+    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
+    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
+
+    on_exit(fn ->
+      case previous_inline? do
+        nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
+        value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
+      end
+    end)
+
+    :ok
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
+
+    on_exit({:ops_dashboard_mission_runtime, mission.mission_id}, fn ->
+      _ = Cadence.Runtime.stop_mission(mission.mission_id)
+    end)
+
     {TestFixtures.member_conn(user), user, org, mission}
   end
 
@@ -116,7 +135,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   end
 
   defp show_path(mission, dashboard) do
-    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/edit"
   end
 
   defp fetch_dashboard_document!(org, mission, dashboard) do
@@ -206,19 +225,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       view |> element("#add-widget-button") |> render_click()
       view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
 
-      html =
-        view
-        |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
-        |> render_submit()
+      view
+      |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
+      |> render_submit()
 
-      assert html =~ "Dashboard changed in another session"
-      assert has_element?(view, "h1", "Power Updated")
+      view |> element("#dashboard-editor-save") |> render_click()
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-editor-conflict[data-editor-starting-version="1"][data-editor-current-version="2"])
+             )
+
+      assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
 
       document = fetch_dashboard_document!(org, mission, dashboard)
 
       assert document.name == "Power Updated"
       assert document.placements == []
       assert Document.version(document) == 2
+
+      stop_dashboard_view(view)
     end
 
     test "edit mode persists layout changes and pauses live data" do
@@ -239,15 +265,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       render_dashboard_async(view)
       assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
 
-      view |> element("#edit-layout-toggle") |> render_click()
       assert has_element?(view, "#edit-paused-note")
 
-      # Layout changes autosave while editing.
+      # Layout changes remain local until the staged Editor transaction is saved.
       view
       |> element("#dashboard-grid-#{dashboard.dashboard_id}")
       |> render_hook("layout_changed", %{
         "layouts" => [%{"widget_id" => widget_id, "x" => 2, "y" => 1, "w" => 6, "h" => 3}]
       })
+
+      unchanged = fetch_dashboard_document!(org, mission, dashboard)
+      assert Document.version(unchanged) == 1
+      assert [%{placement_id: ^widget_id, layout: %{x: nil, y: nil}}] = unchanged.placements
+
+      assert has_element?(view, ~s(.grid-stack-item[gs-x="2"][gs-y="1"][gs-w="6"][gs-h="3"]))
+
+      view |> element("#dashboard-editor-save") |> render_click()
 
       document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -268,11 +301,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
       refute has_element?(view, "#widget-#{widget_id} [data-widget-value]", "5678")
 
-      # …and resumes when editing ends.
-      view |> element("#edit-layout-toggle") |> render_click()
-      render_dashboard_async(view)
-      refute has_element?(view, "#edit-paused-note")
-      assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "5678")
+      # The Editor remains paused after Save; the Viewer resumes live telemetry.
+      {:ok, viewer, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+        )
+
+      render_dashboard_async(viewer)
+      refute has_element?(viewer, "#edit-paused-note")
+      assert has_element?(viewer, "#widget-#{widget_id} [data-widget-value]", "5678")
+
+      stop_dashboard_view(viewer)
+      stop_dashboard_view(view)
     end
 
     test "removes and reconfigures widgets in edit mode" do
@@ -297,8 +338,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view |> element("#edit-layout-toggle") |> render_click()
-
       # Reconfigure: prefilled form, save preserves placement identity and layout.
       view
       |> element(
@@ -316,16 +355,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       render_dashboard_async(view)
 
-      document = fetch_dashboard_document!(org, mission, dashboard)
-
-      renamed = placement_by_title(document, "Renamed Tile")
-      assert renamed.placement_id == tile.placement_id
-      assert Map.take(renamed.layout, [:x, :y, :w, :h]) == %{x: 0, y: 0, w: 4, h: 2}
-
-      assert Document.version(document) == 2
-      version = fetch_dashboard_version!(org, mission, dashboard, 2)
-      assert version.change_summary == "Updated widget"
-      assert version.created_by == user.user_id
+      assert has_element?(view, ~s(button[aria-label="Configure Renamed Tile"]))
+      assert Document.version(fetch_dashboard_document!(org, mission, dashboard)) == 1
 
       # Remove the constellation widget.
       view
@@ -336,14 +367,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       render_dashboard_async(view)
 
+      view |> element("#dashboard-editor-save") |> render_click()
       document = fetch_dashboard_document!(org, mission, dashboard)
       widget_id = tile.placement_id
 
       assert [%{placement_id: ^widget_id}] = document.placements
-      assert Document.version(document) == 3
-      version = fetch_dashboard_version!(org, mission, dashboard, 3)
-      assert version.change_summary == "Removed widget"
+      assert Document.version(document) == 2
+      version = fetch_dashboard_version!(org, mission, dashboard, 2)
+      assert version.change_summary == "Updated widget; Removed widget"
       assert version.created_by == user.user_id
+
+      stop_dashboard_view(view)
     end
   end
 end

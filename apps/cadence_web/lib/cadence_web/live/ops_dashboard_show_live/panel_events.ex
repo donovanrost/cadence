@@ -99,6 +99,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.PanelEvents do
     |> assign(:dashboard_review_placement_id, nil)
   end
 
+  def open_widget_inspector(socket, placement_id) do
+    case Enum.find(socket.assigns.dashboard_render_items, &(&1.placement_id == placement_id)) do
+      nil ->
+        socket
+
+      item ->
+        socket
+        |> assign(
+          :panel,
+          {:widget_inspect, %{placement_id: placement_id, title: item.widget.title}}
+        )
+        |> assign(:dashboard_activity_filter, nil)
+        |> assign(:dashboard_activity_event_id, nil)
+        |> assign(:dashboard_review_placement_id, nil)
+    end
+  end
+
   def close(socket, opts \\ []) do
     case socket.assigns.panel do
       {:data_link, _inspector} ->

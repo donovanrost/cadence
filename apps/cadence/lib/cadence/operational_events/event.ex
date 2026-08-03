@@ -260,7 +260,7 @@ defmodule Cadence.OperationalEvents.Event do
       recorded_at: Map.get(attrs, :recorded_at, Map.get(attrs, "recorded_at", occurred_at)),
       effective_at: Map.get(attrs, :effective_at, Map.get(attrs, "effective_at")),
       category: known_atom!(fetch_required(attrs, :category), @categories, :category),
-      kind: normalize_kind(fetch_required(attrs, :kind)),
+      kind: normalize_event_kind(fetch_required(attrs, :kind)),
       severity:
         attrs
         |> Map.get(:severity, Map.get(attrs, "severity"))

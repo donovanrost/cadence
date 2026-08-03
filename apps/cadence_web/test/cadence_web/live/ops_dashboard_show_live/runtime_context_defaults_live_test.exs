@@ -168,6 +168,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
     ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
   end
 
+  defp settings_path(mission, dashboard) do
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/settings"
+  end
+
+  defp editor_path(mission, dashboard) do
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/edit"
+  end
+
+  defp save_runtime_defaults(view, dashboard, defaults) do
+    view
+    |> form("#dashboard-settings-form",
+      settings: %{
+        name: dashboard.name,
+        description: dashboard.description || "",
+        tags: "",
+        defaults_json: Jason.encode!(defaults)
+      }
+    )
+    |> render_submit()
+  end
+
   defp fetch_dashboard_document!(org, mission, dashboard) do
     assert {:ok, document} =
              Cadence.Dashboards.fetch_document(
@@ -274,9 +295,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
 
       render_dashboard_async(view)
 
-      view
-      |> element(~s(#dashboard-menu button[phx-click="save_runtime_defaults"]))
-      |> render_click()
+      {:ok, settings_view, _html} = live(conn, settings_path(mission, dashboard))
+
+      save_runtime_defaults(settings_view, dashboard, %{
+        "data" => %{
+          "realm" => "rehearsal",
+          "source_contexts" => %{
+            "telemetry" => %{"source_binding_id" => source_context.binding_id}
+          }
+        }
+      })
 
       saved_document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -307,19 +335,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
 
       assert has_element?(override_view, "#dashboard-active-source", "Primary source")
 
-      {:ok, clear_view, _html} =
-        live(conn, show_path(mission, dashboard) <> "?source_binding_id=primary")
-
-      render_dashboard_async(clear_view)
-
-      clear_view
-      |> element(~s(#dashboard-menu button[phx-click="save_runtime_defaults"]))
-      |> render_click()
+      save_runtime_defaults(settings_view, dashboard, %{
+        "data" => %{"realm" => "rehearsal", "source_contexts" => %{}}
+      })
 
       render_dashboard_async(view)
       render_dashboard_async(default_view)
       render_dashboard_async(override_view)
-      render_dashboard_async(clear_view)
 
       cleared_document = fetch_dashboard_document!(org, mission, dashboard)
       assert get_in(cleared_document.defaults, ["data", "realm"]) == "rehearsal"
@@ -328,7 +350,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
       stop_dashboard_view(view)
       stop_dashboard_view(default_view)
       stop_dashboard_view(override_view)
-      stop_dashboard_view(clear_view)
     end
 
     test "runtime default saves create drafts without changing published operator defaults" do
@@ -387,14 +408,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"])
              )
 
-      view
-      |> element(~s(#dashboard-menu button[phx-click="save_runtime_defaults"]))
-      |> render_click()
+      {:ok, settings_view, _html} = live(conn, settings_path(mission, dashboard))
 
-      render_dashboard_async(view)
+      save_runtime_defaults(settings_view, dashboard, %{
+        "data" => %{
+          "realm" => "rehearsal",
+          "source_contexts" => %{
+            "telemetry" => %{"source_binding_id" => source_context.binding_id}
+          }
+        }
+      })
+
+      {:ok, updated_view, _html} =
+        live(
+          conn,
+          show_path(mission, dashboard) <>
+            "?realm=rehearsal&source_binding_id=#{source_context.binding_id}"
+        )
+
+      render_dashboard_async(updated_view)
 
       assert has_element?(
-               view,
+               updated_view,
                ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-draft-defaults-differ="true"])
              )
 
@@ -435,15 +470,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-data-realm="flight"])
              )
 
-      published_view |> element("#edit-layout-toggle") |> render_click()
+      {:ok, editor_view, _html} = live(conn, editor_path(mission, dashboard))
+      render_dashboard_async(editor_view)
 
       assert has_element?(
-               published_view,
-               ~s(#ops-dashboard-show-page[data-dashboard-document-mode="draft"][data-dashboard-data-realm="rehearsal"][data-dashboard-source-binding-id="#{source_context.binding_id}"])
+               editor_view,
+               ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-dashboard-document-mode="draft"][data-dashboard-data-realm="rehearsal"][data-dashboard-source-binding-id="#{source_context.binding_id}"])
              )
-
-      published_view |> element("#edit-layout-toggle") |> render_click()
-      render_dashboard_async(published_view)
 
       assert has_element?(
                published_view,

@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
   alias Cadence.Dashboards.{Document, Placement, PlacementEditor}
   alias CadenceWeb.OpsDashboardShowLive.DocumentLifecycle
   alias CadenceWeb.OpsDashboardShowLive.Runtime
+  alias CadenceWeb.OpsDashboardShowLive.WidgetBindingPreview
   alias CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation
   alias Phoenix.HTML.Form
 
@@ -86,6 +87,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
     socket
     |> assign(:panel, :add_widget)
     |> assign(:widget_error, nil)
+    |> assign(:widget_binding_preview, nil)
     |> assign(:selected_point_id, nil)
     |> assign(:selected_point_ids, [])
     |> assign(:widget_form, to_form(WidgetFormPresentation.widget_form_defaults(), as: :widget))
@@ -100,6 +102,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
         socket
         |> assign(:panel, {:edit_placement, placement_id})
         |> assign(:widget_error, nil)
+        |> assign(:widget_binding_preview, nil)
         |> assign(:selected_point_id, PlacementEditor.selected_observable(placement))
         |> assign(:selected_point_ids, PlacementEditor.selected_observables(placement))
         |> assign(
@@ -110,7 +113,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
   end
 
   def validate_widget(socket, params) when is_map(params) do
-    assign(socket, :widget_form, to_form(params, as: :widget))
+    socket
+    |> assign(:widget_form, to_form(params, as: :widget))
+    |> assign(:widget_binding_preview, nil)
   end
 
   def pick_point(socket, point_id) do
@@ -124,6 +129,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
     socket
     |> assign(:selected_point_id, List.first(selected_point_ids))
     |> assign(:selected_point_ids, selected_point_ids)
+    |> assign(:widget_binding_preview, nil)
+  end
+
+  def preview_widget_binding(socket, opts \\ []) do
+    params = socket.assigns.widget_form.params
+    selected_observables = selected_observables_for_save(socket)
+
+    case WidgetBindingPreview.run(
+           socket,
+           params,
+           selected_observables,
+           socket.assigns.panel,
+           editable_placement(socket),
+           opts
+         ) do
+      {:ok, preview} ->
+        socket
+        |> assign(:widget_error, nil)
+        |> assign(:widget_binding_preview, preview)
+
+      {:error, message} ->
+        socket
+        |> assign(:widget_error, message)
+        |> assign(:widget_binding_preview, nil)
+    end
   end
 
   def save_widget(socket, params, opts) when is_map(params) do
@@ -230,6 +260,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditing do
     socket
     |> assign(:panel, nil)
     |> assign(:widget_error, nil)
+    |> assign(:widget_binding_preview, nil)
     |> assign(:selected_point_id, nil)
     |> assign(:selected_point_ids, [])
     |> assign(:widget_form, to_form(WidgetFormPresentation.widget_form_defaults(), as: :widget))

@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
   import Phoenix.Component, only: [assign: 3, to_form: 2]
   import Phoenix.LiveView, only: [put_flash: 3]
 
-  alias Cadence.Dashboards.{ComparisonReviewQueue, DataLink, Document}
+  alias Cadence.Dashboards.{ComparisonReviewQueue, DataLink, Document, TimeRange}
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContext
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams
@@ -446,13 +446,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
   end
 
   def request_form_defaults(%{assigns: assigns} = socket) do
+    {source_from, source_to} =
+      TimeRange.frozen_bounds(
+        assign_value(assigns, :dashboard_time_from),
+        assign_value(assigns, :dashboard_time_to),
+        DateTime.utc_now()
+      )
+
     HistoricalWorkflowPresenter.request_form_defaults(%{
       realm: assign_value(assigns, :dashboard_data_realm, "backfill"),
       data_source_id: assign_value(assigns, :dashboard_data_source_id),
       source_binding_id: assign_value(assigns, :dashboard_source_binding_id),
       point_id: request_point_id(socket),
-      source_from: assign_value(assigns, :dashboard_time_from),
-      source_to: assign_value(assigns, :dashboard_time_to),
+      source_from: source_from,
+      source_to: source_to,
       dashboard_id: dashboard_id(assigns[:dashboard_document]),
       dashboard_version: dashboard_version(assigns[:dashboard_document]),
       dashboard_time_mode: assign_value(assigns, :dashboard_time_mode),

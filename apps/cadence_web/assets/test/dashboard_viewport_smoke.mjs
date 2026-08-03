@@ -366,7 +366,7 @@ function viewportProfile(name) {
       criticalSelector: [
         "#ops-dashboard-show-page",
         "#dashboard-menu",
-        "#edit-layout-toggle",
+        "#dashboard-edit-link",
         ".grid-stack",
         ".grid-stack-item",
         "[phx-hook='TelemetryChart']",
@@ -1584,6 +1584,60 @@ async function inspectRenderedSourceDependencyCause(client, options = {}) {
   await clickAndWaitForSelector(
     client,
     "#dashboard-diagnostics-button",
+    "#dashboard-diagnostics-page",
+    "dedicated source diagnostics"
+  )
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostic-collection-source",
+    "#dashboard-diagnostic-collection-source.text-primary",
+    "source-execution diagnostic collection"
+  )
+
+  const result = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const url = new URL(window.location.href)
+        return {
+          pagePresent: Boolean(document.querySelector("#dashboard-diagnostics-page")),
+          collectionPresent: Boolean(document.querySelector("#dashboard-diagnostic-collection-source")),
+          collection: url.searchParams.get("collection") || "",
+          count: document.querySelector("#dashboard-diagnostic-count")?.textContent?.trim() || "",
+          detailPresent: Boolean(document.querySelector("#dashboard-diagnostic-detail")),
+          viewerHandoffPresent: Boolean(document.querySelector("#dashboard-diagnostics-viewer")),
+          exploreHandoffPresent: Boolean(document.querySelector("#diagnostics-open-explore")),
+          sourcesHandoffPresent: Boolean(document.querySelector("#diagnostics-open-sources")),
+          contextRailPresent: Boolean(document.querySelector("#ops-context-rail")),
+          replayRunId: url.searchParams.get("replay_run_id") || "",
+          limitMode: url.searchParams.get("limit_mode") || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const snapshot = result.result.value
+  assert.equal(snapshot.pagePresent, true, "dedicated diagnostics page should render")
+  assert.equal(snapshot.collectionPresent, true, "diagnostics should expose source execution")
+  assert.equal(snapshot.collection, "source", "source execution should have a stable collection URL")
+  assert.notEqual(snapshot.count, "", "source execution collection should expose a count")
+  assert.equal(snapshot.detailPresent, true, "diagnostics should preserve master-detail structure")
+  assert.equal(snapshot.viewerHandoffPresent, true, "diagnostics should link back to Viewer")
+  assert.equal(snapshot.contextRailPresent, true, "diagnostics should preserve the context rail")
+
+  if (expectedDashboardTimeMode() === "replay_run") {
+    assert.equal(snapshot.replayRunId, expectedDashboardReplayRunId(), "diagnostics should preserve replay context")
+  }
+  assert.equal(snapshot.limitMode, expectedDashboardLimitMode(), "diagnostics should preserve limit context")
+
+  return { dependency: snapshot, evidence: null, expected: options }
+}
+
+async function inspectLegacyRenderedSourceDependencyCause(client, options = {}) {
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostics-button",
     "#dashboard-source-dependency-causes [data-source-dependency-cause]",
     "source dependency causes"
   )
@@ -1737,9 +1791,9 @@ async function inspectOpsContextRail(client, options = {}) {
           defaultExpanded: rail?.hasAttribute("data-default-expanded") || false,
           sectionKeys,
           collapsedKeys,
-          comparisonStatus: document
-            .querySelector("[data-ops-context-section='comparison']")
-            ?.dataset.opsContextSectionStatus || ""
+          fleetFreshness: document
+            .querySelector("[data-ops-context-module-freshness]")
+            ?.dataset.opsContextModuleFreshness || ""
         }
       })()
     `,
@@ -1756,10 +1810,12 @@ async function inspectOpsContextRail(client, options = {}) {
     "ops context rail should hydrate the expected expanded state"
   )
   assert.equal(
-    snapshot.sectionKeys.every((key) => key === "comparison"),
+    snapshot.sectionKeys.includes("fleet_health"),
     true,
-    "dashboard context rail should only expose comparison sections"
+    "shell context rail should expose fleet health"
   )
+  assert.equal(snapshot.sectionKeys.includes("comparison"), false, "page-local Compare should not replace operational context")
+  assert.equal(snapshot.fleetFreshness, "current", "fleet context should expose projection freshness")
   assert.equal(snapshot.collapsedKeys.length >= snapshot.sectionKeys.length, true, "collapsed rail badges should mirror sections")
 
   if (!expectInitiallyExpanded) {
@@ -1883,7 +1939,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
     "dashboard action menu to close"
   )
 
-  const contextResult = await client.send("Runtime.evaluate", {
+  const scopeResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
         const visible = (el) => {
@@ -1897,21 +1953,18 @@ async function runLiveDashboardInteractions(client, url, profile) {
 
         return {
           overlayOpen: dataControls?.hasAttribute("data-overlay-open") || false,
-          controlsVisible: visible(document.querySelector("#runtime-context-controls")),
-          formPresent: Boolean(document.querySelector("#runtime-context-form")),
-          sourceBindingPresent: Boolean(document.querySelector("#dashboard-source-binding")),
-          timePresetCount: document.querySelectorAll("#dashboard-time-presets button").length
+          panelVisible: visible(document.querySelector("#dashboard-data-controls-panel")),
+          searchPresent: Boolean(document.querySelector("#context-search")),
+          selectedContextPresent: Boolean(document.querySelector("#dashboard-selected-context"))
         }
       })()
     `,
     returnByValue: true,
   })
 
-  assert.equal(contextResult.result.value.overlayOpen, true, "runtime context controls overlay should open")
-  assert.equal(contextResult.result.value.controlsVisible, true, "runtime context controls should be visible in the open overlay")
-  assert.equal(contextResult.result.value.formPresent, true, "runtime context form should render")
-  assert.equal(contextResult.result.value.sourceBindingPresent, true, "source binding control should render")
-  assert.equal(contextResult.result.value.timePresetCount >= 4, true, "time preset controls should render")
+  assert.equal(scopeResult.result.value.overlayOpen, true, "dashboard scope overlay should open")
+  assert.equal(scopeResult.result.value.panelVisible, true, "dashboard scope panel should be visible")
+  assert.equal(scopeResult.result.value.searchPresent, true, "dashboard scope search should render")
 
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
@@ -1928,13 +1981,111 @@ async function runLiveDashboardInteractions(client, url, profile) {
       )
     `,
     2_000,
-    "runtime context controls overlay to close"
+    "dashboard scope overlay to close"
+  )
+
+  const dataResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const visible = (el) => {
+          if (!el) return false
+          const rect = el.getBoundingClientRect()
+          const style = getComputedStyle(el)
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
+        }
+        const dataOptions = document.querySelector("#dashboard-query-options")
+        dataOptions?.querySelector(":scope > [data-overlay-trigger]")?.click()
+
+        return {
+          overlayOpen: dataOptions?.hasAttribute("data-overlay-open") || false,
+          controlsVisible: visible(document.querySelector("#dashboard-data-query-controls")),
+          formPresent: Boolean(document.querySelector("#runtime-context-form")),
+          sourceBindingPresent: Boolean(document.querySelector("#dashboard-source-binding")),
+          representationPresent: Boolean(document.querySelector("#dashboard-data-view"))
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(dataResult.result.value.overlayOpen, true, "dashboard data options overlay should open")
+  assert.equal(dataResult.result.value.controlsVisible, true, "dashboard data options should be visible")
+  assert.equal(dataResult.result.value.formPresent, true, "runtime data form should render")
+  assert.equal(dataResult.result.value.sourceBindingPresent, true, "source binding control should render")
+  assert.equal(dataResult.result.value.representationPresent, true, "data representation control should render")
+
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector("#dashboard-query-options")?.hasAttribute("data-overlay-open") &&
+        document.querySelector("#dashboard-query-options-panel")?.hidden
+      )
+    `,
+    2_000,
+    "dashboard data options overlay to close"
+  )
+
+  const timeResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const visible = (el) => {
+          if (!el) return false
+          const rect = el.getBoundingClientRect()
+          const style = getComputedStyle(el)
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
+        }
+        const timeControls = document.querySelector("#dashboard-time-controls")
+        timeControls?.querySelector(":scope > [data-overlay-trigger]")?.click()
+
+        return {
+          overlayOpen: timeControls?.hasAttribute("data-overlay-open") || false,
+          controlsVisible: visible(document.querySelector("#dashboard-time-query-controls")),
+          customRangePresent: Boolean(document.querySelector("#dashboard-custom-range-form")),
+          replaySelectorPresent: Boolean(document.querySelector("#dashboard-replay-run-selector")),
+          timePresetCount: document.querySelectorAll("#dashboard-time-presets button").length,
+          liveActionCount: document.querySelectorAll("#dashboard-time-preset-live").length
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(timeResult.result.value.overlayOpen, true, "dashboard time overlay should open")
+  assert.equal(timeResult.result.value.controlsVisible, true, "dashboard time controls should be visible")
+  assert.equal(timeResult.result.value.customRangePresent, true, "custom time range should render")
+  assert.equal(timeResult.result.value.replaySelectorPresent, true, "replay selector should render")
+  assert.equal(timeResult.result.value.timePresetCount, 9, "quick time ranges should render")
+  assert.equal(timeResult.result.value.liveActionCount, 1, "time controls should expose one return-live action")
+
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector("#dashboard-time-controls")?.hasAttribute("data-overlay-open") &&
+        document.querySelector("#dashboard-time-controls-panel")?.hidden
+      )
+    `,
+    2_000,
+    "dashboard time overlay to close"
   )
 
   await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        document.querySelector("#edit-layout-toggle")?.click()
+        document.querySelector("#dashboard-edit-link")?.click()
       })()
     `,
     returnByValue: true,
@@ -1944,6 +2095,8 @@ async function runLiveDashboardInteractions(client, url, profile) {
     client,
     `
       Boolean(
+        window.location.pathname.endsWith("/edit") &&
+        document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "true" &&
         document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "true" &&
         (
           document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item")?.classList.contains("ui-draggable") ||
@@ -2029,12 +2182,17 @@ async function runLiveDashboardInteractions(client, url, profile) {
     "GridStack update should resize target placement in the DOM"
   )
 
-  await new Promise((resolve) => setTimeout(resolve, 700))
+  await waitForExpression(
+    client,
+    `document.querySelector("#dashboard-editor-save-state")?.dataset.editorDirty === "true"`,
+    3_000,
+    "dashboard editor to stage the layout mutation"
+  )
 
   await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        document.querySelector("#edit-layout-toggle")?.click()
+        document.querySelector("#dashboard-editor-save")?.click()
       })()
     `,
     returnByValue: true,
@@ -2042,15 +2200,29 @@ async function runLiveDashboardInteractions(client, url, profile) {
 
   await waitForExpression(
     client,
+    `document.querySelector("#dashboard-editor-save-state")?.dataset.editorDirty === "false"`,
+    3_000,
+    "dashboard editor to save the staged layout"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `document.querySelector("#dashboard-editor-discard")?.click()`,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
     `
       Boolean(
+        !window.location.pathname.endsWith("/edit") &&
+        document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "false" &&
         document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "false" &&
         !document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item")?.classList.contains("ui-draggable") &&
         !document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item .ui-resizable-handle")
       )
     `,
     3_000,
-    "dashboard grid to return to static view mode"
+    "dashboard viewer to return after saving the staged layout"
   )
 
   assert.equal(editEnteredResult.result.value.editing, true, "edit layout should enter edit mode")
@@ -2150,7 +2322,11 @@ async function runLiveDashboardInteractions(client, url, profile) {
   return {
     viewport: LIVE_INTERACTION_VIEWPORT.name,
     menu: menuResult.result.value,
-    context: contextResult.result.value,
+    queryControls: {
+      scope: scopeResult.result.value,
+      data: dataResult.result.value,
+      time: timeResult.result.value,
+    },
     edit: {
       ...editEnteredResult.result.value,
       returnedToView: true,
@@ -2200,6 +2376,13 @@ async function runRuntimeContextBatchInspection(client, _profile, config) {
     `,
     10_000,
     `${resultDescription} runtime context selector`
+  )
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-data-controls-toggle",
+    "#dashboard-data-controls[data-overlay-open]",
+    `${resultDescription} scope and time controls`
   )
 
   const searchInputResult = await client.send("Runtime.evaluate", {
@@ -2503,7 +2686,7 @@ async function runRepeatRenderInspection(client, profile) {
   assertRepeatRenderItems(afterReload, expectedIds, "reload render")
 
   await client.send("Runtime.evaluate", {
-    expression: `document.querySelector("#edit-layout-toggle")?.click()`,
+    expression: `document.querySelector("#dashboard-edit-link")?.click()`,
     returnByValue: true,
   })
 
@@ -2511,6 +2694,8 @@ async function runRepeatRenderInspection(client, profile) {
     client,
     `
       Boolean(
+        window.location.pathname.endsWith("/edit") &&
+        document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "true" &&
         document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "true" &&
         Array.from(document.querySelectorAll("[phx-hook='DashboardGrid'] .grid-stack-item[gs-id*='__repeat__spacecraft__']"))
           .every((item) => item.gridstackNode && (item.classList.contains("ui-draggable") || item.querySelector(".ui-resizable-handle")))
@@ -2587,22 +2772,22 @@ async function runSourceEndpointNoDataInspection(client, profile) {
           tableWidget?.dataset.widgetLifecycleSeverity === "info" &&
           tableRoot &&
           tableWidget.querySelectorAll("[data-data-table-row]").length === 0 &&
-          tableNotice?.textContent?.includes("No rows for this table.") &&
+          tableNotice?.textContent?.includes("no rows matched") &&
           matrixWidget?.dataset.widgetLifecycleState === "no_data" &&
           matrixWidget?.dataset.widgetLifecycleSeverity === "info" &&
           matrixRoot &&
           matrixWidget.querySelectorAll("[data-status-matrix-row]").length === 0 &&
-          matrixNotice?.textContent?.includes("No current rows.") &&
+          matrixNotice?.textContent?.includes("no rows matched") &&
           stateTimelineWidget?.dataset.widgetLifecycleState === "no_data" &&
           stateTimelineWidget?.dataset.widgetLifecycleSeverity === "info" &&
           stateTimelineRoot &&
           stateTimelineWidget.querySelectorAll("[data-state-timeline-row]").length === 0 &&
-          stateTimelineNotice?.textContent?.includes("No state transitions in this time range.") &&
+          stateTimelineNotice?.textContent?.includes("no rows matched") &&
           eventTimelineWidget?.dataset.widgetLifecycleState === "no_data" &&
           eventTimelineWidget?.dataset.widgetLifecycleSeverity === "info" &&
           eventTimelineRoot &&
           eventTimelineWidget.querySelectorAll("[data-event-timeline-row]").length === 0 &&
-          eventTimelineNotice?.textContent?.includes("No events in this time range.")
+          eventTimelineNotice?.textContent?.includes("no rows matched")
         )
       })()
     `,
@@ -2702,7 +2887,7 @@ async function runSourceEndpointNoDataInspection(client, profile) {
   assert.equal(initial.tableNoticePresent, true, "data-table no-data widget should render a body notice")
   assert.match(
     initial.tableNoticeText,
-    /No rows for this table/,
+    /no rows matched/i,
     "data-table no-data body notice should explain the empty table"
   )
   assert.equal(initial.matrixLifecycleState, "no_data", "status-matrix widget should render no-data lifecycle")
@@ -2711,7 +2896,7 @@ async function runSourceEndpointNoDataInspection(client, profile) {
   assert.equal(initial.matrixNoticePresent, true, "status-matrix no-data widget should render a body notice")
   assert.match(
     initial.matrixNoticeText,
-    /No current rows/,
+    /no rows matched/i,
     "status-matrix no-data body notice should explain the empty matrix"
   )
   assert.equal(initial.stateTimelineLifecycleState, "no_data", "state-timeline widget should render no-data lifecycle")
@@ -2724,7 +2909,7 @@ async function runSourceEndpointNoDataInspection(client, profile) {
   assert.equal(initial.stateTimelineNoticePresent, true, "state-timeline no-data widget should render a body notice")
   assert.match(
     initial.stateTimelineNoticeText,
-    /No state transitions in this time range/,
+    /no rows matched/i,
     "state-timeline no-data body notice should explain the empty timeline"
   )
   assert.equal(initial.eventTimelineLifecycleState, "no_data", "event-timeline widget should render no-data lifecycle")
@@ -2737,7 +2922,7 @@ async function runSourceEndpointNoDataInspection(client, profile) {
   assert.equal(initial.eventTimelineNoticePresent, true, "event-timeline no-data widget should render a body notice")
   assert.match(
     initial.eventTimelineNoticeText,
-    /No events in this time range/,
+    /no rows matched/i,
     "event-timeline no-data body notice should explain the empty timeline"
   )
   assert.match(
@@ -9832,7 +10017,9 @@ async function runEmptyTelemetryValueTileInspection(client, profile) {
   const expectedSourceEmptyReasonArg = argValue("--expected-widget-source-empty-reason")
   const expectedSourceEmptyReason =
     expectedSourceEmptyReasonArg === undefined ? "scope_no_data" : expectedSourceEmptyReasonArg
-  const expectedNoticeText = argValue("--expected-widget-notice") || "No data received for this point yet."
+  const expectedNoticeText =
+    argValue("--expected-widget-notice") ||
+    "Source responded, but no rows matched the active dashboard scope in the selected time range."
   const placementId = argValue("--expected-placement-id") || "placement-empty-value-tile"
   const widgetSelector = `#widget-${placementId}`
   const sourceBadgeSelector = `${widgetSelector} button[data-widget-source-badge='${expectedSourceState}']`
@@ -9913,7 +10100,7 @@ async function runEmptyTelemetryValueTileInspection(client, profile) {
           sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           sourceEmptyReason: widget?.dataset.widgetSourceEmptyReason || "",
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           valuePresent: Boolean(widget?.querySelector("[data-widget-value]")),
           dataLinkMenuPresent: Boolean(widget?.querySelector("[data-widget-data-links]")),
           sampleDataLinkCount: widget?.querySelectorAll("[phx-value-target='telemetry_sample']").length || 0,
@@ -10877,7 +11064,7 @@ async function runSourceUnavailableTelemetryRowWidgetsInspection(client, profile
               sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
               sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
               sourceEmptyReason: widget?.dataset.widgetSourceEmptyReason || "",
-              noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
               rowCount: widget?.querySelectorAll(spec.rowSelector).length || 0,
               rowLinkCount: widget?.querySelectorAll(spec.linkSelector).length || 0,
               rowEvidenceCount: widget?.querySelectorAll(spec.evidenceSelector).length || 0,
@@ -11090,6 +11277,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
         const returnedObservable = ${JSON.stringify(returnedObservable)}
         const emptyObservable = ${JSON.stringify(emptyObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
+        const panel = widget?.querySelector(":scope > .grid-stack-item-content")
         const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
         const notice = widget?.querySelector("[data-widget-body-notice='partial']")
         const badge = widget?.querySelector("[data-widget-source-badge='partial']")
@@ -11117,8 +11305,12 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
           sourceBadgeState: badge?.dataset.widgetSourceBadge || "",
           sourceBadgeSeverity: badge?.dataset.widgetSourceBadgeSeverity || "",
           noticePresent: Boolean(notice),
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          panelOverflowY: panel ? getComputedStyle(panel).overflowY : "",
+          panelScrollable: panel ? panel.scrollHeight > panel.clientHeight + 1 : true,
           chartPresent: Boolean(chart),
+          chartOverflowY: chart ? getComputedStyle(chart).overflowY : "",
+          chartPresentation: chart?.dataset.panelPresentation || "",
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
           chartTimeMode: chart?.dataset.timeMode || "",
@@ -11151,7 +11343,15 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(initial.sourceBadgeSeverity, "warning", "partial source badge should render warning severity")
   assert.equal(initial.noticePresent, true, "partial widget should render a body notice")
   assert.match(initial.noticeText, /partial data/, "partial body notice should explain degraded coverage")
+  assert.equal(initial.panelOverflowY, "hidden", "time-series panel should own a fixed viewport")
+  assert.equal(initial.panelScrollable, false, "time-series panel should not expose an inner scrollbar")
   assert.equal(initial.chartPresent, true, "partial time series should still render a chart")
+  assert.equal(initial.chartOverflowY, "hidden", "time-series chart should clip to the panel viewport")
+  assert.equal(
+    initial.chartPresentation,
+    "grafana",
+    "time-series chart should use the Grafana presentation contract"
+  )
   assert.equal(initial.chartDataSourceId, expectedDataSourceId, "partial chart should preserve data source")
   assert.equal(initial.chartSourceBindingId, expectedSourceBindingId, "partial chart should preserve source binding")
   assert.equal(initial.chartTimeMode, "archive", "partial chart should preserve archive time mode")
@@ -11357,7 +11557,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           sourceEmptyReason: widget?.dataset.widgetSourceEmptyReason || "",
           noticePresent: Boolean(notice),
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
           uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
@@ -11396,7 +11596,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(initial.noticePresent, true, "empty time-series should render a no-data notice")
   assert.match(
     initial.noticeText,
-    /No historical samples|No data/i,
+    /no rows matched the active dashboard scope/i,
     "empty time-series notice should explain no data"
   )
   assert.equal(initial.chartPresent, false, "empty telemetry time-series should not render a chart hook")
@@ -12989,7 +13189,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           sourceEmptyReason: widget?.dataset.widgetSourceEmptyReason || "",
           noticePresent: Boolean(notice),
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
           uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
@@ -19723,7 +19923,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
             scopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
             scopeIds: widget?.dataset.widgetSourceScopeIds || "",
             emptyReason: widget?.dataset.widgetSourceEmptyReason || "",
-            noticeText: (notice?.textContent || "").trim(),
+            noticeText: (notice?.querySelector("p")?.textContent || notice?.textContent || "").trim(),
             sourceBadgePresent: Boolean(sourceBadge),
             sourceBadgeAction: sourceBadge?.dataset.widgetSourceBadgeAction || "",
             sourceBadgeDataSource: sourceBadge?.dataset.widgetSourceBadgeDataSource || "",
@@ -19799,7 +19999,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
     assert.equal(summary.emptyReason, "scope_no_data", `${label} widget should explain scoped no data`)
     assert.equal(
       summary.noticeText,
-      "No historical samples in this time range.",
+      "Source responded, but no rows matched the active dashboard scope in the selected time range.",
       `${label} widget should render the no-history notice`
     )
     assert.equal(summary.sourceBadgePresent, true, `${label} source badge should render`)
@@ -20297,7 +20497,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           sourceEmptyReason: widget?.dataset.widgetSourceEmptyReason || "",
           noticePresent: Boolean(notice),
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
           uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
@@ -20546,7 +20746,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             widget?.dataset.widgetSourceScopeIds === ${JSON.stringify(expectedScopeId)} &&
             widget?.querySelectorAll("[data-state-timeline-row]").length === 0 &&
             !document.querySelector(${JSON.stringify(laneSelector)}) &&
-            notice?.textContent?.includes("No state transitions in this time range.") &&
+            notice?.textContent?.includes("no rows matched the active dashboard scope") &&
             sourceBadge?.dataset.widgetSourceBadgeDataSource === ${JSON.stringify(expectedDataSourceId)} &&
             sourceBadge?.dataset.widgetSourceBadgeBinding === ${JSON.stringify(expectedSourceBindingId)}
           )
@@ -20589,7 +20789,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             lanePresent: Boolean(document.querySelector(${JSON.stringify(laneSelector)})),
             linkCount: widget?.querySelectorAll("[data-state-timeline-row-link]").length || 0,
             noticePresent: Boolean(notice),
-            noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
             sourceBadgePresent: Boolean(sourceBadge),
             sourceBadgeDataSource: sourceBadge?.dataset.widgetSourceBadgeDataSource || "",
             sourceBadgeBinding: sourceBadge?.dataset.widgetSourceBadgeBinding || "",
@@ -20625,7 +20825,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
     assert.equal(noData.noticePresent, true, "transport execution no-data widget should render a body notice")
     assert.match(
       noData.noticeText,
-      /No state transitions in this time range/,
+      /no rows matched the active dashboard scope/i,
       "transport execution no-data notice should explain the empty timeline"
     )
     assert.equal(noData.sourceBadgePresent, true, "transport execution no-data widget should render source badge")
@@ -20713,7 +20913,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             lanePresent: Boolean(document.querySelector(${JSON.stringify(laneSelector)})),
             linkCount: widget?.querySelectorAll("[data-state-timeline-row-link]").length || 0,
             noticePresent: Boolean(notice),
-            noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+            noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
             sourceBadgePresent: Boolean(sourceBadge),
             sourceBadgeState: sourceBadge?.dataset.widgetSourceBadge || "",
             sourceBadgeSeverity: sourceBadge?.dataset.widgetSourceBadgeSeverity || "",
@@ -22439,7 +22639,7 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
           .find((candidate) => candidate.dataset.widgetLifecycleWarningCodes?.split(",").includes("unsupported_observable_scope"))
         const notice = Array.from(document.querySelectorAll("[data-widget-body-notice='unsupported']"))
           .find((candidate) => candidate.textContent?.includes("selected context"))
-        const warnings = document.querySelector("#dashboard-engine-warnings")
+        const warnings = document.querySelector("#dashboard-data-issues")
         const warning = document.querySelector("[data-engine-warning='unsupported_observable_scope']")
 
         return Boolean(
@@ -22449,8 +22649,7 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
           document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeKind === "mission" &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeId === missionId &&
-          warnings?.dataset.engineDegraded === "true" &&
-          warnings?.dataset.warningCodes?.split(",").includes("unsupported_observable_scope") &&
+          warnings?.dataset.dashboardDataIssueCodes?.split(",").includes("unsupported_observable_scope") &&
           warning &&
           header?.dataset.widgetLifecycleState === "unsupported" &&
           header?.dataset.widgetLifecycleSeverity === "error" &&
@@ -22473,7 +22672,7 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
         const card = header?.closest(".grid-stack-item-content")
         const notice = Array.from(document.querySelectorAll("[data-widget-body-notice]"))
           .find((candidate) => candidate.textContent?.includes("selected context"))
-        const warnings = document.querySelector("#dashboard-engine-warnings")
+        const warnings = document.querySelector("#dashboard-data-issues")
         const engineWarning = document.querySelector("[data-engine-warning='unsupported_observable_scope']")
 
         return {
@@ -22490,11 +22689,11 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
           sourceWarnings: header?.dataset.widgetSourceWarningCodes || "",
           noticePresent: Boolean(notice),
           noticeState: notice?.dataset.widgetBodyNotice || "",
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           noticeTexts: Array.from(document.querySelectorAll("[data-widget-body-notice]"))
             .map((candidate) => candidate.textContent?.replace(/\\s+/g, " ").trim() || ""),
-          engineDegraded: warnings?.dataset.engineDegraded || "",
-          engineWarningCodes: warnings?.dataset.warningCodes || "",
+          engineDegraded: warnings ? "true" : "",
+          engineWarningCodes: warnings?.dataset.dashboardDataIssueCodes || "",
           engineWarningPresent: Boolean(engineWarning),
           engineWarningText: engineWarning?.textContent?.replace(/\\s+/g, " ").trim() || "",
           engineWarningTitle: engineWarning?.getAttribute("title") || "",
@@ -22566,7 +22765,7 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
         const missionId = ${JSON.stringify(missionId)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const notice = widget?.querySelector("[data-widget-body-notice='unsupported']")
-        const warnings = document.querySelector("#dashboard-engine-warnings")
+        const warnings = document.querySelector("#dashboard-data-issues")
         const warning = document.querySelector("[data-engine-warning='unsupported_observable_scope']")
 
         return Boolean(
@@ -22576,8 +22775,7 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
           document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeKind === "mission" &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeId === missionId &&
-          warnings?.dataset.engineDegraded === "true" &&
-          warnings?.dataset.warningCodes?.split(",").includes("unsupported_observable_scope") &&
+          warnings?.dataset.dashboardDataIssueCodes?.split(",").includes("unsupported_observable_scope") &&
           warning &&
           widget?.dataset.widgetLifecycleState === "unsupported" &&
           widget?.dataset.widgetLifecycleSeverity === "error" &&
@@ -22598,7 +22796,7 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
         const root = document.querySelector("#ops-dashboard-show-page")
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const notice = widget?.querySelector("[data-widget-body-notice='unsupported']")
-        const warnings = document.querySelector("#dashboard-engine-warnings")
+        const warnings = document.querySelector("#dashboard-data-issues")
         const engineWarning = document.querySelector("[data-engine-warning='unsupported_observable_scope']")
 
         return {
@@ -22617,9 +22815,9 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
           sourceWarnings: widget?.dataset.widgetSourceWarningCodes || "",
           noticePresent: Boolean(notice),
           noticeState: notice?.dataset.widgetBodyNotice || "",
-          noticeText: notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
-          engineDegraded: warnings?.dataset.engineDegraded || "",
-          engineWarningCodes: warnings?.dataset.warningCodes || "",
+          noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
+          engineDegraded: warnings ? "true" : "",
+          engineWarningCodes: warnings?.dataset.dashboardDataIssueCodes || "",
           engineWarningPresent: Boolean(engineWarning),
           engineWarningText: engineWarning?.textContent?.replace(/\\s+/g, " ").trim() || "",
           engineWarningTitle: engineWarning?.getAttribute("title") || "",
@@ -23615,6 +23813,87 @@ async function runOperationalSourceProductRuntimeInspection(client, profile) {
     "operational source product runtime dashboard"
   )
 
+  const viewer = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        dashboardPresent: Boolean(document.querySelector("#ops-dashboard-show-page")),
+        diagnosticsHandoffPresent: Boolean(document.querySelector("#dashboard-diagnostics-button")),
+        warningCount: document.querySelectorAll("[data-engine-warning]").length,
+        contextRailPresent: Boolean(document.querySelector("#ops-context-rail"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(viewer.result.value.dashboardPresent, true, "operational source dashboard should render")
+  assert.equal(viewer.result.value.diagnosticsHandoffPresent, true, "Viewer should hand source posture to Diagnostics")
+  assert.equal(viewer.result.value.contextRailPresent, true, "Viewer should preserve operational context")
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostics-button",
+    "#dashboard-diagnostics-page",
+    "dedicated runtime diagnostics page"
+  )
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostic-collection-source",
+    "#dashboard-diagnostic-collection-source.text-primary",
+    "source execution collection"
+  )
+
+  const diagnostics = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const url = new URL(window.location.href)
+        return {
+          pagePresent: Boolean(document.querySelector("#dashboard-diagnostics-page")),
+          sourceCollectionPresent: Boolean(document.querySelector("#dashboard-diagnostic-collection-source")),
+          collection: url.searchParams.get("collection") || "",
+          count: document.querySelector("#dashboard-diagnostic-count")?.textContent?.trim() || "",
+          rowsPresent: Boolean(document.querySelector("#dashboard-diagnostic-rows")),
+          detailPresent: Boolean(document.querySelector("#dashboard-diagnostic-detail")),
+          exploreHandoffPresent: Boolean(document.querySelector("#diagnostics-open-explore")),
+          sourcesHandoffPresent: Boolean(document.querySelector("#diagnostics-open-sources")),
+          viewerHandoffPresent: Boolean(document.querySelector("#dashboard-diagnostics-viewer")),
+          contextRailPresent: Boolean(document.querySelector("#ops-context-rail"))
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const value = diagnostics.result.value
+  assert.equal(value.pagePresent, true, "dedicated diagnostics page should render")
+  assert.equal(value.sourceCollectionPresent, true, "diagnostics should expose source execution")
+  assert.equal(value.collection, "source", "source execution should be URL-addressable")
+  assert.notEqual(value.count, "", "source execution should expose its record count")
+  assert.equal(value.rowsPresent, true, "source execution should expose its record collection")
+  assert.equal(value.detailPresent, true, "diagnostics should preserve master-detail layout")
+  assert.equal(value.viewerHandoffPresent, true, "diagnostics should link to Viewer")
+  assert.equal(value.contextRailPresent, true, "diagnostics should preserve operational context")
+
+  return { viewer: viewer.result.value, diagnostics: value, evidence: null, profile: profile.name }
+}
+
+async function runLegacyOperationalSourceProductRuntimeInspection(client, profile) {
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        window.liveSocket &&
+        window.liveSocket.isConnected &&
+        window.liveSocket.isConnected() &&
+        document.querySelector("#ops-dashboard-show-page") &&
+        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+      )
+    `,
+    10_000,
+    "operational source product runtime dashboard"
+  )
+
   await clickAndWaitForSelector(
     client,
     "#dashboard-diagnostics-button",
@@ -24070,7 +24349,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
+    `${rowSelector} [data-event-timeline-row-links][data-overlay-open]`,
     "replay managed runtime row link menu"
   )
 
@@ -24459,7 +24738,7 @@ async function runReplayContactIntervalInspection(client, profile) {
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
+    `${rowSelector} [data-event-timeline-row-links][data-overlay-open]`,
     "replay contact interval row link menu"
   )
 
@@ -24561,7 +24840,7 @@ async function runReplayContactIntervalInspection(client, profile) {
   await clickAndWaitForSelector(
     client,
     rowMenuSelector,
-    `${rowSelector} [data-state-timeline-row-links][data-overlay-open]`,
+    `${rowSelector} [data-event-timeline-row-links][data-overlay-open]`,
     "replay contact interval row link menu for operational event"
   )
 
@@ -25522,6 +25801,217 @@ async function inspectSelectedActivityRecovery(client) {
 }
 
 async function runLiveWorkflowSurfaceInteractions(client) {
+  const sourceSelectionResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        present: Boolean(document.querySelector("#dashboard-source-selection")),
+        contextRailPresent: Boolean(document.querySelector("#ops-context-rail"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(
+    sourceSelectionResult.result.value.present,
+    false,
+    "source selection controls should stay out of the primary telemetry surface"
+  )
+  assert.equal(
+    sourceSelectionResult.result.value.contextRailPresent,
+    true,
+    "the operational context rail should remain available on the dashboard viewer"
+  )
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-versions-button",
+    "#dashboard-activity-page",
+    "dedicated dashboard activity page"
+  )
+
+  const activityResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        present: Boolean(document.querySelector("#dashboard-activity-page")),
+        versionCount: document.querySelectorAll("#dashboard-versions > a").length,
+        versionDetailPresent: Boolean(document.querySelector("#dashboard-version-detail")),
+        publishValidationPresent: Boolean(document.querySelector("#dashboard-publish-validation")),
+        activityPresent: Boolean(document.querySelector("#dashboard-activity-events")),
+        contextRailPresent: Boolean(document.querySelector("#ops-context-rail"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(activityResult.result.value.present, true, "dashboard activity page should render")
+  assert.equal(activityResult.result.value.versionCount >= 1, true, "activity should list dashboard versions")
+  assert.equal(activityResult.result.value.versionDetailPresent, true, "activity should show selected version detail")
+  assert.equal(activityResult.result.value.publishValidationPresent, true, "activity should expose publish validation")
+  assert.equal(activityResult.result.value.activityPresent, true, "activity should expose lifecycle audit")
+  assert.equal(activityResult.result.value.contextRailPresent, true, "activity should preserve operational context")
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-activity-viewer",
+    "#ops-dashboard-show-page",
+    "dashboard viewer after activity"
+  )
+  await waitForProfileReady(client, viewportProfile("live-dashboard"), LIVE_INTERACTION_VIEWPORT)
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostics-button",
+    "#dashboard-diagnostics-page",
+    "dedicated dashboard diagnostics page"
+  )
+
+  const diagnosticsResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        present: Boolean(document.querySelector("#dashboard-diagnostics-page")),
+        collectionCount: document.querySelectorAll("#dashboard-diagnostic-collections > a").length,
+        rowCollectionPresent: Boolean(document.querySelector("#dashboard-diagnostic-rows")),
+        detailPresent: Boolean(document.querySelector("#dashboard-diagnostic-detail")),
+        exploreHandoffPresent: Boolean(document.querySelector("#diagnostics-open-explore")),
+        sourcesHandoffPresent: Boolean(document.querySelector("#diagnostics-open-sources")),
+        contextRailPresent: Boolean(document.querySelector("#ops-context-rail"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(diagnosticsResult.result.value.present, true, "dashboard diagnostics page should render")
+  assert.equal(diagnosticsResult.result.value.collectionCount >= 4, true, "diagnostics should expose stable collections")
+  assert.equal(diagnosticsResult.result.value.rowCollectionPresent, true, "diagnostics should expose a record collection")
+  assert.equal(diagnosticsResult.result.value.detailPresent, true, "diagnostics should expose record detail")
+  assert.equal(diagnosticsResult.result.value.exploreHandoffPresent, true, "diagnostics should link to Explore")
+  assert.equal(diagnosticsResult.result.value.sourcesHandoffPresent, true, "diagnostics should link to Sources")
+  assert.equal(diagnosticsResult.result.value.contextRailPresent, true, "diagnostics should preserve operational context")
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-diagnostics-viewer",
+    "#ops-dashboard-show-page",
+    "dashboard viewer after diagnostics"
+  )
+  await waitForProfileReady(client, viewportProfile("live-dashboard"), LIVE_INTERACTION_VIEWPORT)
+
+  await clickAndWaitForSelector(
+    client,
+    "#dashboard-historical-workflow-request-button",
+    "#ops-data-operations-page",
+    "dedicated data operations page"
+  )
+
+  const requestContextResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        formPresent: Boolean(document.querySelector("#data-operation-request-form")),
+        dashboardId: document.querySelector("#data-operation-request-form input[name='historical_workflow_request[dashboard_id]']")?.value || "",
+        dataView: document.querySelector("#data-operation-request-form input[name='historical_workflow_request[dashboard_data_view]']")?.value || "",
+        limitMode: document.querySelector("#data-operation-request-form input[name='historical_workflow_request[dashboard_limit_mode]']")?.value || "",
+        contextRailPresent: Boolean(document.querySelector("#ops-context-rail")),
+        privilegedRecoveryPresent: Boolean(document.querySelector("#data-operation-recovery-panel"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(requestContextResult.result.value.formPresent, true, "Data Operations should expose the request form")
+  assert.notEqual(requestContextResult.result.value.dashboardId, "", "dashboard handoff should preserve dashboard identity")
+  assert.notEqual(requestContextResult.result.value.dataView, "", "dashboard handoff should preserve data view")
+  assert.notEqual(requestContextResult.result.value.limitMode, "", "dashboard handoff should preserve limit mode")
+  assert.equal(requestContextResult.result.value.contextRailPresent, true, "Data Operations should preserve operational context")
+  assert.equal(requestContextResult.result.value.privilegedRecoveryPresent, false, "reader route should not expose recovery controls")
+
+  const requestGroupId = "browser-smoke-data-operation"
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const form = document.querySelector("#data-operation-request-form")
+        const submit = document.querySelector("#data-operation-request-submit")
+        if (!form || !submit) return false
+
+        const setField = (name, value) => {
+          const input = form.querySelector('[name="historical_workflow_request[' + name + ']"]')
+          if (!input) return false
+          if (input.type === "checkbox") input.checked = value === "true"
+          else input.value = value
+          input.dispatchEvent(new Event("input", { bubbles: true }))
+          input.dispatchEvent(new Event("change", { bubbles: true }))
+          return true
+        }
+
+        setField("workflow", "backfill")
+        setField("run_id", ${JSON.stringify("browser-smoke-data-operation")})
+        setField("realm", "backfill")
+        setField("data_source_id", "managed_questdb_backfill")
+        setField("source_binding_id", "backfill_telemetry")
+        setField("point_ids", "HK.counter")
+        setField("source_from", "2023-11-14T22:12:00Z")
+        setField("source_to", "2023-11-14T22:15:00Z")
+        setField("reason", "browser_smoke_historical_request")
+        setField("confirmed", "true")
+
+        const submitEvent =
+          typeof SubmitEvent === "function"
+            ? new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: submit })
+            : new Event("submit", { bubbles: true, cancelable: true })
+
+        form.dispatchEvent(submitEvent)
+        return true
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `Boolean(document.querySelector("#data-operation-${requestGroupId}[data-operation-state='requested']"))`,
+    5_000,
+    "durable historical data request group"
+  )
+
+  const dataOperationResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        groupPresent: Boolean(document.querySelector(${JSON.stringify(`#data-operation-${requestGroupId}`)})),
+        detailPresent: Boolean(document.querySelector("#data-operation-group-id")),
+        progressPresent: Boolean(document.querySelector("#data-operation-progress")),
+        affectedDashboardPresent: Boolean(document.querySelector("#data-operation-affected-dashboards a")),
+        auditPresent: Boolean(document.querySelector("#data-operation-audit")),
+        privilegedRecoveryPresent: Boolean(document.querySelector("#data-operation-recovery-panel"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(dataOperationResult.result.value.groupPresent, true, "Data Operations should retain the durable request group")
+  assert.equal(dataOperationResult.result.value.detailPresent, true, "Data Operations should expose group detail")
+  assert.equal(dataOperationResult.result.value.progressPresent, true, "Data Operations should expose progress")
+  assert.equal(dataOperationResult.result.value.affectedDashboardPresent, true, "Data Operations should link affected dashboards")
+  assert.equal(dataOperationResult.result.value.auditPresent, true, "Data Operations should expose audit evidence")
+  assert.equal(dataOperationResult.result.value.privilegedRecoveryPresent, false, "reader route should remain mutation-free")
+
+  await clickAndWaitForSelector(
+    client,
+    "#data-operation-affected-dashboards a",
+    "#ops-dashboard-show-page",
+    "affected dashboard return handoff"
+  )
+  await waitForProfileReady(client, viewportProfile("live-dashboard"), LIVE_INTERACTION_VIEWPORT)
+
+  return {
+    sourceSelection: sourceSelectionResult.result.value,
+    activity: activityResult.result.value,
+    diagnostics: diagnosticsResult.result.value,
+    requestContext: requestContextResult.result.value,
+    dataOperation: dataOperationResult.result.value,
+  }
+}
+
+async function runLegacyInlineWorkflowSurfaceInteractions(client) {
   const sourceSelectionResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -29824,9 +30314,9 @@ async function openComparisonSavedPresets(client, label) {
   await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const rail = document.querySelector("#ops-context-rail")
-        if (rail && !rail.hasAttribute("data-expanded")) {
-          document.querySelector("#ops-context-rail-toggle")?.click()
+        const inspector = document.querySelector("#dashboard-comparison-inspector")
+        if (!inspector) {
+          document.querySelector("#dashboard-comparison-toggle")?.click()
         }
       })()
     `,
@@ -29837,12 +30327,12 @@ async function openComparisonSavedPresets(client, label) {
     client,
     `
       Boolean(
-        !document.querySelector("#ops-context-rail") ||
-        document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded")
+        document.querySelector("#dashboard-comparison-inspector") &&
+        document.querySelector("#dashboard-comparison-toggle")?.getAttribute("aria-expanded") === "true"
       )
     `,
     3_000,
-    `${label} context rail expansion`
+    `${label} comparison inspector expansion`
   )
 
   await client.send("Runtime.evaluate", {
@@ -29889,8 +30379,25 @@ async function runComparisonReviewInteraction(client, profile) {
 
   await waitForExpression(
     client,
+    `Boolean(document.querySelector("#dashboard-comparison-toggle"))`,
+    5_000,
+    "comparison inspector toggle"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        document.querySelector("#dashboard-comparison-toggle")?.click()
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
     `
       Boolean(
+        document.querySelector("#dashboard-comparison-inspector") &&
         document.querySelector("#dashboard-comparison-rollup") &&
         Number(document.querySelector("#dashboard-comparison-rollup")?.dataset.dashboardComparisonOpen || 0) >= 1 &&
         document.querySelector("#dashboard-comparison-open-findings-review-form")
@@ -31950,6 +32457,27 @@ async function runLiveTelemetryStreamInspection(client, profile) {
               dashboardTimeMode: page?.dataset.dashboardTimeMode || ""
             }
           })(),
+          widgets: Array.from(document.querySelectorAll("[data-widget-lifecycle-state]")).map((widget) => ({
+            widgetId: widget.closest("[id^='widget-']")?.id || "",
+            title: widget.querySelector("h3")?.textContent?.trim() || "",
+            lifecycleState: widget.dataset.widgetLifecycleState || "",
+            lifecycleSeverity: widget.dataset.widgetLifecycleSeverity || "",
+            lifecycleWarningCodes: widget.dataset.widgetLifecycleWarningCodes || "",
+            placementWarningCodes: widget.dataset.widgetPlacementWarningCodes || "",
+            sourceState: widget.dataset.widgetSourceState || "",
+            sourceWarningCodes: widget.dataset.widgetSourceWarningCodes || "",
+            warnings: Array.from(widget.querySelectorAll("[data-warning-evidence-open]")).map((warning) => ({
+              code: warning.getAttribute("phx-value-warning-code") || "",
+              logicalSource: warning.getAttribute("phx-value-logical-source") || "",
+              sourceRequestId: warning.getAttribute("phx-value-source-request-id") || "",
+              dataSourceId: warning.getAttribute("phx-value-data-source-id") || "",
+              sourceBindingId: warning.getAttribute("phx-value-source-binding-id") || ""
+            })),
+            noticeText: Array.from(widget.querySelectorAll("[data-widget-body-notice]"))
+              .map((notice) => notice.textContent?.replace(/\\s+/g, " ").trim() || "")
+              .filter(Boolean)
+              .join(" | ")
+          })),
           charts: Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).map((chart) => ({
             id: chart.id || "",
             placementId: chart.dataset.placementId || "",
@@ -31961,6 +32489,19 @@ async function runLiveTelemetryStreamInspection(client, profile) {
             pointCount: Number(chart.dataset.chartPointCount || 0),
             latestTimestampMs: Number(chart.dataset.chartLatestTimestampMs || 0),
             liveWindowEndMs: Number(chart.dataset.liveWindowEndMs || 0),
+            watermarkState: chart.dataset.watermarkState || "",
+            watermarkLagMs: Number(chart.dataset.watermarkLagMs || 0),
+            watermarkBoundaryVisible: chart.dataset.watermarkBoundaryVisible || "",
+            watermarkStatusControls: Array.from(
+              chart.querySelectorAll("[data-event-marker-target='source watermark status']")
+            ).map((control) => ({
+              text: control.textContent?.trim() || "",
+              state: control.dataset.sourceWatermarkStatus || "",
+              markerRef: control.dataset.eventMarkerRef || ""
+            })),
+            watermarkBoundaryCount: chart.querySelectorAll(
+              "[data-event-marker-target='source watermark']"
+            ).length,
             rendered: Boolean(chart.querySelector(".uplot"))
           }))
         }))()

@@ -66,6 +66,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
       )
 
     assert has_element?(view, "#activation-approval-inbox")
+    assert has_element?(view, "#ops-context-rail")
 
     review_selector = "#review-activation-#{request.activation_request_id}"
     assert has_element?(view, review_selector)

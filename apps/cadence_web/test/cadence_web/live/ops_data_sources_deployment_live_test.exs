@@ -25,7 +25,7 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
 
     {TestFixtures.member_conn(user), user, org, mission}
@@ -71,11 +71,8 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
   test "registers dedicated mission BYO TSDB sources with deployment posture" do
     {conn, user, org, mission} = signed_in_org_and_mission()
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
-
-    view
-    |> element("#register-source-button")
-    |> render_click()
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
 
     view
     |> form("#register-source-form",
@@ -297,7 +294,11 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
                invalidate_runtime_cache?: false
              )
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/failed-managed-questdb/settings"
+      )
 
     assert has_element?(
              view,
@@ -374,7 +375,11 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
                actor_id: "operator-1"
              })
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/failed-managed-questdb/settings"
+      )
 
     assert has_element?(
              view,

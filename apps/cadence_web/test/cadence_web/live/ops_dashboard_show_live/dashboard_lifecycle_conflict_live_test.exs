@@ -3,8 +3,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Phoenix.LiveViewTest.ClientProxy
-
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
     router: CadenceWeb.Router,
@@ -28,10 +26,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     {conn, org, mission}
   end
 
-  defp show_path(mission, dashboard) do
-    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
-  end
-
   defp bump_dashboard_row_latest_version!(org, mission, dashboard, version)
        when is_integer(version) and version > 0 do
     row =
@@ -46,44 +40,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     |> Repo.update!()
   end
 
-  defp render_dashboard_async(view) do
-    track_dashboard_view(view)
-    render_async(view, 5_000)
-  end
-
-  defp track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do
-    tracked_views = Process.get(:ops_dashboard_live_test_views, MapSet.new())
-
-    unless MapSet.member?(tracked_views, pid) do
-      Process.put(:ops_dashboard_live_test_views, MapSet.put(tracked_views, pid))
-
-      on_exit({:ops_dashboard_live_view, pid}, fn ->
-        stop_dashboard_view(view)
-      end)
-    end
-  end
-
-  defp stop_dashboard_view(view) do
-    if Process.alive?(view.pid) do
-      drain_dashboard_view(view)
-
-      ref = Process.monitor(view.pid)
-      {_proxy_ref, _topic, proxy_pid} = view.proxy
-      ClientProxy.stop(proxy_pid, {:shutdown, :dashboard_test_cleanup})
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000
-    end
-
-    :ok
-  end
-
-  defp drain_dashboard_view(view) do
-    render_async(view, 5_000)
-    :ok
-  catch
-    :exit, _reason -> :ok
-  end
-
   test "refreshes archived dashboard list when a stale restore conflicts" do
     {conn, _user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Restore Conflict")
@@ -96,7 +52,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
                expected_version: 1
              )
 
-    {:ok, list_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
+    {:ok, list_view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards?lifecycle=archived")
 
     assert has_element?(
              list_view,
@@ -111,7 +68,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
       |> render_click()
 
     assert html =~ "Dashboard changed in another session. Reloaded version 2"
-    assert has_element?(list_view, "#archived-dashboard-#{dashboard.dashboard_id}")
+
+    assert has_element?(
+             list_view,
+             ~s(#dashboard-directory-row-#{dashboard.dashboard_id}[data-dashboard-directory-lifecycle="archived"])
+           )
 
     assert [] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -140,8 +101,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     {conn, org, mission} = signed_in_org_and_mission()
     %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-    {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-    render_dashboard_async(view)
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
+      )
 
     assert {:ok, %Document{} = _updated} =
              Cadence.Dashboards.update_document(
@@ -154,11 +118,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
 
     html =
       view
-      |> element(~s(#dashboard-menu button[phx-click="publish_dashboard"]))
+      |> element("#dashboard-activity-publish")
       |> render_click()
 
-    assert html =~ "Dashboard changed in another session"
-    assert has_element?(view, "h1", "Power Updated")
+    assert html =~ "Failed to publish dashboard"
 
     assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -182,8 +145,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     {conn, org, mission} = signed_in_org_and_mission()
     %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-    {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-    render_dashboard_async(view)
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/settings"
+      )
 
     assert {:ok, %Document{} = _updated} =
              Cadence.Dashboards.update_document(
@@ -196,11 +162,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
 
     html =
       view
-      |> element(~s(#dashboard-menu button[phx-click="archive_dashboard"]))
+      |> element("#dashboard-settings-archive")
       |> render_click()
 
-    assert html =~ "Dashboard changed in another session"
-    assert has_element?(view, "h1", "Power Updated")
+    assert html =~ "Failed to archive dashboard"
 
     assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
              Cadence.Dashboards.list_dashboard_summaries(

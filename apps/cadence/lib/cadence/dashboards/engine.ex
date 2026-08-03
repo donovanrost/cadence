@@ -14,6 +14,7 @@ defmodule Cadence.Dashboards.Engine do
     DashboardResolveResult,
     FrameMaterializer,
     LimitSelectedClockAudit,
+    Management,
     Placement,
     PlacementExpansion,
     PlacementFrames,
@@ -33,6 +34,7 @@ defmodule Cadence.Dashboards.Engine do
   @spec resolve(DashboardResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def resolve(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
     request = DashboardResolveRequest.normalize(request)
+    request = resolve_library_document(request)
     plan_result = plan(request, opts)
 
     request
@@ -43,6 +45,7 @@ defmodule Cadence.Dashboards.Engine do
   @spec plan(DashboardResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def plan(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
     request = DashboardResolveRequest.normalize(request)
+    request = resolve_library_document(request)
     validate_request_contract!(request, opts)
 
     opts = plan_dependency_opts(opts)
@@ -67,6 +70,17 @@ defmodule Cadence.Dashboards.Engine do
     end
     |> validate_plan_contract!(opts)
   end
+
+  defp resolve_library_document(
+         %DashboardResolveRequest{document: %Cadence.Dashboards.Document{}} = request
+       ) do
+    %DashboardResolveRequest{
+      request
+      | document: Management.resolve_document(request.document)
+    }
+  end
+
+  defp resolve_library_document(%DashboardResolveRequest{} = request), do: request
 
   defp validate_request_contract!(%DashboardResolveRequest{} = request, opts) do
     if validate_dashboard_contract?(opts) do

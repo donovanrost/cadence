@@ -15,6 +15,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssigns do
 
     %{
       panel: Map.get(assigns, :panel),
+      dashboard_render_items: Map.get(assigns, :dashboard_render_items, []),
+      frames_by_placement: Map.get(assigns, :dashboard_engine_frames_by_placement, %{}),
       dashboard_activity_filter: Map.get(assigns, :dashboard_activity_filter),
       dashboard_activity_event_id: Map.get(assigns, :dashboard_activity_event_id),
       dashboard_review_placement_id: Map.get(assigns, :dashboard_review_placement_id),
@@ -22,6 +24,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssigns do
       dashboard_comparison_review_action_outcome:
         Map.get(assigns, :dashboard_comparison_review_action_outcome),
       widget_form: Map.get(assigns, :widget_form),
+      widget_binding_preview: Map.get(assigns, :widget_binding_preview),
+      section_form: Map.get(assigns, :section_form),
+      section_error: Map.get(assigns, :section_error),
       spacecraft: Map.get(assigns, :spacecraft, []),
       operational_observables: operational_observables,
       points: points,

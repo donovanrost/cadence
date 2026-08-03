@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DocumentLifecycle do
   alias Cadence.Dashboards.{
     DashboardLifecycleStatus,
     Document,
+    Management,
     PublishReadinessPayload,
     RenderItem,
     SourceHealth
@@ -44,6 +45,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DocumentLifecycle do
   end
 
   def assign_document(socket, %Document{} = document, document_mode) do
+    document = Management.resolve_document(document)
+
     socket
     |> assign(:dashboard_document, document)
     |> assign(:dashboard_document_mode, document_mode)

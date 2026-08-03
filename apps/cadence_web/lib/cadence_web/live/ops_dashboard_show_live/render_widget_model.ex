@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
   @moduledoc false
 
+  alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
   alias CadenceWeb.OpsDashboardShowLive.RenderWidgetAssigns
   alias CadenceWeb.OpsDashboardShowLive.SelectedDataRef
   alias CadenceWeb.OpsDashboardShowLive.SourcePresentation
@@ -31,7 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
 
   def widget_shell_attrs(item, props \\ %{})
 
-  def widget_shell_attrs(%{placement_id: placement_id, layout: layout}, props) do
+  def widget_shell_attrs(%{placement_id: placement_id, layout: layout} = item, props) do
     %{
       id: "widget-#{placement_id}",
       class: "grid-stack-item",
@@ -40,7 +41,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
       "gs-y": layout.y,
       "gs-w": layout.w,
       "gs-h": layout.h,
-      "gs-auto-position": if(is_nil(layout.x), do: "true")
+      "gs-auto-position": if(is_nil(layout.x), do: "true"),
+      "data-dashboard-widget-type": widget_type(item)
     }
     |> Map.merge(WidgetLifecycleAttrs.attrs(Map.get(props, :data), Map.get(props, :warnings, [])))
     |> Map.merge(review_focus_attrs(placement_id, props))
@@ -88,6 +90,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
       selected_data_ref: props.selected_data_ref,
       time_mode: context.time_mode,
       time_axis: context.time_axis,
+      window_seconds: context.window_seconds,
       replay_run_id: context.replay_run_id,
       data_realm: context.data_realm,
       data_view: context.data_view,
@@ -123,8 +126,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
           widget
         ),
       compare_backfill: WidgetPresentation.compare_backfill(compare_placement_frames, widget),
-      limit_markers: WidgetPresentation.limit_markers(placement_frames, widget),
-      event_markers: WidgetPresentation.event_markers(placement_frames, widget),
+      limit_markers:
+        placement_frames
+        |> WidgetPresentation.limit_markers(widget)
+        |> MarkerCategories.filter_limit_markers(context.hidden_marker_categories),
+      event_markers:
+        placement_frames
+        |> WidgetPresentation.event_markers(widget)
+        |> MarkerCategories.filter_event_markers(context.hidden_marker_categories),
       selected_data_ref: selected_data_ref_for_placement(context.selected_data_ref, placement_id),
       context_spacecraft_id: context.context_spacecraft_id,
       chart_epoch: context.chart_epoch,
@@ -184,4 +193,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
     point_id = get_in(widget.binding, [:point_id])
     Map.get(context.points_by_id, point_id)
   end
+
+  defp widget_type(%{widget: %{type: type}}) when is_atom(type), do: Atom.to_string(type)
+  defp widget_type(%{widget: %{type: type}}) when is_binary(type), do: type
+  defp widget_type(_item), do: ""
 end

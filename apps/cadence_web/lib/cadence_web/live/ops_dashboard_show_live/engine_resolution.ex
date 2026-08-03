@@ -181,11 +181,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     merged_frames =
       merge_frames(socket.assigns.dashboard_engine_frames_by_placement, result)
 
+    widget_frames = live_tick_widget_frames(current_frames, merged_frames)
+
     socket
     |> assign(:dashboard_engine_result, result)
     |> assign(:dashboard_engine_frames_by_placement, merged_frames)
     |> DataViewComparison.assign_result(nil)
-    |> assign_widget_data(current_frames)
+    |> assign_widget_data(widget_frames)
   end
 
   defp maybe_delay_engine_resolve do
@@ -227,6 +229,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
   defp merge_overlay_frames(previous, current) do
     Map.merge(previous, current, fn _role, previous_frames, current_frames ->
       if current_frames == [], do: previous_frames, else: current_frames
+    end)
+  end
+
+  defp live_tick_widget_frames(current_frames, merged_frames) do
+    Map.merge(merged_frames, current_frames, fn _placement_id, merged, current ->
+      if current.primary == [], do: merged, else: current
     end)
   end
 

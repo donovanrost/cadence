@@ -16,6 +16,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   alias CadenceWeb.OpsDashboardShowLive.WidgetRowComponents
   alias CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents
   alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
+  alias Phoenix.LiveView.JS
 
   attr :dashboard_document, :any, required: true
   attr :dashboard_lifecycle_status, :any, required: true
@@ -125,6 +126,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_axis, :string, default: nil
+  attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
   attr :data_realm, :string, default: nil
   attr :data_view, :string, default: nil
@@ -167,6 +169,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       selected_data_ref={@selected_data_ref}
       time_mode={@time_mode}
       time_axis={@time_axis}
+      window_seconds={@window_seconds}
       replay_run_id={@replay_run_id}
       data_realm={@data_realm}
       data_view={@data_view}
@@ -175,6 +178,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       source_binding_id={@source_binding_id}
       context_spacecraft_id={@context_spacecraft_id}
       chart_epoch={@chart_epoch}
+      edit_mode?={@edit_mode?}
     />
     """
   end
@@ -191,6 +195,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_axis, :string, default: nil
+  attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
   attr :data_realm, :string, default: nil
   attr :data_view, :string, default: nil
@@ -199,6 +204,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :source_binding_id, :string, default: nil
   attr :context_spacecraft_id, :string, required: true
   attr :chart_epoch, :integer, required: true
+  attr :edit_mode?, :boolean, required: true
 
   defp widget_body(%{widget: %{type: :value_tile}} = assigns) do
     ~H"""
@@ -226,7 +232,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
 
   defp widget_body(%{widget: %{type: :time_series}} = assigns) do
     ~H"""
-    <div class="flex-1 min-h-0 p-1 flex flex-col gap-1">
+    <div class={[
+      "cadence-time-series-panel-body",
+      "flex min-h-0 flex-1 flex-col overflow-hidden"
+    ]}>
       <%= cond do %>
         <% @data == nil or @data.unresolved? -> %>
           <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
@@ -238,7 +247,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             default="No historical samples in this time range."
           />
         <% true -> %>
-          <.widget_lifecycle_notice :if={lifecycle_blocking?(@data)} data={@data} compact />
+          <.widget_lifecycle_notice
+            :if={lifecycle_blocking?(@data) or lifecycle_body_notice?(@data)}
+            data={@data}
+            compact
+          />
           <WidgetPointComponents.time_series_chart
             widget={@widget}
             placement_id={@placement_id}
@@ -252,6 +265,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             selected_data_ref={@selected_data_ref}
             time_mode={@time_mode}
             time_axis={@time_axis}
+            window_seconds={@window_seconds}
             replay_run_id={@replay_run_id}
             data_realm={@data_realm}
             data_view={@data_view}
@@ -260,6 +274,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             source_binding_id={@source_binding_id}
             context_spacecraft_id={@context_spacecraft_id}
             chart_epoch={@chart_epoch}
+            edit_mode?={@edit_mode?}
           />
       <% end %>
     </div>
@@ -403,8 +418,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
 
     ~H"""
     <div
-      class="shrink-0 flex items-center gap-1.5 px-2 py-1 border-b border-base-300/60"
+      class={[
+        "cadence-dashboard-widget-header",
+        "flex shrink-0 items-center gap-1.5 px-2.5 py-1"
+      ]}
       {WidgetLifecycleAttrs.attrs(@data, @warnings)}
+      data-dashboard-widget-header
+      data-dashboard-widget-type={@widget.type}
       data-warning-codes={WidgetWarningComponents.warning_codes(@warnings)}
       data-data-management-badges={
         WidgetDataManagementComponents.data_management_badge_codes(@data)
@@ -413,8 +433,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       data-widget-comparison-primary-count={comparison_summary_value(@comparison_summary, :primary_count)}
       data-widget-comparison-compare-count={comparison_summary_value(@comparison_summary, :compare_count)}
     >
-      <h3 class="hud-label min-w-0 flex-1 truncate">{@widget.title}</h3>
-      <div class="ml-auto flex shrink-0 items-center gap-1">
+      <h3 class={[
+        "min-w-0 flex-1 truncate",
+        "text-[0.8rem] font-semibold leading-4 text-base-content/85"
+      ]}>
+        {@widget.title}
+      </h3>
+      <div class={[
+        "cadence-dashboard-widget-actions",
+        "ml-auto flex shrink-0 items-center gap-1"
+      ]}>
         <.severity_badge
           :if={point_data?(@data) && actionable_limit_event?(@data.limit_event)}
           severity={normalized_severity(@data.limit_event.normalized_state)}
@@ -532,6 +560,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
                 links={widget_links(@data)}
                 placement_id={@placement_id}
               />
+              <button
+                :if={@widget.type == :time_series}
+                type="button"
+                phx-click="open_widget_inspector"
+                phx-value-placement-id={@placement_id}
+                class="btn btn-ghost btn-xs btn-square"
+                title="Inspect data"
+                aria-label="Inspect data"
+                data-widget-inspect-data
+              >
+                <.icon name="hero-table-cells" class="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </.popover>
@@ -590,15 +630,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       assigns
       |> assign(:state, lifecycle_state(assigns.data))
       |> assign(:status, lifecycle_status(assigns.data) || :info)
-      |> assign(:notice, lifecycle_notice(assigns.data, assigns.default || "No data available."))
+      |> assign(
+        :notice,
+        actionable_lifecycle_notice(assigns.data, assigns.default || "No data available.")
+      )
+      |> assign(:actions?, not assigns.compact and lifecycle_actionable?(assigns.data))
 
     ~H"""
-    <.widget_notice
-      notice={@notice}
-      status={@status}
-      state={@state}
-      compact={@compact}
-    />
+    <div
+      class={[
+        "rounded border font-mono text-[0.68rem] leading-snug",
+        if(@compact, do: "mt-1 px-2 py-1", else: "px-2 py-1.5"),
+        widget_notice_class(@status)
+      ]}
+      data-widget-body-notice={notice_state(@state)}
+      data-widget-empty-actionable={to_string(@actions?)}
+    >
+      <p>{@notice}</p>
+      <div :if={@actions?} class="mt-2 flex flex-wrap gap-1.5 font-sans">
+        <button
+          type="button"
+          phx-click={JS.dispatch("click", to: "#dashboard-data-controls-toggle")}
+          class="btn btn-xs btn-outline"
+          data-widget-empty-adjust-context
+        >
+          <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5" /> Adjust scope & time
+        </button>
+        <button
+          type="button"
+          phx-click={JS.dispatch("click", to: "#dashboard-investigate-toggle")}
+          class="btn btn-xs btn-ghost"
+          data-widget-empty-investigate
+        >
+          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" /> Investigate
+        </button>
+      </div>
+    </div>
     """
   end
 
@@ -656,6 +723,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
 
   defp lifecycle_notice(%{lifecycle_state: :no_data}, default), do: default
   defp lifecycle_notice(_data, default), do: default
+
+  defp actionable_lifecycle_notice(data, default) do
+    if lifecycle_state(data) == :no_data do
+      scoped_no_data_notice(data, default)
+    else
+      lifecycle_notice(data, default)
+    end
+  end
+
+  defp scoped_no_data_notice(data, default) do
+    source_status = WidgetSourceStatusComponents.source_status(data)
+
+    case source_status && Map.get(source_status, :empty_reason) do
+      :contact_scope_no_data ->
+        "Source responded, but no rows matched this contact and source-endpoint scope in the selected time range."
+
+      :source_endpoint_scope_no_data ->
+        "Source responded, but no rows matched this source endpoint in the selected time range."
+
+      :scope_no_data ->
+        "Source responded, but no rows matched the active dashboard scope in the selected time range."
+
+      _reason ->
+        lifecycle_notice(data, default)
+    end
+  end
+
+  defp lifecycle_actionable?(%{lifecycle_state: state})
+       when state in [:no_data, :unsupported, :error, :retention_gap],
+       do: true
+
+  defp lifecycle_actionable?(_data), do: false
 
   defp lifecycle_status(%{lifecycle_state: :stale}), do: :attention
   defp lifecycle_status(%{lifecycle_state: :partial}), do: :attention

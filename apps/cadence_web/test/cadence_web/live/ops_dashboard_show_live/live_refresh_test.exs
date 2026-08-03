@@ -19,6 +19,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveRefreshTest do
 
     assert socket.assigns.tick_count == 5
     assert socket.assigns.fleet_health == %{status: :nominal, mission_id: "mission-1"}
+    assert socket.assigns.ops_context.mission_id == "mission-1"
+
+    assert fleet_health =
+             Enum.find(socket.assigns.ops_context.modules, &(&1.key == "fleet_health"))
+
+    assert fleet_health.key == "fleet_health"
+    assert fleet_health.data == %{status: :nominal, mission_id: "mission-1"}
     assert socket.assigns.resolved_mode == :live_tick
 
     assert socket.assigns.resolve_opts == [
@@ -82,6 +89,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveRefreshTest do
       mission_health_summary: fn organization_id, mission_id, [] ->
         assert organization_id == "org-1"
         %{status: :nominal, mission_id: mission_id}
+      end,
+      alarm_summary: fn _organization_id, mission_id, [] ->
+        %{
+          mission_id: mission_id,
+          observed_at: DateTime.utc_now(),
+          latest_transition_at: nil,
+          freshness: :current,
+          active_count: 0,
+          critical_count: 0,
+          warning_count: 0,
+          info_count: 0,
+          highest_severity: nil,
+          status: :nominal
+        }
+      end,
+      command_summary: fn _organization_id, mission_id, [] ->
+        %{
+          mission_id: mission_id,
+          observed_at: DateTime.utc_now(),
+          latest_transition_at: nil,
+          freshness: :current,
+          status: :nominal,
+          total_count: 0,
+          queued_count: 0,
+          release_pending_count: 0,
+          in_flight_count: 0,
+          released_count: 0,
+          failed_count: 0,
+          indeterminate_count: 0,
+          active_count: 0,
+          rows: []
+        }
       end,
       resolve_engine: fn socket, mode, resolve_opts ->
         socket

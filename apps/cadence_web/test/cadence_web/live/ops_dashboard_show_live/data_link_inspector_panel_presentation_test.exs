@@ -58,7 +58,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentationTest
     assert action.action_id == "dashboard-data-link-explore"
     assert action.kind == :navigate
     assert action.source == :data_link_panel
-    assert action.route =~ "/missions/mission-1/ops/telemetry/explore"
+    assert action.route =~ "/missions/mission-1/ops/explore"
     assert action.route =~ "source_dashboard_id=dashboard-1"
 
     assert presentation.action_outcome.action == "retry_job"

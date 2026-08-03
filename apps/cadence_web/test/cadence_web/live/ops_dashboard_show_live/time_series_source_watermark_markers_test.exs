@@ -181,22 +181,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesSourceWatermarkMarkersTest d
     assert cursor_marker.label == "Watermark complete through / binding-flight / questdb-flight"
   end
 
-  test "frame_markers hides fresh watermark cursors in live mode" do
-    assert [] =
+  test "frame_markers presents fresh live watermarks as status-only cursors" do
+    assert [
+             %{
+               marker_type: "source_watermark_cursor",
+               freshness_state: "fresh",
+               display_mode: "status"
+             }
+           ] =
              :live
              |> cursor_placement_frames(:fresh)
              |> TimeSeriesSourceWatermarkMarkers.frame_markers()
   end
 
   test "frame_markers keeps stale watermark cursors in live mode" do
-    assert [%{marker_type: "source_watermark_cursor", freshness_state: "stale"}] =
+    assert [
+             %{
+               marker_type: "source_watermark_cursor",
+               freshness_state: "stale",
+               display_mode: "boundary"
+             }
+           ] =
              :live
              |> cursor_placement_frames(:stale)
              |> TimeSeriesSourceWatermarkMarkers.frame_markers()
   end
 
   test "frame_markers keeps fresh watermark cursors in archive mode" do
-    assert [%{marker_type: "source_watermark_cursor", freshness_state: "fresh"}] =
+    assert [
+             %{
+               marker_type: "source_watermark_cursor",
+               freshness_state: "fresh",
+               display_mode: "boundary"
+             }
+           ] =
              :archive
              |> cursor_placement_frames(:fresh)
              |> TimeSeriesSourceWatermarkMarkers.frame_markers()

@@ -1,6 +1,8 @@
 defmodule Cadence.OperationalEvents.Event.Normalization do
   @moduledoc false
 
+  alias Cadence.OperationalEvents.Event.Kind
+
   def fetch_required(attrs, key) when is_map(attrs) and is_atom(key) do
     case Map.fetch(attrs, key) do
       {:ok, value} -> value
@@ -63,6 +65,8 @@ defmodule Cadence.OperationalEvents.Event.Normalization do
 
   def known_atom!(value, _known, label),
     do: raise(ArgumentError, "unsupported #{label}: #{inspect(value)}")
+
+  def normalize_event_kind(value), do: Kind.normalize!(value)
 
   def normalize_kind(value) when is_atom(value), do: value
   def normalize_kind(value) when is_binary(value), do: String.to_existing_atom(value)

@@ -1,18 +1,14 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
   @moduledoc false
 
-  alias Cadence.Dashboards.{DataBinding, Document, ScopeContext}
+  alias Cadence.Dashboards.{DataBinding, Document, ScopeContext, TimeRange}
+  alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
   alias CadenceWeb.OpsDashboardShowLive.RuntimeAssigns
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQueryParams
 
   @supported_limit_modes ["observed", "current", "recomputed", "compare"]
   @supported_data_views ["canonical", "as_recorded", "all_revisions", "recomputed"]
-  @time_presets %{
-    "last_5m" => 5 * 60,
-    "last_15m" => 15 * 60,
-    "last_1h" => 60 * 60
-  }
 
   def runtime_context_from_params(
         params,
@@ -47,7 +43,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
       to_value: to_value,
       axis: time_axis,
       replay_run_id: replay_run_id,
-      validation: time_validation
+      validation: time_validation,
+      window_seconds: window_seconds
     } = validate_time_params(params)
 
     realm =
@@ -94,7 +91,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
       source_binding_id: Map.get(telemetry_source_context, "source_binding_id"),
       limit_mode: limit_mode,
       limit_mode_fallback: limit_mode_fallback,
-      time_context: time_context(time_mode, time_axis, from_value, to_value, replay_run_id),
+      hidden_marker_categories: hidden_marker_categories(params),
+      time_context:
+        time_context(time_mode, time_axis, from_value, to_value, replay_run_id, window_seconds),
       data_context: source_context,
       limit_context: %{"semantics_mode" => limit_mode}
     }
@@ -147,8 +146,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
       "data_source_id" => normalized_data_source_query(params, telemetry_source_context),
       "source_binding_id" =>
         normalized_source_binding_query(params, telemetry_source_context, default_data_context),
-      "limit_mode" => if(limit_mode == "observed", do: nil, else: limit_mode)
+      "limit_mode" => if(limit_mode == "observed", do: nil, else: limit_mode),
+      "hidden_markers" => params |> hidden_marker_categories() |> MarkerCategories.to_param()
     }
+  end
+
+  # The Data-popover form posts the checkbox map under "markers"; direct
+  # patches and URLs carry the canonical "hidden_markers" string.
+  defp hidden_marker_categories(params) do
+    MarkerCategories.normalize_param(params["markers"] || params["hidden_markers"])
   end
 
   def current_query(assigns) when is_map(assigns) do
@@ -171,18 +177,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
       default_source_binding_id: default_source_binding_id
     })
     |> RuntimeQueryParams.to_params()
-  end
-
-  def preset_archive_range(preset, %DateTime{} = now) do
-    case Map.fetch(@time_presets, preset) do
-      {:ok, seconds} ->
-        to_time = DateTime.truncate(now, :second)
-        from_time = DateTime.add(to_time, -seconds, :second)
-        {:ok, DateTime.to_iso8601(from_time), DateTime.to_iso8601(to_time)}
-
-      :error ->
-        :error
-    end
   end
 
   def live_time_overrides(assigns) when is_map(assigns) do
@@ -465,25 +459,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
   defp valid_operational_resource_scope?(_current_scope, _mission, _scope_kind, _scope_id, _opts),
     do: false
 
-  defp time_context("archive", time_axis, from_value, to_value, _replay_run_id) do
+  defp time_context("archive", time_axis, from_value, to_value, _replay_run_id, _window_seconds) do
     %{"mode" => "archive", "axis" => time_axis}
     |> maybe_put("from", from_value)
     |> maybe_put("to", to_value)
   end
 
-  defp time_context("replay_run", time_axis, from_value, to_value, replay_run_id) do
+  defp time_context("replay_run", time_axis, from_value, to_value, replay_run_id, _window_seconds) do
     %{"mode" => "replay_run", "axis" => time_axis, "replay_run_id" => replay_run_id}
     |> maybe_put("from", from_value)
     |> maybe_put("to", to_value)
   end
 
-  defp time_context(_mode, time_axis, _from_value, _to_value, _replay_run_id),
-    do: %{"mode" => "live", "axis" => time_axis}
+  defp time_context(_mode, time_axis, _from_value, _to_value, _replay_run_id, window_seconds),
+    do: maybe_put(%{"mode" => "live", "axis" => time_axis}, "window_seconds", window_seconds)
 
   defp validate_time_params(params) when is_map(params) do
     case params["time_mode"] do
       mode when mode in [nil, "", "live"] ->
-        live_time_params(:ok, params)
+        validate_live_time_params(params, mode)
 
       "archive" ->
         validate_archive_time_params(params)
@@ -493,6 +487,61 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
 
       _unsupported ->
         live_time_params(:unsupported_time_mode, params)
+    end
+  end
+
+  defp validate_live_time_params(params, explicit_mode) do
+    from = text_param(params["from"])
+    to = text_param(params["to"])
+
+    case {from, to} do
+      {nil, nil} ->
+        live_time_params(:ok, params)
+
+      {from, to} when is_binary(from) and is_binary(to) ->
+        resolve_live_time_bounds(params, explicit_mode, from, to)
+
+      _partial ->
+        live_time_params(:time_range_required, params)
+    end
+  end
+
+  # Grafana-style bounds on a live-mode URL: `from=now-6h&to=now` keeps the
+  # dashboard live with a sliding window; frozen bounds fall back to archive
+  # when no explicit `time_mode=live` was requested.
+  defp resolve_live_time_bounds(params, explicit_mode, from, to) do
+    case TimeRange.resolve(from, to, DateTime.utc_now()) do
+      {:ok, {:sliding, window_seconds}} ->
+        %{
+          mode: "live",
+          from: from,
+          to: to,
+          axis: time_axis(params, "live"),
+          from_value: nil,
+          to_value: nil,
+          replay_run_id: nil,
+          validation: "ok",
+          window_seconds: window_seconds
+        }
+
+      {:ok, {:absolute, from_value, to_value}} when explicit_mode in [nil, ""] ->
+        %{
+          mode: "archive",
+          from: DateTime.to_iso8601(from_value),
+          to: DateTime.to_iso8601(to_value),
+          axis: time_axis(params, "archive"),
+          from_value: from_value,
+          to_value: to_value,
+          replay_run_id: nil,
+          validation: "ok",
+          window_seconds: nil
+        }
+
+      {:ok, {:absolute, _from_value, _to_value}} ->
+        live_time_params(:sliding_range_required, params)
+
+      {:error, reason} ->
+        live_time_params(reason, params)
     end
   end
 
@@ -508,7 +557,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
         from_value: from_value,
         to_value: to_value,
         replay_run_id: nil,
-        validation: "ok"
+        validation: "ok",
+        window_seconds: nil
       }
     else
       {:error, reason} -> live_time_params(reason, params)
@@ -527,7 +577,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
         from_value: from_value,
         to_value: to_value,
         replay_run_id: replay_run_id,
-        validation: "ok"
+        validation: "ok",
+        window_seconds: nil
       }
     else
       {:error, reason} -> live_time_params(reason, params)
@@ -543,7 +594,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
       from_value: nil,
       to_value: nil,
       replay_run_id: nil,
-      validation: validation_code(validation)
+      validation: validation_code(validation),
+      window_seconds: nil
     }
   end
 

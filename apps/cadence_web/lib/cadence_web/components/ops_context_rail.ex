@@ -114,24 +114,127 @@ defmodule CadenceWeb.Components.OpsContextRail do
   end
 
   @doc """
-  The baseline rail for ops pages without page-specific context: a single
-  fleet-health section fed by the `OpsShellHook` assigns.
+  The shell-owned rail for every Ops page. Its ordered modules come from the
+  mission-scoped `ops_context` snapshot assembled by `OpsShellHook`.
   """
-  attr :fleet_health, :any, required: true
+  attr :ops_context, :map, required: true
 
   def mission_context_rail(assigns) do
+    assigns = assign(assigns, :modules, Map.get(assigns.ops_context, :modules, []))
+
     ~H"""
     <.ops_context_rail>
       <:section
-        key="fleet_health"
-        title="Fleet health"
-        icon="hero-rocket-launch"
-        status={fleet_health_status(@fleet_health)}
-        count={fleet_health_violations(@fleet_health)}
+        :for={context_module <- @modules}
+        key={context_module.key}
+        title={context_module.title}
+        icon={context_module.icon}
+        status={context_module.status}
+        count={context_module.count}
       >
-        <.fleet_health_section fleet_health={@fleet_health} />
+        <.context_module module={context_module} />
       </:section>
     </.ops_context_rail>
+    """
+  end
+
+  attr :module, :map, required: true
+
+  defp context_module(assigns) do
+    ~H"""
+    <div
+      data-ops-context-module-freshness={@module.freshness}
+      class="px-2 py-2"
+    >
+      <.alarm_context_section :if={@module.key == "alarms"} summary={@module.data} />
+      <.command_context_section :if={@module.key == "commands"} summary={@module.data} />
+      <.fleet_health_section :if={@module.key == "fleet_health"} fleet_health={@module.data} />
+      <div class="mt-1 flex items-center justify-between gap-2 border-t border-base-300/50 pt-1.5">
+        <span class="font-mono text-[0.625rem] uppercase tracking-wide text-base-content/45">
+          {freshness_label(@module.freshness)} · {observed_at_label(@module.observed_at)}
+        </span>
+        <.link
+          navigate={@module.destination}
+          class="inline-flex items-center gap-1 text-[0.65rem] font-semibold text-primary hover:underline"
+        >
+          Open <.icon name="hero-arrow-up-right" class="h-3 w-3" />
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
+  attr :summary, :map, required: true
+
+  defp alarm_context_section(assigns) do
+    ~H"""
+    <div class="space-y-2 text-xs">
+      <div :if={@summary.active_count > 0} class="flex flex-wrap gap-1.5">
+        <.severity_badge severity={:critical} count={@summary.critical_count} label="Critical" />
+        <.severity_badge severity={:warning} count={@summary.warning_count} label="Warning" />
+        <.severity_badge severity={:info} count={@summary.info_count} label="Info" />
+      </div>
+      <div
+        :if={@summary.active_count == 0}
+        class="flex items-center gap-2 text-base-content/55"
+      >
+        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+        No active limit conditions
+      </div>
+      <p :if={@summary.latest_transition_at} class="font-mono text-[0.65rem] text-base-content/50">
+        Latest transition {observed_at_label(@summary.latest_transition_at)}
+      </p>
+    </div>
+    """
+  end
+
+  attr :summary, :map, required: true
+
+  defp command_context_section(assigns) do
+    ~H"""
+    <div class="space-y-2 text-xs">
+      <div class="grid grid-cols-2 gap-1">
+        <.context_count label="Queued" count={@summary.queued_count} tone={:info} />
+        <.context_count
+          label="Release pending"
+          count={@summary.release_pending_count}
+          tone={:warning}
+        />
+        <.context_count label="In flight" count={@summary.in_flight_count} tone={:info} />
+        <.context_count
+          label="Failed"
+          count={@summary.failed_count + @summary.indeterminate_count}
+          tone={:critical}
+        />
+      </div>
+      <div
+        :if={@summary[:followed_command]}
+        data-ops-context-followed-command={@summary.followed_command.command_request_id}
+        class="border-l-2 border-info bg-info/10 px-2 py-1.5"
+      >
+        <p class="hud-label text-info">Following</p>
+        <p class="mt-0.5 truncate font-semibold">{@summary.followed_command.command_name}</p>
+        <p class="truncate font-mono text-[0.65rem] text-base-content/55">
+          {@summary.followed_command.status} · {@summary.followed_command.target}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :count, :integer, required: true
+  attr :tone, :atom, required: true
+
+  defp context_count(assigns) do
+    ~H"""
+    <div class="flex items-center justify-between gap-2 border border-base-300/50 bg-base-100/35 px-2 py-1">
+      <span class="text-[0.65rem] text-base-content/55">{@label}</span>
+      <span class={[
+        "font-mono text-xs font-semibold",
+        context_count_class(@tone, @count)
+      ]}>{@count}</span>
+    </div>
     """
   end
 
@@ -139,7 +242,7 @@ defmodule CadenceWeb.Components.OpsContextRail do
 
   def fleet_health_section(assigns) do
     ~H"""
-    <div :if={@fleet_health} class="flex flex-wrap items-center gap-2 px-2 py-2 text-xs">
+    <div :if={@fleet_health} class="flex flex-wrap items-center gap-2 text-xs">
       <.severity_badge
         severity={:critical}
         count={@fleet_health.normalized_state_counts.red}
@@ -160,7 +263,7 @@ defmodule CadenceWeb.Components.OpsContextRail do
         {@fleet_health.violating_points} violating points
       </span>
     </div>
-    <p :if={is_nil(@fleet_health)} class="px-2 py-2 text-xs text-base-content/60">
+    <p :if={is_nil(@fleet_health)} class="text-xs text-base-content/60">
       Fleet health unavailable.
     </p>
     """
@@ -182,6 +285,16 @@ defmodule CadenceWeb.Components.OpsContextRail do
 
   def fleet_health_violations(_fleet_health), do: nil
 
+  defp freshness_label(:current), do: "Live"
+  defp freshness_label(:stale), do: "Stale"
+  defp freshness_label(:unavailable), do: "Unavailable"
+  defp freshness_label(_freshness), do: "Unknown"
+
+  defp observed_at_label(%DateTime{} = observed_at),
+    do: Calendar.strftime(observed_at, "%H:%M:%S UTC")
+
+  defp observed_at_label(_observed_at), do: "not observed"
+
   defp section_visible?(section), do: Map.get(section, :visible, true)
 
   defp section_key(section), do: Map.get(section, :key) || section.title
@@ -198,4 +311,9 @@ defmodule CadenceWeb.Components.OpsContextRail do
   defp status_dot_class(:info), do: "bg-info"
   defp status_dot_class(:nominal), do: "bg-success"
   defp status_dot_class(_status), do: "bg-base-content/30"
+
+  defp context_count_class(_tone, 0), do: "text-base-content/35"
+  defp context_count_class(:critical, _count), do: "text-error"
+  defp context_count_class(:warning, _count), do: "text-warning"
+  defp context_count_class(:info, _count), do: "text-info"
 end

@@ -90,31 +90,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
     {conn, user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
-    {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-    render_dashboard_async(view)
-
-    view |> element(~s(#dashboard-menu button[phx-click="open_rename"])) |> render_click()
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/settings"
+      )
 
     view
-    |> form("#rename-dashboard-form", dashboard: %{name: "Power North", description: "EPS"})
+    |> form("#dashboard-settings-form",
+      settings: %{
+        name: "Power North",
+        description: "EPS",
+        tags: "",
+        defaults_json: "{}"
+      }
+    )
     |> render_submit()
 
     renamed = fetch_dashboard_document!(org, mission, dashboard)
 
     assert renamed.name == "Power North"
     version = fetch_dashboard_version!(org, mission, dashboard, 2)
-    assert version.change_summary == "Renamed dashboard"
+    assert version.change_summary == "Updated dashboard settings"
     assert version.created_by == user.user_id
-
-    assert has_element?(view, "h1", "Power North")
-    assert has_element?(view, ~s(#ops-nav-rail), "Power North")
 
     assert has_element?(
              view,
-             ~s(#dashboard-menu button[data-dashboard-lifecycle-action="archive"][data-dashboard-action-available="true"])
+             ~s(#dashboard-settings-form input[name="settings[name]"][value="Power North"])
            )
 
-    refute has_element?(view, ~s(#dashboard-menu button[phx-click="delete_dashboard"]))
+    assert has_element?(view, "#dashboard-settings-archive")
+    refute has_element?(view, ~s(button[phx-click="delete_dashboard"]))
   end
 
   test "publishes a historical version from the versions panel without discarding the newer draft" do
@@ -141,20 +147,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
                expected_version: Document.version(updated)
              )
 
-    {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-    render_dashboard_async(view)
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
+      )
 
-    view |> element("#dashboard-versions-button") |> render_click()
+    view |> element("#dashboard-version-1") |> render_click()
+    view |> element("#dashboard-activity-publish") |> render_click()
 
-    view |> element("#publish-version-1") |> render_click()
-    render_dashboard_async(view)
+    assert has_element?(view, ~s([data-dashboard-activity-type="published"]))
+
+    {:ok, viewer, _html} = live(conn, show_path(mission, dashboard))
+    render_dashboard_async(viewer)
 
     assert has_element?(
-             view,
+             viewer,
              ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="2"])
            )
 
-    assert has_element?(view, "h1", "Original Power")
+    assert has_element?(viewer, "h1", "Original Power")
 
     assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
              Cadence.Dashboards.list_dashboard_summaries(

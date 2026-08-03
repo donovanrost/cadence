@@ -8,7 +8,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation
   alias CadenceWeb.OpsDashboardShowLive.DataLinkPresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContext
-  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlComponents
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowExplanation
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyContext
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentation
@@ -38,6 +37,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
       |> assign(:panel_attrs, presentation.panel_attrs)
       |> assign(:data_link_actions, presentation.data_link_actions)
       |> assign(:data_link_action_outcome_presentation, presentation.action_outcome)
+      |> assign(:data_operations_path, data_operations_path(assigns))
       |> assign(
         :data_link_action_outcome_attrs,
         DataLinkActionOutcomePresentation.stable_attrs(
@@ -126,12 +126,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
         action_outcome={@data_link_action_outcome}
       />
 
-      <HistoricalWorkflowControlComponents.historical_workflow_controls
+      <.link
         :if={@panel.historical_workflow_controls?}
-        inspector={@inspector}
-        action_outcome={@data_link_action_outcome}
-        dashboard_current_path={@dashboard_current_path}
-      />
+        id="dashboard-workflow-open-data-operations"
+        navigate={@data_operations_path}
+        class="btn btn-sm btn-outline w-full justify-start"
+      >
+        <.icon name="hero-arrow-path-rounded-square" class="h-4 w-4" />
+        Continue in Data Operations
+      </.link>
 
       <.navigation_breadcrumb
         :if={@panel.navigation}
@@ -221,6 +224,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
       </dl>
     </section>
     """
+  end
+
+  defp data_operations_path(assigns) do
+    context = HistoricalWorkflowContext.build(assigns.inspector)
+
+    query =
+      %{
+        "group" => context.request_group_id || context.run_id,
+        "workflow" => context.workflow,
+        "run_id" => context.run_id,
+        "realm" => context.realm,
+        "data_source_id" => context.data_source_id,
+        "source_binding_id" => context.source_binding_id,
+        "observable_id" => context.observable_id,
+        "point_id" => context.point_id,
+        "point_ids" => context.point_id,
+        "source_from" => context.source_from,
+        "source_to" => context.source_to,
+        "dashboard_id" => context.dashboard_id,
+        "dashboard_version" => context.dashboard_version,
+        "dashboard_time_mode" => context.dashboard_time_mode,
+        "dashboard_replay_run_id" => context.dashboard_replay_run_id,
+        "dashboard_data_view" => context.dashboard_data_view,
+        "dashboard_limit_mode" => context.dashboard_limit_mode,
+        "reason" => context.reason
+      }
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
+
+    ~p"/missions/#{assigns.mission_id}/ops/data-operations?#{query}"
   end
 
   attr :inspector, :map, required: true

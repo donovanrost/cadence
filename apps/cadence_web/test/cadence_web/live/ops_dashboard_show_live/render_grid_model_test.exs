@@ -42,4 +42,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModelTest do
 
     assert populated_state.visible? == false
   end
+
+  test "widget_groups preserves section order and isolates section grids" do
+    sections = [
+      %{section_id: "power", title: "Power", collapsed_by_default?: false},
+      %{section_id: "comms", title: "Comms", collapsed_by_default?: true}
+    ]
+
+    items = [
+      %{item: %{placement: %{section_id: "comms"}}, placement_id: "comms-1"},
+      %{item: %{placement: %{section_id: nil}}, placement_id: "general-1"},
+      %{item: %{placement: %{section_id: "power"}}, placement_id: "power-1"}
+    ]
+
+    groups =
+      RenderGridModel.widget_groups(
+        %{
+          dashboard_document: %{dashboard_id: "dashboard-1", sections: sections},
+          edit_mode?: false
+        },
+        items
+      )
+
+    assert [unsectioned, power, comms] = groups
+    assert Enum.map(unsectioned.widget_items, & &1.placement_id) == ["general-1"]
+    assert Enum.map(power.widget_items, & &1.placement_id) == ["power-1"]
+    assert Enum.map(comms.widget_items, & &1.placement_id) == ["comms-1"]
+    assert power.open?
+    refute comms.open?
+    assert power.grid_props.id == "dashboard-grid-dashboard-1-power"
+  end
 end

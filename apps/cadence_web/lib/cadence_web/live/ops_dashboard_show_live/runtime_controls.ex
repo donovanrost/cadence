@@ -2,8 +2,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
   @moduledoc false
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [put_flash: 3]
+  import Phoenix.LiveView, only: [put_flash: 3, push_event: 3]
 
+  alias Cadence.Dashboards.TimeRange
   alias CadenceWeb.OpsDashboardShowLive.DataLinkSelection
   alias CadenceWeb.OpsDashboardShowLive.Navigation
   alias CadenceWeb.OpsDashboardShowLive.RouteQuery
@@ -14,6 +15,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
   def context_search(socket, query) do
     assign(socket, :context_query, query)
   end
+
+  def time_quick_search(socket, query) when is_binary(query) do
+    assign(socket, :dashboard_time_quick_query, query)
+  end
+
+  def load_time_recents(socket, ranges) do
+    assign(socket, :dashboard_time_recent_ranges, validated_recent_ranges(ranges))
+  end
+
+  @max_recent_ranges 4
+
+  defp validated_recent_ranges(ranges) when is_list(ranges) do
+    ranges
+    |> Enum.filter(&valid_recent_range?/1)
+    |> Enum.map(fn %{"from" => from, "to" => to} -> %{from: from, to: to} end)
+    |> Enum.take(@max_recent_ranges)
+  end
+
+  defp validated_recent_ranges(_ranges), do: []
+
+  defp valid_recent_range?(%{"from" => from, "to" => to})
+       when is_binary(from) and is_binary(to) do
+    match?({:ok, {:absolute, _from, _to}}, TimeRange.resolve(from, to, DateTime.utc_now()))
+  end
+
+  defp valid_recent_range?(_range), do: false
 
   def set_context(socket, context, opts \\ [])
 
@@ -72,7 +99,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
         "compare_data_view",
         "limit_mode",
         "data_source_id",
-        "source_binding_id"
+        "source_binding_id",
+        "hidden_markers",
+        "markers"
       ])
       |> RuntimeQuery.normalize_runtime_query(
         socket.assigns.dashboard_data_realms,
@@ -98,16 +127,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
   end
 
   def set_time_preset(socket, preset, opts) do
-    case RuntimeQuery.preset_archive_range(preset, Keyword.get(opts, :now, DateTime.utc_now())) do
-      {:ok, from_iso, to_iso} ->
+    case TimeRange.quick_range(preset) do
+      {:ok, range} ->
         socket
         |> SelectionPanel.clear_dashboard_selection()
         |> Navigation.patch(
           %{
-            "time_mode" => "archive",
+            "time_mode" => nil,
             "time_axis" => nil,
-            "from" => from_iso,
-            "to" => to_iso,
+            "from" => range.from,
+            "to" => range.to,
             "replay_run_id" => nil
           },
           opts
@@ -117,6 +146,99 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
         put_flash(socket, :error, "Unknown dashboard time preset.")
     end
   end
+
+  def set_chart_time_range(socket, params, opts \\ [])
+
+  def set_chart_time_range(socket, %{"from" => from, "to" => to}, opts) do
+    case TimeRange.resolve(from, to, Keyword.get(opts, :now, DateTime.utc_now())) do
+      {:ok, {:sliding, _window_seconds}} ->
+        socket
+        |> SelectionPanel.clear_dashboard_selection()
+        |> Navigation.patch(
+          %{
+            "time_mode" => nil,
+            "from" => String.trim(from),
+            "to" => String.trim(to),
+            "replay_run_id" => nil
+          },
+          opts
+        )
+
+      {:ok, {:absolute, from_value, to_value}} ->
+        patch_absolute_range(socket, {from_value, to_value}, opts, store_recent: true)
+
+      {:error, :window_too_large} ->
+        put_flash(
+          socket,
+          :error,
+          "Sliding windows are capped at 24 hours. Use an absolute range instead."
+        )
+
+      {:error, _reason} ->
+        put_flash(socket, :error, "Select a valid chart time range.")
+    end
+  end
+
+  def set_chart_time_range(socket, _params, _opts) do
+    put_flash(socket, :error, "Select a valid chart time range.")
+  end
+
+  def shift_time_range(socket, direction, opts \\ []) when direction in [:back, :forward] do
+    with_current_absolute_range(socket, opts, &TimeRange.shift(&1, direction))
+  end
+
+  def zoom_out_time_range(socket, opts \\ []) do
+    with_current_absolute_range(socket, opts, &TimeRange.zoom_out/1)
+  end
+
+  defp with_current_absolute_range(socket, opts, transform) do
+    assigns = socket.assigns
+
+    with true <- assigns.dashboard_time_mode in ["live", "archive"],
+         now = Keyword.get(opts, :now, DateTime.utc_now()),
+         {:ok, range} <- current_absolute_range(assigns, now) do
+      patch_absolute_range(socket, transform.(range), opts)
+    else
+      _unbounded_or_replay -> socket
+    end
+  end
+
+  defp current_absolute_range(assigns, now) do
+    case TimeRange.resolve(assigns.dashboard_time_from, assigns.dashboard_time_to, now) do
+      {:ok, {:sliding, window_seconds}} ->
+        to_value = DateTime.truncate(now, :second)
+        {:ok, {DateTime.add(to_value, -window_seconds, :second), to_value}}
+
+      {:ok, {:absolute, from_value, to_value}} ->
+        {:ok, {from_value, to_value}}
+
+      {:error, _reason} ->
+        :error
+    end
+  end
+
+  defp patch_absolute_range(socket, {from_value, to_value}, opts, range_opts \\ []) do
+    from_iso = DateTime.to_iso8601(from_value)
+    to_iso = DateTime.to_iso8601(to_value)
+
+    socket
+    |> SelectionPanel.clear_dashboard_selection()
+    |> maybe_store_recent(from_iso, to_iso, Keyword.get(range_opts, :store_recent, false))
+    |> Navigation.patch(
+      %{
+        "time_mode" => "archive",
+        "from" => from_iso,
+        "to" => to_iso,
+        "replay_run_id" => nil
+      },
+      opts
+    )
+  end
+
+  defp maybe_store_recent(socket, from_iso, to_iso, true),
+    do: push_event(socket, "cadence:store-time-recent", %{from: from_iso, to: to_iso})
+
+  defp maybe_store_recent(socket, _from_iso, _to_iso, false), do: socket
 
   def pause_at_selected_time(socket, opts \\ []) do
     case selected_archive_range(socket.assigns.dashboard_selected_data_ref) do

@@ -259,11 +259,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveInvalidationLiveTest do
              ~s(#ops-dashboard-show-page[data-engine-resolve-mode="context_change"][data-runtime-last-invalidation-boundary="dashboard_version_changed"][data-runtime-last-invalidation-refresh-reason="runtime_invalidation"])
            )
 
-    view |> element("#dashboard-diagnostics-button") |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-recent-invalidations [data-runtime-invalidation-boundary="dashboard_version_changed"][data-runtime-invalidation-lifecycle-action="published"][data-runtime-invalidation-document-version="2"])
-           )
+    assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
   end
 end

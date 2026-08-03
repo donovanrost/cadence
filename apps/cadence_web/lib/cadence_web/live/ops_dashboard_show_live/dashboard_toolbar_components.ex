@@ -2,9 +2,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   @moduledoc false
   use CadenceWeb, :html
 
-  alias Cadence.Dashboards.ComparisonReviewQueue
+  alias Cadence.Dashboards.{ComparisonReviewQueue, Document, TimeRange}
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents
+  alias CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents
   alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
 
   attr :dashboard_document, :any, required: true
@@ -13,6 +14,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   attr :dashboard_comparison_review_queue, :map, default: nil
   attr :dashboard_publish_readiness, :map, default: nil
   attr :edit_mode?, :boolean, required: true
+  attr :editor_route?, :boolean, default: false
+  attr :editor_dirty?, :boolean, default: false
+  attr :editor_conflict, :map, default: nil
+  attr :dashboard_author?, :boolean, default: false
   attr :show_context?, :boolean, required: true
   attr :current_mission, :any, default: nil
   attr :spacecraft, :list, required: true
@@ -43,17 +48,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   attr :selected_replay_run, :any, default: nil
   attr :limit_mode, :string, required: true
   attr :limit_mode_fallback, :map, default: nil
+  attr :hidden_marker_categories, :list, default: []
   attr :selected_data_ref, :any, default: nil
+  attr :time_quick_query, :string, default: ""
+  attr :time_recent_ranges, :list, default: []
   attr :query, :string, required: true
   attr :dashboard_warnings, :list, default: []
   attr :dashboard_degraded?, :boolean, default: false
   attr :dashboard_health, :map, default: %{}
+  attr :comparison_available?, :boolean, default: false
+  attr :comparison_open?, :boolean, default: false
+  attr :comparison_open_count, :integer, default: 0
 
   def dashboard_toolbar(assigns) do
     assigns =
       assigns
       |> assign(:data_issue_count, data_issue_count(assigns))
       |> assign(:data_issue_status, data_issue_status(assigns))
+      |> assign(:mission_id, map_value(assigns.current_mission, :mission_id))
+      |> assign(:dashboard_id, map_value(assigns.dashboard_document, :dashboard_id))
+      |> assign(:historical_request_path, historical_request_path(assigns))
+      |> assign(:dashboard_edit_path, dashboard_path(assigns, :edit))
+      |> assign(:dashboard_activity_path, dashboard_path(assigns, :activity))
+      |> assign(:dashboard_diagnostics_path, dashboard_path(assigns, :diagnostics))
+      |> assign(:dashboard_settings_path, dashboard_path(assigns, :settings))
+      |> assign(:dashboard_share_path, dashboard_share_path(assigns))
+      |> assign(:data_query_label, data_query_label(assigns))
+      |> assign(:data_query_overrides?, data_query_overrides?(assigns))
 
     ~H"""
     <div
@@ -72,42 +93,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         </p>
       </div>
 
-      <.popover
+      <div
         :if={not @edit_mode?}
-        id="dashboard-data-controls"
-        trigger_id="dashboard-data-controls-toggle"
-        panel_id="dashboard-data-controls-panel"
-        label="Dashboard scope and time controls"
-        width={:viewport}
+        id="runtime-context-controls"
+        class="cadence-dashboard-query-strip"
       >
-        <:trigger>
-          <span
-          class="btn btn-ghost btn-xs h-7 gap-1.5 border border-base-300/70 bg-base-100/50 px-2 font-normal"
-          >
-            <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5 text-base-content/55" />
-            <span class="hidden max-w-36 truncate font-mono text-[0.68rem] sm:inline">
+        <.popover
+          id="dashboard-data-controls"
+          trigger_id="dashboard-data-controls-toggle"
+          panel_id="dashboard-data-controls-panel"
+          label="Dashboard operational scope"
+          placement={:bottom_start}
+          width={:lg}
+          trigger_class="cadence-dashboard-query-trigger"
+        >
+          <:trigger>
+            <span class="cadence-dashboard-query-trigger-label">Scope</span>
+            <span class="cadence-dashboard-query-trigger-value hidden max-w-36 sm:inline">
               {runtime_scope_label(@current_mission, @spacecraft, @context_scope_kind, @context_scope_id, @context_scope_ids)}
             </span>
-            <span class="text-base-content/35">/</span>
-            <span
-              class="font-mono text-[0.68rem] font-semibold uppercase tracking-wide"
-              data-dashboard-time-summary={@time_mode}
-            >
-              {time_mode_label(@time_mode)}
-            </span>
-            <.icon name="hero-chevron-down" class="h-3 w-3 text-base-content/40" />
-          </span>
-        </:trigger>
-        <div class="p-3">
-          <div class="mb-3 flex items-center gap-2 border-b border-base-300/60 pb-2">
+            <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
+          </:trigger>
+          <div class="cadence-dashboard-query-panel-header">
+            <.icon name="hero-viewfinder-circle" class="mt-0.5 h-4 w-4 text-primary" />
             <div>
-              <p class="hud-label">Scope & time</p>
-              <p class="mt-0.5 text-xs text-base-content/55">
-                Refine what the telemetry canvas is showing.
+              <p class="text-xs font-semibold text-base-content/85">Operational scope</p>
+              <p class="mt-0.5 text-[0.68rem] text-base-content/50">
+                Focus every widget without leaving the dashboard.
               </p>
             </div>
           </div>
-          <div class="flex flex-col gap-3">
+          <div class="cadence-dashboard-query-panel-body">
             <DashboardRuntimeContextComponents.context_selector
               :if={@show_context?}
               current_mission={@current_mission}
@@ -124,7 +140,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
               context_scope_ids={@context_scope_ids}
               query={@query}
             />
+          </div>
+        </.popover>
+
+        <.popover
+          id="dashboard-query-options"
+          trigger_id="dashboard-query-options-toggle"
+          panel_id="dashboard-query-options-panel"
+          label="Dashboard data options"
+          placement={:bottom_start}
+          width={:lg}
+          trigger_class="cadence-dashboard-query-trigger"
+          data-query-overrides={to_string(@data_query_overrides?)}
+        >
+          <:trigger>
+            <span class="cadence-dashboard-query-trigger-label">Data</span>
+            <span class="cadence-dashboard-query-trigger-value cadence-dashboard-query-data-value max-w-40">
+              {@data_query_label}
+            </span>
+            <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
+          </:trigger>
+          <div class="cadence-dashboard-query-panel-header">
+            <.icon name="hero-circle-stack" class="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <p class="text-xs font-semibold text-base-content/85">Data options</p>
+              <p class="mt-0.5 text-[0.68rem] text-base-content/50">
+                Select provenance, representation, and mission semantics.
+              </p>
+            </div>
+          </div>
+          <div class="cadence-dashboard-query-panel-body">
             <DashboardRuntimeControlsComponents.runtime_context_controls
+              section={:data}
               time_mode={@time_mode}
               time_from={@time_from}
               time_to={@time_to}
@@ -141,12 +188,115 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
               selected_replay_run={@selected_replay_run}
               limit_mode={@limit_mode}
               limit_mode_fallback={@limit_mode_fallback}
+              hidden_marker_categories={@hidden_marker_categories}
               selected_data_ref={@selected_data_ref}
               time_axis={@time_axis}
             />
           </div>
+        </.popover>
+
+        <DashboardTimePickerComponents.time_toolbar_cluster
+          time_mode={@time_mode}
+          time_axis={@time_axis}
+          time_from={@time_from}
+          time_to={@time_to}
+          replay_run_id={@replay_run_id}
+          time_validation={@time_validation}
+          data_realm={@data_realm}
+          data_view={@data_view}
+          compare_data_view={@compare_data_view}
+          source_binding_id={@source_binding_id}
+          limit_mode={@limit_mode}
+          replay_runs={@replay_runs}
+          selected_replay_run={@selected_replay_run}
+          selected_data_ref={@selected_data_ref}
+          quick_query={@time_quick_query}
+          recent_ranges={@time_recent_ranges}
+        />
+      </div>
+
+      <.popover
+        :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}
+        id="dashboard-investigate"
+        label="Investigate dashboard data"
+        width={:sm}
+      >
+        <:trigger>
+          <span
+            id="dashboard-investigate-toggle"
+            class="btn btn-ghost btn-xs h-7 gap-1 border border-base-300/70 bg-base-100/50 px-2 font-normal"
+          >
+            <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
+            <span class="hidden sm:inline">Investigate</span>
+          </span>
+        </:trigger>
+        <div class="p-2">
+          <p class="px-2 pb-2 text-[0.65rem] text-base-content/55">
+            Continue with this mission and dashboard context.
+          </p>
+          <nav id="dashboard-investigation-links" class="space-y-1" aria-label="Investigation links">
+            <.link
+              id="dashboard-investigate-telemetry"
+              navigate={telemetry_explore_path(assigns)}
+              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
+            >
+              <.icon name="hero-chart-bar-square" class="mt-0.5 h-4 w-4 text-primary" />
+              <span><span class="block font-medium">Telemetry explore</span><span class="block text-xs text-base-content/55">Inspect samples in this scope and time range.</span></span>
+            </.link>
+            <.link
+              id="dashboard-investigate-sources"
+              navigate={~p"/missions/#{@mission_id}/ops/data-sources?source_dashboard_id=#{@dashboard_id}"}
+              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
+            >
+              <.icon name="hero-circle-stack" class="mt-0.5 h-4 w-4 text-primary" />
+              <span><span class="block font-medium">Source inventory</span><span class="block text-xs text-base-content/55">Inspect bindings, health, and watermarks.</span></span>
+            </.link>
+            <.link
+              id="dashboard-investigate-contacts"
+              navigate={~p"/missions/#{@mission_id}/ops/contacts"}
+              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
+            >
+              <.icon name="hero-signal" class="mt-0.5 h-4 w-4 text-primary" />
+              <span><span class="block font-medium">Contacts</span><span class="block text-xs text-base-content/55">Correlate scheduled and realized operations.</span></span>
+            </.link>
+            <.link
+              id="dashboard-investigate-diagnostics"
+              navigate={~p"/missions/#{@mission_id}/ops/dashboards/#{@dashboard_id}/diagnostics"}
+              class="flex w-full items-start gap-2 rounded px-2 py-2 text-left text-sm hover:bg-base-300/60"
+            >
+              <.icon name="hero-wrench-screwdriver" class="mt-0.5 h-4 w-4 text-primary" />
+              <span><span class="block font-medium">Dashboard diagnostics</span><span class="block text-xs text-base-content/55">Inspect plans, cache, and source execution.</span></span>
+            </.link>
+          </nav>
         </div>
       </.popover>
+
+      <button
+        :if={not @edit_mode? and @comparison_available?}
+        id="dashboard-comparison-toggle"
+        type="button"
+        phx-click="toggle_comparison_inspector"
+        aria-expanded={to_string(@comparison_open?)}
+        aria-controls="dashboard-comparison-inspector"
+        data-dashboard-comparison-toggle
+        class={[
+          "btn btn-ghost btn-xs h-7 gap-1.5 border px-2 font-normal",
+          if(@comparison_open?,
+            do: "border-info/45 bg-info/10 text-info",
+            else: "border-base-300/70 bg-base-100/50"
+          )
+        ]}
+      >
+        <.icon name="hero-scale" class="h-3.5 w-3.5" />
+        <span class="hidden sm:inline">Compare</span>
+        <span
+          :if={@comparison_open_count > 0}
+          class="badge badge-warning badge-xs"
+          data-dashboard-comparison-open-count={@comparison_open_count}
+        >
+          {@comparison_open_count}
+        </span>
+      </button>
 
       <.popover
         :if={@data_issue_count > 0}
@@ -194,15 +344,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
           >
             One or more sources returned degraded data.
           </p>
-          <button
+          <.link
             id="dashboard-data-issues-open"
-            type="button"
-            phx-click="open_diagnostics"
+            navigate={@dashboard_diagnostics_path}
             class="btn btn-outline btn-xs mt-3 w-full justify-start"
           >
             <.icon name="hero-chart-bar-square" class="h-3.5 w-3.5" />
             Open diagnostics
-          </button>
+          </.link>
         </div>
       </.popover>
 
@@ -233,7 +382,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         Live updates paused while editing
       </span>
       <.button
-        :if={@edit_mode?}
+        :if={@edit_mode? and not @editor_route?}
         id="edit-layout-toggle"
         variant={:primary}
         size={:xs}
@@ -241,6 +390,47 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       >
         <.icon name="hero-arrows-pointing-out" class="h-3.5 w-3.5" />
         Done
+      </.button>
+      <span
+        :if={@editor_route?}
+        id="dashboard-editor-save-state"
+        class={[
+          "font-mono text-[0.65rem] uppercase tracking-wider",
+          if(@editor_dirty?, do: "text-warning", else: "text-success")
+        ]}
+        data-editor-dirty={to_string(@editor_dirty?)}
+      >
+        {if @editor_dirty?, do: "Unsaved changes", else: "Saved"}
+      </span>
+      <.button
+        :if={@editor_route?}
+        id="dashboard-editor-discard"
+        variant={:ghost}
+        size={:xs}
+        phx-click="discard_editor"
+        data-editor-discard
+      >
+        Discard
+      </.button>
+      <.button
+        :if={@editor_route?}
+        id="dashboard-editor-save"
+        variant={:primary}
+        size={:xs}
+        phx-click="save_editor"
+        disabled={not @editor_dirty? or not is_nil(@editor_conflict)}
+      >
+        <.icon name="hero-check" class="h-3.5 w-3.5" /> Save
+      </.button>
+      <.button
+        :if={@editor_route?}
+        id="dashboard-editor-review"
+        variant={:ghost}
+        size={:xs}
+        phx-click="review_editor"
+        disabled={not is_nil(@editor_conflict)}
+      >
+        Review & Publish
       </.button>
       <.button
         :if={@edit_mode?}
@@ -251,21 +441,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       >
         <.icon name="hero-plus" class="h-3.5 w-3.5" /> Widget
       </.button>
+      <.button
+        :if={@edit_mode?}
+        id="manage-dashboard-sections"
+        variant={:ghost}
+        size={:xs}
+        phx-click="open_dashboard_sections"
+      >
+        <.icon name="hero-rectangle-group" class="h-3.5 w-3.5" /> Sections
+      </.button>
       <.action_menu id="dashboard-menu">
-        <:action :if={not @edit_mode?}>
-          <button id="edit-layout-toggle" phx-click="toggle_edit">
-            <.icon name="hero-arrows-pointing-out" class="h-4 w-4" /> Edit layout
-          </button>
-        </:action>
-        <:action :if={not @edit_mode?}>
-          <button id="add-widget-button" phx-click="open_add_widget">
-            <.icon name="hero-plus" class="h-4 w-4" /> Add widget
-          </button>
+        <:action :if={not @edit_mode? and @dashboard_author?}>
+          <.link
+            id="dashboard-edit-link"
+            navigate={@dashboard_edit_path}
+          >
+            <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit Dashboard
+          </.link>
         </:action>
         <:action>
-          <button
+          <.link
             id="dashboard-versions-button"
-            phx-click={versions_button_event(@dashboard_comparison_review_queue)}
+            navigate={@dashboard_activity_path}
             data-dashboard-comparison-review-open-count={
               comparison_review_open_request_count(@dashboard_comparison_review_queue)
             }
@@ -284,53 +481,39 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
             >
               {comparison_review_open_request_count(@dashboard_comparison_review_queue)}
             </span>
-          </button>
+          </.link>
         </:action>
         <:action>
-          <button
+          <.link
             id="dashboard-historical-workflow-request-button"
-            phx-click="open_historical_workflow_request"
+            navigate={@historical_request_path}
           >
             <.icon name="hero-document-plus" class="h-4 w-4" /> Request historical data
-          </button>
+          </.link>
         </:action>
         <:action>
-          <button id="dashboard-diagnostics-button" phx-click="open_diagnostics">
+          <.link
+            id="dashboard-diagnostics-button"
+            navigate={@dashboard_diagnostics_path}
+          >
             <.icon name="hero-chart-bar-square" class="h-4 w-4" /> Diagnostics
-          </button>
+          </.link>
         </:action>
-        <:action>
-          <button phx-click="save_runtime_defaults">
-            <.icon name="hero-bookmark-square" class="h-4 w-4" /> Save runtime defaults
-          </button>
-        </:action>
-        <:action>
-          <button
-            phx-click="publish_dashboard"
-            disabled={not lifecycle_action_available?(@dashboard_lifecycle_status, :publish)}
-            data-dashboard-lifecycle-action="publish"
-            data-dashboard-action-available={
-              lifecycle_action_available_text(@dashboard_lifecycle_status, :publish)
-            }
+        <:action :if={@dashboard_author?}>
+          <.link
+            id="dashboard-share-button"
+            navigate={@dashboard_share_path}
           >
-            <.icon name="hero-arrow-up-tray" class="h-4 w-4" /> Publish latest draft
-          </button>
+            <.icon name="hero-share" class="h-4 w-4" /> Share current context
+          </.link>
         </:action>
-        <:action>
-          <button phx-click="open_rename">Rename</button>
-        </:action>
-        <:action>
-          <button
-            phx-click="archive_dashboard"
-            disabled={not lifecycle_action_available?(@dashboard_lifecycle_status, :archive)}
-            data-dashboard-lifecycle-action="archive"
-            data-dashboard-action-available={
-              lifecycle_action_available_text(@dashboard_lifecycle_status, :archive)
-            }
-            data-confirm="Archive this dashboard for every operator on the mission?"
+        <:action :if={@dashboard_author?}>
+          <.link
+            id="dashboard-settings-button"
+            navigate={@dashboard_settings_path}
           >
-            <.icon name="hero-archive-box" class="h-4 w-4" /> Archive
-          </button>
+            <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Settings
+          </.link>
         </:action>
       </.action_menu>
     </div>
@@ -369,10 +552,63 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
   defp scope_kind_label(_value), do: "contexts"
 
-  defp time_mode_label("live"), do: "Live"
-  defp time_mode_label("archive"), do: "Archive"
-  defp time_mode_label("replay_run"), do: "Replay"
-  defp time_mode_label(_mode), do: "Time"
+  defp data_query_label(assigns) do
+    base = "#{query_value_label(assigns.data_realm)} · #{query_value_label(assigns.data_view)}"
+
+    case assigns.compare_data_view do
+      value when is_binary(value) and value != "" ->
+        "#{base} ↔ #{query_value_label(value)}"
+
+      _none ->
+        base
+    end
+  end
+
+  defp data_query_overrides?(assigns) do
+    assigns.data_realm != "flight" or
+      assigns.data_view != "canonical" or
+      present_text?(assigns.compare_data_view) or
+      assigns.limit_mode != "observed" or
+      assigns.time_axis != "generation_time"
+  end
+
+  defp query_value_label(value) when is_binary(value) do
+    value
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp query_value_label(_value), do: "Default"
+
+  defp telemetry_explore_path(assigns) do
+    {from_value, to_value} =
+      TimeRange.frozen_bounds(assigns.time_from, assigns.time_to, DateTime.utc_now())
+
+    query =
+      %{
+        "source_dashboard_id" => assigns.dashboard_id,
+        "spacecraft_id" => assigns.context_spacecraft_id,
+        "scope_kind" => assigns.context_scope_kind,
+        "scope_id" => assigns.context_scope_id,
+        "time_mode" => explore_time_mode(assigns.time_mode),
+        "from" => from_value,
+        "to" => to_value,
+        "time_axis" => assigns.time_axis,
+        "replay_run_id" => assigns.replay_run_id,
+        "realm" => assigns.data_realm,
+        "selection_view" => assigns.data_view,
+        "data_source_id" => assigns.data_source_id,
+        "source_binding_id" => assigns.source_binding_id,
+        "limit_mode" => assigns.limit_mode
+      }
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
+
+    ~p"/missions/#{assigns.mission_id}/ops/explore?#{query}"
+  end
+
+  defp explore_time_mode("live"), do: "latest"
+  defp explore_time_mode(mode), do: mode
 
   defp data_issue_count(assigns) do
     warning_count = length(assigns.dashboard_warnings)
@@ -381,6 +617,109 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
     Enum.max([warning_count, affected_count, degraded_count])
   end
+
+  defp historical_request_query(assigns) do
+    point_id =
+      map_value(assigns.selected_data_ref, :point_id) ||
+        map_value(assigns.selected_data_ref, :observable_id)
+
+    {source_from, source_to} =
+      TimeRange.frozen_bounds(assigns.time_from, assigns.time_to, DateTime.utc_now())
+
+    %{
+      "realm" => assigns.data_realm,
+      "data_source_id" => assigns.data_source_id,
+      "source_binding_id" => assigns.source_binding_id,
+      "observable_id" => point_id,
+      "point_id" => point_id,
+      "point_ids" => point_id,
+      "source_from" => source_from,
+      "source_to" => source_to,
+      "dashboard_id" => map_value(assigns.dashboard_document, :dashboard_id),
+      "dashboard_version" => dashboard_version(assigns.dashboard_document),
+      "dashboard_time_mode" => assigns.time_mode,
+      "dashboard_replay_run_id" => assigns.replay_run_id,
+      "dashboard_data_view" => assigns.data_view,
+      "dashboard_limit_mode" => assigns.limit_mode,
+      "reason" => "dashboard_historical_data_gap"
+    }
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+  end
+
+  defp historical_request_path(assigns) do
+    case map_value(assigns.current_mission, :mission_id) do
+      mission_id when is_binary(mission_id) and mission_id != "" ->
+        ~p"/missions/#{mission_id}/ops/data-operations?#{historical_request_query(assigns)}"
+
+      _missing_mission ->
+        "#"
+    end
+  end
+
+  defp dashboard_path(assigns, page) do
+    mission_id = map_value(assigns.current_mission, :mission_id)
+    dashboard_id = map_value(assigns.dashboard_document, :dashboard_id)
+
+    if dashboard_identity?(mission_id, dashboard_id),
+      do: dashboard_page_path(page, mission_id, dashboard_id, assigns),
+      else: "#"
+  end
+
+  defp dashboard_page_path(:edit, mission_id, dashboard_id, _assigns),
+    do: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/edit"
+
+  defp dashboard_page_path(:activity, mission_id, dashboard_id, _assigns),
+    do: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/activity"
+
+  defp dashboard_page_path(:diagnostics, mission_id, dashboard_id, assigns),
+    do:
+      ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/diagnostics?#{runtime_context_query(assigns)}"
+
+  defp dashboard_page_path(:settings, mission_id, dashboard_id, assigns),
+    do:
+      ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/settings?#{runtime_context_query(assigns)}"
+
+  defp dashboard_page_path(_page, _mission_id, _dashboard_id, _assigns), do: "#"
+
+  defp dashboard_identity?(mission_id, dashboard_id),
+    do: present_text?(mission_id) and present_text?(dashboard_id)
+
+  defp runtime_context_query(assigns) do
+    selected_id =
+      map_value(assigns.selected_data_ref, :sample_id) ||
+        map_value(assigns.selected_data_ref, :point_id) ||
+        map_value(assigns.selected_data_ref, :observable_id)
+
+    %{
+      "spacecraft_id" => assigns.context_spacecraft_id,
+      "scope_kind" => assigns.context_scope_kind,
+      "scope_id" => assigns.context_scope_id,
+      "time_mode" => assigns.time_mode,
+      "time_axis" => assigns.time_axis,
+      "from" => assigns.time_from,
+      "to" => assigns.time_to,
+      "replay_run_id" => assigns.replay_run_id,
+      "realm" => assigns.data_realm,
+      "data_view" => assigns.data_view,
+      "data_source_id" => assigns.data_source_id,
+      "source_binding_id" => assigns.source_binding_id,
+      "limit_mode" => assigns.limit_mode,
+      "selected_id" => selected_id
+    }
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+  end
+
+  defp dashboard_share_path(assigns) do
+    case dashboard_path(assigns, :settings) do
+      "#" -> "#"
+      path -> path <> "#dashboard-sharing"
+    end
+  end
+
+  defp dashboard_version(%Document{} = document), do: Document.version(document)
+  defp dashboard_version(_document), do: nil
 
   defp data_issue_status(assigns) do
     health_state = map_value(assigns.dashboard_health, :state)
@@ -430,18 +769,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
   defp present_text?(value), do: is_binary(value) and String.trim(value) != ""
 
-  defp lifecycle_action_available?(%{publish_available?: available?}, :publish),
-    do: available? == true
-
-  defp lifecycle_action_available?(%{archive_available?: available?}, :archive),
-    do: available? == true
-
-  defp lifecycle_action_available?(_status, _action), do: false
-
-  defp lifecycle_action_available_text(status, action) do
-    if lifecycle_action_available?(status, action), do: "true", else: "false"
-  end
-
   defp publish_readiness_label("blocked"), do: "Publish blocked"
   defp publish_readiness_label("stale"), do: "Re-check publish"
   defp publish_readiness_label("warnings"), do: "Publish warnings"
@@ -465,14 +792,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   end
 
   defp publish_readiness_issue_count(_validation), do: "0"
-
-  defp versions_button_event(open_summary) do
-    if comparison_review_open_summary(open_summary).count == 0 do
-      "open_versions"
-    else
-      "open_review_activity"
-    end
-  end
 
   defp comparison_review_open_request_count(open_summary) do
     open_summary

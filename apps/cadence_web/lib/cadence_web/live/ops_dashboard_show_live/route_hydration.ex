@@ -21,6 +21,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
       dashboard_editor_panel?(params) ->
         hydrate_dashboard_editor(socket, params, opts)
 
+      socket.assigns.edit_mode? and socket.assigns[:editor_route?] ->
+        hydrate_runtime_route(socket, params, opts)
+
       socket.assigns.edit_mode? ->
         socket
 
@@ -33,6 +36,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
     context_changed? = runtime_context_changed?(socket, runtime_context)
     runtime_assigns = RuntimeContext.field_assigns(runtime_context)
 
+    # Marker visibility is presentation-only: it must remount the charts
+    # (epoch bump) without triggering an engine re-resolve.
+    markers_changed? =
+      List.wrap(socket.assigns[:dashboard_hidden_marker_categories]) !=
+        runtime_assigns.dashboard_hidden_marker_categories
+
     selected_ref =
       DataLinkSelection.selected_ref_for_runtime_context(
         socket.assigns[:dashboard_selected_data_ref],
@@ -40,7 +49,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
       )
 
     socket
-    |> maybe_increment_chart_epoch(context_changed?)
+    |> maybe_increment_chart_epoch(context_changed? or markers_changed?)
     |> maybe_mark_runtime_context_changed(context_changed?)
     |> assign(runtime_assigns)
     |> DocumentLifecycle.assign_render_items()

@@ -145,6 +145,7 @@ defmodule CadenceWeb.TestFixtures do
       mission_id: mission.mission_id,
       name: Keyword.get(opts, :name, "Dashboard-#{System.unique_integer([:positive])}"),
       description: Keyword.get(opts, :description),
+      metadata: Keyword.get(opts, :metadata, %{}),
       placements:
         opts
         |> Keyword.get(:placements, widget_specs_to_placements(Keyword.get(opts, :widgets, [])))

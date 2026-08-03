@@ -1,0 +1,68 @@
+/* GridStack defaults panel contents to overflow-y:auto. Keep this rule
+   unlayered, like the vendor rule it overrides: the panel is the fixed
+   viewport; individual table/timeline bodies own any scrolling they need. */
+.grid-stack > .grid-stack-item > .grid-stack-item-content.cadence-dashboard-panel {
+  overflow: hidden;
+  border-color: oklch(from var(--color-base-content) l c h / 0.14);
+  border-radius: 0.2rem;
+  background: oklch(from var(--color-base-200) calc(l - 0.012) c h);
+  box-shadow: 0 1px 1px oklch(0% 0 0 / 0.2);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.grid-stack-static > .grid-stack-item > .grid-stack-item-content.cadence-dashboard-panel:is(:hover, :focus-within) {
+  border-color: oklch(from var(--color-base-content) l c h / 0.25);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.28);
+}
+
+.cadence-dashboard-widget-header {
+  min-height: 1.8rem;
+  background: transparent;
+}
+
+.cadence-dashboard-widget-actions {
+  opacity: 0.58;
+  transition: opacity 120ms ease;
+}
+
+.cadence-dashboard-panel:is(:hover, :focus-within) .cadence-dashboard-widget-actions {
+  opacity: 1;
+}
+
+.cadence-time-series-panel-body {
+  padding: 0 0.35rem 0.35rem;
+}
+
+.cadence-time-series-stage,
+.cadence-time-series-chart {
+  overflow: hidden;
+}
+
+.cadence-time-series-chart {
+  color: var(--color-primary);
+}
+
+.cadence-time-series-chart .uplot {
+  overflow: hidden;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+.cadence-time-series-chart .u-select {
+  background: oklch(from var(--color-primary) l c h / 0.12);
+  border: 1px solid oklch(from var(--color-primary) l c h / 0.45);
+}
+
+.cadence-time-series-stage [data-chart-data-management-strip] {
+  position: absolute;
+  z-index: 5;
+  top: 0.35rem;
+  left: 0.5rem;
+  max-width: calc(100% - 1rem);
+}
+
+.cadence-time-series-chart .telemetry-chart-legend {
+  border-top: 1px solid oklch(from var(--color-base-content) l c h / 0.11);
+  background: oklch(from var(--color-base-200) calc(l - 0.012) c h / 0.97);
+}

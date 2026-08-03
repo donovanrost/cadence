@@ -273,6 +273,66 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponentsTest do
     assert html =~ "No point binding required."
   end
 
+  test "renders section, repeat, chart presentation, and binding preview controls" do
+    html =
+      render_widget_form(
+        form:
+          to_form(
+            %{
+              "type" => "time_series",
+              "title" => "Fleet voltage",
+              "mode" => "repeat",
+              "binding_source" => "telemetry",
+              "section_id" => "power"
+            },
+            as: :widget
+          ),
+        dashboard_document: %{
+          sections: [%{section_id: "power", title: "Power"}]
+        },
+        binding_preview: %{
+          status: :ready,
+          title: "Binding is producing data",
+          message: "1 source request produced 1 primary frame with renderable values.",
+          planned_request_count: 1,
+          frame_count: 1,
+          warning_count: 0
+        }
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["power"] =
+             document
+             |> LazyHTML.query(~s(select[name="widget[section_id]"] option[value="power"]))
+             |> LazyHTML.attribute("value")
+
+    assert ["repeat"] =
+             document
+             |> LazyHTML.query(~s(#widget_mode option[value="repeat"]))
+             |> LazyHTML.attribute("value")
+
+    assert ["widget-repeat-options"] =
+             document
+             |> LazyHTML.query("#widget-repeat-options")
+             |> LazyHTML.attribute("id")
+
+    assert ["time-series-presentation-options"] =
+             document
+             |> LazyHTML.query("#time-series-presentation-options")
+             |> LazyHTML.attribute("id")
+
+    assert ["ready"] =
+             document
+             |> LazyHTML.query("#widget-binding-preview")
+             |> LazyHTML.attribute("data-binding-preview-status")
+
+    assert ["preview_widget_binding"] =
+             document
+             |> LazyHTML.query("#test-widget-binding")
+             |> LazyHTML.attribute("phx-click")
+  end
+
   defp render_widget_form(attrs) do
     render_component(&WidgetFormComponents.widget_form/1, Keyword.merge(base_attrs(), attrs))
   end

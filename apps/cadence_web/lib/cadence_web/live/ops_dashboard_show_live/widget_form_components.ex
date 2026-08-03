@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
 
   attr :panel, :any, required: true
   attr :form, Phoenix.HTML.Form, required: true
+  attr :binding_preview, :map, default: nil
   attr :spacecraft, :list, required: true
   attr :operational_observables, :list, required: true
   attr :filtered_points, :list, required: true
@@ -18,6 +19,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
   attr :dashboard_editor_focus, :map, default: nil
   attr :error, :string, required: true
   attr :mission_id, :string, required: true
+  attr :dashboard_document, :any, default: %{sections: []}
 
   def widget_form(assigns) do
     ~H"""
@@ -35,6 +37,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
         options={WidgetFormPresentation.type_options()}
       />
       <.input field={@form[:title]} type="text" label="Title" required />
+      <.input
+        :if={@dashboard_document.sections != []}
+        field={@form[:section_id]}
+        type="select"
+        label="Operational section"
+        options={section_options(@dashboard_document.sections)}
+      />
 
       <%= if WidgetFormPresentation.point_widget?(@form) do %>
         <input
@@ -95,6 +104,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
           label="Spacecraft"
           options={WidgetFormPresentation.spacecraft_options(@spacecraft)}
         />
+        <div
+          :if={WidgetFormPresentation.form_value(@form, :mode) == "repeat"}
+          id="widget-repeat-options"
+          class="space-y-3 rounded border border-primary/30 bg-primary/5 p-3"
+        >
+          <div class="flex items-start gap-2 text-xs text-base-content/75">
+            <.icon name="hero-squares-2x2" class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p>
+              Creates one scoped widget for each resource selected in the dashboard context.
+              Instance IDs stay stable as the selection changes.
+            </p>
+          </div>
+          <.input
+            field={@form[:repeat_over]}
+            type="select"
+            label="Repeat domain"
+            options={WidgetFormPresentation.repeat_over_options()}
+          />
+          <.input
+            field={@form[:repeat_layout]}
+            type="select"
+            label="Instance layout"
+            options={WidgetFormPresentation.repeat_layout_options()}
+          />
+          <.input
+            field={@form[:repeat_max_instances]}
+            type="select"
+            label="Safety limit"
+            options={WidgetFormPresentation.repeat_max_options()}
+          />
+        </div>
         <.point_picker
           :if={not WidgetFormPresentation.operational_observable_widget?(@form)}
           form={@form}
@@ -120,12 +160,65 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
           options={WidgetFormPresentation.precision_options()}
         />
         <.input
+          :if={WidgetFormPresentation.form_value(@form, :type) == "value_tile"}
+          field={@form[:show_unit]}
+          type="checkbox"
+          label="Show engineering unit"
+        />
+        <.input
           :if={WidgetFormPresentation.form_value(@form, :type) == "time_series"}
           field={@form[:window_seconds]}
           type="select"
           label="Chart Window"
           options={WidgetFormPresentation.window_options()}
         />
+        <div
+          :if={WidgetFormPresentation.form_value(@form, :type) == "time_series"}
+          id="time-series-presentation-options"
+          class="space-y-3 rounded border border-base-300/60 bg-base-200/30 p-3"
+        >
+          <p class="hud-label">Chart presentation</p>
+          <div class="grid grid-cols-2 gap-3">
+            <.input
+              field={@form[:legend_mode]}
+              type="select"
+              label="Legend"
+              options={WidgetFormPresentation.legend_mode_options()}
+            />
+            <.input
+              field={@form[:line_width]}
+              type="select"
+              label="Line width"
+              options={WidgetFormPresentation.line_width_options()}
+            />
+            <.input
+              field={@form[:fill_opacity]}
+              type="select"
+              label="Area fill"
+              options={WidgetFormPresentation.fill_opacity_options()}
+            />
+            <.input
+              field={@form[:axis_mode]}
+              type="select"
+              label="Value axes"
+              options={WidgetFormPresentation.axis_mode_options()}
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <.input
+              field={@form[:show_min_max_band]}
+              type="checkbox"
+              label="Show min/max band"
+            />
+            <.input field={@form[:show_points]} type="checkbox" label="Show point markers" />
+            <.input field={@form[:span_gaps]} type="checkbox" label="Connect data gaps" />
+            <.input
+              field={@form[:shared_tooltip]}
+              type="checkbox"
+              label="Shared hover values"
+            />
+          </div>
+        </div>
       <% else %>
         <p class="text-sm text-base-content/70">
           {WidgetFormPresentation.non_point_widget_help(@form)}
@@ -134,12 +227,60 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
 
       <p :if={@error} class="text-sm text-error">{@error}</p>
 
-      <.button type="submit" size={:md}>
-        {if match?({:edit_placement, _id}, @panel), do: "Save Widget", else: "Add Widget"}
-      </.button>
+      <.binding_preview preview={@binding_preview} />
+
+      <div class="flex flex-wrap items-center gap-2 border-t border-base-300/60 pt-4">
+        <.button
+          id="test-widget-binding"
+          type="button"
+          size={:md}
+          variant={:secondary}
+          phx-click="preview_widget_binding"
+        >
+          <.icon name="hero-beaker" class="-ml-0.5 mr-1 h-4 w-4" /> Test binding
+        </.button>
+        <.button id="save-dashboard-widget" type="submit" size={:md}>
+          {if match?({:edit_placement, _id}, @panel), do: "Save Widget", else: "Add Widget"}
+        </.button>
+      </div>
     </.form>
     """
   end
+
+  attr :preview, :map, default: nil
+
+  defp binding_preview(assigns) do
+    ~H"""
+    <div
+      :if={@preview}
+      id="widget-binding-preview"
+      class={[
+        "rounded border px-3 py-2",
+        preview_class(@preview.status)
+      ]}
+      data-binding-preview-status={@preview.status}
+    >
+      <div class="flex items-start gap-2">
+        <.icon name={preview_icon(@preview.status)} class="mt-0.5 h-4 w-4 shrink-0" />
+        <div class="min-w-0">
+          <p class="text-sm font-semibold">{@preview.title}</p>
+          <p class="mt-0.5 text-xs opacity-80">{@preview.message}</p>
+          <p class="mt-2 font-mono text-[0.65rem] uppercase tracking-wide opacity-65">
+            {@preview.planned_request_count} requests / {@preview.frame_count} frames / {@preview.warning_count} warnings
+          </p>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp preview_class(:ready), do: "border-success/40 bg-success/10 text-success"
+  defp preview_class(:no_data), do: "border-warning/40 bg-warning/10 text-warning"
+  defp preview_class(_status), do: "border-error/40 bg-error/10 text-error"
+
+  defp preview_icon(:ready), do: "hero-check-circle"
+  defp preview_icon(:no_data), do: "hero-information-circle"
+  defp preview_icon(_status), do: "hero-exclamation-triangle"
 
   attr :form, Phoenix.HTML.Form, required: true
   attr :filtered_points, :list, required: true
@@ -595,5 +736,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
 
   defp operational_observable_readiness_focus?(observable, focus_ids) when is_list(focus_ids) do
     observable.observable_id in focus_ids
+  end
+
+  defp section_options(sections) do
+    [{"Unsectioned canvas", ""}] ++ Enum.map(sections, &{&1.title, &1.section_id})
   end
 end

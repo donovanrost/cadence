@@ -98,6 +98,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarModelTest do
              dashboard_comparison_review_queue: empty_review_queue(),
              dashboard_publish_readiness: nil,
              edit_mode?: false,
+             editor_route?: false,
+             editor_dirty?: false,
+             editor_conflict: nil,
+             dashboard_author?: false,
              show_context?: false,
              current_mission: nil,
              spacecraft: [],
@@ -128,7 +132,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarModelTest do
              selected_replay_run: nil,
              limit_mode: nil,
              limit_mode_fallback: nil,
+             hidden_marker_categories: [],
              selected_data_ref: nil,
+             time_quick_query: "",
+             time_recent_ranges: [],
              query: ""
            }
   end

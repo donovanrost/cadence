@@ -17,6 +17,8 @@ out. Use these guides when you need to accomplish a specific task.
 ## Common Developer Workflows
 
 - [Run the Local Development Loop](run-the-local-development-loop.md)
+- [Run the Dashboard and Ops Demo](run-dashboard-ops-demo.md)
+- [Manage Dashboards as Code](manage-dashboards-as-code.md)
 - [Profile Cadence Telemetry Ingress](profile-cadence-telemetry-ingress.md)
 - [Benchmark Simulator Throughput Against a Dumb Sink](benchmark-simulator-throughput.md)
 

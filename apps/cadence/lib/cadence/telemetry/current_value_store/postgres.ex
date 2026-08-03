@@ -160,6 +160,13 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
       {:binding_id, binding_id}, query ->
         where(query, [row], row.binding_id == ^binding_id)
 
+      {:replay_run_id, replay_run_id}, query ->
+        where(
+          query,
+          [row],
+          fragment("?->'storage'->>'replay_run_id'", row.provenance) == ^replay_run_id
+        )
+
       {:source_endpoint_ids, source_endpoint_ids}, query ->
         where(
           query,

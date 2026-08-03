@@ -20,6 +20,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContext do
     :source_binding_id,
     :limit_mode,
     :limit_mode_fallback,
+    :hidden_marker_categories,
     :time_context,
     :data_context,
     :limit_context
@@ -46,6 +47,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContext do
           source_binding_id: binary() | nil,
           limit_mode: binary(),
           limit_mode_fallback: map() | nil,
+          hidden_marker_categories: [binary()] | nil,
           time_context: map(),
           data_context: map(),
           limit_context: map()
@@ -100,6 +102,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContext do
       dashboard_source_binding_id: context.source_binding_id,
       dashboard_limit_mode: context.limit_mode,
       dashboard_limit_mode_fallback: context.limit_mode_fallback,
+      dashboard_hidden_marker_categories: context.hidden_marker_categories || [],
       dashboard_time_context: context.time_context,
       dashboard_data_context: context.data_context,
       dashboard_limit_context: context.limit_context

@@ -57,6 +57,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelRollupTest do
     assert model.comparison_rollup.widget_count == 2
     assert model.comparison_rollup.delta_count == 1
     assert model.comparison_rollup.missing_count == 1
+    assert model.comparison_inspector_open? == false
+    assert model.toolbar_props.comparison_available? == true
+    assert model.toolbar_props.comparison_open? == false
+    assert model.toolbar_props.comparison_open_count == 1
     assert model.comparison_preset["schema"] == "dashboard_comparison_investigation_preset.v1"
     assert model.comparison_preset["dashboard_id"] == "dashboard-1"
     assert model.comparison_preset["mission_id"] == "mission-1"
@@ -139,6 +143,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelRollupTest do
              %{key: "open", placement_ids: "placement-2", count: 1},
              %{key: "handled", placement_ids: "placement-1", count: 1}
            ] = model.comparison_rollup.workflow_groups
+  end
+
+  test "opens the page-local comparison inspector only in viewer mode" do
+    base_assigns = %{
+      dashboard_data_view: "all_revisions",
+      dashboard_compare_data_view: "canonical",
+      comparison_inspector_open?: true,
+      dashboard_render_items: [render_item("placement-1")],
+      dashboard_engine_frames_by_placement: %{"placement-1" => scalar_frames(42)},
+      dashboard_compare_engine_frames_by_placement: %{"placement-1" => scalar_frames(40)}
+    }
+
+    viewer_model = base_assigns |> assigns() |> RenderPageModel.build()
+
+    assert viewer_model.comparison_inspector_open? == true
+    assert viewer_model.toolbar_props.comparison_open? == true
+
+    editor_model =
+      base_assigns
+      |> Map.put(:edit_mode?, true)
+      |> assigns()
+      |> RenderPageModel.build()
+
+    assert editor_model.comparison_inspector_open? == false
+    assert editor_model.toolbar_props.comparison_open? == false
   end
 
   test "build exposes dashboard-level health rollup attrs" do

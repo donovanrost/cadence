@@ -19,7 +19,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardActionPresentationTest do
     assert action.action_id == "dashboard-evidence-explore"
     assert action.kind == :navigate
     assert action.source == :evidence_panel
-    assert uri.path == "/missions/mission-1/ops/telemetry/explore"
+    assert uri.path == "/missions/mission-1/ops/explore"
 
     assert query == %{
              "point_id" => "HK.counter",

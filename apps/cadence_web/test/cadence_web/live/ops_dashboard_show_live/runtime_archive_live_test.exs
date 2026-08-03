@@ -222,7 +222,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     Jason.decode!(value)
   end
 
-  test "time presets patch archive snapshot context and can resume live" do
+  test "quick ranges slide live, absolute bounds snapshot archive, and live resumes" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
     dashboard =
@@ -235,6 +235,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     render_dashboard_async(view)
 
     view |> element("#dashboard-time-preset-last-5m") |> render_click()
+
+    patched_path = assert_patch(view)
+    assert patched_path =~ "from=now-5m"
+    assert patched_path =~ "to=now"
+    refute patched_path =~ "time_mode="
+    refute patched_path =~ "time_axis="
+
+    render_dashboard_async(view)
+
+    assert has_element?(
+             view,
+             ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-time-from="now-5m"][data-dashboard-time-to="now"][data-dashboard-time-validation="ok"][data-engine-snapshot="false"][data-engine-live-append-eligible="true"])
+           )
+
+    assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")
+
+    view
+    |> form("#dashboard-custom-range-form", %{
+      "from" => "2026-06-17T12:00:00Z",
+      "to" => "2026-06-17T12:05:00Z"
+    })
+    |> render_submit()
 
     patched_path = assert_patch(view)
     assert patched_path =~ "time_mode=archive"

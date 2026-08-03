@@ -221,7 +221,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelTest do
       assigns
       |> RenderPageModel.build()
 
-    assert model.toolbar_props == RenderToolbarModel.props(assigns)
+    assert model.toolbar_props ==
+             assigns
+             |> RenderToolbarModel.props()
+             |> Map.merge(%{
+               comparison_available?: false,
+               comparison_open?: false,
+               comparison_open_count: 0
+             })
+
     assert model.dashboard_warning_props == RenderSourceModel.dashboard_warning_props(assigns)
     assert model.source_health_props == RenderSourceModel.source_health_props(assigns)
   end

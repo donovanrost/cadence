@@ -443,5 +443,142 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-status="resolved"])
              )
     end
+
+    test "marker category toggles hide markers without an engine re-resolve" do
+      disable_telemetry_storage_runtime_invalidation!()
+
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Marker Toggle")
+      binding_set = persist_binding_set!(org, mission)
+      _scheduled_contact = persist_scheduled_contact!(org, mission)
+      _persisted_event = persist_mission_event!(org, mission, binding_set, spacecraft)
+
+      ingest!(mission, binding_set, spacecraft.spacecraft_id, 14, 1_700_000_090)
+
+      dashboard =
+        TestFixtures.persist_dashboard_document!(mission,
+          name: "Marker Toggles",
+          widgets: [
+            %{
+              type: :time_series,
+              title: "Counter Trend",
+              binding: %{
+                mode: :fixed,
+                spacecraft_id: spacecraft.spacecraft_id,
+                point_id: "HK.counter"
+              },
+              layout: %{x: 0, y: 0, w: 6, h: 3}
+            }
+          ]
+        )
+
+      document = fetch_dashboard_document!(org, mission, dashboard)
+      trend_widget_id = render_item_by_title(document, "Counter Trend").widget.widget_id
+
+      {:ok, view, _html} = live(conn, show_path(mission, dashboard))
+      html = render_dashboard_async(view)
+
+      marker_types =
+        html |> chart_event_markers(trend_widget_id) |> Enum.map(& &1["marker_type"])
+
+      assert "contact_interval" in marker_types
+      assert "mission_event" in marker_types
+
+      chart_id_before = chart_dom_id(html, trend_widget_id)
+      assert has_element?(view, ~s(#dashboard-marker-contacts[checked]))
+
+      view
+      |> form("#runtime-context-form", %{"markers" => %{"contacts" => "false"}})
+      |> render_change()
+
+      toggled_path = assert_patch(view)
+      assert toggled_path =~ "hidden_markers=contacts"
+
+      html = render_dashboard_async(view)
+
+      filtered_types =
+        html |> chart_event_markers(trend_widget_id) |> Enum.map(& &1["marker_type"])
+
+      refute "contact_interval" in filtered_types
+      assert "mission_event" in filtered_types
+
+      # Presentation-only change: chart remounted (new epoch id)...
+      assert chart_dom_id(html, trend_widget_id) != chart_id_before
+      # ...and the checkbox now renders unchecked with the hidden-count hint.
+      refute has_element?(view, ~s(#dashboard-marker-contacts[checked]))
+      assert has_element?(view, "#dashboard-markers-hidden-count")
+
+      view
+      |> form("#runtime-context-form", %{"markers" => %{"contacts" => "true"}})
+      |> render_change()
+
+      restored_path = assert_patch(view)
+      refute restored_path =~ "hidden_markers"
+
+      html = render_dashboard_async(view)
+
+      assert "contact_interval" in (html
+                                    |> chart_event_markers(trend_widget_id)
+                                    |> Enum.map(& &1["marker_type"]))
+    end
+
+    test "widget inspect panel opens from the details popover with table and CSV" do
+      disable_telemetry_storage_runtime_invalidation!()
+
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Inspect")
+      binding_set = persist_binding_set!(org, mission)
+
+      ingest!(mission, binding_set, spacecraft.spacecraft_id, 14, 1_700_000_090)
+      ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100)
+
+      dashboard =
+        TestFixtures.persist_dashboard_document!(mission,
+          name: "Inspect",
+          widgets: [
+            %{
+              type: :time_series,
+              title: "Counter Trend",
+              binding: %{
+                mode: :fixed,
+                spacecraft_id: spacecraft.spacecraft_id,
+                point_id: "HK.counter"
+              },
+              layout: %{x: 0, y: 0, w: 6, h: 3}
+            }
+          ]
+        )
+
+      {:ok, view, _html} = live(conn, show_path(mission, dashboard))
+      render_dashboard_async(view)
+
+      view |> element("[data-widget-inspect-data]") |> render_click()
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-widget-inspector[data-widget-inspect-state="ready"])
+             )
+
+      html = render(view)
+      document = LazyHTML.from_fragment(html)
+
+      assert document |> LazyHTML.query("#dashboard-panel h2") |> LazyHTML.text() =~
+               "Inspect: Counter Trend"
+
+      table = document |> LazyHTML.query("[data-widget-inspect-table]") |> LazyHTML.text()
+      assert table =~ "14"
+      assert table =~ "15"
+
+      assert [csv] =
+               document
+               |> LazyHTML.query("#dashboard-widget-inspect-download")
+               |> LazyHTML.attribute("data-csv")
+
+      assert csv =~ "time_utc"
+      assert csv =~ "14"
+
+      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      refute has_element?(view, "#dashboard-widget-inspector")
+    end
   end
 end

@@ -38,6 +38,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
        TimeSeriesSourceBindingMarkers.interval_markers(placement_frames) ++
        TimeSeriesSourceWatermarkMarkers.frame_markers(placement_frames) ++
        TimeSeriesTelemetryRevisionMarkers.range_markers(placement_frames))
+    |> collapse_source_watermark_markers()
     |> Enum.uniq_by(
       &(Map.get(&1, :marker_id) ||
           Map.get(&1, :link_id) ||
@@ -70,6 +71,50 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
   end
 
   defp event_frame_markers(_frame), do: []
+
+  # Watermark advances are high-frequency ingestion bookkeeping. A chart only
+  # needs the newest completeness boundary for each source; the full event
+  # history remains available through event timelines and diagnostics.
+  defp collapse_source_watermark_markers(markers) do
+    cursor_identities =
+      markers
+      |> Enum.filter(&(Map.get(&1, :marker_type) == "source_watermark_cursor"))
+      |> latest_source_watermark_markers()
+      |> Map.new(&{source_watermark_identity(&1), &1})
+
+    fallback_events =
+      markers
+      |> Enum.filter(&(Map.get(&1, :marker_type) == "source_watermark_event"))
+      |> latest_source_watermark_markers()
+      |> Enum.reject(&Map.has_key?(cursor_identities, source_watermark_identity(&1)))
+
+    markers
+    |> Enum.reject(
+      &(Map.get(&1, :marker_type) in ["source_watermark_cursor", "source_watermark_event"])
+    )
+    |> Kernel.++(Map.values(cursor_identities))
+    |> Kernel.++(fallback_events)
+  end
+
+  defp latest_source_watermark_markers(markers) do
+    markers
+    |> Enum.group_by(&source_watermark_identity/1)
+    |> Enum.map(fn {_identity, candidates} ->
+      Enum.max_by(candidates, &marker_sort_time/1, fn -> nil end)
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp source_watermark_identity(marker) do
+    {
+      Map.get(marker, :logical_source),
+      Map.get(marker, :data_source_id),
+      Map.get(marker, :source_binding_id),
+      Map.get(marker, :dataset),
+      Map.get(marker, :realm),
+      Map.get(marker, :replay_run_id)
+    }
+  end
 
   defp marker_sort_time(%{timestamp_ms: timestamp_ms}), do: timestamp_ms
   defp marker_sort_time(%{starts_at_ms: starts_at_ms}), do: starts_at_ms

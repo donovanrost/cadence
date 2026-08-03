@@ -27,6 +27,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlEvents do
     set_time_preset_fn(opts).(socket, preset, opts)
   end
 
+  def set_chart_time_range(socket, params, opts \\ []) do
+    set_chart_time_range_fn(opts).(socket, params, opts)
+  end
+
+  def shift_time_range(socket, direction, opts \\ []) do
+    shift_time_range_fn(opts).(socket, direction, opts)
+  end
+
+  def zoom_out_time_range(socket, opts \\ []) do
+    zoom_out_time_range_fn(opts).(socket, opts)
+  end
+
   def pause_at_selected_time(socket, opts \\ []) do
     pause_at_selected_time_fn(opts).(socket, opts)
   end
@@ -56,6 +68,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlEvents do
 
   defp set_time_preset_fn(opts),
     do: Keyword.get(opts, :set_time_preset_event, &RuntimeControls.set_time_preset/3)
+
+  defp set_chart_time_range_fn(opts),
+    do: Keyword.get(opts, :set_chart_time_range_event, &RuntimeControls.set_chart_time_range/3)
+
+  defp shift_time_range_fn(opts),
+    do: Keyword.get(opts, :shift_time_range_event, &RuntimeControls.shift_time_range/3)
+
+  defp zoom_out_time_range_fn(opts),
+    do: Keyword.get(opts, :zoom_out_time_range_event, &RuntimeControls.zoom_out_time_range/2)
 
   defp pause_at_selected_time_fn(opts),
     do:

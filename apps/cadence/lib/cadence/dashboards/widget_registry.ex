@@ -113,6 +113,7 @@ defmodule Cadence.Dashboards.WidgetRegistry do
       },
       options_schema: [
         %{key: "precision", type: :integer, default: 2, min: 0, max: 6},
+        %{key: "window_seconds", type: :integer, default: 300, min: 60, max: 3600},
         %{key: "show_unit", type: :boolean, default: true}
       ],
       layout_contract: %{min_w: 2, min_h: 2, preferred_w: 3, preferred_h: 2, resize: :both},
@@ -173,8 +174,17 @@ defmodule Cadence.Dashboards.WidgetRegistry do
         allowed_overlays: [:limits, :events, :quality]
       },
       options_schema: [
+        %{key: "precision", type: :integer, default: 2, min: 0, max: 6},
+        %{key: "window_seconds", type: :integer, default: 300, min: 60, max: 3600},
         %{key: "show_min_max_band", type: :boolean, default: true},
-        %{key: "legend", type: :boolean, default: false}
+        %{key: "legend", type: :boolean, default: false},
+        %{key: "legend_mode", type: :enum, values: ["auto", "always", "hidden"], default: "auto"},
+        %{key: "line_width", type: :enum, values: ["thin", "normal", "bold"], default: "normal"},
+        %{key: "fill_opacity", type: :integer, min: 0, max: 30, default: 0},
+        %{key: "span_gaps", type: :boolean, default: false},
+        %{key: "show_points", type: :boolean, default: false},
+        %{key: "axis_mode", type: :enum, values: ["unit", "shared"], default: "unit"},
+        %{key: "shared_tooltip", type: :boolean, default: true}
       ],
       layout_contract: %{min_w: 4, min_h: 3, preferred_w: 6, preferred_h: 4, resize: :both},
       drilldown_contract: %{
@@ -238,7 +248,10 @@ defmodule Cadence.Dashboards.WidgetRegistry do
         sampling_modes: [:latest],
         allowed_overlays: [:limits, :quality]
       },
-      options_schema: [],
+      options_schema: [
+        %{key: "precision", type: :integer, default: 2, min: 0, max: 6},
+        %{key: "window_seconds", type: :integer, default: 300, min: 60, max: 3600}
+      ],
       layout_contract: %{min_w: 4, min_h: 3, preferred_w: 6, preferred_h: 4, resize: :both},
       drilldown_contract: %{
         primary_action: :inspect,
@@ -302,7 +315,8 @@ defmodule Cadence.Dashboards.WidgetRegistry do
         allowed_overlays: [:limits, :quality]
       },
       options_schema: [
-        %{key: "precision", type: :integer, default: 2, min: 0, max: 6}
+        %{key: "precision", type: :integer, default: 2, min: 0, max: 6},
+        %{key: "window_seconds", type: :integer, default: 300, min: 60, max: 3600}
       ],
       layout_contract: %{min_w: 4, min_h: 3, preferred_w: 6, preferred_h: 4, resize: :both},
       drilldown_contract: %{
@@ -367,7 +381,10 @@ defmodule Cadence.Dashboards.WidgetRegistry do
         sampling_modes: [:event_history],
         allowed_overlays: [:quality]
       },
-      options_schema: [],
+      options_schema: [
+        %{key: "precision", type: :integer, default: 2, min: 0, max: 6},
+        %{key: "window_seconds", type: :integer, default: 300, min: 60, max: 3600}
+      ],
       layout_contract: %{min_w: 4, min_h: 3, preferred_w: 6, preferred_h: 4, resize: :both},
       drilldown_contract: %{
         primary_action: :inspect,

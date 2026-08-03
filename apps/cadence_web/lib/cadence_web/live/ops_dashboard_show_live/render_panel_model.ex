@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelModel do
   alias CadenceWeb.OpsDashboardShowLive.RenderPanelAssigns
   alias CadenceWeb.OpsDashboardShowLive.RenderShellAssigns
   alias CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation
+  alias CadenceWeb.OpsDashboardShowLive.WidgetInspectModel
   alias Phoenix.HTML.Form
 
   def open?(assigns) when is_map(assigns) do
@@ -30,6 +31,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelModel do
 
     %{
       panel: context.panel,
+      widget_inspect:
+        WidgetInspectModel.build(
+          context.panel,
+          context.dashboard_render_items,
+          context.frames_by_placement
+        ),
       dashboard_activity_filter: context.dashboard_activity_filter,
       dashboard_activity_event_id: context.dashboard_activity_event_id,
       dashboard_review_placement_id: context.dashboard_review_placement_id,
@@ -37,6 +44,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelModel do
       dashboard_comparison_review_action_outcome:
         context.dashboard_comparison_review_action_outcome,
       form: widget_form,
+      binding_preview: context.widget_binding_preview,
+      section_form: context.section_form,
+      section_error: context.section_error,
       spacecraft: context.spacecraft,
       operational_observables: operational_observables,
       filtered_points: WidgetFormPresentation.filter_points(points, point_query),

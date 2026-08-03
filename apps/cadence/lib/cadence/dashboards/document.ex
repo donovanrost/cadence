@@ -12,6 +12,7 @@ defmodule Cadence.Dashboards.Document do
     LimitContext,
     Placement,
     ScopeContext,
+    Section,
     TimeContext,
     ValidationResult,
     WidgetFrameContract,
@@ -30,6 +31,7 @@ defmodule Cadence.Dashboards.Document do
           description: binary() | nil,
           defaults: map(),
           grid: map(),
+          sections: [Section.t()],
           placements: [Placement.t()],
           metadata: map()
         }
@@ -43,6 +45,7 @@ defmodule Cadence.Dashboards.Document do
     schema_version: 1,
     defaults: %{},
     grid: %{columns: 12, row_height_px: 64, gap_px: 8},
+    sections: [],
     placements: [],
     metadata: %{}
   ]
@@ -60,6 +63,11 @@ defmodule Cadence.Dashboards.Document do
       description: get_attr(attrs, :description),
       defaults: get_attr(attrs, :defaults) || %{},
       grid: normalize_grid(get_attr(attrs, :grid) || %{}),
+      sections:
+        attrs
+        |> get_attr(:sections)
+        |> List.wrap()
+        |> Enum.map(&Section.from_map/1),
       placements:
         attrs
         |> get_attr(:placements)
@@ -80,6 +88,7 @@ defmodule Cadence.Dashboards.Document do
       description: document.description,
       defaults: document.defaults,
       grid: document.grid,
+      sections: Enum.map(document.sections, &Section.to_map/1),
       placements: Enum.map(document.placements, &Placement.to_map/1),
       metadata: document.metadata || %{}
     }
@@ -120,6 +129,45 @@ defmodule Cadence.Dashboards.Document do
     replace_placements(document, placements)
   end
 
+  @spec put_section(t(), Section.t()) :: t()
+  def put_section(%__MODULE__{} = document, %Section{} = section) do
+    sections = put_section_in_list(document.sections, section)
+    %__MODULE__{document | sections: sections}
+  end
+
+  @spec remove_section(t(), binary()) :: t()
+  def remove_section(%__MODULE__{} = document, section_id) when is_binary(section_id) do
+    sections = Enum.reject(document.sections, &(&1.section_id == section_id))
+
+    placements =
+      Enum.map(document.placements, fn
+        %Placement{section_id: ^section_id} = placement -> %Placement{placement | section_id: nil}
+        placement -> placement
+      end)
+
+    %__MODULE__{document | sections: sections, placements: placements}
+  end
+
+  @spec move_section(t(), binary(), :up | :down) :: t()
+  def move_section(%__MODULE__{} = document, section_id, direction)
+      when is_binary(section_id) and direction in [:up, :down] do
+    index = Enum.find_index(document.sections, &(&1.section_id == section_id))
+    target = if direction == :up, do: index && index - 1, else: index && index + 1
+
+    if is_integer(index) and is_integer(target) and target in 0..(length(document.sections) - 1) do
+      section = Enum.at(document.sections, index)
+
+      sections =
+        document.sections
+        |> List.delete_at(index)
+        |> List.insert_at(target, section)
+
+      %__MODULE__{document | sections: sections}
+    else
+      document
+    end
+  end
+
   @spec apply_layouts(t(), [map()]) :: t()
   def apply_layouts(%__MODULE__{} = document, layouts) when is_list(layouts) do
     layouts_by_placement_id =
@@ -145,6 +193,7 @@ defmodule Cadence.Dashboards.Document do
     |> validate_required_fields(document)
     |> validate_runtime_defaults(document)
     |> validate_grid(document)
+    |> validate_sections(document)
     |> validate_placements(document)
   end
 
@@ -230,6 +279,17 @@ defmodule Cadence.Dashboards.Document do
     [existing | put_placement_in_list(rest, placement)]
   end
 
+  defp put_section_in_list([], %Section{} = section), do: [section]
+
+  defp put_section_in_list(
+         [%Section{section_id: section_id} | rest],
+         %Section{section_id: section_id} = section
+       ),
+       do: [section | rest]
+
+  defp put_section_in_list([existing | rest], %Section{} = section),
+    do: [existing | put_section_in_list(rest, section)]
+
   defp layout_entry(%{} = attrs) do
     with placement_id when is_binary(placement_id) <- layout_placement_id(attrs),
          x when is_integer(x) <- get_attr(attrs, :x),
@@ -314,6 +374,40 @@ defmodule Cadence.Dashboards.Document do
     end)
   end
 
+  defp validate_sections(result, %__MODULE__{sections: sections, placements: placements}) do
+    section_ids = Enum.map(sections, & &1.section_id)
+
+    result =
+      cond do
+        Enum.any?(
+          sections,
+          &(not present_string?(&1.section_id) or not present_string?(&1.title))
+        ) ->
+          ValidationResult.add_error(result, :invalid_dashboard_section, %{})
+
+        length(section_ids) != length(Enum.uniq(section_ids)) ->
+          ValidationResult.add_error(result, :duplicate_dashboard_section_ids, %{})
+
+        true ->
+          result
+      end
+
+    Enum.reduce(placements, result, fn
+      %Placement{section_id: nil}, acc ->
+        acc
+
+      %Placement{placement_id: placement_id, section_id: section_id}, acc ->
+        if section_id in section_ids do
+          acc
+        else
+          ValidationResult.add_error(acc, :unknown_dashboard_section, %{
+            placement_id: placement_id,
+            section_id: section_id
+          })
+        end
+    end)
+  end
+
   defp validate_unique_placement_ids(result, placements) do
     ids = Enum.map(placements, & &1.placement_id)
 
@@ -368,6 +462,17 @@ defmodule Cadence.Dashboards.Document do
   defp auto_position?(nil, nil), do: true
   defp auto_position?(_x, _y), do: false
 
+  defp validate_widget(
+         result,
+         %Placement{
+           content_kind: :library,
+           library_widget_id: item_id,
+           library_version: version
+         }
+       )
+       when is_binary(item_id) and is_integer(version) and version > 0,
+       do: result
+
   defp validate_widget(result, %Placement{widget_def: nil, placement_id: placement_id}) do
     ValidationResult.add_error(result, :missing_widget_def, %{placement_id: placement_id})
   end
@@ -378,6 +483,7 @@ defmodule Cadence.Dashboards.Document do
         result
         |> validate_widget_layout(placement, widget_type)
         |> validate_widget_binding(placement, widget_type)
+        |> validate_widget_options(placement, widget_type)
 
       {:error, reason} ->
         ValidationResult.add_warning(result, reason, %{
@@ -449,6 +555,43 @@ defmodule Cadence.Dashboards.Document do
     end
   end
 
+  defp validate_widget_options(result, %Placement{} = placement, widget_type) do
+    options = placement.widget_def.options || %{}
+    schema_by_key = Map.new(widget_type.options_schema, &{Map.fetch!(&1, :key), &1})
+
+    Enum.reduce(options, result, fn {key, value}, acc ->
+      key = to_string(key)
+      validate_widget_option(acc, placement.placement_id, key, value, schema_by_key[key])
+    end)
+  end
+
+  # Preserve forward and legacy compatibility for stored documents. First-party
+  # authoring only writes registry-declared options, while readers ignore
+  # options introduced by newer or older renderers.
+  defp validate_widget_option(result, _placement_id, _key, _value, nil), do: result
+
+  defp validate_widget_option(result, placement_id, key, value, schema) do
+    if valid_widget_option?(value, schema) do
+      result
+    else
+      ValidationResult.add_error(result, :invalid_widget_option, %{
+        placement_id: placement_id,
+        option: key,
+        value: value
+      })
+    end
+  end
+
+  defp valid_widget_option?(value, %{type: :boolean}), do: is_boolean(value)
+
+  defp valid_widget_option?(value, %{type: :integer} = schema) do
+    is_integer(value) and value >= Map.get(schema, :min, value) and
+      value <= Map.get(schema, :max, value)
+  end
+
+  defp valid_widget_option?(value, %{type: :enum, values: values}), do: value in values
+  defp valid_widget_option?(_value, _schema), do: false
+
   defp validate_repeat(result, %Placement{repeat: nil}), do: result
 
   defp validate_repeat(result, %Placement{repeat: repeat, placement_id: placement_id}) do
@@ -470,6 +613,11 @@ defmodule Cadence.Dashboards.Document do
         ValidationResult.add_error(result, :repeat_instance_limit_exceeded, %{
           placement_id: placement_id,
           max_instances: Map.get(repeat, :max_instances)
+        })
+
+      Map.get(repeat, :layout) not in [:wrap_grid, :row, :column] ->
+        ValidationResult.add_error(result, :unsupported_repeat_layout, %{
+          placement_id: placement_id
         })
 
       true ->

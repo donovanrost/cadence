@@ -14,7 +14,7 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
 
     {TestFixtures.member_conn(user), user, org, mission}
@@ -271,7 +271,7 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-operational-latest-rf-history", source_binding_id: "focus-operational-observables-binding", logical_source: "operational_observables", realm: "flight", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "raw_series", supported_sampling: "latest,event_history", requested_products: "link_rf", requested_source_products: "link_rf_metric_history", supported_products: "link_rf_metric_history", requested_product_families: "link_rf", supported_product_families: "link_rf"}}"
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-operational-latest-rf-history/settings?#{%{source_binding_id: "focus-operational-observables-binding", logical_source: "operational_observables", realm: "flight", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "raw_series", supported_sampling: "latest,event_history", requested_products: "link_rf", requested_source_products: "link_rf_metric_history", supported_products: "link_rf_metric_history", requested_product_families: "link_rf", supported_product_families: "link_rf"}}"
       )
 
     assert has_element?(
@@ -379,7 +379,7 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-rehearsal-questdb", source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_event: "dashboard-readiness-event-2", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "bounded_history", supported_sampling: "latest", requested_products: "bounded_receipt_time_history", supported_products: "latest_value", requested_value_kinds: "engineering", supported_value_kinds: "raw"}}"
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-rehearsal-questdb/settings?#{%{source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_event: "dashboard-readiness-event-2", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "bounded_history", supported_sampling: "latest", requested_products: "bounded_receipt_time_history", supported_products: "latest_value", requested_value_kinds: "engineering", supported_value_kinds: "raw"}}"
       )
 
     view

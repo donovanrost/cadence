@@ -77,7 +77,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-evidence-explore")
              |> LazyHTML.attribute("href")
 
-    assert explore_href =~ "/missions/mission-1/ops/telemetry/explore"
+    assert explore_href =~ "/missions/mission-1/ops/explore"
     assert explore_href =~ "source_dashboard_id=dashboard-1"
 
     assert ["source_inventory"] =

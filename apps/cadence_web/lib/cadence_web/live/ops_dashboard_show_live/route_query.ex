@@ -18,7 +18,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteQuery do
     "compare_data_view",
     "data_source_id",
     "source_binding_id",
-    "limit_mode"
+    "limit_mode",
+    "hidden_markers"
   ]
 
   @spec current(Phoenix.LiveView.Socket.t() | map()) :: map()

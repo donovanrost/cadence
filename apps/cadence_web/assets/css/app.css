@@ -102,6 +102,9 @@ html, body {
 /* Cadence-owned overlay, menu, popover, and sheet primitives. */
 @import "./components/overlay.css";
 
+/* Compact Grafana-inspired dashboard query controls. */
+@import "./components/dashboard-query-controls.css";
+
 /* Collapsible Sidebar */
 @import "./components/sidebar.css";
 
@@ -112,6 +115,10 @@ html, body {
 /* GridStack vendor stylesheet (unmodified) — dashboard grid positioning for
    the DashboardGrid hook. Vendor file, not an authored selector. */
 @import "../vendor/gridstack/gridstack.min.css";
+
+/* Grafana-inspired dashboard panel presentation. This import must follow the
+   GridStack vendor stylesheet so Cadence owns the panel overflow boundary. */
+@import "./components/dashboard-widgets.css";
 
 .dashboard-review-placement-focus > .grid-stack-item-content {
   border-color: oklch(from var(--status-warning) l c h / 0.85);

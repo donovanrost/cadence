@@ -11,14 +11,17 @@
   <div class="flex flex-1 min-h-0">
     <.ops_nav_rail
       mission={@current_mission}
-      dashboards={assigns[:ops_dashboards] || []}
+      dashboard_navigation={assigns[:ops_dashboard_navigation] || %{starred: [], recent: []}}
       active_dashboard_id={assigns[:active_dashboard_id]}
       active_item={assigns[:ops_nav_item] || :dashboards}
       current_scope={@current_scope}
+      dashboard_author?={assigns[:dashboard_author?] || false}
+      operational_focus={@ops_context.pinned_focus}
     />
     <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
       {@inner_content}
     </main>
+    <.mission_context_rail ops_context={@ops_context} />
   </div>
 </div>
 <LiveToast.toast_group

@@ -113,7 +113,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
   end
 
   defp show_path(mission, dashboard) do
-    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+    ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/edit"
   end
 
   defp fetch_dashboard_document!(org, mission, dashboard) do
@@ -218,19 +218,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
 
-      view |> element("#dashboard-versions-button") |> render_click()
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-version-2 [data-version-field="Summary"]),
-               "Added widget"
-             )
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-version-2 [data-version-field="Author"]),
-               user.user_id
-             )
+      view |> element("#dashboard-editor-save") |> render_click()
 
       stop_dashboard_view(view)
 
@@ -265,6 +253,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-event-timeline]))
+
+      view |> element("#dashboard-editor-save") |> render_click()
 
       stop_dashboard_view(view)
 
@@ -315,6 +305,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-state-timeline]))
+
+      view |> element("#dashboard-editor-save") |> render_click()
 
       stop_dashboard_view(view)
 
@@ -384,6 +376,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       render_dashboard_async(view)
       refute has_element?(view, "#dashboard-panel")
+      view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)
@@ -440,6 +433,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       render_dashboard_async(view)
       refute has_element?(view, "#dashboard-panel")
+      view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)

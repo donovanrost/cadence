@@ -38,7 +38,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
 
     document = LazyHTML.from_fragment(html)
 
-    assert ["open_review_activity"] =
+    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
+             document
+             |> LazyHTML.query("#dashboard-versions-button")
+             |> LazyHTML.attribute("href")
+
+    assert [] =
              document
              |> LazyHTML.query("#dashboard-versions-button")
              |> LazyHTML.attribute("phx-click")
@@ -81,10 +86,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
 
     document = LazyHTML.from_fragment(html)
 
-    assert ["open_versions"] =
+    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
              document
              |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
 
     assert ["0"] =
              document
@@ -123,10 +128,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
 
     document = LazyHTML.from_fragment(html)
 
-    assert ["open_review_activity"] =
+    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
              document
              |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
 
     assert ["1"] =
              document
@@ -147,7 +152,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
   defp toolbar_assigns(overrides) do
     Keyword.merge(
       [
-        dashboard_document: %{name: "Ops", description: "Operations"},
+        dashboard_document: %{
+          dashboard_id: "dashboard-1",
+          name: "Ops",
+          description: "Operations"
+        },
         dashboard_lifecycle_status: %{publish_available?: true, archive_available?: false},
         dashboard_lifecycle_events: [],
         dashboard_comparison_review_queue: ComparisonReviewQueue.open_summary([]),

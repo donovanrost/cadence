@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeAssigns do
   @moduledoc false
 
+  alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
 
   @spec normalize(Phoenix.LiveView.Socket.t() | map()) :: map()
@@ -28,7 +29,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeAssigns do
       compare_data_view: Map.get(assigns, :dashboard_compare_data_view),
       data_source_id: Map.get(assigns, :dashboard_data_source_id),
       source_binding_id: Map.get(assigns, :dashboard_source_binding_id),
-      limit_mode: Map.get(assigns, :dashboard_limit_mode)
+      limit_mode: Map.get(assigns, :dashboard_limit_mode),
+      hidden_markers:
+        MarkerCategories.to_param(Map.get(assigns, :dashboard_hidden_marker_categories, []))
     }
     |> Map.merge(defaults)
   end

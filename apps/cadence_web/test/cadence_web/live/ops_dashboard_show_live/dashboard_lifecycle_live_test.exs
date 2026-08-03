@@ -143,7 +143,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     end)
   end
 
-  test "runs the dashboard lifecycle across create edit publish conflict revert archive restore and audit surfaces" do
+  test "runs the dashboard lifecycle across the Editor, Activity, Settings, Directory, and Viewer" do
     enable_dashboard_engine_inline_resolves!()
 
     {conn, user, org, mission} = signed_in_user_org_and_mission()
@@ -162,47 +162,51 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
                mission.mission_id
              )
 
+    editor_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/#{created_summary.dashboard_id}/edit"
+
+    activity_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/#{created_summary.dashboard_id}/activity"
+
+    settings_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/#{created_summary.dashboard_id}/settings"
+
     {dashboard_path, _flash} = assert_redirect(new_view)
-    assert dashboard_path == show_path(mission, created_summary)
+    assert dashboard_path == editor_path
 
     dashboard = fetch_dashboard_document!(org, mission, created_summary)
     assert dashboard.name == "Lifecycle Console"
     assert Document.version(dashboard) == 1
     assert dashboard.placements == []
 
-    {:ok, view, _html} = live(conn, dashboard_path)
-    render_dashboard_async(view)
+    {:ok, editor, _html} = live(conn, dashboard_path)
+    render_dashboard_async(editor)
 
     assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="unpublished"][data-dashboard-publishable-version="1"])
+             editor,
+             ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-editor-dirty="false"])
            )
 
-    view |> element("#add-widget-button") |> render_click()
-    view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
+    editor |> element("#add-widget-button") |> render_click()
+    editor |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
 
-    view
+    editor
     |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
     |> render_submit()
 
-    render_dashboard_async(view)
+    render_dashboard_async(editor)
+
+    assert Document.version(fetch_dashboard_document!(org, mission, created_summary)) == 1
+    editor |> element("#dashboard-editor-save") |> render_click()
 
     edited = fetch_dashboard_document!(org, mission, created_summary)
     assert Document.version(edited) == 2
     assert [%{widget_def: %{title: "Counter"}}] = edited.placements
 
-    assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="unpublished"][data-dashboard-publishable-version="2"])
-           )
-
-    view |> element(~s(#dashboard-menu button[phx-click="publish_dashboard"])) |> render_click()
-    render_dashboard_async(view)
-
-    assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="published_current"][data-dashboard-published-current="true"][data-dashboard-publish-available="false"])
-           )
+    {:ok, activity, _html} = live(conn, activity_path)
+    assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="2"]))
+    activity |> element("#dashboard-activity-publish") |> render_click()
+    assert has_element?(activity, ~s([data-dashboard-activity-type="published"]))
 
     assert [%Cadence.Dashboards.DashboardSummary{} = published_summary] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -214,80 +218,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     assert published_summary.draft_version == nil
     assert published_summary.published_version == 2
 
-    assert {:ok, %Document{} = externally_updated} =
-             Cadence.Dashboards.update_document(
-               org.organization_id,
-               mission.mission_id,
-               created_summary.dashboard_id,
-               %Document{edited | name: "Lifecycle Console Updated"},
-               expected_version: 2,
-               created_by: "other-operator",
-               change_summary: "External edit"
-             )
-
-    assert Document.version(externally_updated) == 3
-
-    view |> element("#add-widget-button") |> render_click()
-    view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
-
-    html =
-      view
-      |> form("#widget-form",
-        widget: %{type: "value_tile", title: "Late Counter", mode: "context"}
-      )
-      |> render_submit()
-
-    assert html =~ "Dashboard changed in another session"
-    assert has_element?(view, "h1", "Lifecycle Console Updated")
-
-    conflicted = fetch_dashboard_document!(org, mission, created_summary)
-    assert Document.version(conflicted) == 3
-    assert conflicted.name == "Lifecycle Console Updated"
-    assert [%{widget_def: %{title: "Counter"}}] = conflicted.placements
-
-    view |> element("#dashboard-versions-button") |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-version-2[data-version-publish-available="false"][data-version-publish-reason="already_published"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-version-3[data-version-restore-available="false"][data-version-restore-reason="already_latest"])
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="published"] [data-activity-field="Published"]),
-             "- -> v2"
-           )
-
-    view |> element("#restore-version-1") |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#ops-dashboard-show-page[data-dashboard-document-mode="draft"][data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="4"])
-           )
+    activity |> element("#dashboard-version-1") |> render_click()
+    assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="1"]))
+    activity |> element("#dashboard-activity-restore") |> render_click()
 
     restored_draft = fetch_dashboard_document!(org, mission, created_summary)
-    assert Document.version(restored_draft) == 4
+    assert Document.version(restored_draft) == 3
     assert restored_draft.name == "Lifecycle Console"
     assert restored_draft.placements == []
+    assert has_element?(activity, ~s([data-dashboard-activity-type="reverted"]))
 
-    view |> element("#dashboard-versions-button") |> render_click()
-
-    assert has_element?(
-             view,
-             ~s([data-lifecycle-event-type="reverted"][data-lifecycle-source-version="1"][data-lifecycle-reverted-version="4"])
-           )
-
-    view
-    |> element(~s(#dashboard-menu button[phx-click="archive_dashboard"]))
-    |> render_click()
+    {:ok, settings, _html} = live(conn, settings_path)
+    settings |> element("#dashboard-settings-archive") |> render_click()
 
     assert %{"info" => "Dashboard archived."} =
-             assert_redirect(view, ~p"/missions/#{mission.mission_id}/ops/dashboards")
+             assert_redirect(settings, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
     assert [] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -302,13 +247,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
              )
 
     assert archived_summary.lifecycle_state == "archived"
-    assert archived_summary.latest_version == 4
+    assert archived_summary.latest_version == 3
 
-    {:ok, list_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
+    {:ok, list_view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards?lifecycle=all")
 
     assert has_element?(
              list_view,
-             ~s(#archived-dashboard-#{created_summary.dashboard_id}[data-dashboard-publication-state="archived"][data-dashboard-restore-available="true"])
+             ~s(#dashboard-directory-row-#{created_summary.dashboard_id}[data-dashboard-directory-lifecycle="archived"])
            )
 
     list_view
@@ -317,17 +263,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
 
     assert has_element?(
              list_view,
-             ~s(#active-dashboard-#{created_summary.dashboard_id}[data-dashboard-publication-state="draft_ahead"][data-dashboard-archive-available="true"][data-dashboard-restore-available="false"])
+             ~s(#dashboard-directory-row-#{created_summary.dashboard_id}[data-dashboard-directory-lifecycle="active"])
            )
 
     assert [
              %Cadence.Dashboards.LifecycleEvent{event_type: :published, dashboard_version: 2},
              %Cadence.Dashboards.LifecycleEvent{
                event_type: :reverted,
-               dashboard_version: 4
+               dashboard_version: 3
              },
-             %Cadence.Dashboards.LifecycleEvent{event_type: :archived, dashboard_version: 4},
-             %Cadence.Dashboards.LifecycleEvent{event_type: :restored, dashboard_version: 4}
+             %Cadence.Dashboards.LifecycleEvent{event_type: :archived, dashboard_version: 3},
+             %Cadence.Dashboards.LifecycleEvent{event_type: :restored, dashboard_version: 3}
            ] =
              Cadence.Dashboards.list_lifecycle_events(
                org.organization_id,
@@ -335,25 +281,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
                created_summary.dashboard_id
              )
 
-    {:ok, restored_view, _html} = live(conn, dashboard_path)
+    {:ok, restored_view, _html} = live(conn, show_path(mission, created_summary))
     render_dashboard_async(restored_view)
 
     assert has_element?(
              restored_view,
-             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="4"][data-dashboard-draft-ahead="true"])
+             ~s(#ops-dashboard-show-page[data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="3"][data-dashboard-draft-ahead="true"])
            )
 
-    restored_view |> element("#dashboard-versions-button") |> render_click()
+    {:ok, final_activity, _html} = live(conn, activity_path)
+    assert has_element?(final_activity, ~s([data-dashboard-activity-type="published"]))
+    assert has_element?(final_activity, ~s([data-dashboard-activity-type="reverted"]))
+    assert has_element?(final_activity, ~s([data-dashboard-activity-type="archived"]))
+    assert has_element?(final_activity, ~s([data-dashboard-activity-type="restored"]))
 
-    assert has_element?(restored_view, ~s([data-lifecycle-event-type="published"]))
-    assert has_element?(restored_view, ~s([data-lifecycle-event-type="reverted"]))
-    assert has_element?(restored_view, ~s([data-lifecycle-event-type="archived"]))
-    assert has_element?(restored_view, ~s([data-lifecycle-event-type="restored"]))
-
-    assert has_element?(
-             restored_view,
-             ~s([data-lifecycle-event-type="restored"] [data-activity-field="Actor"]),
-             user.user_id
+    assert Cadence.Dashboards.list_lifecycle_events(
+             org.organization_id,
+             mission.mission_id,
+             created_summary.dashboard_id
            )
+           |> List.last()
+           |> Map.fetch!(:actor_id) == user.user_id
   end
 end

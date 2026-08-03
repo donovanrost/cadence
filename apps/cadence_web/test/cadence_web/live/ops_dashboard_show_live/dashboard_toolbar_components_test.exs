@@ -32,10 +32,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert html =~ "Lunar Demo"
     assert html =~ "Find mission, spacecraft, contact, source, transport, ground, or link"
 
-    assert ["open_versions"] =
+    assert ["#"] =
              document
              |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
   end
 
   test "dashboard_toolbar exposes scheduled and realized contacts as runtime contexts" do
@@ -135,7 +135,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.attribute("title")
   end
 
-  test "dashboard_toolbar renders dashboard actions with lifecycle availability" do
+  test "dashboard_toolbar routes lifecycle and data operations out of the viewer" do
     html =
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
@@ -150,25 +150,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert html =~ "Live updates paused while editing"
     assert html =~ "Done"
 
-    assert ["false"] =
+    assert [] =
              document
              |> LazyHTML.query(~s(button[data-dashboard-lifecycle-action="publish"]))
              |> LazyHTML.attribute("data-dashboard-action-available")
 
-    assert ["true"] =
+    assert [] =
              document
              |> LazyHTML.query(~s(button[data-dashboard-lifecycle-action="archive"]))
              |> LazyHTML.attribute("data-dashboard-action-available")
 
-    assert ["open_historical_workflow_request"] =
+    assert [historical_request_path] =
              document
              |> LazyHTML.query("#dashboard-historical-workflow-request-button")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
 
-    assert ["open_diagnostics"] =
+    assert historical_request_path =~ "/missions/mission-1/ops/data-operations?"
+
+    assert ["#"] =
              document
              |> LazyHTML.query("#dashboard-diagnostics-button")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
 
     assert [] =
              document
@@ -237,6 +239,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert html =~ "Re-check publish"
   end
 
+  test "dashboard_toolbar exposes the page-local Compare inspector" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          comparison_available?: true,
+          comparison_open?: true,
+          comparison_open_count: 2
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["toggle_comparison_inspector"] =
+             document
+             |> LazyHTML.query("#dashboard-comparison-toggle")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["true"] =
+             document
+             |> LazyHTML.query("#dashboard-comparison-toggle")
+             |> LazyHTML.attribute("aria-expanded")
+
+    assert ["2"] =
+             document
+             |> LazyHTML.query("[data-dashboard-comparison-open-count]")
+             |> LazyHTML.attribute("data-dashboard-comparison-open-count")
+  end
+
   test "dashboard_toolbar keeps telemetry primary and consolidates data issues" do
     html =
       render_component(
@@ -277,15 +308,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.query("#dashboard-data-issues")
              |> LazyHTML.attribute("data-dashboard-data-issue-count")
 
-    assert ["open_diagnostics"] =
+    assert ["#"] =
              document
              |> LazyHTML.query("#dashboard-data-issues-open")
-             |> LazyHTML.attribute("phx-click")
+             |> LazyHTML.attribute("href")
 
     assert ["dashboard-data-controls-panel"] =
              document
              |> LazyHTML.query("#dashboard-data-controls-panel")
              |> LazyHTML.attribute("id")
+
+    assert ["dashboard-query-options-panel"] =
+             document
+             |> LazyHTML.query("#dashboard-query-options-panel")
+             |> LazyHTML.attribute("id")
+
+    assert ["dashboard-time-controls-panel"] =
+             document
+             |> LazyHTML.query("#dashboard-time-controls-panel")
+             |> LazyHTML.attribute("id")
+
+    assert ["Dashboard operational scope"] =
+             document
+             |> LazyHTML.query("#dashboard-data-controls-toggle")
+             |> LazyHTML.attribute("aria-label")
+
+    assert ["Dashboard data options"] =
+             document
+             |> LazyHTML.query("#dashboard-query-options-toggle")
+             |> LazyHTML.attribute("aria-label")
+
+    assert ["Dashboard time range"] =
+             document
+             |> LazyHTML.query("#dashboard-time-controls-toggle")
+             |> LazyHTML.attribute("aria-label")
 
     assert ["dashboard-menu-menu"] =
              document
@@ -308,6 +364,59 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              document
              |> LazyHTML.query("#dashboard-publish-readiness-summary")
              |> LazyHTML.attribute("id")
+  end
+
+  test "viewing toolbar exposes correlated time state and context-preserving drilldowns" do
+    html =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          dashboard_document: %{
+            dashboard_id: "dashboard-1",
+            name: "Ops",
+            description: "Operations"
+          },
+          context_spacecraft_id: "spacecraft-1",
+          time_mode: "archive",
+          time_from: "2026-06-17T12:00:00Z",
+          time_to: "2026-06-17T12:05:00Z",
+          data_source_id: "source-1",
+          source_binding_id: "binding-1"
+        )
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["archive"] =
+             document
+             |> LazyHTML.query("#dashboard-active-time-range")
+             |> LazyHTML.attribute("data-dashboard-time-mode")
+
+    assert ["set_time_preset"] =
+             document
+             |> LazyHTML.query("#dashboard-time-preset-live")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["live"] =
+             document
+             |> LazyHTML.query("#dashboard-time-preset-live")
+             |> LazyHTML.attribute("phx-value-preset")
+
+    assert [href] =
+             document
+             |> LazyHTML.query("#dashboard-investigate-telemetry")
+             |> LazyHTML.attribute("href")
+
+    uri = URI.parse(href)
+    query = URI.decode_query(uri.query)
+
+    assert uri.path == "/missions/mission-1/ops/explore"
+    assert query["source_dashboard_id"] == "dashboard-1"
+    assert query["spacecraft_id"] == "spacecraft-1"
+    assert query["from"] == "2026-06-17T12:00:00Z"
+    assert query["to"] == "2026-06-17T12:05:00Z"
+    assert query["data_source_id"] == "source-1"
+    assert query["source_binding_id"] == "binding-1"
   end
 
   defp toolbar_assigns(overrides) do

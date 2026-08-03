@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cadence.example/schemas/dashboard-document-v1.json",
+  "title": "Cadence Dashboard Document v1",
+  "type": "object",
+  "required": ["schema_version", "dashboard_id", "organization_id", "mission_id", "name", "placements"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dashboard_id": {"type": "string", "minLength": 1},
+    "organization_id": {"type": "string", "minLength": 1},
+    "mission_id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": ["string", "null"]},
+    "defaults": {"type": "object"},
+    "grid": {"$ref": "#/$defs/grid"},
+    "sections": {"type": "array", "items": {"$ref": "#/$defs/section"}},
+    "placements": {"type": "array", "items": {"$ref": "#/$defs/placement"}},
+    "metadata": {"type": "object"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "grid": {
+      "type": "object",
+      "required": ["columns", "row_height_px", "gap_px"],
+      "properties": {
+        "columns": {"type": "integer", "minimum": 1},
+        "row_height_px": {"type": "integer", "minimum": 1},
+        "gap_px": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "required": ["section_id", "title"],
+      "properties": {
+        "section_id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": ["string", "null"]},
+        "collapsed": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "layout": {
+      "type": "object",
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": {"type": ["integer", "null"], "minimum": 0},
+        "y": {"type": ["integer", "null"], "minimum": 0},
+        "w": {"type": "integer", "minimum": 1},
+        "h": {"type": "integer", "minimum": 1},
+        "min_w": {"type": ["integer", "null"], "minimum": 1},
+        "min_h": {"type": ["integer", "null"], "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "widget": {
+      "type": "object",
+      "required": ["widget_type_id", "widget_type_version", "binding", "options"],
+      "properties": {
+        "widget_type_id": {"type": "string", "minLength": 1},
+        "widget_type_version": {"type": "integer", "minimum": 1},
+        "title": {"type": ["string", "null"]},
+        "binding": {
+          "type": "object",
+          "required": ["source", "observables"],
+          "properties": {
+            "source": {"enum": ["telemetry", "operational_observables", "limits", "events"]},
+            "observables": {"type": "array", "items": {"type": "string"}},
+            "scope_mode": {"enum": ["context", "override", "repeat"]},
+            "data_mode": {"enum": ["context", "override"]},
+            "value_type": {"type": ["string", "null"]},
+            "sampling": {"type": ["string", "null"]},
+            "aggregation": {},
+            "overlays": {"type": "array", "items": {"enum": ["limits", "events", "quality"]}}
+          },
+          "additionalProperties": true
+        },
+        "options": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "content": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "widget_def"],
+          "properties": {"kind": {"const": "embedded"}, "widget_def": {"$ref": "#/$defs/widget"}},
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "library_widget_id", "library_version"],
+          "properties": {
+            "kind": {"const": "library"},
+            "library_widget_id": {"type": "string", "minLength": 1},
+            "library_version": {"type": "integer", "minimum": 1},
+            "overrides": {"type": ["object", "null"]}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "placement": {
+      "type": "object",
+      "required": ["placement_id", "layout", "content"],
+      "properties": {
+        "placement_id": {"type": "string", "minLength": 1},
+        "section_id": {"type": ["string", "null"]},
+        "layout": {"$ref": "#/$defs/layout"},
+        "content": {"$ref": "#/$defs/content"},
+        "repeat": {"type": ["object", "null"]},
+        "scope_override": {"type": ["object", "null"]},
+        "data_override": {"type": ["object", "null"]},
+        "limit_override": {"type": ["object", "null"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

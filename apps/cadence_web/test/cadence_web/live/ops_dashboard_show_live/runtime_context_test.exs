@@ -95,6 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextTest do
              dashboard_source_binding_id: "replay-binding",
              dashboard_limit_mode: "observed",
              dashboard_limit_mode_fallback: context.limit_mode_fallback,
+             dashboard_hidden_marker_categories: [],
              dashboard_time_context: context.time_context,
              dashboard_data_context: context.data_context,
              dashboard_limit_context: context.limit_context

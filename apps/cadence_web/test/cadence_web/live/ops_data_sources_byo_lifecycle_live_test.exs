@@ -24,7 +24,7 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
+    _membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
 
     {TestFixtures.member_conn(user), user, org, mission}
@@ -111,11 +111,8 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     configure_customer_questdb_probe!()
     persist_seed_telemetry!(org, mission)
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
-
-    view
-    |> element("#register-source-button")
-    |> render_click()
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
 
     assert has_element?(view, "#register-source-panel")
 

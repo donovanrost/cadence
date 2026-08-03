@@ -14,9 +14,13 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
   @query_params [
     "point_id",
     "spacecraft_id",
+    "scope_kind",
+    "scope_id",
     "time_mode",
+    "time_axis",
     "from",
     "to",
+    "replay_run_id",
     "order",
     "limit",
     "selection_view",
@@ -27,7 +31,9 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     "source_binding_id",
     "source_dashboard_id",
     "sample_id",
-    "selected_time"
+    "selected_time",
+    "question",
+    "limit_mode"
   ]
 
   @impl true
@@ -47,7 +53,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     {:ok,
      socket
      |> assign(:page_title, "Telemetry Explore")
-     |> assign(:ops_nav_item, :dashboards)
+     |> assign(:ops_nav_item, :explore)
      |> assign(:points, points)
      |> assign(:spacecraft, spacecraft)
      |> assign(:data_sources, data_sources)
@@ -55,6 +61,12 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
      |> assign(:data_realms, data_realms)
      |> assign(:explore_context, explore_context(%{}))
      |> assign(:filter_form, to_form(%{}, as: :explore))
+     |> assign(
+       :add_to_dashboard_form,
+       to_form(%{"dashboard_id" => "", "widget_type" => "time_series"},
+         as: :add_to_dashboard
+       )
+     )
      |> assign(:point, nil)
      |> assign(:samples, [])
      |> assign(:selected_sample, nil)
@@ -116,6 +128,42 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
 
   def handle_event("apply_filters", _params, socket), do: {:noreply, socket}
 
+  def handle_event("apply_question", %{"question" => question}, socket) do
+    mission_id = socket.assigns.current_mission.mission_id
+
+    query =
+      question
+      |> question_query(socket.assigns.points)
+      |> maybe_preserve_source_dashboard(socket.assigns.explore_context.source_dashboard_id)
+
+    {:noreply, push_patch(socket, to: telemetry_explore_path(mission_id, query))}
+  end
+
+  def handle_event("apply_question", _params, socket), do: {:noreply, socket}
+
+  def handle_event(
+        "add_to_dashboard",
+        %{"add_to_dashboard" => params},
+        %{assigns: %{dashboard_author?: true}} = socket
+      ) do
+    with dashboard_id when is_binary(dashboard_id) <- text_param(params["dashboard_id"]),
+         true <- dashboard_target?(socket.assigns.ops_dashboards, dashboard_id),
+         point_id when is_binary(point_id) <- socket.assigns.explore_context.point_id do
+      mission_id = socket.assigns.current_mission.mission_id
+      query = dashboard_candidate_query(socket.assigns.explore_context, params, point_id)
+
+      {:noreply,
+       push_navigate(socket,
+         to: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/edit?#{query}"
+       )}
+    else
+      _invalid ->
+        {:noreply, put_flash(socket, :error, "Choose a dashboard and telemetry point first.")}
+    end
+  end
+
+  def handle_event("add_to_dashboard", _params, socket), do: {:noreply, socket}
+
   def handle_event("clear_selected_sample", _params, socket) do
     mission_id = socket.assigns.current_mission.mission_id
 
@@ -135,7 +183,10 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       point_id: text_param(params["point_id"]),
       sample_id: text_param(params["sample_id"]),
       spacecraft_id: text_param(params["spacecraft_id"]),
+      scope_kind: text_param(params["scope_kind"]),
+      scope_id: text_param(params["scope_id"]),
       time_mode: normalize_time_mode(params["time_mode"]),
+      time_axis: text_param(params["time_axis"]),
       from: effective_from(params),
       to: effective_to(params),
       from_text: text_param(params["from"]),
@@ -147,6 +198,9 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       source_binding_id: text_param(params["source_binding_id"]),
       source_dashboard_id: text_param(params["source_dashboard_id"]),
       selected_time: text_param(params["selected_time"]),
+      replay_run_id: text_param(params["replay_run_id"]),
+      question: normalize_question(params["question"]),
+      limit_mode: text_param(params["limit_mode"]),
       limit: parse_limit(params["limit"]),
       limit_text: limit_text(params["limit"]),
       order: parse_order(params["order"]),
@@ -332,6 +386,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       |> maybe_put(:realm, context.realm)
       |> maybe_put(:data_source_id, context.data_source_id)
       |> maybe_put(:binding_id, context.source_binding_id)
+      |> maybe_put(:replay_run_id, context.replay_run_id)
 
     case TelemetryReads.sample_history_result(
            organization_id,
@@ -363,6 +418,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       |> maybe_put(:realm, context.realm)
       |> maybe_put(:data_source_id, context.data_source_id)
       |> maybe_put(:binding_id, context.source_binding_id)
+      |> maybe_put(:replay_run_id, context.replay_run_id)
 
     case TelemetryReads.sample_history_result(
            organization_id,
@@ -415,9 +471,13 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     %{
       "point_id" => blank(context.point_id),
       "spacecraft_id" => blank(context.spacecraft_id),
+      "scope_kind" => blank(context.scope_kind),
+      "scope_id" => blank(context.scope_id),
       "time_mode" => context.time_mode,
+      "time_axis" => blank(context.time_axis),
       "from" => blank(context.from_text),
       "to" => blank(context.to_text),
+      "replay_run_id" => blank(context.replay_run_id),
       "order" => context.order_text,
       "limit" => context.limit_text,
       "selection_view" => context.selection_view_text,
@@ -428,7 +488,9 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       "source_binding_id" => blank(context.source_binding_id),
       "source_dashboard_id" => blank(context.source_dashboard_id),
       "sample_id" => blank(context.sample_id),
-      "selected_time" => blank(context.selected_time)
+      "selected_time" => blank(context.selected_time),
+      "question" => blank(context.question),
+      "limit_mode" => blank(context.limit_mode)
     }
   end
 
@@ -438,8 +500,8 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     params
     |> Map.take(@query_params)
     |> Map.put("time_mode", time_mode)
-    |> Map.put("from", if(time_mode == "archive", do: params["from"], else: nil))
-    |> Map.put("to", if(time_mode == "archive", do: params["to"], else: nil))
+    |> Map.put("from", if(time_mode in ["archive", "replay_run"], do: params["from"], else: nil))
+    |> Map.put("to", if(time_mode in ["archive", "replay_run"], do: params["to"], else: nil))
     |> Map.put("order", order_text(params["order"]))
     |> Map.put("limit", limit_text(params["limit"]))
     |> Map.put("selection_view", selection_view_text(params["selection_view"]))
@@ -451,9 +513,14 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     %{
       "point_id" => context.point_id,
       "spacecraft_id" => context.spacecraft_id,
+      "scope_kind" => context.scope_kind,
+      "scope_id" => context.scope_id,
       "time_mode" => non_default(context.time_mode, "latest"),
-      "from" => if(context.time_mode == "archive", do: context.from_text, else: nil),
-      "to" => if(context.time_mode == "archive", do: context.to_text, else: nil),
+      "time_axis" => context.time_axis,
+      "from" =>
+        if(context.time_mode in ["archive", "replay_run"], do: context.from_text, else: nil),
+      "to" => if(context.time_mode in ["archive", "replay_run"], do: context.to_text, else: nil),
+      "replay_run_id" => context.replay_run_id,
       "order" => non_default(context.order_text, "desc"),
       "limit" => non_default(context.limit_text, Integer.to_string(@default_limit)),
       "selection_view" => non_default(context.selection_view_text, "canonical"),
@@ -464,7 +531,9 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       "source_binding_id" => context.source_binding_id,
       "source_dashboard_id" => context.source_dashboard_id,
       "sample_id" => context.sample_id,
-      "selected_time" => context.selected_time
+      "selected_time" => context.selected_time,
+      "question" => context.question,
+      "limit_mode" => context.limit_mode
     }
     |> compact_query()
   end
@@ -479,11 +548,11 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
   defp non_default(value, _default), do: value
 
   defp telemetry_explore_path(mission_id, query) when map_size(query) == 0 do
-    ~p"/missions/#{mission_id}/ops/telemetry/explore"
+    ~p"/missions/#{mission_id}/ops/explore"
   end
 
   defp telemetry_explore_path(mission_id, query) do
-    ~p"/missions/#{mission_id}/ops/telemetry/explore?#{query}"
+    ~p"/missions/#{mission_id}/ops/explore?#{query}"
   end
 
   defp investigation_fingerprint(path) do
@@ -525,15 +594,17 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     do: DateTime.utc_now() |> DateTime.add(-60 * 60, :second)
 
   defp effective_from(%{"time_mode" => "archive", "from" => from}), do: parse_datetime(from)
+  defp effective_from(%{"time_mode" => "replay_run", "from" => from}), do: parse_datetime(from)
   defp effective_from(_params), do: nil
 
   defp effective_to(%{"time_mode" => "archive", "to" => to}), do: parse_datetime(to)
+  defp effective_to(%{"time_mode" => "replay_run", "to" => to}), do: parse_datetime(to)
   defp effective_to(_params), do: nil
 
   defp normalize_time_mode("live"), do: "latest"
 
   defp normalize_time_mode(value)
-       when value in ["latest", "last_5m", "last_15m", "last_1h", "archive"],
+       when value in ["latest", "last_5m", "last_15m", "last_1h", "archive", "replay_run"],
        do: value
 
   defp normalize_time_mode(_value), do: "latest"
@@ -591,18 +662,115 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
 
   defp validity_state_text(_value), do: ""
 
-  defp parse_logical_source(value) do
-    case logical_source_text(value) do
-      "telemetry" -> :telemetry
-      other -> String.to_atom(other)
-    end
-  end
+  defp parse_logical_source("limits"), do: :limits
+  defp parse_logical_source("events"), do: :events
+  defp parse_logical_source("operational_observables"), do: :operational_observables
+  defp parse_logical_source(_value), do: :telemetry
 
   defp logical_source_text(value)
        when value in ["telemetry", "limits", "events", "operational_observables"],
        do: value
 
   defp logical_source_text(_value), do: "telemetry"
+
+  defp normalize_question(value)
+       when value in ["recent_anomalies", "what_changed", "missing_history", "link_degradation"],
+       do: value
+
+  defp normalize_question(_value), do: nil
+
+  defp question_query("recent_anomalies", points) do
+    %{
+      "question" => "recent_anomalies",
+      "point_id" => default_point_id(points),
+      "time_mode" => "last_15m",
+      "selection_view" => "all_revisions"
+    }
+    |> compact_query()
+  end
+
+  defp question_query("what_changed", points) do
+    %{
+      "question" => "what_changed",
+      "point_id" => default_point_id(points),
+      "time_mode" => "last_1h",
+      "selection_view" => "all_revisions"
+    }
+    |> compact_query()
+  end
+
+  defp question_query("missing_history", points) do
+    %{
+      "question" => "missing_history",
+      "point_id" => default_point_id(points),
+      "time_mode" => "last_1h",
+      "selection_view" => "all_revisions"
+    }
+    |> compact_query()
+  end
+
+  defp question_query("link_degradation", _points) do
+    %{
+      "question" => "link_degradation",
+      "time_mode" => "last_1h",
+      "logical_source" => "operational_observables"
+    }
+  end
+
+  defp question_query(_question, _points), do: %{}
+
+  defp default_point_id([point | _rest]), do: point.point_id
+  defp default_point_id(_points), do: nil
+
+  defp maybe_preserve_source_dashboard(query, nil), do: query
+
+  defp maybe_preserve_source_dashboard(query, dashboard_id),
+    do: Map.put(query, "source_dashboard_id", dashboard_id)
+
+  defp dashboard_target?(dashboards, dashboard_id) do
+    Enum.any?(dashboards, fn dashboard ->
+      dashboard.dashboard_id == dashboard_id and dashboard.lifecycle_state == "active"
+    end)
+  end
+
+  defp dashboard_candidate_query(context, params, point_id) do
+    widget_type =
+      if params["widget_type"] in ["value_tile", "time_series"],
+        do: params["widget_type"],
+        else: "time_series"
+
+    %{
+      "candidate_source" => "explore",
+      "candidate_point_id" => point_id,
+      "candidate_title" => text_param(params["title"]) || default_candidate_title(point_id),
+      "candidate_widget_type" => widget_type,
+      "candidate_spacecraft_id" => context.spacecraft_id,
+      "candidate_realm" => context.realm,
+      "candidate_data_view" => context.selection_view_text,
+      "candidate_data_source_id" => context.data_source_id,
+      "candidate_source_binding_id" => context.source_binding_id,
+      "time_mode" => context.time_mode,
+      "time_axis" => context.time_axis,
+      "from" => context.from_text,
+      "to" => context.to_text,
+      "replay_run_id" => context.replay_run_id,
+      "data_view" => context.selection_view_text,
+      "realm" => context.realm,
+      "data_source_id" => context.data_source_id,
+      "source_binding_id" => context.source_binding_id,
+      "scope_kind" => context.scope_kind,
+      "scope_id" => context.scope_id,
+      "limit_mode" => context.limit_mode
+    }
+    |> compact_query()
+  end
+
+  defp default_candidate_title(point_id) do
+    point_id
+    |> String.replace(["_", "."], " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
 
   defp text_param(nil), do: nil
   defp text_param(""), do: nil

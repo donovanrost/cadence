@@ -23,7 +23,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryParams do
     :data_source_id,
     :source_binding_id,
     :default_source_binding_id,
-    :limit_mode
+    :limit_mode,
+    :hidden_markers
   ]
 
   defstruct @fields
@@ -48,7 +49,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryParams do
           data_source_id: binary() | nil,
           source_binding_id: binary() | nil,
           default_source_binding_id: binary() | nil,
-          limit_mode: binary() | nil
+          limit_mode: binary() | nil,
+          hidden_markers: binary() | nil
         }
 
   @field_set MapSet.new(@fields)
@@ -97,7 +99,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryParams do
       "data_source_id" => params.data_source_id,
       "source_binding_id" =>
         current_source_binding_query(params.source_binding_id, params.default_source_binding_id),
-      "limit_mode" => maybe_non_default(params.limit_mode, "observed")
+      "limit_mode" => maybe_non_default(params.limit_mode, "observed"),
+      "hidden_markers" => params.hidden_markers
     }
     |> Map.merge(selection_query)
     |> Map.merge(evidence_query)

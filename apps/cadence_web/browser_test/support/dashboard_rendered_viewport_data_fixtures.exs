@@ -132,6 +132,37 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
 
     assert {:ok, _processing_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence)
 
+    runtime_sample =
+      wait_for_runtime_ingress_latency_sample(mission.mission_id, source_endpoint_id)
+
+    # ADR-019 moved new ingress-latency observations out of the operational
+    # event store. Browser history scenarios still exercise the migration-era
+    # reader, so seed that compatibility boundary explicitly from the live
+    # runtime sample instead of implying that ingress persistence wrote it.
+    latency_event =
+      Event.from_operational_observable_metric_sample(%{
+        sample_id: raw_evidence.evidence_id <> ":browser_history_fixture",
+        organization_id: org.organization_id,
+        mission_id: mission.mission_id,
+        observable_id: "ingress.processing_latency_ms",
+        resource_id: source_endpoint_id,
+        scope_kind: :source_endpoint,
+        spacecraft_id: spacecraft_id,
+        contact_id: contact_id,
+        scheduled_contact_id: Keyword.get(opts, :scheduled_contact_id, contact_id),
+        realized_contact_id: Keyword.get(opts, :realized_contact_id),
+        source_endpoint_id: source_endpoint_id,
+        value: runtime_sample.value,
+        unit: "ms",
+        observed_at: receipt_time,
+        metadata: %{
+          evidence_id: raw_evidence.evidence_id,
+          fixture_source: :runtime_health_history_adapter
+        }
+      })
+
+    assert {:ok, _event} = OperationalEvents.persist_event(latency_event)
+
     [latency_sample | _] =
       Cadence.OperationalEvents.operational_observable_metric_samples(
         org.organization_id,
@@ -150,6 +181,33 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     assert latency_sample.value > 0
 
     latency_sample
+  end
+
+  defp wait_for_runtime_ingress_latency_sample(mission_id, source_endpoint_id, attempts \\ 40)
+
+  defp wait_for_runtime_ingress_latency_sample(mission_id, source_endpoint_id, attempts)
+       when attempts > 1 do
+    case runtime_ingress_latency_sample(mission_id, source_endpoint_id) do
+      nil ->
+        Process.sleep(25)
+        wait_for_runtime_ingress_latency_sample(mission_id, source_endpoint_id, attempts - 1)
+
+      sample ->
+        sample
+    end
+  end
+
+  defp wait_for_runtime_ingress_latency_sample(mission_id, source_endpoint_id, 1) do
+    runtime_ingress_latency_sample(mission_id, source_endpoint_id)
+  end
+
+  defp runtime_ingress_latency_sample(mission_id, source_endpoint_id) do
+    Cadence.runtime_health_snapshot()
+    |> get_in([:metrics, :ingress_processing_latency_ms])
+    |> Enum.find(
+      &(Map.get(&1, :mission_id) == mission_id and
+          Map.get(&1, :source_endpoint_id) == source_endpoint_id)
+    )
   end
 
   def persist_binding_set!(org, mission) do

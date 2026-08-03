@@ -67,6 +67,17 @@ defmodule Cadence.Auth.Policy do
     end
   end
 
+  # Dashboard authoring deliberately starts with the existing mission-operator
+  # population. Keeping this as a named policy action gives the Editor and
+  # other mutation routes one enforceable boundary while leaving room for a
+  # narrower durable grant later without changing those routes.
+  def authorize(%Scope{actor_kind: :user} = current_scope, :author_dashboards, params) do
+    authorize(current_scope, :operate_mission, params)
+  end
+
+  def authorize(%Scope{}, :author_dashboards, _params),
+    do: {:error, :authenticated_user_required}
+
   def authorize(%Scope{} = current_scope, :request_activation, params) do
     action = if current_scope.actor_kind == :service, do: :manage_mission, else: :operate_mission
     authorize(current_scope, action, params)

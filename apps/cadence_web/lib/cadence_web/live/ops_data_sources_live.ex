@@ -30,18 +30,27 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceRegistration
   }
 
+  @source_mutation_events ~w(
+    open_register_source cancel_register_source register_source
+    open_change_binding cancel_change_binding change_binding
+    rotate_source_credential reconcile_tsdb_backend provision_tsdb_backend
+    deprovision_tsdb_backend probe_source disable_source enable_source
+    retry_deployment_run requeue_deployment_run
+  )
+
   @impl true
   def mount(_params, _session, socket) do
-    # credo:disable-for-next-line Credo.Check.Design.TagTODO
-    # todo(authz): require a mission-level source configuration/read permission once RBAC exists.
+    source_admin? = socket.assigns.live_action in [:new, :settings]
+
     {:ok,
      socket
      |> assign(:page_title, "Data Sources")
      |> assign(:ops_nav_item, :data_sources)
+     |> assign(:source_admin?, source_admin?)
      |> assign(:change_binding, nil)
      |> assign(:change_binding_form, to_form(%{}, as: :binding))
      |> assign(:change_binding_error, nil)
-     |> assign(:register_source?, false)
+     |> assign(:register_source?, socket.assigns.live_action == :new)
      |> assign(:register_source_form, to_form(SourceRegistration.defaults(), as: :source))
      |> assign(:register_source_error, nil)
      |> assign(:source_focus, SourceFocus.default())
@@ -58,6 +67,17 @@ defmodule CadenceWeb.OpsDataSourcesLive do
      |> assign(:source_focus, source_focus)
      |> assign_source_focus_resources()
      |> assign_source_focus_state()}
+  end
+
+  @impl true
+  def handle_event(event, _params, %{assigns: %{source_admin?: false}} = socket)
+      when event in @source_mutation_events do
+    {:noreply,
+     put_flash(
+       socket,
+       :error,
+       "Source configuration requires the Data Source Settings administrator route."
+     )}
   end
 
   @impl true

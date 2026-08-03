@@ -26,7 +26,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssignsTest do
     assert context.points_by_id == %{"HK.temp" => %{point_id: "HK.temp"}}
 
     assert context.content_class == [
-             "grid-stack-item-content bg-base-200 border flex flex-col overflow-hidden",
+             "grid-stack-item-content cadence-dashboard-panel border flex flex-col overflow-hidden",
              "border-primary/40 ring-1 ring-primary/20 cursor-move"
            ]
   end
@@ -51,8 +51,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssignsTest do
     assert context.points_by_id == %{}
 
     assert context.content_class == [
-             "grid-stack-item-content bg-base-200 border flex flex-col overflow-hidden",
-             "border-base-300 hover:border-primary/60"
+             "grid-stack-item-content cadence-dashboard-panel border flex flex-col overflow-hidden",
+             "border-base-300/80"
            ]
   end
 

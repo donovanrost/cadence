@@ -10,6 +10,7 @@ defmodule Cadence.Dashboards.Placement do
 
   @type t :: %__MODULE__{
           placement_id: binary(),
+          section_id: binary() | nil,
           layout: map(),
           content_kind: :embedded | :library,
           widget_def: WidgetDef.t() | nil,
@@ -24,6 +25,7 @@ defmodule Cadence.Dashboards.Placement do
 
   defstruct [
     :placement_id,
+    :section_id,
     :widget_def,
     :library_widget_id,
     :library_version,
@@ -43,6 +45,7 @@ defmodule Cadence.Dashboards.Placement do
 
     %__MODULE__{
       placement_id: get_attr(attrs, :placement_id),
+      section_id: get_attr(attrs, :section_id),
       layout: normalize_layout(get_attr(attrs, :layout) || %{}),
       content_kind: normalize_content_kind(get_attr(content, :kind)),
       widget_def: normalize_widget_def(content),
@@ -60,6 +63,7 @@ defmodule Cadence.Dashboards.Placement do
   def to_map(%__MODULE__{} = placement) do
     %{
       placement_id: placement.placement_id,
+      section_id: placement.section_id,
       layout: placement.layout,
       content: content_to_map(placement),
       repeat: placement.repeat,

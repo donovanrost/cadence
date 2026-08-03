@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
 
   def render(assigns) do
     ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div
       id="ops-data-sources-page"
       class="flex flex-1 min-h-0"
@@ -44,15 +45,22 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
         <div class="mx-auto max-w-6xl px-6 py-8">
         <div class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 class="text-lg font-semibold text-base-content">Data Sources</h1>
+            <h1 class="text-lg font-semibold text-base-content">
+              {if @source_admin?, do: "Data Source Settings", else: "Data Sources"}
+            </h1>
             <p class="mt-1 font-mono text-xs text-base-content/60">
               {@current_mission.mission_id}
             </p>
           </div>
           <div class="flex flex-col items-stretch gap-3 md:items-end">
-            <.button id="register-source-button" size={:sm} phx-click="open_register_source">
+            <.link
+              :if={source_admin_eligible?(@current_scope)}
+              id="register-source-button"
+              navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/registration/new"}
+              class="btn btn-primary btn-sm"
+            >
               <.icon name="hero-plus" class="h-4 w-4" /> Register Source
-            </.button>
+            </.link>
             <div class="grid grid-cols-3 gap-2 text-right">
               <.stat_tile label="sources" value={length(@data_sources)} />
               <.stat_tile label="bindings" value={length(@data_bindings)} />
@@ -137,7 +145,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
         </div>
 
         <section
-          :if={@register_source?}
+          :if={@register_source? and @source_admin?}
           id="register-source-panel"
           class="mt-5 border border-primary/20 bg-base-200/60 p-4"
         >
@@ -293,6 +301,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                       </p>
                       <.status_pill status={row.binding_status} />
                       <.button
+                        :if={@source_admin?}
                         id={"change-binding-#{row.binding.binding_id}"}
                         variant={:ghost}
                         size={:xs}
@@ -345,7 +354,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                   </div>
 
                   <div
-                    :if={change_binding_open?(@change_binding, row.binding.binding_id)}
+                    :if={@source_admin? and change_binding_open?(@change_binding, row.binding.binding_id)}
                     id={"change-binding-form-panel-#{row.binding.binding_id}"}
                     class="border-t border-primary/20 bg-base-100/80 px-3 py-3 xl:col-span-3"
                   >
@@ -459,9 +468,12 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                 >
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                      <p class="truncate font-mono text-xs font-semibold text-base-content">
+                      <.link
+                        navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/#{source.data_source_id}"}
+                        class="truncate font-mono text-xs font-semibold text-primary hover:underline"
+                      >
                         {source.data_source_id}
-                      </p>
+                      </.link>
                       <p class="mt-1 text-xs text-base-content/60">
                         {source.kind_text} · {source.owner_text} · {source.isolation_text}
                       </p>
@@ -471,8 +483,16 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.status_pill status={source.status_text} />
                         <.status_pill status={source.health_status} />
                       </div>
+                      <.link
+                        :if={source_admin_eligible?(@current_scope) and not @source_admin?}
+                        id={"source-settings-#{source.data_source_id}"}
+                        navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/#{source.data_source_id}/settings"}
+                        class="btn btn-ghost btn-xs"
+                      >
+                        <.icon name="hero-cog-6-tooth" class="h-3.5 w-3.5" /> Settings
+                      </.link>
                       <.button
-                        :if={source.credential_action?}
+                        :if={@source_admin? and source.credential_action?}
                         id={"rotate-credential-#{source.data_source_id}"}
                         variant={:ghost}
                         size={:xs}
@@ -484,7 +504,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-key" class="h-3.5 w-3.5" /> Rotate Credential
                       </.button>
                       <.button
-                        :if={source.backend_reconcile_action?}
+                        :if={@source_admin? and source.backend_reconcile_action?}
                         id={"reconcile-backend-#{source.data_source_id}"}
                         variant={:ghost}
                         size={:xs}
@@ -494,7 +514,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Reconcile Backend
                       </.button>
                       <.button
-                        :if={source.backend_provision_action?}
+                        :if={@source_admin? and source.backend_provision_action?}
                         id={"provision-backend-#{source.data_source_id}"}
                         variant={:secondary}
                         size={:xs}
@@ -504,7 +524,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-server-stack" class="h-3.5 w-3.5" /> Provision Backend
                       </.button>
                       <.button
-                        :if={source.backend_deprovision_action?}
+                        :if={@source_admin? and source.backend_deprovision_action?}
                         id={"deprovision-backend-#{source.data_source_id}"}
                         variant={:danger}
                         size={:xs}
@@ -515,7 +535,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-trash" class="h-3.5 w-3.5" /> Deprovision Backend
                       </.button>
                       <.button
-                        :if={source.status_text == "active"}
+                        :if={@source_admin? and source.status_text == "active"}
                         id={"probe-source-#{source.data_source_id}"}
                         variant={:ghost}
                         size={:xs}
@@ -525,7 +545,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Probe
                       </.button>
                       <.button
-                        :if={source.status_text == "active"}
+                        :if={@source_admin? and source.status_text == "active"}
                         id={"disable-source-#{source.data_source_id}"}
                         variant={:danger}
                         size={:xs}
@@ -536,7 +556,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-pause" class="h-3.5 w-3.5" /> Disable
                       </.button>
                       <.button
-                        :if={source.enable_action?}
+                        :if={@source_admin? and source.enable_action?}
                         id={"enable-source-#{source.data_source_id}"}
                         variant={:secondary}
                         size={:xs}
@@ -628,7 +648,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                     <div class="flex shrink-0 flex-col items-end gap-2">
                       <.status_pill status={run.status_text} />
                       <.button
-                        :if={run.status_text == "failed"}
+                        :if={@source_admin? and run.status_text == "failed"}
                         id={"retry-deployment-run-#{run.run_id}"}
                         variant={:secondary}
                         size={:xs}
@@ -638,7 +658,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
                         <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Retry
                       </.button>
                       <.button
-                        :if={run.status_text == "provisioning"}
+                        :if={@source_admin? and run.status_text == "provisioning"}
                         id={"requeue-deployment-run-#{run.run_id}"}
                         variant={:secondary}
                         size={:xs}
@@ -691,8 +711,8 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
         </div>
         </div>
       </div>
-      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
+    </Layouts.app>
     """
   end
 
@@ -766,4 +786,9 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
     do: :blocked
 
   defp pill_status(_status), do: :info
+
+  defp source_admin_eligible?(scope) do
+    MapSet.member?(scope.capabilities, :organization_admin) or
+      MapSet.member?(scope.capabilities, :platform_admin)
+  end
 end

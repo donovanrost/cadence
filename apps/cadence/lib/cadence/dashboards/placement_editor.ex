@@ -39,9 +39,22 @@ defmodule Cadence.Dashboards.PlacementEditor do
       "spacecraft_id" => "",
       "scope_kind" => "",
       "scope_id" => "",
+      "section_id" => "",
       "binding_source" => "telemetry",
       "precision" => "2",
       "window_seconds" => "300",
+      "show_unit" => "true",
+      "show_min_max_band" => "true",
+      "legend_mode" => "auto",
+      "line_width" => "normal",
+      "fill_opacity" => "0",
+      "span_gaps" => "false",
+      "show_points" => "false",
+      "axis_mode" => "unit",
+      "shared_tooltip" => "true",
+      "repeat_over" => "spacecraft",
+      "repeat_layout" => "wrap_grid",
+      "repeat_max_instances" => "12",
       "point_q" => ""
     }
   end
@@ -59,9 +72,22 @@ defmodule Cadence.Dashboards.PlacementEditor do
       "spacecraft_id" => scope_spacecraft_id(placement) || "",
       "scope_kind" => scope_override_kind(placement) || "",
       "scope_id" => scope_override_id(placement) || "",
+      "section_id" => placement.section_id || "",
       "binding_source" => widget_binding_source(widget_def),
       "precision" => option_string(widget_def.options, :precision, 2),
       "window_seconds" => option_string(widget_def.options, :window_seconds, 300),
+      "show_unit" => option_string(widget_def.options, :show_unit, true),
+      "show_min_max_band" => option_string(widget_def.options, :show_min_max_band, true),
+      "legend_mode" => option_string(widget_def.options, :legend_mode, "auto"),
+      "line_width" => option_string(widget_def.options, :line_width, "normal"),
+      "fill_opacity" => option_string(widget_def.options, :fill_opacity, 0),
+      "span_gaps" => option_string(widget_def.options, :span_gaps, false),
+      "show_points" => option_string(widget_def.options, :show_points, false),
+      "axis_mode" => option_string(widget_def.options, :axis_mode, "unit"),
+      "shared_tooltip" => option_string(widget_def.options, :shared_tooltip, true),
+      "repeat_over" => repeat_string(placement, :over, :spacecraft),
+      "repeat_layout" => repeat_string(placement, :layout, :wrap_grid),
+      "repeat_max_instances" => repeat_string(placement, :max_instances, 12),
       "point_q" => ""
     }
   end
@@ -87,10 +113,12 @@ defmodule Cadence.Dashboards.PlacementEditor do
          :ok <- validate_title(title),
          {:ok, binding} <- binding(type, params, selected_observables),
          :ok <- validate_authoring_scope(binding, opts),
+         :ok <- validate_repeat_declaration(type, params),
          {:ok, options} <- options(type, params) do
       placement =
         %Placement{
           placement_id: placement_id(panel, existing_placement),
+          section_id: blank_to_nil(params["section_id"]),
           layout: placement_layout(type, existing_placement),
           widget_def: %WidgetDef{
             widget_type_id: widget_type_id(type),
@@ -99,7 +127,8 @@ defmodule Cadence.Dashboards.PlacementEditor do
             binding: binding,
             options: options
           },
-          scope_override: scope_override(type, params)
+          scope_override: scope_override(type, params),
+          repeat: repeat(type, params)
         }
 
       {:ok, placement}
@@ -273,8 +302,9 @@ defmodule Cadence.Dashboards.PlacementEditor do
   defp telemetry_point_binding(type, mode, spacecraft_id, selected_point_id, params)
        when type in [:value_tile, :time_series, :state_timeline] do
     cond do
-      mode not in ["context", "fixed", "scope"] ->
-        {:error, {:invalid_binding, "point widgets bind in context, fixed, or pinned-scope mode"}}
+      mode not in ["context", "fixed", "scope", "repeat"] ->
+        {:error,
+         {:invalid_binding, "point widgets bind in context, fixed, pinned-scope, or repeat mode"}}
 
       blank?(selected_point_id) ->
         {:error, {:invalid_binding, "a telemetry point is required"}}
@@ -302,9 +332,10 @@ defmodule Cadence.Dashboards.PlacementEditor do
   defp telemetry_multi_observable_binding(type, mode, spacecraft_id, observables, params)
        when type in [:status_matrix, :data_table] do
     cond do
-      mode not in ["context", "fixed", "scope"] ->
+      mode not in ["context", "fixed", "scope", "repeat"] ->
         {:error,
-         {:invalid_binding, "#{widget_label(type)} binds in context, fixed, or pinned-scope mode"}}
+         {:invalid_binding,
+          "#{widget_label(type)} binds in context, fixed, pinned-scope, or repeat mode"}}
 
       length(observables) not in observable_range(type) ->
         {:error, {:invalid_binding, "select 1 to 24 telemetry points"}}
@@ -334,7 +365,7 @@ defmodule Cadence.Dashboards.PlacementEditor do
   end
 
   defp operational_multi_observable_binding(type, mode, observables, params)
-       when type in [:status_matrix, :data_table] and mode in ["context", "scope", nil] do
+       when type in [:status_matrix, :data_table] and mode in ["context", "scope", "repeat", nil] do
     cond do
       length(observables) not in observable_range(type) ->
         {:error, {:invalid_binding, "select 1 to 24 operational observables"}}
@@ -371,7 +402,7 @@ defmodule Cadence.Dashboards.PlacementEditor do
   end
 
   defp operational_state_timeline_binding(mode, observables, params)
-       when mode in ["context", "scope", nil] do
+       when mode in ["context", "scope", "repeat", nil] do
     cond do
       length(observables) not in @status_matrix_observable_range ->
         {:error, {:invalid_binding, "select 1 to 24 operational state observables"}}
@@ -445,7 +476,7 @@ defmodule Cadence.Dashboards.PlacementEditor do
   end
 
   defp operational_time_series_binding(observables, mode, params)
-       when mode in ["context", "scope", nil] do
+       when mode in ["context", "scope", "repeat", nil] do
     cond do
       length(observables) not in @time_series_observable_range ->
         {:error, {:invalid_binding, "select 1 to 8 operational metric observables"}}
@@ -539,13 +570,54 @@ defmodule Cadence.Dashboards.PlacementEditor do
         {:error, {:invalid_options, "window must be between 60 and 3600 seconds"}}
 
       type == :time_series ->
-        {:ok, %{precision: precision, window_seconds: window_seconds}}
+        time_series_options(params, precision, window_seconds)
 
       type in [:status_matrix, :data_table, :state_timeline] ->
         {:ok, %{precision: precision, window_seconds: window_seconds}}
 
       true ->
-        {:ok, %{precision: precision, window_seconds: window_seconds, show_unit: true}}
+        {:ok,
+         %{
+           precision: precision,
+           window_seconds: window_seconds,
+           show_unit: parse_bool(params["show_unit"], true)
+         }}
+    end
+  end
+
+  defp time_series_options(params, precision, window_seconds) do
+    legend_mode = params["legend_mode"] || "auto"
+    line_width = params["line_width"] || "normal"
+    axis_mode = params["axis_mode"] || "unit"
+    fill_opacity = parse_int(params["fill_opacity"], 0)
+
+    cond do
+      legend_mode not in ["auto", "always", "hidden"] ->
+        {:error, {:invalid_options, "legend mode is invalid"}}
+
+      line_width not in ["thin", "normal", "bold"] ->
+        {:error, {:invalid_options, "line width is invalid"}}
+
+      axis_mode not in ["unit", "shared"] ->
+        {:error, {:invalid_options, "axis mode is invalid"}}
+
+      fill_opacity not in 0..30 ->
+        {:error, {:invalid_options, "fill opacity must be between 0 and 30 percent"}}
+
+      true ->
+        {:ok,
+         %{
+           precision: precision,
+           window_seconds: window_seconds,
+           show_min_max_band: parse_bool(params["show_min_max_band"], true),
+           legend_mode: legend_mode,
+           line_width: line_width,
+           fill_opacity: fill_opacity,
+           span_gaps: parse_bool(params["span_gaps"], false),
+           show_points: parse_bool(params["show_points"], false),
+           axis_mode: axis_mode,
+           shared_tooltip: parse_bool(params["shared_tooltip"], true)
+         }}
     end
   end
 
@@ -598,11 +670,49 @@ defmodule Cadence.Dashboards.PlacementEditor do
 
   defp params_scope_override(_mode, _params), do: nil
 
+  defp repeat(type, %{"mode" => "repeat"} = params)
+       when type in [:time_series, :status_matrix, :data_table] do
+    %{
+      axis: :scope,
+      over: normalize_repeat_over(params["repeat_over"]),
+      layout: normalize_repeat_layout(params["repeat_layout"]),
+      max_instances: parse_int(params["repeat_max_instances"], 12)
+    }
+  end
+
+  defp repeat(_type, _params), do: nil
+
+  defp validate_repeat_declaration(type, %{"mode" => "repeat"} = params) do
+    repeat_over = params["repeat_over"] || "spacecraft"
+    repeat_layout = params["repeat_layout"] || "wrap_grid"
+    max_instances = parse_strict_int(params["repeat_max_instances"] || "12")
+
+    cond do
+      type not in [:time_series, :status_matrix, :data_table] ->
+        {:error, {:invalid_binding, "selected widget type does not support repeat scope"}}
+
+      repeat_over not in ["spacecraft", "contact", "ground_station", "transport", "link"] ->
+        {:error, {:invalid_binding, "repeat domain is invalid"}}
+
+      repeat_layout not in ["wrap_grid", "row", "column"] ->
+        {:error, {:invalid_binding, "repeat layout is invalid"}}
+
+      max_instances not in 1..24 ->
+        {:error, {:invalid_binding, "repeat safety limit must be between 1 and 24"}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_repeat_declaration(_type, _params), do: :ok
+
   defp invalid_scope_override?(nil), do: true
   defp invalid_scope_override?(_scope_override), do: false
 
   defp binding_scope_mode("fixed"), do: :override
   defp binding_scope_mode("scope"), do: :override
+  defp binding_scope_mode("repeat"), do: :repeat
   defp binding_scope_mode(_mode), do: :context
 
   defp sampling(:value_tile), do: :latest
@@ -643,6 +753,7 @@ defmodule Cadence.Dashboards.PlacementEditor do
     cond do
       widget_def.widget_type_id == "cadence.event_timeline" -> "context"
       widget_def.widget_type_id == "cadence.constellation_health" -> "constellation"
+      is_map(placement.repeat) -> "repeat"
       scope_override_kind(placement) in [nil, ""] -> "context"
       scope_override_kind(placement) == "spacecraft" -> "fixed"
       true -> "scope"
@@ -718,11 +829,42 @@ defmodule Cadence.Dashboards.PlacementEditor do
     |> to_string()
   end
 
+  defp repeat_string(%Placement{repeat: repeat}, key, default) when is_map(repeat) do
+    repeat
+    |> Map.get(key, Map.get(repeat, to_string(key), default))
+    |> to_string()
+  end
+
+  defp repeat_string(_placement, _key, default), do: to_string(default)
+
   defp parse_int(value, default) do
     case Integer.parse(to_string(value)) do
       {int, _rest} -> int
       :error -> default
     end
+  end
+
+  defp parse_strict_int(value) do
+    case Integer.parse(to_string(value)) do
+      {int, ""} -> int
+      _invalid -> nil
+    end
+  end
+
+  defp parse_bool(value, _default) when value in [true, "true", "1", "on"], do: true
+  defp parse_bool(value, _default) when value in [false, "false", "0", "off"], do: false
+  defp parse_bool(_value, default), do: default
+
+  defp normalize_repeat_over(value) do
+    Enum.find([:spacecraft, :contact, :ground_station, :transport, :link], :spacecraft, fn kind ->
+      to_string(kind) == to_string(value)
+    end)
+  end
+
+  defp normalize_repeat_layout(value) do
+    Enum.find([:wrap_grid, :row, :column], :wrap_grid, fn layout ->
+      to_string(layout) == to_string(value)
+    end)
   end
 
   defp blank?(nil), do: true

@@ -53,7 +53,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardActionPresentation do
       action
       | action_id: telemetry_panel_action_id(action, rendered_source),
         kind: :navigate,
-        route: ~p"/missions/#{mission_id}/ops/telemetry/explore?#{query}",
+        route: ~p"/missions/#{mission_id}/ops/explore?#{query}",
         query: query,
         source: rendered_source || action.source
     }

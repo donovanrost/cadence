@@ -31,6 +31,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents do
     pick_point_fn(opts).(socket, point_id)
   end
 
+  def preview_widget_binding(socket, opts \\ []) do
+    preview_widget_binding_fn(opts).(socket, opts)
+  end
+
   def save_widget(socket, params, opts \\ []) do
     save_widget_fn(opts).(socket, params, opts)
   end
@@ -63,6 +67,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents do
 
   defp pick_point_fn(opts),
     do: Keyword.get(opts, :pick_point_event, &WidgetEditing.pick_point/2)
+
+  defp preview_widget_binding_fn(opts),
+    do:
+      Keyword.get(
+        opts,
+        :preview_widget_binding_event,
+        &WidgetEditing.preview_widget_binding/2
+      )
 
   defp save_widget_fn(opts),
     do: Keyword.get(opts, :save_widget_event, &WidgetEditing.save_widget/3)

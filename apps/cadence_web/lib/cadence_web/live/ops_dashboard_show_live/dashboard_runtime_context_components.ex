@@ -22,38 +22,51 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents do
     assigns =
       assigns
       |> assign(:context_presentation, DashboardRuntimeContextPresentation.build(assigns))
+      |> assign(:context_form, to_form(%{"q" => assigns.query}))
 
     ~H"""
-    <div class="relative flex items-center gap-2 min-w-0">
-      <span class="hud-label hidden md:inline">Context</span>
-      <%= if @context_presentation.selected_label do %>
-        <span
-          id="dashboard-selected-context"
-          data-dashboard-selected-context-kind={@context_presentation.selected_scope_kind || ""}
-          data-dashboard-selected-context-id={@context_presentation.selected_scope_id || ""}
-          data-dashboard-selected-context-ids={Enum.join(@context_presentation.selected_scope_ids, ",")}
-          class="badge badge-primary badge-outline badge-sm font-mono"
-        >
-          {@context_presentation.selected_label}
-        </span>
+    <div class="relative min-w-0">
+      <div :if={@context_presentation.selected_label} class="mb-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+            Current scope
+          </p>
+          <span
+            id="dashboard-selected-context"
+            data-dashboard-selected-context-kind={@context_presentation.selected_scope_kind || ""}
+            data-dashboard-selected-context-id={@context_presentation.selected_scope_id || ""}
+            data-dashboard-selected-context-ids={Enum.join(@context_presentation.selected_scope_ids, ",")}
+            class="badge badge-primary badge-outline badge-sm mt-1 max-w-full truncate font-mono"
+          >
+            {@context_presentation.selected_label}
+          </span>
+        </div>
         <.button variant={:ghost} size={:xs} phx-click="clear_context" aria-label="Clear context">
           <.icon name="hero-x-mark" class="h-3 w-3" />
         </.button>
-      <% end %>
-      <form id="context-search-form" phx-change="context_search" onsubmit="return false" class="w-44">
+      </div>
+      <p class="mb-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+        Find operational context
+      </p>
+      <.form
+        for={@context_form}
+        id="context-search-form"
+        phx-change="context_search"
+        onsubmit="return false"
+        class="w-full"
+      >
         <.input
+          field={@context_form[:q]}
           id="context-search"
-          name="q"
           type="search"
-          value={@query}
           placeholder="Find mission, spacecraft, contact, source, transport, ground, or link"
           compact
           phx-debounce="150"
         />
-      </form>
+      </.form>
       <ul
         :if={@query != ""}
-        class="absolute left-0 top-full z-[var(--z-popover)] mt-1 w-64 max-h-60 overflow-y-auto rounded border border-primary/20 bg-base-200 p-1 shadow-lg"
+        class="absolute left-0 right-0 top-full z-[var(--z-popover)] mt-1 max-h-60 overflow-y-auto rounded border border-primary/20 bg-base-200 p-1 shadow-lg"
       >
         <li :for={action <- @context_presentation.batch_actions}>
           <button

@@ -85,22 +85,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
              |> LazyHTML.query(~s([data-workflow-explanation-field="Group"]))
              |> selected_text()
 
-    assert ["dashboard-1"] =
+    assert [data_operations_path] =
              document
-             |> LazyHTML.query("#dashboard-historical-workflow-correction-dashboard-id")
-             |> LazyHTML.attribute("value")
+             |> LazyHTML.query("#dashboard-workflow-open-data-operations")
+             |> LazyHTML.attribute("href")
 
-    assert ["replay-1"] =
-             document
-             |> LazyHTML.query(
-               "#dashboard-historical-workflow-correction-dashboard-replay-run-id"
-             )
-             |> LazyHTML.attribute("value")
+    uri = URI.parse(data_operations_path)
+    query = URI.decode_query(uri.query)
 
-    assert ["observed"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-correction-dashboard-limit-mode")
-             |> LazyHTML.attribute("value")
+    assert uri.path == "/missions/mission-1/ops/data-operations"
+    assert query["dashboard_id"] == "dashboard-1"
+    assert query["dashboard_replay_run_id"] == "replay-1"
+    assert query["dashboard_limit_mode"] == "observed"
+    assert query["group"] == "group-1"
   end
 
   test "data_link_panel groups lifecycle recovery related links" do

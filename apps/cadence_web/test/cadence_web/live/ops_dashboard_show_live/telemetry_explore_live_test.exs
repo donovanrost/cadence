@@ -14,7 +14,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources}
+  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
@@ -193,7 +193,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/telemetry/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, sample_id: older_sample.sample_id, selected_time: DateTime.to_iso8601(older_sample.receipt_time), realm: "rehearsal", data_source_id: source_context.data_source_id, source_binding_id: source_context.binding_id, source_dashboard_id: dashboard.dashboard_id}}"
+        ~p"/missions/#{mission.mission_id}/ops/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, sample_id: older_sample.sample_id, selected_time: DateTime.to_iso8601(older_sample.receipt_time), realm: "rehearsal", data_source_id: source_context.data_source_id, source_binding_id: source_context.binding_id, source_dashboard_id: dashboard.dashboard_id}}"
       )
 
     assert has_element?(view, "#ops-telemetry-explore-page")
@@ -263,7 +263,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
 
     assert has_element?(
              view,
-             ~s(#telemetry-explore-copy-link[data-clipboard-text*="/ops/telemetry/explore"][data-clipboard-text*="point_id=HK.counter"][data-clipboard-text*="sample_id=#{older_sample.sample_id}"][data-clipboard-text*="data_source_id=#{source_context.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_context.binding_id}"])
+             ~s(#telemetry-explore-copy-link[data-clipboard-text*="/ops/explore"][data-clipboard-text*="point_id=HK.counter"][data-clipboard-text*="sample_id=#{older_sample.sample_id}"][data-clipboard-text*="data_source_id=#{source_context.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_context.binding_id}"])
            )
 
     assert has_element?(
@@ -389,7 +389,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/telemetry/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, realm: "rehearsal", data_source_id: "retired-rehearsal-tsdb", source_binding_id: "retired-rehearsal-binding"}}"
+        ~p"/missions/#{mission.mission_id}/ops/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, realm: "rehearsal", data_source_id: "retired-rehearsal-tsdb", source_binding_id: "retired-rehearsal-binding"}}"
       )
 
     assert has_element?(
@@ -404,5 +404,95 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
 
     assert has_element?(view, ~s([data-explore-source="State"]), "missing")
     assert has_element?(view, ~s([data-explore-diagnostics="Returned"]), "0")
+  end
+
+  test "question-led Explore stages a dashboard candidate without writing until Save" do
+    {conn, _user, org, mission} = signed_in_user_org_and_mission()
+    binding_set = persist_binding_set!(org, mission)
+
+    assert {:ok, _activation} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               org.organization_id,
+               mission.mission_id,
+               binding_set.binding_set_id,
+               binding_set.version,
+               []
+             )
+
+    dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Investigation Board")
+
+    {:ok, explore, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore")
+
+    assert has_element?(explore, "#ops-context-rail")
+    assert has_element?(explore, "#telemetry-explore-questions")
+
+    explore
+    |> element("#telemetry-explore-question-what_changed")
+    |> render_click()
+
+    preset_path = assert_patch(explore)
+    assert preset_path =~ "question=what_changed"
+    assert preset_path =~ "time_mode=last_1h"
+    assert preset_path =~ "selection_view=all_revisions"
+
+    assert has_element?(
+             explore,
+             ~s(#telemetry-explore-question-briefing[data-explore-question="what_changed"])
+           )
+
+    assert has_element?(explore, "#telemetry-explore-question-timeline")
+    assert has_element?(explore, "#telemetry-explore-add-to-dashboard-form")
+
+    explore
+    |> form("#telemetry-explore-add-to-dashboard-form",
+      add_to_dashboard: %{
+        dashboard_id: dashboard.dashboard_id,
+        widget_type: "time_series",
+        title: "Counter investigation"
+      }
+    )
+    |> render_submit()
+
+    {editor_path, _flash} = assert_redirect(explore)
+    assert editor_path =~ "/ops/dashboards/#{dashboard.dashboard_id}/edit"
+    assert editor_path =~ "candidate_source=explore"
+    assert editor_path =~ "candidate_point_id=HK.counter"
+
+    assert version_count(org, mission, dashboard) == 1
+
+    {:ok, editor, _html} = live(conn, editor_path)
+
+    assert has_element?(
+             editor,
+             ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-editor-dirty="true"])
+           )
+
+    assert version_count(org, mission, dashboard) == 1
+    assert {:ok, %Document{placements: []}} = fetch_document(org, mission, dashboard)
+
+    editor |> element("#dashboard-editor-save") |> render_click()
+
+    assert version_count(org, mission, dashboard) == 2
+
+    assert {:ok, %Document{placements: [placement]}} = fetch_document(org, mission, dashboard)
+    assert placement.widget_def.title == "Counter investigation"
+    assert placement.widget_def.binding.observables == ["HK.counter"]
+  end
+
+  defp version_count(org, mission, dashboard) do
+    Cadence.Dashboards.list_versions(
+      org.organization_id,
+      mission.mission_id,
+      dashboard.dashboard_id
+    )
+    |> length()
+  end
+
+  defp fetch_document(org, mission, dashboard) do
+    Cadence.Dashboards.fetch_document(
+      org.organization_id,
+      mission.mission_id,
+      dashboard.dashboard_id
+    )
   end
 end

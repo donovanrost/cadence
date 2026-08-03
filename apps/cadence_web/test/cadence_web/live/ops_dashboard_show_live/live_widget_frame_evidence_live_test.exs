@@ -620,7 +620,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-evidence-explore[data-dashboard-action-target="telemetry_explore"][data-dashboard-action-source="evidence_panel"][href*="/ops/telemetry/explore"][href*="point_id=HK.counter"][href*="sample_id="][href*="data_source_id="][href*="source_binding_id="][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
+               ~s(#dashboard-evidence-explore[data-dashboard-action-target="telemetry_explore"][data-dashboard-action-source="evidence_panel"][href*="/ops/explore"][href*="point_id=HK.counter"][href*="sample_id="][href*="data_source_id="][href*="source_binding_id="][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
 
       assert has_element?(

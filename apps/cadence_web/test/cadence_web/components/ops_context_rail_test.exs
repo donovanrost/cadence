@@ -63,9 +63,26 @@ defmodule CadenceWeb.Components.OpsContextRailTest do
   test "mission context rail derives fleet-health badge status and count" do
     html =
       render_component(&OpsContextRail.mission_context_rail/1,
-        fleet_health: %{
-          normalized_state_counts: %{red: 0, yellow: 2, blue: 1, green: 8},
-          violating_points: 3
+        ops_context: %{
+          mission_id: "mission-1",
+          observed_at: ~U[2026-08-01 12:00:00Z],
+          pinned_focus: nil,
+          modules: [
+            %{
+              key: "fleet_health",
+              title: "Fleet health",
+              icon: "hero-rocket-launch",
+              status: :warning,
+              count: 3,
+              freshness: :current,
+              observed_at: ~U[2026-08-01 12:00:00Z],
+              destination: "/missions/mission-1",
+              data: %{
+                normalized_state_counts: %{red: 0, yellow: 2, blue: 1, green: 8},
+                violating_points: 3
+              }
+            }
+          ]
         }
       )
 
@@ -85,6 +102,16 @@ defmodule CadenceWeb.Components.OpsContextRailTest do
              document
              |> LazyHTML.query(~s([data-ops-context-section="fleet_health"]))
              |> LazyHTML.attribute("data-ops-context-section-count")
+
+    assert ["current"] =
+             document
+             |> LazyHTML.query(~s([data-ops-context-module-freshness]))
+             |> LazyHTML.attribute("data-ops-context-module-freshness")
+
+    assert ["/missions/mission-1"] =
+             document
+             |> LazyHTML.query(~s([data-ops-context-section="fleet_health"] a))
+             |> LazyHTML.attribute("href")
   end
 
   defp section_slot(key, title, status, count, body, opts \\ []) do

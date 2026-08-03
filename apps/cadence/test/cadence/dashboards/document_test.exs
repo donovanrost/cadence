@@ -21,6 +21,23 @@ defmodule Cadence.Dashboards.DocumentTest do
       end
     end
 
+    test "rejects invalid values for catalog-declared widget options" do
+      document = load_fixture!("time_series_with_limits.v1.json")
+      [placement] = document.placements
+
+      widget_def = %{
+        placement.widget_def
+        | options: Map.put(placement.widget_def.options, :line_width, "extra-bold")
+      }
+
+      validation =
+        Document.validate(%{document | placements: [%{placement | widget_def: widget_def}]})
+
+      assert Enum.any?(validation.errors, fn error ->
+               error.code == :invalid_widget_option and error.details.option == "line_width"
+             end)
+    end
+
     test "normalizes widget bindings from fixture JSON" do
       document = load_fixture!("time_series_with_limits.v1.json")
 
@@ -391,6 +408,10 @@ defmodule Cadence.Dashboards.DocumentTest do
         |> put_in(
           ["placements", Access.at(0), "content", "widget_def", "widget_type_id"],
           "cadence.status_matrix"
+        )
+        |> put_in(
+          ["placements", Access.at(0), "content", "widget_def", "options"],
+          %{"precision" => 2}
         )
         |> put_in(
           ["placements", Access.at(0), "content", "widget_def", "binding"],

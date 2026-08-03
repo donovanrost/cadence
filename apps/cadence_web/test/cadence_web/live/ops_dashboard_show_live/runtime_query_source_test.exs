@@ -42,7 +42,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuerySourceTest do
              "compare_data_view" => "canonical",
              "data_source_id" => "questdb-rehearsal",
              "source_binding_id" => "rehearsal-fast",
-             "limit_mode" => nil
+             "limit_mode" => nil,
+             "hidden_markers" => nil
            }
   end
 
@@ -63,7 +64,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuerySourceTest do
              "compare_data_view" => nil,
              "data_source_id" => nil,
              "source_binding_id" => "primary",
-             "limit_mode" => nil
+             "limit_mode" => nil,
+             "hidden_markers" => nil
            }
   end
 

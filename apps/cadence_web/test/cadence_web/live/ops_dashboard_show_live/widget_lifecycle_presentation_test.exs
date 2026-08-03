@@ -239,6 +239,57 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecyclePresentationTest do
              )
   end
 
+  test "put keeps healthy primary telemetry ready when an optional limits overlay is unavailable" do
+    telemetry_frame =
+      %Frame{
+        meta: %{
+          data_source_id: "questdb-flight",
+          source_binding_id: "binding-flight",
+          source_request_context: %{
+            source_request_id: "source-req-telemetry",
+            logical_source: :telemetry
+          }
+        }
+      }
+
+    placement_frames = %PlacementFrames{
+      primary: [telemetry_frame],
+      warnings: [
+        %ResolveWarning{
+          code: :source_unavailable,
+          severity: :error,
+          message: "Limits source unavailable",
+          details: %{
+            source_request_id: "source-req-limits",
+            logical_source: :limits,
+            data_source_id: "managed-limits",
+            source_binding_id: "binding-limits"
+          }
+        }
+      ]
+    }
+
+    assert %{
+             lifecycle_state: :ready,
+             lifecycle: %{state: :ready, severity: :ok, warning_codes: []},
+             source_status: %{
+               state: :fresh,
+               severity: :ok,
+               warning_codes: [],
+               logical_sources: [:telemetry],
+               data_source_ids: ["questdb-flight"],
+               source_binding_ids: ["binding-flight"]
+             }
+           } =
+             WidgetLifecyclePresentation.put(
+               %{kind: :point},
+               placement_frames,
+               telemetry_frame,
+               :ready,
+               false
+             )
+  end
+
   test "aggregate row data state only returns no-data when all rows are no-data" do
     assert WidgetLifecyclePresentation.aggregate_row_data_state([
              %{normalized_state: :no_data},

@@ -154,6 +154,55 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
              )
   end
 
+  test "filters replay-scoped replacements by replay run", %{
+    mission_id: mission_id,
+    scope_id: scope_id
+  } do
+    replay_sample =
+      sample("sample-replay", 42, ~U[2026-06-21 12:00:00Z],
+        mission_id: mission_id,
+        scope_id: scope_id,
+        realm: :replay,
+        replay_run_id: "replay-run-alpha",
+        data_source_id: "managed_questdb_replay",
+        binding_id: "replay_telemetry"
+      )
+
+    persist_sample_scope!(replay_sample)
+    assert :ok = Postgres.record_samples([replay_sample])
+
+    source_opts = [
+      realm: :replay,
+      replay_run_id: "replay-run-beta",
+      data_source_id: "managed_questdb_replay",
+      binding_id: "replay_telemetry"
+    ]
+
+    assert :ok = Postgres.replace_value(mission_id, "HK.counter", nil, source_opts)
+
+    assert Postgres.latest_value(mission_id, "HK.counter",
+             realm: :replay,
+             replay_run_id: "replay-run-alpha",
+             data_source_id: "managed_questdb_replay",
+             binding_id: "replay_telemetry"
+           ).raw_value == 42
+
+    assert :ok =
+             Postgres.replace_value(
+               mission_id,
+               "HK.counter",
+               nil,
+               Keyword.put(source_opts, :replay_run_id, "replay-run-alpha")
+             )
+
+    assert Postgres.latest_value(mission_id, "HK.counter",
+             realm: :replay,
+             replay_run_id: "replay-run-alpha",
+             data_source_id: "managed_questdb_replay",
+             binding_id: "replay_telemetry"
+           ) == nil
+  end
+
   defp sample(sample_id, raw_value, receipt_time, opts) do
     scope_id = Keyword.fetch!(opts, :scope_id)
     scoped_sample_id = scoped_id(sample_id, scope_id)
@@ -186,6 +235,7 @@ defmodule Cadence.Telemetry.CurrentValueStorePostgresTest do
       |> maybe_put("realm", atom_text(Keyword.get(opts, :realm)))
       |> maybe_put("data_source_id", Keyword.get(opts, :data_source_id))
       |> maybe_put("binding_id", Keyword.get(opts, :binding_id))
+      |> maybe_put("replay_run_id", Keyword.get(opts, :replay_run_id))
 
     if map_size(storage) == 0 do
       %{}

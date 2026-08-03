@@ -1,10 +1,10 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveRefresh do
-  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   @moduledoc false
 
   import Phoenix.Component, only: [assign: 3]
 
   alias CadenceWeb.OpsDashboardShowLive.Runtime
+  alias CadenceWeb.OpsShellHook
 
   @default_constellation_every 5
 
@@ -51,20 +51,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveRefresh do
   defp maybe_refresh_fleet_health(socket, false, _opts), do: socket
 
   defp maybe_refresh_fleet_health(socket, true, opts) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
-
-    assign(
-      socket,
-      :fleet_health,
-      mission_health_summary(scope.organization_id, mission.mission_id, opts)
-    )
-  end
-
-  defp mission_health_summary(organization_id, mission_id, opts) do
-    case Keyword.get(opts, :mission_health_summary) do
-      callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> MissionHealthReads.summary(organization_id, mission_id, [])
-    end
+    OpsShellHook.refresh_context(socket, opts)
   end
 
   defp resolve_engine(socket, mode, resolve_opts, opts) do

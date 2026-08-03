@@ -8,6 +8,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssignsTest do
   test "projects panel render context from sockets and assigns maps" do
     expected = %{
       panel: :add_widget,
+      dashboard_render_items: [],
+      frames_by_placement: %{},
       dashboard_activity_filter: :open_comparison_reviews,
       dashboard_activity_event_id: "event-1",
       dashboard_review_placement_id: "placement-1",
@@ -34,7 +36,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssignsTest do
       dashboard_publish_validation: %{valid?: true},
       dashboard_publish_validation_freshness: freshness(),
       historical_workflow_request_form: nil,
-      data_link_action_outcome: nil
+      data_link_action_outcome: nil,
+      widget_binding_preview: nil,
+      section_form: nil,
+      section_error: nil
     }
 
     assert RenderPanelAssigns.panel_context(%Socket{assigns: assigns(%{points: []})}) ==
@@ -46,6 +51,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssignsTest do
   test "projects panel defaults" do
     assert RenderPanelAssigns.panel_context(%{}) == %{
              panel: nil,
+             dashboard_render_items: [],
+             frames_by_placement: %{},
              dashboard_activity_filter: nil,
              dashboard_activity_event_id: nil,
              dashboard_review_placement_id: nil,
@@ -72,7 +79,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPanelAssignsTest do
              dashboard_publish_validation: nil,
              dashboard_publish_validation_freshness: nil,
              historical_workflow_request_form: nil,
-             data_link_action_outcome: nil
+             data_link_action_outcome: nil,
+             widget_binding_preview: nil,
+             section_form: nil,
+             section_error: nil
            }
   end
 
