@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryReplayTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document, ScopeContext}
+  alias Cadence.Dashboards.{Document, ScopeContext}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
 

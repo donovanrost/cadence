@@ -2,15 +2,15 @@ defmodule Cadence.Dashboards.Sources.EventsTelemetryBackfillTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
-    DataBinding,
     DataLink,
-    DataSource,
     EvidenceRef,
     Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     SourceResult
   }
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.Events
   alias Cadence.Jobs.Job

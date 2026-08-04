@@ -183,30 +183,31 @@ case System.get_env("CADENCE_TELEMETRY_CURRENT_VALUE_STORE", "ets") |> String.do
     :ok
 end
 
-case System.get_env("CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES") do
+case System.get_env("CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES") ||
+       System.get_env("CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES") do
   nil ->
     :ok
 
   encoded_profiles ->
     case Jason.decode(encoded_profiles) do
       {:ok, profiles} when is_map(profiles) ->
-        current_config = Application.get_env(:cadence, :dashboard_source_credentials, [])
+        current_config = Application.get_env(:cadence, :data_source_credentials, [])
 
         config :cadence,
-               :dashboard_source_credentials,
+               :data_source_credentials,
                Keyword.merge(current_config,
                  material_resolver:
-                   {Cadence.Dashboards.SourceCredentials.SecretMaterialResolver, :resolve},
+                   {Cadence.Management.DataSources.Credentials.SecretMaterialResolver, :resolve},
                  secret_backend:
-                   {Cadence.Dashboards.SourceCredentials.EnvSecretBackend, :fetch_material},
+                   {Cadence.Management.DataSources.Credentials.EnvSecretBackend, :fetch_material},
                  env_material_profiles: profiles
                )
 
       {:ok, _other} ->
-        raise "CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES must decode to a JSON object"
+        raise "CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES must decode to a JSON object"
 
       {:error, reason} ->
-        raise "CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES is invalid JSON: #{inspect(reason)}"
+        raise "CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES is invalid JSON: #{inspect(reason)}"
     end
 end
 

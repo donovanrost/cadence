@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
 
   use CadenceWeb, :html
 
-  alias Cadence.Dashboards.DataBinding
+  alias Cadence.DataSources.DataBinding
 
   alias CadenceWeb.OpsDataSourcesLive.{
     SourceFocus,

@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
     RuntimeCoordinator
   }
 
-  alias CadenceWeb.OpsDashboardShowLive
+  alias CadenceWeb.OpsDashboardShowLive.Controller
   alias CadenceWeb.OpsDashboardShowLive.Runtime
   alias CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers
 
@@ -225,7 +225,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
         }
       }
 
-    assert :ok = OpsDashboardShowLive.terminate(:normal, socket)
+    assert :ok = Controller.terminate(:normal, socket)
 
     assert_receive {:DOWN, ^dashboard_ref, :process, ^dashboard_resolve_pid,
                     {:shutdown, :dashboard_live_view_terminated}}

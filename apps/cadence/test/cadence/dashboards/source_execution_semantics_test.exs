@@ -6,17 +6,19 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
     DashboardResolveResult,
-    DataBinding,
-    DataSource,
-    DataSources,
     Document,
     Engine,
     PlannedSourceRequest,
     RuntimeCache,
     SourceCircuitBreaker,
-    SourceCredentials,
     SourceExecutionSemantics
   }
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Limits.Event
   alias Cadence.Telemetry.Sample

@@ -5,14 +5,15 @@ defmodule Cadence.Dashboards.RuntimeCacheKeyTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataBinding,
-    DataSource,
     Document,
     Engine,
     PlannedSourceRequest,
-    RuntimeCacheKey,
-    SourceWatermark
+    RuntimeCacheKey
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @fixture_dir Path.expand("../../fixtures/dashboards", __DIR__)
 

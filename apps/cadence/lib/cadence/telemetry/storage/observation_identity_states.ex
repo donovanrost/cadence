@@ -12,14 +12,19 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
   import Ecto.Query
 
-  alias Cadence.Dashboards.RuntimeInvalidation
-  alias Cadence.Dashboards.TelemetryRevisionSummary
   alias Cadence.Ids
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Repo
-  alias Cadence.Telemetry.{Facts, ObservationIdentitySelectionChanged}
+
+  alias Cadence.Telemetry.{
+    Facts,
+    ObservationIdentityDependency,
+    ObservationIdentitySelectionChanged,
+    ObservationIdentityStateChanged
+  }
+
   alias Cadence.Telemetry.Storage.ObservationEnvelope
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
   alias Cadence.Telemetry.Storage.ObservationIdentityState
@@ -43,7 +48,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
-        invalidate_revision_state(envelopes, opts)
+        publish_envelope_state_changes(envelopes, opts)
         :ok
 
       {:error, _operation, reason, _changes_so_far} ->
@@ -73,8 +78,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
          {:ok, updated_row} <- persist_decision(row, attrs, decision, opts) do
       state = TelemetryObservationIdentityStateRow.to_domain(updated_row)
 
+      publish_state_changed(state, opts)
       publish_latest_value_refresh(state, opts)
-      invalidate_revision_state_state(state, opts)
       {:ok, state}
     end
   end
@@ -615,24 +620,6 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   defp ensure_map(map) when is_map(map), do: map
   defp ensure_map(_value), do: %{}
 
-  defp invalidate_revision_state([], _opts), do: :ok
-
-  defp invalidate_revision_state(envelopes, opts) do
-    if Keyword.get(opts, :dashboard_runtime_invalidation?, true) do
-      invalidation_opts = Keyword.take(opts, [:runtime_cache])
-
-      envelopes
-      |> Enum.group_by(&revision_invalidation_group_key/1)
-      |> Enum.each(fn {_group_key, [%ObservationEnvelope{} = envelope | _rest]} ->
-        envelope
-        |> revision_invalidation_filters()
-        |> RuntimeInvalidation.telemetry_revision_state_changed(invalidation_opts)
-      end)
-    end
-
-    :ok
-  end
-
   defp publish_latest_value_refresh(%ObservationIdentityState{} = state, opts) do
     if Keyword.get(opts, :refresh_latest_value?, true) do
       Facts.publish(%ObservationIdentitySelectionChanged{
@@ -652,60 +639,56 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     :ok
   end
 
-  defp invalidate_revision_state_state(%ObservationIdentityState{} = state, opts) do
-    if Keyword.get(opts, :dashboard_runtime_invalidation?, true) do
-      dependency = TelemetryRevisionSummary.from_identity_states([state]).dependency
-
-      state
-      |> revision_invalidation_filters()
-      |> Map.put(:telemetry_revision_dependency, dependency)
-      |> RuntimeInvalidation.telemetry_revision_state_changed(
-        Keyword.take(opts, [:runtime_cache])
-      )
+  defp publish_envelope_state_changes(envelopes, opts) do
+    if publish_state_facts?(opts) do
+      envelopes
+      |> Enum.uniq_by(& &1.observation_identity_id)
+      |> Enum.each(fn %ObservationEnvelope{} = envelope ->
+        Facts.publish(%ObservationIdentityStateChanged{
+          observation_identity_id: envelope.observation_identity_id,
+          organization_id: envelope.organization_id,
+          mission_id: envelope.mission_id,
+          point_id: envelope.observable_id,
+          spacecraft_id: envelope.spacecraft_id,
+          realm: envelope.realm,
+          replay_run_id: envelope.replay_run_id,
+          data_source_id: envelope.data_source_id,
+          binding_id: envelope.binding_id,
+          dependency: nil,
+          committed_at: envelope.ingested_at
+        })
+      end)
     end
 
     :ok
   end
 
-  defp revision_invalidation_group_key(%ObservationEnvelope{} = envelope) do
-    {
-      envelope.organization_id,
-      envelope.mission_id,
-      envelope.data_source_id,
-      envelope.binding_id,
-      envelope.realm,
-      envelope.replay_run_id,
-      envelope.observable_id,
-      envelope.observation_identity_id
-    }
+  defp publish_state_changed(%ObservationIdentityState{} = state, opts) do
+    if publish_state_facts?(opts) do
+      Facts.publish(%ObservationIdentityStateChanged{
+        observation_identity_id: state.observation_identity_id,
+        organization_id: state.organization_id,
+        mission_id: state.mission_id,
+        point_id: state.point_id,
+        spacecraft_id: state.spacecraft_id,
+        realm: state.realm,
+        replay_run_id: state.replay_run_id,
+        data_source_id: state.data_source_id,
+        binding_id: state.binding_id,
+        dependency: ObservationIdentityDependency.from_states([state]),
+        committed_at: DateTime.utc_now()
+      })
+    end
+
+    :ok
   end
 
-  defp revision_invalidation_filters(%ObservationEnvelope{} = envelope) do
-    %{
-      organization_id: envelope.organization_id,
-      mission_id: envelope.mission_id,
-      logical_source: :telemetry,
-      data_source_id: envelope.data_source_id,
-      source_binding_id: envelope.binding_id,
-      realm: envelope.realm,
-      replay_run_id: envelope.replay_run_id,
-      observable: envelope.observable_id,
-      observation_identity_id: envelope.observation_identity_id
-    }
-  end
-
-  defp revision_invalidation_filters(%ObservationIdentityState{} = state) do
-    %{
-      organization_id: state.organization_id,
-      mission_id: state.mission_id,
-      logical_source: :telemetry,
-      data_source_id: state.data_source_id,
-      source_binding_id: state.binding_id,
-      realm: state.realm,
-      replay_run_id: state.replay_run_id,
-      observable: state.observable_id,
-      observation_identity_id: state.observation_identity_id
-    }
+  defp publish_state_facts?(opts) do
+    Keyword.get(
+      opts,
+      :publish_facts?,
+      Keyword.get(opts, :dashboard_runtime_invalidation?, true)
+    )
   end
 
   defp normalize_identity_ids(observation_identity_ids) do

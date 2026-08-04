@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryMarkersTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RouteQuery
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery

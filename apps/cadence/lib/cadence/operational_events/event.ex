@@ -16,12 +16,11 @@ defmodule Cadence.OperationalEvents.Event do
   alias Cadence.Catalog.Revision
   alias Cadence.Contacts.{ContactAction, RealizedContact, ScheduledContact}
 
-  alias Cadence.Dashboards.{
-    DataBindingEvent,
-    LifecycleEvent,
-    SourceHealthEvent,
-    SourceWatermarkEvent
-  }
+  alias Cadence.Dashboards.LifecycleEvent
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceWatermarkEvent}
+
+  alias Cadence.DataSources.DataBindingEvent
 
   alias Cadence.Limits.DefinitionLifecycleEvent
 
@@ -76,7 +75,7 @@ defmodule Cadence.OperationalEvents.Event do
   @source_record_kinds [
     :binding_set_activation,
     :catalog_revision,
-    :dashboard_data_binding_event,
+    :data_source_binding_event,
     :dashboard_lifecycle_event,
     :source_capability_posture,
     :telemetry_backfill_lifecycle_event,
@@ -139,7 +138,7 @@ defmodule Cadence.OperationalEvents.Event do
   @type source_record_kind ::
           :binding_set_activation
           | :catalog_revision
-          | :dashboard_data_binding_event
+          | :data_source_binding_event
           | :dashboard_lifecycle_event
           | :source_capability_posture
           | :telemetry_backfill_lifecycle_event

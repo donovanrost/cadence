@@ -6,10 +6,9 @@ defmodule Cadence.Telemetry.Storage do
   dispatches them to the configured physical writer.
   """
 
-  alias Cadence.Dashboards.{RuntimeInvalidation, SourceWatermarks}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.OrganizationScope
-  alias Cadence.Telemetry.{CurrentValueStore, Sample}
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
 
   alias Cadence.Telemetry.Storage.{
     BackfillLifecycleEvent,
@@ -21,6 +20,8 @@ defmodule Cadence.Telemetry.Storage do
     ObservationIdentityStates,
     WriteContext
   }
+
+  alias Cadence.Telemetry.{CurrentValueStore, Facts, ObservationsCommitted, Sample}
 
   @default_realm :flight
   @default_data_source_id "managed_questdb_primary"
@@ -184,7 +185,7 @@ defmodule Cadence.Telemetry.Storage do
          {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts),
          :ok <- persist_mission_envelopes_or_record_failure(envelopes, opts),
          :ok <- record_backfill_lifecycle_events(envelopes, opts) do
-      invalidate_dashboard_runtime_caches(envelopes, opts)
+      publish_observation_facts(envelopes, opts)
     end
   end
 
@@ -209,7 +210,7 @@ defmodule Cadence.Telemetry.Storage do
   defp persist_mission_envelope_projections(envelopes, opts) do
     with :ok <- ObservationIdentityStates.record_envelopes(envelopes, opts),
          :ok <- record_current_values(envelopes, opts) do
-      record_dashboard_source_watermarks(envelopes, opts)
+      record_data_source_watermarks(envelopes, opts)
     end
   end
 
@@ -232,17 +233,17 @@ defmodule Cadence.Telemetry.Storage do
     end
   end
 
-  defp record_dashboard_source_watermarks([], _opts), do: :ok
+  defp record_data_source_watermarks([], _opts), do: :ok
 
-  defp record_dashboard_source_watermarks(envelopes, opts) do
+  defp record_data_source_watermarks(envelopes, opts) do
     if SourceWatermarks.enabled?(opts) do
-      record_dashboard_source_watermark_groups(envelopes, opts)
+      record_data_source_watermark_groups(envelopes, opts)
     else
       :ok
     end
   end
 
-  defp record_dashboard_source_watermark_groups(envelopes, opts) do
+  defp record_data_source_watermark_groups(envelopes, opts) do
     envelopes
     |> Enum.group_by(&invalidation_group_key/1)
     |> Enum.reduce_while(:ok, fn {_group_key, group}, :ok ->
@@ -347,35 +348,29 @@ defmodule Cadence.Telemetry.Storage do
   defp recorded_at(%{raw_evidence: %RawEvidence{} = raw_evidence}), do: raw_evidence.receipt_time
   defp recorded_at(_prepared_result), do: nil
 
-  defp invalidate_dashboard_runtime_caches([], _opts), do: :ok
+  defp publish_observation_facts([], _opts), do: :ok
 
-  defp invalidate_dashboard_runtime_caches(envelopes, opts) do
-    if dashboard_runtime_invalidation_enabled?(opts) do
-      runtime_cache = dashboard_runtime_cache(opts)
-
+  defp publish_observation_facts(envelopes, opts) do
+    if publish_observation_facts?(opts) do
       envelopes
       |> Enum.group_by(&invalidation_group_key/1)
       |> Enum.each(fn {_group_key, group} ->
-        invalidate_dashboard_runtime_cache_group(group, runtime_cache)
+        publish_observation_fact(group)
       end)
     end
 
     :ok
   end
 
-  defp dashboard_runtime_invalidation_enabled?(opts) do
+  defp publish_observation_facts?(opts) do
     Keyword.get(
       opts,
-      :dashboard_runtime_invalidation?,
-      Keyword.get(storage_config(), :dashboard_runtime_invalidation?, true)
-    )
-  end
-
-  defp dashboard_runtime_cache(opts) do
-    Keyword.get(
-      opts,
-      :dashboard_runtime_cache,
-      Keyword.get(storage_config(), :dashboard_runtime_cache, Cadence.Dashboards.RuntimeCache)
+      :publish_facts?,
+      Keyword.get(
+        opts,
+        :dashboard_runtime_invalidation?,
+        Keyword.get(storage_config(), :dashboard_runtime_invalidation?, true)
+      )
     )
   end
 
@@ -405,26 +400,19 @@ defmodule Cadence.Telemetry.Storage do
     }
   end
 
-  defp invalidate_dashboard_runtime_cache_group(
-         [%ObservationEnvelope{} = first_envelope | _rest] = envelopes,
-         runtime_cache
-       ) do
-    filters = dashboard_invalidation_filters(first_envelope)
-    opts = [runtime_cache: runtime_cache]
-
-    _live_result = RuntimeInvalidation.source_watermark_changed(filters, opts)
-
-    envelopes
-    |> changed_time_ranges()
-    |> Enum.each(fn time_range ->
-      filters
-      |> Map.merge(%{
-        reason: :telemetry_write,
-        time_range: time_range,
-        evidence_ref: telemetry_write_evidence_ref(envelopes)
-      })
-      |> RuntimeInvalidation.historical_data_changed(opts)
-    end)
+  defp publish_observation_fact([%ObservationEnvelope{} = first_envelope | _rest] = envelopes) do
+    Facts.publish(%ObservationsCommitted{
+      organization_id: first_envelope.organization_id,
+      mission_id: first_envelope.mission_id,
+      data_source_id: first_envelope.data_source_id,
+      binding_id: first_envelope.binding_id,
+      realm: first_envelope.realm,
+      replay_run_id: first_envelope.replay_run_id,
+      observable_id: first_envelope.observable_id,
+      time_ranges: changed_time_ranges(envelopes),
+      evidence_ref: telemetry_write_evidence_ref(envelopes),
+      committed_at: latest_datetime(Enum.map(envelopes, & &1.ingested_at))
+    })
   end
 
   defp source_watermark_attrs([%ObservationEnvelope{} = first_envelope | _rest] = envelopes) do
@@ -452,19 +440,6 @@ defmodule Cadence.Telemetry.Storage do
       reason: :telemetry_storage_write,
       observed_at: observed_at,
       payload: telemetry_write_evidence_ref(envelopes)
-    }
-  end
-
-  defp dashboard_invalidation_filters(%ObservationEnvelope{} = envelope) do
-    %{
-      organization_id: envelope.organization_id,
-      mission_id: envelope.mission_id,
-      logical_source: :telemetry,
-      data_source_id: envelope.data_source_id,
-      source_binding_id: envelope.binding_id,
-      realm: envelope.realm,
-      replay_run_id: envelope.replay_run_id,
-      observable: envelope.observable_id
     }
   end
 

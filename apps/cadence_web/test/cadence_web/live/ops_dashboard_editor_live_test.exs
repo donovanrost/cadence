@@ -11,6 +11,17 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
 
+  test "viewer route rejects editor-only events" do
+    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
+    dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Viewer Boundary")
+
+    {:ok, viewer, _html} = live(conn, viewer_path(mission, dashboard))
+
+    refute has_element?(viewer, "#dashboard-panel")
+    render_hook(viewer, "open_add_widget", %{})
+    refute has_element?(viewer, "#dashboard-panel")
+  end
+
   test "stages multiple document changes and persists one coherent version only on Save" do
     {conn, _user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Staged Editor")

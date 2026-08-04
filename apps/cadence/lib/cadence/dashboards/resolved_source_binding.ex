@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.ResolvedSourceBinding do
   Concrete source binding selected for a planned dashboard source request.
   """
 
-  alias Cadence.Dashboards.{DataBinding, DataBindingInterval, DataSource}
+  alias Cadence.DataSources.{DataBinding, DataBindingInterval, DataSource}
 
   @type t :: %__MODULE__{
           binding: DataBinding.t(),

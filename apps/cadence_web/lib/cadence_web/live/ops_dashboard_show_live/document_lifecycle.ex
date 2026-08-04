@@ -9,9 +9,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DocumentLifecycle do
     Document,
     Management,
     PublishReadinessPayload,
-    RenderItem,
-    SourceHealth
+    RenderItem
   }
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
   alias Cadence.Management.DataSources
 

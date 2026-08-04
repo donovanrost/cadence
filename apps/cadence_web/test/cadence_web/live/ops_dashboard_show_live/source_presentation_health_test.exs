@@ -13,7 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourcePresentationHealthTest do
   test "source_health_summaries expose redacted source probe diagnostics" do
     result = %DashboardResolveResult{
       watermarks: [
-        %Cadence.Dashboards.SourceWatermark{
+        %Cadence.DataSources.SourceWatermark{
           logical_source: :telemetry,
           request_id: "req-telemetry",
           source_binding_id: "binding-flight",

@@ -8,16 +8,8 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
 
   import Cadence.Dashboards.DataLinkResolver.Support
 
-  alias Cadence.Comms.{
-    GroundStation,
-    GroundStationStore,
-    RoutingRule,
-    RoutingRuleStore,
-    Transport,
-    TransportStore
-  }
+  alias Cadence.Comms.{GroundStation, RoutingRule, Transport}
 
-  alias Cadence.Contacts
   alias Cadence.Contacts.{LinkAssignment, RealizedContact, ScheduledContact}
 
   alias Cadence.Dashboards.{
@@ -26,7 +18,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
     DataLinkInspector
   }
 
-  alias Cadence.SourceEndpoints
+  alias Cadence.Reads.OperationalState
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
@@ -59,7 +51,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
   end
 
   def resolve(%DataLink{target: :transport} = link, organization_id, mission_id) do
-    case TransportStore.fetch_transport(organization_id, mission_id, link.target_id) do
+    case OperationalState.fetch_transport(organization_id, mission_id, link.target_id) do
       {:ok, %Transport{} = transport} ->
         {:ok,
          inspector(
@@ -85,7 +77,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
   end
 
   def resolve(%DataLink{target: :link} = link, organization_id, mission_id) do
-    case Contacts.fetch_link_assignment(organization_id, mission_id, link.target_id) do
+    case OperationalState.fetch_link_assignment(organization_id, mission_id, link.target_id) do
       {:ok, %LinkAssignment{} = assignment} ->
         routing_rule = routing_rule_for_link_assignment(organization_id, mission_id, assignment)
         resource = link_assignment_resource(assignment, routing_rule)
@@ -114,7 +106,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
   end
 
   def resolve(%DataLink{target: :source_endpoint} = link, organization_id, mission_id) do
-    case SourceEndpoints.fetch_source_endpoint(organization_id, mission_id, link.target_id) do
+    case OperationalState.fetch_source_endpoint(organization_id, mission_id, link.target_id) do
       {:ok, %SourceEndpoint{} = source_endpoint} ->
         {:ok,
          inspector(
@@ -140,7 +132,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
   end
 
   def resolve(%DataLink{target: :ground_station} = link, organization_id, mission_id) do
-    case GroundStationStore.fetch_ground_station(organization_id, mission_id, link.target_id) do
+    case OperationalState.fetch_ground_station(organization_id, mission_id, link.target_id) do
       {:ok, %GroundStation{} = ground_station} ->
         {:ok,
          inspector(
@@ -166,12 +158,12 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
   end
 
   defp fetch_contact(contact_id, organization_id, mission_id) do
-    case Contacts.fetch_scheduled_contact(organization_id, mission_id, contact_id) do
+    case OperationalState.fetch_scheduled_contact(organization_id, mission_id, contact_id) do
       {:ok, %ScheduledContact{} = contact} ->
         {:scheduled, contact}
 
       {:error, _reason} ->
-        case Contacts.fetch_realized_contact(organization_id, mission_id, contact_id) do
+        case OperationalState.fetch_realized_contact(organization_id, mission_id, contact_id) do
           {:ok, %RealizedContact{} = contact} -> {:realized, contact}
           {:error, _reason} -> nil
         end
@@ -527,7 +519,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.OperationalResourceTargets do
          mission_id,
          %LinkAssignment{} = assignment
        ) do
-    RoutingRuleStore.list_routing_rules(organization_id, mission_id)
+    OperationalState.list_routing_rules(organization_id, mission_id)
     |> Enum.find(&routing_rule_materialized_link?(&1, assignment.link_assignment_id))
   end
 

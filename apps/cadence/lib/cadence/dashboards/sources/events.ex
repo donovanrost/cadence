@@ -14,10 +14,11 @@ defmodule Cadence.Dashboards.Sources.Events do
     Frame,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceCapabilities,
     SourceFacts,
     SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
 
   import Cadence.Dashboards.Sources.Events.RequestPlanning, except: [capabilities: 0]
   import Cadence.Dashboards.Sources.Events.Reads
@@ -380,7 +381,7 @@ defmodule Cadence.Dashboards.Sources.Events do
         |> Map.merge(%{
           family: :source_health,
           product: :source_health_transitions,
-          projection: :dashboard_source_health_events,
+          projection: :data_source_health_events,
           cursor: source_health_event_cursor(events),
           returned_events: length(events),
           truncated?: length(events) == limit,
@@ -485,7 +486,7 @@ defmodule Cadence.Dashboards.Sources.Events do
         |> Map.merge(%{
           family: :source_watermark,
           product: :source_watermark_events,
-          projection: :dashboard_source_watermark_events,
+          projection: :data_source_watermark_events,
           cursor: source_watermark_event_cursor(events),
           returned_events: length(events),
           truncated?: length(events) == limit,

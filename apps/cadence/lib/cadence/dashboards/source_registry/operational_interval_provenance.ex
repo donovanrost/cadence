@@ -13,8 +13,8 @@ defmodule Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance do
     SourceResult
   }
 
-  alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.EffectiveInterval
+  alias Cadence.Reads.OperationalEvidence
 
   @spec build(PlannedSourceRequest.t(), ResolvedSourceBinding.t(), keyword(), SourceResult.t()) ::
           map()
@@ -176,38 +176,41 @@ defmodule Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance do
     end
   end
 
-  defp default_operational_intervals(organization_id, :binding_set, mission_id, opts)
-       when is_binary(organization_id),
-       do: OperationalEvents.binding_set_intervals(organization_id, mission_id, opts)
+  defp default_operational_intervals(organization_id, :binding_set, mission_id, opts) do
+    OperationalEvidence.list_effective_intervals(
+      :binding_set,
+      organization_id,
+      mission_id,
+      opts
+    )
+  end
 
-  defp default_operational_intervals(_organization_id, :binding_set, mission_id, opts),
-    do: OperationalEvents.binding_set_intervals(mission_id, opts)
+  defp default_operational_intervals(organization_id, :application_binding, mission_id, opts) do
+    OperationalEvidence.list_effective_intervals(
+      :application_binding,
+      organization_id,
+      mission_id,
+      opts
+    )
+  end
 
-  defp default_operational_intervals(organization_id, :application_binding, mission_id, opts)
-       when is_binary(organization_id),
-       do: OperationalEvents.application_binding_intervals(organization_id, mission_id, opts)
+  defp default_operational_intervals(organization_id, :catalog_revision, mission_id, opts) do
+    OperationalEvidence.list_effective_intervals(
+      :catalog_revision,
+      organization_id,
+      mission_id,
+      opts
+    )
+  end
 
-  defp default_operational_intervals(
-         _organization_id,
-         :application_binding,
-         mission_id,
-         opts
-       ),
-       do: OperationalEvents.application_binding_intervals(mission_id, opts)
-
-  defp default_operational_intervals(organization_id, :catalog_revision, mission_id, opts)
-       when is_binary(organization_id),
-       do: OperationalEvents.catalog_revision_intervals(organization_id, mission_id, opts)
-
-  defp default_operational_intervals(_organization_id, :catalog_revision, mission_id, opts),
-    do: OperationalEvents.catalog_revision_intervals(mission_id, opts)
-
-  defp default_operational_intervals(organization_id, :source_health, mission_id, opts)
-       when is_binary(organization_id),
-       do: OperationalEvents.source_health_intervals(organization_id, mission_id, opts)
-
-  defp default_operational_intervals(_organization_id, :source_health, mission_id, opts),
-    do: OperationalEvents.source_health_intervals(mission_id, opts)
+  defp default_operational_intervals(organization_id, :source_health, mission_id, opts) do
+    OperationalEvidence.list_effective_intervals(
+      :source_health,
+      organization_id,
+      mission_id,
+      opts
+    )
+  end
 
   defp operational_interval_reader(:binding_set, opts) do
     Keyword.get(opts, :binding_set_intervals_fun) ||

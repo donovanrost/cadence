@@ -48,14 +48,14 @@ Cadence already has several event-like concepts:
   activation history plus current active binding set.
 - `comms_routing_rule_events` — append-only event family for routing-rule state
   changes.
-- `dashboard_data_bindings` + `dashboard_data_binding_events` —
-  dashboard-owned current source-binding projection plus registration/change/
+- `data_source_bindings` + `data_source_binding_events` —
+  Data Sources-owned current source-binding projection plus registration/change/
   enable/disable/supersession lifecycle events.
-- `dashboard_source_health_events` + `dashboard_source_health_statuses` —
-  dashboard-owned source health transitions plus latest source health
+- `data_source_health_events` + `data_source_health_statuses` —
+  Data Sources-owned source health transitions plus latest source health
   projection.
-- `dashboard_source_credential_references` +
-  `dashboard_source_credential_events` — dashboard-owned non-secret credential
+- `data_source_credential_references` +
+  `data_source_credential_events` — Data Sources-owned non-secret credential
   reference registry plus registration/rotation/enable/disable lifecycle
   events.
 - managed action/timer requests and transport/action records — runtime activity.
@@ -284,7 +284,7 @@ Cadence now has the first durable operational-event spine slice:
   capability decisions are auditable outside the current dashboard render.
 - Mission-scoped dashboard source-binding lifecycle events persist canonical
   `:data_source` operational events from the same transaction that writes
-  `dashboard_data_binding_events`, giving source-binding registration/change/
+  `data_source_binding_events`, giving source-binding registration/change/
   enable/disable/supersession a queryable operational-event source record.
 - Limit definition lifecycle changes persist canonical `:limits` operational
   events from the same transaction that writes

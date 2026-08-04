@@ -1,7 +1,7 @@
 defmodule Cadence.Management.DataSources.Lifecycle do
   @moduledoc false
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
 
   def reconcile_tsdb_backend(data_source_id, attrs, opts, {fetch_fun, persist_fun})
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do

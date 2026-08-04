@@ -15,9 +15,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document, RenderItem}
-  alias Cadence.Dashboards.SourceWatermarks
+  alias Cadence.Dashboards.{Document, RenderItem}
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
@@ -197,7 +199,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     end)
   end
 
-  defp enable_dashboard_source_watermark_events! do
+  defp enable_data_source_watermark_events! do
     previous_config = Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
 
     Application.put_env(
@@ -222,7 +224,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
   end
 
   test "archive time-series charts expose source watermark retention gaps" do
-    enable_dashboard_source_watermark_events!()
+    enable_data_source_watermark_events!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Retention Gap")

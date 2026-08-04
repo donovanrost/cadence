@@ -6,9 +6,10 @@ defmodule Cadence.Dashboards.Sources.Events.RequestPlanning do
     DataLinks,
     PlannedSourceRequest,
     ResolveWarning,
-    ScopeContext,
-    SourceCapabilities
+    ScopeContext
   }
+
+  alias Cadence.DataSources.SourceCapabilities
 
   @supported_products [
     :contact_intervals,

@@ -4,7 +4,6 @@ defmodule Cadence.Dashboards.SourceRegistry.Provenance do
   """
 
   alias Cadence.Dashboards.{
-    DataBindingInterval,
     DataLink,
     DataLinks,
     Field,
@@ -14,9 +13,12 @@ defmodule Cadence.Dashboards.SourceRegistry.Provenance do
     ResolveWarning,
     SourceActions,
     SourceFacts,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.DataBindingInterval
 
   alias Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance
 

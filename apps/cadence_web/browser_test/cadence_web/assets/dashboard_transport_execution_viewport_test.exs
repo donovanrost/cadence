@@ -21,8 +21,8 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
 
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
-  alias Cadence.Dashboards.DataSources
-  alias Cadence.Dashboards.SourceHealth
+  alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSources.Health
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
@@ -49,7 +49,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
     previous_source_execution =
       Application.get_env(:cadence_web, :dashboard_engine_source_execution)
 
-    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
+    source_health_config = Application.get_env(:cadence, :data_source_health_events, [])
 
     on_exit(fn ->
       case previous_source_execution do
@@ -60,7 +60,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
           Application.put_env(:cadence_web, :dashboard_engine_source_execution, value)
       end
 
-      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
+      Application.put_env(:cadence, :data_source_health_events, source_health_config)
     end)
 
     replay_sources = persist_replay_dashboard_sources!(org.organization_id, mission.mission_id)
@@ -251,7 +251,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
     previous_source_execution =
       Application.get_env(:cadence_web, :dashboard_engine_source_execution)
 
-    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
+    source_health_config = Application.get_env(:cadence, :data_source_health_events, [])
 
     Application.put_env(
       :cadence_web,
@@ -268,7 +268,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
           Application.put_env(:cadence_web, :dashboard_engine_source_execution, value)
       end
 
-      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
+      Application.put_env(:cadence, :data_source_health_events, source_health_config)
     end)
 
     user = TestFixtures.persist_user!()
@@ -606,7 +606,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
 
     Application.put_env(
       :cadence,
-      :dashboard_source_health_events,
+      :data_source_health_events,
       enabled?: true,
       freshness: [
         default_max_age_ms: 31_536_000_000,
@@ -740,7 +740,7 @@ defmodule CadenceWeb.Assets.DashboardTransportExecutionViewportTest do
 
     Application.put_env(
       :cadence,
-      :dashboard_source_health_events,
+      :data_source_health_events,
       enabled?: true,
       freshness: [
         default_max_age_ms: 31_536_000_000,

@@ -19,7 +19,6 @@ defmodule Cadence.Contacts.ContactStore do
   alias Cadence.Contacts.Scheduler
   alias Cadence.Contacts.SchedulerReadModel
   alias Cadence.Contacts.Validation
-  alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Repo
@@ -533,14 +532,12 @@ defmodule Cadence.Contacts.ContactStore do
   def notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
     Scheduler.notify_contact_changed(scheduled_contact)
     Facts.publish(scheduled_contact)
-    invalidate_dashboard_events(scheduled_contact)
     {:ok, scheduled_contact}
   end
 
   def notify_contact_changed(%RealizedContact{} = realized_contact) do
     Scheduler.notify_contact_changed(realized_contact)
     Facts.publish(realized_contact)
-    invalidate_dashboard_events(realized_contact)
     {:ok, realized_contact}
   end
 
@@ -555,18 +552,6 @@ defmodule Cadence.Contacts.ContactStore do
     |> OperationalEvent.from_realized_contact_interval()
     |> then(&OperationalEvents.persist_event(repo, &1))
   end
-
-  defp invalidate_dashboard_events(%{organization_id: organization_id, mission_id: mission_id})
-       when is_binary(organization_id) and is_binary(mission_id) do
-    RuntimeInvalidation.events_changed(%{
-      organization_id: organization_id,
-      mission_id: mission_id
-    })
-
-    :ok
-  end
-
-  defp invalidate_dashboard_events(_contact), do: :ok
 
   defp maybe_filter_contact_actions(query, opts) do
     query

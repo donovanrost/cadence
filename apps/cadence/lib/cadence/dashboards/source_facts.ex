@@ -7,14 +7,12 @@ defmodule Cadence.Dashboards.SourceFacts do
   revision cursors, and source health without resolving display frames.
   """
 
-  alias Cadence.Dashboards.{
-    ContractNormalization,
-    DataBinding,
-    DataSource,
-    PlannedSourceRequest,
-    RuntimeCacheKey,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, RuntimeCacheKey}
+  alias Cadence.Platform.ContractNormalization
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @source_health_values [:healthy, :degraded, :unavailable, :unknown]
 

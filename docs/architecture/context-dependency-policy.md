@@ -3,7 +3,7 @@ title: Cadence Context Dependency Policy
 tags: [developer, architecture, boundaries, xref]
 status: active
 created: 2026-07-18
-updated: 2026-07-23
+updated: 2026-08-02
 owner: Cadence core architecture
 review_by: 2026-10-18
 ---
@@ -43,7 +43,8 @@ should use the callee context's public application service or value types.
 | Commanding | staging, approvals, release queues, dispatch, verification | Identity and tenancy; Catalog and activation; Comms configuration; Mission runtime and capabilities; Telemetry, history, and projections; Platform |
 | Mission runtime and capabilities | runtime partitions, workload ownership, capability descriptors and execution | Identity and tenancy; Catalog and activation; Comms configuration; Telemetry, history, and projections; Platform |
 | Telemetry and history | ingress, decom, current values, history, archives, replay inputs, and limits | Identity and tenancy; Catalog and activation; Comms configuration; Platform |
-| Dashboards | documents, lifecycle, source contracts, data links, execution, visualization-facing read models | All domain contexts through public services, value types, events, and read models; Platform |
+| Data Sources | physical source definitions, logical bindings, non-secret credential references, health/watermark projections, probes, and provisioning | Identity and tenancy; Platform |
+| Dashboards | documents, lifecycle, source requests, data links, execution, and visualization contracts | Data Sources and Read models for IO; other contexts only through public value types and pure domain services; Platform |
 | Read models | cross-plane mission events, status, health, and query projections | All domain contexts through public facts, services, and value types; Platform |
 | Platform | observability, jobs, secrets, notifications, identifiers, generic infrastructure | Platform only |
 | Composition roots | supervisors, job runners, and explicit workflow assembly | All contexts through public boundaries |
@@ -70,6 +71,7 @@ are the working ownership map for refactors and future xref enforcement:
 | Commanding | `Commanding`, `ActionRequests` |
 | Mission runtime and capabilities | `Runtime`, `Capabilities`, `Applications`, `ApplicationDispatch` |
 | Telemetry and history | `Telemetry`, `Ingress*`, `DerivedTelemetry`, `Limits`, `Replay`, `Protocol` |
+| Data Sources | `DataSources`, `Management.DataSources`, `Control.DataSources`, `Projections.DataSources`, `Reads.DataSources` |
 | Dashboards | `Dashboards` |
 | Platform | `Observability`, `Jobs`, `Secrets`, `Notifications`, `Ids` |
 | Read models | `Projections`, `Reads`, `MissionEvents`, `Ops` |
@@ -81,8 +83,8 @@ The following namespaces are transitional and are not context APIs:
 - root `Cadence` is a facade to retire;
 - `Cadence.Persistence` and `Cadence.Persistence.Schemas` are horizontal storage
   namespaces whose schemas should move under their owning contexts;
-- `Cadence.Reads` groups read models that should move to their owning domain or
-  an explicitly shared projection boundary; and
+- `Cadence.Reads` is the explicit query boundary for cross-context projections;
+  owner-specific implementations remain behind those APIs; and
 - `Cadence.Application` is composition-root code, not a domain dependency
   escape hatch.
 
@@ -109,7 +111,10 @@ The ratchet now enforces the complete plane and bounded-context axes:
    row;
 7. controllers and LiveViews reach the transitional
    `CadenceWeb.ControlPlane*` modules only through resource-owned
-   `CadenceWeb.API.*` boundaries.
+   `CadenceWeb.API.*` boundaries; and
+8. dashboard source, registry, and evidence adapters cannot call management,
+   control, repository, or owner-store IO directly; they must use
+   `Cadence.Reads` or a configured provider boundary.
 
 The schema ownership guard covers Identity and tenancy, Catalog and activation,
 Comms configuration, Contacts, Limits, Jobs, Notifications, Applications,
@@ -123,11 +128,9 @@ The live debt is recorded in
 xref edge, not permission for new code. The check fails when an edge is added,
 when a removed edge is left in the baseline, or when the baseline review date
 expires. Removing an edge and its baseline entry in the same change makes the
-policy ratchet toward the target. As of 2026-07-23, root-facade, horizontal
-persistence-schema, cross-context row, web catch-all, and unclassified-module
-debt and cross-plane internal access are all zero. The remaining baseline
-contains 31 named context/plane direction edges concentrated in mixed legacy
-facades and workflows; they are not exceptions to the target architecture.
+policy ratchet toward the target. As of 2026-08-02, root-facade, horizontal
+persistence-schema, cross-context row, web catch-all, unclassified-module,
+reverse context/plane direction, and cross-plane internal debt are all zero.
 
 ## Dependency exceptions
 

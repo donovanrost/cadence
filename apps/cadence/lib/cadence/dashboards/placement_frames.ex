@@ -3,7 +3,8 @@ defmodule Cadence.Dashboards.PlacementFrames do
   Engine result bucket for one placement.
   """
 
-  alias Cadence.Dashboards.{ContractNormalization, Frame, ResolveWarning}
+  alias Cadence.Dashboards.{Frame, ResolveWarning}
+  alias Cadence.Platform.ContractNormalization
 
   @type t :: %__MODULE__{
           primary: [Frame.t()],

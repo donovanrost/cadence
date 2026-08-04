@@ -19,13 +19,13 @@ defmodule CadenceWeb.Assets.DashboardSourceReadinessViewportTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Contacts.ScheduledContact
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Document
   alias Cadence.Dashboards.Placement
-  alias Cadence.Dashboards.SourceCredentials
-  alias Cadence.Dashboards.SourceHealth
+  alias Cadence.Management.DataSources.Credentials
+  alias Cadence.Projections.DataSources.Health
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.OperationalEvents
   alias Cadence.Control.Replay.Store.ReplayRunRow

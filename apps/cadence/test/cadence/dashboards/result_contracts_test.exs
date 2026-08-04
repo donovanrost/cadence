@@ -12,12 +12,14 @@ defmodule Cadence.Dashboards.ResultContractsTest do
     PlannedSourceRequest,
     ResolveWarning,
     ScopeContext,
-    SourceCapabilities,
     SourceFacts,
     SourceResult,
-    SourceWatermark,
     TimeContext
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.SourceWatermark
 
   test "fields normalize serialized keys and kind vocabularies" do
     assert %Field{

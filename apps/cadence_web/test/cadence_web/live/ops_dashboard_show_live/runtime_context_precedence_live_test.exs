@@ -15,9 +15,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextPrecedenceLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document}
+  alias Cadence.Dashboards.Document
   alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
   alias Cadence.Telemetry.PacketDefinition

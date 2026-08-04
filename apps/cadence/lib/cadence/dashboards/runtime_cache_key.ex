@@ -8,14 +8,11 @@ defmodule Cadence.Dashboards.RuntimeCacheKey do
   semantics into ad hoc keys.
   """
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    Document,
-    PlannedSourceRequest,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, PlannedSourceRequest}
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Platform.Fingerprint
 

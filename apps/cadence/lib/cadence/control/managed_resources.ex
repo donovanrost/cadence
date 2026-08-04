@@ -1,11 +1,11 @@
 defmodule Cadence.Control.ManagedResources do
   @moduledoc "Control-plane executor and recovery boundary for managed resources."
 
-  alias Cadence.Dashboards.{
-    ManagedQuestDBProvisioningJobs,
-    ManagedQuestDBProvisioningRuns,
-    TSDBBackendLifecycleJobs
-  }
+  alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
+
+  alias Cadence.Control.DataSources.ManagedQuestDBProvisioningRuns
+
+  alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
 
   alias Cadence.Management.ManagedResources
   alias Cadence.Management.ManagedResources.ManagedResourceRequest
@@ -60,7 +60,13 @@ defmodule Cadence.Control.ManagedResources do
   def retry_deployment_run(job_id) do
     case ManagedQuestDBProvisioningRuns.retry_failed(job_id) do
       {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
-        TSDBBackendLifecycleJobs.retry_failed(job_id)
+        case TSDBBackendLifecycleJobs.retry_failed(job_id) do
+          {:error, {:unsupported_tsdb_backend_lifecycle_job, job_type}} ->
+            {:error, {:unsupported_deployment_job, job_type}}
+
+          result ->
+            result
+        end
 
       result ->
         result
@@ -70,7 +76,13 @@ defmodule Cadence.Control.ManagedResources do
   def requeue_deployment_run(job_id) do
     case ManagedQuestDBProvisioningRuns.requeue_running(job_id) do
       {:error, {:unsupported_managed_questdb_provisioning_job, _job_type}} ->
-        TSDBBackendLifecycleJobs.requeue_running(job_id)
+        case TSDBBackendLifecycleJobs.requeue_running(job_id) do
+          {:error, {:unsupported_tsdb_backend_lifecycle_job, job_type}} ->
+            {:error, {:unsupported_deployment_job, job_type}}
+
+          result ->
+            result
+        end
 
       result ->
         result

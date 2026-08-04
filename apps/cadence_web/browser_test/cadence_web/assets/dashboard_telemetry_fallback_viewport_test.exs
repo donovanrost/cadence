@@ -16,11 +16,11 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
-  alias Cadence.Dashboards.SourceWatermarks
+  alias Cadence.Projections.DataSources.Watermarks
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias CadenceWeb.TestFixtures
@@ -714,16 +714,16 @@ defmodule CadenceWeb.Assets.DashboardTelemetryFallbackViewportTest do
       )
 
     source_watermark_config =
-      Application.get_env(:cadence, :dashboard_source_watermark_events, [])
+      Application.get_env(:cadence, :data_source_watermark_events, [])
 
     Application.put_env(
       :cadence,
-      :dashboard_source_watermark_events,
+      :data_source_watermark_events,
       Keyword.put(source_watermark_config, :enabled?, true)
     )
 
     on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_source_watermark_events, source_watermark_config)
+      Application.put_env(:cadence, :data_source_watermark_events, source_watermark_config)
     end)
 
     assert {:ok, _watermark_event, _watermark_status} =

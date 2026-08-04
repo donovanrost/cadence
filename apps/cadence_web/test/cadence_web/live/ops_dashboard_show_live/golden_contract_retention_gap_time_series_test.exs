@@ -5,7 +5,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractRetentionGapTimeSeriesTe
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
@@ -13,6 +12,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractRetentionGapTimeSeriesTe
     RenderItem,
     ResolveWarning
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

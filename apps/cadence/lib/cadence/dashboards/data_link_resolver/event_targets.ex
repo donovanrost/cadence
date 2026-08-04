@@ -10,10 +10,10 @@ defmodule Cadence.Dashboards.DataLinkResolver.EventTargets do
 
   alias Cadence.Dashboards.{DataLink, DataLinkInspector}
   alias Cadence.Dashboards.DataLinkResolver.TransportRuntimeTargets
-  alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Reads.MissionEvents, as: MissionEventReads
+  alias Cadence.Reads.OperationalEvidence
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
@@ -35,7 +35,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.EventTargets do
   end
 
   def resolve(%DataLink{target: :operational_event} = link, organization_id, mission_id) do
-    case OperationalEvents.fetch_event(organization_id, mission_id, link.target_id) do
+    case OperationalEvidence.fetch_operational_event(organization_id, mission_id, link.target_id) do
       {:ok, %OperationalEvent{} = event} ->
         {:ok, inspector(link, :resolved, nil, operational_event_rows(event))}
 
@@ -50,7 +50,11 @@ defmodule Cadence.Dashboards.DataLinkResolver.EventTargets do
          organization_id,
          mission_id
        ) do
-    case OperationalEvents.fetch_event(organization_id, mission_id, operational_event_id) do
+    case OperationalEvidence.fetch_operational_event(
+           organization_id,
+           mission_id,
+           operational_event_id
+         ) do
       {:ok, %OperationalEvent{} = event} ->
         event
         |> MissionEventProjection.project()

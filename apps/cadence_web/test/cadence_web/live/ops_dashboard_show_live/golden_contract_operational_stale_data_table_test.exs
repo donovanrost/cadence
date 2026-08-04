@@ -5,7 +5,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractOperationalStaleDataTabl
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
@@ -13,6 +12,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractOperationalStaleDataTabl
     RenderItem,
     ResolveWarning
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

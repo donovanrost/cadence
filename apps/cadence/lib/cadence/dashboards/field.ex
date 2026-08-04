@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.Field do
   Columnar field in a dashboard Frame.
   """
 
-  alias Cadence.Dashboards.ContractNormalization
+  alias Cadence.Platform.ContractNormalization
 
   @type kind :: :time | :number | :string | :boolean | :enum
 

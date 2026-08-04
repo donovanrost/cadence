@@ -8,11 +8,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.AntennaPointing do
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     AntennaPointingFrames,
     AntennaPointingRows,
-    LatestFreshness,
-    OperationalEventSnapshots
+    LatestFreshness
   }
 
-  alias Cadence.SourceEndpoints
+  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.OperationalState.Snapshots, as: OperationalEventSnapshots
 
   @spec resolve_latest(
           PlannedSourceRequest.t(),
@@ -97,7 +97,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.AntennaPointing do
   end
 
   defp default_source_endpoints(organization_id, mission_id, _opts) do
-    SourceEndpoints.list_source_endpoints(organization_id, mission_id)
+    OperationalState.list_source_endpoints(organization_id, mission_id)
   end
 
   defp source_endpoint_revision_entry(source_endpoint) do

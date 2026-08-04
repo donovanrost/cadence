@@ -7,7 +7,10 @@ defmodule Cadence.Dashboards.SourceResult do
   metadata that callers can surface without coupling widgets to backend details.
   """
 
-  alias Cadence.Dashboards.{ContractNormalization, Frame, ResolveWarning, SourceWatermark}
+  alias Cadence.Dashboards.{Frame, ResolveWarning}
+  alias Cadence.Platform.ContractNormalization
+
+  alias Cadence.DataSources.SourceWatermark
 
   @type t :: %__MODULE__{
           request_id: binary() | nil,

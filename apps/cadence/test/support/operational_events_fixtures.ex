@@ -11,7 +11,7 @@ defmodule Cadence.OperationalEventsFixtures do
   }
 
   alias Cadence.Catalog.Revision
-  alias Cadence.Dashboards.{SourceHealthEvent, SourceWatermarkEvent}
+  alias Cadence.DataSources.{SourceHealthEvent, SourceWatermarkEvent}
   alias Cadence.OperationalEvents.Event
   alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord, TransportTimerEvent}
   alias Cadence.SourceEndpoints.SourceEndpoint

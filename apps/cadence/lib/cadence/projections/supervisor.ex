@@ -17,8 +17,9 @@ defmodule Cadence.Projections.Supervisor do
         Cadence.Projections.DomainFactConsumer
       ] ++
         dashboard_runtime_cache_children() ++
+        dashboard_runtime_fact_consumer_children() ++
         dashboard_source_circuit_breaker_children() ++
-        dashboard_source_probe_scheduler_children() ++
+        data_source_probe_scheduler_children() ++
         mission_health_observability_children()
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -39,6 +40,16 @@ defmodule Cadence.Projections.Supervisor do
     end
   end
 
+  defp dashboard_runtime_fact_consumer_children do
+    config = Application.get_env(:cadence, :dashboard_runtime_cache, [])
+
+    if Keyword.get(config, :enabled?, true) do
+      [Cadence.Dashboards.RuntimeFactConsumer]
+    else
+      []
+    end
+  end
+
   defp dashboard_source_circuit_breaker_children do
     config = Application.get_env(:cadence, :dashboard_source_circuit_breaker, [])
 
@@ -49,11 +60,11 @@ defmodule Cadence.Projections.Supervisor do
     end
   end
 
-  defp dashboard_source_probe_scheduler_children do
-    config = Application.get_env(:cadence, :dashboard_source_probe_scheduler, [])
+  defp data_source_probe_scheduler_children do
+    config = Application.get_env(:cadence, :data_source_probe_scheduler, [])
 
     if Keyword.get(config, :enabled?, false) do
-      [{Cadence.Dashboards.SourceProbeScheduler, config}]
+      [{Cadence.DataSources.ProbeScheduler, config}]
     else
       []
     end

@@ -4,12 +4,13 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
   """
 
   alias Cadence.Dashboards.{
-    ContractNormalization,
     DataContext,
     LimitContext,
     ScopeContext,
     TimeContext
   }
+
+  alias Cadence.Platform.ContractNormalization
 
   @logical_sources [:telemetry, :limits, :events, :operational_observables]
 

@@ -22,7 +22,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.Management.DataSources
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias CadenceWeb.TestFixtures
   alias CadenceWeb.Assets.DashboardAuthenticatedRouteScenario

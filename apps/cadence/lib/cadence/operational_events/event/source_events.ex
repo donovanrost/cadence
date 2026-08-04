@@ -3,12 +3,11 @@ defmodule Cadence.OperationalEvents.Event.SourceEvents do
 
   import Cadence.OperationalEvents.Event.Normalization
 
-  alias Cadence.Dashboards.{
-    DataBindingEvent,
-    LifecycleEvent,
-    SourceHealthEvent,
-    SourceWatermarkEvent
-  }
+  alias Cadence.Dashboards.LifecycleEvent
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceWatermarkEvent}
+
+  alias Cadence.DataSources.DataBindingEvent
 
   def from_dashboard_lifecycle_event(%LifecycleEvent{} = lifecycle_event, build_event) do
     build_event.(%{
@@ -52,7 +51,7 @@ defmodule Cadence.OperationalEvents.Event.SourceEvents do
   def from_data_binding_event(%DataBindingEvent{} = binding_event, build_event) do
     build_event.(%{
       event_id:
-        "operational_event:dashboard_data_binding_event:#{binding_event.data_binding_event_id}",
+        "operational_event:data_source_binding_event:#{binding_event.data_binding_event_id}",
       organization_id: binding_event.organization_id,
       mission_id: binding_event.mission_id,
       occurred_at: binding_event.occurred_at,
@@ -66,7 +65,7 @@ defmodule Cadence.OperationalEvents.Event.SourceEvents do
       scope: data_binding_scope(binding_event),
       causality: %{
         correlation_id: binding_event.binding_id,
-        source_record_kind: :dashboard_data_binding_event,
+        source_record_kind: :data_source_binding_event,
         source_record_id: binding_event.data_binding_event_id
       },
       payload: %{

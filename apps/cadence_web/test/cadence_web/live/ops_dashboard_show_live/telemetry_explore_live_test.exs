@@ -1,7 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
-  alias Cadence.Runtime.Persistence, as: RuntimePersistence
-
   alias Cadence.Reads.Telemetry, as: TelemetryReads
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -14,8 +13,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document}
+  alias Cadence.Dashboards.Document
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 

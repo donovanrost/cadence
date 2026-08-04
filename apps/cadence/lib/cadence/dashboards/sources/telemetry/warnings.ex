@@ -7,9 +7,10 @@ defmodule Cadence.Dashboards.Sources.Telemetry.Warnings do
     PlannedSourceRequest,
     ResolveWarning,
     SourceActions,
-    SourceWatermark,
     TelemetryActions
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Telemetry.FrameContext
 

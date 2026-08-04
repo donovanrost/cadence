@@ -3,11 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookupTest do
 
   import Cadence.Dashboards.SourceRegistryFixtures
 
-  alias Cadence.Dashboards.{
-    ResolvedSourceBinding,
-    SourceHealthEvent,
-    SourceHealthStatus
-  }
+  alias Cadence.Dashboards.ResolvedSourceBinding
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
 
   alias Cadence.Dashboards.SourceRegistry.SourceHealthLookup
   alias Cadence.OperationalEvents.EffectiveInterval

@@ -10,15 +10,16 @@ defmodule Cadence.LimitsTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
     RuntimeCacheKey,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence

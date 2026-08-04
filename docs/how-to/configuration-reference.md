@@ -181,12 +181,12 @@ These configure:
 
 Optional production settings:
 
-- `CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES`
+- `CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES`
 
-`CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES` enables the default BYO
-dashboard source secret-backend path. Runtime config wires
-`Cadence.Dashboards.SourceCredentials.SecretMaterialResolver` to
-`Cadence.Dashboards.SourceCredentials.EnvSecretBackend`; the older
+`CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES` enables the default BYO Data
+Source secret-backend path. Runtime config wires
+`Cadence.Management.DataSources.Credentials.SecretMaterialResolver` to
+`Cadence.Management.DataSources.Credentials.EnvSecretBackend`; the older
 `EnvMaterialResolver` remains a compatibility entry point. The value is a JSON
 object keyed by non-secret credential material profile name. Each profile maps
 material fields to environment variable names, not to secret values:
@@ -215,7 +215,7 @@ generic resolver also validates backend material before adapter handoff,
 including endpoint userinfo rejection and ambiguous bearer/basic auth rejection.
 
 Deployments can also configure a `:material_authorizer` under
-`:dashboard_source_credentials`, or pass `:credential_material_authorizer` per
+`:data_source_credentials`, or pass `:credential_material_authorizer` per
 call. The authorizer sees the resolved non-secret credential descriptor and
 scope context, and can deny material access before the secret backend is called.
 Denials are audited as redacted security events. The default path is currently
@@ -224,7 +224,7 @@ permissive and marked `todo(authz)` until the broader RBAC model exists.
 External secret-manager URLs must use HTTPS by default. Local or test-only
 deployments that intentionally use plain HTTP must set
 `allow_insecure_secret_manager_http?: true` in the credential resolution opts or
-`:dashboard_source_credentials` config; otherwise material resolution fails
+`:data_source_credentials` config; otherwise material resolution fails
 closed before any request is sent.
 
 For early BYO setup flows, credential metadata may also store non-secret

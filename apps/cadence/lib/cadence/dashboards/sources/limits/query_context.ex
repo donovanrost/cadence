@@ -13,9 +13,10 @@ defmodule Cadence.Dashboards.Sources.Limits.QueryContext do
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
-    ScopeContext,
-    SourceWatermark
+    ScopeContext
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Limits.RecomputedAnalysis
   alias Cadence.Limits.{DefinitionInterval, Event}

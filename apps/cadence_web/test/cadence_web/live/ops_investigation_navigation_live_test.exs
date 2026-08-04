@@ -8,7 +8,9 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources}
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias CadenceWeb.TestFixtures
 
   test "Dashboard, Explore, Sources, Data Operations, Timeline, and Diagnostics round-trip context" do

@@ -3,12 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractTimeSeriesPlanningTest d
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataSources,
-    Document,
-    Engine
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine}
+
+  alias Cadence.Management.DataSources
 
   @fixture_dir Path.expand("../../../../../cadence/test/fixtures/dashboards", __DIR__)
 

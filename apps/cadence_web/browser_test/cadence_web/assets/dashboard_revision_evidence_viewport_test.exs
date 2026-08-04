@@ -16,9 +16,9 @@ defmodule CadenceWeb.Assets.DashboardRevisionEvidenceViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.Reads.Telemetry, as: TelemetryReads

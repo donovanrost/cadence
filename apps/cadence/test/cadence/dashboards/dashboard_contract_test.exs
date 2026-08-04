@@ -20,12 +20,14 @@ defmodule Cadence.Dashboards.DashboardContractTest do
     ResolveWarning,
     RuntimeCacheKey,
     ScopeContext,
-    SourceCapabilities,
     SourceFacts,
     SourceResult,
-    SourceWatermark,
     TimeContext
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Limits.Event
   alias Cadence.Telemetry.Sample

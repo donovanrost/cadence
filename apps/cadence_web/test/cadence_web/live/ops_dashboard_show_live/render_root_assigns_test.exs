@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderRootAssignsTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document, RenderWidget}
+  alias Cadence.Dashboards.{Document, RenderWidget}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RenderRootAssigns
   alias Phoenix.LiveView.Socket
 

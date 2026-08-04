@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommands do
 
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Control.TelemetryDataManagement, as: DataManagement
 
   alias CadenceWeb.OpsDashboardShowLive.RevisionDecisionParams
 

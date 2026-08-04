@@ -5,7 +5,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Dashboards.{DataBinding, DataSource}
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
   alias CadenceWeb.OpsTelemetryExploreComponents
 

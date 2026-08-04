@@ -16,7 +16,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportExecutionSt
     ScopeContext
   }
 
-  alias Cadence.OperationalEvents
+  alias Cadence.Reads.OperationalState
 
   @observable_id "comms.transport.execution_state"
   @states [:initialized, :transport_event_handled, :control_input_handled, :timer_handled]
@@ -128,7 +128,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportExecutionSt
   end
 
   defp default_intervals(organization_id, mission_id, opts) do
-    OperationalEvents.transport_execution_intervals(
+    OperationalState.transport_execution_intervals(
       organization_id,
       mission_id,
       interval_opts(opts)

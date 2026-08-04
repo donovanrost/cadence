@@ -3,16 +3,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractReplayTest do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Engine,
-    Frame,
-    PlacementFrames
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine, Frame, PlacementFrames}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Limits.DefinitionInterval
   alias Cadence.Limits.Event
@@ -154,16 +149,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractReplayTest do
   end
 
   defp replay_source_registry_opts(opts \\ []) do
+    %DataSource{} = default_managed_source = DataSources.default_managed_data_source()
+    %DataBinding{} = default_telemetry_binding = DataSources.default_flight_telemetry_binding()
+    %DataBinding{} = default_limits_binding = DataSources.default_flight_limits_binding()
+
     replay_telemetry_source = %DataSource{
-      DataSources.default_managed_data_source()
+      default_managed_source
       | data_source_id: "replay-questdb",
         capabilities:
-          DataSources.default_managed_data_source().capabilities
+          default_managed_source.capabilities
           |> Map.put(:range_scan?, true)
     }
 
     replay_telemetry_binding = %DataBinding{
-      DataSources.default_flight_telemetry_binding()
+      default_telemetry_binding
       | binding_id: "replay_flight_telemetry",
         realm: :replay,
         data_source_id: "replay-questdb",
@@ -171,7 +170,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractReplayTest do
     }
 
     replay_limits_binding = %DataBinding{
-      DataSources.default_flight_limits_binding()
+      default_limits_binding
       | binding_id: "replay_limits",
         realm: :replay
     }

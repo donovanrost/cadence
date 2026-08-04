@@ -21,11 +21,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
 
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
-  alias Cadence.Dashboards.SourceHealth
-  alias Cadence.Dashboards.SourceWatermarks
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSources.Health
+  alias Cadence.Projections.DataSources.Watermarks
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
@@ -46,14 +46,14 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
     partial_replay_run_id = "browser-operational-metric-partial-replay-run"
     from_time = ~U[2026-06-17 12:00:00Z]
     to_time = ~U[2026-06-17 12:04:00Z]
-    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
+    source_health_config = Application.get_env(:cadence, :data_source_health_events, [])
 
     source_watermark_config =
-      Application.get_env(:cadence, :dashboard_source_watermark_events, [])
+      Application.get_env(:cadence, :data_source_watermark_events, [])
 
     Application.put_env(
       :cadence,
-      :dashboard_source_health_events,
+      :data_source_health_events,
       enabled?: true,
       freshness: [
         default_max_age_ms: 31_536_000_000,
@@ -63,13 +63,13 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
 
     Application.put_env(
       :cadence,
-      :dashboard_source_watermark_events,
+      :data_source_watermark_events,
       Keyword.put(source_watermark_config, :enabled?, true)
     )
 
     on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
-      Application.put_env(:cadence, :dashboard_source_watermark_events, source_watermark_config)
+      Application.put_env(:cadence, :data_source_health_events, source_health_config)
+      Application.put_env(:cadence, :data_source_watermark_events, source_watermark_config)
     end)
 
     replay_sources = persist_replay_dashboard_sources!(org.organization_id, mission.mission_id)

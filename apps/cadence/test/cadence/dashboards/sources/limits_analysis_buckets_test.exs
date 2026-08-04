@@ -2,14 +2,14 @@ defmodule Cadence.Dashboards.Sources.LimitsAnalysisBucketsTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
     Field,
     Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     SourceResult
   }
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.Limits
   alias Cadence.Limits.{DefinitionInterval, Event}

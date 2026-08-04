@@ -3,16 +3,16 @@ defmodule Cadence.Dashboards.DataSourceRegistryTest do
 
   alias Cadence.Dashboards.{
     DashboardAction,
-    DataBinding,
-    DataSource,
     DataSourceRegistry,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     RuntimeCacheKey,
-    SourceFacts,
-    SourceHealthEvent,
-    SourceHealthStatus
+    SourceFacts
   }
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   test "resolves default flight telemetry binding to managed QuestDB source" do
     request = source_request()

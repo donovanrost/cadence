@@ -7,6 +7,46 @@ defmodule Cadence.Reads.Commands do
   alias Cadence.Commanding
   alias Cadence.Commanding.{CommandQueueEntry, CommandReleaseAttempt, CommandRequest}
 
+  def fetch_command_request(organization_id, mission_id, command_request_id) do
+    Commanding.fetch_command_request(organization_id, mission_id, command_request_id)
+  end
+
+  def fetch_command_queue_entry(organization_id, mission_id, command_queue_entry_id) do
+    Commanding.fetch_command_queue_entry(organization_id, mission_id, command_queue_entry_id)
+  end
+
+  def fetch_command_release_attempt(organization_id, mission_id, command_release_attempt_id) do
+    Commanding.fetch_command_release_attempt(
+      organization_id,
+      mission_id,
+      command_release_attempt_id
+    )
+  end
+
+  def fetch_command_verifier_instance(
+        organization_id,
+        mission_id,
+        command_verifier_instance_id
+      ) do
+    Commanding.fetch_command_verifier_instance(
+      organization_id,
+      mission_id,
+      command_verifier_instance_id
+    )
+  end
+
+  def list_command_queue_entries(organization_id, mission_id, opts) do
+    Commanding.list_command_queue_entries(organization_id, mission_id, opts)
+  end
+
+  def list_command_release_attempts(organization_id, mission_id, opts) do
+    Commanding.list_command_release_attempts(organization_id, mission_id, opts)
+  end
+
+  def list_command_verifier_instances(organization_id, mission_id, opts) do
+    Commanding.list_command_verifier_instances(organization_id, mission_id, opts)
+  end
+
   @spec snapshot(binary(), binary(), keyword()) :: map()
   def snapshot(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do

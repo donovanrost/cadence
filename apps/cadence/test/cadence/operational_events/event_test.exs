@@ -5,12 +5,11 @@ defmodule Cadence.OperationalEvents.EventTest do
   alias Cadence.Catalog.Revision
   alias Cadence.Contacts.{ContactAction, RealizedContact, ScheduledContact}
 
-  alias Cadence.Dashboards.{
-    DataBindingEvent,
-    LifecycleEvent,
-    SourceHealthEvent,
-    SourceWatermarkEvent
-  }
+  alias Cadence.Dashboards.LifecycleEvent
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceWatermarkEvent}
+
+  alias Cadence.DataSources.DataBindingEvent
 
   alias Cadence.Limits.DefinitionLifecycleEvent
   alias Cadence.OperationalEvents.Event
@@ -339,7 +338,7 @@ defmodule Cadence.OperationalEvents.EventTest do
 
     event = Event.from_data_binding_event(binding_event)
 
-    assert event.event_id == "operational_event:dashboard_data_binding_event:data-binding-event-1"
+    assert event.event_id == "operational_event:data_source_binding_event:data-binding-event-1"
     assert event.category == :data_source
     assert event.kind == :source_binding_changed
     assert event.severity == :info
@@ -356,7 +355,7 @@ defmodule Cadence.OperationalEvents.EventTest do
 
     assert event.causality == %{
              correlation_id: "flight-telemetry",
-             source_record_kind: :dashboard_data_binding_event,
+             source_record_kind: :data_source_binding_event,
              source_record_id: "data-binding-event-1"
            }
 

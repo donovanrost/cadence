@@ -6,17 +6,16 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.Connection do
   reads, row materialization, freshness, frame production, and revisions.
   """
 
-  alias Cadence.Comms.TransportStore
   alias Cadence.Dashboards.{PlannedSourceRequest, RuntimeCacheKey}
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     ConnectionFrames,
     ConnectionRows,
-    LatestFreshness,
-    OperationalEventSnapshots
+    LatestFreshness
   }
 
-  alias Cadence.SourceEndpoints
+  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.OperationalState.Snapshots, as: OperationalEventSnapshots
 
   @connection_states [:connected, :connecting, :degraded, :disconnected, :unknown]
 
@@ -106,11 +105,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.Connection do
   end
 
   defp default_transports(organization_id, mission_id, _opts) do
-    TransportStore.list_transports(organization_id, mission_id)
+    OperationalState.list_transports(organization_id, mission_id)
   end
 
   defp default_source_endpoints(organization_id, mission_id, _opts) do
-    SourceEndpoints.list_source_endpoints(organization_id, mission_id)
+    OperationalState.list_source_endpoints(organization_id, mission_id)
   end
 
   defp transport_revision_entry(transport) do

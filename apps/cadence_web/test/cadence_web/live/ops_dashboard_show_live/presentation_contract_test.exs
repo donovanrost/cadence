@@ -9,9 +9,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.PresentationContractTest do
     PlacementFrames,
     PlannedSourceRequest,
     RenderWidget,
-    ResolveWarning,
-    SourceWatermark
+    ResolveWarning
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias CadenceWeb.OpsDashboardShowLive.EvidencePresentation
   alias CadenceWeb.OpsDashboardShowLive.SourcePresentation

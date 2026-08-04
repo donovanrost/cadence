@@ -10,13 +10,13 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    SourceCredentials,
-    SourceHealth
-  }
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
   alias CadenceWeb.TestFixtures
@@ -32,30 +32,31 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
 
   defp configure_customer_questdb_probe! do
     test_pid = self()
-    previous_credential_config = Application.get_env(:cadence, :dashboard_source_credentials, [])
-    previous_probe_config = Application.get_env(:cadence, :dashboard_source_probe, [])
+    previous_credential_config = Application.get_env(:cadence, :data_source_credentials, [])
+    previous_probe_config = Application.get_env(:cadence, :data_source_probe, [])
 
     System.put_env("OPS_CUSTOMER_QUESTDB_HTTP", "http://ops-customer-questdb:9000")
 
     Application.put_env(
       :cadence,
-      :dashboard_source_credentials,
+      :data_source_credentials,
       Keyword.merge(previous_credential_config,
-        material_resolver: {Cadence.Dashboards.SourceCredentials.EnvMaterialResolver, :resolve}
+        material_resolver:
+          {Cadence.Management.DataSources.Credentials.EnvMaterialResolver, :resolve}
       )
     )
 
     Application.put_env(
       :cadence,
-      :dashboard_source_probe,
+      :data_source_probe,
       Keyword.merge(previous_probe_config,
         questdb_exec_fun: questdb_probe_exec_fun(test_pid)
       )
     )
 
     on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_source_credentials, previous_credential_config)
-      Application.put_env(:cadence, :dashboard_source_probe, previous_probe_config)
+      Application.put_env(:cadence, :data_source_credentials, previous_credential_config)
+      Application.put_env(:cadence, :data_source_probe, previous_probe_config)
       System.delete_env("OPS_CUSTOMER_QUESTDB_HTTP")
     end)
   end

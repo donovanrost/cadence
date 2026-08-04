@@ -1,14 +1,9 @@
 defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{
-    Field,
-    Frame,
-    PlannedSourceRequest,
-    ResolveWarning,
-    SourceResult,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{Field, Frame, PlannedSourceRequest, ResolveWarning, SourceResult}
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.SourceRegistry.SegmentResultMerge
 

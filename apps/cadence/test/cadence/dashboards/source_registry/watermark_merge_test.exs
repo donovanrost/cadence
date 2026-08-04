@@ -6,9 +6,10 @@ defmodule Cadence.Dashboards.SourceRegistry.WatermarkMergeTest do
     PlannedSourceRequest,
     ResolveWarning,
     SourceFacts,
-    SourceResult,
-    SourceWatermarkStatus
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermarkStatus
 
   alias Cadence.Dashboards.SourceRegistry.WatermarkMerge
 

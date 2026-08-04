@@ -14,12 +14,11 @@ defmodule Cadence.ExtensionCatalog do
   alias Cadence.Contacts.ProviderClients.Definition, as: ProviderConnectorDefinition
   alias Cadence.Contacts.ProviderClients.Registry, as: ProviderConnectorRegistry
 
-  alias Cadence.Dashboards.{
-    DefaultSourceAdapters,
-    SourceAdapterDefinition,
-    WidgetRegistry,
-    WidgetType
-  }
+  alias Cadence.Dashboards.{WidgetRegistry, WidgetType}
+
+  alias Cadence.DataSources.AdapterRegistry
+
+  alias Cadence.DataSources.AdapterDefinition
 
   alias Cadence.Extensions.{
     ApplicationContribution,
@@ -57,7 +56,7 @@ defmodule Cadence.ExtensionCatalog do
           | :unsupported_widget_type_contribution_version
 
   @type source_adapter_fetch_error ::
-          DefaultSourceAdapters.definition_fetch_error()
+          AdapterRegistry.definition_fetch_error()
           | :unknown_source_adapter_contribution
           | :unsupported_source_adapter_contribution_version
 
@@ -353,10 +352,10 @@ defmodule Cadence.ExtensionCatalog do
   def fetch_widget_type(_widget_type_id, _version),
     do: {:error, :unknown_widget_type_contribution}
 
-  @spec source_adapters() :: [SourceAdapterDefinition.t()]
+  @spec source_adapters() :: [AdapterDefinition.t()]
   def source_adapters do
     Enum.flat_map(source_adapter_contributions(), fn contribution ->
-      case DefaultSourceAdapters.fetch_definition(
+      case AdapterRegistry.fetch_definition(
              contribution.logical_source,
              contribution.source_adapter_version
            ) do
@@ -367,12 +366,12 @@ defmodule Cadence.ExtensionCatalog do
   end
 
   @spec fetch_source_adapter(atom(), pos_integer() | :latest | nil) ::
-          {:ok, SourceAdapterDefinition.t()} | {:error, source_adapter_fetch_error()}
+          {:ok, AdapterDefinition.t()} | {:error, source_adapter_fetch_error()}
   def fetch_source_adapter(logical_source, version \\ :latest)
 
   def fetch_source_adapter(logical_source, version) when is_atom(logical_source) do
     with {:ok, contribution} <- fetch_source_adapter_contribution(logical_source, version) do
-      DefaultSourceAdapters.fetch_definition(
+      AdapterRegistry.fetch_definition(
         contribution.logical_source,
         contribution.source_adapter_version
       )
@@ -707,12 +706,12 @@ defmodule Cadence.ExtensionCatalog do
          %ExtensionPackage{},
          %SourceAdapterContribution{} = contribution
        ) do
-    with {:ok, %SourceAdapterDefinition{} = definition} <-
-           DefaultSourceAdapters.fetch_definition(
+    with {:ok, %AdapterDefinition{} = definition} <-
+           AdapterRegistry.fetch_definition(
              contribution.logical_source,
              contribution.source_adapter_version
            ),
-         :ok <- SourceAdapterDefinition.validate(definition),
+         :ok <- AdapterDefinition.validate(definition),
          true <- definition.logical_source == contribution.logical_source,
          true <- definition.version == contribution.source_adapter_version do
       :ok

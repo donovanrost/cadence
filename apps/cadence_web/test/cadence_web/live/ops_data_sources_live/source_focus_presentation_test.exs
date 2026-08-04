@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusPresentationTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
 
   alias CadenceWeb.OpsDataSourcesLive.{
     SourceFocus,

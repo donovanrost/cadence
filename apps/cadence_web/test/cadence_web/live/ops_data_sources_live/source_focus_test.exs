@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, DataSource}
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias CadenceWeb.OpsDataSourcesLive.SourceFocus
 
   describe "from_params/1" do

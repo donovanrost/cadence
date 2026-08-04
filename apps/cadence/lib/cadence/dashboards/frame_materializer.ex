@@ -14,9 +14,10 @@ defmodule Cadence.Dashboards.FrameMaterializer do
     ResolveWarning,
     RuntimeCacheKey,
     ScopeContext,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   @type materialized :: %{
           placement_id: binary(),

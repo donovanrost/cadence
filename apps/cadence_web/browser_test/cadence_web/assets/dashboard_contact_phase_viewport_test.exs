@@ -19,9 +19,9 @@ defmodule CadenceWeb.Assets.DashboardContactPhaseViewportTest do
 
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias CadenceWeb.TestFixtures
 
   @tag :browser

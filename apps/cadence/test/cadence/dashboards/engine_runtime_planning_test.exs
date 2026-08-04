@@ -5,15 +5,17 @@ defmodule Cadence.Dashboards.EngineRuntimePlanningTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataBinding,
     DataContext,
-    DataSources,
     Document,
     Engine,
     LimitContext,
     Placement,
     ResolveWarning
   }
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.DataBinding
 
   alias Cadence.Telemetry.Sample
 

@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyPresentation do
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Reads.TelemetryDataManagement, as: DataManagement
 
   @moduledoc false
 

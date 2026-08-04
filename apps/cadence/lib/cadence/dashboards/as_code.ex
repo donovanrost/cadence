@@ -1,7 +1,7 @@
 defmodule Cadence.Dashboards.AsCode do
   @moduledoc "CI-facing validation for raw Dashboard Documents and governed export bundles."
 
-  alias Cadence.Dashboards.{Document, ValidationResult}
+  alias Cadence.Dashboards.{Contracts, Document, DocumentCodec, ValidationResult}
 
   @spec validate_file(Path.t()) :: {:ok, map()} | {:error, map()}
   def validate_file(path) when is_binary(path) do
@@ -13,9 +13,8 @@ defmodule Cadence.Dashboards.AsCode do
 
   @spec validate_content(binary(), binary()) :: {:ok, map()} | {:error, map()}
   def validate_content(json, source \\ "inline") when is_binary(json) and is_binary(source) do
-    with {:ok, %Document{} = document} <- Cadence.Dashboards.validate_export_bundle(json),
-         %ValidationResult{valid?: true} = validation <-
-           Cadence.Dashboards.validate_document(document) do
+    with {:ok, %Document{} = document} <- DocumentCodec.decode_import(json),
+         %ValidationResult{valid?: true} = validation <- Contracts.validate_document(document) do
       {:ok,
        %{
          source: source,

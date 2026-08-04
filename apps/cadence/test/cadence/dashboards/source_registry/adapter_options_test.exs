@@ -3,13 +3,11 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptionsTest do
 
   import Cadence.Dashboards.SourceRegistryFixtures
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    ResolvedSourceBinding,
-    ResolvedSourceCredential,
-    SourceCapabilities,
-    SourceCredentialMaterial
-  }
+  alias Cadence.Dashboards.ResolvedSourceBinding
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.{DataSource, ResolvedSourceCredential, SourceCredentialMaterial}
 
   alias Cadence.Dashboards.SourceRegistry.AdapterOptions
 

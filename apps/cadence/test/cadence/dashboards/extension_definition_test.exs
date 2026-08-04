@@ -1,13 +1,13 @@
 defmodule Cadence.Dashboards.ExtensionDefinitionTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{
-    DefaultSourceAdapters,
-    SourceAdapterDefinition,
-    SourceCapabilities,
-    WidgetRegistry,
-    WidgetType
-  }
+  alias Cadence.Dashboards.{WidgetRegistry, WidgetType}
+
+  alias Cadence.DataSources.AdapterRegistry
+
+  alias Cadence.DataSources.AdapterDefinition
+
+  alias Cadence.DataSources.SourceCapabilities
 
   test "validates every compiled widget type and its authoring presentation identity" do
     for widget_type <- WidgetRegistry.list_types() do
@@ -25,8 +25,8 @@ defmodule Cadence.Dashboards.ExtensionDefinitionTest do
   end
 
   test "resolves only exact validated built-in source adapter versions" do
-    for definition <- DefaultSourceAdapters.list_definitions() do
-      assert :ok = SourceAdapterDefinition.validate(definition)
+    for definition <- AdapterRegistry.list_definitions() do
+      assert :ok = AdapterDefinition.validate(definition)
 
       assert %SourceCapabilities{logical_source: logical_source} =
                SourceCapabilities.normalize(definition.module.capabilities())
@@ -34,16 +34,16 @@ defmodule Cadence.Dashboards.ExtensionDefinitionTest do
       assert logical_source == definition.logical_source
 
       assert {:ok, ^definition} =
-               DefaultSourceAdapters.fetch_definition(
+               AdapterRegistry.fetch_definition(
                  definition.logical_source,
                  definition.version
                )
     end
 
     assert {:error, :unsupported_source_adapter_version} =
-             DefaultSourceAdapters.fetch_definition(:telemetry, 99)
+             AdapterRegistry.fetch_definition(:telemetry, 99)
 
     assert {:error, :unknown_source_adapter} =
-             DefaultSourceAdapters.fetch_definition(:unknown)
+             AdapterRegistry.fetch_definition(:unknown)
   end
 end

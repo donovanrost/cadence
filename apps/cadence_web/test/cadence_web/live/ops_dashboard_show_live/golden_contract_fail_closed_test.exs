@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractFailClosedTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     PlacementFrames,
     RenderItem,
     ResolveWarning
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

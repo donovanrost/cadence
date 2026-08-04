@@ -5,8 +5,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractSourceUnavailableTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataBinding,
-    DataSource,
     Document,
     Engine,
     PlacementFrames,
@@ -15,6 +13,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractSourceUnavailableTest do
     SourceCircuitBreaker,
     SourceExecutionSemantics
   }
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

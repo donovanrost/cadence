@@ -102,7 +102,7 @@ defmodule Cadence.Jobs.BackgroundJobRow do
   defp job_type("catalog_import_run"), do: :catalog_import_run
   defp job_type("telemetry_historical_data_workflow"), do: :telemetry_historical_data_workflow
   defp job_type("managed_questdb_provisioning"), do: :managed_questdb_provisioning
-  defp job_type("dashboard_tsdb_backend_lifecycle"), do: :dashboard_tsdb_backend_lifecycle
+  defp job_type("tsdb_backend_lifecycle"), do: :tsdb_backend_lifecycle
 
   defp status("queued"), do: :queued
   defp status("running"), do: :running

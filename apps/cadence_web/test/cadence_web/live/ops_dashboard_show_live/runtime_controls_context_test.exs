@@ -3,7 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsContextTest do
 
   import Phoenix.Component, only: [assign: 3]
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RuntimeControls
   alias Phoenix.LiveView.Socket
 

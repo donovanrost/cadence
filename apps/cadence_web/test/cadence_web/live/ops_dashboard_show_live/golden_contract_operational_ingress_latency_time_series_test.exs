@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractOperationalIngressLatenc
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

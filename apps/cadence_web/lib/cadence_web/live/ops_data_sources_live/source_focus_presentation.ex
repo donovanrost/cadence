@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusPresentation do
   Evidence and remediation presentation models for focused dashboard sources.
   """
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
   alias CadenceWeb.OpsDataSourcesLive.SourceContract
 
   @spec evidence(map()) :: map() | nil

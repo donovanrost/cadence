@@ -1,7 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectionLiveTest do
-  alias Cadence.Runtime.Persistence, as: RuntimePersistence
-
   alias Cadence.Reads.Telemetry, as: TelemetryReads
+  alias Cadence.Runtime.Persistence, as: RuntimePersistence
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :config
@@ -16,9 +15,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataSources, Document, RenderItem}
+  alias Cadence.Dashboards.{Document, RenderItem}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 

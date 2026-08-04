@@ -1,16 +1,13 @@
 defmodule Cadence.Dashboards.SourceWatermarksTest do
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    PlannedSourceRequest,
-    SourceFacts,
-    SourceRegistry,
-    SourceResult,
-    SourceWatermark,
-    SourceWatermarks
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts, SourceRegistry, SourceResult}
+
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Telemetry.Sample
 

@@ -1,7 +1,7 @@
 defmodule Cadence.Management.ProviderAndManagedResourceContractsTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
   alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.Management.ManagedResources.ManagedResourceRequest
   alias Cadence.Management.Providers.ProviderConfiguration

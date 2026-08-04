@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands do
   @moduledoc false
 
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Control.TelemetryDataManagement, as: DataManagement
 
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflowCorrectionRequestHandoff,

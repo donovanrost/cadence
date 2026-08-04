@@ -869,7 +869,7 @@ The current enforceable source contract is:
   isolation profile so operators can distinguish shared-filtered reads from
   organization, mission, and customer-owned physical boundaries.
 
-`Cadence.Dashboards.ManagedQuestDBProvisioning` is the first concrete operation
+`Cadence.Control.DataSources.ManagedQuestDBProvisioning` is the first concrete operation
 for managed isolated TSDB sources. It plans an organization- or mission-isolated
 QuestDB data source, applies pending versioned QuestDB SQL migrations through
 `SchemaMigrator`, persists the data-source projection/event, and records
@@ -877,7 +877,7 @@ redacted provisioning evidence such as isolation boundary, endpoint/topology
 refs, and applied migration versions. The operation deliberately keeps raw
 connection credentials and executable migration callbacks out of public plan,
 event, and data-source evidence.
-`Cadence.Dashboards.ManagedQuestDBProvisioningJobs` is the durable execution
+`Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs` is the durable execution
 boundary for that operation. It enqueues a `managed_questdb_provisioning`
 background job with a redacted request payload, executes provisioning through
 the shared `Cadence.Jobs` runner, gets runtime-only migration credentials or
@@ -895,7 +895,7 @@ data source, binding, credential reference, and isolation profile; adapters must
 not infer tenancy by hard-coding database names.
 
 The current binding row should be treated as a projection, not the full audit
-source. The first implementation records `dashboard_data_binding_events` when a
+source. The first implementation records `data_source_binding_events` when a
 source binding is registered, changed, enabled, disabled, or superseded. Those
 events capture previous/current data source, dataset, realm, priority, active
 interval, status, version, actor, and payload. This is the minimum provenance
@@ -952,8 +952,8 @@ entry point is:
 mix cadence.questdb.migrate --plan
 mix cadence.questdb.migrate
 mix cadence.questdb.smoke
-mix cadence.dashboards.managed_questdb_provision --plan --organization-id ORG --mission-id MISSION --data-source-id SOURCE
-mix cadence.dashboards.managed_questdb_provision --apply --organization-id ORG --mission-id MISSION --data-source-id SOURCE
+mix cadence.data_sources.managed_questdb_provision --plan --organization-id ORG --mission-id MISSION --data-source-id SOURCE
+mix cadence.data_sources.managed_questdb_provision --apply --organization-id ORG --mission-id MISSION --data-source-id SOURCE
 ```
 
 The migration task connects to QuestDB through the REST `/exec` API on port

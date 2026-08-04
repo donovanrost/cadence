@@ -1,11 +1,9 @@
 defmodule Cadence.Dashboards.SourceRegistry.AdapterSelectionTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    ResolvedSourceBinding
-  }
+  alias Cadence.Dashboards.ResolvedSourceBinding
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.SourceRegistry.AdapterSelection
   alias Cadence.Dashboards.Sources.{Events, Limits, OperationalObservables, Telemetry}

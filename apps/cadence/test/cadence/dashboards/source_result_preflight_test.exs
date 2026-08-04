@@ -2,14 +2,15 @@ defmodule Cadence.Dashboards.SourceResultPreflightTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
     PlannedSourceRequest,
     RuntimeCacheKey,
     SourceResult,
-    SourceResultPreflight,
-    SourceWatermark
+    SourceResultPreflight
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   test "marks matching fresh source-result facts as usable" do
     key = source_result_key()

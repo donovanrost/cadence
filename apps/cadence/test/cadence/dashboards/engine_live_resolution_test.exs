@@ -5,13 +5,14 @@ defmodule Cadence.Dashboards.EngineLiveResolutionTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSource,
     Document,
     Engine,
     Frame,
     ResolveWarning,
     RuntimeCacheKey
   }
+
+  alias Cadence.DataSources.DataSource
 
   alias Cadence.Limits.Event
   alias Cadence.Telemetry.Sample
@@ -299,7 +300,7 @@ defmodule Cadence.Dashboards.EngineLiveResolutionTest do
     refute result.plan_metadata.degraded?
 
     assert [
-             %Cadence.Dashboards.SourceWatermark{
+             %Cadence.DataSources.SourceWatermark{
                confidence: :unknown,
                logical_source: :telemetry
              }
@@ -385,7 +386,7 @@ defmodule Cadence.Dashboards.EngineLiveResolutionTest do
       )
 
     assert [
-             %Cadence.Dashboards.SourceWatermark{
+             %Cadence.DataSources.SourceWatermark{
                freshness_state: :stale,
                freshness_policy: %{stale_after_ms: 5_000},
                freshness_checked_at: ~U[2026-06-17 12:00:06Z]
@@ -502,7 +503,7 @@ defmodule Cadence.Dashboards.EngineLiveResolutionTest do
       )
 
     assert [
-             %Cadence.Dashboards.SourceWatermark{
+             %Cadence.DataSources.SourceWatermark{
                freshness_state: :retention_gap,
                retention_starts_at: ~U[2026-06-17 11:00:00Z]
              }

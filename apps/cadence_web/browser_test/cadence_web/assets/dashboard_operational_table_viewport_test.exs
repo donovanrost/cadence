@@ -16,11 +16,11 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
-  alias Cadence.Dashboards.SourceHealth
+  alias Cadence.Projections.DataSources.Health
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
@@ -638,14 +638,14 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
        } do
     reset_runtime_health!()
 
-    source_health_config = Application.get_env(:cadence, :dashboard_source_health_events, [])
+    source_health_config = Application.get_env(:cadence, :data_source_health_events, [])
 
     previous_source_execution =
       Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
 
     Application.put_env(
       :cadence,
-      :dashboard_source_health_events,
+      :data_source_health_events,
       enabled?: true,
       freshness: [
         default_max_age_ms: 31_536_000_000,
@@ -662,7 +662,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalTableViewportTest do
     )
 
     on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_source_health_events, source_health_config)
+      Application.put_env(:cadence, :data_source_health_events, source_health_config)
 
       Application.put_env(
         :cadence_web,

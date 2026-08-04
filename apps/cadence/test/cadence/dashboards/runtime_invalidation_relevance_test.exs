@@ -8,9 +8,10 @@ defmodule Cadence.Dashboards.RuntimeInvalidationRelevanceTest do
     RuntimeCacheKey,
     RuntimeInvalidation.Event,
     RuntimeInvalidationRelevance,
-    SourceWatermark,
     WidgetDef
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   test "matches scoped telemetry invalidations against document observable and active source identity" do
     document = telemetry_document()

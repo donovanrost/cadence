@@ -3,15 +3,16 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportBitrate do
   Resolves latest and historical operational transport-bitrate products.
   """
 
-  alias Cadence.Comms.TransportStore
   alias Cadence.Dashboards.{Frame, PlannedSourceRequest, RuntimeCacheKey}
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     LatestFreshness,
-    OperationalEventSnapshots,
     OperationalMetricFrames,
     TransportBitrateRows
   }
+
+  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.OperationalState.Snapshots, as: OperationalEventSnapshots
 
   @spec resolve_latest(
           PlannedSourceRequest.t(),
@@ -87,7 +88,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.TransportBitrate do
   end
 
   defp default_transports(organization_id, mission_id, _opts) do
-    TransportStore.list_transports(organization_id, mission_id)
+    OperationalState.list_transports(organization_id, mission_id)
   end
 
   defp transport_revision_entry(transport) do

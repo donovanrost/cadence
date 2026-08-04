@@ -1,12 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.SourceExecutionRuntimeSummaryFixtures do
   @moduledoc false
 
-  alias Cadence.Dashboards.{
-    DashboardResolveResult,
-    PlannedSourceRequest,
-    ResolveWarning,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{DashboardResolveResult, PlannedSourceRequest, ResolveWarning}
+
+  alias Cadence.DataSources.SourceWatermark
 
   def degraded_source_result do
     %DashboardResolveResult{

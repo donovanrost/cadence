@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RouteQueryTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RouteQuery
 
   test "merge compacts nil and empty overrides so route patches can clear params" do

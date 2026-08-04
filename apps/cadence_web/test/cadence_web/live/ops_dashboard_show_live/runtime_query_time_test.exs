@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryTimeTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
 
   test "invalid archive time params fall back to live with validation state" do

@@ -5,9 +5,9 @@ defmodule Cadence.GroundNetworks.ProviderCredentials.CredentialRow do
 
   import Ecto.Changeset
 
-  alias Cadence.Dashboards.SecretMetadata
   alias Cadence.GroundNetworks.ProviderCredential
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.SecretMetadata
 
   @primary_key {:provider_credential_ref, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]

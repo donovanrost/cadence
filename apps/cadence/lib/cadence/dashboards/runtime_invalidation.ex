@@ -173,7 +173,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
       layers: [:plan, :source_result, :frame],
       default_cache_policy: nil,
       producer_status: :wired,
-      producer: "Cadence.Dashboards.DataSources",
+      producer: "Cadence.Management.DataSources",
       notes: "Data-source and binding upserts invalidate source-bound runtime artifacts."
     },
     %{
@@ -212,7 +212,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
       layers: [:source_result, :frame],
       default_cache_policy: :live,
       producer_status: :wired,
-      producer: "Cadence.Dashboards.SourceHealth",
+      producer: "Cadence.Projections.DataSources.Health",
       notes:
         "Dashboard source-health transitions invalidate live source/frame artifacts for affected source identity."
     },

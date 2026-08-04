@@ -1,13 +1,9 @@
 defmodule Cadence.Dashboards.Sources.TelemetryFixtures do
   @moduledoc false
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataBindingInterval,
-    DataSource,
-    PlannedSourceRequest,
-    ResolvedSourceBinding
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, ResolvedSourceBinding}
+
+  alias Cadence.DataSources.{DataBinding, DataBindingInterval, DataSource}
 
   alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.Telemetry.Sample

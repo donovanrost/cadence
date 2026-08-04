@@ -6,7 +6,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows do
   import Cadence.Dashboards.DataLinkResolver.Support
 
   alias Cadence.Jobs
-  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Storage.BackfillLifecycleGroup
 
   @spec rows(struct(), binary(), binary()) :: [map() | nil]
@@ -148,7 +148,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows do
       group_id when is_binary(group_id) and group_id != "" ->
         lifecycle_events =
           mission_id
-          |> TelemetryStorage.list_backfill_lifecycle_events(
+          |> TelemetryReads.list_backfill_lifecycle_events(
             organization_id: organization_id,
             limit: 1_000
           )

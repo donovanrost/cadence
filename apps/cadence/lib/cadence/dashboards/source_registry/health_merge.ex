@@ -3,7 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistry.HealthMerge do
   Applies classified persisted source health to facts, metadata, and watermarks.
   """
 
-  alias Cadence.Dashboards.{SourceFacts, SourceWatermark}
+  alias Cadence.Dashboards.SourceFacts
+
+  alias Cadence.DataSources.SourceWatermark
   alias Cadence.OperationalEvents.EffectiveInterval
 
   @spec merge_facts(SourceFacts.t(), map(), EffectiveInterval.t() | nil) :: SourceFacts.t()

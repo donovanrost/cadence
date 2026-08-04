@@ -4,6 +4,23 @@ defmodule Cadence.Reads.Telemetry do
   """
 
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Sample}
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+
+  def observation_identity_states(identity_ids, opts) do
+    TelemetryStorage.fetch_observation_identity_states(identity_ids, opts)
+  end
+
+  def fetch_observation_identity_decision_event(decision_event_id, opts) do
+    TelemetryStorage.fetch_observation_identity_decision_event(decision_event_id, opts)
+  end
+
+  def list_backfill_lifecycle_events(mission_id, opts) do
+    TelemetryStorage.list_backfill_lifecycle_events(mission_id, opts)
+  end
+
+  def fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts) do
+    TelemetryStorage.fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts)
+  end
 
   @spec latest_value(binary(), binary(), keyword()) :: Sample.t() | nil
   def latest_value(mission_id, point_id, opts \\ [])

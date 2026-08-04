@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractOperationalDataTableTest
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem
   }
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

@@ -1,12 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{
-    ComparisonReviewQueue,
-    DataBinding,
-    Document,
-    RenderWidget
-  }
+  alias Cadence.Dashboards.{ComparisonReviewQueue, Document, RenderWidget}
+
+  alias Cadence.DataSources.DataBinding
 
   alias CadenceWeb.OpsDashboardShowLive.{
     RenderGridModel,

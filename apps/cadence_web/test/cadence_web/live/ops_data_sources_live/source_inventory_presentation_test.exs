@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentationTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataSource, SourceReadiness}
+  alias Cadence.Dashboards.SourceReadiness
+
+  alias Cadence.DataSources.DataSource
   alias CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation
 
   test "presents sorted source rows with capability, credential, action, and watermark state" do

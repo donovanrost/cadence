@@ -1,8 +1,9 @@
 defmodule Cadence.Dashboards.SourceRegistry.HealthMergeTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{SourceFacts, SourceWatermark}
+  alias Cadence.Dashboards.SourceFacts
   alias Cadence.Dashboards.SourceRegistry.HealthMerge
+  alias Cadence.DataSources.SourceWatermark
   alias Cadence.OperationalEvents.EffectiveInterval
 
   test "applies durable health, diagnostics, and interval evidence to facts and watermarks" do

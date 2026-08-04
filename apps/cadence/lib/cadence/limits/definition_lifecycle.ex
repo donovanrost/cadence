@@ -7,13 +7,12 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
   alias Ecto.Changeset
 
-  alias Cadence.Dashboards.RuntimeInvalidation
-
   alias Cadence.Limits.{
     ActiveDefinition,
     ActiveLimitDefinitionRow,
     Definition,
     DefinitionLifecycleEvent,
+    Facts,
     GovernedLimitDefinitionRow,
     LimitDefinitionLifecycleEventRow
   }
@@ -55,7 +54,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
     end)
     |> case do
       {:ok, {:changed, event, status}} ->
-        maybe_invalidate_limit_definition(event, opts)
+        maybe_publish_limit_definition(event, opts)
         {:ok, event, status}
 
       {:ok, {:unchanged, status}} ->
@@ -256,30 +255,9 @@ defmodule Cadence.Limits.DefinitionLifecycle do
   defp next_transition_count(nil), do: 1
   defp next_transition_count(%ActiveDefinition{transition_count: count}), do: count + 1
 
-  defp maybe_invalidate_limit_definition(%DefinitionLifecycleEvent{} = event, opts) do
-    config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    if Keyword.get(config, :enabled?, true) and
-         Keyword.get(opts, :invalidate_runtime_cache?, true) do
-      RuntimeInvalidation.limit_definition_changed(
-        %{
-          organization_id: event.organization_id,
-          mission_id: event.mission_id,
-          observable: event.point_id,
-          limit_set_name: event.limit_set_name,
-          scope_type: event.scope_type,
-          scope_ref: event.scope_ref,
-          realm: event.realm,
-          limit_definition_lifecycle_event_id: event.limit_definition_lifecycle_event_id,
-          limit_definition_id: event.limit_definition_id,
-          limit_definition_version: event.limit_definition_version,
-          evidence_ref: %{
-            kind: "limit_definition_lifecycle_event",
-            id: event.limit_definition_lifecycle_event_id
-          }
-        },
-        runtime_cache: Keyword.get(config, :runtime_cache, Cadence.Dashboards.RuntimeCache)
-      )
+  defp maybe_publish_limit_definition(%DefinitionLifecycleEvent{} = event, opts) do
+    if Keyword.get(opts, :publish_facts?, Keyword.get(opts, :invalidate_runtime_cache?, true)) do
+      Facts.publish(event)
     end
 
     :ok

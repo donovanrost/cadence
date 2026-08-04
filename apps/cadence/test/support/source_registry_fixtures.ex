@@ -1,15 +1,13 @@
 defmodule Cadence.Dashboards.SourceRegistryFixtures do
   @moduledoc false
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    EvidenceRef,
-    PlannedSourceRequest,
-    SourceHealthEvent,
-    SourceHealthStatus
-  }
+  alias Cadence.Dashboards.{EvidenceRef, PlannedSourceRequest}
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Limits.{DefinitionInterval, Event}
   alias Cadence.OperationalEvents.EffectiveInterval

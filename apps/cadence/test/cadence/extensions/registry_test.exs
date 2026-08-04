@@ -7,7 +7,8 @@ defmodule Cadence.Extensions.RegistryTest do
   alias Cadence.Catalog.Registry, as: CatalogImporterRegistry
   alias Cadence.Comms.TransportKind
   alias Cadence.Contacts.ProviderClients.Registry, as: ProviderConnectorRegistry
-  alias Cadence.Dashboards.{DefaultSourceAdapters, WidgetRegistry}
+  alias Cadence.Dashboards.WidgetRegistry
+  alias Cadence.DataSources.AdapterRegistry
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces
@@ -121,7 +122,7 @@ defmodule Cadence.Extensions.RegistryTest do
 
     for contribution <- ExtensionCatalog.source_adapter_contributions() do
       assert {:ok, definition} =
-               DefaultSourceAdapters.fetch_definition(
+               AdapterRegistry.fetch_definition(
                  contribution.logical_source,
                  contribution.source_adapter_version
                )
@@ -201,7 +202,7 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.fetch_source_adapter(:telemetry, 1)
 
     assert Enum.map(ExtensionCatalog.source_adapters(), &{&1.logical_source, &1.version}) ==
-             Enum.map(DefaultSourceAdapters.list_definitions(), &{&1.logical_source, &1.version})
+             Enum.map(AdapterRegistry.list_definitions(), &{&1.logical_source, &1.version})
 
     assert {:error, :unsupported_source_adapter_contribution_version} =
              ExtensionCatalog.fetch_source_adapter(:telemetry, 2)

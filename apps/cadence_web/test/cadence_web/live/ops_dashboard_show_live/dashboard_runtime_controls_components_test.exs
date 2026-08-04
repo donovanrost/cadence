@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponentsTest
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Cadence.Dashboards.DataBinding
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents
 
   test "runtime_context_controls renders source binding and fallback state" do

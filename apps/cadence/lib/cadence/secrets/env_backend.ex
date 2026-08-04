@@ -61,7 +61,7 @@ defmodule Cadence.Secrets.EnvBackend do
     profiles =
       Keyword.get(opts, :env_material_profiles) ||
         :cadence
-        |> Application.get_env(:dashboard_source_credentials, [])
+        |> Application.get_env(:data_source_credentials, [])
         |> Keyword.get(:env_material_profiles, %{})
 
     case map_value(profiles, profile_key) do

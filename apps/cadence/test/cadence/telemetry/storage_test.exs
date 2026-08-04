@@ -3,17 +3,19 @@ defmodule Cadence.Telemetry.StorageTest do
   use Cadence.ConfigCase, async: false
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
     RuntimeCacheKey,
     RuntimeInvalidation,
-    SourceResult,
-    SourceWatermark,
-    SourceWatermarks
+    SourceResult
   }
+
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Sample
@@ -367,6 +369,7 @@ defmodule Cadence.Telemetry.StorageTest do
 
   test "replay telemetry writes emit replay-scoped runtime invalidations" do
     cache = start_supervised!({RuntimeCache, name: nil})
+    use_dashboard_runtime_cache!(cache)
     attach_runtime_invalidation_telemetry(self())
 
     assert :ok =
@@ -400,6 +403,7 @@ defmodule Cadence.Telemetry.StorageTest do
 
   test "telemetry writes invalidate live and overlapping snapshot dashboard caches" do
     cache = start_supervised!({RuntimeCache, name: nil})
+    use_dashboard_runtime_cache!(cache)
     attach_runtime_invalidation_telemetry(self())
 
     time_context = archive_time_context(~U[2026-06-17 12:00:00Z], ~U[2026-06-17 12:10:00Z])
@@ -447,6 +451,7 @@ defmodule Cadence.Telemetry.StorageTest do
 
   test "telemetry writes leave non-overlapping snapshot dashboard caches in place" do
     cache = start_supervised!({RuntimeCache, name: nil})
+    use_dashboard_runtime_cache!(cache)
     time_context = archive_time_context(~U[2026-06-17 13:00:00Z], ~U[2026-06-17 13:10:00Z])
     snapshot_key = source_result_key(cache_policy: :snapshot, time_context: time_context)
     snapshot_frame_key = frame_key(cache_policy: :snapshot, time_context: time_context)
@@ -619,5 +624,18 @@ defmodule Cadence.Telemetry.StorageTest do
       max(deadline - System.monotonic_time(:millisecond), 0) ->
         flunk("expected runtime invalidation telemetry for #{inspect(boundary)}")
     end
+  end
+
+  defp use_dashboard_runtime_cache!(cache) do
+    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
+
+    Application.put_env(:cadence, :dashboard_runtime_invalidation,
+      enabled?: true,
+      runtime_cache: cache
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
+    end)
   end
 end

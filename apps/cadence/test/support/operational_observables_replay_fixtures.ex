@@ -5,14 +5,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesReplayFixtures do
 
   alias Cadence.Comms.Transport
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    Field,
-    Frame,
-    PlannedSourceRequest,
-    ResolvedSourceBinding
-  }
+  alias Cadence.Dashboards.{Field, Frame, PlannedSourceRequest, ResolvedSourceBinding}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.OperationalObservables
   alias Cadence.OperationalEvents

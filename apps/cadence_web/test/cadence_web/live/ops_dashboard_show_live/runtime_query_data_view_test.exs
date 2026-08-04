@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryDataViewTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
 
   test "normalizes data-view comparison only when it differs from the active view" do

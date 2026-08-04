@@ -1,12 +1,12 @@
 defmodule Cadence.Management.DataSources do
   @moduledoc """
-  Management-plane boundary for dashboard data-source definitions and bindings.
+  Management-plane boundary for data-source definitions and bindings.
 
   This API owns desired data-source configuration, binding history, and the
   durable lifecycle state that control-plane workers reconcile.
   """
 
-  alias Cadence.Dashboards.DataSources, as: Store
+  alias Cadence.Management.DataSources.Store
 
   defdelegate default_managed_data_source(), to: Store
   defdelegate default_limits_data_source(), to: Store

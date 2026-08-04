@@ -8,7 +8,7 @@ defmodule Cadence.Dashboards.DashboardAction do
   evidence inspector can resolve directly.
   """
 
-  alias Cadence.Dashboards.ContractNormalization
+  alias Cadence.Platform.ContractNormalization
 
   @targets [
     :telemetry_explore,

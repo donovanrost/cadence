@@ -11,8 +11,8 @@ defmodule Cadence.Dashboards.Sources.Telemetry.RevisionState do
     TelemetryRevisionSummary
   }
 
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Sample
-  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @spec resolve(
           [{Frame.t(), [Sample.t()]}],
@@ -81,7 +81,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry.RevisionState do
 
   defp fetch_identity_states(identity_ids, lookup_opts, opts) do
     opts
-    |> Keyword.get(:identity_states_fun, &TelemetryStorage.fetch_observation_identity_states/2)
+    |> Keyword.get(:identity_states_fun, &TelemetryReads.observation_identity_states/2)
     |> then(fn fetch_fun -> fetch_fun.(identity_ids, lookup_opts) end)
     |> case do
       states when is_list(states) -> states

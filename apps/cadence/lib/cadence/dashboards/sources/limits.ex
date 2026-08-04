@@ -10,10 +10,11 @@ defmodule Cadence.Dashboards.Sources.Limits do
     DataContext,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceCapabilities,
     SourceFacts,
     SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
 
   alias Cadence.Dashboards.Sources.Limits.FrameBuilder
   alias Cadence.Dashboards.Sources.Limits.FrameMetadata

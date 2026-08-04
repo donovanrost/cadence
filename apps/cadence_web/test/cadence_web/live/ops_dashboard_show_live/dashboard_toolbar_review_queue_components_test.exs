@@ -4,7 +4,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
   import CadenceWeb.DashboardReviewFixtures
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Cadence.Dashboards.{ComparisonReviewQueue, DataBinding}
+  alias Cadence.Dashboards.ComparisonReviewQueue
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
 
   test "dashboard_toolbar routes versions button to review activity when review work is open" do

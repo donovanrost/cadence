@@ -21,7 +21,7 @@ defmodule CadenceWeb.Assets.DashboardOperationalStateViewportTest do
 
   alias Cadence.Comms.GroundStation
   alias Cadence.Comms.Transport
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.Management.DataSources
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 

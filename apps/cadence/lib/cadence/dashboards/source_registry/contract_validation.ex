@@ -3,13 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistry.ContractValidation do
   Normalizes source contracts and optionally enforces strict dashboard validation.
   """
 
-  alias Cadence.Dashboards.{
-    DashboardContract,
-    PlannedSourceRequest,
-    SourceCapabilities,
-    SourceFacts,
-    SourceResult
-  }
+  alias Cadence.Dashboards.{DashboardContract, PlannedSourceRequest, SourceFacts, SourceResult}
+
+  alias Cadence.DataSources.SourceCapabilities
 
   @spec planned_request!(PlannedSourceRequest.t(), keyword()) :: PlannedSourceRequest.t()
   def planned_request!(%PlannedSourceRequest{} = request, opts) when is_list(opts) do

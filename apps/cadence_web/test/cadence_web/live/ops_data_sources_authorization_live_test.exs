@@ -8,7 +8,9 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{DataSource, DataSources}
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.DataSource
   alias CadenceWeb.TestFixtures
 
   defp signed_in(role) do

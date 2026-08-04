@@ -12,13 +12,15 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    DataSources,
-    ManagedQuestDBProvisioningJobs,
-    SourceCredentials,
-    SourceHealth
-  }
+  alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.DataSource
 
   alias CadenceWeb.TestFixtures
 
@@ -282,7 +284,7 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
                  reason: :source_probe_timeout,
                  observed_at: DateTime.utc_now(),
                  payload: %{
-                   source: "dashboard_source_probe_scheduler",
+                   source: "data_source_probe_scheduler",
                    probe_kind: "scheduler",
                    probe_message: "Source probe exceeded scheduler timeout.",
                    probe_metadata: %{probe_timeout_ms: 25},
@@ -315,17 +317,17 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
   test "renders managed TSDB deployment runs before sources exist" do
     {conn, _user, org, mission} = signed_in_org_and_mission()
-    previous_config = Application.get_env(:cadence, :dashboard_managed_questdb_provisioning)
+    previous_config = Application.get_env(:cadence, :managed_questdb_provisioning)
 
     on_exit(fn ->
       if is_nil(previous_config) do
-        Application.delete_env(:cadence, :dashboard_managed_questdb_provisioning)
+        Application.delete_env(:cadence, :managed_questdb_provisioning)
       else
-        Application.put_env(:cadence, :dashboard_managed_questdb_provisioning, previous_config)
+        Application.put_env(:cadence, :managed_questdb_provisioning, previous_config)
       end
     end)
 
-    Application.put_env(:cadence, :dashboard_managed_questdb_provisioning,
+    Application.put_env(:cadence, :managed_questdb_provisioning,
       provisioner: fn attrs, _opts ->
         assert attrs["data_source_id"] == "failed-managed-questdb"
         {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}

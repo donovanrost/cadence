@@ -19,12 +19,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
 
-  alias Cadence.Dashboards.{
-    DataSources,
-    Document,
-    RenderItem,
-    SourceHealth
-  }
+  alias Cadence.Dashboards.{Document, RenderItem}
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
 
   alias Cadence.Comms.Transport
   alias Cadence.Ingress.RawEvidence

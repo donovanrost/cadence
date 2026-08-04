@@ -1,14 +1,9 @@
 defmodule Cadence.Dashboards.EngineQuestDBDecimationTest do
   use Cadence.ConfigCase, async: false
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    Document,
-    Engine,
-    Frame
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine, Frame}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Telemetry.HistoryStore.QuestDB
   alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
@@ -110,7 +105,7 @@ defmodule Cadence.Dashboards.EngineQuestDBDecimationTest do
     assert [%{code: :physical_aggregate_semantics, severity: :info}] = result.dashboard_warnings
 
     assert [
-             %Cadence.Dashboards.SourceWatermark{
+             %Cadence.DataSources.SourceWatermark{
                confidence: :best_effort,
                complete_through: ~U[2026-06-17 12:05:00Z],
                latest_receipt_time: ~U[2026-06-17 12:05:00Z],

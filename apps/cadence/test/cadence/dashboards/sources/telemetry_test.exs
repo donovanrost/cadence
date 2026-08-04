@@ -11,9 +11,10 @@ defmodule Cadence.Dashboards.Sources.TelemetryTest do
     Frame,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Telemetry
 

@@ -3,16 +3,13 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Placement,
-    SourceHealthEvent,
-    SourceHealthStatus,
-    WidgetDef
-  }
+  alias Cadence.Dashboards.{Document, Placement, WidgetDef}
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @fixture_dir Path.expand("../../fixtures/dashboards", __DIR__)
 
@@ -53,6 +50,7 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
 
   test "blocks publish when physical source capabilities cannot satisfy widget sampling" do
     document = load_fixture!("value_tile_latest.v1.json")
+    %DataSource{} = telemetry_source = DataSources.default_managed_data_source()
 
     validation =
       Dashboards.validate_publish_readiness(
@@ -61,7 +59,7 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
         document,
         registry_opts(
           telemetry_source: %DataSource{
-            DataSources.default_managed_data_source()
+            telemetry_source
             | capabilities: %{latest?: false, range_scan?: true}
           }
         )
@@ -90,11 +88,8 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
   test "blocks operational metric history publish with source product guidance" do
     document = load_fixture!("operational_rf_metric_time_series.v1.json")
 
-    operational_source =
-      %DataSource{
-        DataSources.default_operational_observables_data_source()
-        | capabilities: %{range_scan?: false}
-      }
+    %DataSource{} = default_source = DataSources.default_operational_observables_data_source()
+    operational_source = %DataSource{default_source | capabilities: %{range_scan?: false}}
 
     validation =
       Dashboards.validate_publish_readiness(
@@ -134,15 +129,16 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
   test "blocks operational metric history publish when source supports the wrong history product" do
     document = load_fixture!("operational_rf_metric_time_series.v1.json")
 
-    operational_source =
-      %DataSource{
-        DataSources.default_operational_observables_data_source()
-        | capabilities: %{
-            latest?: true,
-            range_scan?: true,
-            supported_products: [:transport_bitrate_history]
-          }
-      }
+    %DataSource{} = default_source = DataSources.default_operational_observables_data_source()
+
+    operational_source = %DataSource{
+      default_source
+      | capabilities: %{
+          latest?: true,
+          range_scan?: true,
+          supported_products: [:transport_bitrate_history]
+        }
+    }
 
     validation =
       Dashboards.validate_publish_readiness(

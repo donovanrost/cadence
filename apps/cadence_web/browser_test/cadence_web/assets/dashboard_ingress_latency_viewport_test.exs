@@ -17,9 +17,9 @@ defmodule CadenceWeb.Assets.DashboardIngressLatencyViewportTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Contacts.ScheduledContact
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.SourceEndpoints.SourceEndpoint

@@ -9,16 +9,17 @@ defmodule Cadence.CatalogTest do
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
     DashboardResolveResult,
-    DataBinding,
-    DataSource,
     Document,
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
     RuntimeCacheKey,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Missions.Mission
 

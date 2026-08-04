@@ -3,15 +3,13 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
 
   import Cadence.Dashboards.DataLinkResolverFixtures
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataLink,
-    DataLinkResolver,
-    DataSource,
-    DataSources,
-    LifecycleEvent,
-    SourceWatermarks
-  }
+  alias Cadence.Dashboards.{DataLink, DataLinkResolver, LifecycleEvent}
+
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
 
@@ -93,7 +91,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
     assert related_link(
              inspector.related_links,
              :operational_event,
-             "operational_event:dashboard_data_binding_event:#{event.data_binding_event_id}"
+             "operational_event:data_source_binding_event:#{event.data_binding_event_id}"
            )
 
     interval_link = %DataLink{

@@ -1,8 +1,9 @@
 defmodule Cadence.Dashboards.SourceRegistry.CapabilityPostureTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceCapabilities}
+  alias Cadence.Dashboards.PlannedSourceRequest
   alias Cadence.Dashboards.SourceRegistry.CapabilityPosture
+  alias Cadence.DataSources.SourceCapabilities
 
   test "reports telemetry receipt-time fallback without marking the request unsupported" do
     request =

@@ -3,12 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistryEvidenceTest do
 
   import Cadence.Dashboards.SourceRegistryFixtures
 
-  alias Cadence.Dashboards.{
-    DataSources,
-    Field,
-    Frame,
-    SourceRegistry
-  }
+  alias Cadence.Dashboards.{Field, Frame, SourceRegistry}
+
+  alias Cadence.Management.DataSources
 
   alias Cadence.OperationalEvents.EffectiveInterval
 

@@ -1,8 +1,9 @@
 defmodule Cadence.Dashboards.SourceRegistry.FactsAggregationTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts, SourceWatermark}
+  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts}
   alias Cadence.Dashboards.SourceRegistry.FactsAggregation
+  alias Cadence.DataSources.SourceWatermark
 
   test "aggregates segment watermarks, health, posture, and common revision facts" do
     request = %PlannedSourceRequest{

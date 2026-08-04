@@ -13,7 +13,7 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.Management.DataSources
   alias Cadence.Control.Replay.Store.ReplayRunRow
   alias Cadence.Replay.Run
   alias Cadence.Repo

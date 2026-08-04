@@ -15,8 +15,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, Document}
+  alias Cadence.Dashboards.Document
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 

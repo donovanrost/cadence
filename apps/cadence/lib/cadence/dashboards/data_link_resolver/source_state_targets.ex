@@ -6,22 +6,13 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
   with interval lookup, inspector rows, and related evidence links.
   """
 
-  import Ecto.Query
   import Cadence.Dashboards.DataLinkResolver.Support
 
-  alias Cadence.Dashboards.{
-    DataBindingInterval,
-    DataLink,
-    DataLinkInspector
-  }
-
-  alias Cadence.Dashboards.DataSources.DataBindingEventRow
-  alias Cadence.Dashboards.SourceHealth.EventRow, as: SourceHealthEventRow
-  alias Cadence.Dashboards.SourceWatermarks.EventRow, as: SourceWatermarkEventRow
-  alias Cadence.Management.DataSources
-  alias Cadence.OperationalEvents
+  alias Cadence.Dashboards.{DataLink, DataLinkInspector}
+  alias Cadence.DataSources.DataBindingInterval
   alias Cadence.OperationalEvents.EffectiveInterval
-  alias Cadence.Repo
+  alias Cadence.Reads.DataSources
+  alias Cadence.Reads.OperationalEvidence
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
@@ -47,63 +38,30 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
   end
 
   def resolve(%DataLink{target: :source_health_event} = link, organization_id, mission_id) do
-    event_row =
-      SourceHealthEventRow
-      |> where(
-        [row],
-        (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-          row.mission_id == ^mission_id and
-          row.source_health_event_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %SourceHealthEventRow{} = row ->
-        event = SourceHealthEventRow.to_domain(row)
+    case DataSources.fetch_source_health_event(organization_id, mission_id, link.target_id) do
+      {:ok, event} ->
         {:ok, inspector(link, :resolved, nil, source_health_event_rows(event))}
 
-      nil ->
+      {:error, _reason} ->
         {:error,
          inspector(link, :missing, "Source health event was not found in this mission.", [])}
     end
   end
 
   def resolve(%DataLink{target: :source_watermark_event} = link, organization_id, mission_id) do
-    event_row =
-      SourceWatermarkEventRow
-      |> where(
-        [row],
-        (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-          row.mission_id == ^mission_id and
-          row.source_watermark_event_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %SourceWatermarkEventRow{} = row ->
-        event = SourceWatermarkEventRow.to_domain(row)
+    case DataSources.fetch_source_watermark_event(organization_id, mission_id, link.target_id) do
+      {:ok, event} ->
         {:ok, inspector(link, :resolved, nil, source_watermark_event_rows(event))}
 
-      nil ->
+      {:error, _reason} ->
         {:error,
          inspector(link, :missing, "Source watermark event was not found in this mission.", [])}
     end
   end
 
   def resolve(%DataLink{target: :source_binding_event} = link, organization_id, mission_id) do
-    event_row =
-      DataBindingEventRow
-      |> where(
-        [row],
-        (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
-          row.mission_id == ^mission_id and row.data_binding_event_id == ^link.target_id
-      )
-      |> Repo.one()
-
-    case event_row do
-      %DataBindingEventRow{} = event_row ->
-        event = DataBindingEventRow.to_domain(event_row)
-
+    case DataSources.fetch_data_binding_event(organization_id, mission_id, link.target_id) do
+      {:ok, event} ->
         {:ok,
          inspector(
            link,
@@ -113,7 +71,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
            source_binding_event_related_links(link, event)
          )}
 
-      nil ->
+      {:error, _reason} ->
         {:error,
          inspector(link, :missing, "Source binding event was not found in this mission.", [])}
     end
@@ -285,29 +243,71 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
   end
 
   defp effective_intervals(:binding_set_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.binding_set_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :binding_set,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(:application_binding_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.application_binding_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :application_binding,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(:catalog_revision_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.catalog_revision_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :catalog_revision,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(:source_binding_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.source_binding_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :source_binding,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(:source_health_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.source_health_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :source_health,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(:transport_execution_interval, organization_id, mission_id, opts),
-    do: OperationalEvents.transport_execution_intervals(organization_id, mission_id, opts)
+    do:
+      OperationalEvidence.list_effective_intervals(
+        :transport_execution,
+        organization_id,
+        mission_id,
+        opts
+      )
 
   defp effective_intervals(target, organization_id, mission_id, opts)
        when target in [
               :transport_connection_state_interval,
               :ground_station_connection_state_interval
             ],
-       do: OperationalEvents.connection_state_intervals(organization_id, mission_id, opts)
+       do:
+         OperationalEvidence.list_effective_intervals(
+           :connection_state,
+           organization_id,
+           mission_id,
+           opts
+         )
 
   defp effective_intervals(
          :ground_station_antenna_pointing_state_interval,
@@ -317,12 +317,23 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
        ) do
     opts = Keyword.put(opts, :observable_id, ["ground.station.antenna_pointing_state"])
 
-    OperationalEvents.operational_observable_state_intervals(organization_id, mission_id, opts)
+    OperationalEvidence.list_effective_intervals(
+      :operational_observable_state,
+      organization_id,
+      mission_id,
+      opts
+    )
   end
 
   defp effective_intervals(target, organization_id, mission_id, opts)
        when target in [:link_rf_lock_state_interval, :link_frame_sync_state_interval],
-       do: OperationalEvents.link_rf_state_intervals(organization_id, mission_id, opts)
+       do:
+         OperationalEvidence.list_effective_intervals(
+           :link_rf_state,
+           organization_id,
+           mission_id,
+           opts
+         )
 
   defp effective_intervals(_target, _organization_id, _mission_id, _opts), do: []
 
@@ -340,7 +351,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
       related_link(
         link,
         :operational_event,
-        "operational_event:dashboard_data_binding_event:#{event.data_binding_event_id}",
+        "operational_event:data_source_binding_event:#{event.data_binding_event_id}",
         "Operational event",
         :source_event
       )
@@ -418,7 +429,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.SourceStateTargets do
       related_link(
         link,
         :operational_event,
-        "operational_event:dashboard_data_binding_event:#{interval.data_binding_event_id}",
+        "operational_event:data_source_binding_event:#{interval.data_binding_event_id}",
         "Operational event",
         :source_event
       )

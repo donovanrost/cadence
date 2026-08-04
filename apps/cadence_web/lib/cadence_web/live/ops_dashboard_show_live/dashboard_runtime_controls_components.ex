@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
   @moduledoc false
   use CadenceWeb, :html
 
-  alias Cadence.Dashboards.DataBinding
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
 
   attr :time_mode, :string, required: true

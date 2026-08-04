@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowExplanation do
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Reads.TelemetryDataManagement, as: DataManagement
 
   @moduledoc false
 

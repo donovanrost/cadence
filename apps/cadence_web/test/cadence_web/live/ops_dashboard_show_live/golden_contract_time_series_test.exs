@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractTimeSeriesTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem
   }
+
+  alias Cadence.Management.DataSources
 
   alias Cadence.Limits.DefinitionInterval
   alias Cadence.Limits.Event

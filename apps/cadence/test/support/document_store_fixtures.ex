@@ -6,15 +6,11 @@ defmodule Cadence.Dashboards.DocumentStoreFixtures do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Engine,
-    RuntimeInvalidation
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine, RuntimeInvalidation}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Dashboards.DocumentStore.VersionRow, as: DashboardVersionRow

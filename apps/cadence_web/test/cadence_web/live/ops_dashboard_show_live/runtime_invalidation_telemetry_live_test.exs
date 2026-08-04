@@ -13,8 +13,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationTelemetryLiveTest d
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.{DataSources, Document, RenderItem, RuntimeInvalidation}
+  alias Cadence.Dashboards.{Document, RenderItem, RuntimeInvalidation}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 

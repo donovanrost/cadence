@@ -8,9 +8,10 @@ defmodule Cadence.Dashboards.FrameMaterializerTest do
     PlannedSourceRequest,
     ResolveWarning,
     RuntimeCacheKey,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   test "materializes source frames for a placement consumer" do
     request = source_request()

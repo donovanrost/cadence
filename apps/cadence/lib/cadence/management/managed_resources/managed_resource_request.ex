@@ -1,7 +1,7 @@
 defmodule Cadence.Management.ManagedResources.ManagedResourceRequest do
   @moduledoc "Immutable Management fact requesting one managed-resource lifecycle action."
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
   alias Cadence.Platform.ContentHash
 
   @type operation :: :provision | :deprovision
@@ -9,7 +9,7 @@ defmodule Cadence.Management.ManagedResources.ManagedResourceRequest do
           request_id: binary(),
           organization_id: binary(),
           mission_id: binary(),
-          resource_type: :dashboard_tsdb_backend,
+          resource_type: :tsdb_backend,
           resource_id: binary(),
           operation: operation(),
           content_sha256: binary(),
@@ -38,7 +38,7 @@ defmodule Cadence.Management.ManagedResources.ManagedResourceRequest do
     basis = %{
       organization_id: source.organization_id,
       mission_id: source.mission_id,
-      resource_type: :dashboard_tsdb_backend,
+      resource_type: :tsdb_backend,
       resource_id: source.data_source_id,
       operation: operation,
       requested_at: requested_at,
@@ -52,7 +52,7 @@ defmodule Cadence.Management.ManagedResources.ManagedResourceRequest do
       request_id: request_id || "managed_resource:#{operation}:#{source.data_source_id}:#{hash}",
       organization_id: source.organization_id,
       mission_id: source.mission_id,
-      resource_type: :dashboard_tsdb_backend,
+      resource_type: :tsdb_backend,
       resource_id: source.data_source_id,
       operation: operation,
       content_sha256: hash,

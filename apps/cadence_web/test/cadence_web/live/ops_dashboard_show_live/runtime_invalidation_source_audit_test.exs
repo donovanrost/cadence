@@ -9,9 +9,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationSourceAuditTest do
     Placement,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceWatermark,
     WidgetDef
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations

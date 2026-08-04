@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractTransportExecutionTimeli
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem
   }
+
+  alias Cadence.Management.DataSources
 
   alias Cadence.OperationalEvents.EffectiveInterval
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation

@@ -2,10 +2,7 @@ defmodule Cadence.Dashboards.SourceRegistry.ProvenanceTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataBindingInterval,
     DataLink,
-    DataSource,
     EvidenceRef,
     Field,
     Frame,
@@ -15,6 +12,8 @@ defmodule Cadence.Dashboards.SourceRegistry.ProvenanceTest do
     SourceFacts,
     SourceResult
   }
+
+  alias Cadence.DataSources.{DataBinding, DataBindingInterval, DataSource}
 
   alias Cadence.Dashboards.SourceRegistry.Provenance
 

@@ -111,7 +111,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   defp setup(ids, rate_hz, duration_seconds) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-    with :ok <- ensure_dashboard_data_sources(),
+    with :ok <- ensure_data_sources(),
          {:ok, _organization} <- persist_organization(ids),
          :ok <- ensure_browser_access(ids),
          {:ok, _mission} <- persist_mission(ids),
@@ -346,7 +346,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
     Cadence.Contacts.persist_scheduled_contact(ids.organization_id, scheduled_contact)
   end
 
-  defp ensure_dashboard_data_sources do
+  defp ensure_data_sources do
     _sources = DataSources.ensure_default_managed_sources!()
     :ok
   end
@@ -733,7 +733,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   end
 
   defp persist_source_health_context(ids, observed_at) do
-    Cadence.Dashboards.SourceHealth.record_source_health(%{
+    Cadence.Control.DataSources.record_health_observation(%{
       organization_id: ids.organization_id,
       mission_id: ids.mission_id,
       logical_source: :telemetry,

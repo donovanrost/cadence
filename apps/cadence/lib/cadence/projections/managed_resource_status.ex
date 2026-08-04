@@ -2,7 +2,7 @@ defmodule Cadence.Projections.ManagedResourceStatus do
   @moduledoc "Read model separating desired data-source state from lifecycle execution."
 
   alias Cadence.Control.ManagedResources, as: ControlManagedResources
-  alias Cadence.Dashboards.TSDBDeploymentStatus
+  alias Cadence.DataSources.DeploymentStatus
   alias Cadence.Management.ManagedResources
 
   @spec project(binary()) :: {:ok, map()} | {:error, term()}
@@ -11,7 +11,7 @@ defmodule Cadence.Projections.ManagedResourceStatus do
       {:ok,
        %{
          requested: %{data_source: source},
-         operational: %{deployment: TSDBDeploymentStatus.from_data_source(source)},
+         operational: %{deployment: DeploymentStatus.from_data_source(source)},
          applied: %{lifecycle: lifecycle(source)},
          observed: %{health: Map.get(source.metadata, "health", %{})}
        }}

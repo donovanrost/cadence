@@ -1,18 +1,19 @@
 defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
   use Cadence.ConfigCase, async: false
 
-  import Cadence.Dashboards.DataSourcesFixtures
+  import Cadence.DataSourcesFixtures
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Control.ManagedResources
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    DataSources,
-    SourceCredentials,
-    TSDBDeploymentStatus
-  }
+  alias Cadence.DataSources.DeploymentStatus
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.DataSource
 
   alias Cadence.Jobs
 
@@ -68,7 +69,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              backend: :questdb,
              physical_boundary: :mission,
              remediation: "monitor_customer_dedicated_mission_backend"
-           } = TSDBDeploymentStatus.from_data_source(persisted)
+           } = DeploymentStatus.from_data_source(persisted)
   end
 
   test "reconciles dedicated BYO TSDB backend lifecycle state" do
@@ -125,7 +126,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              lifecycle_operation_text: "reconcile",
              lifecycle_status_text: "reconciled",
              lifecycle_observed_at_text: "2026-07-07T15:30:00Z"
-           } = TSDBDeploymentStatus.from_data_source(reconciled)
+           } = DeploymentStatus.from_data_source(reconciled)
 
     events =
       DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
@@ -203,7 +204,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              lifecycle_operation_text: "deprovision",
              lifecycle_status_text: "deprovision_requested",
              lifecycle_observed_at_text: "2026-07-07T16:00:00Z"
-           } = TSDBDeploymentStatus.from_data_source(deprovisioned)
+           } = DeploymentStatus.from_data_source(deprovisioned)
 
     events =
       DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
@@ -228,9 +229,9 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "worker completes dedicated BYO TSDB backend provisioning" do
     test_pid = self()
-    previous_config = Application.get_env(:cadence, :dashboard_tsdb_backend_lifecycle)
+    previous_config = Application.get_env(:cadence, :tsdb_backend_lifecycle)
 
-    Application.put_env(:cadence, :dashboard_tsdb_backend_lifecycle,
+    Application.put_env(:cadence, :tsdb_backend_lifecycle,
       executor: fn payload, opts ->
         send(test_pid, {:tsdb_backend_lifecycle_executor, payload, opts})
         {:ok, %{"status" => "physical_provisioned"}}
@@ -240,8 +241,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
     on_exit(fn ->
       case previous_config do
-        nil -> Application.delete_env(:cadence, :dashboard_tsdb_backend_lifecycle)
-        config -> Application.put_env(:cadence, :dashboard_tsdb_backend_lifecycle, config)
+        nil -> Application.delete_env(:cadence, :tsdb_backend_lifecycle)
+        config -> Application.put_env(:cadence, :tsdb_backend_lifecycle, config)
       end
     end)
 
@@ -286,7 +287,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
     assert requested_source.status == :active
     assert requested_source.metadata["tsdb_backend_lifecycle"]["status"] == "provision_requested"
-    assert queued_job.job_type == :dashboard_tsdb_backend_lifecycle
+    assert queued_job.job_type == :tsdb_backend_lifecycle
     assert queued_job.run_id == "worker-provision-run"
     assert queued_job.payload["operation"] == "provision"
     assert queued_job.payload["provisioning_kind"] == "byo_tsdb"
@@ -328,7 +329,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                &(&1.payload["operation"] == "complete_tsdb_backend_provisioning")
              )
 
-    assert completed_event.actor_id == "dashboard_tsdb_backend_lifecycle_worker"
+    assert completed_event.actor_id == "tsdb_backend_lifecycle_worker"
     assert completed_event.payload["job_id"] == queued_job.job_id
     assert completed_event.payload["run_id"] == queued_job.run_id
     assert completed_event.current_metadata["tsdb_backend_lifecycle"]["status"] == "provisioned"
@@ -336,9 +337,9 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "worker completes dedicated BYO TSDB backend deprovisioning" do
     test_pid = self()
-    previous_config = Application.get_env(:cadence, :dashboard_tsdb_backend_lifecycle)
+    previous_config = Application.get_env(:cadence, :tsdb_backend_lifecycle)
 
-    Application.put_env(:cadence, :dashboard_tsdb_backend_lifecycle,
+    Application.put_env(:cadence, :tsdb_backend_lifecycle,
       executor: fn payload, opts ->
         send(test_pid, {:tsdb_backend_lifecycle_executor, payload, opts})
         {:ok, %{"status" => "physical_deprovisioned"}}
@@ -348,8 +349,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
     on_exit(fn ->
       case previous_config do
-        nil -> Application.delete_env(:cadence, :dashboard_tsdb_backend_lifecycle)
-        config -> Application.put_env(:cadence, :dashboard_tsdb_backend_lifecycle, config)
+        nil -> Application.delete_env(:cadence, :tsdb_backend_lifecycle)
+        config -> Application.put_env(:cadence, :tsdb_backend_lifecycle, config)
       end
     end)
 
@@ -393,7 +394,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              )
 
     assert requested_source.status == :disabled
-    assert queued_job.job_type == :dashboard_tsdb_backend_lifecycle
+    assert queued_job.job_type == :tsdb_backend_lifecycle
     assert queued_job.run_id == "worker-deprovision-run"
     assert queued_job.payload["operation"] == "deprovision"
     assert queued_job.payload["provisioning_kind"] == "byo_tsdb"
@@ -434,7 +435,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                &(&1.payload["operation"] == "complete_tsdb_backend_deprovisioning")
              )
 
-    assert completed_event.actor_id == "dashboard_tsdb_backend_lifecycle_worker"
+    assert completed_event.actor_id == "tsdb_backend_lifecycle_worker"
     assert completed_event.payload["job_id"] == queued_job.job_id
     assert completed_event.payload["run_id"] == queued_job.run_id
     assert completed_event.current_metadata["tsdb_backend_lifecycle"]["status"] == "deprovisioned"

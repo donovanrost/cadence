@@ -4,9 +4,9 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants.GrantRow do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Dashboards.SecretMetadata
   alias Cadence.GroundNetworks.ProviderAccountGrant
   alias Cadence.Persistence.{JsonDocument, OrganizationScope}
+  alias Cadence.Platform.SecretMetadata
 
   @primary_key false
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]

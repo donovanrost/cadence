@@ -13,10 +13,11 @@ defmodule Cadence.Dashboards.PlannedRequestValidation do
     PlannedSourceRequest,
     ResolveWarning,
     ScopeContext,
-    SourceCapabilities,
     SourceRegistry,
     WidgetFrameContract
   }
+
+  alias Cadence.DataSources.SourceCapabilities
 
   @known_scope_kinds [
     :mission,

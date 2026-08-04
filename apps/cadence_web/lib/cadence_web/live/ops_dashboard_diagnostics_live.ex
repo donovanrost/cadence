@@ -2,8 +2,9 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Cadence.Dashboards.{Document, SourceHealth}
+  alias Cadence.Dashboards.Document
   alias Cadence.Projections.DashboardRuntimeInvalidations
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
   @collections ~w(plan requests frames cache source refresh invalidations)
   @runtime_query_keys ~w(spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id realm data_view data_source_id source_binding_id limit_mode selected_id)

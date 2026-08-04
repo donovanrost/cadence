@@ -3,12 +3,9 @@ defmodule Cadence.Dashboards.EngineFixtures do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    Document
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Limits.{DefinitionInterval, Event}
   alias Cadence.Telemetry.Sample

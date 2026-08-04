@@ -7,13 +7,9 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesFixtures do
   alias Cadence.Comms.Transport
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    Field,
-    PlannedSourceRequest,
-    ResolvedSourceBinding
-  }
+  alias Cadence.Dashboards.{Field, PlannedSourceRequest, ResolvedSourceBinding}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.OperationalObservables
   alias Cadence.Limits.Event

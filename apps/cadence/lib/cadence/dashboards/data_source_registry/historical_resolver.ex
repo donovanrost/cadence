@@ -2,18 +2,18 @@ defmodule Cadence.Dashboards.DataSourceRegistry.HistoricalResolver do
   @moduledoc false
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataBindingInterval,
     DataContext,
     DataLinks,
-    DataSource,
-    DefaultSourceAdapters,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
     SourceActions,
     TelemetryActions
   }
+
+  alias Cadence.DataSources.AdapterRegistry
+
+  alias Cadence.DataSources.{DataBinding, DataBindingInterval, DataSource}
 
   def resolve(
         %PlannedSourceRequest{} = request,
@@ -330,7 +330,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry.HistoricalResolver do
        ) do
     with :ok <- validate_data_source_active(data_source, binding, request, selection),
          :ok <- validate_data_source_configuration(data_source, binding, request, selection) do
-      {:ok, DefaultSourceAdapters.materialize(data_source, binding.logical_source)}
+      {:ok, AdapterRegistry.materialize(data_source, binding.logical_source)}
     end
   end
 

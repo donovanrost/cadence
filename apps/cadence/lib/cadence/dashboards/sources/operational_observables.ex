@@ -12,10 +12,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
     OperationalObservable,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceCapabilities,
     SourceFacts,
     SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     AggregateProducts,

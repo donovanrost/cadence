@@ -1,14 +1,9 @@
 defmodule Cadence.Dashboards.Sources.EventsOperationalReplayTest do
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    Field,
-    PlannedSourceRequest,
-    ResolvedSourceBinding,
-    SourceResult
-  }
+  alias Cadence.Dashboards.{Field, PlannedSourceRequest, ResolvedSourceBinding, SourceResult}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.Events
   alias Cadence.OperationalEvents

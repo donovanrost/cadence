@@ -4,9 +4,9 @@ defmodule Cadence.GroundNetworks.ProviderAccounts.AccountVersionRow do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Dashboards.SecretMetadata
   alias Cadence.GroundNetworks.ProviderAccountVersion
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.SecretMetadata
 
   @primary_key false
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]

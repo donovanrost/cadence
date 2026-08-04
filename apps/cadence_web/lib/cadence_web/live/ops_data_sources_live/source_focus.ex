@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocus do
   URL focus parsing and source-inventory matching for the data sources page.
   """
 
-  alias Cadence.Dashboards.{DataBinding, DataSource}
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @spec default() :: map()
   def default do

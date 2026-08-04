@@ -3,7 +3,11 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
   Source compatibility and dashboard focus contract evaluation for the data sources page.
   """
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, DefaultSourceAdapters, SourceCapabilities}
+  alias Cadence.DataSources.AdapterRegistry
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @spec compatible_sources([DataSource.t()], DataBinding.t()) :: [DataSource.t()]
   def compatible_sources(sources, %DataBinding{} = binding) when is_list(sources) do
@@ -62,7 +66,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
 
   @spec effective_capabilities(DataSource.t()) :: SourceCapabilities.t() | nil
   def effective_capabilities(%DataSource{adapter: adapter} = source) when is_atom(adapter) do
-    with {:ok, adapter_module} <- DefaultSourceAdapters.resolve(adapter),
+    with {:ok, adapter_module} <- AdapterRegistry.resolve(adapter),
          {:module, ^adapter_module} <- Code.ensure_loaded(adapter_module),
          true <- function_exported?(adapter_module, :capabilities, 0),
          %SourceCapabilities{} = capabilities <-
@@ -77,7 +81,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceContract do
 
   @spec logical_source(DataSource.t()) :: atom() | nil
   def logical_source(%DataSource{adapter: adapter}),
-    do: DefaultSourceAdapters.logical_source(adapter)
+    do: AdapterRegistry.logical_source(adapter)
 
   @spec logical_source_text(DataSource.t()) :: binary()
   def logical_source_text(%DataSource{} = source), do: text(logical_source(source))

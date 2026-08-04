@@ -6,7 +6,8 @@ defmodule Cadence.Dashboards.DataLinkInspector do
   mission records and UI code that renders operator investigation state.
   """
 
-  alias Cadence.Dashboards.{ContractNormalization, DashboardAction, DataLink}
+  alias Cadence.Dashboards.{DashboardAction, DataLink}
+  alias Cadence.Platform.ContractNormalization
 
   @statuses [:resolved, :context_only, :missing, :unsupported]
 

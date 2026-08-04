@@ -3,6 +3,53 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
 
   alias Cadence.Architecture.DependencyBoundary
 
+  test "dashboard adapters use reads and configured providers instead of owner IO" do
+    graph = %{
+      "lib/cadence/dashboards/sources/telemetry.ex" => %{
+        "lib/cadence/reads/telemetry.ex" => "runtime",
+        "lib/cadence/telemetry/storage.ex" => "runtime"
+      },
+      "lib/cadence/dashboards/data_link_resolver/command_targets.ex" => %{
+        "lib/cadence/commanding.ex" => "runtime",
+        "lib/cadence/reads/commands.ex" => "runtime"
+      },
+      "lib/cadence/dashboards/runtime_fact_consumer.ex" => %{
+        "lib/cadence/telemetry/backfill_lifecycle_changed.ex" => "runtime",
+        "lib/cadence/telemetry/storage/backfill_lifecycle_event.ex" => "runtime"
+      },
+      "lib/cadence/dashboards/source_registry/adapter_options.ex" => %{
+        "lib/cadence/management/data_sources/credentials.ex" => "runtime",
+        "lib/cadence/reads/data_sources.ex" => "runtime"
+      }
+    }
+
+    assert [
+             %{
+               kind: :dashboard_io_boundary,
+               source: "lib/cadence/dashboards/data_link_resolver/command_targets.ex",
+               sink: "lib/cadence/commanding.ex"
+             },
+             %{
+               kind: :dashboard_io_boundary,
+               source: "lib/cadence/dashboards/runtime_fact_consumer.ex",
+               sink: "lib/cadence/telemetry/storage/backfill_lifecycle_event.ex"
+             },
+             %{
+               kind: :dashboard_io_boundary,
+               source: "lib/cadence/dashboards/source_registry/adapter_options.ex",
+               sink: "lib/cadence/management/data_sources/credentials.ex"
+             },
+             %{
+               kind: :dashboard_io_boundary,
+               source: "lib/cadence/dashboards/sources/telemetry.ex",
+               sink: "lib/cadence/telemetry/storage.ex"
+             }
+           ] =
+             graph
+             |> DependencyBoundary.findings()
+             |> Enum.filter(&(&1.kind == :dashboard_io_boundary))
+  end
+
   test "enforces plane direction and explicit public cross-plane boundaries" do
     graph = %{
       "lib/cadence/control/activations/executor.ex" => %{

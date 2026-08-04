@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationRuntimeContextTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document, Placement, WidgetDef}
+  alias Cadence.Dashboards.{Document, Placement, WidgetDef}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RouteHydration
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias Phoenix.LiveView.Socket

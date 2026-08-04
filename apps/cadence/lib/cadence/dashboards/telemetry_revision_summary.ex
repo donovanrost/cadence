@@ -7,7 +7,8 @@ defmodule Cadence.Dashboards.TelemetryRevisionSummary do
   making widgets interpret projection rows.
   """
 
-  alias Cadence.Dashboards.{DataLinks, RuntimeCacheKey}
+  alias Cadence.Dashboards.DataLinks
+  alias Cadence.Telemetry.ObservationIdentityDependency
   alias Cadence.Telemetry.Storage.ObservationIdentityState
 
   @validity_states [:canonical, :duplicate, :conflict, :superseded, :advisory]
@@ -73,45 +74,7 @@ defmodule Cadence.Dashboards.TelemetryRevisionSummary do
   end
 
   defp dependency(states) do
-    entries =
-      states
-      |> Enum.map(&dependency_entry/1)
-      |> Enum.sort_by(& &1.observation_identity_id)
-
-    fingerprint =
-      "telemetry-revision:" <>
-        RuntimeCacheKey.fingerprint(%{
-          kind: :telemetry_observation_identity_state,
-          entries: entries
-        })
-
-    %{
-      kind: :telemetry_observation_identity_state,
-      fingerprint: fingerprint,
-      observation_identity_ids: Enum.map(entries, & &1.observation_identity_id)
-    }
-  end
-
-  defp dependency_entry(%ObservationIdentityState{} = state) do
-    %{
-      observation_identity_id: state.observation_identity_id,
-      validity_state: state.validity_state,
-      canonical_observation_id: state.canonical_observation_id,
-      canonical_sample_id: state.canonical_sample_id,
-      canonical_revision: state.canonical_revision,
-      latest_observation_id: state.latest_observation_id,
-      latest_sample_id: state.latest_sample_id,
-      latest_revision: state.latest_revision,
-      canonical_count: state.canonical_count,
-      duplicate_count: state.duplicate_count,
-      conflict_count: state.conflict_count,
-      superseded_count: state.superseded_count,
-      advisory_count: state.advisory_count,
-      decision_event_id: state.decision_event_id,
-      last_seen_at: state.last_seen_at,
-      decided_at: state.decided_at,
-      decision_reason: state.decision_reason
-    }
+    ObservationIdentityDependency.from_states(states)
   end
 
   defp revision_decision_evidence(states) do

@@ -1,12 +1,13 @@
-defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
+defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    DataSources,
-    ManagedQuestDBProvisioning,
-    TSDBDeploymentStatus
-  }
+  alias Cadence.Control.DataSources.ManagedQuestDBProvisioning
+
+  alias Cadence.DataSources.DeploymentStatus
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.DataSource
 
   @organization_id "org-managed-questdb-provisioning"
   @mission_id "mission-managed-questdb-provisioning"
@@ -39,7 +40,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
     assert plan.isolation_profile.physical_boundary == :mission
     assert plan.provisioning.deployment_status == :planned
     assert plan.provisioning.deployment_backend == :questdb
-    assert TSDBDeploymentStatus.from_data_source(plan.data_source).status == :planned
+    assert DeploymentStatus.from_data_source(plan.data_source).status == :planned
     assert plan.connection_config[:http_endpoint] == "http://mission-questdb:9000"
     assert plan.connection_config[:secret_material?]
     refute Keyword.has_key?(plan.connection_config, :password)
@@ -84,7 +85,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
              backend: :questdb,
              physical_boundary: :mission,
              remediation: "probe_source_health"
-           } = TSDBDeploymentStatus.from_data_source(persisted)
+           } = DeploymentStatus.from_data_source(persisted)
 
     assert [event] =
              DataSources.list_data_source_events(@organization_id, @mission_id,

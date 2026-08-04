@@ -14,8 +14,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.Dashboards.{DataSources, Document, RenderItem}
+  alias Cadence.Dashboards.{Document, RenderItem}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 

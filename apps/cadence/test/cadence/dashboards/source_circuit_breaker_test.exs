@@ -1,13 +1,9 @@
 defmodule Cadence.Dashboards.SourceCircuitBreakerTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    PlannedSourceRequest,
-    ResolvedSourceBinding,
-    SourceCircuitBreaker
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, ResolvedSourceBinding, SourceCircuitBreaker}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   test "keys include tenant mission logical source data source realm and dataset" do
     request = source_request(realm: :rehearsal)

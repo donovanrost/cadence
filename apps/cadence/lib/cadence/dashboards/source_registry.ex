@@ -15,13 +15,16 @@ defmodule Cadence.Dashboards.SourceRegistry do
     ResolveWarning,
     RuntimeCacheKey,
     SourceActions,
-    SourceCapabilities,
     SourceExecutionPolicy,
     SourceFacts,
-    SourceHealth,
-    SourceResult,
-    SourceWatermarks
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
 
   alias Cadence.Dashboards.SourceRegistry.{
     AdapterOptions,
@@ -34,10 +37,11 @@ defmodule Cadence.Dashboards.SourceRegistry do
     Provenance,
     SegmentResultMerge,
     SourceHealthLookup,
+    SourceIdentity,
     WatermarkMerge
   }
 
-  alias Cadence.Management.DataSources
+  alias Cadence.Reads.DataSources
 
   @type adapter :: module()
   @type adapter_map :: %{optional(atom()) => adapter()}
@@ -511,7 +515,9 @@ defmodule Cadence.Dashboards.SourceRegistry do
          opts
        ) do
     if SourceWatermarks.enabled?(opts) do
-      case SourceWatermarks.fetch_status_for_source(request, resolved_binding) do
+      case DataSources.fetch_source_watermark_for_identity(
+             SourceIdentity.from(request, resolved_binding)
+           ) do
         {:ok, status} ->
           WatermarkMerge.merge_facts(facts, status, request)
 
@@ -808,7 +814,9 @@ defmodule Cadence.Dashboards.SourceRegistry do
          opts
        ) do
     if SourceWatermarks.enabled?(opts) do
-      case SourceWatermarks.fetch_status_for_source(request, resolved_binding) do
+      case DataSources.fetch_source_watermark_for_identity(
+             SourceIdentity.from(request, resolved_binding)
+           ) do
         {:ok, status} ->
           WatermarkMerge.merge_result(result, status, request)
 

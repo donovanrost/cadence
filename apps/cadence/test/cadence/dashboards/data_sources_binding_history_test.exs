@@ -1,20 +1,15 @@
 defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
   use Cadence.ConfigCase, async: false
 
-  import Cadence.Dashboards.DataSourcesFixtures
+  import Cadence.DataSourcesFixtures
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataBindingEvent,
-    DataBindingInterval,
-    DataSourceRegistry,
-    DataSources,
-    EvidenceRef,
-    Frame,
-    SourceFacts,
-    SourceHealth,
-    SourceRegistry
-  }
+  alias Cadence.Dashboards.{DataSourceRegistry, EvidenceRef, Frame, SourceFacts, SourceRegistry}
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataBindingEvent, DataBindingInterval}
 
   alias Cadence.OperationalEvents
   alias Cadence.Projections.DataSourceBindings
@@ -64,7 +59,7 @@ defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
              OperationalEvents.list_events("org-dash-source", "mission-dash-source",
                category: :data_source,
                kind: :source_binding_registered,
-               source_record_kind: :dashboard_data_binding_event,
+               source_record_kind: :data_source_binding_event,
                source_record_id: event.data_binding_event_id
              )
 

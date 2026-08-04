@@ -16,13 +16,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    RenderItem
-  }
+  alias Cadence.Dashboards.{Document, RenderItem}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Telemetry.PacketDefinition

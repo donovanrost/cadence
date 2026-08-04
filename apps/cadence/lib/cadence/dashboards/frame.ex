@@ -5,7 +5,8 @@ defmodule Cadence.Dashboards.Frame do
   Sources differ; widgets consume Frames.
   """
 
-  alias Cadence.Dashboards.{ContractNormalization, Field}
+  alias Cadence.Dashboards.Field
+  alias Cadence.Platform.ContractNormalization
 
   @type source :: :telemetry | :limits | :events | :operational_observables
   @type shape :: :scalar | :wide | :long | :events | :intervals | :matrix

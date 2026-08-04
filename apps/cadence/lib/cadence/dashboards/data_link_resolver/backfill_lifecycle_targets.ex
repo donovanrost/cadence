@@ -7,13 +7,13 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleTargets do
 
   alias Cadence.Dashboards.{DataLink, DataLinkInspector}
   alias Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows
-  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
   def resolve(%DataLink{} = link, organization_id, mission_id) do
     link.target_id
-    |> TelemetryStorage.fetch_backfill_lifecycle_event(
+    |> TelemetryReads.fetch_backfill_lifecycle_event(
       organization_id: organization_id,
       mission_id: mission_id
     )
@@ -98,7 +98,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleTargets do
 
   defp referencing_event_links(%DataLink{} = link, event, organization_id, mission_id) do
     mission_id
-    |> TelemetryStorage.list_backfill_lifecycle_events(
+    |> TelemetryReads.list_backfill_lifecycle_events(
       organization_id: organization_id,
       limit: 1_000
     )
@@ -219,7 +219,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleTargets do
     case payload_value(event.payload, :request_group_id) do
       group_id when is_binary(group_id) and group_id != "" ->
         mission_id
-        |> TelemetryStorage.list_backfill_lifecycle_events(
+        |> TelemetryReads.list_backfill_lifecycle_events(
           organization_id: organization_id,
           event_type: :backfill_failed,
           limit: 1_000

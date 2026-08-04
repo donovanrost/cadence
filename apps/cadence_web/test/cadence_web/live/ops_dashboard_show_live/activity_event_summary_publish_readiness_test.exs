@@ -3,7 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityEventSummaryPublishReadinessTe
 
   import CadenceWeb.DashboardReviewFixtures
 
-  alias Cadence.Dashboards.{DataBindingEvent, DataSourceEvent, SourceHealthEvent}
+  alias Cadence.DataSources.SourceHealthEvent
+
+  alias Cadence.DataSources.{DataBindingEvent, DataSourceEvent}
   alias CadenceWeb.OpsDashboardShowLive.ActivityEventSummary
 
   test "rows summarize publish readiness check payloads" do

@@ -8,14 +8,15 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    SourceCredentials,
-    SourceHealth,
-    SourceWatermarks
-  }
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias CadenceWeb.TestFixtures
 

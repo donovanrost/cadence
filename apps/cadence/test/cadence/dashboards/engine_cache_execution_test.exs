@@ -3,16 +3,11 @@ defmodule Cadence.Dashboards.EngineCacheExecutionTest do
 
   import Cadence.Dashboards.EngineFixtures
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Engine,
-    Frame,
-    RuntimeCache,
-    SourceCircuitBreaker
-  }
+  alias Cadence.Dashboards.{Document, Engine, Frame, RuntimeCache, SourceCircuitBreaker}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   test "source result cache opt-in reuses cached adapter results" do
     cache = start_supervised!({RuntimeCache, name: nil})
@@ -347,14 +342,17 @@ defmodule Cadence.Dashboards.EngineCacheExecutionTest do
       best_effort_watermark(~U[2026-06-17 12:05:00Z])
     end
 
+    %DataSource{} = default_managed_source = DataSources.default_managed_data_source()
+    %DataBinding{} = default_telemetry_binding = DataSources.default_flight_telemetry_binding()
+
     replay_source = %DataSource{
-      DataSources.default_managed_data_source()
+      default_managed_source
       | data_source_id: "replay_questdb",
         capabilities: %{latest?: true, watermarks?: true}
     }
 
     replay_binding = %DataBinding{
-      DataSources.default_flight_telemetry_binding()
+      default_telemetry_binding
       | binding_id: "replay_flight_telemetry",
         data_source_id: "replay_questdb",
         realm: :replay,

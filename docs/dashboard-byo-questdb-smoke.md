@@ -29,7 +29,7 @@ docker compose up -d questdb_customer
 Run the smoke against the customer QuestDB HTTP endpoint:
 
 ```sh
-MIX_ENV=test mix cadence.dashboards.byo_questdb_smoke \
+MIX_ENV=test mix cadence.data_sources.byo_questdb_smoke \
   --http-endpoint http://127.0.0.1:9100
 ```
 
@@ -44,7 +44,7 @@ times with a 100 ms delay by default. Use `--history-read-attempts` and
 Use `--keep-records` when inspecting the generated Cadence registry state:
 
 ```sh
-MIX_ENV=test mix cadence.dashboards.byo_questdb_smoke \
+MIX_ENV=test mix cadence.data_sources.byo_questdb_smoke \
   --http-endpoint http://127.0.0.1:9100 \
   --keep-records
 ```

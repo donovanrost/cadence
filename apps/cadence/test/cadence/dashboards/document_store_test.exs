@@ -5,16 +5,11 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Engine,
-    LifecycleEvent,
-    RuntimeCache,
-    Version
-  }
+  alias Cadence.Dashboards.{Document, Engine, LifecycleEvent, RuntimeCache, Version}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   setup do
     RuntimeCache.reset()

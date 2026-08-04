@@ -4,8 +4,9 @@ defmodule Cadence.Projections.DataSourceBindings do
   """
 
   alias Cadence.Dashboards.{DataSourceRegistry, PlannedSourceRequest, ResolvedSourceBinding}
-  alias Cadence.Dashboards.{ResolveWarning, SourceHealth}
+  alias Cadence.Dashboards.ResolveWarning
   alias Cadence.Management.DataSources
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
   @spec resolve(PlannedSourceRequest.t(), keyword()) ::
           {:ok, ResolvedSourceBinding.t()} | {:error, ResolveWarning.t()}

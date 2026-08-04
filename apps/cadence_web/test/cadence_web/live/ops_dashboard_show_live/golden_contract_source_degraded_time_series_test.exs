@@ -5,16 +5,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractSourceDegradedTimeSeries
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem,
-    ResolveWarning,
-    SourceHealthEvent,
-    SourceHealthStatus
+    ResolveWarning
   }
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.Management.DataSources
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetPresentation
 

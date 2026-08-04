@@ -2,9 +2,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
-    DataBinding,
     DataLink,
-    DataSource,
     EvidenceRef,
     Field,
     Frame,
@@ -12,9 +10,12 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.Limits
   alias Cadence.Limits.{DefinitionInterval, Event}

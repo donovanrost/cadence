@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents do
 
   import Phoenix.Component, only: [assign: 3]
 
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Control.TelemetryDataManagement, as: DataManagement
 
   alias Cadence.Dashboards
   alias Cadence.Dashboards.ComparisonReviewQueue

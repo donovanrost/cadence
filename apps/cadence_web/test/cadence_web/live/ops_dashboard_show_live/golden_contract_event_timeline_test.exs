@@ -5,13 +5,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.GoldenContractEventTimelineTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataSources,
     Document,
     Engine,
     Frame,
     PlacementFrames,
     RenderItem
   }
+
+  alias Cadence.Management.DataSources
 
   alias Cadence.Jobs.Job
   alias Cadence.OperationalEvents.Event

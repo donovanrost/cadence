@@ -12,13 +12,13 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
 
   alias Cadence.Comms.{GroundStation, RoutingRule, Transport}
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    SourceCredentials,
-    SourceHealth
-  }
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures

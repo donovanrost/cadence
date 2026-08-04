@@ -3,7 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistry.CapabilityPosture do
   Builds request-local sampling, product, and time-axis compatibility posture.
   """
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceCapabilities}
+  alias Cadence.Dashboards.PlannedSourceRequest
+
+  alias Cadence.DataSources.SourceCapabilities
 
   @spec build(PlannedSourceRequest.t(), SourceCapabilities.t()) :: map()
   def build(%PlannedSourceRequest{} = request, %SourceCapabilities{} = capabilities) do

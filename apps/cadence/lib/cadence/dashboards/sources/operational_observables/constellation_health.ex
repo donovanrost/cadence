@@ -9,8 +9,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ConstellationHealth 
   alias Cadence.Dashboards.{Field, Frame, PlannedSourceRequest}
   alias Cadence.Limits.Event
   alias Cadence.Reads.Limits, as: LimitReads
+  alias Cadence.Reads.OperationalState
   alias Cadence.Spacecraft
-  alias Cadence.SpacecraftStore
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
 
@@ -110,6 +110,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ConstellationHealth 
   end
 
   defp default_spacecraft(organization_id, mission_id, _opts) do
-    SpacecraftStore.list_spacecraft(organization_id, mission_id)
+    OperationalState.list_spacecraft(organization_id, mission_id)
   end
 end

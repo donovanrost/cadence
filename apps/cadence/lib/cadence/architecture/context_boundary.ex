@@ -21,6 +21,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     :commanding,
     :runtime,
     :telemetry,
+    :data_sources,
     :dashboards,
     :read_models,
     :platform
@@ -40,6 +41,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/supervisor.ex" => :composition,
     "lib/cadence/platform/supervisor.ex" => :composition,
     "lib/cadence/projections/supervisor.ex" => :composition,
+    "lib/cadence/data_sources/probe_scheduler.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
     "lib/cadence/application_dispatch/binding_rule.ex" => :catalog,
     "lib/cadence/application_dispatch/binding_set.ex" => :catalog,
@@ -76,23 +78,17 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/contact_fact_consumer.ex" => :commanding,
     "lib/cadence/control/derived_telemetry.ex" => :telemetry,
     "lib/cadence/control/ingress.ex" => :telemetry,
+    "lib/cadence/control/telemetry_data_management.ex" => :telemetry,
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
-    "lib/cadence/management/data_sources.ex" => :dashboards,
-    "lib/cadence/management/data_sources/execution_policy.ex" => :dashboards,
-    "lib/cadence/management/data_sources/lifecycle.ex" => :dashboards,
     "lib/cadence/management/transports.ex" => :composition,
-    "lib/cadence/projections/data_source_bindings.ex" => :dashboards,
-    "lib/cadence/projections/data_source_health.ex" => :dashboards,
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_evaluator.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_parser.ex" => :catalog,
     "lib/cadence/cfdp/transaction_event.ex" => :telemetry,
-    "lib/cadence/dashboards/secret_metadata.ex" => :platform,
     "lib/cadence/dashboards/runtime_cache.ex" => :adapter,
     "lib/cadence/dashboards/runtime_invalidation.ex" => :adapter,
     "lib/cadence/dashboards/runtime_invalidation/event.ex" => :adapter,
-    "lib/cadence/dashboards/source_watermarks.ex" => :adapter,
     "lib/cadence/dashboards/telemetry_revision_summary.ex" => :adapter,
     "lib/cadence/ingress/raw_evidence.ex" => :comms,
     "lib/cadence/telemetry/field_definition.ex" => :catalog,
@@ -108,7 +104,8 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/operational_events/"
     ],
     composition: [
-      "lib/cadence/observability/metrics/"
+      "lib/cadence/observability/metrics/",
+      "lib/cadence/smoke/"
     ],
     runtime: [
       "lib/cadence/action_requests/",
@@ -128,6 +125,10 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/contacts/link_assignment_store",
       "lib/cadence/contacts/path_template_store",
       "lib/cadence/contacts/profile_store"
+    ],
+    data_sources: [
+      "lib/cadence/reads/data_sources.ex",
+      "lib/cadence/reads/data_sources/"
     ],
     read_models: [
       "lib/cadence/mission_events/",
@@ -204,6 +205,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/replay/",
       "lib/cadence/telemetry/"
     ],
+    data_sources: ["lib/cadence/data_sources/"],
     dashboards: ["lib/cadence/dashboards.ex", "lib/cadence/dashboards/"],
     platform: [
       "lib/cadence/application.ex",
@@ -251,10 +253,15 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/control/missions"
     ],
     telemetry: ["lib/cadence/control/replay"],
-    dashboards: [
+    data_sources: [
+      "lib/cadence/management/data_sources",
       "lib/cadence/management/managed_resources",
-      "lib/cadence/control/managed_resources"
+      "lib/cadence/control/data_sources",
+      "lib/cadence/control/managed_resources",
+      "lib/cadence/projections/data_source",
+      "lib/cadence/projections/data_sources"
     ],
+    dashboards: [],
     platform: [
       "lib/cadence/management/supervisor.ex",
       "lib/cadence/control/supervisor.ex"
@@ -278,6 +285,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     commanding: [:identity, :catalog, :comms, :contacts, :runtime, :telemetry, :platform],
     runtime: [:identity, :catalog, :comms, :telemetry, :platform],
     telemetry: [:identity, :catalog, :comms, :platform],
+    data_sources: [:identity, :platform],
     dashboards: @contexts,
     read_models: @contexts,
     platform: [:platform],
@@ -313,6 +321,7 @@ defmodule Cadence.Architecture.ContextBoundary do
           | :commanding
           | :runtime
           | :telemetry
+          | :data_sources
           | :dashboards
           | :read_models
           | :platform

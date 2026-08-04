@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuerySourceTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, Document}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
 
   test "normalizes runtime query to selected active source binding" do

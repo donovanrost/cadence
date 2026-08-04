@@ -6,12 +6,9 @@ defmodule Cadence.Dashboards.Sources.Limits.RequestPolicy do
   semantics, and the warning policy shared across limits resolution paths.
   """
 
-  alias Cadence.Dashboards.{
-    DataLinks,
-    PlannedSourceRequest,
-    ResolveWarning,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{DataLinks, PlannedSourceRequest, ResolveWarning}
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Limits.RecomputedAnalysis
   alias Cadence.Limits.{DefinitionInterval, Event}

@@ -102,6 +102,38 @@ defmodule Cadence.JobsTest do
              Cadence.Jobs.retry_failed_job(queued_job.job_id)
   end
 
+  test "fails explicitly when a domain job handler is not configured" do
+    configured_handlers = Application.fetch_env!(:cadence, :job_handlers)
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :job_handlers, configured_handlers)
+    end)
+
+    Application.put_env(
+      :cadence,
+      :job_handlers,
+      Map.delete(configured_handlers, :catalog_import_run)
+    )
+
+    assert {:ok, job} =
+             Cadence.Jobs.enqueue(
+               :catalog_import_run,
+               "mission-background-jobs",
+               "unconfigured-catalog-import-handler",
+               %{}
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == job.job_id
+
+    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert failed_job.status == :failed
+
+    assert failed_job.failure_reason == %{
+             "tuple" => ["job_handler_not_configured", "catalog_import_run"]
+           }
+  end
+
   test "does not requeue non-running jobs" do
     assert {:ok, queued_job} =
              Cadence.Jobs.enqueue(

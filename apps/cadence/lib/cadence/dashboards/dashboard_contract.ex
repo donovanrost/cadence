@@ -13,10 +13,8 @@ defmodule Cadence.Dashboards.DashboardContract do
     DashboardAction,
     DashboardResolveRequest,
     DashboardResolveResult,
-    DataBinding,
     DataContext,
     DataLink,
-    DataSource,
     EvidenceRef,
     Field,
     Frame,
@@ -26,12 +24,16 @@ defmodule Cadence.Dashboards.DashboardContract do
     ResolveWarning,
     RuntimeCacheKey,
     ScopeContext,
-    SourceCapabilities,
     SourceFacts,
     SourceResult,
-    SourceWatermark,
     TimeContext
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @type violation :: %{path: [term()], code: atom(), message: binary()}
 

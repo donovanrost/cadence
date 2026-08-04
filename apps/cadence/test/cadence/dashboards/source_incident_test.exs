@@ -7,9 +7,10 @@ defmodule Cadence.Dashboards.SourceIncidentTest do
     EvidenceRef,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceIncident,
-    SourceWatermark
+    SourceIncident
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   test "summarizes source incidents from watermarks, cache state, warnings, and execution outcomes" do
     result = %DashboardResolveResult{

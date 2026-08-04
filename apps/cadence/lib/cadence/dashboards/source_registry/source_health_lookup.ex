@@ -3,25 +3,26 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookup do
   Resolves injected or persisted source-health status and its effective interval.
   """
 
-  alias Cadence.Dashboards.{
-    DataContext,
-    PlannedSourceRequest,
-    ResolvedSourceBinding,
-    SourceHealth,
-    SourceHealthEvent,
-    SourceHealthStatus
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, ResolvedSourceBinding}
 
-  alias Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.Dashboards.SourceRegistry.{OperationalIntervalProvenance, SourceIdentity}
   alias Cadence.OperationalEvents.EffectiveInterval
+  alias Cadence.Reads.DataSources
 
   @spec fetch(PlannedSourceRequest.t(), ResolvedSourceBinding.t(), keyword()) ::
           {:ok, SourceHealthStatus.t()} | {:error, :source_health_status_not_found}
   def fetch(%PlannedSourceRequest{} = request, %ResolvedSourceBinding{} = resolved_binding, opts)
       when is_list(opts) do
     case injected_status(request, resolved_binding, opts) do
-      %SourceHealthStatus{} = status -> {:ok, status}
-      nil -> SourceHealth.fetch_status_for_source(request, resolved_binding)
+      %SourceHealthStatus{} = status ->
+        {:ok, status}
+
+      nil ->
+        DataSources.fetch_source_health_for_identity(
+          SourceIdentity.from(request, resolved_binding)
+        )
     end
   end
 
@@ -38,7 +39,7 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookup do
         opts
       )
       when is_list(opts) do
-    identity = identity(request, resolved_binding)
+    identity = SourceIdentity.from(request, resolved_binding)
 
     if interval_lookup_enabled?(opts) do
       interval_opts =
@@ -84,12 +85,12 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookup do
        ) do
     exact_key =
       request
-      |> identity(resolved_binding)
+      |> SourceIdentity.from(resolved_binding)
       |> SourceHealthEvent.source_health_key()
 
     source_key =
       request
-      |> identity(resolved_binding)
+      |> SourceIdentity.from(resolved_binding)
       |> Map.merge(%{source_binding_id: nil, realm: nil, replay_run_id: nil, dataset: nil})
       |> SourceHealthEvent.source_health_key()
 
@@ -101,28 +102,6 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookup do
         source_health_statuses,
         &(status_value(&1, :source_health_key) == source_key)
       )
-  end
-
-  defp identity(
-         %PlannedSourceRequest{} = request,
-         %ResolvedSourceBinding{} = resolved_binding
-       ) do
-    binding = resolved_binding.binding
-    data_source = resolved_binding.data_source
-
-    %{
-      organization_id:
-        request.organization_id || Map.get(binding, :organization_id) ||
-          Map.get(data_source, :organization_id),
-      mission_id:
-        request.mission_id || Map.get(binding, :mission_id) || Map.get(data_source, :mission_id),
-      logical_source: request.logical_source || Map.get(binding, :logical_source),
-      data_source_id: Map.get(data_source, :data_source_id),
-      source_binding_id: Map.get(binding, :binding_id),
-      realm: Map.get(binding, :realm),
-      replay_run_id: requested_replay_run_id(request),
-      dataset: Map.get(binding, :dataset)
-    }
   end
 
   defp status_value(%SourceHealthStatus{} = status, key), do: Map.get(status, key)
@@ -169,11 +148,6 @@ defmodule Cadence.Dashboards.SourceRegistry.SourceHealthLookup do
       true ->
         nil
     end
-  end
-
-  defp requested_replay_run_id(%PlannedSourceRequest{} = request) do
-    DataContext.source_value(request.data_context, request.logical_source, :replay_run_id) ||
-      get_attr(request.time_context, :replay_run_id)
   end
 
   defp get_attr(%_{} = attrs, key) when is_atom(key) do

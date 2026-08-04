@@ -1,4 +1,4 @@
-defmodule Cadence.Dashboards.DataSourcesFixtures do
+defmodule Cadence.DataSourcesFixtures do
   @moduledoc false
 
   import ExUnit.Assertions
@@ -13,17 +13,13 @@ defmodule Cadence.Dashboards.DataSourcesFixtures do
 
   alias Cadence.Catalog.Revision
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Frame,
-    PlannedSourceRequest,
-    RuntimeCacheKey,
-    SourceResult,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{Document, Frame, PlannedSourceRequest, RuntimeCacheKey, SourceResult}
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft

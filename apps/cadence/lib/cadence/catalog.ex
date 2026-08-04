@@ -15,6 +15,7 @@ defmodule Cadence.Catalog do
     Database,
     DatabaseRow,
     Events,
+    Facts,
     ImportExecution,
     ImportResult,
     ImportRun,
@@ -29,7 +30,6 @@ defmodule Cadence.Catalog do
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
-  alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Governance
   alias Cadence.Jobs
   alias Cadence.Missions
@@ -673,28 +673,12 @@ defmodule Cadence.Catalog do
            revision
            |> OperationalEvent.from_catalog_revision(row.inserted_at)
            |> then(&OperationalEvents.persist_event(Repo, &1)) do
-      maybe_invalidate_dashboard_catalog_revision(revision)
+      Facts.publish(revision)
       {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
-  end
-
-  defp maybe_invalidate_dashboard_catalog_revision(%Revision{} = revision) do
-    config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    if Keyword.get(config, :enabled?, true) do
-      RuntimeInvalidation.catalog_revision_changed(
-        %{
-          organization_id: revision.organization_id,
-          mission_id: revision.mission_id
-        },
-        runtime_cache: Keyword.get(config, :runtime_cache, Cadence.Dashboards.RuntimeCache)
-      )
-    end
-
-    :ok
   end
 
   defp snapshot_id_for_run(row_module, import_run_id) do

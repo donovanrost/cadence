@@ -3,7 +3,11 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceBindingPresentation do
   Binding-group and readiness presentation for the data sources inventory.
   """
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, SourceHealth, SourceReadiness}
+  alias Cadence.Dashboards.SourceReadiness
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @spec groups([DataBinding.t()], [DataSource.t()], [map()], [map()], map()) :: [map()]
   def groups(bindings, sources, credentials, health_statuses, readiness_policy) do

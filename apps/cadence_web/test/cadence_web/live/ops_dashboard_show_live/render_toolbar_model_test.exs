@@ -1,13 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarModelTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{
-    ComparisonReviewQueue,
-    DataBinding,
-    Document,
-    RenderWidget,
-    ValidationResult
-  }
+  alias Cadence.Dashboards.{ComparisonReviewQueue, Document, RenderWidget, ValidationResult}
+
+  alias Cadence.DataSources.DataBinding
 
   alias CadenceWeb.OpsDashboardShowLive.RenderToolbarModel
 

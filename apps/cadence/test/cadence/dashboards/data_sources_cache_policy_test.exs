@@ -3,20 +3,21 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
   @moduletag :runtime
 
-  import Cadence.Dashboards.DataSourcesFixtures
+  import Cadence.DataSourcesFixtures
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataBinding,
-    DataSource,
     DataSourceRegistry,
-    DataSources,
     Engine,
     EvidenceRef,
     Frame,
     RuntimeCache,
     SourceRegistry
   }
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event

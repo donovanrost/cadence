@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicy do
   @moduledoc false
 
-  alias Cadence.Telemetry.DataManagement, as: DataManagement
+  alias Cadence.Reads.TelemetryDataManagement, as: DataManagement
 
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionPolicyAction,
     as: Action

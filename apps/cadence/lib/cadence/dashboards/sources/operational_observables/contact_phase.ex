@@ -16,9 +16,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ContactPhase do
     ScopeContext
   }
 
-  alias Cadence.Contacts
   alias Cadence.Dashboards.Sources.OperationalObservables.LatestFreshness
-  alias Cadence.SourceEndpoints
+  alias Cadence.Reads.OperationalState
 
   @observable_id "contacts.phase"
 
@@ -248,15 +247,15 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ContactPhase do
   end
 
   defp default_scheduled_contacts(organization_id, mission_id, _opts) do
-    Contacts.list_scheduled_contacts(organization_id, mission_id)
+    OperationalState.list_scheduled_contacts(organization_id, mission_id)
   end
 
   defp default_realized_contacts(organization_id, mission_id, _opts) do
-    Contacts.list_realized_contacts(organization_id, mission_id)
+    OperationalState.list_realized_contacts(organization_id, mission_id)
   end
 
   defp default_source_endpoints(organization_id, mission_id, _opts) do
-    SourceEndpoints.list_source_endpoints(organization_id, mission_id)
+    OperationalState.list_source_endpoints(organization_id, mission_id)
   end
 
   defp contact_rows(scheduled_contacts, realized_contacts, scope) do

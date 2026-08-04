@@ -8,8 +8,8 @@ defmodule Cadence.Dashboards.DataLinkResolver.TransportRuntimeTargets do
   import Cadence.Dashboards.DataLinkResolver.Support
 
   alias Cadence.Dashboards.{DataLink, DataLinkInspector}
-  alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Reads.OperationalEvidence
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
@@ -104,7 +104,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.TransportRuntimeTargets do
 
   defp first_event(organization_id, mission_id, source_record_kind, source_record_id) do
     organization_id
-    |> OperationalEvents.list_events(
+    |> OperationalEvidence.list_operational_events(
       mission_id,
       source_record_kind: source_record_kind,
       source_record_id: source_record_id,

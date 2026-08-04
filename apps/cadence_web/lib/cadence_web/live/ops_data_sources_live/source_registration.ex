@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceRegistration do
   Source-registration form parsing and persistence payload construction.
   """
 
-  alias Cadence.Dashboards.DataSource
+  alias Cadence.DataSources.DataSource
   alias Cadence.ExtensionCatalog
 
   @spec defaults() :: map()

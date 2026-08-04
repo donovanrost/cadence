@@ -4,13 +4,15 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
   """
 
   alias Cadence.Dashboards.{
-    ContractNormalization,
     DashboardResolveRequest,
     PlacementFrames,
     PlannedSourceRequest,
-    ResolveWarning,
-    SourceWatermark
+    ResolveWarning
   }
+
+  alias Cadence.Platform.ContractNormalization
+
+  alias Cadence.DataSources.SourceWatermark
 
   @resolve_modes DashboardResolveRequest.resolve_modes()
 

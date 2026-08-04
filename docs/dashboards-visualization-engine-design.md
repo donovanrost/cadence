@@ -489,13 +489,13 @@ v0 implementation split:
 - `DataSourceRegistry` v0 keeps in-memory fallback defaults for local
   bootstrap: shared managed QuestDB-backed flight telemetry and the Postgres
   latest-limit projection. It also has a persisted path through
-  `Cadence.Dashboards.DataSources`, which stores `DataSource` and `DataBinding`
+  `Cadence.Management.DataSources`, which stores `DataSource` and `DataBinding`
   rows and can be enabled for source resolution.
 - Source adapters receive the resolved binding so frames and queries carry
   `binding_id`, `data_source_id`, `realm`, and `dataset` metadata rather than
   relying only on the request's loose `data_context`.
 - Historical archive/range requests resolve source bindings from
-  `dashboard_data_binding_events`, not only from the current projection row.
+  `data_source_binding_events`, not only from the current projection row.
   The engine derives a `source_binding_at` timestamp from the planned request's
   time context and the registry reconstructs the event interval that was active
   at that instant. Returned `SourceResult` and `Frame` metadata include
@@ -915,10 +915,10 @@ Current v0 runtime invalidation coverage:
 | dashboard version changed | `dashboard_version_changed/2` | plan | n/a | wired from `Cadence.Dashboards.DocumentStore` |
 | catalog revision activated/superseded | `catalog_revision_changed/2` | plan, source result, frame | n/a | wired from `Cadence.Catalog` |
 | limit definition activated/superseded/disabled/reverted | `limit_definition_changed/2` | plan, source result, frame | n/a | wired from `Cadence.Governance` |
-| data source or binding changed | `data_source_binding_changed/2` | plan, source result, frame | n/a | wired from `Cadence.Dashboards.DataSources`; binding writes record `dashboard_data_binding_events` |
+| data source or binding changed | typed `Cadence.DataSources` facts | plan, source result, frame | n/a | wired from `Cadence.Management.DataSources`; binding writes record `data_source_binding_events` |
 | source watermark advanced/regressed | `source_watermark_changed/2` | source result, frame | live | wired from `Cadence.Telemetry.Storage` |
 | data correction/backfill accepted | `historical_data_changed/2` | source result, frame | snapshot | wired from `Cadence.Telemetry.Storage` |
-| source health degraded/recovered | `source_health_changed/2` | source result, frame | live | wired from `Cadence.Dashboards.SourceHealth` |
+| source health degraded/recovered | typed `Cadence.DataSources` facts | source result, frame | live | wired from `Cadence.Projections.DataSources.Health` |
 
 Runtime invalidation event contract:
 
@@ -1101,16 +1101,16 @@ non-secret credential descriptor, never embedded credential material.
 `:byo_tsdb` rows must be customer-owned, organization-scoped,
 `isolation_level: :customer_owned`, carry a non-empty `credentials_ref`, and
 that reference must resolve to an active scope-compatible record in
-`dashboard_source_credential_references`. Metadata is rejected if it embeds
+`data_source_credential_references`. Metadata is rejected if it embeds
 obvious credential/secret keys. `DataSourceRegistry` applies the same
 data-source configuration validation before dispatching an in-memory or
 persisted source to an adapter, so tests and future admin tools cannot bypass
 the persisted changeset by constructing ad hoc source records.
 
-`Cadence.Dashboards.SourceCredentials` is the first credential-registry stub.
+`Cadence.Management.DataSources.Credentials` owns the credential registry.
 It stores no secret material. It records a current non-secret reference row with
 scope, owner, provider, status, version, and metadata, plus append-only
-`dashboard_source_credential_events` for registration, rotation, enable, and
+`data_source_credential_events` for registration, rotation, enable, and
 disable actions. The resolver returns `ResolvedSourceCredential` descriptors
 with `secret_material?: false`. `SourceCredentials.resolve_material/2` is the
 secret-manager boundary: it accepts an injected or configured material resolver,
@@ -1136,14 +1136,14 @@ The default path currently allows and is marked `todo(authz)` for the future
 RBAC-backed policy engine.
 
 The production-shaped resolver boundary is now
-`Cadence.Dashboards.SourceCredentials.SecretMaterialResolver`. It delegates to a
+`Cadence.Management.DataSources.Credentials.SecretMaterialResolver`. It delegates to a
 configured secret backend implementing
-`Cadence.Dashboards.SourceCredentials.SecretBackend`, then applies shared
+`Cadence.Management.DataSources.Credentials.SecretBackend`, then applies shared
 material policy before any adapter receives the values. That policy normalizes
 allowed material fields, rejects unsafe HTTP endpoints with userinfo, rejects
 ambiguous bearer/basic auth material, fails closed on empty material, and keeps
 unknown backend fields out of the adapter handoff. The first concrete backend is
-`Cadence.Dashboards.SourceCredentials.EnvSecretBackend`, with
+`Cadence.Management.DataSources.Credentials.EnvSecretBackend`, with
 `EnvMaterialResolver` retained only as a compatibility entry point for older
 configuration and local tests. Credential metadata may carry a non-secret
 `material_env_profile` pointer; runtime configuration maps that profile to
@@ -1158,17 +1158,17 @@ the material authorizer to a real RBAC/user-permission model and adding a real
 deployment-backed Vault/KMS-style backend.
 
 Source bindings are now durable subsystem lifecycle facts as well:
-`dashboard_data_bindings` is the current projection and
-`dashboard_data_binding_events` records registration, change, enable, disable,
+`data_source_bindings` is the current projection and
+`data_source_binding_events` records registration, change, enable, disable,
 and supersession events. Each event captures previous/current binding facts such
 as data source, dataset, realm, priority, active interval, status, version,
 actor, and payload. Binding writes invalidate affected runtime plan,
 source-result, and frame caches after the transaction commits.
 
 Dashboard source health is now durable as subsystem state:
-`Cadence.Dashboards.SourceHealth` records append-only
-`dashboard_source_health_events`, maintains latest
-`dashboard_source_health_statuses`, and emits `source_health_changed/2`
+`Cadence.Projections.DataSources.Health` records append-only
+`data_source_health_events`, maintains latest
+`data_source_health_statuses`, and publishes typed Data Sources facts
 invalidation on actual health transitions. `SourceRegistry.facts/2` overlays
 the latest durable status into `SourceFacts`, so source-result cache preflight
 uses the subsystem projection instead of only adapter-local health hints. The
@@ -1890,7 +1890,7 @@ v0 should support what exists today:
 - flight mission timeline annotations from the `mission_events` projection
 - replay-scoped mission timeline annotations from canonical `operational_events`
   projected through the same mission-event presenter contract
-- source-health transition annotations from `dashboard_source_health_events`
+- source-health transition annotations from `data_source_health_events`
 - source-health, source-watermark, telemetry revision-decision, and
   backfill/import lifecycle rows with companion canonical `operational_event`
   evidence/DataLinks where those dashboard-owned projections already persist
@@ -2035,7 +2035,7 @@ Source-health transition annotation frame:
   meta: %{
     family: :source_health,
     product: :source_health_transitions,
-    projection: :dashboard_source_health_events,
+    projection: :data_source_health_events,
     cursor: %{observed_at: "...", source_health_event_id: "..."} | nil,
     warnings: []
   }
@@ -2109,7 +2109,7 @@ v0 implementation boundary:
 - **Supported:** replay-scoped mission timeline annotations from canonical
   `operational_events` projected into mission-event Frame shape.
 - **Supported:** source-health transition annotations from
-  `dashboard_source_health_events`.
+  `data_source_health_events`.
 - **Partial:** limit-violation annotations through `mission_events`, while rich
   limit overlays remain the Limits source.
 - **Future:** command annotations.
@@ -2375,7 +2375,7 @@ Data sources are registered resources, not hardcoded adapter modules:
 }
 ```
 
-v0 persistence stores these in `dashboard_data_sources`. The row is intentionally
+v0 persistence stores these in `data_source_definitions`. The row is intentionally
 adapter-oriented, not UI-oriented: it records physical backend identity,
 organization/mission scope, isolation level, adapter module, capabilities, and
 metadata. Credentials remain referenced indirectly through `credentials_ref`.
@@ -2406,20 +2406,20 @@ The broader enforced isolation contract is:
   backend, a mission-isolated backend, or a customer-owned backend.
 
 Managed QuestDB provisioning now has a first operational seam:
-`Cadence.Dashboards.ManagedQuestDBProvisioning`. It accepts an organization or
+`Cadence.Control.DataSources.ManagedQuestDBProvisioning`. It accepts an organization or
 mission isolation intent, applies the versioned Cadence QuestDB schema through
 `QuestDB.SchemaMigrator`, persists the managed telemetry data source, and records
 redacted provisioning evidence in the data-source lifecycle event payload. The
 public plan/result surfaces expose endpoint/topology refs, physical isolation,
 and migration versions, but not raw passwords, executable migration functions,
-or endpoint credentials. `Cadence.Dashboards.ManagedQuestDBProvisioningJobs`
+or endpoint credentials. `Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs`
 wraps the same operation in the durable `Cadence.Jobs` runner: the job payload
 stores only redacted provisioning intent, execution receives runtime-only
 migration material from deployment config, success persists the same
 data-source/provisioning evidence, and failure/retry use normal background-job
 state. This is not yet a full infrastructure allocator; it is the product-owned
 operation that future deployment automation and admin UI can call.
-`mix cadence.dashboards.managed_questdb_provision` provides the current
+`mix cadence.data_sources.managed_questdb_provision` provides the current
 ops-facing command path with explicit `--plan` and `--apply` modes, redacted
 output, and nonzero failure semantics for deployment automation.
 
@@ -2478,15 +2478,15 @@ A source binding selects which data source backs a logical source in a realm:
   priority: 0,
   status: :active,
   binding_version: 3,
-  current_event_id: "dashboard_data_binding_event_...",
+  current_event_id: "data_source_binding_event_...",
   active_from: nil,
   active_to: nil
 }
 ```
 
-v0 persistence stores the current projection in `dashboard_data_bindings`.
-`Cadence.Dashboards.DataSources` also records append-only
-`dashboard_data_binding_events` for registration, real changes, enable,
+v0 persistence stores the current projection in `data_source_bindings`.
+`Cadence.Management.DataSources` also records append-only
+`data_source_binding_events` for registration, real changes, enable,
 disable, and supersession. Repeated identical upserts are no-ops, which keeps
 bootstrap/default writes idempotent instead of creating noisy event history.
 
@@ -2510,7 +2510,7 @@ The matching bootstrapped binding is global flight telemetry:
 }
 ```
 
-`config :cadence, :dashboard_data_sources` controls whether persisted bindings
+`config :cadence, :data_sources` controls whether persisted bindings
 are used for resolution and whether these defaults are bootstrapped on
 application startup.
 
@@ -4631,7 +4631,7 @@ Current implementation baseline:
 | Runtime contexts | Engine planning normalizes document defaults, URL/session runtime state, and placement overrides into `TimeContext`, `ScopeContext`, `DataContext`, and `LimitContext`. `DataContext.view` is the typed data-management read view (`:canonical`, `:as_recorded`, `:all_revisions`, `:recomputed`) and participates in cache identity, telemetry selection policy, data-link provenance, telemetry explore links, source-overlay evidence, frame metadata, non-canonical view warnings, and URL-backed runtime controls. The ops show page has URL-backed live/archive/replay-run time modes, data realm/source-binding controls, data-view controls, limit semantics controls, and a generic `scope_kind`/`scope_id` URL contract. Planned source requests normalize execution axes per logical source: temporal telemetry and limits use receipt time, events use occurrence time, and non-temporal latest reads preserve the dashboard display axis. `ScopeContext` carries typed mission, spacecraft, contact, ground-station, source-endpoint, transport, and link ids. Legacy spacecraft context remains supported through `spacecraft_id`; explicit mission and contact scopes are validated against the current mission before reaching the engine. `replay_run` requires `replay_run_id`, defaults implicit data realm resolution to replay instead of document-level flight defaults, is exposed in engine/runtime diagnostics, appears in data-link inspector context, is preserved in dashboard copy/explore links, and is treated as a snapshot/non-appendable mode. |
 | Engine and contract | `Engine.plan/1` and `Engine.resolve/2` batch placement source requests, execute logical sources through `SourceRegistry`, fan results back to placement frames, and can opt into strict dashboard contract validation for planned requests and source results. `WidgetFrameContract` resolves registry primary-frame specs against placement bindings during document validation and planning; source overrides are allowed only when the widget contract declares the source, accepted shape, sampling mode, and logical products. |
 | Runtime cache and refresh | `RuntimeCacheKey`, `RuntimeCache`, `SourceResultPreflight`, `FrameMaterializer`, `RuntimeCoordinator`, and `RuntimeInvalidation` provide plan/source-result/frame cache identity, cache storage, freshness preflight, materialized-frame caching, refresh/backpressure decisions, and explicit invalidation boundaries. |
-| Source bindings and TSDBs | `DataSources` persists data sources and data bindings, records binding/source events, supports managed and BYO TSDB configuration policy, and uses non-secret `SourceCredentials` references for customer-owned sources. `ManagedQuestDBProvisioning` can plan and apply org/mission-isolated managed QuestDB data-source provisioning through the QuestDB schema migrator while recording redacted physical-isolation evidence; `ManagedQuestDBProvisioningJobs` queues the same operation as a durable redacted background job with normal failure/retry state; and the `cadence.dashboards.managed_questdb_provision` Mix task exposes direct plan/apply execution for ops automation. QuestDB is the first concrete managed TSDB target for local telemetry storage and native decimation. |
+| Source bindings and TSDBs | `Cadence.Management.DataSources` persists definitions and bindings, records lifecycle facts, supports managed and BYO TSDB policy, and uses non-secret credential references for customer-owned sources. `Cadence.Control.DataSources.ManagedQuestDBProvisioning` can plan and apply org/mission-isolated QuestDB provisioning through the schema migrator while recording redacted physical-isolation evidence; its job service queues the same operation with normal failure/retry state; and the `cadence.data_sources.managed_questdb_provision` Mix task exposes plan/apply execution for ops automation. QuestDB is the first concrete managed TSDB target for local telemetry storage and native decimation. |
 | Source health, watermarks, revision decisions, and backfills | Source health events/status, source watermark events/status, telemetry observation identity decision events, and telemetry backfill/import lifecycle events exist. `SourceRegistry.facts/2` can fetch current source facts before frame resolution; telemetry and limits expose best-effort freshness/watermark information and cache preflight evidence. Source-health transition events, source-watermark movement events, telemetry revision decision events, and backfill/import lifecycle events can be queried by source identity and observed/source-time window for dashboard overlays. |
 | Logical sources | Telemetry supports latest, bounded history, source-binding provenance, segmented historical binding intervals, typed data-management read views, and native QuestDB decimated envelopes when the selected source advertises the capability. Limits supports latest state, observed event history, governed definition intervals, and non-observed semantics guardrails. Events supports contact intervals, mission timeline annotations, source-health transition event overlays, source-watermark movement event overlays, telemetry revision decision event overlays, and telemetry backfill/import lifecycle overlays. Operational observables exist as a first-party logical source seam with a v0 semantic registry for Cadence-produced observables such as transport bit rate, transport execution state, RF lock state, frame sync state, RF SNR, RF Doppler, connection state, antenna pointing state, contact phase, command queue depth, and ingress latency; the registry distinguishes semantic definitions from currently backed ids. `contacts.phase` resolves as a latest matrix from contact projections and as event-history state segments from scheduled/realized contact lifecycle rows; it is selectable as an operational-observable status-matrix, data-table, or state-timeline binding and renders with contact-aware phase/kind/status presentation plus contact DataLinks where available. `comms.transport.execution_state` resolves from canonical operational-event transport execution intervals as an event-history Frame with explicit start/end times, normalized execution states, transport/contact/path context, and transport-execution interval evidence for state timelines. `comms.transport.connection_state` and `ground.station.connection_state` are backed through configured transport/source-endpoint resources plus canonical operational-observable state events or optional runtime snapshots; they render with connection-aware state/adapter/status/target presentation, can emit event-history state segments from timestamped facts, carry link identity when a transport/source-endpoint fact is tied to a link assignment, and preserve unknown state rather than confusing setup existence with live connectivity. `ground.station.antenna_pointing_state` is backed through configured ground-station/source-endpoint resources plus canonical generic operational-observable state events; it emits latest and event-history Frames with pointing/acquisition state, normalized antenna-state coloring, source-endpoint/link context when available, and native antenna-pointing interval evidence. `link.rf_lock_state` and `link.frame_sync_state` are backed through configured transport/link resources plus canonical operational-observable state events or optional timestamped RF snapshots; they emit generic operational-state latest and event-history Frames with `state`/`normalized_state`, link-state coloring, and link/source-endpoint/ground-station context. Link RF metrics including `link.snr_db`, `link.eb_n0_db`, `link.symbol_rate_sps`, and `link.doppler_hz` are backed through configured transport/link resources plus canonical operational-observable metric sample events or optional RF metric snapshots; they emit link-scoped latest metric Frames with metric-specific units and raw-series wide Frames for metric history. `comms.transport.downlink_bitrate` and `comms.transport.uplink_bitrate` resolve from configured transports plus canonical operational-observable metric sample events or optional metric snapshots as latest rows and raw-series wide Frames, carrying link identity when available and keeping directional series distinct. `commanding.queue_depth` resolves from pending command queue entries with mission, source-endpoint, spacecraft, contact, and multi-id scoped counting; multi-scope rows are represented as aggregates over the full scope-id set instead of being mislabeled as the first selected id. `ingress.processing_latency_ms` resolves from canonical operational-observable metric sample events with process-local runtime-health ingress profiler samples overlaid for live reads. Connection-state, antenna-pointing-state, RF-lock-state, frame-sync-state, RF metrics, transport-bit-rate, ingress-latency, and transport-execution operational Frames can filter rows by link scope as well as mission, spacecraft, contact, ground-station, source-endpoint, and transport scope where the backing rows carry those identities. Latest operational-observable rows carry `freshness_state`, `age_ms`, `freshness_policy`, `freshness_checked_at`, and stale/unknown warning metadata, so old or missing contact, connection, metric, queue, and runtime samples render as stale/unknown instead of current. Value tiles, time-series charts, status matrices, and data tables can render these backed operational metrics through declared widget-frame source overrides; state timelines can render backed operational event-history state Frames, including contact phase, connection/RF state, antenna pointing state, and transport execution state. Time-series bindings are metric-only and render operational wide Frames through the same chart presenter used for telemetry. Operational latest metric Frames and metric-history Frames carry resource DataLinks on the frame and value field, a primary `resource_link_id` where a chart series needs one, and operational-event frame evidence for canonical metric samples, so chart series and individual points can drill into the backing transport/source-endpoint/ground-station while the frame evidence panel can explain which event facts produced the series even when there is no telemetry sample id. Status matrices and data tables can bind mixed latest operational observables, with the source returning separate contact, connection, metric, and generic state product frames that the presenter flattens into one widget model. Unsupported widget/source pairings become `unsupported_widget_frame_contract` warnings, and missing snapshots stay `nil`/no-data rather than being coerced to `0 bit/s`. |
 | UI diagnostics | The dashboard shows engine degraded state, placement warnings, source-health/freshness summaries, source execution/circuit details, runtime invalidation diagnostics, cache provenance, data links, evidence panels, widget lifecycle states (`ready`, `no_data`, `stale`, `partial`, `error`, `unsupported`), data-management view/revision badges, multi-series time-series payloads rendered from all primary telemetry Frames, decimated min/max envelope bands, unit-aware chart legend/axis grouping, chart point clicks for telemetry samples and operational resource links, operator controls for series visibility and grouped/shared value axes, first-party data-table rows for latest telemetry and operational-observable Frames, row-level product/source diagnostics for mixed operational latest Frames, row-level operational resource inspector links for transport, source-endpoint, and ground-station identities carried by connection/metric/generic-state Frames and operational state-timeline rows, operational resource inspectors with cross-resource related links plus source-inventory/source-health actions, data-source inventory deep links that preserve transport/source-endpoint/ground-station/link focus context and render a visible operational-resource context panel with setup links where setup routes exist, resolved setup names where the referenced transport/source-endpoint/ground-station/link still exists, routing-rule setup navigation for materialized link-assignment focus, first-class ground-station setup navigation plus inferred/missing/unverified fallback for legacy metadata-backed station context, first-party state-timeline lanes for Limits event-history Frames with row-level limit-event/definition/sample/point inspector links where resolvable, first-party state-timeline lanes for operational contact-phase, connection-state, generic-state, and transport-execution event Frames with contact/resource inspector links where resolvable, first-party event-timeline rows for Events source event/interval Frames with row-level mission/contact/source/data-management inspector links where resolvable, and chart overlays for limit-definition intervals, source-binding intervals, source-health transitions, source retention gaps, frame-derived source watermark cursors, persisted source-watermark movement events, persisted telemetry revision decision events, persisted backfill/import lifecycle events, and telemetry correction/backfill ranges derived from frame revision metadata. |

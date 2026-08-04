@@ -8,7 +8,11 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, SourceCredentials}
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do

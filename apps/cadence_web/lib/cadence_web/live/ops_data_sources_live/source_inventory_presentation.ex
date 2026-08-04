@@ -3,14 +3,17 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation do
   Source inventory rows, health rollups, and operational action presentation.
   """
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    SourceCapabilities,
-    SourceHealth,
-    SourceProbePolicy,
-    SourceReadiness,
-    TSDBDeploymentStatus
-  }
+  alias Cadence.Dashboards.SourceReadiness
+
+  alias Cadence.DataSources.ProbePolicy
+
+  alias Cadence.DataSources.DeploymentStatus
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.DataSources.DataSource
 
   alias CadenceWeb.OpsDataSourcesLive.{SourceActivityPresentation, SourceContract}
 
@@ -25,8 +28,8 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation do
       watermark = source_watermark_rollup(watermark_statuses, source)
       credential_status = source_credential_rollup(source, credential, health.connection_profile)
       capabilities = SourceContract.effective_capabilities(source)
-      deployment_status = TSDBDeploymentStatus.from_data_source(source)
-      probe_policy = SourceProbePolicy.from_data_source(source)
+      deployment_status = DeploymentStatus.from_data_source(source)
+      probe_policy = ProbePolicy.from_data_source(source)
 
       %{
         data_source_id: source.data_source_id,
@@ -67,7 +70,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation do
         health_status: health.status,
         health_reason_text: health.reason,
         probe_policy_text: probe_policy.policy_id,
-        probe_stale_after_ms_text: SourceProbePolicy.stale_after_ms_text(probe_policy),
+        probe_stale_after_ms_text: ProbePolicy.stale_after_ms_text(probe_policy),
         source_readiness_status: health.readiness_status,
         source_readiness_policy_id: health.readiness_policy_id,
         source_readiness_reason_text: health.readiness_reason,

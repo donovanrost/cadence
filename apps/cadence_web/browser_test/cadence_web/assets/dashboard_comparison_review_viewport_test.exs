@@ -17,7 +17,7 @@ defmodule CadenceWeb.Assets.DashboardComparisonReviewViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.Telemetry.Storage

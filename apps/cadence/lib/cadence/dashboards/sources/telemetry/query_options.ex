@@ -1,8 +1,6 @@
 defmodule Cadence.Dashboards.Sources.Telemetry.QueryOptions do
   @moduledoc false
 
-  alias Cadence.Contacts
-
   alias Cadence.Dashboards.{
     DataContext,
     DataLinks,
@@ -13,6 +11,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry.QueryOptions do
   }
 
   alias Cadence.Dashboards.Sources.Telemetry.FrameContext
+  alias Cadence.Reads.OperationalState
   alias Cadence.Telemetry.SelectionPolicy
 
   @default_limit 10_000
@@ -354,14 +353,14 @@ defmodule Cadence.Dashboards.Sources.Telemetry.QueryOptions do
 
   defp fetch_scheduled_contact(organization_id, mission_id, contact_id, opts) do
     fetch_scheduled_contact =
-      Keyword.get(opts, :fetch_scheduled_contact, &Contacts.fetch_scheduled_contact/3)
+      Keyword.get(opts, :fetch_scheduled_contact, &OperationalState.fetch_scheduled_contact/3)
 
     fetch_scheduled_contact.(organization_id, mission_id, contact_id)
   end
 
   defp fetch_realized_contact(organization_id, mission_id, contact_id, opts) do
     fetch_realized_contact =
-      Keyword.get(opts, :fetch_realized_contact, &Contacts.fetch_realized_contact/3)
+      Keyword.get(opts, :fetch_realized_contact, &OperationalState.fetch_realized_contact/3)
 
     fetch_realized_contact.(organization_id, mission_id, contact_id)
   end

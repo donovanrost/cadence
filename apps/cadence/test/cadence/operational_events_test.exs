@@ -3,13 +3,11 @@ defmodule Cadence.OperationalEventsTest do
 
   import Cadence.OperationalEventsFixtures
 
-  alias Cadence.Dashboards.{
-    DashboardResolveResult,
-    DataBinding,
-    DataSource,
-    DataSources,
-    PlannedSourceRequest
-  }
+  alias Cadence.Dashboards.{DashboardResolveResult, PlannedSourceRequest}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
@@ -959,7 +957,7 @@ defmodule Cadence.OperationalEventsTest do
     assert first_interval.payload["realm"] == "flight"
     assert first_interval.payload["data_source_id"] == "interval-questdb-v1"
     assert first_interval.payload["dataset"] == "flight-v1"
-    assert first_interval.metadata["source_record_kind"] == :dashboard_data_binding_event
+    assert first_interval.metadata["source_record_kind"] == :data_source_binding_event
     assert first_interval.metadata["source_record_id"] == registered.current_event_id
 
     assert second_interval.subject_id == "interval-flight-telemetry"

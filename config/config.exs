@@ -72,9 +72,63 @@ config :cadence,
     realm: :flight,
     data_source_id: "managed_questdb_primary"
   ],
-  dashboard_data_sources: [
+  data_sources: [
     persisted?: true,
     bootstrap_defaults?: true
+  ],
+  data_source_adapters: [
+    telemetry: [
+      version: 1,
+      label: "Telemetry",
+      description: "Latest and historical spacecraft telemetry.",
+      module: Cadence.Dashboards.Sources.Telemetry,
+      probe_module: Cadence.Control.DataSources.Probes.Telemetry,
+      default_data_source_capabilities: %{
+        latest?: true,
+        range_scan?: true,
+        bounded_history?: true,
+        watermarks?: true,
+        native_decimation?: false
+      }
+    ],
+    limits: [
+      version: 1,
+      label: "Limits",
+      description: "Current and historical telemetry limit state.",
+      module: Cadence.Dashboards.Sources.Limits,
+      default_data_source_capabilities: %{
+        latest_state?: true,
+        event_history?: true,
+        definition_intervals?: true,
+        watermarks?: true
+      }
+    ],
+    operational_observables: [
+      version: 1,
+      label: "Operational observables",
+      description: "Cadence operational state and metric projections.",
+      module: Cadence.Dashboards.Sources.OperationalObservables,
+      default_data_source_capabilities: %{
+        constellation_health?: true,
+        watermarks?: false
+      }
+    ],
+    events: [
+      version: 1,
+      label: "Events",
+      description: "Mission, contact, source, and data-management events.",
+      module: Cadence.Dashboards.Sources.Events,
+      default_data_source_capabilities: %{
+        contact_intervals?: true,
+        mission_timeline?: true,
+        source_health_transitions?: true,
+        source_watermark_events?: true,
+        source_capability_postures?: true,
+        telemetry_backfill_lifecycle?: true,
+        telemetry_revision_decisions?: true,
+        watermarks?: false
+      }
+    ]
   ],
   dashboard_source_circuit_breaker: [
     enabled?: true,
@@ -85,7 +139,7 @@ config :cadence,
     max_concurrency: 4,
     timeout_ms: 5_000
   ],
-  dashboard_source_health_events: [
+  data_source_health_events: [
     enabled?: true,
     freshness: [
       default_max_age_ms: 300_000,
@@ -99,13 +153,13 @@ config :cadence,
     block_source_health: [:unavailable],
     block_freshness: [:fresh]
   ],
-  dashboard_source_probe_scheduler: [
+  data_source_probe_scheduler: [
     enabled?: true,
     interval_ms: 60_000,
     max_concurrency: 4,
     probe_timeout_ms: 5_000
   ],
-  dashboard_source_watermark_events: [
+  data_source_watermark_events: [
     enabled?: true
   ],
   contact_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
@@ -161,4 +215,5 @@ config :esbuild,
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
+import_config "job_handlers.exs"
 import_config "#{config_env()}.exs"

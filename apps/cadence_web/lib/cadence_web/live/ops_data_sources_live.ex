@@ -3,20 +3,14 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
+  alias Cadence.Control.DataSources, as: DataSourceControl
   alias Cadence.Control.ManagedResources
-
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    SourceCredentials,
-    SourceHealth,
-    SourceReadiness,
-    SourceWatermarks
-  }
-
+  alias Cadence.Dashboards.SourceReadiness
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
-  alias Cadence.Projections.DataSourceHealth
-
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
   alias Cadence.Projections.ManagedResourceStatus
 
   alias CadenceWeb.OpsDataSourcesLive.{
@@ -225,7 +219,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     source = find_data_source(socket.assigns.data_sources, data_source_id)
 
-    case DataSourceHealth.probe(
+    case DataSourceControl.probe(
            data_source_id,
            %{mission_id: mission.mission_id},
            [

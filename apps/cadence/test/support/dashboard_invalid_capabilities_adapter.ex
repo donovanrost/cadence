@@ -1,7 +1,9 @@
 defmodule Cadence.Support.DashboardInvalidCapabilitiesAdapter do
   @moduledoc false
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceCapabilities, SourceResult}
+  alias Cadence.Dashboards.{PlannedSourceRequest, SourceResult}
+
+  alias Cadence.DataSources.SourceCapabilities
 
   def capabilities do
     %SourceCapabilities{

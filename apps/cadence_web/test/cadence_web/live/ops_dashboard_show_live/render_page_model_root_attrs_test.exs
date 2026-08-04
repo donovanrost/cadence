@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelRootAttrsTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{ComparisonReviewQueue, DataBinding, Document}
+  alias Cadence.Dashboards.{ComparisonReviewQueue, Document}
+
+  alias Cadence.DataSources.DataBinding
 
   alias CadenceWeb.OpsDashboardShowLive.{
     RenderRootAssigns,

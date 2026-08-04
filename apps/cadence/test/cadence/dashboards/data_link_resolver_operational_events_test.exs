@@ -4,9 +4,10 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalEventsTest do
   import Cadence.Dashboards.DataLinkResolverFixtures
 
   alias Cadence.Contacts.ScheduledContact
-  alias Cadence.Dashboards.{DataLink, DataLinkResolver, SourceHealth}
+  alias Cadence.Dashboards.{DataLink, DataLinkResolver}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
   alias Cadence.Projections.MissionEvents
   alias Cadence.Reads.MissionEvents, as: MissionEventReads
   alias Cadence.Repo

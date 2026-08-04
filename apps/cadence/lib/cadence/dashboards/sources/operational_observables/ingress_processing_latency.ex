@@ -7,9 +7,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
 
   The default history reader is a compatibility path for operational-event
   rows produced before ADR-019. New live ingress latency is sourced from
-  `Cadence.Telemetry.RuntimeHealth`; deployments can inject a metrics-history
-  reader through `:durable_ingress_processing_latency_snapshots_fun` while the
-  dedicated history boundary is migrated.
+  the operational-state read boundary; deployments can inject a metrics-history
+  reader through `:durable_ingress_processing_latency_snapshots_fun`.
   """
 
   alias Cadence.Dashboards.{Frame, PlannedSourceRequest, RuntimeCacheKey}
@@ -17,11 +16,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
   alias Cadence.Dashboards.Sources.OperationalObservables.{
     IngressProcessingLatencyRows,
     LatestFreshness,
-    OperationalEventSnapshots,
     OperationalMetricFrames
   }
 
-  alias Cadence.Telemetry.RuntimeHealth
+  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.OperationalState.Snapshots, as: OperationalEventSnapshots
 
   @spec resolve_latest(
           PlannedSourceRequest.t(),
@@ -164,9 +163,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.IngressProcessingLat
   end
 
   defp default_runtime_snapshots(_organization_id, _mission_id, _opts) do
-    RuntimeHealth.snapshot()
-    |> Map.get(:metrics, %{})
-    |> Map.get(:ingress_processing_latency_ms, [])
+    OperationalState.ingress_processing_latency_snapshots()
   end
 
   defp overlay(durable_snapshots, runtime_snapshots) do

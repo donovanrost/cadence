@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.EvidenceRef do
   Stable pointer to data or operational evidence behind a dashboard result.
   """
 
-  alias Cadence.Dashboards.ContractNormalization
+  alias Cadence.Platform.ContractNormalization
 
   @kinds [
     :raw_evidence,

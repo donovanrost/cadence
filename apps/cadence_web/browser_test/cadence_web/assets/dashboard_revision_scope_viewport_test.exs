@@ -16,11 +16,11 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Dashboards.Placement
-  alias Cadence.Dashboards.SourceWatermarks
+  alias Cadence.Projections.DataSources.Watermarks
   alias Cadence.Dashboards.WidgetDef
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Storage
@@ -614,7 +614,7 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
       Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
 
     source_watermark_config =
-      Application.get_env(:cadence, :dashboard_source_watermark_events, [])
+      Application.get_env(:cadence, :data_source_watermark_events, [])
 
     Application.put_env(
       :cadence_web,
@@ -626,7 +626,7 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
 
     Application.put_env(
       :cadence,
-      :dashboard_source_watermark_events,
+      :data_source_watermark_events,
       Keyword.put(source_watermark_config, :enabled?, true)
     )
 
@@ -637,7 +637,7 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
         previous_source_execution
       )
 
-      Application.put_env(:cadence, :dashboard_source_watermark_events, source_watermark_config)
+      Application.put_env(:cadence, :data_source_watermark_events, source_watermark_config)
     end)
 
     user = TestFixtures.persist_user!()

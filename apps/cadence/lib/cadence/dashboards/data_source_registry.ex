@@ -7,26 +7,28 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
   """
 
   alias Cadence.Dashboards.{
-    DataBinding,
     DataContext,
     DataLinks,
-    DataSource,
-    DefaultSourceAdapters,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
     SourceActions,
     SourceFacts,
-    SourceHealth,
-    SourceHealthEvent,
-    SourceHealthStatus,
     SourceReadiness,
     TelemetryActions
   }
 
+  alias Cadence.DataSources.AdapterRegistry
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
+
   alias Cadence.Dashboards.DataSourceRegistry.Facts
   alias Cadence.Dashboards.DataSourceRegistry.HistoricalResolver
-  alias Cadence.Management.DataSources
+  alias Cadence.Reads.DataSources
 
   @spec resolve(PlannedSourceRequest.t(), keyword()) ::
           {:ok, ResolvedSourceBinding.t()} | {:error, ResolveWarning.t()}
@@ -226,7 +228,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
   defp persisted?(opts) do
     Keyword.get_lazy(opts, :persisted?, fn ->
       :cadence
-      |> Application.get_env(:dashboard_data_sources, [])
+      |> Application.get_env(:data_sources, [])
       |> Keyword.get(:persisted?, false)
     end)
   end
@@ -401,7 +403,7 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
        ) do
     with :ok <- validate_data_source_active(data_source, binding, request, selection),
          :ok <- validate_data_source_configuration(data_source, binding, request, selection) do
-      {:ok, DefaultSourceAdapters.materialize(data_source, binding.logical_source)}
+      {:ok, AdapterRegistry.materialize(data_source, binding.logical_source)}
     end
   end
 

@@ -3,13 +3,15 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
   Selects default, overridden, or binding-owned source adapters.
   """
 
-  alias Cadence.Dashboards.{DefaultSourceAdapters, ResolvedSourceBinding}
+  alias Cadence.Dashboards.ResolvedSourceBinding
+
+  alias Cadence.DataSources.AdapterRegistry
 
   @type adapter :: module()
 
   @spec logical_sources() :: [atom()]
   def logical_sources do
-    DefaultSourceAdapters.logical_sources()
+    AdapterRegistry.logical_sources()
   end
 
   @spec for_logical_source(atom(), keyword()) :: {:ok, adapter()} | :error
@@ -18,7 +20,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
 
     case Map.fetch(adapters, logical_source) do
       {:ok, adapter} when is_atom(adapter) -> {:ok, adapter}
-      :error -> DefaultSourceAdapters.fetch(logical_source)
+      :error -> AdapterRegistry.fetch(logical_source)
     end
   end
 
@@ -32,7 +34,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterSelection do
         {:ok, adapter}
 
       :error ->
-        DefaultSourceAdapters.resolve(resolved_binding.data_source.adapter, logical_source)
+        AdapterRegistry.resolve(resolved_binding.data_source.adapter, logical_source)
     end
   end
 end

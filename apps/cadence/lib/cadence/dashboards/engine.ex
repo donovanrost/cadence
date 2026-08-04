@@ -9,6 +9,7 @@ defmodule Cadence.Dashboards.Engine do
   """
 
   alias Cadence.Dashboards.{
+    Contracts,
     DashboardContract,
     DashboardResolveRequest,
     DashboardResolveResult,
@@ -181,7 +182,7 @@ defmodule Cadence.Dashboards.Engine do
   end
 
   defp plan_uncached(%DashboardResolveRequest{} = request, opts, %RuntimeCacheKey{} = plan_key) do
-    validation = Cadence.Dashboards.validate_document(request.document)
+    validation = Contracts.validate_document(request.document)
 
     {planned_requests, frames_by_placement, placement_warnings} =
       PlacementExpansion.expand(request.document, request.scope_context)

@@ -1,12 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeEngineDiagnosticsTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{
-    DashboardResolveResult,
-    PlannedSourceRequest,
-    ResolveWarning,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{DashboardResolveResult, PlannedSourceRequest, ResolveWarning}
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias CadenceWeb.OpsDashboardShowLive.RuntimeEngineDiagnostics
 

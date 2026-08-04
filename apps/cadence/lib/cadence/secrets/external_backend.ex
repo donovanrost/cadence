@@ -242,7 +242,7 @@ defmodule Cadence.Secrets.ExternalBackend do
 
   defp secret_config_value(key) do
     shared = Application.get_env(:cadence, :secrets, [])
-    dashboard = Application.get_env(:cadence, :dashboard_source_credentials, [])
+    dashboard = Application.get_env(:cadence, :data_source_credentials, [])
     Keyword.get(shared, key) || Keyword.get(dashboard, key)
   end
 

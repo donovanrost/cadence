@@ -3,15 +3,11 @@ defmodule Cadence.Dashboards.EngineFrameResolutionTest do
 
   import Cadence.Dashboards.EngineFixtures
 
-  alias Cadence.Dashboards.{
-    DashboardResolveRequest,
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    Engine,
-    Frame
-  }
+  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine, Frame}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Limits.Event
   alias Cadence.Telemetry.Sample
@@ -169,14 +165,17 @@ defmodule Cadence.Dashboards.EngineFrameResolutionTest do
       best_effort_watermark(~U[2026-06-17 12:00:01Z])
     end
 
+    %DataSource{} = default_managed_source = DataSources.default_managed_data_source()
+    %DataBinding{} = default_telemetry_binding = DataSources.default_flight_telemetry_binding()
+
     selected_telemetry_source = %DataSource{
-      DataSources.default_managed_data_source()
+      default_managed_source
       | data_source_id: "selected_questdb",
         capabilities: %{latest?: true}
     }
 
     selected_telemetry_binding = %DataBinding{
-      DataSources.default_flight_telemetry_binding()
+      default_telemetry_binding
       | binding_id: "selected_flight_telemetry",
         data_source_id: "selected_questdb",
         dataset: "selected-flight",

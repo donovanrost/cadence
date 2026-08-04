@@ -3,7 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanelDirectLinksTest do
 
   import Phoenix.Component, only: [assign: 3]
 
-  alias Cadence.Dashboards.{DataBinding, DataLink, Document, Frame, PlacementFrames}
+  alias Cadence.Dashboards.{DataLink, Document, Frame, PlacementFrames}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.SelectionPanel
   alias Phoenix.LiveView.Socket
 

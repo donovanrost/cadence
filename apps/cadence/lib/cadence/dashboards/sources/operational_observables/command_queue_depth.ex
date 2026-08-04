@@ -7,6 +7,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.CommandQueueDepth do
   durable revision projection for the command queue depth observable.
   """
 
+  alias Cadence.Dashboards.Sources.OperationalObservables.LatestFreshness
+
   alias Cadence.Dashboards.{
     DataLinks,
     Field,
@@ -16,8 +18,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.CommandQueueDepth do
     ScopeContext
   }
 
-  alias Cadence.Commanding
-  alias Cadence.Dashboards.Sources.OperationalObservables.LatestFreshness
+  alias Cadence.Reads.OperationalState
 
   @observable_id "commanding.queue_depth"
 
@@ -139,7 +140,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.CommandQueueDepth do
   end
 
   defp default_entries(organization_id, mission_id, _opts) do
-    Commanding.list_command_queue_entries(organization_id, mission_id, lifecycle_state: :pending)
+    OperationalState.list_pending_command_queue_entries(organization_id, mission_id)
   end
 
   defp depth_scope(request, mission_id) do

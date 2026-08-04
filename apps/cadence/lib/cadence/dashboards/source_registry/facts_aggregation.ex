@@ -3,7 +3,9 @@ defmodule Cadence.Dashboards.SourceRegistry.FactsAggregation do
   Aggregates source facts collected across effective binding segments.
   """
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts, SourceWatermark}
+  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts}
+
+  alias Cadence.DataSources.SourceWatermark
 
   @type segment_metadata_fun :: (term() -> map() | nil)
 

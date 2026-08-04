@@ -6,9 +6,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceExecutionDiagnosticsTest 
     Document,
     PlannedSourceRequest,
     ResolveWarning,
-    RuntimeCoordinator,
-    SourceWatermark
+    RuntimeCoordinator
   }
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias CadenceWeb.OpsDashboardShowLive.RuntimeDiagnostics
 

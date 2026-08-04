@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQuery do
   @moduledoc false
 
-  alias Cadence.Dashboards.{DataBinding, Document, ScopeContext, TimeRange}
+  alias Cadence.Dashboards.{Document, ScopeContext, TimeRange}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
   alias CadenceWeb.OpsDashboardShowLive.RuntimeAssigns
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext

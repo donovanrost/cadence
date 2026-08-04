@@ -12,7 +12,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{DataSources, Document, RenderItem, RuntimeCache}
+  alias Cadence.Dashboards.{Document, RenderItem, RuntimeCache}
+
+  alias Cadence.Management.DataSources
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
   alias CadenceWeb.TestFixtures

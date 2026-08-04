@@ -8,7 +8,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
   baseline, or lets the baseline review date expire.
   """
 
-  alias Cadence.Architecture.{ContextBoundary, PlaneBoundary, WebBoundary}
+  alias Cadence.Architecture.{ContextBoundary, DashboardBoundary, PlaneBoundary, WebBoundary}
 
   @root_facade "lib/cadence.ex"
   @schema_prefix "lib/cadence/persistence/schemas/"
@@ -190,6 +190,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
           required(:kind) =>
             :context_schema
             | :context_direction
+            | :dashboard_io_boundary
             | :plane_direction
             | :plane_internal
             | :root_facade
@@ -267,6 +268,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     case legacy_edge_findings(source, sink, label) do
       [] ->
         ContextBoundary.findings_for_edge(source, sink, label) ++
+          DashboardBoundary.findings_for_edge(source, sink, label) ++
           PlaneBoundary.findings_for_edge(source, sink, label) ++
           WebBoundary.findings_for_edge(source, sink, label)
 

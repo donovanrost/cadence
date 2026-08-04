@@ -417,7 +417,7 @@ defmodule Cadence.OperationalEvents do
 
   defp source_binding_events(organization_id, mission_id, opts) do
     event_opts = [
-      source_record_kind: :dashboard_data_binding_event,
+      source_record_kind: :data_source_binding_event,
       order: :asc,
       limit: Keyword.get(opts, :event_limit, 1_000)
     ]

@@ -7,7 +7,9 @@ defmodule Cadence.Dashboards.SourceFreshness do
   semantics in LiveViews or individual widgets.
   """
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, ResolveWarning, SourceActions, SourceWatermark}
+  alias Cadence.Dashboards.{PlannedSourceRequest, ResolveWarning, SourceActions}
+
+  alias Cadence.DataSources.SourceWatermark
 
   @type state :: :fresh | :stale | :unknown | :retention_gap
 

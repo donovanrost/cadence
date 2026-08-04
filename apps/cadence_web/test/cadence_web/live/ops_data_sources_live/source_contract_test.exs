@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsDataSourcesLive.SourceContractTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, DataSource}
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias CadenceWeb.OpsDataSourcesLive.{SourceContract, SourceFocus}
 
   test "compatible_sources/2 keeps active matching adapters in identifier order" do

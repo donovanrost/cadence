@@ -8,10 +8,10 @@ defmodule Cadence.Dashboards.SourceRegistry.WatermarkMerge do
     PlannedSourceRequest,
     ResolveWarning,
     SourceFacts,
-    SourceResult,
-    SourceWatermark,
-    SourceWatermarkStatus
+    SourceResult
   }
+
+  alias Cadence.DataSources.{SourceWatermark, SourceWatermarkStatus}
 
   @spec merge_facts(SourceFacts.t(), SourceWatermarkStatus.t(), PlannedSourceRequest.t()) ::
           SourceFacts.t()

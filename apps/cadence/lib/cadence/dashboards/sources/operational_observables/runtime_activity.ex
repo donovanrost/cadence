@@ -17,9 +17,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
     ScopeContext
   }
 
-  alias Cadence.Commanding
-  alias Cadence.OperationalEvents
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Reads.OperationalState
 
   @managed_observable_id "runtime.managed_activity"
   @transport_observable_id "runtime.transport_activity"
@@ -384,7 +383,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
   end
 
   defp default_managed_events(organization_id, mission_id, opts) do
-    OperationalEvents.list_events(
+    OperationalState.list_operational_events(
       organization_id,
       mission_id,
       managed_event_opts(opts)
@@ -406,7 +405,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
   end
 
   defp default_transport_events(organization_id, mission_id, opts) do
-    OperationalEvents.list_events(
+    OperationalState.list_operational_events(
       organization_id,
       mission_id,
       transport_event_opts(opts)
@@ -434,8 +433,10 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.RuntimeActivity do
 
       command_release_attempt_ids when is_list(command_release_attempt_ids) ->
         Enum.flat_map(command_release_attempt_ids, fn command_release_attempt_id ->
-          Commanding.list_command_verifier_instances(organization_id, mission_id,
-            command_release_attempt_id: command_release_attempt_id
+          OperationalState.list_command_verifier_instances(
+            organization_id,
+            mission_id,
+            command_release_attempt_id
           )
         end)
     end

@@ -3,7 +3,8 @@ defmodule Cadence.Dashboards.ResolveWarning do
   Structured dashboard engine warning.
   """
 
-  alias Cadence.Dashboards.{ContractNormalization, DataLink, EvidenceRef}
+  alias Cadence.Dashboards.{DataLink, EvidenceRef}
+  alias Cadence.Platform.ContractNormalization
 
   @severities [:info, :warning, :error]
   @scopes [:dashboard, :placement, :frame, :field]

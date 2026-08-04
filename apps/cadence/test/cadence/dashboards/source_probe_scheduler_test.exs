@@ -1,13 +1,15 @@
-defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
+defmodule Cadence.DataSources.ProbeSchedulerTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    DataSources,
-    SourceCredentials,
-    SourceHealth,
-    SourceProbeScheduler
-  }
+  alias Cadence.DataSources.ProbeScheduler
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.DataSource
 
   @organization_id "org-source-probe-scheduler"
   @mission_id "mission-source-probe-scheduler"
@@ -33,7 +35,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     test_pid = self()
 
     summary =
-      SourceProbeScheduler.run_once(
+      ProbeScheduler.run_once(
         list_sources_fun: fn _, _ -> [missing, stale, fresh, disabled, unscoped] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
@@ -54,8 +56,8 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     assert_receive {:scheduled_probe, "scheduler-missing", missing_attrs, missing_opts}
     assert missing_attrs.mission_id == missing.mission_id
     assert missing_attrs.observed_at == @now
-    assert Keyword.fetch!(missing_opts, :actor_id) == "dashboard_source_probe_scheduler"
-    assert Keyword.fetch!(missing_opts, :payload).source == "dashboard_source_probe_scheduler"
+    assert Keyword.fetch!(missing_opts, :actor_id) == "data_source_probe_scheduler"
+    assert Keyword.fetch!(missing_opts, :payload).source == "data_source_probe_scheduler"
 
     assert_receive {:scheduled_probe, "scheduler-stale", _attrs, _opts}
     refute_receive {:scheduled_probe, "scheduler-fresh", _attrs, _opts}
@@ -67,7 +69,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     source = persist_source!("scheduler-real-probe")
 
     summary =
-      SourceProbeScheduler.run_once(
+      ProbeScheduler.run_once(
         list_sources_fun: fn _, _ -> [source] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
@@ -88,7 +90,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     assert status.source_health == :healthy
     assert status.reason == :source_probe_succeeded
-    assert status.payload["source"] == "dashboard_source_probe_scheduler"
+    assert status.payload["source"] == "data_source_probe_scheduler"
   end
 
   test "run_once honors per-source probe policy freshness and disabled scheduling" do
@@ -122,7 +124,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     test_pid = self()
 
     summary =
-      SourceProbeScheduler.run_once(
+      ProbeScheduler.run_once(
         list_sources_fun: fn _, _ -> [strict, relaxed, disabled_by_policy] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
@@ -140,7 +142,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     assert summary.errors == []
 
     assert_receive {:scheduled_probe, "scheduler-strict-policy", payload}
-    assert payload.source == "dashboard_source_probe_scheduler"
+    assert payload.source == "data_source_probe_scheduler"
     assert payload.probe_policy_id == "strict-policy"
     assert payload.probe_stale_after_ms == 10_000
 
@@ -152,7 +154,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     assert {:ok, _reference, _event} =
              SourceCredentials.register_reference(%{
                credentials_ref:
-                 "secret://org-source-probe-scheduler/dashboard/scheduler-byo-slow",
+                 "secret://org-source-probe-scheduler/data-sources/scheduler-byo-slow",
                organization_id: @organization_id,
                mission_id: @mission_id,
                data_source_id: "scheduler-byo-slow",
@@ -167,14 +169,14 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
         owner: :customer,
         kind: :byo_tsdb,
         isolation_level: :customer_owned,
-        credentials_ref: "secret://org-source-probe-scheduler/dashboard/scheduler-byo-slow"
+        credentials_ref: "secret://org-source-probe-scheduler/data-sources/scheduler-byo-slow"
       )
 
     managed_source = persist_source!("scheduler-managed-fast")
     test_pid = self()
 
     summary =
-      SourceProbeScheduler.run_once(
+      ProbeScheduler.run_once(
         list_sources_fun: fn _, _ -> [byo_source, managed_source] end,
         source_health_events?: true,
         source_health_freshness: [default_max_age_ms: 60_000],
@@ -219,7 +221,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     assert managed_status.source_health == :healthy
     assert managed_status.reason == :source_probe_succeeded
-    assert managed_status.payload["source"] == "dashboard_source_probe_scheduler"
+    assert managed_status.payload["source"] == "data_source_probe_scheduler"
 
     assert [byo_status] =
              SourceHealth.list_source_health_statuses(@organization_id, @mission_id,
@@ -228,7 +230,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
 
     assert byo_status.source_health == :unavailable
     assert byo_status.reason == :source_probe_timeout
-    assert byo_status.payload["source"] == "dashboard_source_probe_scheduler"
+    assert byo_status.payload["source"] == "data_source_probe_scheduler"
     assert byo_status.payload["probe_kind"] == "scheduler"
     assert byo_status.payload["probe_message"] == "Source probe exceeded scheduler timeout."
     assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == 500
@@ -240,7 +242,7 @@ defmodule Cadence.Dashboards.SourceProbeSchedulerTest do
     _source = persist_source!("scheduler-disabled-health")
 
     summary =
-      SourceProbeScheduler.run_once(
+      ProbeScheduler.run_once(
         source_health_events?: false,
         probe_fun: fn _data_source_id, _attrs, _opts ->
           flunk("probe_fun should not be called")

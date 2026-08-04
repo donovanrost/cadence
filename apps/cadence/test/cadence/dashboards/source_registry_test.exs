@@ -4,15 +4,18 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
   import Cadence.Dashboards.SourceRegistryFixtures
 
   alias Cadence.Dashboards.{
-    DataSource,
-    DataSources,
     PlannedSourceRequest,
-    SourceCapabilities,
     SourceCircuitBreaker,
     SourceExecutionPolicy,
     SourceFacts,
     SourceRegistry
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.DataSource
 
   test "returns telemetry adapter capabilities" do
     assert %SourceCapabilities{} = capabilities = SourceRegistry.capabilities(:telemetry)

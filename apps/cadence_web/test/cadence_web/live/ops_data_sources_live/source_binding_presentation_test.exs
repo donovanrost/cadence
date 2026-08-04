@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDataSourcesLive.SourceBindingPresentationTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, SourceReadiness}
+  alias Cadence.Dashboards.SourceReadiness
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias CadenceWeb.OpsDataSourcesLive.SourceBindingPresentation
 
   test "groups bindings and orders active rows before missing disabled rows" do

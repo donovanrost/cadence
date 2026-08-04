@@ -15,18 +15,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Comms.{GroundStation, Transport}
-
   alias Cadence.Control.Replay.Store.ReplayRunRow
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
   alias Cadence.Dashboards.Document
   alias Cadence.Dashboards.DocumentStore.DashboardRow, as: OpsDashboardRow
   alias Cadence.Dashboards.RenderItem
-  alias Cadence.Dashboards.SourceHealth
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
   alias Cadence.Replay.Run
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -266,9 +265,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ReplaySourceHealthIntervalRouteLiveTes
 
     binding_id = "replay-operational-observables-#{System.unique_integer([:positive])}"
 
+    %DataBinding{} =
+      default_operational_binding =
+      DataSources.default_flight_operational_observables_binding()
+
     assert {:ok, _binding} =
              DataSources.persist_data_binding(%DataBinding{
-               DataSources.default_flight_operational_observables_binding()
+               default_operational_binding
                | binding_id: binding_id,
                  organization_id: mission.organization_id,
                  mission_id: mission.mission_id,

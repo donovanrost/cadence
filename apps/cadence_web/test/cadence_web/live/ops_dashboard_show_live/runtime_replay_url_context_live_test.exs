@@ -10,13 +10,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    Document,
-    RenderItem
-  }
+  alias Cadence.Dashboards.{Document, RenderItem}
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Control.Replay.Store.ReplayRunRow
   alias Cadence.Replay.Run

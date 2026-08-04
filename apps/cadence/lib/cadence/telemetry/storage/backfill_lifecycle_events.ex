@@ -5,11 +5,11 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
 
   import Ecto.Query
 
-  alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Repo
+  alias Cadence.Telemetry.Facts
   alias Cadence.Telemetry.Storage.BackfillLifecycleEvent
 
   alias Cadence.Telemetry.Storage.BackfillLifecycleEvents.EventRow,
@@ -22,7 +22,7 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
 
     case insert_event_with_operational_event(event) do
       {:ok, event} ->
-        maybe_invalidate_runtime(event, opts)
+        maybe_publish_fact(event, opts)
         {:ok, event}
 
       {:error, reason} ->
@@ -100,36 +100,16 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
     end)
   end
 
-  defp maybe_invalidate_runtime(%BackfillLifecycleEvent{} = event, opts) do
-    if Keyword.get(opts, :dashboard_runtime_invalidation?, true) do
-      event
-      |> runtime_invalidation_filters()
-      |> RuntimeInvalidation.historical_data_changed(Keyword.take(opts, [:runtime_cache]))
+  defp maybe_publish_fact(%BackfillLifecycleEvent{} = event, opts) do
+    if Keyword.get(
+         opts,
+         :publish_facts?,
+         Keyword.get(opts, :dashboard_runtime_invalidation?, true)
+       ) do
+      Facts.publish(BackfillLifecycleEvent.to_fact(event))
     end
 
     :ok
-  end
-
-  defp runtime_invalidation_filters(%BackfillLifecycleEvent{} = event) do
-    %{
-      organization_id: event.organization_id,
-      mission_id: event.mission_id,
-      logical_source: :telemetry,
-      data_source_id: event.data_source_id,
-      source_binding_id: event.binding_id,
-      realm: event.realm,
-      replay_run_id: event.replay_run_id,
-      observable: event.observable_id || event.point_id,
-      source_from: event.source_from,
-      source_to: event.source_to,
-      reason: event.reason,
-      evidence_ref: %{
-        kind: "telemetry_backfill_lifecycle_event",
-        id: event.backfill_lifecycle_event_id
-      }
-    }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
   end
 
   defp required_context?(opts) do

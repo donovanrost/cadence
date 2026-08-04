@@ -4,7 +4,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
   import CadenceWeb.DashboardReviewFixtures
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Cadence.Dashboards.{Document, SourceHealthEvent}
+  alias Cadence.Dashboards.Document
+
+  alias Cadence.DataSources.SourceHealthEvent
   alias CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponents
 
   test "versions_panel links selected publish readiness activity to remediation target" do

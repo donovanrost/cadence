@@ -3,7 +3,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.LinkRf do
   Resolves RF lock, frame-synchronization, and numeric RF metric products.
   """
 
-  alias Cadence.Comms.TransportStore
   alias Cadence.Dashboards.{Frame, PlannedSourceRequest, RuntimeCacheKey}
 
   alias Cadence.Dashboards.Sources.OperationalObservables.{
@@ -11,9 +10,11 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.LinkRf do
     LinkRfMetricRows,
     LinkRfStateFrames,
     LinkRfStateRows,
-    OperationalEventSnapshots,
     OperationalMetricFrames
   }
+
+  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.OperationalState.Snapshots, as: OperationalEventSnapshots
 
   @spec resolve_lock_latest(
           PlannedSourceRequest.t(),
@@ -284,7 +285,7 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.LinkRf do
   end
 
   defp default_transports(organization_id, mission_id, _opts) do
-    TransportStore.list_transports(organization_id, mission_id)
+    OperationalState.list_transports(organization_id, mission_id)
   end
 
   defp transport_revision_entry(transport) do

@@ -1,14 +1,11 @@
 defmodule Cadence.Support.DashboardSourceContractAdapter do
   @moduledoc false
 
-  alias Cadence.Dashboards.{
-    PlannedSourceRequest,
-    SourceCapabilities,
-    SourceFacts,
-    SourceProbe,
-    SourceResult,
-    SourceWatermark
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts, SourceResult}
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.{SourceProbe, SourceWatermark}
 
   def capabilities do
     SourceCapabilities.new(%{

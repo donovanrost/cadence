@@ -8,7 +8,7 @@ defmodule Cadence.Dashboards.DataLink do
   evidence-resolution target set.
   """
 
-  alias Cadence.Dashboards.ContractNormalization
+  alias Cadence.Platform.ContractNormalization
 
   @resolvable_targets [
     :telemetry_point,

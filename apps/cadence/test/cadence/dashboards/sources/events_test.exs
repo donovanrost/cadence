@@ -4,19 +4,19 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
 
   alias Cadence.Dashboards.{
-    DataBinding,
     DataLink,
-    DataSource,
     EvidenceRef,
     Field,
     Frame,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
-    SourceHealthEvent,
-    SourceResult,
-    SourceWatermarkEvent
+    SourceResult
   }
+
+  alias Cadence.DataSources.{SourceHealthEvent, SourceWatermarkEvent}
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Dashboards.Sources.Events
   alias Cadence.MissionEvents.Entry
@@ -475,7 +475,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
 
     assert frame.meta.family == :source_health
     assert frame.meta.product == :source_health_transitions
-    assert frame.meta.projection == :dashboard_source_health_events
+    assert frame.meta.projection == :data_source_health_events
     assert frame.meta.returned_events == 2
 
     assert frame.meta.cursor.source_health_event_id == "source-health-2"
@@ -695,7 +695,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
 
     assert frame.meta.family == :source_watermark
     assert frame.meta.product == :source_watermark_events
-    assert frame.meta.projection == :dashboard_source_watermark_events
+    assert frame.meta.projection == :data_source_watermark_events
     assert frame.meta.returned_events == 1
     assert frame.meta.cursor.source_watermark_event_id == "watermark-event-1"
     assert_evidence_ref(frame.meta.evidence, :source_watermark_event, "watermark-event-1")

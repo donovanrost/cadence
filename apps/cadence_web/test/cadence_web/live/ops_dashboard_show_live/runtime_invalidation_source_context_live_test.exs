@@ -14,12 +14,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationSourceContextLiveTe
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
 
-  alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
-    RuntimeInvalidation
-  }
+  alias Cadence.Dashboards.RuntimeInvalidation
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Telemetry.PacketDefinition

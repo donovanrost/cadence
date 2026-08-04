@@ -204,8 +204,8 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
     Application.put_env(:cadence, :provider_reservation_reconciler, enabled: false)
     Application.put_env(:cadence, :command_dispatcher, enabled: false)
     Application.put_env(:cadence, :command_verifier_scheduler, enabled: false)
-    Application.put_env(:cadence, :dashboard_source_probe_scheduler, enabled?: false)
-    Application.put_env(:cadence, :dashboard_source_watermark_events, enabled?: false)
+    Application.put_env(:cadence, :data_source_probe_scheduler, enabled?: false)
+    Application.put_env(:cadence, :data_source_watermark_events, enabled?: false)
     Application.put_env(:cadence, :ingress_archive, module: EphemeralIngressArchive)
 
     Application.put_env(:cadence, :ingress_archive_consumer,

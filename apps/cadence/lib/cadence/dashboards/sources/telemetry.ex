@@ -9,19 +9,18 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
 
   alias Cadence.Dashboards.{
     DataContext,
-    DataSource,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceCapabilities,
     SourceFacts,
-    SourceProbe,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext, QueryOptions, Warnings}
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
-  alias Cadence.Dashboards.Sources.Telemetry.QuestDBProbe
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.Sample
@@ -53,21 +52,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       supports_watermarks?: false,
       completeness: :unknown
     })
-  end
-
-  @spec probe(DataSource.t(), keyword()) :: SourceProbe.t()
-  def probe(%DataSource{} = data_source, opts \\ []) when is_list(opts) do
-    case metadata_value(data_source.metadata, :storage) do
-      storage when storage in [:questdb, "questdb"] ->
-        QuestDBProbe.probe(data_source, opts)
-
-      storage ->
-        SourceProbe.unsupported(%{
-          adapter: "telemetry",
-          storage: storage || "unknown",
-          reason: "telemetry adapter only has a live probe for QuestDB-backed sources"
-        })
-    end
   end
 
   @spec facts(PlannedSourceRequest.t(), keyword()) ::
@@ -217,12 +201,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
        message: "Telemetry source request does not include observables"
      }}
   end
-
-  defp metadata_value(metadata, key) when is_map(metadata) do
-    Map.get(metadata, key, Map.get(metadata, Atom.to_string(key)))
-  end
-
-  defp metadata_value(_metadata, _key), do: nil
 
   defp resolve_frames(
          %PlannedSourceRequest{} = request,

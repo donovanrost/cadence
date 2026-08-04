@@ -293,7 +293,7 @@ defmodule CadenceWeb.Router do
            :index
 
       live "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
-           OpsDashboardShowLive,
+           OpsDashboardEditorLive,
            :edit
 
       live "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
@@ -406,7 +406,7 @@ defmodule CadenceWeb.Router do
            :show
 
       live "/missions/:mission_id/ops/dashboards/:dashboard_id",
-           OpsDashboardShowLive,
+           OpsDashboardViewerLive,
            :show
     end
 

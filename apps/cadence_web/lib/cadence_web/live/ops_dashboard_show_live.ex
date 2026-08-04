@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive do
+defmodule CadenceWeb.OpsDashboardShowLive.Controller do
   @moduledoc false
   use CadenceWeb, :live_view
 

@@ -5,11 +5,13 @@ defmodule Cadence.Support.DashboardSourceTestAdapter do
     DataLinks,
     PlannedSourceRequest,
     ResolveWarning,
-    SourceCapabilities,
     SourceFacts,
-    SourceProbe,
     SourceResult
   }
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.DataSources.SourceProbe
 
   def capabilities do
     %SourceCapabilities{

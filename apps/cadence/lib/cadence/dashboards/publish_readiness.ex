@@ -17,7 +17,7 @@ defmodule Cadence.Dashboards.PublishReadiness do
     ValidationResult
   }
 
-  alias Cadence.Management.DataSources
+  alias Cadence.Reads.DataSources
 
   @blocking_warning_codes [
     :missing_source_binding,

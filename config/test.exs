@@ -60,12 +60,12 @@ config :cadence,
 
 config :cadence, telemetry_history_store: [module: Cadence.Telemetry.HistoryStore.Postgres]
 
-config :cadence, dashboard_data_sources: [persisted?: false, bootstrap_defaults?: false]
+config :cadence, data_sources: [persisted?: false, bootstrap_defaults?: false]
 
 config :cadence, dashboard_source_circuit_breaker: [enabled?: false]
-config :cadence, dashboard_source_health_events: [enabled?: false]
-config :cadence, dashboard_source_probe_scheduler: [enabled?: false]
-config :cadence, dashboard_source_watermark_events: [enabled?: false]
+config :cadence, data_source_health_events: [enabled?: false]
+config :cadence, data_source_probe_scheduler: [enabled?: false]
+config :cadence, data_source_watermark_events: [enabled?: false]
 
 config :cadence_web, CadenceWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4101],

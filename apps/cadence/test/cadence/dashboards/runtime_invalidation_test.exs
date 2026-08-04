@@ -5,8 +5,6 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    DataBinding,
-    DataSource,
     Document,
     Engine,
     Frame,
@@ -15,9 +13,12 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
     RuntimeCacheKey,
     RuntimeInvalidation,
     RuntimeInvalidation.Event,
-    SourceResult,
-    SourceWatermark
+    SourceResult
   }
+
+  alias Cadence.DataSources.SourceWatermark
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   @fixture_dir Path.expand("../../fixtures/dashboards", __DIR__)
 

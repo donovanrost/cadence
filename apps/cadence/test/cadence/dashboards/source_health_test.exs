@@ -2,21 +2,24 @@ defmodule Cadence.Dashboards.SourceHealthTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Dashboards.{
-    DataBinding,
-    DataSource,
-    DataSources,
     EvidenceRef,
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
     RuntimeCacheKey,
     SourceFacts,
-    SourceHealth,
-    SourceHealthEvent,
     SourceRegistry,
     SourceResult,
     SourceResultPreflight
   }
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.DataSources.SourceHealthEvent
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Telemetry.Sample
 
@@ -176,6 +179,7 @@ defmodule Cadence.Dashboards.SourceHealthTest do
 
   test "recorded transitions invalidate matching live source and frame cache entries" do
     cache = start_supervised!({RuntimeCache, name: nil})
+    use_dashboard_runtime_cache!(cache)
     source_key = source_result_key()
     frame_key = frame_key(source_key)
     source_result = %SourceResult{request_id: "source-request-health"}
@@ -191,7 +195,7 @@ defmodule Cadence.Dashboards.SourceHealthTest do
                reason: :source_probe_failed,
                observed_at: ~U[2026-06-21 13:00:00Z]
              })
-             |> SourceHealth.record_source_health(runtime_cache: cache)
+             |> SourceHealth.record_source_health()
 
     assert RuntimeCache.get_source_result(source_key, cache) == :miss
     assert RuntimeCache.get_frame(frame_key, cache) == :miss
@@ -772,6 +776,19 @@ defmodule Cadence.Dashboards.SourceHealthTest do
       receipt_time: ~U[2026-06-21 14:00:00Z],
       provenance: %{}
     }
+  end
+
+  defp use_dashboard_runtime_cache!(cache) do
+    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
+
+    Application.put_env(:cadence, :dashboard_runtime_invalidation,
+      enabled?: true,
+      runtime_cache: cache
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
+    end)
   end
 
   defp best_effort_watermark(_organization_id, _mission_id, _point_id, _opts) do

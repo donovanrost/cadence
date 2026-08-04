@@ -6,7 +6,7 @@ defmodule Cadence.Application do
   use Application
 
   alias Cadence.Auth
-  alias Cadence.Management.DataSources, as: DashboardDataSources
+  alias Cadence.Management.DataSources
   @impl true
   def start(_type, _args) do
     Cadence.Observability.setup_repo_tracing()
@@ -40,16 +40,16 @@ defmodule Cadence.Application do
   end
 
   defp initialize_after_start do
-    maybe_bootstrap_dashboard_data_sources()
+    maybe_bootstrap_data_sources()
 
     Auth.reconcile_environment_admin()
   end
 
-  defp maybe_bootstrap_dashboard_data_sources do
-    dashboard_data_sources_config = Application.get_env(:cadence, :dashboard_data_sources, [])
+  defp maybe_bootstrap_data_sources do
+    data_sources_config = Application.get_env(:cadence, :data_sources, [])
 
-    if Keyword.get(dashboard_data_sources_config, :bootstrap_defaults?, false) do
-      _ = DashboardDataSources.ensure_default_managed_sources!()
+    if Keyword.get(data_sources_config, :bootstrap_defaults?, false) do
+      _ = DataSources.ensure_default_managed_sources!()
     end
 
     :ok

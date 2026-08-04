@@ -3,7 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Cadence.Dashboards.{ComparisonReviewQueue, DataBinding}
+  alias Cadence.Dashboards.ComparisonReviewQueue
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
 
   test "dashboard_toolbar exposes mission scope alongside spacecraft context search" do

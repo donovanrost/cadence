@@ -8,9 +8,10 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
     ResolvedSourceBinding,
     SourceCircuitBreaker,
     SourceExecutionPolicy,
-    SourceHealth,
     SourceResult
   }
+
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
   @spec allow(
           PlannedSourceRequest.t(),

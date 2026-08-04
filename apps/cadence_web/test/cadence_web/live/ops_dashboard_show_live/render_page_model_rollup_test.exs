@@ -3,13 +3,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelRollupTest do
 
   alias Cadence.Dashboards.{
     ComparisonReviewQueue,
-    DataBinding,
     Document,
     Field,
     Frame,
     PlacementFrames,
     RenderWidget
   }
+
+  alias Cadence.DataSources.DataBinding
 
   alias CadenceWeb.OpsDashboardShowLive.RenderPageModel
 

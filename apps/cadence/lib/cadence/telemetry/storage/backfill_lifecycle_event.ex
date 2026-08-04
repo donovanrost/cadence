@@ -8,6 +8,7 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvent do
   """
 
   alias Cadence.Ids
+  alias Cadence.Telemetry.BackfillLifecycleChanged
   alias Cadence.Telemetry.Storage.WriteContext
 
   @type event_type ::
@@ -165,6 +166,11 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvent do
 
   @spec authorities() :: [authority()]
   def authorities, do: @authorities
+
+  @spec to_fact(t()) :: BackfillLifecycleChanged.t()
+  def to_fact(%__MODULE__{} = event) do
+    BackfillLifecycleChanged.from_committed_event(event)
+  end
 
   defp normalize_event_type(value) when is_atom(value) and value in @event_types, do: value
 

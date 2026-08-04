@@ -2,12 +2,13 @@ defmodule Cadence.Dashboards.DataSourceRegistry.Facts do
   @moduledoc false
 
   alias Cadence.Dashboards.{
-    DataSource,
     PlannedSourceRequest,
     ResolvedSourceBinding,
     ResolveWarning,
     SourceFacts
   }
+
+  alias Cadence.DataSources.DataSource
 
   def fetch(%PlannedSourceRequest{} = request, opts, resolve, warning)
       when is_list(opts) and is_function(resolve, 2) and is_function(warning, 5) do

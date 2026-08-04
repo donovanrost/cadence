@@ -16,9 +16,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   alias Cadence.Commanding.CommandQueueEntry
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Contacts.Path, as: ContactPath
-  alias Cadence.Dashboards.DataBinding
-  alias Cadence.Dashboards.DataSource
-  alias Cadence.Dashboards.DataSources
+  alias Cadence.DataSources.DataBinding
+  alias Cadence.DataSources.DataSource
+  alias Cadence.Management.DataSources
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits.Event, as: LimitEvent

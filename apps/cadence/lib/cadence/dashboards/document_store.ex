@@ -10,10 +10,9 @@ defmodule Cadence.Dashboards.DocumentStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Dashboards
-
   alias Cadence.Dashboards.{
     ComparisonReviewQueue,
+    Contracts,
     DashboardSummary,
     Document,
     DocumentMigration,
@@ -484,14 +483,14 @@ defmodule Cadence.Dashboards.DocumentStore do
   end
 
   defp validate_document(%Document{} = document) do
-    case Dashboards.validate_document(document) do
+    case Contracts.validate_document(document) do
       %{valid?: true} -> :ok
       result -> {:error, {:invalid_dashboard_document, result}}
     end
   end
 
   defp validate_publish_readiness(organization_id, mission_id, %Document{} = document) do
-    case Dashboards.validate_publish_readiness(organization_id, mission_id, document) do
+    case Contracts.validate_publish_readiness(organization_id, mission_id, document) do
       %{valid?: true} -> :ok
       result -> {:error, {:invalid_dashboard_document, result}}
     end

@@ -1,7 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RenderToolbarAssignsTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{ComparisonReviewQueue, DataBinding, Document, RenderWidget}
+  alias Cadence.Dashboards.{ComparisonReviewQueue, Document, RenderWidget}
+
+  alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.RenderToolbarAssigns
   alias Phoenix.LiveView.Socket
 

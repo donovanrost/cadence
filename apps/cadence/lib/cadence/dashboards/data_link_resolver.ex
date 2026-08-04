@@ -11,6 +11,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.Dashboards.{
     DataLink,
     DataLinkInspector,
+    Lifecycle,
     LifecycleEvent
   }
 
@@ -24,9 +25,9 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   alias Cadence.IngressArchive
   alias Cadence.Limits
   alias Cadence.Ops.PointCatalog
+  alias Cadence.Reads.Telemetry, as: TelemetryReads
 
   alias Cadence.Telemetry.SampleRecords
-  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @supported_targets DataLink.resolvable_targets()
 
@@ -329,7 +330,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
 
   defp resolve_telemetry_revision_decision_event(%DataLink{} = link, organization_id, mission_id) do
     link.target_id
-    |> TelemetryStorage.fetch_observation_identity_decision_event(
+    |> TelemetryReads.fetch_observation_identity_decision_event(
       organization_id: organization_id,
       mission_id: mission_id
     )
@@ -356,7 +357,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   end
 
   defp resolve_dashboard_lifecycle_event(%DataLink{} = link, organization_id, mission_id) do
-    case Cadence.Dashboards.fetch_lifecycle_event(organization_id, mission_id, link.target_id) do
+    case Lifecycle.fetch_event(organization_id, mission_id, link.target_id) do
       {:ok, %LifecycleEvent{} = event} ->
         {:ok,
          inspector(

@@ -1,16 +1,17 @@
 defmodule Cadence.Dashboards.SourceCredentialsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Dashboards.{
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+
+  alias Cadence.DataSources.{
     DataSource,
     ResolvedSourceCredential,
     SourceCredentialEvent,
     SourceCredentialMaterial,
-    SourceCredentialReference,
-    SourceCredentials
+    SourceCredentialReference
   }
 
-  alias Cadence.Dashboards.SourceCredentials.{
+  alias Cadence.Management.DataSources.Credentials.{
     EnvMaterialResolver,
     ExternalSecretBackend,
     SecretMaterialResolver
@@ -454,13 +455,13 @@ defmodule Cadence.Dashboards.SourceCredentialsTest do
     assert audit_event.payload["secret_material_fields"] == ["bearer_token"]
 
     assert audit_event.payload["resolver"] ==
-             "Cadence.Dashboards.SourceCredentials.SecretMaterialResolver.resolve/2"
+             "Cadence.Management.DataSources.Credentials.SecretMaterialResolver.resolve/2"
 
     assert audit_event.payload["secret_backend"] ==
-             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+             "Cadence.Management.DataSources.Credentials.ExternalSecretBackend.fetch_material/2"
 
     assert audit_event.metadata["secret_backend"] ==
-             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+             "Cadence.Management.DataSources.Credentials.ExternalSecretBackend.fetch_material/2"
 
     refute inspect(audit_event) =~ "secret-bearer"
     refute inspect(audit_event) =~ "secret-manager-token"
@@ -580,7 +581,7 @@ defmodule Cadence.Dashboards.SourceCredentialsTest do
            ]
 
     assert audit_event.payload["secret_backend"] ==
-             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+             "Cadence.Management.DataSources.Credentials.ExternalSecretBackend.fetch_material/2"
 
     assert audit_event.current["failure_reason"] == [
              "external_secret_manager_http_error",

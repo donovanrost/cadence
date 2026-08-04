@@ -19,7 +19,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
   alias Cadence.Comms.{GroundStation, Transport}
   alias Cadence.Contacts.{Path, RealizedContact}
 
-  alias Cadence.Dashboards.{DataBinding, DataSource, DataSources, SourceHealth}
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Management.DataSources
+
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
@@ -903,9 +907,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
     operational_binding_id = "replay-operational-observables-#{unique}"
     events_binding_id = "replay-events-#{unique}"
 
+    %DataBinding{} =
+      default_operational_binding =
+      DataSources.default_flight_operational_observables_binding()
+
+    %DataBinding{} = default_events_binding = DataSources.default_flight_events_binding()
+
     assert {:ok, _binding} =
              DataSources.persist_data_binding(%DataBinding{
-               DataSources.default_flight_operational_observables_binding()
+               default_operational_binding
                | binding_id: operational_binding_id,
                  organization_id: mission.organization_id,
                  mission_id: mission.mission_id,
@@ -916,7 +926,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures do
 
     assert {:ok, _binding} =
              DataSources.persist_data_binding(%DataBinding{
-               DataSources.default_flight_events_binding()
+               default_events_binding
                | binding_id: events_binding_id,
                  organization_id: mission.organization_id,
                  mission_id: mission.mission_id,

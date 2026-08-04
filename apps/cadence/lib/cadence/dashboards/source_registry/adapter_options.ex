@@ -3,15 +3,13 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptions do
   Builds source-adapter options and resolves credential-safe connection context.
   """
 
-  alias Cadence.Dashboards.{
-    DataSource,
-    PlannedSourceRequest,
-    ResolvedSourceBinding,
-    ResolvedSourceCredential,
-    SourceCapabilities,
-    SourceCredentialMaterial,
-    SourceCredentials
-  }
+  alias Cadence.Dashboards.{PlannedSourceRequest, ResolvedSourceBinding}
+
+  alias Cadence.DataSources.SourceCapabilities
+
+  alias Cadence.Reads.DataSources, as: DataSourceReads
+
+  alias Cadence.DataSources.{DataSource, ResolvedSourceCredential, SourceCredentialMaterial}
 
   @spec build(
           PlannedSourceRequest.t(),
@@ -105,9 +103,9 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptions do
     resolver_opts = credential_resolver_opts(data_source, opts)
 
     if credential_material_resolver_configured?(opts) do
-      SourceCredentials.resolve_material(data_source.credentials_ref, resolver_opts)
+      DataSourceReads.resolve_credential_material(data_source.credentials_ref, resolver_opts)
     else
-      SourceCredentials.resolve(data_source.credentials_ref, resolver_opts)
+      DataSourceReads.resolve_credential(data_source.credentials_ref, resolver_opts)
     end
   end
 
@@ -129,7 +127,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptions do
   end
 
   defp credential_material_resolver_configured?(opts) do
-    configured = Application.get_env(:cadence, :dashboard_source_credentials, [])
+    configured = Application.get_env(:cadence, :data_source_credentials, [])
 
     Keyword.has_key?(opts, :credential_material_resolver) ||
       Keyword.has_key?(opts, :credential_secret_backend) ||

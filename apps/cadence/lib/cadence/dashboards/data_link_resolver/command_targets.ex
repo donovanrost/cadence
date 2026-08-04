@@ -8,9 +8,9 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
 
   import Cadence.Dashboards.DataLinkResolver.Support
 
-  alias Cadence.Commanding
   alias Cadence.Dashboards.{DataLink, DataLinkInspector}
-  alias Cadence.OperationalEvents
+  alias Cadence.Reads.Commands, as: CommandReads
+  alias Cadence.Reads.OperationalEvidence
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
@@ -19,7 +19,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
         organization_id,
         mission_id
       ) do
-    case Commanding.fetch_command_release_attempt(
+    case CommandReads.fetch_command_release_attempt(
            organization_id,
            mission_id,
            link.target_id
@@ -54,7 +54,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
   end
 
   def resolve(%DataLink{target: :command_queue_entry} = link, organization_id, mission_id) do
-    case Commanding.fetch_command_queue_entry(organization_id, mission_id, link.target_id) do
+    case CommandReads.fetch_command_queue_entry(organization_id, mission_id, link.target_id) do
       {:ok, queue_entry} ->
         {:ok,
          inspector(
@@ -72,7 +72,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
   end
 
   def resolve(%DataLink{target: :command_request} = link, organization_id, mission_id) do
-    case Commanding.fetch_command_request(organization_id, mission_id, link.target_id) do
+    case CommandReads.fetch_command_request(organization_id, mission_id, link.target_id) do
       {:ok, request} ->
         {:ok,
          inspector(
@@ -93,7 +93,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
         organization_id,
         mission_id
       ) do
-    case Commanding.fetch_command_verifier_instance(
+    case CommandReads.fetch_command_verifier_instance(
            organization_id,
            mission_id,
            link.target_id
@@ -184,7 +184,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
   defp request_related_links(%DataLink{} = link, request, organization_id, mission_id) do
     queue_entry_links =
       organization_id
-      |> Commanding.list_command_queue_entries(
+      |> CommandReads.list_command_queue_entries(
         mission_id,
         command_request_id: request.command_request_id
       )
@@ -200,7 +200,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
 
     release_attempt_links =
       organization_id
-      |> Commanding.list_command_release_attempts(
+      |> CommandReads.list_command_release_attempts(
         mission_id,
         command_request_id: request.command_request_id
       )
@@ -280,7 +280,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
          source_record_id
        ) do
     organization_id
-    |> OperationalEvents.list_events(
+    |> OperationalEvidence.list_operational_events(
       mission_id,
       source_record_kind: source_record_kind,
       source_record_id: source_record_id,
@@ -298,7 +298,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
        ) do
     verifier_links =
       organization_id
-      |> Commanding.list_command_verifier_instances(
+      |> CommandReads.list_command_verifier_instances(
         mission_id,
         command_release_attempt_id: release_attempt.command_release_attempt_id
       )
