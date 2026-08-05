@@ -9,7 +9,36 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Dashboards.{DashboardResolveResult, Frame, RuntimeCacheKey, SourceResult}
+
+  @default_call_timeout_ms 1_000
+
+  @source_result_live_lineage_fields [
+    :cache_policy,
+    :organization_id,
+    :mission_id,
+    :request_id,
+    :logical_source,
+    :observables,
+    :time_context,
+    :replay_run_id,
+    :source_binding_ids,
+    :data_source_ids,
+    :realms,
+    :datasets
+  ]
+
+  @frame_live_lineage_fields @source_result_live_lineage_fields ++
+                               [
+                                 :placement_id,
+                                 :placement_size,
+                                 :display,
+                                 :frame_shape,
+                                 :limit_context,
+                                 :catalog_revision
+                               ]
 
   @type server :: GenServer.server()
   @type invalidation_filters :: keyword() | map()
@@ -35,10 +64,7 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   @spec get_plan(RuntimeCacheKey.t(), server()) :: {:ok, DashboardResolveResult.t()} | :miss
   def get_plan(%RuntimeCacheKey{layer: :plan} = key, server \\ __MODULE__) do
-    case server_pid(server) do
-      nil -> :miss
-      _pid -> GenServer.call(server, {:get, :plan, key.fingerprint})
-    end
+    cache_call(server, {:get, :plan, key.fingerprint}, :miss)
   end
 
   @spec put_plan(RuntimeCacheKey.t(), DashboardResolveResult.t(), server()) :: :ok
@@ -47,18 +73,12 @@ defmodule Cadence.Dashboards.RuntimeCache do
         %DashboardResolveResult{} = result,
         server \\ __MODULE__
       ) do
-    case server_pid(server) do
-      nil -> :ok
-      _pid -> GenServer.call(server, {:put, :plan, key, result})
-    end
+    cache_call(server, {:put, :plan, key, result}, :ok)
   end
 
   @spec get_source_result(RuntimeCacheKey.t(), server()) :: {:ok, SourceResult.t()} | :miss
   def get_source_result(%RuntimeCacheKey{layer: :source_result} = key, server \\ __MODULE__) do
-    case server_pid(server) do
-      nil -> :miss
-      _pid -> GenServer.call(server, {:get, :source_result, key.fingerprint})
-    end
+    cache_call(server, {:get, :source_result, key.fingerprint}, :miss)
   end
 
   @spec put_source_result(RuntimeCacheKey.t(), SourceResult.t(), server()) :: :ok
@@ -67,27 +87,18 @@ defmodule Cadence.Dashboards.RuntimeCache do
         %SourceResult{} = result,
         server \\ __MODULE__
       ) do
-    case server_pid(server) do
-      nil -> :ok
-      _pid -> GenServer.call(server, {:put, :source_result, key, result})
-    end
+    cache_call(server, {:put, :source_result, key, result}, :ok)
   end
 
   @spec get_frame(RuntimeCacheKey.t(), server()) :: {:ok, [Frame.t()]} | :miss
   def get_frame(%RuntimeCacheKey{layer: :frame} = key, server \\ __MODULE__) do
-    case server_pid(server) do
-      nil -> :miss
-      _pid -> GenServer.call(server, {:get, :frame, key.fingerprint})
-    end
+    cache_call(server, {:get, :frame, key.fingerprint}, :miss)
   end
 
   @spec put_frame(RuntimeCacheKey.t(), [Frame.t()], server()) :: :ok
   def put_frame(%RuntimeCacheKey{layer: :frame} = key, frames, server \\ __MODULE__)
       when is_list(frames) do
-    case server_pid(server) do
-      nil -> :ok
-      _pid -> GenServer.call(server, {:put, :frame, key, frames})
-    end
+    cache_call(server, {:put, :frame, key, frames}, :ok)
   end
 
   @spec invalidate_plans(invalidation_filters()) :: {:ok, non_neg_integer()}
@@ -97,10 +108,7 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   @spec invalidate_plans(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_plans(server, filters) when is_list(filters) or is_map(filters) do
-    case server_pid(server) do
-      nil -> {:ok, 0}
-      _pid -> GenServer.call(server, {:invalidate, :plan, normalize_filters(filters)})
-    end
+    cache_call(server, {:invalidate, :plan, normalize_filters(filters)}, {:ok, 0})
   end
 
   @spec invalidate_source_results(invalidation_filters()) :: {:ok, non_neg_integer()}
@@ -110,10 +118,7 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   @spec invalidate_source_results(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_source_results(server, filters) when is_list(filters) or is_map(filters) do
-    case server_pid(server) do
-      nil -> {:ok, 0}
-      _pid -> GenServer.call(server, {:invalidate, :source_result, normalize_filters(filters)})
-    end
+    cache_call(server, {:invalidate, :source_result, normalize_filters(filters)}, {:ok, 0})
   end
 
   @spec invalidate_frames(invalidation_filters()) :: {:ok, non_neg_integer()}
@@ -123,18 +128,12 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   @spec invalidate_frames(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_frames(server, filters) when is_list(filters) or is_map(filters) do
-    case server_pid(server) do
-      nil -> {:ok, 0}
-      _pid -> GenServer.call(server, {:invalidate, :frame, normalize_filters(filters)})
-    end
+    cache_call(server, {:invalidate, :frame, normalize_filters(filters)}, {:ok, 0})
   end
 
   @spec reset(server()) :: :ok
   def reset(server \\ __MODULE__) do
-    case server_pid(server) do
-      nil -> :ok
-      _pid -> GenServer.call(server, :reset)
-    end
+    cache_call(server, :reset, :ok)
   end
 
   @impl true
@@ -147,7 +146,13 @@ defmodule Cadence.Dashboards.RuntimeCache do
         write_concurrency: true
       ])
 
-    {:ok, %{table: table}}
+    live_index =
+      :ets.new(__MODULE__, [
+        :set,
+        :private
+      ])
+
+    {:ok, %{live_index: live_index, table: table}}
   end
 
   @impl true
@@ -158,29 +163,72 @@ defmodule Cadence.Dashboards.RuntimeCache do
     end
   end
 
-  def handle_call({:put, layer, %RuntimeCacheKey{} = key, value}, _from, %{table: table} = state) do
-    entry = %{value: value, metadata: cache_metadata(layer, key, value)}
+  def handle_call(
+        {:put, layer, %RuntimeCacheKey{} = key, value},
+        _from,
+        %{live_index: live_index, table: table} = state
+      ) do
+    metadata = cache_metadata(layer, key, value)
+    prune_superseded_live_entry(table, live_index, layer, key.fingerprint, metadata)
+
+    entry = %{value: value, metadata: metadata}
     true = :ets.insert(table, {{layer, key.fingerprint}, entry})
+    index_live_entry(live_index, layer, key.fingerprint, metadata)
     {:reply, :ok, state}
   end
 
-  def handle_call({:invalidate, layer, filters}, _from, %{table: table} = state) do
+  def handle_call(
+        {:invalidate, layer, filters},
+        _from,
+        %{live_index: live_index, table: table} = state
+      ) do
     deleted =
       table
       |> entries_for_layer(layer)
-      |> Enum.filter(fn {_key, entry} -> metadata_matches?(entry.metadata, filters) end)
-      |> Enum.reduce(0, fn {key, _entry}, count ->
-        true = :ets.delete(table, key)
+      |> Enum.filter(fn {_fingerprint, metadata} -> metadata_matches?(metadata, filters) end)
+      |> Enum.reduce(0, fn {fingerprint, metadata}, count ->
+        delete_entry(table, live_index, layer, fingerprint, metadata)
         count + 1
       end)
 
     {:reply, {:ok, deleted}, state}
   end
 
-  def handle_call(:reset, _from, %{table: table} = state) do
+  def handle_call(:reset, _from, %{live_index: live_index, table: table} = state) do
     true = :ets.delete_all_objects(table)
+    true = :ets.delete_all_objects(live_index)
     {:reply, :ok, state}
   end
+
+  defp cache_call(server, request, fallback) do
+    case server_pid(server) do
+      nil ->
+        fallback
+
+      _pid ->
+        try do
+          GenServer.call(server, request, call_timeout_ms())
+        catch
+          :exit, reason ->
+            Logger.warning(
+              "Dashboard runtime cache #{cache_operation(request)} failed open: " <>
+                inspect(reason, limit: 10)
+            )
+
+            fallback
+        end
+    end
+  end
+
+  defp call_timeout_ms do
+    :cadence
+    |> Application.get_env(:dashboard_runtime_cache, [])
+    |> Keyword.get(:call_timeout_ms, @default_call_timeout_ms)
+  end
+
+  defp cache_operation({operation, _layer, _value}), do: operation
+  defp cache_operation({operation, _layer, _key, _value}), do: operation
+  defp cache_operation(operation), do: operation
 
   defp server_pid(server) do
     cond do
@@ -199,18 +247,61 @@ defmodule Cadence.Dashboards.RuntimeCache do
   end
 
   defp entries_for_layer(table, layer) do
-    :ets.foldl(
-      fn
-        {{^layer, _fingerprint} = key, %{metadata: _metadata} = entry}, acc ->
-          [{key, entry} | acc]
-
-        _other, acc ->
-          acc
-      end,
-      [],
-      table
-    )
+    :ets.select(table, [
+      {{{layer, :"$1"}, %{metadata: :"$2"}}, [], [{{:"$1", :"$2"}}]}
+    ])
   end
+
+  defp prune_superseded_live_entry(table, live_index, layer, fingerprint, metadata) do
+    case live_lineage(layer, metadata) do
+      nil ->
+        :ok
+
+      lineage ->
+        case :ets.lookup(live_index, lineage) do
+          [{^lineage, {previous_layer, previous_fingerprint}}]
+          when previous_layer != layer or previous_fingerprint != fingerprint ->
+            true = :ets.delete(table, {previous_layer, previous_fingerprint})
+            true = :ets.delete(live_index, lineage)
+
+          _other ->
+            :ok
+        end
+    end
+  end
+
+  defp index_live_entry(live_index, layer, fingerprint, metadata) do
+    case live_lineage(layer, metadata) do
+      nil -> :ok
+      lineage -> true = :ets.insert(live_index, {lineage, {layer, fingerprint}})
+    end
+  end
+
+  defp delete_entry(table, live_index, layer, fingerprint, metadata) do
+    key = {layer, fingerprint}
+    true = :ets.delete(table, key)
+
+    case live_lineage(layer, metadata) do
+      nil ->
+        :ok
+
+      lineage ->
+        case :ets.lookup(live_index, lineage) do
+          [{^lineage, ^key}] -> true = :ets.delete(live_index, lineage)
+          _other -> :ok
+        end
+    end
+  end
+
+  defp live_lineage(:source_result, %{cache_policy: :live} = metadata) do
+    {:source_result, Map.take(metadata, @source_result_live_lineage_fields)}
+  end
+
+  defp live_lineage(:frame, %{cache_policy: :live} = metadata) do
+    {:frame, Map.take(metadata, @frame_live_lineage_fields)}
+  end
+
+  defp live_lineage(_layer, _metadata), do: nil
 
   defp cache_metadata(:plan, _key, %DashboardResolveResult{} = result) do
     plan_key = get_in(result.plan_metadata, [:cache, :plan_key])

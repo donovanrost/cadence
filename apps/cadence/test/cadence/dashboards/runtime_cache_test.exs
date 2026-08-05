@@ -305,8 +305,18 @@ defmodule Cadence.Dashboards.RuntimeCacheTest do
 
     conflict_source_key = source_result_key(:telemetry, request_id: "source_req_conflict")
     resolved_source_key = source_result_key(:telemetry, request_id: "source_req_resolved")
-    conflict_frame_key = frame_key(:telemetry, telemetry_revision_dependency: conflict_dependency)
-    resolved_frame_key = frame_key(:telemetry, telemetry_revision_dependency: resolved_dependency)
+
+    conflict_frame_key =
+      frame_key(:telemetry,
+        placement_id: "placement_conflict",
+        telemetry_revision_dependency: conflict_dependency
+      )
+
+    resolved_frame_key =
+      frame_key(:telemetry,
+        placement_id: "placement_resolved",
+        telemetry_revision_dependency: resolved_dependency
+      )
 
     conflict_result =
       source_result(:telemetry, telemetry_revision_dependency: conflict_dependency)
@@ -413,18 +423,29 @@ defmodule Cadence.Dashboards.RuntimeCacheTest do
 
     old_key =
       source_result_key(:telemetry,
+        request_id: "source_req_old_watermark",
         data_source_id: "flight-questdb",
         complete_through: ~U[2026-06-17 12:00:00Z]
       )
 
     new_key =
       source_result_key(:telemetry,
+        request_id: "source_req_new_watermark",
         data_source_id: "flight-questdb",
         complete_through: ~U[2026-06-17 12:05:00Z]
       )
 
-    old_result = source_result(:telemetry, complete_through: ~U[2026-06-17 12:00:00Z])
-    new_result = source_result(:telemetry, complete_through: ~U[2026-06-17 12:05:00Z])
+    old_result =
+      source_result(:telemetry,
+        request_id: "source_req_old_watermark",
+        complete_through: ~U[2026-06-17 12:00:00Z]
+      )
+
+    new_result =
+      source_result(:telemetry,
+        request_id: "source_req_new_watermark",
+        complete_through: ~U[2026-06-17 12:05:00Z]
+      )
 
     assert :ok = RuntimeCache.put_source_result(old_key, old_result, cache)
     assert :ok = RuntimeCache.put_source_result(new_key, new_result, cache)
@@ -503,6 +524,69 @@ defmodule Cadence.Dashboards.RuntimeCacheTest do
     assert {:ok, ^frames} = RuntimeCache.get_frame(key, cache)
     assert :ok = RuntimeCache.reset(cache)
     assert RuntimeCache.get_frame(key, cache) == :miss
+  end
+
+  test "new live generations replace superseded source results and frames" do
+    cache = start_supervised!({RuntimeCache, name: nil})
+
+    old_source_key =
+      source_result_key(:telemetry, complete_through: ~U[2026-06-17 12:00:00Z])
+
+    new_source_key =
+      source_result_key(:telemetry, complete_through: ~U[2026-06-17 12:00:01Z])
+
+    old_frame_key = frame_key(:telemetry, complete_through: ~U[2026-06-17 12:00:00Z])
+    new_frame_key = frame_key(:telemetry, complete_through: ~U[2026-06-17 12:00:01Z])
+    old_source_result = source_result(:telemetry, complete_through: ~U[2026-06-17 12:00:00Z])
+    new_source_result = source_result(:telemetry, complete_through: ~U[2026-06-17 12:00:01Z])
+    old_frames = frames(:telemetry, frame_id: "frame-old-live-generation")
+    new_frames = frames(:telemetry, frame_id: "frame-new-live-generation")
+
+    refute old_source_key.fingerprint == new_source_key.fingerprint
+    refute old_frame_key.fingerprint == new_frame_key.fingerprint
+
+    assert :ok = RuntimeCache.put_source_result(old_source_key, old_source_result, cache)
+    assert :ok = RuntimeCache.put_frame(old_frame_key, old_frames, cache)
+    assert :ok = RuntimeCache.put_source_result(new_source_key, new_source_result, cache)
+    assert :ok = RuntimeCache.put_frame(new_frame_key, new_frames, cache)
+
+    assert RuntimeCache.get_source_result(old_source_key, cache) == :miss
+    assert {:ok, ^new_source_result} = RuntimeCache.get_source_result(new_source_key, cache)
+    assert RuntimeCache.get_frame(old_frame_key, cache) == :miss
+    assert {:ok, ^new_frames} = RuntimeCache.get_frame(new_frame_key, cache)
+  end
+
+  test "snapshot generations remain independently reusable" do
+    cache = start_supervised!({RuntimeCache, name: nil})
+
+    first_key =
+      frame_key(:telemetry,
+        cache_policy: :snapshot,
+        time_context: %{
+          mode: :range,
+          from: ~U[2026-06-17 12:00:00Z],
+          to: ~U[2026-06-17 12:01:00Z]
+        }
+      )
+
+    second_key =
+      frame_key(:telemetry,
+        cache_policy: :snapshot,
+        time_context: %{
+          mode: :range,
+          from: ~U[2026-06-17 12:01:00Z],
+          to: ~U[2026-06-17 12:02:00Z]
+        }
+      )
+
+    first_frames = frames(:telemetry, frame_id: "frame-first-snapshot")
+    second_frames = frames(:telemetry, frame_id: "frame-second-snapshot")
+
+    assert :ok = RuntimeCache.put_frame(first_key, first_frames, cache)
+    assert :ok = RuntimeCache.put_frame(second_key, second_frames, cache)
+
+    assert {:ok, ^first_frames} = RuntimeCache.get_frame(first_key, cache)
+    assert {:ok, ^second_frames} = RuntimeCache.get_frame(second_key, cache)
   end
 
   test "invalidating source result fingerprint clears dependent frames only" do
