@@ -8,8 +8,10 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Contacts.{Path, ScheduledContact}
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
+  alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
   test "renders canonical mission events and round-trips originating dashboard context" do
@@ -17,6 +19,45 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
     organization = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Timeline spacecraft")
+
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "timeline-source-endpoint",
+        mission_id: mission.mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        display_name: "Timeline source endpoint"
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(
+               organization.organization_id,
+               source_endpoint
+             )
+
+    scheduled_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "timeline-scheduled-contact",
+        mission_id: mission.mission_id,
+        source_endpoint_refs: [source_endpoint.source_endpoint_id],
+        contact_intents: [:telemetry_downlink],
+        paths: [
+          Path.new(%{
+            path_id: "timeline-contact-path",
+            direction: :downlink,
+            selection_role: :selected,
+            source_endpoint_ref: source_endpoint.source_endpoint_id
+          })
+        ],
+        starts_at: ~U[2026-08-01 12:10:00Z],
+        ends_at: ~U[2026-08-01 12:20:00Z]
+      })
+
+    assert {:ok, _scheduled_contact} =
+             Cadence.Contacts.persist_scheduled_contact(
+               organization.organization_id,
+               scheduled_contact
+             )
 
     dashboard =
       TestFixtures.persist_dashboard_document!(mission,
@@ -36,7 +77,7 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
         kind: :source_health_degraded,
         severity: :warning,
         subject: %{kind: :data_source, id: "flight-telemetry"},
-        scope: %{data_source_id: "flight-telemetry", spacecraft_id: "spacecraft-1"},
+        scope: %{data_source_id: "flight-telemetry", spacecraft_id: spacecraft.spacecraft_id},
         causality: %{correlation_id: "source-health-1"},
         payload: %{reason: "source_probe_failed"},
         current: %{status: "degraded"}
@@ -52,7 +93,7 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
         kind: :telemetry_backfill_failed,
         severity: :error,
         subject: %{kind: :telemetry_point, id: "HK.counter"},
-        scope: %{point_id: "HK.counter", spacecraft_id: "spacecraft-1"},
+        scope: %{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id},
         causality: %{correlation_id: "historical-group-1"},
         payload: %{reason: "archive_gap"},
         metadata: %{"request_group_id" => "historical-group-1"}
@@ -101,5 +142,27 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
 
     assert has_element?(view, "#mission-event-mission_event-operational-event-source-health-1")
     refute has_element?(view, "#mission-event-mission_event-operational-event-backfill-1")
+
+    view
+    |> form("#timeline-filter-form",
+      timeline: %{
+        category: "operations",
+        kind: "scheduled_contact_interval",
+        spacecraft_id: spacecraft.spacecraft_id
+      }
+    )
+    |> render_submit()
+
+    contact_event_selector =
+      "#mission-event-mission_event-operational_event-scheduled_contact_interval-timeline-scheduled-contact"
+
+    assert has_element?(view, contact_event_selector)
+
+    view |> element(contact_event_selector) |> render_click()
+
+    assert has_element?(
+             view,
+             ~s(#timeline-open-event-owner[href="/missions/#{mission.mission_id}/ops/contacts/records/#{scheduled_contact.scheduled_contact_id}"])
+           )
   end
 end

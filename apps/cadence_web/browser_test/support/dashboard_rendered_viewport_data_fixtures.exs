@@ -309,7 +309,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   def browser_retention_gap_watermark(_organization_id, _mission_id, _point_id, _opts) do
     {:ok,
      %{
-       complete_through: ~U[2026-06-16 00:30:00Z],
+       complete_through: ~U[2026-06-16 00:25:00Z],
        latest_receipt_time: ~U[2026-06-16 00:30:00Z],
        retention_starts_at: ~U[2026-06-16 00:20:00Z],
        sample_count: 2,

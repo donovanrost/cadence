@@ -1966,6 +1966,50 @@ async function runLiveDashboardInteractions(client, url, profile) {
   assert.equal(scopeResult.result.value.panelVisible, true, "dashboard scope panel should be visible")
   assert.equal(scopeResult.result.value.searchPresent, true, "dashboard scope search should render")
 
+  const dataResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const visible = (el) => {
+          if (!el) return false
+          const rect = el.getBoundingClientRect()
+          const style = getComputedStyle(el)
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
+        }
+        const dataOptions = document.querySelector("#dashboard-query-options")
+        document.querySelector("#dashboard-query-options-toggle")?.click()
+
+        return {
+          disclosureOpen: dataOptions?.open || dataOptions?.hasAttribute("open") || false,
+          nestedInScope: Boolean(
+            document.querySelector("#dashboard-data-controls-panel #dashboard-query-options")
+          ),
+          controlsVisible: visible(document.querySelector("#dashboard-data-query-controls")),
+          formPresent: Boolean(document.querySelector("#runtime-context-form")),
+          sourceBindingPresent: Boolean(document.querySelector("#dashboard-source-binding")),
+          representationPresent: Boolean(document.querySelector("#dashboard-data-view"))
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(dataResult.result.value.disclosureOpen, true, "dashboard data options disclosure should open")
+  assert.equal(dataResult.result.value.nestedInScope, true, "dashboard data options should be nested in scope")
+  assert.equal(dataResult.result.value.controlsVisible, true, "dashboard data options should be visible")
+  assert.equal(dataResult.result.value.formPresent, true, "runtime data form should render")
+  assert.equal(dataResult.result.value.sourceBindingPresent, true, "source binding control should render")
+  assert.equal(dataResult.result.value.representationPresent, true, "data representation control should render")
+
+  await client.send("Runtime.evaluate", {
+    expression: `document.querySelector("#dashboard-query-options-toggle")?.click()`,
+  })
+  await waitForExpression(
+    client,
+    `!document.querySelector("#dashboard-query-options")?.open`,
+    2_000,
+    "dashboard data options disclosure to close"
+  )
+
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
     key: "Escape",
@@ -1982,54 +2026,6 @@ async function runLiveDashboardInteractions(client, url, profile) {
     `,
     2_000,
     "dashboard scope overlay to close"
-  )
-
-  const dataResult = await client.send("Runtime.evaluate", {
-    expression: `
-      (() => {
-        const visible = (el) => {
-          if (!el) return false
-          const rect = el.getBoundingClientRect()
-          const style = getComputedStyle(el)
-          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
-        }
-        const dataOptions = document.querySelector("#dashboard-query-options")
-        dataOptions?.querySelector(":scope > [data-overlay-trigger]")?.click()
-
-        return {
-          overlayOpen: dataOptions?.hasAttribute("data-overlay-open") || false,
-          controlsVisible: visible(document.querySelector("#dashboard-data-query-controls")),
-          formPresent: Boolean(document.querySelector("#runtime-context-form")),
-          sourceBindingPresent: Boolean(document.querySelector("#dashboard-source-binding")),
-          representationPresent: Boolean(document.querySelector("#dashboard-data-view"))
-        }
-      })()
-    `,
-    returnByValue: true,
-  })
-
-  assert.equal(dataResult.result.value.overlayOpen, true, "dashboard data options overlay should open")
-  assert.equal(dataResult.result.value.controlsVisible, true, "dashboard data options should be visible")
-  assert.equal(dataResult.result.value.formPresent, true, "runtime data form should render")
-  assert.equal(dataResult.result.value.sourceBindingPresent, true, "source binding control should render")
-  assert.equal(dataResult.result.value.representationPresent, true, "data representation control should render")
-
-  await client.send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "Escape",
-    windowsVirtualKeyCode: 27,
-    nativeVirtualKeyCode: 27,
-  })
-  await waitForExpression(
-    client,
-    `
-      Boolean(
-        !document.querySelector("#dashboard-query-options")?.hasAttribute("data-overlay-open") &&
-        document.querySelector("#dashboard-query-options-panel")?.hidden
-      )
-    `,
-    2_000,
-    "dashboard data options overlay to close"
   )
 
   const timeResult = await client.send("Runtime.evaluate", {
@@ -30945,6 +30941,8 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
     .map((id) => id.trim())
     .filter(Boolean)
   const expectedReplayRunId = expectedDashboardReplayRunId()
+  const expectedSharedCursorPeerPlacementId =
+    argValue("--expected-shared-cursor-peer-placement-id") || ""
   const expectedTimeMode =
     expectedDashboardTimeMode() || (expectedReplayRunId ? "replay_run" : "archive")
   const expectedTimeAxis =
@@ -30992,6 +30990,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
               target: control.dataset.eventMarkerTarget || "",
               targetId: control.dataset.eventMarkerId || "",
               ref: control.dataset.eventMarkerRef || "",
+              cursorPassthrough: control.dataset.chartCursorPassthrough || "",
             })
           ),
         }
@@ -31091,6 +31090,166 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
     watermarkCursorMarker.sourceRequestId,
     "retention and cursor markers should explain the same source request"
   )
+
+  const watermarkCursorControl = markerSummary.controls.find(
+    (control) =>
+      control.target === "source watermark" && control.ref === watermarkCursorMarker.markerId
+  )
+  assert.ok(watermarkCursorControl, "watermark cursor control should render")
+  assert.equal(
+    watermarkCursorControl.cursorPassthrough,
+    "true",
+    "watermark cursor control should preserve shared-cursor movement"
+  )
+
+  const watermarkLayerResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const chart = document.querySelector(${JSON.stringify(chartSelector)})
+        const plotOverlay = chart?.querySelector(".u-over")
+        const watermarkLayer = chart?.querySelector("[data-chart-watermark-overlay-layer]")
+        const region = chart?.querySelector("[data-source-watermark-incomplete-region]")
+        const nativeCursor = chart?.querySelector(".u-cursor-x")
+        if (!chart || !plotOverlay || !watermarkLayer || !region || !nativeCursor) {
+          return {
+            ready: false,
+            reason: "missing plot, watermark, or native cursor layer",
+            chart: Boolean(chart),
+            plotOverlay: Boolean(plotOverlay),
+            watermarkLayer: Boolean(watermarkLayer),
+            region: Boolean(region),
+            nativeCursor: Boolean(nativeCursor),
+            watermarkChildren: Array.from(watermarkLayer?.children || []).map((child) => ({
+              tag: child.tagName,
+              attributes: Array.from(child.attributes || []).map((attribute) => [
+                attribute.name,
+                attribute.value,
+              ]),
+            })),
+            eventControls: Array.from(chart?.querySelectorAll("[data-event-marker-target]") || []).map(
+              (control) => ({
+                target: control.dataset.eventMarkerTarget || "",
+                boundary: control.dataset.watermarkBoundary || "",
+              })
+            ),
+          }
+        }
+
+        const rect = region.getBoundingClientRect()
+        const x = rect.left + Math.max(2, Math.min(rect.width - 2, rect.width * 0.55))
+        const y = rect.top + Math.max(2, Math.min(rect.height - 2, rect.height * 0.62))
+        const relation = watermarkLayer.compareDocumentPosition(nativeCursor)
+
+        return {
+          ready: true,
+          nestedInPlotOverlay: watermarkLayer.parentElement === plotOverlay,
+          beforeNativeCursor: Boolean(relation & Node.DOCUMENT_POSITION_FOLLOWING),
+          pointerTransparent:
+            getComputedStyle(watermarkLayer).pointerEvents === "none" &&
+            getComputedStyle(region).pointerEvents === "none",
+          hitReachesPlotOverlay: document.elementFromPoint(x, y) === plotOverlay,
+          x,
+          y
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const watermarkLayer = watermarkLayerResult.result.value
+  assert.equal(
+    watermarkLayer.ready,
+    true,
+    `watermark overlay and native cursor layers should render: ${JSON.stringify(watermarkLayer)}`
+  )
+  assert.equal(
+    watermarkLayer.nestedInPlotOverlay,
+    true,
+    "watermark wash should be contained by uPlot's pointer overlay"
+  )
+  assert.equal(
+    watermarkLayer.beforeNativeCursor,
+    true,
+    "watermark wash should paint before uPlot's synchronized cursor"
+  )
+  assert.equal(
+    watermarkLayer.pointerTransparent,
+    true,
+    "watermark wash should not intercept plot pointer movement"
+  )
+  assert.equal(
+    watermarkLayer.hitReachesPlotOverlay,
+    true,
+    "pointer hit-testing through the watermark wash should reach uPlot"
+  )
+
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: watermarkLayer.x,
+    y: watermarkLayer.y,
+  })
+
+  const cursorResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const sourceChart = document.querySelector(${JSON.stringify(chartSelector)})
+        const peerChart = ${JSON.stringify(expectedSharedCursorPeerPlacementId)}
+          ? document.querySelector(
+              "[phx-hook='TelemetryChart'][data-placement-id='" +
+                ${JSON.stringify(expectedSharedCursorPeerPlacementId)} +
+                "']"
+            )
+          : null
+
+        const inspectCursor = (chart) => {
+          const cursor = chart?.querySelector(".u-cursor-x")
+          const watermarkLayer = chart?.querySelector("[data-chart-watermark-overlay-layer]")
+          const region = chart?.querySelector("[data-source-watermark-incomplete-region]")
+          if (!chart || !cursor || !watermarkLayer || !region) return { ready: false }
+
+          const relation = watermarkLayer.compareDocumentPosition(cursor)
+          const cursorRect = cursor.getBoundingClientRect()
+          const regionRect = region.getBoundingClientRect()
+          const style = getComputedStyle(cursor)
+
+          return {
+            ready: true,
+            visible: style.display !== "none" && !cursor.classList.contains("u-off"),
+            aboveWatermark: Boolean(relation & Node.DOCUMENT_POSITION_FOLLOWING),
+            insideWatermarkRegion:
+              cursorRect.left >= regionRect.left - 1 && cursorRect.left <= regionRect.right + 1,
+          }
+        }
+
+        return {
+          source: inspectCursor(sourceChart),
+          peer: peerChart ? inspectCursor(peerChart) : null,
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const cursor = cursorResult.result.value
+  assert.equal(cursor.source.ready, true, "source chart native cursor should render")
+  assert.equal(cursor.source.visible, true, "source chart cursor should stay visible in the watermark region")
+  assert.equal(cursor.source.aboveWatermark, true, "source chart cursor should paint above the watermark wash")
+  assert.equal(
+    cursor.source.insideWatermarkRegion,
+    true,
+    "source chart cursor should move through the watermark region"
+  )
+
+  if (expectedSharedCursorPeerPlacementId) {
+    assert.equal(cursor.peer?.ready, true, "shared-cursor peer chart should render")
+    assert.equal(cursor.peer?.visible, true, "synchronized peer cursor should remain visible")
+    assert.equal(cursor.peer?.aboveWatermark, true, "synchronized peer cursor should paint above its watermark wash")
+    assert.equal(
+      cursor.peer?.insideWatermarkRegion,
+      true,
+      "synchronized peer cursor should move through its watermark region"
+    )
+  }
 
   const clickMarker = async (target, ref, label) => {
     const clickResult = await client.send("Runtime.evaluate", {
@@ -31383,6 +31542,8 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
     markers: markerSummary,
     retentionEvidence,
     cursorEvidence,
+    watermarkLayer,
+    cursor,
     eventInspector,
   }
 }
@@ -32454,7 +32615,11 @@ async function runLiveTelemetryStreamInspection(client, profile) {
               runtimeRefreshStatus: page?.dataset.runtimeRefreshStatus || "",
               runtimeRefreshReason: page?.dataset.runtimeRefreshReason || "",
               engineLiveAppendEligible: page?.dataset.engineLiveAppendEligible || "",
-              dashboardTimeMode: page?.dataset.dashboardTimeMode || ""
+              dashboardTimeMode: page?.dataset.dashboardTimeMode || "",
+              dashboardLiveStreamState: page?.dataset.dashboardLiveStreamState || "",
+              dashboardLiveStreamChartCount: Number(
+                page?.dataset.dashboardLiveStreamChartCount || 0
+              )
             }
           })(),
           widgets: Array.from(document.querySelectorAll("[data-widget-lifecycle-state]")).map((widget) => ({
@@ -32489,6 +32654,18 @@ async function runLiveTelemetryStreamInspection(client, profile) {
             pointCount: Number(chart.dataset.chartPointCount || 0),
             latestTimestampMs: Number(chart.dataset.chartLatestTimestampMs || 0),
             liveWindowEndMs: Number(chart.dataset.liveWindowEndMs || 0),
+            liveStreamState: chart.dataset.liveStreamState || "",
+            liveHeartbeatAtMs: Number(chart.dataset.liveHeartbeatAtMs || 0),
+            liveLastSampleAtMs: Number(chart.dataset.liveLastSampleAtMs || 0),
+            liveArrivalSequence: Number(chart.dataset.liveArrivalSequence || 0),
+            liveEdge: (() => {
+              const edge = chart.querySelector("[data-live-stream-edge]")
+              return {
+                present: Boolean(edge),
+                state: edge?.dataset.liveStreamState || "",
+                label: edge?.querySelector(".telemetry-chart-live-edge-label")?.textContent?.trim() || ""
+              }
+            })(),
             watermarkState: chart.dataset.watermarkState || "",
             watermarkLagMs: Number(chart.dataset.watermarkLagMs || 0),
             watermarkBoundaryVisible: chart.dataset.watermarkBoundaryVisible || "",
@@ -32556,7 +32733,40 @@ async function runLiveTelemetryStreamInspection(client, profile) {
       true,
       `${chart.placementId} should advance its live window`
     )
+    assert.equal(chart.liveEdge.present, true, `${chart.placementId} should render a live edge`)
+    assert.equal(
+      ["following", "receiving"].includes(chart.liveStreamState),
+      true,
+      `${chart.placementId} should expose healthy live-stream state`
+    )
+    assert.equal(
+      chart.liveEdge.state,
+      chart.liveStreamState,
+      `${chart.placementId} live edge should match chart stream state`
+    )
+    assert.equal(chart.liveEdge.label, "LIVE", `${chart.placementId} live edge should read LIVE`)
+    assert.equal(
+      chart.liveHeartbeatAtMs > before.liveHeartbeatAtMs,
+      true,
+      `${chart.placementId} should expose an advancing heartbeat`
+    )
+    assert.equal(
+      chart.liveArrivalSequence > before.liveArrivalSequence,
+      true,
+      `${chart.placementId} should expose sample-arrival motion`
+    )
   })
+
+  assert.equal(
+    ["following", "receiving"].includes(current.page.dashboardLiveStreamState),
+    true,
+    "the Time control should receive aggregate healthy live-stream state"
+  )
+  assert.equal(
+    current.page.dashboardLiveStreamChartCount,
+    current.charts.length,
+    "the aggregate live-stream state should cover every chart"
+  )
 
   return {
     initial,

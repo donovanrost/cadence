@@ -51,7 +51,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
       payload =
         %{
           "series" => appends,
-          "window_end_ms" => System.system_time(:millisecond)
+          "window_end_ms" => System.system_time(:millisecond),
+          "refresh_interval_ms" => refresh_interval_ms(socket)
         }
         |> maybe_put("markers", marker_appends, marker_appends == %{})
 
@@ -120,6 +121,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
 
   defp maybe_put_marker_append(acc, placement_id, markers),
     do: Map.put(acc, placement_id, markers)
+
+  defp refresh_interval_ms(socket) do
+    case Map.get(socket.assigns, :dashboard_live_refresh_ms) do
+      value when is_integer(value) and value > 0 -> value
+      _missing -> configured_refresh_interval_ms()
+    end
+  end
+
+  defp configured_refresh_interval_ms do
+    case Application.get_env(:cadence_web, :dashboard_live_refresh_ms, 1_000) do
+      value when is_integer(value) and value > 0 -> value
+      _invalid -> 1_000
+    end
+  end
 
   defp maybe_put(map, _key, _value, true), do: map
   defp maybe_put(map, key, value, false), do: Map.put(map, key, value)

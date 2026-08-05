@@ -74,6 +74,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
 
     assert socket.assigns.patched_query == %{
              "time_mode" => "archive",
+             "time_axis" => "generation_time",
              "from" => "2026-06-25T11:58:00Z",
              "to" => "2026-06-25T12:00:00Z",
              "replay_run_id" => nil
@@ -106,6 +107,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
 
     assert socket.assigns.patched_query == %{
              "time_mode" => "archive",
+             "time_axis" => "generation_time",
              "from" => "2026-06-25T06:00:00Z",
              "to" => "2026-06-25T09:00:00Z",
              "replay_run_id" => nil
@@ -135,6 +137,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
 
     assert back.assigns.patched_query == %{
              "time_mode" => "archive",
+             "time_axis" => "generation_time",
              "from" => "2026-06-25T13:00:00Z",
              "to" => "2026-06-25T17:00:00Z",
              "replay_run_id" => nil
@@ -163,6 +166,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
 
     assert socket.assigns.patched_query == %{
              "time_mode" => "archive",
+             "time_axis" => "generation_time",
              "from" => "2026-06-25T10:30:00Z",
              "to" => "2026-06-25T11:30:00Z",
              "replay_run_id" => nil
@@ -181,6 +185,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
 
     assert socket.assigns.patched_query == %{
              "time_mode" => "archive",
+             "time_axis" => "generation_time",
              "from" => "2026-06-25T15:00:00Z",
              "to" => "2026-06-25T19:00:00Z",
              "replay_run_id" => nil
@@ -262,6 +267,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControlsTimeTest do
             dashboard_time_mode: "live",
             dashboard_time_from: nil,
             dashboard_time_to: nil,
+            dashboard_time_axis: "generation_time",
             dashboard_replay_run_id: nil,
             dashboard_data_realm: "flight",
             dashboard_data_view: "canonical",

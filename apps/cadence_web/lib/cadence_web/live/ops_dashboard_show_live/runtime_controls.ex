@@ -230,7 +230,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeControls do
         "from" => from_iso,
         "to" => to_iso,
         "replay_run_id" => nil
-      },
+      }
+      |> maybe_put("time_axis", Map.get(socket.assigns, :dashboard_time_axis)),
       opts
     )
   end

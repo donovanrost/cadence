@@ -34,7 +34,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
           |> stream_configure(:provider_audit_entries,
             dom_id: &"provider-audit-#{&1.provider_audit_entry_id}"
           )
-          |> assign(:page_title, "Contact #{reservation.provider_reservation_id}")
+          |> assign(:page_title, "Provider reservation #{reservation.provider_reservation_id}")
           |> assign(:ops_nav_item, :contacts)
           |> assign(:provider_reservation_id, reservation.provider_reservation_id)
           |> refresh()
@@ -77,7 +77,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
               <.icon name="hero-arrow-left" class="h-3 w-3" /> Contact ledger
             </.link>
             <div class="mt-3 flex flex-wrap items-center gap-3">
-              <h1 class="text-2xl font-bold tracking-tight text-base-content">Contact record</h1>
+              <h1 class="text-2xl font-bold tracking-tight text-base-content">Provider reservation</h1>
               <.state_badge state={@reservation.lifecycle_state} />
             </div>
             <p class="mt-2 truncate font-mono text-xs text-base-content/50">

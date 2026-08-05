@@ -8,6 +8,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   alias CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents
   alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
 
+  @data_source_issue_codes [
+    :missing_source_binding,
+    :partial_data,
+    :retention_gap,
+    :source_binding_segment_merge_unsupported,
+    :source_connection_failed,
+    :source_degraded,
+    :source_execution_failed,
+    :source_health_degraded,
+    :source_unavailable,
+    :stale_data,
+    :unsupported_observable_scope,
+    :unsupported_source_adapter,
+    :unsupported_source_capability,
+    :watermark_unknown
+  ]
+
   attr :dashboard_document, :any, required: true
   attr :dashboard_lifecycle_status, :any, required: true
   attr :dashboard_lifecycle_events, :list, default: []
@@ -75,11 +92,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       |> assign(:dashboard_share_path, dashboard_share_path(assigns))
       |> assign(:data_query_label, data_query_label(assigns))
       |> assign(:data_query_overrides?, data_query_overrides?(assigns))
+      |> assign(:comparison_toolbar_visible?, comparison_toolbar_visible?(assigns))
+      |> then(&assign(&1, :data_issue_action, data_issue_action(&1)))
 
     ~H"""
     <div
       id="dashboard-telemetry-toolbar"
-      class="min-h-11 shrink-0 flex items-center gap-2 border-b border-base-300/60 bg-base-200/45 px-3 py-1.5"
+      class="min-h-10 shrink-0 flex items-center gap-2 border-b border-base-300/50 bg-base-200/35 px-3 py-1"
+      data-dashboard-viewer-toolbar={to_string(not @edit_mode?)}
     >
       <div class="min-w-0 flex-1">
         <h1
@@ -88,9 +108,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         >
           {@dashboard_document.name}
         </h1>
-        <p class="hidden truncate text-[0.65rem] text-base-content/50 sm:block">
-          Telemetry dashboard
-        </p>
       </div>
 
       <div
@@ -106,11 +123,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
           placement={:bottom_start}
           width={:lg}
           trigger_class="cadence-dashboard-query-trigger"
+          data-dashboard-primary-control="scope"
+          data-query-overrides={to_string(@data_query_overrides?)}
         >
           <:trigger>
             <span class="cadence-dashboard-query-trigger-label">Scope</span>
             <span class="cadence-dashboard-query-trigger-value hidden max-w-36 sm:inline">
               {runtime_scope_label(@current_mission, @spacecraft, @context_scope_kind, @context_scope_id, @context_scope_ids)}
+            </span>
+            <span
+              :if={@data_query_overrides?}
+              class="cadence-dashboard-context-override hidden max-w-40 md:inline-flex"
+              data-dashboard-data-override
+            >
+              {@data_query_label}
             </span>
             <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
           </:trigger>
@@ -140,58 +166,55 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
               context_scope_ids={@context_scope_ids}
               query={@query}
             />
-          </div>
-        </.popover>
-
-        <.popover
-          id="dashboard-query-options"
-          trigger_id="dashboard-query-options-toggle"
-          panel_id="dashboard-query-options-panel"
-          label="Dashboard data options"
-          placement={:bottom_start}
-          width={:lg}
-          trigger_class="cadence-dashboard-query-trigger"
-          data-query-overrides={to_string(@data_query_overrides?)}
-        >
-          <:trigger>
-            <span class="cadence-dashboard-query-trigger-label">Data</span>
-            <span class="cadence-dashboard-query-trigger-value cadence-dashboard-query-data-value max-w-40">
-              {@data_query_label}
-            </span>
-            <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
-          </:trigger>
-          <div class="cadence-dashboard-query-panel-header">
-            <.icon name="hero-circle-stack" class="mt-0.5 h-4 w-4 text-primary" />
-            <div>
-              <p class="text-xs font-semibold text-base-content/85">Data options</p>
-              <p class="mt-0.5 text-[0.68rem] text-base-content/50">
-                Select provenance, representation, and mission semantics.
-              </p>
-            </div>
-          </div>
-          <div class="cadence-dashboard-query-panel-body">
-            <DashboardRuntimeControlsComponents.runtime_context_controls
-              section={:data}
-              time_mode={@time_mode}
-              time_from={@time_from}
-              time_to={@time_to}
-              replay_run_id={@replay_run_id}
-              time_validation={@time_validation}
-              data_realm={@data_realm}
-              data_realms={@data_realms}
-              data_view={@data_view}
-              compare_data_view={@compare_data_view}
-              data_source_id={@data_source_id}
-              source_binding_id={@source_binding_id}
-              data_bindings={@data_bindings}
-              replay_runs={@replay_runs}
-              selected_replay_run={@selected_replay_run}
-              limit_mode={@limit_mode}
-              limit_mode_fallback={@limit_mode_fallback}
-              hidden_marker_categories={@hidden_marker_categories}
-              selected_data_ref={@selected_data_ref}
-              time_axis={@time_axis}
-            />
+            <details
+              id="dashboard-query-options"
+              open={@data_query_overrides?}
+              class="cadence-dashboard-context-advanced"
+              data-query-overrides={to_string(@data_query_overrides?)}
+            >
+              <summary
+                id="dashboard-query-options-toggle"
+                class="cadence-dashboard-context-advanced-summary"
+                aria-label="Dashboard data options"
+              >
+                <span class="flex min-w-0 items-center gap-2">
+                  <.icon name="hero-circle-stack" class="h-4 w-4 shrink-0 text-primary" />
+                  <span class="min-w-0">
+                    <span class="block text-xs font-semibold text-base-content/85">
+                      Data provenance & semantics
+                    </span>
+                    <span class="block truncate text-[0.68rem] text-base-content/50">
+                      {if @data_query_overrides?, do: @data_query_label, else: "Flight · Canonical · Observed limits"}
+                    </span>
+                  </span>
+                </span>
+                <.icon name="hero-chevron-right" class="h-3.5 w-3.5 shrink-0 text-base-content/45 transition-transform" />
+              </summary>
+              <div id="dashboard-query-options-panel" class="pt-3">
+                <DashboardRuntimeControlsComponents.runtime_context_controls
+                  section={:data}
+                  time_mode={@time_mode}
+                  time_from={@time_from}
+                  time_to={@time_to}
+                  replay_run_id={@replay_run_id}
+                  time_validation={@time_validation}
+                  data_realm={@data_realm}
+                  data_realms={@data_realms}
+                  data_view={@data_view}
+                  compare_data_view={@compare_data_view}
+                  data_source_id={@data_source_id}
+                  source_binding_id={@source_binding_id}
+                  data_bindings={@data_bindings}
+                  replay_runs={@replay_runs}
+                  selected_replay_run={@selected_replay_run}
+                  limit_mode={@limit_mode}
+                  limit_mode_fallback={@limit_mode_fallback}
+                  hidden_marker_categories={@hidden_marker_categories}
+                  selected_data_ref={@selected_data_ref}
+                  time_axis={@time_axis}
+                />
+              </div>
+            </details>
           </div>
         </.popover>
 
@@ -215,64 +238,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         />
       </div>
 
-      <.popover
-        :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}
-        id="dashboard-investigate"
-        label="Investigate dashboard data"
-        width={:sm}
-      >
-        <:trigger>
-          <span
-            id="dashboard-investigate-toggle"
-            class="btn btn-ghost btn-xs h-7 gap-1 border border-base-300/70 bg-base-100/50 px-2 font-normal"
-          >
-            <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" />
-            <span class="hidden sm:inline">Investigate</span>
-          </span>
-        </:trigger>
-        <div class="p-2">
-          <p class="px-2 pb-2 text-[0.65rem] text-base-content/55">
-            Continue with this mission and dashboard context.
-          </p>
-          <nav id="dashboard-investigation-links" class="space-y-1" aria-label="Investigation links">
-            <.link
-              id="dashboard-investigate-telemetry"
-              navigate={telemetry_explore_path(assigns)}
-              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
-            >
-              <.icon name="hero-chart-bar-square" class="mt-0.5 h-4 w-4 text-primary" />
-              <span><span class="block font-medium">Telemetry explore</span><span class="block text-xs text-base-content/55">Inspect samples in this scope and time range.</span></span>
-            </.link>
-            <.link
-              id="dashboard-investigate-sources"
-              navigate={~p"/missions/#{@mission_id}/ops/data-sources?source_dashboard_id=#{@dashboard_id}"}
-              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
-            >
-              <.icon name="hero-circle-stack" class="mt-0.5 h-4 w-4 text-primary" />
-              <span><span class="block font-medium">Source inventory</span><span class="block text-xs text-base-content/55">Inspect bindings, health, and watermarks.</span></span>
-            </.link>
-            <.link
-              id="dashboard-investigate-contacts"
-              navigate={~p"/missions/#{@mission_id}/ops/contacts"}
-              class="flex items-start gap-2 rounded px-2 py-2 text-sm hover:bg-base-300/60"
-            >
-              <.icon name="hero-signal" class="mt-0.5 h-4 w-4 text-primary" />
-              <span><span class="block font-medium">Contacts</span><span class="block text-xs text-base-content/55">Correlate scheduled and realized operations.</span></span>
-            </.link>
-            <.link
-              id="dashboard-investigate-diagnostics"
-              navigate={~p"/missions/#{@mission_id}/ops/dashboards/#{@dashboard_id}/diagnostics"}
-              class="flex w-full items-start gap-2 rounded px-2 py-2 text-left text-sm hover:bg-base-300/60"
-            >
-              <.icon name="hero-wrench-screwdriver" class="mt-0.5 h-4 w-4 text-primary" />
-              <span><span class="block font-medium">Dashboard diagnostics</span><span class="block text-xs text-base-content/55">Inspect plans, cache, and source execution.</span></span>
-            </.link>
-          </nav>
-        </div>
-      </.popover>
-
       <button
-        :if={not @edit_mode? and @comparison_available?}
+        :if={not @edit_mode? and @comparison_toolbar_visible?}
         id="dashboard-comparison-toggle"
         type="button"
         phx-click="toggle_comparison_inspector"
@@ -346,11 +313,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
           </p>
           <.link
             id="dashboard-data-issues-open"
-            navigate={@dashboard_diagnostics_path}
+            navigate={@data_issue_action.path}
             class="btn btn-outline btn-xs mt-3 w-full justify-start"
+            data-dashboard-data-issue-action={@data_issue_action.kind}
           >
-            <.icon name="hero-chart-bar-square" class="h-3.5 w-3.5" />
-            Open diagnostics
+            <.icon name={@data_issue_action.icon} class="h-3.5 w-3.5" />
+            {@data_issue_action.label}
+          </.link>
+          <.link
+            :if={@data_issue_action.kind == "data_sources"}
+            id="dashboard-data-issues-diagnostics"
+            navigate={@dashboard_diagnostics_path}
+            class="btn btn-ghost btn-xs mt-1 w-full justify-start"
+          >
+            <.icon name="hero-wrench-screwdriver" class="h-3.5 w-3.5" />
+            Dashboard diagnostics
           </.link>
         </div>
       </.popover>
@@ -451,6 +428,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         <.icon name="hero-rectangle-group" class="h-3.5 w-3.5" /> Sections
       </.button>
       <.action_menu id="dashboard-menu">
+        <:action :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}>
+          <.link id="dashboard-investigate-telemetry" navigate={telemetry_explore_path(assigns)}>
+            <.icon name="hero-chart-bar-square" class="h-4 w-4" /> Explore telemetry
+          </.link>
+        </:action>
+        <:action :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}>
+          <.link
+            id="dashboard-investigate-sources"
+            navigate={~p"/missions/#{@mission_id}/ops/data-sources?source_dashboard_id=#{@dashboard_id}"}
+          >
+            <.icon name="hero-circle-stack" class="h-4 w-4" /> Data Sources
+          </.link>
+        </:action>
+        <:action :if={not @edit_mode? and not is_nil(@mission_id)}>
+          <.link id="dashboard-investigate-contacts" navigate={~p"/missions/#{@mission_id}/ops/contacts"}>
+            <.icon name="hero-signal" class="h-4 w-4" /> Contacts
+          </.link>
+        </:action>
         <:action :if={not @edit_mode? and @dashboard_author?}>
           <.link
             id="dashboard-edit-link"
@@ -572,6 +567,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       assigns.time_axis != "generation_time"
   end
 
+  defp comparison_toolbar_visible?(assigns) do
+    assigns.comparison_available? and
+      (assigns.comparison_open? or assigns.comparison_open_count > 0 or
+         present_text?(assigns.compare_data_view))
+  end
+
   defp query_value_label(value) when is_binary(value) do
     value
     |> String.replace("_", " ")
@@ -617,6 +618,43 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
     Enum.max([warning_count, affected_count, degraded_count])
   end
+
+  defp data_issue_action(assigns) do
+    if data_source_issue?(assigns.dashboard_warnings) and
+         dashboard_identity?(assigns.mission_id, assigns.dashboard_id) do
+      %{
+        kind: "data_sources",
+        label: "Open Data Sources",
+        icon: "hero-circle-stack",
+        path:
+          ~p"/missions/#{assigns.mission_id}/ops/data-sources?source_dashboard_id=#{assigns.dashboard_id}"
+      }
+    else
+      %{
+        kind: "diagnostics",
+        label: "Open diagnostics",
+        icon: "hero-wrench-screwdriver",
+        path: assigns.dashboard_diagnostics_path
+      }
+    end
+  end
+
+  defp data_source_issue?(warnings) when is_list(warnings) do
+    Enum.any?(warnings, fn warning ->
+      warning
+      |> map_value(:code)
+      |> normalize_issue_code()
+      |> then(&(&1 in @data_source_issue_codes))
+    end)
+  end
+
+  defp normalize_issue_code(code) when is_atom(code), do: code
+
+  defp normalize_issue_code(code) when is_binary(code) do
+    Enum.find(@data_source_issue_codes, &(Atom.to_string(&1) == code))
+  end
+
+  defp normalize_issue_code(_code), do: nil
 
   defp historical_request_query(assigns) do
     point_id =

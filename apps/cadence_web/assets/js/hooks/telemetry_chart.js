@@ -11,6 +11,12 @@ const TelemetryChart = {
     this.placementId = this.el.dataset.placementId
     this.windowSeconds = parseInt(this.el.dataset.windowSeconds, 10) || 300
     this.liveWindowEnd = null
+    this.liveHeartbeatObserved = false
+    this.liveHeartbeatCurrent = false
+    this.liveReceivingSamples = false
+    this.liveArrivalSequence = 0
+    this.liveHeartbeatTimer = null
+    this.liveArrivalTimer = null
     if (this.liveMode()) this.advanceLiveWindow(Date.now())
 
     const backfill = JSON.parse(this.el.dataset.backfill || "[]")
@@ -38,31 +44,49 @@ const TelemetryChart = {
     this.el.style.position = "relative"
     this.chart = new uPlot(this.chartOptions(), this.plotData(), this.el)
     this.installRangeSelection()
+    this.watermarkOverlayLayer = this.buildWatermarkOverlayLayer()
+    this.attachWatermarkOverlayLayer()
     this.eventLayer = this.buildEventLayer()
     this.el.appendChild(this.eventLayer)
     this.markerLayer = this.buildMarkerLayer()
     this.el.appendChild(this.markerLayer)
     this.selectionLayer = this.buildSelectionLayer()
     this.el.appendChild(this.selectionLayer)
+    this.liveEdge = this.buildLiveEdge()
+    this.el.appendChild(this.liveEdge)
     this.legendLayer = this.buildLegendLayer()
     this.el.appendChild(this.legendLayer)
     this.renderEventMarkers()
     this.renderLimitMarkers()
     this.renderLegend()
+    this.renderLiveEdge()
     this.tooltipLayer = this.buildTooltipLayer()
     this.el.appendChild(this.tooltipLayer)
     this.renderSelection()
     this.handleClick = (event) => this.openPointInspector(event)
     this.el.addEventListener("click", this.handleClick)
 
-    this.handleEvent("tlm:append", ({ series, markers, window_end_ms: windowEndMs }) => {
+    this.handleEvent("tlm:append", ({
+      series,
+      markers,
+      window_end_ms: windowEndMs,
+      refresh_interval_ms: refreshIntervalMs,
+    }) => {
       const points = series && (series[this.widgetId] || series[this.placementId])
+      const appendedPointCount = this.seriesPayloadPointCount(points)
       const previousPlotSeriesLength = (this.plotSeries || []).length
       const appendedSeries = this.appendSeriesPayload(points)
 
       const markerAppends = markers && (markers[this.widgetId] || markers[this.placementId])
       const appendedMarkers = this.appendMarkerPayload(markerAppends)
       const advancedLiveWindow = this.advanceLiveWindow(windowEndMs)
+      this.recordLiveActivity({
+        appendedPointCount,
+        advancedLiveWindow,
+        refreshIntervalMs,
+        seriesPayload: points,
+        windowEndMs,
+      })
       if (!appendedSeries && !appendedMarkers && !advancedLiveWindow) return
 
       this.trimToWindow()
@@ -75,6 +99,7 @@ const TelemetryChart = {
         this.renderLimitMarkers()
         this.renderLegend()
         this.renderSelection()
+        this.renderLiveEdge()
       }
     })
 
@@ -89,6 +114,7 @@ const TelemetryChart = {
       this.renderEventMarkers()
       this.renderLimitMarkers()
       this.renderSelection()
+      this.renderLiveEdge()
     })
     this.resizeObserver.observe(this.el)
   },
@@ -96,6 +122,8 @@ const TelemetryChart = {
   destroyed() {
     if (this.handleClick) this.el.removeEventListener("click", this.handleClick)
     if (this.resizeObserver) this.resizeObserver.disconnect()
+    if (this.liveHeartbeatTimer) clearTimeout(this.liveHeartbeatTimer)
+    if (this.liveArrivalTimer) clearTimeout(this.liveArrivalTimer)
     if (this.rangeSelectionOverlay && this.handleRangeSelection) {
       this.rangeSelectionOverlay.removeEventListener("mouseup", this.handleRangeSelection)
     }
@@ -134,15 +162,18 @@ const TelemetryChart = {
 
     this.chart = new uPlot(this.chartOptions(), this.plotData(), this.el)
     this.installRangeSelection()
+    this.attachWatermarkOverlayLayer()
     this.el.appendChild(this.eventLayer)
     this.el.appendChild(this.markerLayer)
     this.el.appendChild(this.selectionLayer)
+    this.el.appendChild(this.liveEdge)
     this.el.appendChild(this.legendLayer)
     if (this.tooltipLayer) this.el.appendChild(this.tooltipLayer)
     this.renderEventMarkers()
     this.renderLimitMarkers()
     this.renderLegend()
     this.renderSelection()
+    this.renderLiveEdge()
   },
 
   normalizeSeriesPayload(payload) {
@@ -269,6 +300,22 @@ const TelemetryChart = {
     return true
   },
 
+  seriesPayloadPointCount(payload) {
+    return this.normalizeSeriesPayload(payload).reduce(
+      (count, series) => count + series.points.length,
+      0
+    )
+  },
+
+  seriesPayloadLatestTimestampMs(payload) {
+    const timestamps = this.normalizeSeriesPayload(payload).flatMap((series) =>
+      series.points.map(([timestampMs]) => Number(timestampMs))
+    )
+    const valid = timestamps.filter((timestampMs) => Number.isFinite(timestampMs))
+
+    return valid.length > 0 ? Math.max(...valid) : null
+  },
+
   mergeEnvelope(previous, incoming) {
     if (!previous) return incoming
     if (!incoming) return previous
@@ -368,6 +415,74 @@ const TelemetryChart = {
     })
 
     return [this.xs].concat(series)
+  },
+
+  seriesGaps(plot, uPlotSeriesIndex, idx0, idx1, nullGaps = []) {
+    const entry = (this.plotSeries || [])[uPlotSeriesIndex - 1]
+    if (!entry) return nullGaps
+
+    const xs = (plot.data && plot.data[0]) || this.xs || []
+    const ys =
+      (plot.data && plot.data[uPlotSeriesIndex]) ||
+      (entry.kind === "line" ? this.seriesYs[entry.seriesIndex] : entry.values) ||
+      []
+    const observed = []
+    const fromIndex = Math.max(0, idx0)
+    const toIndex = Math.min(idx1, xs.length - 1, ys.length - 1)
+
+    for (let index = fromIndex; index <= toIndex; index += 1) {
+      const x = Number(xs[index])
+      const y = ys[index]
+      if (Number.isFinite(x) && y !== null && y !== undefined && Number.isFinite(Number(y))) {
+        observed.push(x)
+      }
+    }
+
+    const threshold = this.inferredGapThreshold(observed)
+    if (!Number.isFinite(threshold)) return nullGaps
+
+    const inferredGaps = []
+
+    for (let index = 1; index < observed.length; index += 1) {
+      const previous = observed[index - 1]
+      const current = observed[index]
+      if (current - previous <= threshold) continue
+
+      const from = plot.valToPos(previous, "x", true)
+      const to = plot.valToPos(current, "x", true)
+      if (Number.isFinite(from) && Number.isFinite(to)) inferredGaps.push([from, to])
+    }
+
+    return this.mergePixelGaps(nullGaps.concat(inferredGaps))
+  },
+
+  inferredGapThreshold(observed) {
+    const intervals = observed
+      .slice(1)
+      .map((value, index) => value - observed[index])
+      .filter((value) => Number.isFinite(value) && value > 0)
+
+    if (intervals.length < 3) return null
+
+    const sorted = intervals.slice().sort((left, right) => left - right)
+    const middle = Math.floor(sorted.length / 2)
+    const median =
+      sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+
+    return Math.max(median * 3, 5)
+  },
+
+  mergePixelGaps(gaps) {
+    return gaps
+      .map(([from, to]) => [Math.min(from, to), Math.max(from, to)])
+      .filter(([from, to]) => Number.isFinite(from) && Number.isFinite(to) && to > from)
+      .sort((left, right) => left[0] - right[0])
+      .reduce((merged, gap) => {
+        const previous = merged[merged.length - 1]
+        if (previous && gap[0] <= previous[1]) previous[1] = Math.max(previous[1], gap[1])
+        else merged.push(gap)
+        return merged
+      }, [])
   },
 
   trimToWindow() {
@@ -527,6 +642,28 @@ const TelemetryChart = {
     return layer
   },
 
+  buildWatermarkOverlayLayer() {
+    const layer = document.createElement("div")
+    layer.className = "telemetry-chart-watermark-overlays"
+    layer.dataset.chartWatermarkOverlayLayer = "true"
+    Object.assign(layer.style, {
+      position: "absolute",
+      inset: "0",
+      pointerEvents: "none",
+    })
+    return layer
+  },
+
+  attachWatermarkOverlayLayer() {
+    const plotOverlay = (this.chart && this.chart.over) || this.el.querySelector(".u-over")
+    if (!plotOverlay || !this.watermarkOverlayLayer) return
+
+    // uPlot appends its native cursor after this layer. Keeping the watermark
+    // wash inside `.u-over` but before the cursor lets it tint the plot without
+    // covering the synchronized crosshair.
+    plotOverlay.insertBefore(this.watermarkOverlayLayer, plotOverlay.firstChild)
+  },
+
   buildSelectionLayer() {
     const layer = document.createElement("div")
     layer.className = "telemetry-chart-selection"
@@ -538,6 +675,32 @@ const TelemetryChart = {
       zIndex: "4",
     })
     return layer
+  },
+
+  buildLiveEdge() {
+    const edge = document.createElement("div")
+    edge.className = "telemetry-chart-live-edge"
+    edge.dataset.liveStreamEdge = ""
+    edge.setAttribute("role", "status")
+
+    const wash = document.createElement("span")
+    wash.className = "telemetry-chart-live-edge-wash"
+    edge.appendChild(wash)
+
+    const line = document.createElement("span")
+    line.className = "telemetry-chart-live-edge-line"
+    edge.appendChild(line)
+
+    const beacon = document.createElement("span")
+    beacon.className = "telemetry-chart-live-edge-beacon"
+    edge.appendChild(beacon)
+
+    const label = document.createElement("span")
+    label.className = "telemetry-chart-live-edge-label"
+    edge.appendChild(label)
+
+    this.liveEdgeLabel = label
+    return edge
   },
 
   buildLegendLayer() {
@@ -778,16 +941,12 @@ const TelemetryChart = {
     if (!this.eventLayer || !this.chart) return
 
     this.eventLayer.replaceChildren()
+    if (this.watermarkOverlayLayer) this.watermarkOverlayLayer.replaceChildren()
     delete this.el.dataset.watermarkState
     delete this.el.dataset.watermarkLagMs
     delete this.el.dataset.watermarkBoundaryVisible
 
     this.eventMarkers.forEach((marker) => {
-      if (marker.marker_type === "contact_interval") {
-        this.renderContactInterval(marker)
-        return
-      }
-
       if (marker.marker_type === "source_binding_interval") {
         this.renderSourceBindingInterval(marker)
         return
@@ -827,51 +986,6 @@ const TelemetryChart = {
         this.renderMissionEvent(marker)
       }
     })
-  },
-
-  renderContactInterval(marker) {
-    if (!marker.link_id || !marker.starts_at_ms) return
-
-    const interval = this.intervalBounds(marker)
-    if (!interval) return
-
-    const button = document.createElement("button")
-    button.type = "button"
-    button.title = `Inspect ${marker.label || "contact interval"}`
-    button.setAttribute("aria-label", button.title)
-    button.dataset.eventMarkerTarget = "contact"
-    button.dataset.eventMarkerId = marker.contact_id || marker.target_id || ""
-    button.dataset.eventMarkerRef = marker.link_id || ""
-    Object.assign(button.style, {
-      position: "absolute",
-      left: `${interval.left}px`,
-      top: `${this.chart.bbox.top || 0}px`,
-      width: `${interval.width}px`,
-      height: `${this.chart.bbox.height || this.el.clientHeight}px`,
-      border: "0",
-      borderLeft: `1px solid ${this.eventColor(marker)}`,
-      borderRight: `1px solid ${this.eventColor(marker)}`,
-      padding: "0",
-      background: "rgba(56, 189, 248, 0.10)",
-      cursor: "pointer",
-      pointerEvents: "auto",
-    })
-
-    button.addEventListener("click", (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      this.pushEvent(
-        "open_data_link",
-        this.markerDataLinkPayload(
-          marker,
-          "contact",
-          marker.target_id || marker.contact_id,
-          marker.starts_at_ms
-        )
-      )
-    })
-
-    this.eventLayer.appendChild(button)
   },
 
   renderSourceBindingInterval(marker) {
@@ -1002,8 +1116,6 @@ const TelemetryChart = {
   },
 
   renderSourceWatermarkBoundary(marker, left) {
-    const plotTop = this.chart.bbox.top || 0
-
     const button = document.createElement("button")
     button.type = "button"
     button.title = `Inspect ${marker.label || "source watermark cursor"}`
@@ -1014,8 +1126,8 @@ const TelemetryChart = {
     button.dataset.watermarkBoundary = marker.freshness_state || "unknown"
     Object.assign(button.style, {
       position: "absolute",
-      left: `${left}px`,
-      top: `${plotTop}px`,
+      left: `${left - (this.chart.bbox.left || 0)}px`,
+      top: "0",
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       width: "14px",
       transform: "translateX(-7px)",
@@ -1038,7 +1150,7 @@ const TelemetryChart = {
     button.appendChild(line)
 
     this.installSourceWatermarkAction(button, marker)
-    this.eventLayer.appendChild(button)
+    this.watermarkOverlayLayer.appendChild(button)
   },
 
   renderSourceWatermarkIncompleteRegion(marker, left) {
@@ -1052,8 +1164,8 @@ const TelemetryChart = {
     region.dataset.sourceWatermarkIncompleteRegion = marker.freshness_state || "unknown"
     Object.assign(region.style, {
       position: "absolute",
-      left: `${regionLeft}px`,
-      top: `${this.chart.bbox.top || 0}px`,
+      left: `${regionLeft - plotLeft}px`,
+      top: "0",
       width: `${width}px`,
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       borderLeft: `1px dashed ${this.sourceWatermarkCursorColor(marker)}`,
@@ -1062,7 +1174,7 @@ const TelemetryChart = {
         "repeating-linear-gradient(135deg, transparent 0, transparent 8px, rgba(148, 163, 184, 0.07) 8px, rgba(148, 163, 184, 0.07) 9px)",
       pointerEvents: "none",
     })
-    this.eventLayer.appendChild(region)
+    this.watermarkOverlayLayer.appendChild(region)
   },
 
   renderSourceWatermarkStatus(marker, boundaryVisible) {
@@ -1083,8 +1195,8 @@ const TelemetryChart = {
 
     Object.assign(status.style, {
       position: "absolute",
-      left: `${(this.chart.bbox.left || 0) + 10}px`,
-      top: `${(this.chart.bbox.top || 0) + 8}px`,
+      left: "10px",
+      top: "8px",
       border: `1px solid ${this.sourceWatermarkStatusBorder(marker, boundaryVisible)}`,
       borderRadius: "3px",
       background: boundaryVisible ? "rgba(30, 23, 10, 0.90)" : "rgba(6, 31, 31, 0.86)",
@@ -1104,10 +1216,12 @@ const TelemetryChart = {
     this.el.dataset.watermarkBoundaryVisible = `${boundaryVisible}`
 
     this.installSourceWatermarkAction(status, marker)
-    this.eventLayer.appendChild(status)
+    this.watermarkOverlayLayer.appendChild(status)
   },
 
   installSourceWatermarkAction(control, marker) {
+    this.installSharedCursorPassthrough(control)
+
     control.addEventListener("click", (event) => {
       event.preventDefault()
       event.stopPropagation()
@@ -1137,6 +1251,32 @@ const TelemetryChart = {
         "source-binding-id": marker.source_binding_id,
         "placement-id": this.placementId,
       })
+    })
+  },
+
+  installSharedCursorPassthrough(control) {
+    control.dataset.chartCursorPassthrough = "true"
+
+    const updateCursor = (event) => {
+      const overlay = this.el.querySelector && this.el.querySelector(".u-over")
+      if (!overlay || !this.chart || typeof this.chart.setCursor !== "function") return
+
+      const rect = overlay.getBoundingClientRect()
+      this.chart.setCursor(
+        {
+          left: event.clientX - rect.left,
+          top: event.clientY - rect.top,
+        },
+        true,
+        true
+      )
+    }
+
+    control.addEventListener("mouseenter", updateCursor)
+    control.addEventListener("mousemove", updateCursor)
+    control.addEventListener("mouseleave", () => {
+      if (!this.chart || typeof this.chart.setCursor !== "function") return
+      this.chart.setCursor({ left: -10, top: -10 }, true, true)
     })
   },
 
@@ -1814,11 +1954,6 @@ const TelemetryChart = {
       if (marker) this.renderSelectedEvent(marker)
     }
 
-    if (this.selectedRef.target === "contact") {
-      const marker = this.selectedEventMarker("contact")
-      if (marker) this.renderSelectedContact(marker)
-    }
-
     if (this.selectedRef.target === "telemetry_sample") {
       const selection = this.selectedPointIndex()
       if (selection) this.renderSelectedPoint(selection)
@@ -2057,26 +2192,6 @@ const TelemetryChart = {
     this.selectionLayer.appendChild(selection)
   },
 
-  renderSelectedContact(marker) {
-    const interval = this.intervalBounds(marker)
-    if (!interval) return
-
-    const selection = document.createElement("div")
-    selection.dataset.chartSelectionTarget = "contact"
-    selection.dataset.chartSelectionRef = this.selectedRef.link_id || ""
-    Object.assign(selection.style, {
-      position: "absolute",
-      left: `${interval.left}px`,
-      top: `${this.chart.bbox.top || 0}px`,
-      width: `${interval.width}px`,
-      height: `${this.chart.bbox.height || this.el.clientHeight}px`,
-      border: `1px solid ${this.eventColor(marker)}`,
-      background: "rgba(56, 189, 248, 0.16)",
-      boxShadow: `0 0 12px ${this.eventColor(marker)}`,
-    })
-    this.selectionLayer.appendChild(selection)
-  },
-
   markerLeft(marker) {
     const plotLeft = this.chart.bbox.left || 0
     const x = marker.timestamp_ms / 1000
@@ -2157,7 +2272,6 @@ const TelemetryChart = {
     if (marker.severity === "critical" || marker.severity === "error") return "rgba(248, 113, 113, 0.90)"
     if (marker.severity === "warning" || marker.status === "canceled") return "rgba(251, 191, 36, 0.90)"
     if (marker.marker_type === "retention_gap") return this.retentionGapColor(marker)
-    if (marker.marker_type === "contact_interval") return "rgba(56, 189, 248, 0.72)"
     if (marker.marker_type === "source_binding_interval") return this.sourceBindingIntervalColor(marker)
     if (marker.marker_type === "source_health_transition") return this.sourceHealthTransitionColor(marker)
     if (marker.marker_type === "source_watermark_cursor" || marker.marker_type === "source_watermark_event") return this.sourceWatermarkCursorColor(marker)
@@ -2196,7 +2310,6 @@ const TelemetryChart = {
 
   eventMarkerOverlapsWindow(marker, cutoff) {
     if (
-      marker.marker_type === "contact_interval" ||
       marker.marker_type === "source_binding_interval" ||
       marker.marker_type === "retention_gap" ||
       marker.marker_type === "telemetry_revision_range" ||
@@ -2230,6 +2343,178 @@ const TelemetryChart = {
 
   liveMode() {
     return this.el.dataset.timeMode === "live"
+  },
+
+  recordLiveActivity({
+    appendedPointCount,
+    advancedLiveWindow,
+    refreshIntervalMs,
+    seriesPayload,
+    windowEndMs,
+  }) {
+    if (!this.liveMode()) return
+
+    const intervalMs = Number(refreshIntervalMs)
+
+    if (advancedLiveWindow) {
+      this.liveHeartbeatObserved = true
+      this.liveHeartbeatCurrent = true
+      this.el.dataset.liveHeartbeatAtMs = `${Math.round(Number(windowEndMs))}`
+
+      if (Number.isFinite(intervalMs) && intervalMs > 0) {
+        this.el.dataset.liveRefreshIntervalMs = `${Math.round(intervalMs)}`
+      }
+
+      if (this.liveHeartbeatTimer) clearTimeout(this.liveHeartbeatTimer)
+      const heartbeatTimeoutMs = Math.max(
+        (Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 1_000) * 3,
+        5_000
+      )
+
+      this.liveHeartbeatTimer = setTimeout(() => {
+        this.liveHeartbeatCurrent = false
+        this.renderLiveEdge()
+      }, heartbeatTimeoutMs)
+    }
+
+    if (appendedPointCount > 0) {
+      this.liveReceivingSamples = true
+      this.liveArrivalSequence += 1
+      this.el.dataset.liveArrivalCount = `${appendedPointCount}`
+      this.el.dataset.liveArrivalSequence = `${this.liveArrivalSequence}`
+
+      const latestTimestampMs = this.seriesPayloadLatestTimestampMs(seriesPayload)
+      if (Number.isFinite(latestTimestampMs)) {
+        this.el.dataset.liveLastSampleAtMs = `${Math.round(latestTimestampMs)}`
+      }
+
+      this.restartLiveArrivalAnimation()
+      if (this.liveArrivalTimer) clearTimeout(this.liveArrivalTimer)
+      this.liveArrivalTimer = setTimeout(() => {
+        this.liveReceivingSamples = false
+        if (this.liveEdge) this.liveEdge.classList.remove("is-receiving")
+        this.renderLiveEdge()
+      }, 720)
+    }
+
+    this.renderLiveEdge()
+  },
+
+  restartLiveArrivalAnimation() {
+    if (!this.liveEdge) return
+
+    this.liveEdge.classList.remove("is-receiving")
+    void this.liveEdge.offsetWidth
+    this.liveEdge.classList.add("is-receiving")
+  },
+
+  liveStreamState() {
+    const page = this.el.closest && this.el.closest("#ops-dashboard-show-page")
+    const degradedSources = Number(page && page.dataset.runtimeSourceExecutionDegraded)
+    const refreshDegraded = page && page.dataset.runtimeRefreshStatus === "degraded"
+
+    if (refreshDegraded || (Number.isFinite(degradedSources) && degradedSources > 0)) {
+      return "degraded"
+    }
+
+    const delayedWatermark = (this.eventMarkers || []).some((marker) =>
+      (marker.marker_type === "source_watermark_cursor" ||
+        marker.marker_type === "source_watermark_event") &&
+      (marker.display_mode !== "status" ||
+        marker.freshness_state === "stale" ||
+        marker.freshness_state === "retention_gap")
+    )
+
+    if (this.el.dataset.watermarkBoundaryVisible === "true" || delayedWatermark) {
+      return "delayed"
+    }
+
+    if (!this.liveHeartbeatObserved) return "connecting"
+    if (!this.liveHeartbeatCurrent) return "paused"
+    if (this.liveReceivingSamples) return "receiving"
+    return "following"
+  },
+
+  renderLiveEdge() {
+    if (!this.liveEdge) return
+
+    if (!this.liveMode()) {
+      this.liveEdge.hidden = true
+      delete this.el.dataset.liveStreamState
+      this.publishDashboardLiveState()
+      return
+    }
+
+    const bbox = this.chart && this.chart.bbox
+    if (!bbox) return
+
+    const state = this.liveStreamState()
+    const plotRight = (bbox.left || 0) + (bbox.width || this.el.clientWidth)
+    const edgeWidth = 64
+
+    this.liveEdge.hidden = false
+    this.liveEdge.dataset.liveStreamState = state
+    this.el.dataset.liveStreamState = state
+    Object.assign(this.liveEdge.style, {
+      left: `${Math.max(0, plotRight - edgeWidth)}px`,
+      top: `${bbox.top || 0}px`,
+      width: `${edgeWidth}px`,
+      height: `${bbox.height || this.el.clientHeight}px`,
+    })
+
+    const label = this.liveStreamLabel(state)
+    const description = this.liveStreamDescription(state)
+    if (this.liveEdgeLabel) this.liveEdgeLabel.textContent = label
+    this.liveEdge.title = description
+    this.liveEdge.setAttribute("aria-label", description)
+    this.publishDashboardLiveState()
+  },
+
+  liveStreamLabel(state) {
+    if (state === "connecting") return "SYNC"
+    if (state === "paused") return "PAUSED"
+    if (state === "delayed") return "DELAYED"
+    if (state === "degraded") return "DEGRADED"
+    return "LIVE"
+  },
+
+  liveStreamDescription(state) {
+    if (state === "connecting") return "Connecting the live telemetry window"
+    if (state === "paused") return "Live telemetry heartbeat has paused"
+    if (state === "delayed") return "Live telemetry is following a delayed source watermark"
+    if (state === "degraded") return "Live telemetry source execution is degraded"
+
+    if (state === "receiving") {
+      const count = Number(this.el.dataset.liveArrivalCount) || 0
+      return `Live telemetry received ${count} new ${count === 1 ? "sample" : "samples"}`
+    }
+
+    return "Live telemetry window is current"
+  },
+
+  publishDashboardLiveState() {
+    const page = this.el.closest && this.el.closest("#ops-dashboard-show-page")
+    if (!page || !page.querySelectorAll) return
+
+    const charts = Array.from(
+      page.querySelectorAll("[phx-hook='TelemetryChart'][data-time-mode='live']")
+    )
+
+    if (charts.length === 0) {
+      delete page.dataset.dashboardLiveStreamState
+      delete page.dataset.dashboardLiveStreamChartCount
+      return
+    }
+
+    const states = charts.map((chart) => chart.dataset.liveStreamState || "connecting")
+    const priority = ["degraded", "paused", "delayed", "connecting", "receiving", "following"]
+    const state = priority.find((candidate) => states.includes(candidate)) || "connecting"
+
+    page.dataset.dashboardLiveStreamState = state
+    page.dataset.dashboardLiveStreamChartCount = `${charts.length}`
+
+    const timeRange = page.querySelector("#dashboard-active-time-range")
+    if (timeRange) timeRange.dataset.liveStreamState = state
   },
 
   advanceLiveWindow(windowEndMs) {
@@ -2329,6 +2614,9 @@ const TelemetryChart = {
       return [liveWindowEnd - this.windowSeconds, liveWindowEnd]
     }
 
+    const requestedRange = this.requestedTimeRange()
+    if (requestedRange) return requestedRange
+
     const values = [dataMin, dataMax]
       .concat(this.markerXValues(this.limitMarkers))
       .concat(this.markerXValues(this.eventMarkers))
@@ -2342,6 +2630,14 @@ const TelemetryChart = {
     if (min === max) return [min - 30, max + 30]
 
     return [min, max]
+  },
+
+  requestedTimeRange() {
+    const fromMs = Date.parse(this.el.dataset.timeFrom || "")
+    const toMs = Date.parse(this.el.dataset.timeTo || "")
+
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) return null
+    return [fromMs / 1000, toMs / 1000]
   },
 
   chartXDomain() {
@@ -2423,6 +2719,8 @@ const TelemetryChart = {
           width: compare ? Math.max(this.lineWidthValue() - 0.4, 0.8) : this.lineWidthValue(),
           dash: compare ? [6, 4] : undefined,
           spanGaps: this.spanGaps,
+          gaps: (plot, seriesIndex, idx0, idx1, nullGaps) =>
+            this.seriesGaps(plot, seriesIndex, idx0, idx1, nullGaps),
           fill: this.fillOpacity > 0 ? this.seriesFillColor(color) : undefined,
           points: { show: this.showPoints, size: 4 },
         }
@@ -2436,6 +2734,8 @@ const TelemetryChart = {
         width: 0,
         points: { show: false },
         spanGaps: false,
+        gaps: (plot, seriesIndex, idx0, idx1, nullGaps) =>
+          this.seriesGaps(plot, seriesIndex, idx0, idx1, nullGaps),
       }
     })
   },

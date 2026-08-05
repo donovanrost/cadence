@@ -365,7 +365,20 @@ defmodule CadenceWeb.OpsTimelineLive do
 
   defp event_owner_path(mission_id, %Entry{realized_contact_id: contact_id}, false)
        when is_binary(contact_id),
-       do: ~p"/missions/#{mission_id}/ops/contacts/#{contact_id}"
+       do: ~p"/missions/#{mission_id}/ops/contacts/records/#{contact_id}"
+
+  defp event_owner_path(mission_id, %Entry{scheduled_contact_id: contact_id}, false)
+       when is_binary(contact_id),
+       do: ~p"/missions/#{mission_id}/ops/contacts/records/#{contact_id}"
+
+  defp event_owner_path(
+         mission_id,
+         %Entry{subject_kind: subject_kind, subject_id: contact_id},
+         false
+       )
+       when subject_kind in [:contact, :scheduled_contact, :realized_contact] and
+              is_binary(contact_id),
+       do: ~p"/missions/#{mission_id}/ops/contacts/records/#{contact_id}"
 
   defp event_owner_path(_mission_id, %Entry{}, false), do: nil
 

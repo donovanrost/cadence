@@ -26,12 +26,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
     |> assign(:dashboard_runtime_resolved?, false)
     |> assign(:dashboard_runtime_pending_appends, %{})
     |> assign(:dashboard_runtime_pending_chart_remounts, %{})
+    |> assign(:dashboard_runtime_chart_remount_pending?, false)
   end
 
   @spec resolve_engine(Phoenix.LiveView.Socket.t(), resolve_mode(), keyword()) ::
           Phoenix.LiveView.Socket.t()
   def resolve_engine(socket, resolve_mode, opts \\ []) when is_list(opts) do
     opts = put_start_timing(opts)
+    socket = maybe_mark_chart_remount_pending(socket, opts)
 
     {coordinator, decisions} =
       socket
@@ -76,6 +78,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
     socket
     |> cleanup_pending_append(resolve_id)
     |> cleanup_pending_chart_remount(resolve_id)
+    |> maybe_clear_chart_remount_pending(decisions)
     |> assign_runtime_result(
       coordinator,
       socket.assigns.dashboard_runtime_decisions ++ decisions,
@@ -102,6 +105,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
     socket
     |> cleanup_pending_append(resolve_id)
     |> cleanup_pending_chart_remount(resolve_id)
+    |> maybe_clear_chart_remount_pending(decisions)
     |> assign_runtime_result(
       coordinator,
       socket.assigns.dashboard_runtime_decisions ++ annotate_failure(decisions, reason),
@@ -308,6 +312,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
       %{action: :cancel_obsolete, superseded_resolve_id: resolve_id}, socket ->
         socket
         |> cleanup_pending_append(resolve_id)
+        |> cleanup_pending_chart_remount(resolve_id)
         |> cancel_async(async_name(resolve_id), {:shutdown, :obsolete_dashboard_resolve})
 
       %{action: :start_resolve, resolve_mode: resolve_mode, resolve_id: resolve_id}, socket ->
@@ -423,9 +428,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
     end
   end
 
+  defp maybe_mark_chart_remount_pending(socket, opts) do
+    if Keyword.get(opts, :remount_charts_after_resolve?, false) do
+      assign(socket, :dashboard_runtime_chart_remount_pending?, true)
+    else
+      socket
+    end
+  end
+
   defp maybe_remount_charts(socket, resolve_id) do
-    if Map.get(socket.assigns.dashboard_runtime_pending_chart_remounts, resolve_id) do
-      assign(socket, :chart_epoch, socket.assigns.chart_epoch + 1)
+    resolve_remount? =
+      Map.get(socket.assigns.dashboard_runtime_pending_chart_remounts, resolve_id, false)
+
+    if resolve_remount? or
+         Map.get(socket.assigns, :dashboard_runtime_chart_remount_pending?, false) do
+      socket
+      |> assign(:chart_epoch, socket.assigns.chart_epoch + 1)
+      |> assign(:dashboard_runtime_chart_remount_pending?, false)
     else
       socket
     end
@@ -437,6 +456,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
       |> Map.delete(resolve_id)
 
     assign(socket, :dashboard_runtime_pending_chart_remounts, pending_remounts)
+  end
+
+  defp maybe_clear_chart_remount_pending(socket, decisions) do
+    active_failure? = decision_action?(decisions, :record_degradation)
+    replacement_started? = decision_action?(decisions, :start_resolve)
+
+    if active_failure? and not replacement_started? do
+      assign(socket, :dashboard_runtime_chart_remount_pending?, false)
+    else
+      socket
+    end
   end
 
   defp decision_action?(decisions, action) do

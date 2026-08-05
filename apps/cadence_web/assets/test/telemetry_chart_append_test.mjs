@@ -50,11 +50,30 @@ function fakeElement(tagName) {
     attributes: {},
     children: [],
     listeners: {},
+    get firstChild() {
+      return this.children[0] || null
+    },
     setAttribute(name, value) {
       this.attributes[name] = value
     },
     appendChild(child) {
+      if (child.parentNode && child.parentNode !== this) {
+        child.parentNode.children = child.parentNode.children.filter((candidate) => candidate !== child)
+      }
       this.children.push(child)
+      child.parentNode = this
+    },
+    insertBefore(child, reference) {
+      if (child.parentNode && child.parentNode !== this) {
+        child.parentNode.children = child.parentNode.children.filter((candidate) => candidate !== child)
+      }
+      const index = reference ? this.children.indexOf(reference) : -1
+      if (index >= 0) this.children.splice(index, 0, child)
+      else this.children.push(child)
+      child.parentNode = this
+    },
+    replaceChildren(...children) {
+      this.children = children
     },
     addEventListener(name, callback) {
       this.listeners[name] = callback
@@ -76,6 +95,7 @@ function chartWithPlot(limitMarkers = []) {
   }
   chart.markerLayer = fakeElement("div")
   chart.eventLayer = fakeElement("div")
+  chart.watermarkOverlayLayer = fakeElement("div")
   chart.selectionLayer = fakeElement("div")
   chart.pushedEvents = []
   chart.pushEvent = (name, payload) => chart.pushedEvents.push({ name, payload })
@@ -154,10 +174,12 @@ function chartWithPlot(limitMarkers = []) {
     target_id: "telemetry-request",
   })
 
-  assert.equal(chart.eventLayer.children.length, 1)
-  const status = chart.eventLayer.children[0]
+  assert.equal(chart.eventLayer.children.length, 0)
+  assert.equal(chart.watermarkOverlayLayer.children.length, 1)
+  const status = chart.watermarkOverlayLayer.children[0]
   assert.equal(status.dataset.sourceWatermarkStatus, "complete")
   assert.equal(status.dataset.sourceWatermarkLagMs, "1000")
+  assert.equal(status.dataset.chartCursorPassthrough, "true")
   assert.equal(status.textContent, "Complete · 1.0s behind")
   assert.equal(chart.el.dataset.watermarkBoundaryVisible, "false")
 }
@@ -175,15 +197,66 @@ function chartWithPlot(limitMarkers = []) {
     target_id: "telemetry-request",
   })
 
-  assert.equal(chart.eventLayer.children.length, 3)
-  const [region, boundary, status] = chart.eventLayer.children
+  assert.equal(chart.watermarkOverlayLayer.children.length, 3)
+  const [region, boundary, status] = chart.watermarkOverlayLayer.children
+  assert.equal(chart.eventLayer.children.length, 0)
   assert.equal(region.dataset.sourceWatermarkIncompleteRegion, "stale")
-  assert.equal(region.style.left, "160px")
+  assert.equal(region.style.left, "150px")
+  assert.equal(region.style.top, "0")
   assert.equal(region.style.width, "150px")
   assert.equal(boundary.dataset.watermarkBoundary, "stale")
+  assert.equal(boundary.style.left, "150px")
+  assert.equal(boundary.style.top, "0")
+  assert.equal(boundary.dataset.chartCursorPassthrough, "true")
   assert.equal(status.dataset.sourceWatermarkStatus, "incomplete")
+  assert.equal(status.dataset.chartCursorPassthrough, "true")
+  assert.equal(status.style.left, "10px")
+  assert.equal(status.style.top, "8px")
   assert.equal(status.textContent, "Incomplete · 1m behind")
   assert.equal(chart.el.dataset.watermarkBoundaryVisible, "true")
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  const plotOverlay = fakeElement("div")
+  const nativeCursor = fakeElement("span")
+  plotOverlay.appendChild(nativeCursor)
+  chart.chart.over = plotOverlay
+  chart.watermarkOverlayLayer = chart.buildWatermarkOverlayLayer()
+
+  chart.attachWatermarkOverlayLayer()
+
+  assert.equal(chart.watermarkOverlayLayer.dataset.chartWatermarkOverlayLayer, "true")
+  assert.equal(chart.watermarkOverlayLayer.parentNode, plotOverlay)
+  assert.equal(plotOverlay.children[0], chart.watermarkOverlayLayer)
+  assert.equal(plotOverlay.children[1], nativeCursor)
+}
+
+{
+  const chart = chartWithPlot()
+  const control = fakeElement("button")
+  const cursorUpdates = []
+  const overlay = {
+    getBoundingClientRect() {
+      return { left: 100, top: 50 }
+    },
+  }
+
+  chart.el.querySelector = (selector) => (selector === ".u-over" ? overlay : null)
+  chart.chart.setCursor = (position, fire, publish) => {
+    cursorUpdates.push({ position, fire, publish })
+  }
+  chart.installSharedCursorPassthrough(control)
+
+  control.listeners.mousemove({ clientX: 132, clientY: 94 })
+  control.listeners.mouseleave()
+
+  assert.equal(control.dataset.chartCursorPassthrough, "true")
+  assert.deepEqual(plain(cursorUpdates), [
+    { position: { left: 32, top: 44 }, fire: true, publish: true },
+    { position: { left: -10, top: -10 }, fire: true, publish: true },
+  ])
 }
 
 {
@@ -706,6 +779,66 @@ function chartWithPlot(limitMarkers = []) {
 
 {
   const chart = chartWithMarkers()
+  const payload = {
+    series: [
+      { id: "HK.counter", points: [[1000, 1, {}], [2000, 2, {}]] },
+      { id: "HK.voltage", points: [[1500, 28.4, {}]] },
+    ],
+  }
+
+  assert.equal(chart.seriesPayloadPointCount(payload), 3)
+  assert.equal(chart.seriesPayloadLatestTimestampMs(payload), 2000)
+}
+
+{
+  const chart = chartWithMarkers()
+  chart.eventMarkers = []
+
+  assert.equal(chart.liveStreamState(), "connecting")
+
+  chart.liveHeartbeatObserved = true
+  assert.equal(chart.liveStreamState(), "paused")
+
+  chart.liveHeartbeatCurrent = true
+  assert.equal(chart.liveStreamState(), "following")
+
+  chart.liveReceivingSamples = true
+  assert.equal(chart.liveStreamState(), "receiving")
+
+  chart.eventMarkers = [
+    {
+      marker_type: "source_watermark_cursor",
+      display_mode: "boundary",
+      freshness_state: "stale",
+    },
+  ]
+  assert.equal(chart.liveStreamState(), "delayed")
+
+  chart.el.closest = () => ({
+    dataset: { runtimeRefreshStatus: "degraded", runtimeSourceExecutionDegraded: "1" },
+  })
+  assert.equal(chart.liveStreamState(), "degraded")
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.eventMarkers = []
+  chart.liveHeartbeatObserved = true
+  chart.liveHeartbeatCurrent = true
+  chart.liveReceivingSamples = false
+  chart.liveEdge = chart.buildLiveEdge()
+  chart.renderLiveEdge()
+
+  assert.equal(chart.liveEdge.hidden, false)
+  assert.equal(chart.liveEdge.dataset.liveStreamState, "following")
+  assert.equal(chart.liveEdgeLabel.textContent, "LIVE")
+  assert.equal(chart.liveEdge.style.left, "246px")
+  assert.equal(chart.el.dataset.liveStreamState, "following")
+}
+
+{
+  const chart = chartWithMarkers()
   chart.el.dataset.timeMode = "archive"
   chart.windowSeconds = 300
   chart.liveWindowEnd = 1781697900
@@ -713,6 +846,55 @@ function chartWithPlot(limitMarkers = []) {
 
   assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
   assert.equal(chart.advanceLiveWindow(1781697960000), false)
+}
+
+{
+  const chart = chartWithMarkers([], [
+    {
+      marker_type: "source_watermark_cursor",
+      timestamp_ms: 1781694300000,
+    },
+  ])
+  chart.el.dataset.timeMode = "archive"
+  chart.el.dataset.timeFrom = new Date(1781694000000).toISOString()
+  chart.el.dataset.timeTo = new Date(1781694060000).toISOString()
+
+  assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
+}
+
+{
+  const chart = chartWithMarkers()
+  chart.spanGaps = false
+  chart.hiddenSeriesIds = new Set()
+  chart.axisMode = "unit"
+  chart.lineWidth = "normal"
+  chart.fillOpacity = 0
+  chart.showPoints = false
+  chart.seriesList = [
+    {
+      id: "battery_voltage",
+      label: "Battery voltage",
+      role: "primary",
+      points: [
+        [1000, 1],
+        [2000, 2],
+        [3000, 3],
+        [101000, 4],
+        [102000, 5],
+      ],
+    },
+  ]
+  chart.rebuildPlotData()
+
+  const series = chart.chartSeriesOptions(["cyan"])[0]
+  const plot = {
+    data: chart.plotData(),
+    valToPos(value) {
+      return value
+    },
+  }
+
+  assert.deepEqual(plain(series.gaps(plot, 1, 0, 4, [])), [[3, 101]])
 }
 
 {

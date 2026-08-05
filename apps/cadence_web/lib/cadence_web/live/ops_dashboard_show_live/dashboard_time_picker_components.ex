@@ -2,8 +2,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   @moduledoc """
   Grafana-style dashboard time range picker.
 
-  Toolbar cluster: shift back / picker popover / shift forward / zoom out /
-  (inactive) refresh interval. The popover pairs an absolute From/To form and
+  Toolbar cluster: picker popover plus archive-only shift and zoom controls.
+  The popover pairs an absolute From/To form and
   recently used ranges with a searchable quick-range list; quick ranges keep
   the dashboard live with a sliding window, absolute bounds freeze it into
   archive mode.
@@ -37,7 +37,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
       |> assign(:range_bounded?, range_bounded?(assigns))
 
     ~H"""
-    <.shift_button id="dashboard-time-shift-back" direction="back" disabled={not @range_bounded?} />
+    <.shift_button
+      :if={@range_bounded?}
+      id="dashboard-time-shift-back"
+      direction="back"
+    />
     <.popover
       id="dashboard-time-controls"
       trigger_id="dashboard-time-controls-toggle"
@@ -47,9 +51,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
       width={:lg}
       trigger_class="cadence-dashboard-query-trigger"
       data-query-state={@time_mode}
+      data-dashboard-primary-control="time"
     >
       <:trigger>
-        <span class="cadence-dashboard-query-dot"></span>
+        <span
+          id="dashboard-live-follow-indicator"
+          class="cadence-dashboard-query-dot"
+          data-dashboard-live-follow={to_string(@time_mode == "live")}
+          aria-hidden="true"
+        >
+        </span>
         <span
           id="dashboard-active-time-range"
           class="cadence-dashboard-query-trigger-value max-w-48"
@@ -101,38 +112,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
         </div>
       </div>
     </.popover>
-    <.shift_button id="dashboard-time-shift-forward" direction="forward" disabled={not @range_bounded?} />
+    <.shift_button
+      :if={@range_bounded?}
+      id="dashboard-time-shift-forward"
+      direction="forward"
+    />
     <.button
+      :if={@range_bounded?}
       id="dashboard-time-zoom-out"
       variant={:ghost}
       size={:xs}
       phx-click="zoom_out_time_range"
-      disabled={not @range_bounded?}
       aria-label="Zoom out time range"
       title="Zoom out time range"
     >
       <.icon name="hero-magnifying-glass-minus" class="h-3.5 w-3.5" />
     </.button>
-    <span title="Auto-refresh interval selection coming soon. Live dashboards stream continuously.">
-      <.input
-        id="dashboard-refresh-interval"
-        name="refresh_interval"
-        type="select"
-        value=""
-        options={refresh_interval_options()}
-        disabled
-        compact
-        class="select-xs"
-        aria-label="Auto-refresh interval (coming soon)"
-        data-dashboard-refresh-interval-inactive="true"
-      />
-    </span>
     """
   end
 
   attr :id, :string, required: true
   attr :direction, :string, required: true
-  attr :disabled, :boolean, required: true
 
   defp shift_button(assigns) do
     assigns = assign(assigns, :label, "Move time range #{assigns.direction}wards")
@@ -144,7 +144,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
       size={:xs}
       phx-click="shift_time_range"
       phx-value-direction={@direction}
-      disabled={@disabled}
       aria-label={@label}
       title={@label}
     >
@@ -406,9 +405,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   defp filter_quick_ranges(query) do
     Enum.filter(TimeRange.quick_ranges(), &quick_match?(&1.label, query))
   end
-
-  defp refresh_interval_options,
-    do: [{"Off", ""}, {"5s", "5s"}, {"10s", "10s"}, {"30s", "30s"}, {"1m", "1m"}]
 
   defp quick_match?(_label, query) when query in [nil, ""], do: true
 

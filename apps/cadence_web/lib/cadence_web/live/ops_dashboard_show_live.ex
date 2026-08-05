@@ -794,25 +794,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
           <section
             :for={group <- @render_model.widget_groups}
             id={"dashboard-widget-group-#{group.id}"}
-            class="border-b border-base-300/45 last:border-b-0"
+            class={[
+              @editor_route? && "border-b border-base-300/45 last:border-b-0",
+              not @editor_route? && "pt-1"
+            ]}
             data-dashboard-widget-group={group.id}
           >
             <%= if group.section do %>
               <details
                 id={"dashboard-section-group-#{group.id}"}
                 open={group.open?}
-                class="group/dashboard-section"
+                class={["group/dashboard-section"]}
                 data-dashboard-section={group.id}
               >
-                <summary class="sticky top-0 z-10 flex cursor-pointer list-none items-center gap-2 border-b border-base-300/50 bg-base-200/90 px-3 py-2 backdrop-blur marker:hidden">
+                <summary class={[
+                  "flex cursor-pointer list-none items-center gap-2 marker:hidden",
+                  if(@editor_route?,
+                    do: "sticky top-0 z-10 border-b border-base-300/50 bg-base-200/90 px-3 py-2 backdrop-blur",
+                    else: "mx-2 rounded px-1 py-1.5 text-base-content/65 hover:text-base-content"
+                  )
+                ]}>
                   <.icon name="hero-chevron-right" class="h-3.5 w-3.5 text-base-content/45 transition-transform group-open/dashboard-section:rotate-90" />
                   <div class="min-w-0 flex-1">
                     <h2 class="text-xs font-semibold uppercase tracking-wide">{group.section.title}</h2>
-                    <p :if={group.section.description} class="truncate text-[0.65rem] text-base-content/50">
+                    <p :if={@editor_route? and group.section.description} class="truncate text-[0.65rem] text-base-content/50">
                       {group.section.description}
                     </p>
                   </div>
-                  <span class="font-mono text-[0.65rem] text-base-content/45">
+                  <span :if={@editor_route?} class="font-mono text-[0.65rem] text-base-content/45">
                     {length(group.widget_items)} {if length(group.widget_items) == 1, do: "widget", else: "widgets"}
                   </span>
                 </summary>
@@ -821,11 +830,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
             <% else %>
               <header
                 :if={group.show_header?}
-                class="flex items-center gap-2 border-b border-base-300/50 bg-base-200/65 px-3 py-2"
+                class={[
+                  "flex items-center gap-2 px-3",
+                  if(@editor_route?,
+                    do: "border-b border-base-300/50 bg-base-200/65 py-2",
+                    else: "py-1.5 text-base-content/65"
+                  )
+                ]}
               >
                 <.icon name="hero-square-3-stack-3d" class="h-3.5 w-3.5 text-base-content/45" />
                 <h2 class="text-xs font-semibold uppercase tracking-wide">Unsectioned canvas</h2>
-                <span class="ml-auto font-mono text-[0.65rem] text-base-content/45">
+                <span :if={@editor_route?} class="ml-auto font-mono text-[0.65rem] text-base-content/45">
                   {length(group.widget_items)} {if length(group.widget_items) == 1, do: "widget", else: "widgets"}
                 </span>
               </header>

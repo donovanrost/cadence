@@ -23,12 +23,27 @@
 }
 
 .cadence-dashboard-widget-actions {
-  opacity: 0.58;
+  opacity: 1;
   transition: opacity 120ms ease;
 }
 
-.cadence-dashboard-panel:is(:hover, :focus-within) .cadence-dashboard-widget-actions {
+.grid-stack[data-edit-mode="false"] .cadence-dashboard-widget-actions {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.grid-stack[data-edit-mode="false"]
+  .cadence-dashboard-panel:is(:hover, :focus-within)
+  .cadence-dashboard-widget-actions {
+  pointer-events: auto;
   opacity: 1;
+}
+
+@media (hover: none) {
+  .grid-stack[data-edit-mode="false"] .cadence-dashboard-widget-actions {
+    pointer-events: auto;
+    opacity: 0.72;
+  }
 }
 
 .cadence-time-series-panel-body {
@@ -65,4 +80,148 @@
 .cadence-time-series-chart .telemetry-chart-legend {
   border-top: 1px solid oklch(from var(--color-base-content) l c h / 0.11);
   background: oklch(from var(--color-base-200) calc(l - 0.012) c h / 0.97);
+}
+
+.telemetry-chart-live-edge {
+  position: absolute;
+  z-index: 5;
+  overflow: visible;
+  color: var(--color-success);
+  opacity: 0.82;
+  pointer-events: none;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.telemetry-chart-live-edge[hidden] {
+  display: none;
+}
+
+.telemetry-chart-live-edge-wash,
+.telemetry-chart-live-edge-line,
+.telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge-label {
+  position: absolute;
+  pointer-events: none;
+}
+
+.telemetry-chart-live-edge-wash {
+  inset: 0 0 0 auto;
+  width: 1.75rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(from currentColor l c h / 0.035) 45%,
+    oklch(from currentColor l c h / 0.13)
+  );
+  transform-origin: right center;
+}
+
+.telemetry-chart-live-edge-line {
+  inset: 0 0 0 auto;
+  width: 1px;
+  background: currentColor;
+  box-shadow: 0 0 7px oklch(from currentColor l c h / 0.58);
+}
+
+.telemetry-chart-live-edge-beacon {
+  top: 0.3rem;
+  right: -0.16rem;
+  width: 0.36rem;
+  height: 0.36rem;
+  border: 1px solid oklch(from currentColor l c h / 0.92);
+  border-radius: 999px;
+  background: var(--color-base-200);
+  box-shadow:
+    0 0 0 2px oklch(from currentColor l c h / 0.12),
+    0 0 8px oklch(from currentColor l c h / 0.62);
+  animation: cadence-live-edge-breathe 2.4s ease-in-out infinite;
+}
+
+.telemetry-chart-live-edge-label {
+  top: 0.18rem;
+  right: 0.55rem;
+  color: currentColor;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-shadow: 0 1px 3px var(--color-base-200);
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="connecting"] {
+  color: oklch(from var(--color-base-content) l c h / 0.46);
+  opacity: 0.58;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"],
+.telemetry-chart-live-edge[data-live-stream-state="delayed"] {
+  color: var(--color-warning);
+  opacity: 0.95;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="degraded"] {
+  color: var(--color-error);
+  opacity: 1;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"]
+  .telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge[data-live-stream-state="degraded"]
+  .telemetry-chart-live-edge-beacon {
+  animation: none;
+  background: currentColor;
+}
+
+.telemetry-chart-live-edge.is-receiving .telemetry-chart-live-edge-wash {
+  animation: cadence-live-edge-arrival 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.telemetry-chart-live-edge.is-receiving .telemetry-chart-live-edge-line {
+  animation: cadence-live-edge-line-arrival 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cadence-live-edge-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes cadence-live-edge-arrival {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.05);
+  }
+
+  24% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.38;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cadence-live-edge-line-arrival {
+  0% {
+    filter: brightness(1);
+  }
+
+  32% {
+    filter: brightness(2.1);
+  }
+
+  100% {
+    filter: brightness(1);
+  }
 }

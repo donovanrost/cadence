@@ -15,7 +15,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategories do
   @categories [
     {"limits", "Limits",
      ["limit_analysis", "limit_analysis_bucket", "limit_definition_interval"]},
-    {"contacts", "Contacts", ["contact_interval"]},
     {"source_status", "Source status", ["source_binding_interval", "source_health_transition"]},
     {"watermarks", "Watermarks & gaps",
      ["source_watermark_event", "source_watermark_cursor", "retention_gap"]},

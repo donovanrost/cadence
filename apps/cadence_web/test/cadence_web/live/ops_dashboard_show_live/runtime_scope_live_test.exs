@@ -248,10 +248,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="contact"][data-dashboard-scope-id="#{scheduled_contact.scheduled_contact_id}"])
            )
 
-    contact_markers = chart_event_markers(html, trend_widget.widget_id)
-
-    assert [%{"contact_id" => "dashboard-runtime-scope-contact", "target" => "contact"}] =
-             Enum.filter(contact_markers, &(&1["marker_type"] == "contact_interval"))
+    refute Enum.any?(
+             chart_event_markers(html, trend_widget.widget_id),
+             &(&1["marker_type"] == "contact_interval")
+           )
   end
 
   test "source-endpoint-scoped telemetry no-data exposes endpoint filter diagnostics" do

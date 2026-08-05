@@ -26,7 +26,11 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     previous_inline_resolve? =
       Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
 
+    previous_live_refresh_ms =
+      Application.get_env(:cadence_web, :dashboard_live_refresh_ms)
+
     Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
+    Application.put_env(:cadence_web, :dashboard_live_refresh_ms, 1_000)
 
     Application.put_env(
       :cadence_web,
@@ -44,6 +48,11 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
       case previous_inline_resolve? do
         nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
         value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
+      end
+
+      case previous_live_refresh_ms do
+        nil -> Application.delete_env(:cadence_web, :dashboard_live_refresh_ms)
+        value -> Application.put_env(:cadence_web, :dashboard_live_refresh_ms, value)
       end
     end)
 
@@ -172,6 +181,20 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     assert output =~ "dashboard_viewport_smoke passed"
     assert output =~ "\"contextRail\""
     assert output =~ "\"sectionKeys\""
+
+    if mode == :legacy_inline do
+      assert_live_stream_motion!(
+        sandbox_owner,
+        mission,
+        binding_set,
+        spacecraft,
+        script,
+        dashboard_url,
+        base_url,
+        user,
+        app_root
+      )
+    end
 
     persisted_layout_document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -529,5 +552,65 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
         user: user
       }
     end
+  end
+
+  defp assert_live_stream_motion!(
+         sandbox_owner,
+         mission,
+         binding_set,
+         spacecraft,
+         script,
+         dashboard_url,
+         base_url,
+         user,
+         app_root
+       ) do
+    streamer =
+      Task.async(fn ->
+        receive do
+          :stream ->
+            Enum.each(1..8, fn sequence ->
+              ingest!(
+                mission,
+                binding_set,
+                spacecraft.spacecraft_id,
+                22 + sequence,
+                DateTime.utc_now() |> DateTime.to_unix(:second)
+              )
+
+              Process.sleep(1_000)
+            end)
+        end
+      end)
+
+    Ecto.Adapters.SQL.Sandbox.allow(Repo, sandbox_owner, streamer.pid)
+    send(streamer.pid, :stream)
+
+    assert {stream_output, 0} =
+             run_dashboard_viewport_smoke(
+               [
+                 script,
+                 "--profile",
+                 "live-dashboard",
+                 "--interaction-mode",
+                 "live-telemetry-stream",
+                 "--url",
+                 dashboard_url,
+                 "--login-url",
+                 base_url <> ~p"/sign-in",
+                 "--login-email",
+                 user.email,
+                 "--login-password",
+                 TestFixtures.default_password()
+               ],
+               cd: app_root,
+               stderr_to_stdout: true
+             )
+
+    assert :ok = Task.await(streamer, 15_000)
+    assert stream_output =~ "dashboard_viewport_smoke passed"
+    assert stream_output =~ "\"liveTelemetryStream\""
+    assert stream_output =~ "\"liveStreamState\""
+    assert stream_output =~ "\"liveArrivalSequence\""
   end
 end

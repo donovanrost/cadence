@@ -100,6 +100,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
         event_markers: [%{title: "Limit crossed"}],
         selected_data_ref: %{kind: "sample", id: "sample-1"},
         time_mode: "replay_run",
+        time_from: "2026-06-25T11:55:00Z",
+        time_to: "2026-06-25T12:00:00Z",
         time_axis: "receipt_time",
         replay_run_id: "replay-run-1",
         data_realm: "rehearsal",
@@ -118,6 +120,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
     assert ["placement-1"] = LazyHTML.attribute(chart, "data-placement-id")
     assert ["V"] = LazyHTML.attribute(chart, "data-unit")
     assert ["replay_run"] = LazyHTML.attribute(chart, "data-time-mode")
+    assert ["2026-06-25T11:55:00Z"] = LazyHTML.attribute(chart, "data-time-from")
+    assert ["2026-06-25T12:00:00Z"] = LazyHTML.attribute(chart, "data-time-to")
     assert ["receipt_time"] = LazyHTML.attribute(chart, "data-time-axis")
     assert ["replay-run-1"] = LazyHTML.attribute(chart, "data-replay-run-id")
     assert ["rehearsal"] = LazyHTML.attribute(chart, "data-data-realm")

@@ -32,7 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
     end
   end
 
-  def assign_runtime_context(socket, runtime_context) do
+  def assign_runtime_context(socket, runtime_context, opts \\ []) do
     context_changed? = runtime_context_changed?(socket, runtime_context)
     runtime_assigns = RuntimeContext.field_assigns(runtime_context)
 
@@ -49,7 +49,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
       )
 
     socket
-    |> maybe_increment_chart_epoch(context_changed? or markers_changed?)
+    |> maybe_increment_chart_epoch(
+      immediate_chart_remount?(context_changed?, markers_changed?, opts)
+    )
     |> maybe_mark_runtime_context_changed(context_changed?)
     |> assign(runtime_assigns)
     |> DocumentLifecycle.assign_render_items()
@@ -93,11 +95,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
       |> assign(:dashboard_selection_query, selection_query)
       |> assign(:dashboard_evidence_query, evidence_query)
       |> assign(:dashboard_editor_focus, nil)
-      |> assign_runtime_context(runtime_context)
+      |> assign_runtime_context(runtime_context, remount_charts_immediately?: false)
 
     if context_changed? or is_nil(socket.assigns.dashboard_engine_result) do
+      resolve_mode = resolve_mode(socket)
+
       socket =
-        resolve_engine(socket, resolve_mode(socket), [reason: :runtime_context_changed], opts)
+        resolve_engine(
+          socket,
+          resolve_mode,
+          [
+            reason: :runtime_context_changed,
+            remount_charts_after_resolve?: resolve_mode == :context_change
+          ],
+          opts
+        )
 
       if socket.assigns[:dashboard_engine_result] do
         SelectionHydration.hydrate_from_query(socket, opts)
@@ -234,6 +246,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydration do
     do: assign(socket, :chart_epoch, socket.assigns.chart_epoch + 1)
 
   defp maybe_increment_chart_epoch(socket, false), do: socket
+
+  defp immediate_chart_remount?(context_changed?, markers_changed?, opts) do
+    remount_context? = Keyword.get(opts, :remount_charts_immediately?, true)
+    (context_changed? and remount_context?) or (markers_changed? and not context_changed?)
+  end
 
   defp maybe_mark_runtime_context_changed(socket, true),
     do: assign(socket, :dashboard_runtime_context_since, DateTime.utc_now())

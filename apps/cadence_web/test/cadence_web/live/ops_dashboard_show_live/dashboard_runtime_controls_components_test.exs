@@ -76,21 +76,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponentsTest
         data_bindings: [data_binding()],
         limit_mode: "observed",
         limit_mode_fallback: nil,
-        hidden_marker_categories: ["contacts"],
+        hidden_marker_categories: ["watermarks"],
         selected_data_ref: nil
       )
 
     document = LazyHTML.from_fragment(html)
 
-    assert ["markers[contacts]"] =
-             document
-             |> LazyHTML.query("#dashboard-marker-contacts")
-             |> LazyHTML.attribute("name")
-
     assert [] =
              document
              |> LazyHTML.query("#dashboard-marker-contacts")
-             |> LazyHTML.attribute("checked")
+             |> LazyHTML.attribute("id")
 
     assert [""] =
              document
@@ -102,7 +97,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponentsTest
 
     for key <- [
           "limits",
-          "contacts",
           "source_status",
           "watermarks",
           "mission_events",

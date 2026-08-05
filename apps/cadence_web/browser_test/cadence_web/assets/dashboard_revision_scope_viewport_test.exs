@@ -945,6 +945,26 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
               },
               options: %{}
             }
+          },
+          %Placement{
+            placement_id: "placement-retention-counter-trend-peer",
+            layout: %{x: 0, y: 3, w: 8, h: 3},
+            scope_override: %{
+              primary: %{kind: "spacecraft", mode: "one", ids: [spacecraft.spacecraft_id]}
+            },
+            widget_def: %WidgetDef{
+              widget_type_id: "cadence.time_series",
+              widget_type_version: 1,
+              title: "Replay Counter Retention Trend Peer",
+              binding: %{
+                source: :telemetry,
+                observables: ["HK.counter"],
+                scope_mode: :override,
+                sampling: :raw_series,
+                overlays: []
+              },
+              options: %{}
+            }
           }
         ]
       )
@@ -976,6 +996,8 @@ defmodule CadenceWeb.Assets.DashboardRevisionScopeViewportTest do
                  "replay_run",
                  "--expected-replay-run-id",
                  replay_run_id,
+                 "--expected-shared-cursor-peer-placement-id",
+                 "placement-retention-counter-trend-peer",
                  "--url",
                  dashboard_url,
                  "--login-url",

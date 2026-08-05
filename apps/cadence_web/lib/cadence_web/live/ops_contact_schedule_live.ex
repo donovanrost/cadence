@@ -17,6 +17,9 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
     socket =
       socket
+      |> stream_configure(:contact_records,
+        dom_id: fn row -> "contact-record-#{row.canonical_id}" end
+      )
       |> stream_configure(:opportunities,
         dom_id: fn opportunity ->
           "opportunity-#{opportunity["id"]}"
@@ -27,9 +30,10 @@ defmodule CadenceWeb.OpsContactScheduleLive do
           "provider-reservation-#{row.reservation.provider_reservation_id}"
         end
       )
-      |> assign(:page_title, "Contact Scheduling")
+      |> assign(:page_title, "Contacts")
       |> assign(:ops_nav_item, :contacts)
       |> assign(:spacecraft, spacecraft)
+      |> assign(:contact_record_count, 0)
       |> assign(:opportunity_count, 0)
       |> assign(:opportunities_empty?, true)
       |> assign(:searching?, false)
@@ -261,19 +265,25 @@ defmodule CadenceWeb.OpsContactScheduleLive do
         <div class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-              Mission operations / downlink
+              Mission operations / contact control
             </p>
             <h1 class="mt-1 text-2xl font-bold tracking-tight text-base-content">
-              Contact window control
+              Contacts
             </h1>
             <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-              Search provider availability, reserve capacity, and track Cadence contact realization through one durable workflow.
+              Inspect scheduled and realized mission contacts, then plan provider capacity without mixing contact state into telemetry charts.
             </p>
           </div>
           <div class="flex items-center gap-4 border-l border-primary/30 pl-4 font-mono text-xs">
             <div>
               <p class="hud-label">Scope</p>
-              <p class="mt-1 text-base-content/70">Downlink only</p>
+              <p class="mt-1 text-base-content/70">Mission contact truth</p>
+            </div>
+            <div>
+              <p class="hud-label">Contacts</p>
+              <p id="contact-record-count" class="mt-1 text-primary">
+                {@contact_record_count}
+              </p>
             </div>
             <div>
               <p class="hud-label">Reservations</p>
@@ -285,8 +295,40 @@ defmodule CadenceWeb.OpsContactScheduleLive do
         </div>
       </header>
 
-      <div class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)] lg:p-7">
-        <div class="min-w-0 space-y-5">
+      <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
+        <section id="mission-contact-ledger" class="border border-base-300 bg-base-200/20 shadow-sm">
+          <div class="flex flex-col gap-3 border-b border-base-300 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="hud-label">Canonical contact ledger</p>
+              <h2 class="mt-1 text-base font-semibold">Scheduled and realized mission contacts</h2>
+              <p class="mt-1 text-sm text-base-content/60">
+                Open a record for lifecycle evidence or hand its exact window to Telemetry Explore.
+              </p>
+            </div>
+            <.link
+              id="contacts-open-timeline"
+              navigate={~p"/missions/#{@current_mission.mission_id}/ops/timeline?#{%{category: "operations"}}"}
+              class="btn btn-sm btn-ghost justify-start"
+            >
+              <.icon name="hero-clock" class="h-4 w-4" /> Mission Timeline
+            </.link>
+          </div>
+          <div id="contact-records" phx-update="stream">
+            <div id="contact-records-empty" class="hidden only:block px-4 py-12 text-center">
+              <.icon name="hero-signal-slash" class="mx-auto h-6 w-6 text-base-content/30" />
+              <p class="mt-3 text-sm text-base-content/55">No scheduled or realized contacts for this mission.</p>
+            </div>
+            <.contact_record_row
+              :for={{dom_id, row} <- @streams.contact_records}
+              id={dom_id}
+              row={row}
+              mission_id={@current_mission.mission_id}
+            />
+          </div>
+        </section>
+
+        <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)]">
+          <div class="min-w-0 space-y-5">
           <section class="border border-base-300 bg-base-200/35 shadow-sm">
             <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
               <div>
@@ -418,7 +460,8 @@ defmodule CadenceWeb.OpsContactScheduleLive do
               )}
             />
           </div>
-        </aside>
+          </aside>
+        </div>
       </div>
     </section>
     """
@@ -622,6 +665,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
     socket =
       socket
+      |> refresh_contact_records()
       |> assign(:reservation_count, length(rows))
       |> stream(:provider_reservations, rows, reset: true)
 
@@ -631,6 +675,15 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     else
       socket
     end
+  end
+
+  defp refresh_contact_records(socket) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+    rows = LiveDeps.list_contact_records(scope.organization_id, mission.mission_id)
+
+    socket
+    |> assign(:contact_record_count, length(rows))
+    |> stream(:contact_records, rows, reset: true)
   end
 
   defp schedule_reservation_refresh(%{assigns: %{refresh_timer: nil}} = socket) do

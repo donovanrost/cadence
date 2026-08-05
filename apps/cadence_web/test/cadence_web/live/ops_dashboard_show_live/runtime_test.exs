@@ -43,6 +43,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
     assert [%{action: :accept_result, resolve_id: 2}] = socket.assigns.dashboard_runtime_decisions
   end
 
+  test "accepted resolve consumes durable chart remount intent after resolve-specific state changes" do
+    result = engine_result(:context_change, "placement-new")
+
+    socket =
+      socket(
+        coordinator:
+          RuntimeCoordinator.new(
+            status: :resolving,
+            generation: 3,
+            active_resolve_id: 3,
+            active_mode: :context_change
+          ),
+        chart_remount_pending?: true
+      )
+
+    socket = Runtime.resolve_finished(socket, 3, result)
+
+    assert socket.assigns.chart_epoch == 1
+    refute socket.assigns.dashboard_runtime_chart_remount_pending?
+  end
+
   test "stale resolve success is ignored and only its pending runtime state is cleaned" do
     previous_result = engine_result(:initial, "placement-old")
     stale_result = engine_result(:context_change, "placement-stale")
@@ -60,7 +81,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
         chart_epoch: 4,
         engine_result: previous_result,
         pending_appends: %{1 => %{stale: true}, 2 => %{active: true}},
-        pending_chart_remounts: %{1 => true, 2 => true}
+        pending_chart_remounts: %{1 => true, 2 => true},
+        chart_remount_pending?: true
       )
 
     socket = Runtime.resolve_finished(socket, 1, stale_result)
@@ -72,6 +94,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
 
     assert socket.assigns.dashboard_runtime_resolved?
     assert socket.assigns.chart_epoch == 4
+    assert socket.assigns.dashboard_runtime_chart_remount_pending?
     assert socket.assigns.dashboard_runtime_pending_appends == %{2 => %{active: true}}
     assert socket.assigns.dashboard_runtime_pending_chart_remounts == %{2 => true}
     assert socket.assigns.dashboard_runtime_coordinator.active_resolve_id == 2
@@ -150,7 +173,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
         chart_epoch: 2,
         engine_result: previous_result,
         pending_appends: %{5 => %{previous: true}},
-        pending_chart_remounts: %{5 => true}
+        pending_chart_remounts: %{5 => true},
+        chart_remount_pending?: true
       )
 
     socket = Runtime.resolve_failed(socket, 5, {:shutdown, :source_timeout})
@@ -158,6 +182,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
     assert socket.assigns.dashboard_engine_result == previous_result
     assert socket.assigns.dashboard_runtime_resolved?
     assert socket.assigns.chart_epoch == 2
+    refute socket.assigns.dashboard_runtime_chart_remount_pending?
     assert socket.assigns.dashboard_runtime_pending_appends == %{}
     assert socket.assigns.dashboard_runtime_pending_chart_remounts == %{}
     assert socket.assigns.dashboard_runtime_coordinator.status == :idle
@@ -193,13 +218,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
         resolved?: true,
         engine_result: previous_result,
         pending_appends: %{4 => %{stale: true}, 6 => %{active: true}},
-        pending_chart_remounts: %{4 => true, 6 => true}
+        pending_chart_remounts: %{4 => true, 6 => true},
+        chart_remount_pending?: true
       )
 
     socket = Runtime.resolve_failed(socket, 4, :obsolete_timeout)
 
     assert socket.assigns.dashboard_engine_result == previous_result
     assert socket.assigns.dashboard_runtime_resolved?
+    assert socket.assigns.dashboard_runtime_chart_remount_pending?
     assert socket.assigns.dashboard_runtime_pending_appends == %{6 => %{active: true}}
     assert socket.assigns.dashboard_runtime_pending_chart_remounts == %{6 => true}
     assert socket.assigns.dashboard_runtime_coordinator.active_resolve_id == 6
@@ -251,6 +278,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTest do
         dashboard_runtime_decisions: [],
         dashboard_runtime_pending_appends: Keyword.get(opts, :pending_appends, %{}),
         dashboard_runtime_pending_chart_remounts: Keyword.get(opts, :pending_chart_remounts, %{}),
+        dashboard_runtime_chart_remount_pending?:
+          Keyword.get(opts, :chart_remount_pending?, false),
         dashboard_runtime_resolved?: Keyword.get(opts, :resolved?, false),
         widget_data: %{}
       }

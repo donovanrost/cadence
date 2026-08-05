@@ -125,6 +125,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :event_markers, :list, required: true
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
+  attr :time_from, :string, default: nil
+  attr :time_to, :string, default: nil
   attr :time_axis, :string, default: nil
   attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
@@ -168,6 +170,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       event_markers={@event_markers}
       selected_data_ref={@selected_data_ref}
       time_mode={@time_mode}
+      time_from={@time_from}
+      time_to={@time_to}
       time_axis={@time_axis}
       window_seconds={@window_seconds}
       replay_run_id={@replay_run_id}
@@ -194,6 +198,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :event_markers, :list, required: true
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
+  attr :time_from, :string, default: nil
+  attr :time_to, :string, default: nil
   attr :time_axis, :string, default: nil
   attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
@@ -264,6 +270,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             event_markers={@event_markers}
             selected_data_ref={@selected_data_ref}
             time_mode={@time_mode}
+            time_from={@time_from}
+            time_to={@time_to}
             time_axis={@time_axis}
             window_seconds={@window_seconds}
             replay_run_id={@replay_run_id}
@@ -439,10 +447,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       ]}>
         {@widget.title}
       </h3>
-      <div class={[
-        "cadence-dashboard-widget-actions",
-        "ml-auto flex shrink-0 items-center gap-1"
-      ]}>
+      <div
+        class="ml-auto flex shrink-0 items-center gap-1"
+        data-widget-status-indicators
+      >
         <.severity_badge
           :if={point_data?(@data) && actionable_limit_event?(@data.limit_event)}
           severity={normalized_severity(@data.limit_event.normalized_state)}
@@ -479,6 +487,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         >
           <.icon name={lifecycle_indicator_icon(@data)} class="h-3.5 w-3.5" />
         </span>
+      </div>
+      <div class={[
+        "cadence-dashboard-widget-actions",
+        "flex shrink-0 items-center gap-1"
+      ]}>
         <.popover
           id={"widget-details-#{@placement_id}"}
           label={"#{@widget.title} widget details"}
@@ -658,7 +671,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         </button>
         <button
           type="button"
-          phx-click={JS.dispatch("click", to: "#dashboard-investigate-toggle")}
+          phx-click={JS.dispatch("click", to: "#dashboard-menu-trigger")}
           class="btn btn-xs btn-ghost"
           data-widget-empty-investigate
         >

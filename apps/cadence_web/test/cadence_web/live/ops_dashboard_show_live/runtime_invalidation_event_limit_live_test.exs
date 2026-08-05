@@ -277,11 +277,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
 
       event_markers = chart_event_markers(refreshed_html, trend_widget.widget_id)
 
-      assert Enum.any?(
-               event_markers,
-               &(&1["marker_type"] == "contact_interval" and
-                   &1["contact_id"] == scheduled_contact.scheduled_contact_id)
-             )
+      refute Enum.any?(event_markers, &(&1["marker_type"] == "contact_interval"))
     end
 
     test "limit definition runtime invalidation refreshes live dashboard limit overlays" do

@@ -270,11 +270,78 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.attribute("data-dashboard-comparison-open-count")
   end
 
+  test "dashboard_toolbar hides an available but inactive comparison" do
+    document =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(comparison_available?: true)
+      )
+      |> LazyHTML.from_fragment()
+
+    assert [] =
+             document
+             |> LazyHTML.query("#dashboard-comparison-toggle")
+             |> LazyHTML.attribute("id")
+  end
+
+  test "healthy viewer keeps only scope and time as primary controls" do
+    document =
+      render_component(&DashboardToolbarComponents.dashboard_toolbar/1, toolbar_assigns([]))
+      |> LazyHTML.from_fragment()
+
+    assert ["scope", "time"] =
+             document
+             |> LazyHTML.query("[data-dashboard-primary-control]")
+             |> LazyHTML.attribute("data-dashboard-primary-control")
+
+    assert [] =
+             document
+             |> LazyHTML.query("#dashboard-query-options")
+             |> LazyHTML.attribute("open")
+
+    assert [] =
+             document
+             |> LazyHTML.query("[data-dashboard-data-override]")
+             |> LazyHTML.attribute("data-dashboard-data-override")
+
+    assert [] =
+             document
+             |> LazyHTML.query("#dashboard-investigate-toggle")
+             |> LazyHTML.attribute("id")
+  end
+
+  test "non-default data context opens provenance controls and exposes a compact override" do
+    document =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(data_realm: "replay", data_view: "as_recorded", limit_mode: "current")
+      )
+      |> LazyHTML.from_fragment()
+
+    assert [""] =
+             document
+             |> LazyHTML.query("#dashboard-query-options")
+             |> LazyHTML.attribute("open")
+
+    assert [""] =
+             document
+             |> LazyHTML.query("[data-dashboard-data-override]")
+             |> LazyHTML.attribute("data-dashboard-data-override")
+
+    assert document |> LazyHTML.query("[data-dashboard-data-override]") |> LazyHTML.text() =~
+             "Replay · As recorded"
+  end
+
   test "dashboard_toolbar keeps telemetry primary and consolidates data issues" do
     html =
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
         toolbar_assigns(
+          dashboard_document: %{
+            dashboard_id: "dashboard-1",
+            name: "Ops",
+            description: "Operations"
+          },
           dashboard_degraded?: true,
           dashboard_warnings: [
             %{
@@ -310,10 +377,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.query("#dashboard-data-issues")
              |> LazyHTML.attribute("data-dashboard-data-issue-count")
 
-    assert ["#"] =
+    assert ["data_sources"] =
+             document
+             |> LazyHTML.query("#dashboard-data-issues-open")
+             |> LazyHTML.attribute("data-dashboard-data-issue-action")
+
+    assert [source_path] =
              document
              |> LazyHTML.query("#dashboard-data-issues-open")
              |> LazyHTML.attribute("href")
+
+    assert source_path =~ "/missions/mission-1/ops/data-sources"
+
+    assert [diagnostics_path] =
+             document
+             |> LazyHTML.query("#dashboard-data-issues-diagnostics")
+             |> LazyHTML.attribute("href")
+
+    assert diagnostics_path =~ "/missions/mission-1/ops/dashboards/dashboard-1/diagnostics"
 
     assert ["dashboard-data-controls-panel"] =
              document
@@ -348,6 +429,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert ["dashboard-menu-menu"] =
              document
              |> LazyHTML.query("#dashboard-menu-menu")
+             |> LazyHTML.attribute("id")
+
+    assert ["dashboard-investigate-telemetry"] =
+             document
+             |> LazyHTML.query("#dashboard-menu-menu #dashboard-investigate-telemetry")
              |> LazyHTML.attribute("id")
   end
 

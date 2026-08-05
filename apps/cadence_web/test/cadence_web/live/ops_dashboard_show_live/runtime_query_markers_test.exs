@@ -8,7 +8,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryMarkersTest do
   alias CadenceWeb.OpsDashboardShowLive.RuntimeContext
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
 
-  test "hidden_markers param round-trips through context, assigns, and query" do
+  test "hidden_markers round-trips valid keys and drops the retired contacts key" do
     params = %{"hidden_markers" => "limits,contacts,bogus"}
 
     context =
@@ -22,12 +22,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryMarkersTest do
         document()
       )
 
-    assert context.hidden_marker_categories == ["contacts", "limits"]
+    assert context.hidden_marker_categories == ["limits"]
 
     field_assigns = RuntimeContext.field_assigns(context)
-    assert field_assigns.dashboard_hidden_marker_categories == ["contacts", "limits"]
+    assert field_assigns.dashboard_hidden_marker_categories == ["limits"]
 
-    assert %{"hidden_markers" => "contacts,limits"} =
+    assert %{"hidden_markers" => "limits"} =
              RuntimeQuery.normalize_runtime_query(
                params,
                ["flight"],
@@ -78,14 +78,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeQueryMarkersTest do
       dashboard_document: document(),
       dashboard_data_realms: ["flight"],
       dashboard_data_bindings: [data_binding()],
-      dashboard_hidden_marker_categories: ["contacts"],
+      dashboard_hidden_marker_categories: ["contacts", "limits"],
       dashboard_time_mode: "live",
       dashboard_data_realm: "flight",
       dashboard_data_view: "canonical",
       dashboard_limit_mode: "observed"
     }
 
-    assert %{"hidden_markers" => "contacts"} = RuntimeQuery.current_query(assigns)
+    assert %{"hidden_markers" => "limits"} = RuntimeQuery.current_query(assigns)
     assert "hidden_markers" in RouteQuery.runtime_query_keys()
   end
 

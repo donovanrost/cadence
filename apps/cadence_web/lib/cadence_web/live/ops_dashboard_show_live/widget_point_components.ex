@@ -53,6 +53,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   attr :event_markers, :list, default: []
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
+  attr :time_from, :string, default: nil
+  attr :time_to, :string, default: nil
   attr :time_axis, :string, default: nil
   attr :window_seconds, :integer, default: nil
   attr :replay_run_id, :string, default: nil
@@ -107,6 +109,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
         data-event-markers={Jason.encode!(@event_markers || [])}
         data-selected-ref={Jason.encode!(@selected_data_ref)}
         data-time-mode={@time_mode || ""}
+        data-time-from={@time_from || ""}
+        data-time-to={@time_to || ""}
         data-time-axis={@time_axis || ""}
         data-replay-run-id={@replay_run_id || ""}
         data-data-realm={@data_realm || ""}

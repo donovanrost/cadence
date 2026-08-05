@@ -32,7 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     render_component(&DashboardTimePickerComponents.time_toolbar_cluster/1, attrs)
   end
 
-  test "plain live mode renders Live label with disabled shift and zoom" do
+  test "plain live mode renders Live without inactive time navigation" do
     document = LazyHTML.from_fragment(render_cluster([]))
 
     assert ["live"] =
@@ -42,18 +42,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
 
     assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~ "Live"
 
+    assert ["true"] =
+             document
+             |> LazyHTML.query("#dashboard-live-follow-indicator")
+             |> LazyHTML.attribute("data-dashboard-live-follow")
+
     for id <- [
           "dashboard-time-shift-back",
           "dashboard-time-shift-forward",
           "dashboard-time-zoom-out"
         ] do
-      assert [""] = document |> LazyHTML.query("##{id}") |> LazyHTML.attribute("disabled")
+      assert [] = document |> LazyHTML.query("##{id}") |> LazyHTML.attribute("id")
     end
 
-    assert [""] =
+    assert [] =
              document
              |> LazyHTML.query("#dashboard-refresh-interval")
-             |> LazyHTML.attribute("disabled")
+             |> LazyHTML.attribute("id")
+
+    assert ["time"] =
+             document
+             |> LazyHTML.query("#dashboard-time-controls")
+             |> LazyHTML.attribute("data-dashboard-primary-control")
 
     assert [""] =
              document
@@ -123,6 +133,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
              document
              |> LazyHTML.query("#dashboard-time-validation")
              |> LazyHTML.attribute("data-time-validation")
+
+    assert ["false"] =
+             document
+             |> LazyHTML.query("#dashboard-live-follow-indicator")
+             |> LazyHTML.attribute("data-dashboard-live-follow")
 
     assert ["2026-06-17T12:00:00Z"] =
              document |> LazyHTML.query("#dashboard-time-from") |> LazyHTML.attribute("value")
@@ -219,10 +234,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~
              "Replay · replay-run-1"
 
-    assert [""] =
+    assert [] =
              document
              |> LazyHTML.query("#dashboard-time-shift-back")
-             |> LazyHTML.attribute("disabled")
+             |> LazyHTML.attribute("id")
   end
 
   test "disables replay scrub when no timestamp is selected" do

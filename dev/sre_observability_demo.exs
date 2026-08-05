@@ -10,7 +10,8 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
-  alias Cadence.Dashboards.{DataSources, Document, Management, Placement, Section, WidgetDef}
+  alias Cadence.Dashboards.{Document, Management, Placement, Section, WidgetDef}
+  alias Cadence.Management.DataSources
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.Limits.Store, as: LimitStore
   alias Cadence.Missions.Mission

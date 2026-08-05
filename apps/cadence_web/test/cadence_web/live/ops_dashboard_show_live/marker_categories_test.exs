@@ -5,13 +5,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategoriesTest do
 
   describe "normalize_param/1" do
     test "parses comma strings, dropping unknown keys and duplicates" do
-      assert MarkerCategories.normalize_param("limits, contacts,limits,bogus") ==
-               ["contacts", "limits"]
+      assert MarkerCategories.normalize_param("limits, contacts,limits,bogus") == ["limits"]
     end
 
     test "accepts lists and sorts them" do
-      assert MarkerCategories.normalize_param(["watermarks", "contacts"]) ==
-               ["contacts", "watermarks"]
+      assert MarkerCategories.normalize_param(["watermarks", "contacts"]) == ["watermarks"]
     end
 
     test "accepts the checkbox map shape, treating false values as hidden" do
@@ -36,7 +34,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategoriesTest do
     end
 
     test "joins sorted valid keys" do
-      assert MarkerCategories.to_param(["limits", "contacts"]) == "contacts,limits"
+      assert MarkerCategories.to_param(["limits", "contacts"]) == "limits"
     end
   end
 
@@ -52,26 +50,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategoriesTest do
 
   describe "filter_event_markers/2" do
     test "rejects markers whose type maps to a hidden category" do
-      contact = %{marker_type: "contact_interval"}
       watermark = %{marker_type: "source_watermark_cursor"}
       mission = %{marker_type: "mission_event"}
 
-      assert MarkerCategories.filter_event_markers([contact, watermark, mission], [
-               "contacts",
-               "watermarks"
-             ]) == [mission]
+      assert MarkerCategories.filter_event_markers([watermark, mission], ["watermarks"]) == [
+               mission
+             ]
     end
 
     test "keeps markers with unknown or missing types (fail open)" do
       unknown = %{marker_type: "future_marker"}
       untyped = %{marker_id: "x"}
 
-      assert MarkerCategories.filter_event_markers([unknown, untyped], ["contacts"]) ==
+      assert MarkerCategories.filter_event_markers([unknown, untyped], ["watermarks"]) ==
                [unknown, untyped]
     end
 
     test "no hidden categories is a passthrough" do
-      markers = [%{marker_type: "contact_interval"}]
+      markers = [%{marker_type: "mission_event"}]
       assert MarkerCategories.filter_event_markers(markers, []) == markers
     end
   end
@@ -81,7 +77,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategoriesTest do
       "limit_analysis",
       "limit_analysis_bucket",
       "limit_definition_interval",
-      "contact_interval",
       "source_binding_interval",
       "source_health_transition",
       "source_watermark_event",

@@ -93,7 +93,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
       )
 
     assert socket.assigns.resolved_mode == :initial
-    assert socket.assigns.resolve_opts == [reason: :runtime_context_changed]
+
+    assert socket.assigns.resolve_opts == [
+             reason: :runtime_context_changed,
+             remount_charts_after_resolve?: false
+           ]
+
     assert socket.assigns.context_scope_kind == "mission"
     assert socket.assigns.context_scope_id == "mission-1"
     assert socket.assigns.dashboard_time_mode == "archive"
@@ -116,7 +121,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
            }
 
     assert socket.assigns.dashboard_evidence_query == nil
-    assert socket.assigns.chart_epoch == 1
+    assert socket.assigns.chart_epoch == 0
     assert %DateTime{} = socket.assigns.dashboard_runtime_context_since
   end
 
@@ -134,7 +139,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RouteHydrationTest do
       )
 
     assert socket.assigns.resolved_mode == :context_change
-    assert socket.assigns.resolve_opts == [reason: :runtime_context_changed]
+
+    assert socket.assigns.resolve_opts == [
+             reason: :runtime_context_changed,
+             remount_charts_after_resolve?: true
+           ]
+
     assert socket.assigns.context_scope_kind == "spacecraft"
     assert socket.assigns.context_scope_id == "sc-1"
   end

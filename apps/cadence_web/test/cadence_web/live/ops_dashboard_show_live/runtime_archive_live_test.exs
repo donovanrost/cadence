@@ -260,13 +260,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     assert patched_path =~ "time_mode=archive"
     assert patched_path =~ "from="
     assert patched_path =~ "to="
-    refute patched_path =~ "time_axis="
+    assert patched_path =~ "time_axis=generation_time"
 
     render_dashboard_async(view)
 
     assert has_element?(
              view,
-             ~s(#ops-dashboard-show-page[data-dashboard-time-mode="archive"][data-dashboard-time-axis="receipt_time"][data-dashboard-time-validation="ok"][data-engine-time-axis="receipt_time"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
+             ~s(#ops-dashboard-show-page[data-dashboard-time-mode="archive"][data-dashboard-time-axis="generation_time"][data-dashboard-time-validation="ok"][data-engine-time-axis="generation_time"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
            )
 
     assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")

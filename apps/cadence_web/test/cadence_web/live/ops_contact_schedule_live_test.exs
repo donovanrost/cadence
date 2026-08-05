@@ -44,6 +44,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
 
     assert has_element?(view, "#ops-contacts-page")
+    assert has_element?(view, "#mission-contact-ledger")
+    assert has_element?(view, "#contact-records")
     assert has_element?(view, "#contact-opportunity-search-form")
     assert has_element?(view, "#provider-reservations")
 

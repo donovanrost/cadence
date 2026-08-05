@@ -89,6 +89,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
       event_markers: props.event_markers,
       selected_data_ref: props.selected_data_ref,
       time_mode: context.time_mode,
+      time_from: context.time_from,
+      time_to: context.time_to,
       time_axis: context.time_axis,
       window_seconds: context.window_seconds,
       replay_run_id: context.replay_run_id,

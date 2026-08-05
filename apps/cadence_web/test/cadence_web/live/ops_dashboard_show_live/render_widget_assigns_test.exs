@@ -15,6 +15,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssignsTest do
     assert context.edit_mode? == true
     assert context.spacecraft == [%{spacecraft_id: "SC-1"}]
     assert context.selected_data_ref == selected_data_ref()
+    assert context.time_mode == "archive"
+    assert context.time_from == "2026-06-25T11:55:00Z"
+    assert context.time_to == "2026-06-25T12:00:00Z"
+    assert context.time_axis == "generation_time"
     assert context.data_view == "all_revisions"
     assert context.compare_data_view == "canonical"
     assert context.context_spacecraft_id == "SC-1"
@@ -139,6 +143,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssignsTest do
         dashboard_lifecycle_events: [],
         dashboard_comparison_review_queue: ComparisonReviewQueue.open_summary([]),
         dashboard_selected_data_ref: selected_data_ref(),
+        dashboard_time_mode: "archive",
+        dashboard_time_from: "2026-06-25T11:55:00Z",
+        dashboard_time_to: "2026-06-25T12:00:00Z",
+        dashboard_time_context: %{"mode" => "archive", "axis" => "generation_time"},
         dashboard_data_view: "all_revisions",
         dashboard_compare_data_view: "canonical",
         context_spacecraft_id: "SC-1",

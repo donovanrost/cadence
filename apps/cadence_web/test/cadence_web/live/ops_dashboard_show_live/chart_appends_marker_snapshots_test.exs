@@ -98,7 +98,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsMarkerSnapshotsTest do
                  push_events: [
                    [
                      "tlm:append",
-                     %{"series" => %{}, "window_end_ms" => window_end_ms}
+                     %{
+                       "series" => %{},
+                       "window_end_ms" => window_end_ms,
+                       "refresh_interval_ms" => 2_500
+                     }
                    ]
                  ]
                }
@@ -133,7 +137,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppendsMarkerSnapshotsTest do
         ],
         dashboard_engine_result: %DashboardResolveResult{
           frames_by_placement: %{"placement-1" => placement_frames}
-        }
+        },
+        dashboard_live_refresh_ms: 2_500
       }
     }
   end

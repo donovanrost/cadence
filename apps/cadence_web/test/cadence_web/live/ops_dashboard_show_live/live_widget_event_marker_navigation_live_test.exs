@@ -268,13 +268,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
   end
 
   describe "live widget event marker navigation" do
-    test "opens contact and mission event chart markers with navigation context" do
+    test "opens mission event chart markers with navigation context" do
       disable_telemetry_storage_runtime_invalidation!()
 
       {conn, org, mission} = signed_in_org_and_mission()
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Alpha")
       binding_set = persist_binding_set!(org, mission)
-      scheduled_contact = persist_scheduled_contact!(org, mission)
       persisted_event = persist_mission_event!(org, mission, binding_set, spacecraft)
 
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 14, 1_700_000_090)
@@ -305,75 +304,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
 
       event_markers = chart_event_markers(html, trend_widget_id)
 
-      contact_marker =
-        Enum.find(
-          event_markers,
-          &(&1["marker_type"] == "contact_interval" and
-              &1["contact_id"] == scheduled_contact.scheduled_contact_id)
-        )
-
       mission_event_marker =
         Enum.find(
           event_markers,
           &(&1["marker_type"] == "mission_event" and
               &1["source_record_id"] == persisted_event.event_id)
         )
-
-      contact_link_id = contact_marker["link_id"]
-      contact_target_id = contact_marker["target_id"]
-      contact_timestamp_ms = contact_marker["starts_at_ms"]
-
-      chart_id = chart_dom_id(render(view), trend_widget_id)
-
-      view
-      |> element("##{chart_id}")
-      |> render_hook("open_data_link", %{
-        "link-id" => contact_link_id,
-        "placement-id" => trend_widget_id,
-        "target" => "contact",
-        "target-id" => scheduled_contact.scheduled_contact_id,
-        "timestamp-ms" => contact_timestamp_ms
-      })
-
-      assert_push_event(
-        view,
-        "tlm:select",
-        %{
-          "selection" => %{
-            "link_id" => ^contact_link_id,
-            "placement_id" => ^trend_widget_id,
-            "target" => "contact",
-            "target_id" => ^contact_target_id,
-            "timestamp_ms" => ^contact_timestamp_ms
-          }
-        },
-        1_000
-      )
-
-      contact_path = assert_patch(view)
-      assert contact_path =~ "panel=data_link"
-      assert contact_path =~ "selected_target=contact"
-
-      assert contact_path =~
-               "selected_id=#{URI.encode_www_form(scheduled_contact.scheduled_contact_id)}"
-
-      assert contact_path =~ "selected_placement=#{URI.encode_www_form(trend_widget_id)}"
-
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-inspector[data-data-link-target="contact"][data-data-link-status="resolved"])
-             )
-
-      assert has_element?(
-               view,
-               ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
-             )
-
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
-
-      closed_path = assert_patch(view)
-      refute closed_path =~ "panel=data_link"
-      refute has_element?(view, "#dashboard-panel")
 
       mission_event_link_id = mission_event_marker["link_id"]
       mission_event_id = mission_event_marker["mission_event_id"]
@@ -444,7 +380,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
              )
     end
 
-    test "marker category toggles hide markers without an engine re-resolve" do
+    test "standard dashboards omit contacts while marker toggles filter annotations" do
       disable_telemetry_storage_runtime_invalidation!()
 
       {conn, org, mission} = signed_in_org_and_mission()
@@ -481,18 +417,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       marker_types =
         html |> chart_event_markers(trend_widget_id) |> Enum.map(& &1["marker_type"])
 
-      assert "contact_interval" in marker_types
+      refute "contact_interval" in marker_types
       assert "mission_event" in marker_types
 
       chart_id_before = chart_dom_id(html, trend_widget_id)
-      assert has_element?(view, ~s(#dashboard-marker-contacts[checked]))
+      refute has_element?(view, "#dashboard-marker-contacts")
 
       view
-      |> form("#runtime-context-form", %{"markers" => %{"contacts" => "false"}})
+      |> form("#runtime-context-form", %{"markers" => %{"mission_events" => "false"}})
       |> render_change()
 
       toggled_path = assert_patch(view)
-      assert toggled_path =~ "hidden_markers=contacts"
+      assert toggled_path =~ "hidden_markers=mission_events"
 
       html = render_dashboard_async(view)
 
@@ -500,16 +436,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
         html |> chart_event_markers(trend_widget_id) |> Enum.map(& &1["marker_type"])
 
       refute "contact_interval" in filtered_types
-      assert "mission_event" in filtered_types
+      refute "mission_event" in filtered_types
 
       # Presentation-only change: chart remounted (new epoch id)...
       assert chart_dom_id(html, trend_widget_id) != chart_id_before
       # ...and the checkbox now renders unchecked with the hidden-count hint.
-      refute has_element?(view, ~s(#dashboard-marker-contacts[checked]))
+      refute has_element?(view, ~s(#dashboard-marker-mission_events[checked]))
       assert has_element?(view, "#dashboard-markers-hidden-count")
 
       view
-      |> form("#runtime-context-form", %{"markers" => %{"contacts" => "true"}})
+      |> form("#runtime-context-form", %{"markers" => %{"mission_events" => "true"}})
       |> render_change()
 
       restored_path = assert_patch(view)
@@ -517,9 +453,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
 
       html = render_dashboard_async(view)
 
-      assert "contact_interval" in (html
-                                    |> chart_event_markers(trend_widget_id)
-                                    |> Enum.map(& &1["marker_type"]))
+      restored_types =
+        html |> chart_event_markers(trend_widget_id) |> Enum.map(& &1["marker_type"])
+
+      assert "mission_event" in restored_types
+      refute "contact_interval" in restored_types
     end
 
     test "widget inspect panel opens from the details popover with table and CSV" do

@@ -55,6 +55,61 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
 
   attr :id, :string, required: true
   attr :row, :map, required: true
+  attr :mission_id, :string, required: true
+
+  def contact_record_row(assigns) do
+    ~H"""
+    <article
+      id={@id}
+      class="grid gap-3 border-b border-base-300/70 px-4 py-4 transition-colors hover:bg-primary/[0.035] lg:grid-cols-[minmax(15rem,1.25fr)_minmax(10rem,0.7fr)_minmax(12rem,0.9fr)_auto] lg:items-center"
+      data-contact-record-kind={if(@row.realized_contact, do: "realized", else: "scheduled")}
+      data-contact-record-state={@row.lifecycle_state}
+    >
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <.reservation_status state={@row.lifecycle_state} />
+          <span class="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-base-content/45">
+            {if(@row.realized_contact, do: "Realized contact", else: "Scheduled contact")}
+          </span>
+        </div>
+        <p class="mt-2 truncate font-mono text-xs font-semibold text-base-content/80">
+          {@row.canonical_id}
+        </p>
+      </div>
+
+      <div>
+        <p class="hud-label">Operational window</p>
+        <p class="mt-1 font-mono text-xs text-base-content/70">
+          {format_time(@row.starts_at)}
+        </p>
+        <p class="mt-0.5 font-mono text-[0.66rem] text-base-content/45">
+          to {format_time(@row.ends_at)}
+        </p>
+      </div>
+
+      <div class="min-w-0">
+        <p class="hud-label">Intent / source</p>
+        <p class="mt-1 truncate text-xs text-base-content/70">
+          {contact_intents(@row.contact_intents)}
+        </p>
+        <p class="mt-0.5 truncate font-mono text-[0.66rem] text-base-content/45">
+          {source_endpoints(@row.source_endpoint_refs)}
+        </p>
+      </div>
+
+      <.link
+        id={"open-contact-record-#{@row.canonical_id}"}
+        navigate={~p"/missions/#{@mission_id}/ops/contacts/records/#{@row.canonical_id}"}
+        class="btn btn-sm btn-outline justify-self-start lg:justify-self-end"
+      >
+        Inspect <.icon name="hero-arrow-right" class="h-3.5 w-3.5" />
+      </.link>
+    </article>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :row, :map, required: true
   attr :busy?, :boolean, default: false
   attr :mission_id, :string, required: true
   attr :admin?, :boolean, default: false
@@ -99,7 +154,7 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
         navigate={~p"/missions/#{@mission_id}/ops/contacts/#{@reservation.provider_reservation_id}"}
         class="mt-3 inline-flex items-center gap-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-primary hover:underline"
       >
-        Open contact record <.icon name="hero-arrow-right" class="h-3 w-3" />
+        Open provider reservation <.icon name="hero-arrow-right" class="h-3 w-3" />
       </.link>
 
       <div class="mt-3 grid grid-cols-3 gap-px border border-base-300/60 bg-base-300/60 text-xs">
@@ -238,4 +293,16 @@ defmodule CadenceWeb.OpsContactScheduleLive.Components do
   end
 
   defp format_time(_value), do: "Time unavailable"
+
+  defp contact_intents([]), do: "No declared intent"
+  defp contact_intents(intents), do: Enum.map_join(intents, " · ", &humanize/1)
+
+  defp source_endpoints([]), do: "No source endpoint"
+  defp source_endpoints(refs), do: Enum.join(refs, " · ")
+
+  defp humanize(value) do
+    value
+    |> to_string()
+    |> String.replace("_", " ")
+  end
 end

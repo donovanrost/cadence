@@ -22,6 +22,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetAssigns do
       spacecraft: Map.get(assigns, :spacecraft, []),
       selected_data_ref: Map.get(assigns, :dashboard_selected_data_ref),
       time_mode: Map.get(assigns, :dashboard_time_mode),
+      time_from: Map.get(assigns, :dashboard_time_from),
+      time_to: Map.get(assigns, :dashboard_time_to),
       time_axis: Map.get(time_context, "axis"),
       window_seconds: Map.get(time_context, "window_seconds"),
       hidden_marker_categories: Map.get(assigns, :dashboard_hidden_marker_categories, []),

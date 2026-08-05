@@ -10,7 +10,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
   alias Cadence.Dashboards.{Frame, PlacementFrames}
 
   alias CadenceWeb.OpsDashboardShowLive.{
-    TimeSeriesContactIntervalMarkers,
     TimeSeriesLimitMarkers,
     TimeSeriesMissionEventMarkers,
     TimeSeriesSourceBindingMarkers,
@@ -48,8 +47,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
 
   def event_markers(_placement_frames), do: []
 
-  defp event_frame_markers(%Frame{source: :events, shape: :intervals} = frame),
-    do: TimeSeriesContactIntervalMarkers.interval_markers(frame)
+  defp event_frame_markers(%Frame{source: :events, shape: :intervals}), do: []
 
   defp event_frame_markers(%Frame{source: :events, shape: :events} = frame) do
     cond do
