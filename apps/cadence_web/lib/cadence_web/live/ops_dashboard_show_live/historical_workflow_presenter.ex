@@ -1,10 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
   @moduledoc false
 
-  alias CadenceWeb.OpsDashboardShowLive.{
-    HistoricalWorkflowActionOutcome,
-    HistoricalWorkflowRequestDefaults
-  }
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcome
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowRequestDefaults
 
   @type action_outcome :: HistoricalWorkflowActionOutcome.t()
   @type request_defaults :: HistoricalWorkflowRequestDefaults.t()

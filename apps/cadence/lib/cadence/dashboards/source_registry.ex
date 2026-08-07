@@ -182,6 +182,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
         adapter: adapter,
         supported_sampling: capabilities.supported_sampling,
         supported_products: capabilities.supported_products,
+        annotation_products: capabilities.annotation_products,
         supported_time_axes: capabilities.supported_time_axes,
         supported_value_types: capabilities.supported_value_types,
         supported_shapes: capabilities.supported_shapes,

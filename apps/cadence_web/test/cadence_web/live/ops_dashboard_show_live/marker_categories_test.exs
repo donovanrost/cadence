@@ -78,7 +78,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.MarkerCategoriesTest do
       "limit_analysis_bucket",
       "limit_definition_interval",
       "source_binding_interval",
-      "source_health_transition",
       "source_watermark_event",
       "source_watermark_cursor",
       "retention_gap",

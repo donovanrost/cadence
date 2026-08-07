@@ -35,4 +35,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPresentation do
 
   @spec event_markers(PlacementFrames.t() | nil, RenderWidget.t()) :: [map()]
   defdelegate event_markers(placement_frames, widget), to: TimeSeriesWidgetMarkers
+
+  @spec annotations(PlacementFrames.t() | nil, RenderWidget.t()) :: [map()]
+  defdelegate annotations(placement_frames, widget), to: TimeSeriesWidgetMarkers
 end

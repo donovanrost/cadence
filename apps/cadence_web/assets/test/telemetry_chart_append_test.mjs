@@ -18,10 +18,11 @@ vm.runInContext(testableSource, context, { filename: hookPath })
 
 const TelemetryChart = context.TelemetryChart
 
-function chartWithMarkers(limitMarkers = [], eventMarkers = []) {
+function chartWithMarkers(limitMarkers = [], eventMarkers = [], annotations = []) {
   const chart = Object.create(TelemetryChart)
   chart.limitMarkers = limitMarkers
   chart.eventMarkers = eventMarkers
+  chart.annotations = annotations
   chart.placementId = "placement-1"
   chart.el = {
     dataset: {
@@ -75,6 +76,25 @@ function fakeElement(tagName) {
     replaceChildren(...children) {
       this.children = children
     },
+    contains(candidate) {
+      if (candidate === this) return true
+      return this.children.some((child) => child.contains?.(candidate))
+    },
+    querySelector(selector) {
+      const dataAttribute = selector.match(/^\[data-([a-z0-9-]+)='([^']+)'\]$/)
+      const datasetKey = dataAttribute?.[1].replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase())
+      const matches =
+        datasetKey && String(this.dataset[datasetKey] || "") === String(dataAttribute[2])
+
+      if (matches) return this
+
+      for (const child of this.children) {
+        const match = child.querySelector?.(selector)
+        if (match) return match
+      }
+
+      return null
+    },
     addEventListener(name, callback) {
       this.listeners[name] = callback
     },
@@ -95,11 +115,220 @@ function chartWithPlot(limitMarkers = []) {
   }
   chart.markerLayer = fakeElement("div")
   chart.eventLayer = fakeElement("div")
+  chart.annotationLayer = fakeElement("div")
   chart.watermarkOverlayLayer = fakeElement("div")
   chart.selectionLayer = fakeElement("div")
   chart.pushedEvents = []
   chart.pushEvent = (name, payload) => chart.pushedEvents.push({ name, payload })
   return chart
+}
+
+{
+  const chart = chartWithPlot()
+  chart.sharedTooltip = true
+  chart.tooltipLayer = fakeElement("div")
+  chart.tooltipLayer.offsetWidth = 100
+  chart.tooltipLayer.offsetHeight = 40
+  chart.seriesList = [{ id: "battery-voltage", label: "Battery Voltage", unit: "V" }]
+  chart.seriesYs = [[27.4, 27.8, 28.1]]
+  chart.hiddenSeriesIds = new Set()
+
+  chart.renderSharedTooltip({ cursor: { idx: 1, left: 275, top: 115 } })
+
+  assert.equal(chart.tooltipLayer.style.display, "block")
+  assert.equal(chart.tooltipLayer.style.left, "173px")
+  assert.equal(chart.tooltipLayer.style.top, "83px")
+  assert.equal(chart.tooltipLayer.dataset.chartTooltipPlacementX, "left")
+  assert.equal(chart.tooltipLayer.dataset.chartTooltipPlacementY, "above")
+  assert.match(chart.tooltipLayer.textContent, /Battery Voltage: 27.8 V/)
+
+  chart.renderSharedTooltip({ cursor: { idx: 0, left: 5, top: 4 } })
+
+  assert.equal(chart.tooltipLayer.style.left, "27px")
+  assert.equal(chart.tooltipLayer.style.top, "36px")
+  assert.equal(chart.tooltipLayer.dataset.chartTooltipPlacementX, "right")
+  assert.equal(chart.tooltipLayer.dataset.chartTooltipPlacementY, "below")
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.eventMarkers = [
+    {
+      marker_type: "source_health_transition",
+      timestamp_ms: 1781697600000,
+      source_health_event_id: "legacy-source-health-event",
+      link_id: "source_health_event:legacy-source-health-event",
+    },
+  ]
+
+  chart.renderEventMarkers()
+
+  assert.equal(chart.eventLayer.children.length, 0)
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.annotations = [
+    {
+      annotation_id: "cadence.source-health:outage:source-health-event-1",
+      provider_id: "cadence.source-health",
+      layer_id: "source-status",
+      geometry: "interval",
+      starts_at_ms: 1781697600000,
+      ends_at_ms: 1781697660000,
+      title: "Limits source unavailable",
+      text: "The managed limits projection stopped responding.",
+      tags: ["limits", "unavailable"],
+      color: "red",
+      glyph: "SOURCE",
+      link_id: "source_health_event:source-health-event-1",
+      target: "source_health_event",
+      target_id: "source-health-event-1",
+      requested_realm: "replay",
+      requested_data_source_id: "managed-events-projection",
+      requested_source_binding_id: "replay-events",
+      time_mode: "replay_run",
+      time_axis: "occurred_at",
+      replay_run_id: "replay-run-1",
+      metadata: {
+        realm: "replay",
+        data_source_id: "managed-operational-observables",
+        source_binding_id: "replay-operational-observables",
+      },
+    },
+  ]
+
+  chart.renderAnnotations()
+
+  assert.equal(chart.annotationLayer.children.length, 2)
+  const [region, anchor] = chart.annotationLayer.children
+  const [control, tooltip] = anchor.children
+  const evidenceControl = tooltip.querySelector("[data-chart-annotation-open-evidence='true']")
+  assert.equal(region.dataset.chartAnnotationLayer, "source-status")
+  assert.equal(region.style.pointerEvents, "none")
+  assert.equal(region.style.height, "120px")
+  assert.match(region.style.borderLeft, /^2px dashed rgba\(/)
+  assert.match(region.style.borderRight, /^2px dashed rgba\(/)
+  assert.match(region.style.background, /10%/)
+  assert.equal(anchor.style.pointerEvents, "none")
+  assert.equal(anchor.style.height, "5px")
+  assert.equal(control.dataset.chartAnnotationControl, "true")
+  assert.equal(control.dataset.chartAnnotationGeometry, "interval")
+  assert.equal(control.style.pointerEvents, "auto")
+  assert.equal(control.style.height, "5px")
+  assert.equal(control.attributes["aria-expanded"], "false")
+  assert.equal(tooltip.hidden, true)
+  assert.equal(tooltip.attributes.role, "tooltip")
+  assert.equal(tooltip.dataset.chartAnnotationId, chart.annotations[0].annotation_id)
+  assert.equal(tooltip.querySelector("[data-chart-annotation-tags='true']").children.length, 2)
+  assert.equal(
+    tooltip.querySelector("[data-chart-annotation-provenance='true']").textContent,
+    "cadence.source-health / source-status"
+  )
+
+  anchor.listeners.mouseenter()
+  assert.equal(tooltip.hidden, false)
+  assert.equal(control.attributes["aria-expanded"], "true")
+  anchor.listeners.mouseleave()
+  assert.equal(tooltip.hidden, true)
+
+  control.listeners.click({
+    preventDefault() {},
+    stopPropagation() {},
+  })
+  assert.equal(tooltip.hidden, false)
+  assert.deepEqual(plain(chart.pushedEvents), [])
+
+  evidenceControl.listeners.click({
+    preventDefault() {},
+    stopPropagation() {},
+  })
+
+  assert.deepEqual(plain(chart.pushedEvents), [
+    {
+      name: "open_data_link",
+      payload: {
+        "link-id": "source_health_event:source-health-event-1",
+        "placement-id": "placement-1",
+        target: "source_health_event",
+        "target-id": "source-health-event-1",
+        "timestamp-ms": 1781697600000,
+        realm: "replay",
+        "data-source-id": "managed-operational-observables",
+        "source-binding-id": "replay-operational-observables",
+        "time-mode": "replay_run",
+        "time-axis": "occurred_at",
+        "replay-run-id": "replay-run-1",
+      },
+    },
+  ])
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.annotations = [
+    {
+      annotation_id: "cadence.deployments:deployment:deploy-1",
+      provider_id: "cadence.deployments",
+      layer_id: "deployments",
+      geometry: "point",
+      starts_at_ms: 1781697660000,
+      title: "Flight software deployed",
+      color: "green",
+    },
+  ]
+
+  chart.renderAnnotations()
+
+  assert.equal(chart.annotationLayer.children.length, 2)
+  const [line, anchor] = chart.annotationLayer.children
+  const [control, tooltip] = anchor.children
+  const [triangle] = control.children
+  assert.equal(line.dataset.chartAnnotation, "point")
+  assert.equal(line.style.width, "0")
+  assert.match(line.style.borderLeft, /^2px dashed rgba\(/)
+  assert.equal(line.style.pointerEvents, "none")
+  assert.equal(anchor.dataset.chartAnnotationAnchor, "point")
+  assert.equal(anchor.style.pointerEvents, "none")
+  assert.equal(control.dataset.chartAnnotationGeometry, "point")
+  assert.equal(control.style.pointerEvents, "auto")
+  assert.equal(triangle.dataset.chartAnnotationPointGlyph, "true")
+  assert.match(triangle.style.borderBottom, /^5px solid rgba\(/)
+  assert.equal(tooltip.hidden, true)
+  assert.equal(
+    tooltip.querySelector("[data-chart-annotation-open-evidence='true']"),
+    null
+  )
+}
+
+{
+  context.document = { createElement: fakeElement }
+  context.devicePixelRatio = 2
+  const chart = chartWithPlot()
+  chart.chart.bbox = { left: 20, top: 40, width: 600, height: 240 }
+  chart.annotations = [
+    {
+      annotation_id: "cadence.deployments:deployment:retina",
+      provider_id: "cadence.deployments",
+      layer_id: "deployments",
+      geometry: "point",
+      starts_at_ms: 1781697660000,
+      title: "Retina-safe annotation",
+      color: "violet",
+    },
+  ]
+
+  chart.renderAnnotations()
+
+  const [line, anchor] = chart.annotationLayer.children
+  assert.equal(line.style.left, "160px")
+  assert.equal(line.style.top, "20px")
+  assert.equal(line.style.height, "120px")
+  assert.equal(anchor.style.top, "140px")
+  context.devicePixelRatio = 1
 }
 
 {
@@ -284,6 +513,96 @@ function chartWithPlot(limitMarkers = []) {
     chart.eventMarkers.map((marker) => marker.mission_event_id),
     ["existing-event", "new-event"]
   )
+}
+
+{
+  const chart = chartWithMarkers([], [], [
+    { annotation_id: "annotation-existing", starts_at_ms: 1 },
+  ])
+
+  chart.appendMarkerPayload({
+    annotations: [
+      { annotation_id: "annotation-new", starts_at_ms: 2 },
+      { annotation_id: "annotation-new", starts_at_ms: 2 },
+    ],
+  })
+
+  assert.deepEqual(
+    chart.annotations.map((annotation) => annotation.annotation_id),
+    ["annotation-existing", "annotation-new"]
+  )
+}
+
+{
+  context.document = { createElement: fakeElement }
+  const chart = chartWithPlot()
+  chart.annotations = [
+    {
+      annotation_id: "cadence.contacts:scheduled_contact:contact-1",
+      provider_id: "cadence.contacts",
+      layer_id: "mission-contacts",
+      geometry: "interval",
+      starts_at_ms: 1781697600000,
+      ends_at_ms: 1781697660000,
+      title: "DSS-14 pass",
+      color: "cyan",
+      glyph: "CONTACT",
+      link_id: "contact:contact-1",
+      target: "contact",
+      target_id: "contact-1",
+      requested_realm: "flight",
+      requested_data_view: "canonical",
+      requested_data_source_id: "managed-events",
+      requested_source_binding_id: "events-flight",
+      time_mode: "archive",
+      time_axis: "occurred_at",
+    },
+  ]
+
+  chart.renderAnnotations()
+
+  assert.equal(chart.annotationLayer.children.length, 2)
+  const [region, anchor] = chart.annotationLayer.children
+  const [control, tooltip] = anchor.children
+  const evidenceControl = tooltip.querySelector("[data-chart-annotation-open-evidence='true']")
+  assert.equal(region.dataset.chartAnnotation, "interval")
+  assert.equal(region.dataset.chartAnnotationProvider, "cadence.contacts")
+  assert.equal(region.style.pointerEvents, "none")
+  assert.equal(anchor.dataset.chartAnnotationAnchor, "interval")
+  assert.equal(anchor.style.pointerEvents, "none")
+  assert.equal(control.dataset.chartAnnotationControl, "true")
+  assert.equal(control.style.pointerEvents, "auto")
+  assert.equal(control.style.height, "5px")
+
+  control.listeners.click({
+    preventDefault() {},
+    stopPropagation() {},
+  })
+  assert.equal(tooltip.hidden, false)
+
+  evidenceControl.listeners.click({
+    preventDefault() {},
+    stopPropagation() {},
+  })
+
+  assert.deepEqual(plain(chart.pushedEvents), [
+    {
+      name: "open_data_link",
+      payload: {
+        "link-id": "contact:contact-1",
+        "placement-id": "placement-1",
+        target: "contact",
+        "target-id": "contact-1",
+        "timestamp-ms": 1781697600000,
+        realm: "flight",
+        "data-view": "canonical",
+        "data-source-id": "managed-events",
+        "source-binding-id": "events-flight",
+        "time-mode": "archive",
+        "time-axis": "occurred_at",
+      },
+    },
+  ])
 }
 
 {
@@ -846,6 +1165,20 @@ function chartWithPlot(limitMarkers = []) {
 
   assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
   assert.equal(chart.advanceLiveWindow(1781697960000), false)
+}
+
+{
+  const chart = chartWithMarkers([], [], [
+    {
+      annotation_id: "outside-visible-range",
+      geometry: "interval",
+      starts_at_ms: 1781680000000,
+      ends_at_ms: 1781680060000,
+    },
+  ])
+  chart.el.dataset.timeMode = "archive"
+
+  assert.deepEqual(plain(chart.chartXRange(1781694000, 1781694060)), [1781694000, 1781694060])
 }
 
 {

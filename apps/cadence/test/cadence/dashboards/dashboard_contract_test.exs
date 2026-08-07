@@ -4,6 +4,8 @@ defmodule Cadence.Dashboards.DashboardContractTest do
   alias Cadence.Dashboards
 
   alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
     DashboardAction,
     DashboardContract,
     DashboardResolveRequest,
@@ -327,6 +329,28 @@ defmodule Cadence.Dashboards.DashboardContractTest do
             }
           }
         ],
+        annotations: [
+          %{
+            annotation_id: "contacts:contact-1",
+            provider_id: "cadence.contacts",
+            layer_id: "mission-contacts",
+            kind: "contact_interval",
+            title: "DSS-14 pass",
+            span: %{
+              kind: "interval",
+              starts_at: "2026-06-17T12:01:00Z",
+              ends_at: "2026-06-17T12:05:00Z"
+            },
+            style: %{primitive: "rail", color: "cyan"},
+            link: %{
+              link_id: "contact:contact-1",
+              label: "Open contact",
+              target: "contact",
+              target_id: "contact-1",
+              source: "annotation"
+            }
+          }
+        ],
         warnings: [
           %{
             code: "watermark_unknown",
@@ -375,6 +399,22 @@ defmodule Cadence.Dashboards.DashboardContractTest do
         %ResolveWarning{code: nil, severity: :bad_severity, scope: :bad_scope},
         "bad-warning"
       ],
+      annotations: [
+        %Annotation{
+          annotation_id: "",
+          provider_id: "",
+          layer_id: "",
+          title: "",
+          span: %AnnotationSpan{kind: :interval, starts_at: nil, ends_at: nil},
+          severity: :unknown,
+          style: "invalid",
+          scope: "invalid",
+          provenance: "invalid",
+          metadata: "invalid",
+          link: "invalid"
+        },
+        "bad-annotation"
+      ],
       watermarks: [%SourceWatermark{logical_source: :bad_source, confidence: :bad_confidence}],
       meta: "invalid"
     }
@@ -392,6 +432,13 @@ defmodule Cadence.Dashboards.DashboardContractTest do
     assert violation?(errors, [:warnings, 0, :severity], :unsupported_value)
     assert violation?(errors, [:warnings, 0, :scope], :unsupported_value)
     assert violation?(errors, [:warnings, 1], :invalid_warning)
+    assert violation?(errors, [:annotations, 0, :annotation_id], :invalid_binary)
+    assert violation?(errors, [:annotations, 0, :provider_id], :invalid_binary)
+    assert violation?(errors, [:annotations, 0, :layer_id], :invalid_binary)
+    assert violation?(errors, [:annotations, 0, :span], :invalid_annotation_span)
+    assert violation?(errors, [:annotations, 0, :severity], :unsupported_value)
+    assert violation?(errors, [:annotations, 0, :link], :invalid_data_link)
+    assert violation?(errors, [:annotations, 1], :invalid_annotation)
     assert violation?(errors, [:watermarks, 0, :logical_source], :unsupported_value)
     assert violation?(errors, [:watermarks, 0, :confidence], :unsupported_value)
     assert violation?(errors, [:meta], :invalid_map)

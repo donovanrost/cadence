@@ -4,6 +4,8 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
 
   alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
     DataLink,
     EvidenceRef,
     Field,
@@ -136,6 +138,31 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
              %DataLink{target: :contact, target_id: "contact-scheduled-1", source: :frame},
              %DataLink{target: :contact, target_id: "contact-realized-1", source: :frame}
            ] = contacts.meta.links
+
+    assert [
+             %Annotation{
+               provider_id: "cadence.contacts",
+               layer_id: "mission-contacts",
+               kind: "contact_interval",
+               span: %AnnotationSpan{
+                 kind: :interval,
+                 starts_at: ^scheduled_start,
+                 ends_at: ^scheduled_end
+               },
+               style: %{primitive: :rail, color: "cyan", glyph: "CONTACT"},
+               link: %DataLink{
+                 target: :contact,
+                 target_id: "contact-scheduled-1",
+                 source: :annotation
+               }
+             },
+             %Annotation{
+               span: %AnnotationSpan{kind: :interval, starts_at: ^event_time, ends_at: nil},
+               link: %DataLink{target: :contact, target_id: "contact-realized-1"}
+             }
+           ] = result.annotations
+
+    assert result.meta.returned_annotation_count == 2
 
     assert [
              %Field{name: "occurred_at", kind: :time, values: [^event_time]},
@@ -391,7 +418,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
     refute Keyword.has_key?(opts, :spacecraft_id)
   end
 
-  test "resolves source-health transitions as event markers" do
+  test "resolves source-health transitions as evidence frames and generic annotations" do
     from_time = ~U[2026-06-21 12:00:00Z]
     to_time = ~U[2026-06-21 12:10:00Z]
     parent = self()
@@ -512,6 +539,22 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
     )
 
     assert result.meta.supported_capability == [:source_health_transitions]
+
+    assert [
+             %Annotation{
+               annotation_id: "cadence.source-health:outage:source-health-1",
+               provider_id: "cadence.source-health",
+               layer_id: "source-status",
+               kind: "source_health_outage",
+               span: %AnnotationSpan{
+                 kind: :interval,
+                 starts_at: ~U[2026-06-21 12:02:00.000000Z],
+                 ends_at: nil
+               },
+               severity: :warning,
+               metadata: %{active?: true, logical_source: "telemetry"}
+             }
+           ] = result.annotations
 
     assert_receive {:source_health_events, "org-1", "mission-1", opts}
     assert opts[:from_observed_at] == from_time

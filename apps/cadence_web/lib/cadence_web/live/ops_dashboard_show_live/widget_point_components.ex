@@ -51,6 +51,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   attr :compare_backfill, :any, default: nil
   attr :limit_markers, :list, default: []
   attr :event_markers, :list, default: []
+  attr :annotations, :list, default: []
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_from, :string, default: nil
@@ -107,6 +108,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
         data-compare-backfill={Jason.encode!(@compare_backfill || [])}
         data-limit-markers={Jason.encode!(@limit_markers || [])}
         data-event-markers={Jason.encode!(@event_markers || [])}
+        data-annotations={Jason.encode!(@annotations || [])}
         data-selected-ref={Jason.encode!(@selected_data_ref)}
         data-time-mode={@time_mode || ""}
         data-time-from={@time_from || ""}

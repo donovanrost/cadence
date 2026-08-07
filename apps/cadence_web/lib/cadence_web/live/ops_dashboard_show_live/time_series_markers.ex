@@ -13,7 +13,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
     TimeSeriesLimitMarkers,
     TimeSeriesMissionEventMarkers,
     TimeSeriesSourceBindingMarkers,
-    TimeSeriesSourceHealthMarkers,
     TimeSeriesSourceWatermarkMarkers,
     TimeSeriesTelemetryBackfillMarkers,
     TimeSeriesTelemetryRevisionMarkers
@@ -51,8 +50,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
 
   defp event_frame_markers(%Frame{source: :events, shape: :events} = frame) do
     cond do
-      TimeSeriesSourceHealthMarkers.event_frame?(frame) ->
-        TimeSeriesSourceHealthMarkers.event_markers(frame)
+      source_health_event_frame?(frame) ->
+        []
 
       TimeSeriesSourceWatermarkMarkers.event_frame?(frame) ->
         TimeSeriesSourceWatermarkMarkers.event_markers(frame)
@@ -69,6 +68,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers do
   end
 
   defp event_frame_markers(_frame), do: []
+
+  defp source_health_event_frame?(%Frame{meta: meta}) when is_map(meta) do
+    Map.get(meta, :family, Map.get(meta, "family")) in [:source_health, "source_health"]
+  end
+
+  defp source_health_event_frame?(%Frame{}), do: false
 
   # Watermark advances are high-frequency ingestion bookkeeping. A chart only
   # needs the newest completeness boundary for each source; the full event

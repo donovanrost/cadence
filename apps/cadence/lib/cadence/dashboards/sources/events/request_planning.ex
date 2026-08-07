@@ -29,6 +29,7 @@ defmodule Cadence.Dashboards.Sources.Events.RequestPlanning do
       logical_source: :events,
       supported_sampling: @supported_sampling,
       supported_products: @supported_products,
+      annotation_products: [:contact_intervals, :source_health_transitions],
       supported_time_axes: [:occurred_at],
       supported_value_types: [],
       supported_shapes: [:intervals, :events],

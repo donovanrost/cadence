@@ -466,6 +466,38 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     end
   end
 
+  test "fans adapter annotations out to placement composition independently of frames" do
+    hidden_result =
+      Engine.resolve(
+        resolve_request(live_time_series_with_limits_document()),
+        source_contract_opts(:annotation_result)
+      )
+
+    assert %{"placement_power_trend" => hidden_placement_frames} =
+             hidden_result.frames_by_placement
+
+    assert hidden_placement_frames.annotations == []
+
+    result =
+      Engine.resolve(
+        resolve_request(live_time_series_with_limits_document(["test.annotations"])),
+        source_contract_opts(:annotation_result)
+      )
+
+    assert %{"placement_power_trend" => placement_frames} = result.frames_by_placement
+    assert placement_frames.primary == []
+    assert Enum.all?(placement_frames.overlays, fn {_role, frames} -> frames == [] end)
+
+    assert Enum.sort(Enum.map(placement_frames.annotations, & &1.annotation_id)) ==
+             result.planned_source_requests
+             |> Enum.map(&"test.provider:#{&1.request_id}")
+             |> Enum.sort()
+
+    assert Enum.all?(placement_frames.annotations, fn annotation ->
+             annotation.provenance.source_request_context.source_request_id in placement_frames.planned_request_ids
+           end)
+  end
+
   test "source adapter timeouts share one retryable execution-failure contract across logical sources" do
     results =
       [
@@ -875,10 +907,20 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     })
   end
 
-  defp live_time_series_with_limits_document do
-    "time_series_with_limits.v1.json"
-    |> load_fixture_map!()
+  defp live_time_series_with_limits_document(annotation_layers \\ []) do
+    attrs = load_fixture_map!("time_series_with_limits.v1.json")
+    [placement] = attrs["placements"]
+
+    placement =
+      put_in(
+        placement,
+        ["content", "widget_def", "options", "annotation_layers"],
+        annotation_layers
+      )
+
+    attrs
     |> put_in(["defaults", "time", "mode"], "live")
+    |> Map.put("placements", [placement])
     |> Document.from_map()
   end
 

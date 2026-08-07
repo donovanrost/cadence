@@ -8,7 +8,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers do
   """
 
   alias Cadence.Dashboards.{PlacementFrames, RenderWidget}
-  alias CadenceWeb.OpsDashboardShowLive.TimeSeriesMarkers
+  alias CadenceWeb.OpsDashboardShowLive.{TimeSeriesAnnotations, TimeSeriesMarkers}
+
+  @spec annotations(PlacementFrames.t() | nil, RenderWidget.t()) :: [map()]
+  def annotations(%PlacementFrames{} = placement_frames, %RenderWidget{type: :time_series}) do
+    TimeSeriesAnnotations.annotations(placement_frames)
+  end
+
+  def annotations(_placement_frames, %RenderWidget{}), do: []
 
   @spec limit_markers(PlacementFrames.t() | nil, RenderWidget.t()) :: [map()]
   def limit_markers(%PlacementFrames{} = placement_frames, %RenderWidget{type: :time_series}) do
@@ -48,9 +55,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers do
       |> TimeSeriesMarkers.event_markers()
       |> new_markers(Map.get(previous_snapshot, :event_markers, MapSet.new()))
 
+    annotations =
+      placement_frames
+      |> TimeSeriesAnnotations.annotations()
+      |> new_markers(Map.get(previous_snapshot, :annotations, MapSet.new()))
+
     %{}
     |> maybe_put(:limit_markers, limit_markers)
     |> maybe_put(:event_markers, event_markers)
+    |> maybe_put(:annotations, annotations)
   end
 
   def append_markers(_placement_frames, %RenderWidget{}, _previous_snapshot), do: %{}
@@ -65,6 +78,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers do
       event_markers:
         placement_frames
         |> TimeSeriesMarkers.event_markers()
+        |> marker_fingerprints(),
+      annotations:
+        placement_frames
+        |> TimeSeriesAnnotations.annotations()
         |> marker_fingerprints()
     }
   end
@@ -87,7 +104,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers do
   end
 
   defp marker_identity(marker) do
-    Map.get(marker, :link_id) ||
+    Map.get(marker, :annotation_id) ||
+      Map.get(marker, :link_id) ||
       Map.get(marker, :marker_id) ||
       {
         Map.get(marker, :marker_type),

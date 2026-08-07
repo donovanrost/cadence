@@ -3,17 +3,18 @@ defmodule Cadence.Dashboards.PlacementFrames do
   Engine result bucket for one placement.
   """
 
-  alias Cadence.Dashboards.{Frame, ResolveWarning}
+  alias Cadence.Dashboards.{Annotation, Frame, ResolveWarning}
   alias Cadence.Platform.ContractNormalization
 
   @type t :: %__MODULE__{
           primary: [Frame.t()],
           overlays: map(),
+          annotations: [Annotation.t()],
           warnings: [ResolveWarning.t()],
           planned_request_ids: [binary()]
         }
 
-  defstruct primary: [], overlays: %{}, warnings: [], planned_request_ids: []
+  defstruct primary: [], overlays: %{}, annotations: [], warnings: [], planned_request_ids: []
 
   @spec new(map() | t()) :: t()
   def new(attrs), do: normalize(attrs)
@@ -24,6 +25,7 @@ defmodule Cadence.Dashboards.PlacementFrames do
       placement_frames
       | primary: normalize_frames(placement_frames.primary),
         overlays: normalize_overlay_frames(placement_frames.overlays),
+        annotations: normalize_annotations(placement_frames.annotations),
         warnings: normalize_warnings(placement_frames.warnings),
         planned_request_ids:
           ContractNormalization.binary_list(placement_frames.planned_request_ids)
@@ -40,6 +42,10 @@ defmodule Cadence.Dashboards.PlacementFrames do
         placement_frames
         |> ContractNormalization.attr(:overlays, %{})
         |> normalize_overlay_frames(),
+      annotations:
+        placement_frames
+        |> ContractNormalization.attr(:annotations, [])
+        |> normalize_annotations(),
       warnings:
         placement_frames
         |> ContractNormalization.attr(:warnings, [])
@@ -63,6 +69,12 @@ defmodule Cadence.Dashboards.PlacementFrames do
   end
 
   defp normalize_overlay_frames(overlays), do: overlays
+
+  defp normalize_annotations(annotations) when is_list(annotations) do
+    Enum.map(annotations, &(Annotation.normalize(&1) || &1))
+  end
+
+  defp normalize_annotations(annotations), do: annotations
 
   defp normalize_warnings(warnings) when is_list(warnings),
     do: Enum.map(warnings, &ResolveWarning.normalize/1)

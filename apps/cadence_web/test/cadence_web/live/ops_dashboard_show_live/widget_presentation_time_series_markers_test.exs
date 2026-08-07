@@ -147,7 +147,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPresentationTimeSeriesMarkersTes
     assert retention_marker.requested_dataset == "replay-dataset"
   end
 
-  test "time-series event markers include source-health transitions" do
+  test "time-series event markers exclude source-health transitions from the legacy path" do
     placement_frames = %PlacementFrames{
       overlays: %{
         events: [
@@ -206,37 +206,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPresentationTimeSeriesMarkersTes
 
     widget = %RenderWidget{type: :time_series}
 
-    assert [
-             %{
-               marker_type: "source_health_transition",
-               timestamp_ms: 1_782_043_320_000,
-               link_id: "source_health_event:source-health-1:events-request-1",
-               target: "source_health_event",
-               target_id: "source-health-1",
-               source_health_event_id: "source-health-1",
-               event_kind: "degraded",
-               severity: "warning",
-               title: "telemetry source degraded",
-               source_record_id: "source-health-1",
-               source_health: "degraded",
-               previous_source_health: "healthy",
-               reason: "source_probe_failed",
-               source_request_id: "events-request-1",
-               logical_source: "telemetry",
-               data_source_id: "flight-questdb",
-               source_binding_id: "flight-telemetry",
-               dataset: "mission_events",
-               realm: "replay",
-               time_mode: "replay_run",
-               time_axis: "occurred_at",
-               replay_run_id: "replay-run-1",
-               requested_realm: "replay",
-               requested_data_view: "all_revisions",
-               requested_data_source_id: "events-projection",
-               requested_source_binding_id: "events-binding",
-               requested_dataset: "mission_events"
-             }
-           ] = WidgetPresentation.event_markers(placement_frames, widget)
+    assert WidgetPresentation.event_markers(placement_frames, widget) == []
   end
 
   test "time-series event markers include source-watermark events" do

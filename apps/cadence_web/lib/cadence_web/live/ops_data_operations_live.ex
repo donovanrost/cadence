@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias CadenceWeb.OpsDashboardShowLive.{
+  alias CadenceWeb.OpsDataOperationsLive.{
     HistoricalWorkflowCommands,
     HistoricalWorkflowRequestDefaults
   }

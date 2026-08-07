@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRetryGroupFailedJobsHandoff do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowRetryGroupFailedJobsHandoff do
   @moduledoc false
 
   @type t :: %__MODULE__{

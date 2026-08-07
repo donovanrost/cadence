@@ -9,6 +9,7 @@ defmodule Cadence.Dashboards.Engine do
   """
 
   alias Cadence.Dashboards.{
+    AnnotationComposition,
     Contracts,
     DashboardContract,
     DashboardResolveRequest,
@@ -423,7 +424,8 @@ defmodule Cadence.Dashboards.Engine do
         %{
           placement_id: placement.placement_id,
           role: role,
-          widget_type_id: widget_type.widget_type_id
+          widget_type_id: widget_type.widget_type_id,
+          annotation_layer_ids: AnnotationComposition.layer_ids(placement.widget_def)
         }
       ]
     }
@@ -511,7 +513,8 @@ defmodule Cadence.Dashboards.Engine do
         %{
           placement_id: placement.placement_id,
           role: role,
-          widget_type_id: widget_type.widget_type_id
+          widget_type_id: widget_type.widget_type_id,
+          annotation_layer_ids: AnnotationComposition.layer_ids(placement.widget_def)
         }
       ]
     }
@@ -742,6 +745,12 @@ defmodule Cadence.Dashboards.Engine do
       placement_frames =
         placement_frames
         |> append_role_frames(materialized.role, frames)
+        |> append_annotations(
+          AnnotationComposition.select(
+            materialized.annotations,
+            Map.get(consumer, :annotation_layer_ids, [])
+          )
+        )
         |> append_warnings(materialized.warnings)
 
       {
@@ -807,6 +816,17 @@ defmodule Cadence.Dashboards.Engine do
     overlays = Map.update(placement_frames.overlays, role, frames, &(&1 ++ frames))
     %{placement_frames | overlays: overlays}
   end
+
+  defp append_annotations(%PlacementFrames{} = placement_frames, annotations)
+       when is_list(annotations) do
+    %{
+      placement_frames
+      | annotations: Enum.uniq_by(placement_frames.annotations ++ annotations, & &1.annotation_id)
+    }
+  end
+
+  defp append_annotations(%PlacementFrames{} = placement_frames, _annotations),
+    do: placement_frames
 
   defp source_dependencies(:limits, sampling, limit_context) do
     case limit_semantics_mode(limit_context) do

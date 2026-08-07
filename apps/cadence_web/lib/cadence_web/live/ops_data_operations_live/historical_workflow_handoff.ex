@@ -1,7 +1,7 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowHandoff do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
   @moduledoc false
 
-  alias CadenceWeb.OpsDashboardShowLive.{
+  alias CadenceWeb.OpsDataOperationsLive.{
     HistoricalWorkflowCorrectionRequestHandoff,
     HistoricalWorkflowGroupStageHandoff,
     HistoricalWorkflowJobRecoveryHandoff,

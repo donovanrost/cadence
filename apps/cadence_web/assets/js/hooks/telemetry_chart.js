@@ -39,6 +39,7 @@ const TelemetryChart = {
     this.eventMarkers = this.collapseSourceWatermarkMarkers(
       JSON.parse(this.el.dataset.eventMarkers || "[]")
     )
+    this.annotations = JSON.parse(this.el.dataset.annotations || "[]")
     this.selectedRef = JSON.parse(this.el.dataset.selectedRef || "null")
 
     this.el.style.position = "relative"
@@ -48,6 +49,8 @@ const TelemetryChart = {
     this.attachWatermarkOverlayLayer()
     this.eventLayer = this.buildEventLayer()
     this.el.appendChild(this.eventLayer)
+    this.annotationLayer = this.buildAnnotationLayer()
+    this.el.appendChild(this.annotationLayer)
     this.markerLayer = this.buildMarkerLayer()
     this.el.appendChild(this.markerLayer)
     this.selectionLayer = this.buildSelectionLayer()
@@ -57,6 +60,7 @@ const TelemetryChart = {
     this.legendLayer = this.buildLegendLayer()
     this.el.appendChild(this.legendLayer)
     this.renderEventMarkers()
+    this.renderAnnotations()
     this.renderLimitMarkers()
     this.renderLegend()
     this.renderLiveEdge()
@@ -96,6 +100,7 @@ const TelemetryChart = {
       } else {
         this.chart.setData(this.plotData())
         this.renderEventMarkers()
+        this.renderAnnotations()
         this.renderLimitMarkers()
         this.renderLegend()
         this.renderSelection()
@@ -112,6 +117,7 @@ const TelemetryChart = {
       this.renderLegend()
       this.chart.setSize(this.chartSize())
       this.renderEventMarkers()
+      this.renderAnnotations()
       this.renderLimitMarkers()
       this.renderSelection()
       this.renderLiveEdge()
@@ -140,6 +146,7 @@ const TelemetryChart = {
 
     const limitMarkerAppends = markerAppends.limit_markers || []
     const eventMarkerAppends = markerAppends.event_markers || []
+    const annotationAppends = markerAppends.annotations || []
     let appended = false
 
     if (limitMarkerAppends.length > 0) {
@@ -154,6 +161,11 @@ const TelemetryChart = {
       appended = true
     }
 
+    if (annotationAppends.length > 0) {
+      this.annotations = this.dedupeMarkers(this.annotations.concat(annotationAppends))
+      appended = true
+    }
+
     return appended
   },
 
@@ -164,12 +176,14 @@ const TelemetryChart = {
     this.installRangeSelection()
     this.attachWatermarkOverlayLayer()
     this.el.appendChild(this.eventLayer)
+    this.el.appendChild(this.annotationLayer)
     this.el.appendChild(this.markerLayer)
     this.el.appendChild(this.selectionLayer)
     this.el.appendChild(this.liveEdge)
     this.el.appendChild(this.legendLayer)
     if (this.tooltipLayer) this.el.appendChild(this.tooltipLayer)
     this.renderEventMarkers()
+    this.renderAnnotations()
     this.renderLimitMarkers()
     this.renderLegend()
     this.renderSelection()
@@ -503,6 +517,9 @@ const TelemetryChart = {
     this.rebuildPlotData()
     this.limitMarkers = this.limitMarkers.filter((marker) => this.limitMarkerOverlapsWindow(marker, cutoff))
     this.eventMarkers = this.eventMarkers.filter((marker) => this.eventMarkerOverlapsWindow(marker, cutoff))
+    this.annotations = this.annotations.filter((annotation) =>
+      this.annotationOverlapsWindow(annotation, cutoff)
+    )
   },
 
   openPointInspector(event) {
@@ -642,6 +659,21 @@ const TelemetryChart = {
     return layer
   },
 
+  buildAnnotationLayer() {
+    const layer = document.createElement("div")
+    layer.className = "telemetry-chart-annotations"
+    layer.dataset.chartAnnotationLayer = "true"
+    layer.setAttribute("aria-hidden", "false")
+    Object.assign(layer.style, {
+      position: "absolute",
+      inset: "0",
+      bottom: `${this.legendHeight()}px`,
+      pointerEvents: "none",
+      zIndex: "3",
+    })
+    return layer
+  },
+
   buildWatermarkOverlayLayer() {
     const layer = document.createElement("div")
     layer.className = "telemetry-chart-watermark-overlays"
@@ -731,8 +763,8 @@ const TelemetryChart = {
     layer.dataset.chartSharedTooltip = "true"
     Object.assign(layer.style, {
       position: "absolute",
-      left: "6px",
-      top: "4px",
+      left: "0",
+      top: "0",
       display: "none",
       maxWidth: "55%",
       border: "1px solid rgba(204, 204, 220, 0.2)",
@@ -774,6 +806,40 @@ const TelemetryChart = {
     this.tooltipLayer.textContent = `${timestamp}\n${rows.join("  ·  ")}`
     this.tooltipLayer.style.whiteSpace = "pre-wrap"
     this.tooltipLayer.style.display = "block"
+    this.positionSharedTooltip(u)
+  },
+
+  positionSharedTooltip(u) {
+    const cursorLeft = u?.cursor?.left
+    const cursorTop = u?.cursor?.top
+    if (!Number.isFinite(cursorLeft) || !Number.isFinite(cursorTop)) return
+
+    const plotBounds = this.chartPlotBounds()
+    const chartWidth = this.el.clientWidth || plotBounds.left + plotBounds.width
+    const chartHeight = this.el.clientHeight || plotBounds.top + plotBounds.height
+    const contentBottom = Math.max(0, chartHeight - this.legendHeight())
+    const tooltipWidth = this.tooltipLayer.offsetWidth || 160
+    const tooltipHeight = this.tooltipLayer.offsetHeight || 48
+    const pointerLeft = plotBounds.left + cursorLeft
+    const pointerTop = plotBounds.top + cursorTop
+    const gap = 12
+    const inset = 6
+
+    const rightLeft = pointerLeft + gap
+    const leftLeft = pointerLeft - gap - tooltipWidth
+    const belowTop = pointerTop + gap
+    const aboveTop = pointerTop - gap - tooltipHeight
+    const placeRight = rightLeft + tooltipWidth <= chartWidth - inset
+    const placeBelow = belowTop + tooltipHeight <= contentBottom - inset
+    const maxLeft = Math.max(inset, chartWidth - tooltipWidth - inset)
+    const maxTop = Math.max(inset, contentBottom - tooltipHeight - inset)
+    const left = Math.min(Math.max(placeRight ? rightLeft : leftLeft, inset), maxLeft)
+    const top = Math.min(Math.max(placeBelow ? belowTop : aboveTop, inset), maxTop)
+
+    this.tooltipLayer.style.left = `${Math.round(left)}px`
+    this.tooltipLayer.style.top = `${Math.round(top)}px`
+    this.tooltipLayer.dataset.chartTooltipPlacementX = placeRight ? "right" : "left"
+    this.tooltipLayer.dataset.chartTooltipPlacementY = placeBelow ? "below" : "above"
   },
 
   renderLegend() {
@@ -962,11 +1028,6 @@ const TelemetryChart = {
         return
       }
 
-      if (marker.marker_type === "source_health_transition") {
-        this.renderSourceHealthTransition(marker)
-        return
-      }
-
       if (marker.marker_type === "telemetry_revision_range") {
         this.renderTelemetryRevisionRange(marker)
         return
@@ -986,6 +1047,465 @@ const TelemetryChart = {
         this.renderMissionEvent(marker)
       }
     })
+  },
+
+  renderAnnotations() {
+    if (!this.annotationLayer || !this.chart) return
+
+    this.activeAnnotationPopover = null
+    this.annotationLayer.replaceChildren()
+
+    this.annotations.forEach((annotation) => {
+      if (annotation.geometry === "interval") {
+        this.renderIntervalAnnotation(annotation)
+        return
+      }
+
+      this.renderPointAnnotation(annotation)
+    })
+  },
+
+  renderIntervalAnnotation(annotation) {
+    const interval = this.intervalBounds(annotation)
+    if (!interval) return
+
+    const { top: plotTop, height: plotHeight } = this.chartPlotBounds()
+    const color = this.annotationColor(annotation)
+    const region = document.createElement("div")
+    region.dataset.chartAnnotation = "interval"
+    region.dataset.chartAnnotationId = annotation.annotation_id || ""
+    region.dataset.chartAnnotationProvider = annotation.provider_id || ""
+    region.dataset.chartAnnotationLayer = annotation.layer_id || ""
+    region.setAttribute("aria-hidden", "true")
+    Object.assign(region.style, {
+      position: "absolute",
+      left: `${interval.left}px`,
+      top: `${plotTop}px`,
+      width: `${interval.width}px`,
+      height: `${plotHeight}px`,
+      boxSizing: "border-box",
+      borderLeft: `2px dashed ${color}`,
+      borderRight: `2px dashed ${color}`,
+      background: `color-mix(in srgb, ${color} 10%, transparent)`,
+      pointerEvents: "none",
+    })
+    this.annotationLayer.appendChild(region)
+    this.renderAnnotationControl(annotation, {
+      geometry: "interval",
+      left: interval.left,
+      width: interval.width,
+      top: plotTop + plotHeight,
+      color,
+    })
+  },
+
+  renderPointAnnotation(annotation) {
+    const left = this.annotationLeft(annotation)
+    if (left === null || left === undefined || Number.isNaN(left)) return
+
+    const { top: plotTop, height: plotHeight } = this.chartPlotBounds()
+    const color = this.annotationColor(annotation)
+    const line = document.createElement("div")
+    line.dataset.chartAnnotation = "point"
+    line.dataset.chartAnnotationId = annotation.annotation_id || ""
+    line.dataset.chartAnnotationProvider = annotation.provider_id || ""
+    line.dataset.chartAnnotationLayer = annotation.layer_id || ""
+    line.setAttribute("aria-hidden", "true")
+    Object.assign(line.style, {
+      position: "absolute",
+      left: `${left}px`,
+      top: `${plotTop}px`,
+      width: "0",
+      height: `${plotHeight}px`,
+      borderLeft: `2px dashed ${color}`,
+      pointerEvents: "none",
+    })
+    this.annotationLayer.appendChild(line)
+    this.renderAnnotationControl(annotation, {
+      geometry: "point",
+      left,
+      width: 0,
+      top: plotTop + plotHeight,
+      color,
+    })
+  },
+
+  renderAnnotationControl(annotation, { geometry, left, width, top, color }) {
+    const wrapper = document.createElement("div")
+    const interval = geometry === "interval"
+    const wrapperLeft = interval ? left : left - 8
+    const wrapperWidth = interval ? width : 16
+    const markerCenter = interval ? left + width / 2 : left
+
+    wrapper.dataset.chartAnnotationAnchor = geometry
+    wrapper.dataset.chartAnnotationId = annotation.annotation_id || ""
+    wrapper.dataset.chartAnnotationProvider = annotation.provider_id || ""
+    wrapper.dataset.chartAnnotationLayer = annotation.layer_id || ""
+    Object.assign(wrapper.style, {
+      position: "absolute",
+      left: `${wrapperLeft}px`,
+      top: `${top}px`,
+      width: `${wrapperWidth}px`,
+      height: interval ? "5px" : "10px",
+      pointerEvents: "none",
+      zIndex: "4",
+    })
+
+    const control = document.createElement("button")
+    const tooltip = this.buildAnnotationTooltip(annotation, {
+      color,
+      markerCenter,
+      wrapperLeft,
+    })
+    const tooltipId = this.annotationTooltipId(annotation)
+    const label = this.annotationLabel(annotation)
+
+    control.type = "button"
+    control.title = `Inspect annotation: ${label}`
+    control.setAttribute("aria-label", control.title)
+    control.setAttribute("aria-describedby", tooltipId)
+    control.setAttribute("aria-expanded", "false")
+    control.dataset.chartAnnotationControl = "true"
+    control.dataset.chartAnnotationGeometry = geometry
+    control.dataset.chartAnnotationId = annotation.annotation_id || ""
+    control.dataset.chartAnnotationProvider = annotation.provider_id || ""
+    control.dataset.chartAnnotationLayer = annotation.layer_id || ""
+
+    if (interval) {
+      Object.assign(control.style, {
+        position: "absolute",
+        inset: "0",
+        minWidth: "10px",
+        height: "5px",
+        border: "0",
+        borderRadius: "0",
+        padding: "0",
+        background: color,
+        cursor: "pointer",
+        pointerEvents: "auto",
+      })
+    } else {
+      Object.assign(control.style, {
+        position: "absolute",
+        inset: "0",
+        width: "16px",
+        height: "10px",
+        border: "0",
+        padding: "0",
+        background: "transparent",
+        cursor: "pointer",
+        pointerEvents: "auto",
+      })
+
+      const triangle = document.createElement("span")
+      triangle.dataset.chartAnnotationPointGlyph = "true"
+      triangle.setAttribute("aria-hidden", "true")
+      Object.assign(triangle.style, {
+        position: "absolute",
+        left: "3px",
+        top: "0",
+        width: "0",
+        height: "0",
+        borderLeft: "5px solid transparent",
+        borderRight: "5px solid transparent",
+        borderBottom: `5px solid ${color}`,
+        pointerEvents: "none",
+      })
+      control.appendChild(triangle)
+    }
+
+    tooltip.id = tooltipId
+    tooltip.hidden = true
+
+    const showTooltip = () => this.setAnnotationTooltipVisible(control, tooltip, true)
+    const hideTooltip = () => this.setAnnotationTooltipVisible(control, tooltip, false)
+
+    wrapper.addEventListener("mouseenter", showTooltip)
+    wrapper.addEventListener("mouseleave", hideTooltip)
+    wrapper.addEventListener("focusin", showTooltip)
+    wrapper.addEventListener("focusout", (event) => {
+      if (!event.relatedTarget || !wrapper.contains(event.relatedTarget)) hideTooltip()
+    })
+    wrapper.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") hideTooltip()
+    })
+    control.addEventListener("click", (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      showTooltip()
+    })
+
+    const evidenceControl = tooltip.querySelector?.("[data-chart-annotation-open-evidence='true']")
+    if (evidenceControl) {
+      evidenceControl.addEventListener("click", (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        hideTooltip()
+        this.pushEvent(
+          "open_data_link",
+          this.annotationDataLinkPayload(
+            annotation,
+            annotation.target,
+            annotation.target_id,
+            annotation.timestamp_ms || annotation.starts_at_ms
+          )
+        )
+      })
+    }
+
+    wrapper.appendChild(control)
+    wrapper.appendChild(tooltip)
+    this.annotationLayer.appendChild(wrapper)
+  },
+
+  buildAnnotationTooltip(annotation, { color, markerCenter, wrapperLeft }) {
+    const tooltip = document.createElement("div")
+    const chartWidth = this.el.clientWidth || 320
+    const tooltipWidth = Math.max(160, Math.min(300, chartWidth - 16))
+    const maxLeft = Math.max(8, chartWidth - tooltipWidth - 8)
+    const absoluteLeft = Math.min(Math.max(markerCenter - tooltipWidth / 2, 8), maxLeft)
+
+    tooltip.setAttribute("role", "tooltip")
+    tooltip.dataset.chartAnnotationTooltip = "true"
+    tooltip.dataset.chartAnnotationId = annotation.annotation_id || ""
+    Object.assign(tooltip.style, {
+      position: "absolute",
+      left: `${absoluteLeft - wrapperLeft}px`,
+      bottom: "10px",
+      width: `${tooltipWidth}px`,
+      border: "1px solid rgba(148, 163, 184, 0.30)",
+      borderTop: `2px solid ${color}`,
+      borderRadius: "4px",
+      background: "rgba(10, 15, 25, 0.98)",
+      boxShadow: "0 14px 34px rgba(0, 0, 0, 0.38)",
+      color: "rgba(226, 232, 240, 0.96)",
+      font: "400 12px ui-sans-serif, system-ui, sans-serif",
+      lineHeight: "1.4",
+      pointerEvents: "auto",
+      textAlign: "left",
+      zIndex: "5",
+    })
+
+    const header = document.createElement("div")
+    Object.assign(header.style, {
+      padding: "7px 9px",
+      borderBottom: "1px solid rgba(148, 163, 184, 0.18)",
+      color: "rgba(226, 232, 240, 0.90)",
+      font: "500 11px ui-monospace, SFMono-Regular, Menlo, monospace",
+      letterSpacing: "0.01em",
+    })
+    header.textContent = this.annotationTimeLabel(annotation)
+    tooltip.appendChild(header)
+
+    const body = document.createElement("div")
+    Object.assign(body.style, { padding: "9px" })
+
+    const title = document.createElement("div")
+    Object.assign(title.style, {
+      color: "rgba(248, 250, 252, 0.98)",
+      fontWeight: "650",
+      marginBottom: annotation.text ? "4px" : "0",
+    })
+    title.textContent = this.annotationLabel(annotation)
+    body.appendChild(title)
+
+    if (annotation.text && annotation.text !== annotation.title) {
+      const description = document.createElement("div")
+      Object.assign(description.style, {
+        color: "rgba(203, 213, 225, 0.86)",
+        marginBottom: "8px",
+      })
+      description.textContent = annotation.text
+      body.appendChild(description)
+    }
+
+    const tags = Array.isArray(annotation.tags) ? annotation.tags.filter(Boolean) : []
+    if (tags.length > 0) {
+      const tagList = document.createElement("div")
+      tagList.dataset.chartAnnotationTags = "true"
+      Object.assign(tagList.style, {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "4px",
+        marginBottom: "8px",
+      })
+
+      tags.forEach((tag) => {
+        const tagElement = document.createElement("span")
+        Object.assign(tagElement.style, {
+          border: "1px solid rgba(148, 163, 184, 0.24)",
+          borderRadius: "999px",
+          padding: "1px 6px",
+          color: "rgba(203, 213, 225, 0.88)",
+          font: "500 10px ui-monospace, SFMono-Regular, Menlo, monospace",
+        })
+        tagElement.textContent = String(tag)
+        tagList.appendChild(tagElement)
+      })
+      body.appendChild(tagList)
+    }
+
+    const provenance = document.createElement("div")
+    provenance.dataset.chartAnnotationProvenance = "true"
+    Object.assign(provenance.style, {
+      color: "rgba(148, 163, 184, 0.78)",
+      font: "500 10px ui-monospace, SFMono-Regular, Menlo, monospace",
+      letterSpacing: "0.035em",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    })
+    provenance.textContent = [annotation.provider_id, annotation.layer_id].filter(Boolean).join(" / ")
+    body.appendChild(provenance)
+
+    if (annotation.link_id) {
+      const footer = document.createElement("div")
+      Object.assign(footer.style, {
+        display: "flex",
+        justifyContent: "flex-end",
+        marginTop: "9px",
+        paddingTop: "8px",
+        borderTop: "1px solid rgba(148, 163, 184, 0.14)",
+      })
+
+      const evidenceControl = document.createElement("button")
+      evidenceControl.type = "button"
+      evidenceControl.dataset.chartAnnotationOpenEvidence = "true"
+      evidenceControl.textContent = "OPEN EVIDENCE"
+      Object.assign(evidenceControl.style, {
+        height: "24px",
+        border: `1px solid ${color}`,
+        borderRadius: "3px",
+        padding: "0 8px",
+        background: `color-mix(in srgb, ${color} 12%, rgba(15, 23, 42, 0.96))`,
+        color: "rgba(248, 250, 252, 0.96)",
+        cursor: "pointer",
+        font: "650 10px ui-monospace, SFMono-Regular, Menlo, monospace",
+        letterSpacing: "0.055em",
+      })
+      footer.appendChild(evidenceControl)
+      body.appendChild(footer)
+    }
+
+    tooltip.appendChild(body)
+    return tooltip
+  },
+
+  setAnnotationTooltipVisible(control, tooltip, visible) {
+    const active = this.activeAnnotationPopover
+
+    if (visible && active && active.tooltip !== tooltip) {
+      active.tooltip.hidden = true
+      active.control.setAttribute("aria-expanded", "false")
+    }
+
+    tooltip.hidden = !visible
+    control.setAttribute("aria-expanded", visible ? "true" : "false")
+    this.activeAnnotationPopover = visible ? { control, tooltip } : null
+  },
+
+  annotationTooltipId(annotation) {
+    const raw = [
+      "chart-annotation-tooltip",
+      this.placementId || "chart",
+      annotation.annotation_id || annotation.starts_at_ms || "annotation",
+    ].join("-")
+
+    return raw.replace(/[^a-zA-Z0-9_-]/g, "-")
+  },
+
+  annotationLabel(annotation) {
+    return annotation.title || annotation.text || annotation.layer_id || "Annotation"
+  },
+
+  annotationTimeLabel(annotation) {
+    const start = this.annotationTimestampLabel(
+      annotation.timestamp_ms || annotation.starts_at_ms
+    )
+
+    if (annotation.geometry !== "interval") return start
+
+    return `${start} – ${this.annotationTimestampLabel(annotation.ends_at_ms)}`
+  },
+
+  annotationTimestampLabel(timestampMs) {
+    const value = Number(timestampMs)
+    if (!Number.isFinite(value)) return "Time unavailable"
+
+    return new Date(value).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  },
+
+  annotationDataLinkPayload(annotation, target, targetId, timestampMs) {
+    const metadata = annotation.metadata || {}
+
+    return this.markerDataLinkPayload(
+      {
+        ...annotation,
+        requested_realm: metadata.realm || annotation.requested_realm,
+        requested_data_view: metadata.data_view || annotation.requested_data_view,
+        requested_data_source_id:
+          metadata.data_source_id || annotation.requested_data_source_id,
+        requested_source_binding_id:
+          metadata.source_binding_id || annotation.requested_source_binding_id,
+        replay_run_id: metadata.replay_run_id || annotation.replay_run_id,
+      },
+      target,
+      targetId,
+      timestampMs
+    )
+  },
+
+  annotationLeft(annotation) {
+    const timestampMs = Number(annotation.timestamp_ms || annotation.starts_at_ms)
+    if (!Number.isFinite(timestampMs)) return null
+
+    const xDomain = this.chartXDomain()
+    const seconds = timestampMs / 1000
+    if (seconds < xDomain.min || seconds > xDomain.max) return null
+
+    return this.chartPlotBounds().left + this.chart.valToPos(seconds, "x", false)
+  },
+
+  chartPlotBounds() {
+    const bbox = this.chart?.bbox || {}
+    const reportedRatio = Number(uPlot.pxRatio || globalThis.devicePixelRatio || 1)
+    const pixelRatio = Number.isFinite(reportedRatio) && reportedRatio > 0 ? reportedRatio : 1
+
+    return {
+      left: Number(bbox.left || 0) / pixelRatio,
+      top: Number(bbox.top || 0) / pixelRatio,
+      width: Number(bbox.width || this.el.clientWidth * pixelRatio) / pixelRatio,
+      height: Number(bbox.height || this.el.clientHeight * pixelRatio) / pixelRatio,
+    }
+  },
+
+  annotationColor(annotation) {
+    const namedColors = {
+      amber: "rgba(251, 191, 36, 0.90)",
+      cyan: "rgba(34, 211, 238, 0.90)",
+      green: "rgba(34, 197, 94, 0.86)",
+      indigo: "rgba(129, 140, 248, 0.88)",
+      red: "rgba(248, 113, 113, 0.90)",
+      teal: "rgba(45, 212, 191, 0.88)",
+      violet: "rgba(167, 139, 250, 0.90)",
+    }
+
+    if (namedColors[annotation.color]) return namedColors[annotation.color]
+    if (typeof annotation.color === "string" && /^(#|rgb|hsl)/.test(annotation.color)) {
+      return annotation.color
+    }
+    if (annotation.severity === "critical" || annotation.severity === "error") {
+      return namedColors.red
+    }
+    if (annotation.severity === "warning") return namedColors.amber
+    return namedColors.indigo
   },
 
   renderSourceBindingInterval(marker) {
@@ -1369,62 +1889,6 @@ const TelemetryChart = {
 
   sourceWatermarkTimestamp(marker) {
     return Number(marker.timestamp_ms || marker.complete_through_ms || marker.observed_at_ms || 0)
-  },
-
-  renderSourceHealthTransition(marker) {
-    if (!marker.link_id || !marker.timestamp_ms) return
-
-    const left = this.markerLeft(marker)
-    if (left === null || left === undefined || Number.isNaN(left)) return
-
-    const button = document.createElement("button")
-    button.type = "button"
-    button.title = `Inspect ${marker.title || marker.label || "source health transition"}`
-    button.setAttribute("aria-label", button.title)
-    button.dataset.eventMarkerTarget = "source health"
-    button.dataset.eventMarkerId = marker.source_health_event_id || marker.target_id || ""
-    button.dataset.eventMarkerRef = marker.link_id || ""
-    button.dataset.eventMarkerSummary = marker.reason || marker.source_health || ""
-    Object.assign(button.style, {
-      position: "absolute",
-      left: `${left}px`,
-      top: `${this.chart.bbox.top || 0}px`,
-      height: `${this.chart.bbox.height || this.el.clientHeight}px`,
-      width: "14px",
-      transform: "translateX(-7px)",
-      border: "0",
-      padding: "0",
-      background: "transparent",
-      cursor: "pointer",
-      pointerEvents: "auto",
-    })
-
-    const line = document.createElement("span")
-    Object.assign(line.style, {
-      display: "block",
-      width: "1px",
-      height: "100%",
-      margin: "0 auto",
-      background: this.eventColor(marker),
-      boxShadow: `0 0 6px ${this.eventColor(marker)}`,
-    })
-    button.appendChild(line)
-
-    button.addEventListener("click", (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      this.pushEvent(
-        "open_data_link",
-        this.markerDataLinkPayload(
-          marker,
-          "source_health_event",
-          marker.source_health_event_id || marker.target_id,
-          marker.timestamp_ms
-        )
-      )
-    })
-
-    this.eventLayer.appendChild(button)
   },
 
   sourceWatermarkDataLinkPayload(marker) {
@@ -2201,8 +2665,9 @@ const TelemetryChart = {
   intervalBounds(marker) {
     if (!marker.starts_at_ms || this.xs.length === 0) return null
 
-    const plotLeft = this.chart.bbox.left || 0
-    const plotRight = plotLeft + (this.chart.bbox.width || this.el.clientWidth)
+    const plotBounds = this.chartPlotBounds()
+    const plotLeft = plotBounds.left
+    const plotRight = plotLeft + plotBounds.width
     const startSeconds = marker.starts_at_ms / 1000
     const endSeconds = marker.ends_at_ms ? marker.ends_at_ms / 1000 : this.xs[this.xs.length - 1]
     const xDomain = this.chartXDomain()
@@ -2273,7 +2738,6 @@ const TelemetryChart = {
     if (marker.severity === "warning" || marker.status === "canceled") return "rgba(251, 191, 36, 0.90)"
     if (marker.marker_type === "retention_gap") return this.retentionGapColor(marker)
     if (marker.marker_type === "source_binding_interval") return this.sourceBindingIntervalColor(marker)
-    if (marker.marker_type === "source_health_transition") return this.sourceHealthTransitionColor(marker)
     if (marker.marker_type === "source_watermark_cursor" || marker.marker_type === "source_watermark_event") return this.sourceWatermarkCursorColor(marker)
     if (
       marker.marker_type === "telemetry_revision_range" ||
@@ -2295,12 +2759,6 @@ const TelemetryChart = {
     if (marker.freshness_state === "stale") return "rgba(251, 191, 36, 0.82)"
     if (marker.freshness_state === "retention_gap") return "rgba(248, 113, 113, 0.78)"
     return "rgba(45, 212, 191, 0.76)"
-  },
-
-  sourceHealthTransitionColor(marker) {
-    if (marker.source_health === "unavailable") return "rgba(248, 113, 113, 0.88)"
-    if (marker.source_health === "degraded" || marker.source_health === "unknown") return "rgba(251, 191, 36, 0.86)"
-    return "rgba(34, 197, 94, 0.76)"
   },
 
   telemetryRevisionColor(marker) {
@@ -2339,6 +2797,15 @@ const TelemetryChart = {
     const end = marker.ends_at_ms ? marker.ends_at_ms / 1000 : this.chartWindowEnd()
     if (!start) return false
     return end >= cutoff
+  },
+
+  annotationOverlapsWindow(annotation, cutoff) {
+    if (annotation.geometry === "interval") {
+      return this.intervalMarkerOverlapsWindow(annotation, cutoff)
+    }
+
+    const timestampMs = Number(annotation.timestamp_ms || annotation.starts_at_ms)
+    return Number.isFinite(timestampMs) && timestampMs / 1000 >= cutoff
   },
 
   liveMode() {
@@ -2539,6 +3006,7 @@ const TelemetryChart = {
     const seen = new Set()
     return markers.filter((marker) => {
       const key =
+        marker.annotation_id ||
         marker.link_id ||
         marker.marker_id ||
         `${marker.marker_type || "limit_event"}:${marker.limit_event_id || marker.limit_definition_id}:${marker.timestamp_ms || marker.starts_at_ms}`

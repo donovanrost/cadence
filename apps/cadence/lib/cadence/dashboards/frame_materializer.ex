@@ -8,6 +8,7 @@ defmodule Cadence.Dashboards.FrameMaterializer do
   """
 
   alias Cadence.Dashboards.{
+    Annotation,
     DataContext,
     Frame,
     PlannedSourceRequest,
@@ -24,6 +25,7 @@ defmodule Cadence.Dashboards.FrameMaterializer do
           request_id: binary(),
           role: atom(),
           frames: list(),
+          annotations: list(),
           warnings: [ResolveWarning.t()],
           frame_key: RuntimeCacheKey.t() | nil,
           capability_provenance: map() | nil
@@ -58,6 +60,12 @@ defmodule Cadence.Dashboards.FrameMaterializer do
           capability_provenance,
           source_watermarks,
           source_request_time_context,
+          source_request_context
+        ),
+      annotations:
+        annotate_annotations(
+          source_result.annotations,
+          capability_provenance,
           source_request_context
         ),
       warnings: placement_warnings(source_result.warnings, placement_id),
@@ -147,6 +155,31 @@ defmodule Cadence.Dashboards.FrameMaterializer do
     do: Enum.map(frames, &(Frame.normalize(&1) || &1))
 
   defp normalize_frames(frames), do: frames
+
+  defp annotate_annotations(annotations, capability_provenance, source_request_context)
+       when is_list(annotations) do
+    Enum.map(annotations, fn annotation ->
+      annotation = Annotation.normalize(annotation) || annotation
+
+      case annotation do
+        %Annotation{} = annotation ->
+          %Annotation{
+            annotation
+            | provenance:
+                annotation.provenance
+                |> ensure_map()
+                |> maybe_put(:capability_provenance, capability_provenance)
+                |> maybe_put(:source_request_context, source_request_context)
+          }
+
+        annotation ->
+          annotation
+      end
+    end)
+  end
+
+  defp annotate_annotations(annotations, _capability_provenance, _source_request_context),
+    do: annotations
 
   defp capability_provenance(%PlannedSourceRequest{} = request) do
     request.metadata

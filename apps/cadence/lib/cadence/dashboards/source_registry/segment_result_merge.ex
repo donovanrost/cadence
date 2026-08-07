@@ -21,6 +21,11 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
     warnings = Enum.flat_map(segment_results, fn {_binding, result} -> result.warnings end)
     watermarks = Enum.flat_map(segment_results, fn {_binding, result} -> result.watermarks end)
 
+    annotations =
+      segment_results
+      |> Enum.flat_map(fn {_binding, result} -> result.annotations end)
+      |> Enum.uniq_by(& &1.annotation_id)
+
     segment_metadata =
       Enum.map(segment_results, fn {binding, _result} ->
         segment_metadata.(binding)
@@ -31,11 +36,13 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
        SourceResult.new(%{
          request_id: request.request_id,
          frames: frames,
+         annotations: annotations,
          warnings: warnings,
          watermarks: watermarks,
          meta: %{
            logical_source: request.logical_source,
            returned_frame_count: length(frames),
+           returned_annotation_count: length(annotations),
            degraded?: Enum.any?(warnings, &(&1.severity == :error)),
            segmented_source_bindings?: true,
            source_binding_segment_count: length(segment_metadata),

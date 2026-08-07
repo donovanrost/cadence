@@ -25,6 +25,8 @@ defmodule Cadence.Dashboards.Sources.Events do
   import Cadence.Dashboards.Sources.Events.ContactIntervals
   import Cadence.Dashboards.Sources.Events.Presentation
 
+  alias Cadence.Dashboards.Sources.Events.Annotations
+
   @spec capabilities() :: SourceCapabilities.t()
   defdelegate capabilities(), to: Cadence.Dashboards.Sources.Events.RequestPlanning
 
@@ -77,9 +79,12 @@ defmodule Cadence.Dashboards.Sources.Events do
 
       warnings = product_warnings ++ time_warnings ++ read_warnings
 
+      annotations = Annotations.from_frames(frames)
+
       SourceResult.new(%{
         request_id: request.request_id,
         frames: frames,
+        annotations: annotations,
         warnings: warnings,
         watermarks: [],
         meta: %{
@@ -88,6 +93,7 @@ defmodule Cadence.Dashboards.Sources.Events do
           data_source_id: data_source_id(request, source_binding),
           supported_capability: products,
           returned_frame_count: length(frames),
+          returned_annotation_count: length(annotations),
           degraded?: degraded?(warnings)
         }
       })

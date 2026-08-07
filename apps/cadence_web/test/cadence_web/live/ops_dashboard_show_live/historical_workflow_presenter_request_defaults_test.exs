@@ -1,10 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenterRequestDefaultsTest do
   use ExUnit.Case, async: true
 
-  alias CadenceWeb.OpsDashboardShowLive.{
-    HistoricalWorkflowPresenter,
-    HistoricalWorkflowRequestDefaults
-  }
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowRequestDefaults
 
   describe "request_form_defaults/1" do
     test "builds default request form values from dashboard context" do

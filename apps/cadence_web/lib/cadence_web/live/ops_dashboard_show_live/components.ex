@@ -123,6 +123,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :compare_backfill, :any, default: nil
   attr :limit_markers, :list, required: true
   attr :event_markers, :list, required: true
+  attr :annotations, :list, default: []
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_from, :string, default: nil
@@ -168,6 +169,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       compare_backfill={@compare_backfill}
       limit_markers={@limit_markers}
       event_markers={@event_markers}
+      annotations={@annotations}
       selected_data_ref={@selected_data_ref}
       time_mode={@time_mode}
       time_from={@time_from}
@@ -196,6 +198,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :compare_backfill, :any, default: nil
   attr :limit_markers, :list, required: true
   attr :event_markers, :list, required: true
+  attr :annotations, :list, default: []
   attr :selected_data_ref, :any, default: nil
   attr :time_mode, :string, default: nil
   attr :time_from, :string, default: nil
@@ -268,6 +271,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
             compare_backfill={@compare_backfill}
             limit_markers={@limit_markers}
             event_markers={@event_markers}
+            annotations={@annotations}
             selected_data_ref={@selected_data_ref}
             time_mode={@time_mode}
             time_from={@time_from}

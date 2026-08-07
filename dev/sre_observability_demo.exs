@@ -526,6 +526,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
           overlays: [:limits, :events]
         },
         options: %{
+          annotation_layers: ["mission-contacts"],
           legend: true,
           legend_mode: "always",
           window_seconds: 300,

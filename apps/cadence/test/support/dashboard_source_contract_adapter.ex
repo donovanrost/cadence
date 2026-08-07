@@ -1,7 +1,13 @@
 defmodule Cadence.Support.DashboardSourceContractAdapter do
   @moduledoc false
 
-  alias Cadence.Dashboards.{PlannedSourceRequest, SourceFacts, SourceResult}
+  alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
+    PlannedSourceRequest,
+    SourceFacts,
+    SourceResult
+  }
 
   alias Cadence.DataSources.SourceCapabilities
 
@@ -88,7 +94,32 @@ defmodule Cadence.Support.DashboardSourceContractAdapter do
 
       :empty_result ->
         empty_result(request, opts)
+
+      :annotation_result ->
+        annotation_result(request)
     end
+  end
+
+  defp annotation_result(%PlannedSourceRequest{} = request) do
+    SourceResult.new(%{
+      request_id: request.request_id,
+      annotations: [
+        %Annotation{
+          annotation_id: "test.provider:#{request.request_id}",
+          provider_id: "test.provider",
+          layer_id: "test.annotations",
+          title: "Adapter annotation",
+          span: %AnnotationSpan{kind: :point, starts_at: ~U[2026-06-17 12:00:00Z]},
+          provenance: %{adapter_logical_source: request.logical_source}
+        }
+      ],
+      meta: %{
+        logical_source: request.logical_source,
+        returned_frame_count: 0,
+        returned_annotation_count: 1,
+        degraded?: false
+      }
+    })
   end
 
   defp empty_result(%PlannedSourceRequest{} = request, opts) do

@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStageHandoff do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowGroupStageHandoff do
   @moduledoc false
 
   @type t :: %__MODULE__{

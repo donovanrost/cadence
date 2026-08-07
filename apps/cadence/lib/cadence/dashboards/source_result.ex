@@ -7,7 +7,7 @@ defmodule Cadence.Dashboards.SourceResult do
   metadata that callers can surface without coupling widgets to backend details.
   """
 
-  alias Cadence.Dashboards.{Frame, ResolveWarning}
+  alias Cadence.Dashboards.{Annotation, Frame, ResolveWarning}
   alias Cadence.Platform.ContractNormalization
 
   alias Cadence.DataSources.SourceWatermark
@@ -15,6 +15,7 @@ defmodule Cadence.Dashboards.SourceResult do
   @type t :: %__MODULE__{
           request_id: binary() | nil,
           frames: [Frame.t()],
+          annotations: [Annotation.t()],
           warnings: [ResolveWarning.t()],
           watermarks: [SourceWatermark.t()],
           meta: map()
@@ -23,6 +24,7 @@ defmodule Cadence.Dashboards.SourceResult do
   defstruct [
     :request_id,
     frames: [],
+    annotations: [],
     warnings: [],
     watermarks: [],
     meta: %{}
@@ -36,6 +38,7 @@ defmodule Cadence.Dashboards.SourceResult do
     %__MODULE__{
       result
       | frames: normalize_frames(result.frames),
+        annotations: normalize_annotations(result.annotations),
         warnings: normalize_warnings(result.warnings),
         watermarks: normalize_watermarks(result.watermarks),
         meta: ContractNormalization.map_or_default(result.meta)
@@ -49,6 +52,10 @@ defmodule Cadence.Dashboards.SourceResult do
         result
         |> ContractNormalization.attr(:frames, [])
         |> normalize_frames(),
+      annotations:
+        result
+        |> ContractNormalization.attr(:annotations, [])
+        |> normalize_annotations(),
       warnings:
         result
         |> ContractNormalization.attr(:warnings, [])
@@ -70,6 +77,12 @@ defmodule Cadence.Dashboards.SourceResult do
     do: Enum.map(frames, &(Frame.normalize(&1) || &1))
 
   defp normalize_frames(frames), do: frames
+
+  defp normalize_annotations(annotations) when is_list(annotations) do
+    Enum.map(annotations, &(Annotation.normalize(&1) || &1))
+  end
+
+  defp normalize_annotations(annotations), do: annotations
 
   defp normalize_warnings(warnings) when is_list(warnings),
     do: Enum.map(warnings, &normalize_warning/1)

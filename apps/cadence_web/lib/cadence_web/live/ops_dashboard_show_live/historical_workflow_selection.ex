@@ -3,8 +3,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelection do
 
   alias Cadence.Dashboards.DataLink
 
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
+
   alias CadenceWeb.OpsDashboardShowLive.{
-    HistoricalWorkflowParams,
     HistoricalWorkflowSelectionResult,
     SelectionQuery
   }

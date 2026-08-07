@@ -10,18 +10,18 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
     TimeContext
   }
 
+  alias Cadence.Dashboards.SourceRegistry.AdapterSelection
   alias Cadence.Platform.ContractNormalization
 
-  @logical_sources [:telemetry, :limits, :events, :operational_observables]
-
   @type consumer :: %{
-          placement_id: binary(),
-          role: atom(),
-          widget_type_id: binary()
+          required(:placement_id) => binary(),
+          required(:role) => atom(),
+          required(:widget_type_id) => binary(),
+          optional(:annotation_layer_ids) => [binary()]
         }
 
   @type source_dependency :: %{
-          required(:logical_source) => :telemetry | :limits | :events | :operational_observables,
+          required(:logical_source) => atom(),
           required(:reason) => atom() | binary(),
           required(:products) => [atom()],
           optional(:sampling) => map()
@@ -31,7 +31,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
           request_id: binary(),
           organization_id: binary() | nil,
           mission_id: binary() | nil,
-          logical_source: :telemetry | :limits | :events | :operational_observables,
+          logical_source: atom() | nil,
           observables: [binary()],
           scope_context: ScopeContext.t(),
           time_context: TimeContext.t(),
@@ -64,10 +64,10 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
   ]
 
   @spec logical_sources() :: [atom()]
-  def logical_sources, do: @logical_sources
+  def logical_sources, do: AdapterSelection.logical_sources()
 
   @spec logical_source?(term()) :: boolean()
-  def logical_source?(logical_source), do: logical_source in @logical_sources
+  def logical_source?(logical_source), do: logical_source in logical_sources()
 
   @spec new(map() | t()) :: t()
   def new(attrs), do: normalize(attrs)
@@ -76,8 +76,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
   def normalize(%__MODULE__{} = request) do
     %__MODULE__{
       request
-      | logical_source:
-          ContractNormalization.known_atom(request.logical_source, @logical_sources),
+      | logical_source: normalize_logical_source(request.logical_source),
         observables: ContractNormalization.binary_list(request.observables),
         scope_context:
           ContractNormalization.normalize_context(request.scope_context, ScopeContext),
@@ -101,7 +100,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
       logical_source:
         request
         |> ContractNormalization.attr(:logical_source)
-        |> ContractNormalization.known_atom(@logical_sources),
+        |> normalize_logical_source(),
       observables:
         request
         |> ContractNormalization.attr(:observables, [])
@@ -159,7 +158,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
           |> Map.update(
             :logical_source,
             nil,
-            &ContractNormalization.known_atom(&1, @logical_sources)
+            &normalize_logical_source/1
           )
           |> Map.update(:reason, nil, &ContractNormalization.existing_atom/1)
           |> Map.update(:products, [], &ContractNormalization.atom_list/1)
@@ -173,6 +172,10 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
 
   defp normalize_source_dependencies(nil), do: []
   defp normalize_source_dependencies(dependencies), do: dependencies
+
+  defp normalize_logical_source(logical_source) do
+    ContractNormalization.known_atom(logical_source, logical_sources())
+  end
 
   defp normalize_dependency_key(key) when is_atom(key), do: key
   defp normalize_dependency_key("logical_source"), do: :logical_source
@@ -190,7 +193,11 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
             consumer
             |> ContractNormalization.attr(:role)
             |> ContractNormalization.existing_atom(),
-          widget_type_id: ContractNormalization.attr(consumer, :widget_type_id)
+          widget_type_id: ContractNormalization.attr(consumer, :widget_type_id),
+          annotation_layer_ids:
+            consumer
+            |> ContractNormalization.attr(:annotation_layer_ids, [])
+            |> ContractNormalization.binary_list()
         }
 
       consumer ->

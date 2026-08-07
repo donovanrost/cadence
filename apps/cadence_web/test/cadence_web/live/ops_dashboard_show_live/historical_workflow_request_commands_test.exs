@@ -6,11 +6,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestCommandsTest 
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflow,
     HistoricalWorkflowActionOutcome,
-    HistoricalWorkflowParams,
     HistoricalWorkflowPresenter
   }
 
   alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
   alias Phoenix.LiveView.Socket
 
   test "recording a bulk request preserves request group context" do

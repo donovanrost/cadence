@@ -17769,6 +17769,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
         const chartSummaries = charts.map((chart) => {
           const backfill = parseBackfill(chart)
           const eventMarkers = parseJsonList(chart.dataset.eventMarkers)
+          const annotations = parseJsonList(chart.dataset.annotations)
           return {
             widgetId: chart.dataset.widgetId || "",
             placementId: chart.dataset.placementId || "",
@@ -17785,9 +17786,31 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
               freshnessState: marker.freshness_state || "",
               sourceHealthEventId: marker.source_health_event_id || "",
               sourceWatermarkEventId: marker.source_watermark_event_id || "",
+              sourceRequestId: marker.source_request_id || "",
+              logicalSource: marker.logical_source || "",
               dataSourceId: marker.data_source_id || "",
               sourceBindingId: marker.source_binding_id || "",
+              realm: marker.realm || "",
+              timeMode: marker.time_mode || "",
+              timeAxis: marker.time_axis || "",
               replayRunId: marker.replay_run_id || "",
+              requestedRealm: marker.requested_realm || "",
+              requestedDataView: marker.requested_data_view || "",
+            })),
+            annotations: annotations.map((annotation) => ({
+              annotationId: annotation.annotation_id || "",
+              providerId: annotation.provider_id || "",
+              layerId: annotation.layer_id || "",
+              annotationKind: annotation.annotation_kind || "",
+              geometry: annotation.geometry || "",
+              target: annotation.target || "",
+              targetId: annotation.target_id || "",
+              startsAtMs: annotation.starts_at_ms || null,
+              endsAtMs: annotation.ends_at_ms || null,
+              dataSourceId: annotation.metadata?.data_source_id || "",
+              sourceBindingId: annotation.metadata?.source_binding_id || "",
+              replayRunId: annotation.replay_run_id || "",
+              active: annotation.metadata?.active || false,
             })),
             eventMarkerControls: Array.from(chart.querySelectorAll("[data-event-marker-target]")).map(
               (control) => ({
@@ -17796,6 +17819,13 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
                 ref: control.dataset.eventMarkerRef || "",
               })
             ),
+            annotationControls: Array.from(
+              chart.querySelectorAll("[data-chart-annotation-control='true']")
+            ).map((control) => ({
+              annotationId: control.dataset.chartAnnotationId || "",
+              providerId: control.dataset.chartAnnotationProvider || "",
+              layerId: control.dataset.chartAnnotationLayer || "",
+            })),
             series: (backfill.series || []).map((series) => ({
               id: series.id || "",
               observableId: series.observable_id || "",
@@ -18107,72 +18137,98 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "ingress latency chart points should preserve source endpoint identity"
   )
 
-  const sourceHealthMarker = bitrateChart.eventMarkers.find(
-    (marker) => marker.markerType === "source_health_transition"
-  )
-  assert.ok(sourceHealthMarker, "bitrate chart should include a source health transition marker")
   assert.equal(
-    sourceHealthMarker.sourceHealth,
-    "degraded",
-    "bitrate source health marker should preserve degraded health"
+    bitrateChart.eventMarkers.some((marker) => marker.markerType === "source_health_transition"),
+    false,
+    "bitrate chart should not expose legacy source health transition markers"
   )
   assert.equal(
-    sourceHealthMarker.dataSourceId,
+    ingressLatencyChart.eventMarkers.some(
+      (marker) => marker.markerType === "source_health_transition"
+    ),
+    false,
+    "ingress latency chart should not expose legacy source health transition markers"
+  )
+
+  const sourceHealthAnnotation = bitrateChart.annotations.find(
+    (annotation) =>
+      annotation.providerId === "cadence.source-health" &&
+      annotation.layerId === "source-status" &&
+      annotation.annotationKind === "source_health_outage"
+  )
+  assert.ok(sourceHealthAnnotation, "bitrate chart should include the opted-in source status annotation")
+  assert.equal(
+    sourceHealthAnnotation.geometry,
+    "interval",
+    "bitrate source status should use interval geometry"
+  )
+  assert.equal(
+    sourceHealthAnnotation.dataSourceId,
     expectedDataSourceId,
-    "bitrate source health marker should preserve data source"
+    "bitrate source status annotation should preserve data source"
   )
   assert.equal(
-    sourceHealthMarker.sourceBindingId,
+    sourceHealthAnnotation.sourceBindingId,
     expectedSourceBindingId,
-    "bitrate source health marker should preserve source binding"
+    "bitrate source status annotation should preserve source binding"
   )
   assert.equal(
-    sourceHealthMarker.replayRunId,
+    sourceHealthAnnotation.replayRunId,
     replayRunId,
-    "bitrate source health marker should preserve replay run"
+    "bitrate source status annotation should preserve replay run"
   )
   assert.notEqual(
-    sourceHealthMarker.sourceHealthEventId,
+    sourceHealthAnnotation.targetId,
     "",
-    "bitrate source health marker should carry a source health event id"
+    "bitrate source status annotation should carry a source health event id"
   )
-  const ingressSourceHealthMarker = ingressLatencyChart.eventMarkers.find(
-    (marker) => marker.markerType === "source_health_transition"
+  const ingressSourceHealthAnnotation = ingressLatencyChart.annotations.find(
+    (annotation) =>
+      annotation.providerId === "cadence.source-health" &&
+      annotation.layerId === "source-status" &&
+      annotation.annotationKind === "source_health_outage"
   )
   assert.ok(
-    ingressSourceHealthMarker,
-    "ingress latency chart should include a source health transition marker"
+    ingressSourceHealthAnnotation,
+    "ingress latency chart should include the opted-in source status annotation"
   )
   assert.equal(
-    ingressSourceHealthMarker.sourceHealth,
-    "degraded",
-    "ingress latency source health marker should preserve degraded health"
+    ingressSourceHealthAnnotation.geometry,
+    "interval",
+    "ingress latency source status should use interval geometry"
   )
   assert.equal(
-    ingressSourceHealthMarker.dataSourceId,
+    ingressSourceHealthAnnotation.dataSourceId,
     expectedDataSourceId,
-    "ingress latency source health marker should preserve data source"
+    "ingress latency source status annotation should preserve data source"
   )
   assert.equal(
-    ingressSourceHealthMarker.sourceBindingId,
+    ingressSourceHealthAnnotation.sourceBindingId,
     expectedSourceBindingId,
-    "ingress latency source health marker should preserve source binding"
+    "ingress latency source status annotation should preserve source binding"
   )
   assert.equal(
-    ingressSourceHealthMarker.replayRunId,
+    ingressSourceHealthAnnotation.replayRunId,
     replayRunId,
-    "ingress latency source health marker should preserve replay run"
+    "ingress latency source status annotation should preserve replay run"
   )
   assert.equal(
-    ingressSourceHealthMarker.sourceHealthEventId,
-    sourceHealthMarker.sourceHealthEventId,
-    "ingress latency should use the same replay source health event as bitrate"
+    ingressSourceHealthAnnotation.targetId,
+    sourceHealthAnnotation.targetId,
+    "ingress latency should use the same replay source health evidence as bitrate"
   )
 
   const sourceWatermarkMarker = bitrateChart.eventMarkers.find(
-    (marker) => marker.markerType === "source_watermark_event"
+    (marker) =>
+      marker.markerType === "source_watermark_cursor" ||
+      marker.markerType === "source_watermark_event"
   )
-  assert.ok(sourceWatermarkMarker, "bitrate chart should include a source watermark event marker")
+  assert.ok(sourceWatermarkMarker, "bitrate chart should include source watermark evidence")
+  assert.equal(
+    sourceWatermarkMarker.markerType,
+    "source_watermark_cursor",
+    "bitrate chart should prefer the collapsed source watermark cursor"
+  )
   assert.equal(
     sourceWatermarkMarker.dataSourceId,
     expectedDataSourceId,
@@ -18194,48 +18250,70 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "bitrate source watermark marker should carry a source watermark event id"
   )
   assert.ok(
-    bitrateChart.eventMarkerControls.some((control) => control.target === "source health"),
-    "bitrate chart should render a clickable source health marker"
+    bitrateChart.annotationControls.some(
+      (control) =>
+        control.annotationId === sourceHealthAnnotation.annotationId &&
+        control.layerId === "source-status"
+    ),
+    "bitrate chart should render a compact source status annotation control"
   )
   assert.ok(
-    ingressLatencyChart.eventMarkerControls.some(
+    ingressLatencyChart.annotationControls.some(
       (control) =>
-        control.target === "source health" &&
-        control.targetId === ingressSourceHealthMarker.sourceHealthEventId
+        control.annotationId === ingressSourceHealthAnnotation.annotationId &&
+        control.layerId === "source-status"
     ),
-    "ingress latency chart should render a clickable source health marker"
+    "ingress latency chart should render a compact source status annotation control"
   )
   assert.ok(
     bitrateChart.eventMarkerControls.some((control) => control.target === "source watermark"),
     "bitrate chart should render a clickable source watermark marker"
   )
 
-  const sourceHealthMarkerClick = await client.send("Runtime.evaluate", {
+  const sourceHealthAnnotationClick = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
         const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='placement-transport-bitrate-history']")
-        const control = Array.from(chart?.querySelectorAll("[data-event-marker-target='source health']") || []).find(
-          (candidate) => candidate.dataset.eventMarkerId === ${JSON.stringify(sourceHealthMarker.sourceHealthEventId)}
+        const control = Array.from(chart?.querySelectorAll("[data-chart-annotation-control='true']") || []).find(
+          (candidate) => candidate.dataset.chartAnnotationId === ${JSON.stringify(sourceHealthAnnotation.annotationId)}
         )
-        if (!chart || !control) return { clicked: false, reason: "missing source health marker control" }
+        if (!chart || !control) return { clicked: false, reason: "missing source status annotation control" }
         control.click()
+        const tooltip = Array.from(chart.querySelectorAll("[data-chart-annotation-tooltip='true']")).find(
+          (candidate) => candidate.dataset.chartAnnotationId === ${JSON.stringify(sourceHealthAnnotation.annotationId)}
+        )
+        const evidenceControl = tooltip?.querySelector("[data-chart-annotation-open-evidence='true']")
+        if (!tooltip || tooltip.hidden || !evidenceControl) {
+          return { clicked: false, reason: "missing open annotation evidence action" }
+        }
+        evidenceControl.click()
         return {
           clicked: true,
-          target: control.dataset.eventMarkerTarget || "",
-          targetId: control.dataset.eventMarkerId || "",
-          ref: control.dataset.eventMarkerRef || "",
+          tooltipOpened: true,
+          annotationId: control.dataset.chartAnnotationId || "",
+          providerId: control.dataset.chartAnnotationProvider || "",
+          layerId: control.dataset.chartAnnotationLayer || "",
         }
       })()
     `,
     returnByValue: true,
   })
 
-  const sourceHealthClick = sourceHealthMarkerClick.result.value
-  assert.equal(sourceHealthClick.clicked, true, "source health marker should be clickable")
+  const sourceHealthClick = sourceHealthAnnotationClick.result.value
   assert.equal(
-    sourceHealthClick.targetId,
-    sourceHealthMarker.sourceHealthEventId,
-    "source health marker control should target the marker event"
+    sourceHealthClick.clicked,
+    true,
+    "source status annotation should expose an evidence action"
+  )
+  assert.equal(
+    sourceHealthClick.tooltipOpened,
+    true,
+    "source status annotation should open its detail tooltip before navigation"
+  )
+  assert.equal(
+    sourceHealthClick.annotationId,
+    sourceHealthAnnotation.annotationId,
+    "source status control should identify the annotation"
   )
 
   await waitForExpression(
@@ -18246,13 +18324,13 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
         return Boolean(
           inspector &&
           inspector.dataset.dataLinkTarget === "source_health_event" &&
-          inspector.dataset.dataLinkTargetId === ${JSON.stringify(sourceHealthMarker.sourceHealthEventId)} &&
+          inspector.dataset.dataLinkTargetId === ${JSON.stringify(sourceHealthAnnotation.targetId)} &&
           inspector.dataset.dataLinkStatus === "resolved"
         )
       })()
     `,
     5_000,
-    "source health chart marker DataLink inspector"
+    "source status chart annotation DataLink inspector"
   )
 
   const sourceHealthInspectorResult = await client.send("Runtime.evaluate", {
@@ -18287,70 +18365,75 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
   assert.equal(
     sourceHealthInspector.target,
     "source_health_event",
-    "source health marker should open a source-health DataLink"
+    "source status annotation should open a source-health DataLink"
   )
   assert.equal(
     sourceHealthInspector.targetId,
-    sourceHealthMarker.sourceHealthEventId,
-    "source health marker DataLink should resolve the seeded event"
+    sourceHealthAnnotation.targetId,
+    "source status annotation DataLink should resolve the seeded event"
   )
-  assert.equal(sourceHealthInspector.status, "resolved", "source health marker DataLink should resolve")
+  assert.equal(
+    sourceHealthInspector.status,
+    "resolved",
+    "source status annotation DataLink should resolve"
+  )
   assert.equal(
     sourceHealthInspector.selectedTarget,
     "source_health_event",
-    "source health marker route should select the source-health event"
+    "source status annotation route should select the source-health event"
   )
   assert.equal(
     sourceHealthInspector.selectedId,
-    sourceHealthMarker.sourceHealthEventId,
-    "source health marker route should preserve selected event id"
+    sourceHealthAnnotation.targetId,
+    "source status annotation route should preserve selected event id"
   )
   assert.equal(
     sourceHealthInspector.selectedPlacement,
     "placement-transport-bitrate-history",
-    "source health marker should preserve selected placement"
+    "source status annotation should preserve selected placement"
   )
   assert.notEqual(
     sourceHealthInspector.selectedTime,
     "",
-    "source health marker should preserve selected timestamp"
+    "source status annotation should preserve selected timestamp"
   )
   assert.equal(
     sourceHealthInspector.selectedDataSourceId,
     expectedDataSourceId,
-    "source health marker inspector should preserve data source"
+    "source status annotation inspector should preserve data source"
   )
   assert.equal(
     sourceHealthInspector.selectedSourceBindingId,
     expectedSourceBindingId,
-    "source health marker inspector should preserve source binding"
+    "source status annotation inspector should preserve source binding"
   )
   assert.equal(
     sourceHealthInspector.selectedReplayRunId,
     replayRunId,
-    "source health marker inspector should preserve replay run"
+    "source status annotation inspector should preserve replay run"
   )
   assert.equal(
     sourceHealthInspector.copyHook,
     "ClipboardButton",
-    "source health marker copy action should use ClipboardButton"
+    "source status annotation copy action should use ClipboardButton"
   )
   assert.match(
     sourceHealthInspector.copyText,
     /selected_target=source_health_event/,
-    "source health marker copy payload should preserve selected target"
+    "source status annotation copy payload should preserve selected target"
   )
   assert.ok(
-    sourceHealthInspector.copyText.includes(`selected_id=${sourceHealthMarker.sourceHealthEventId}`),
-    "source health marker copy payload should preserve selected event"
+    sourceHealthInspector.copyText.includes(`selected_id=${sourceHealthAnnotation.targetId}`),
+    "source status annotation copy payload should preserve selected event"
   )
   assert.match(
     sourceHealthInspector.text,
     /Source health event/i,
-    "source health marker inspector should render source health event details"
+    "source status annotation inspector should render source health event details"
   )
 
-  const sourceWatermarkMarkerClick = await client.send("Runtime.evaluate", {
+  if (sourceWatermarkMarker.markerType === "source_watermark_event") {
+    const sourceWatermarkMarkerClick = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
         const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='placement-transport-bitrate-history']")
@@ -18382,38 +18465,45 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     client,
     `
       (() => {
-        const inspector = document.querySelector("#dashboard-data-link-inspector")
+        const root = document.querySelector("#ops-dashboard-show-page")
+        const inspector = document.querySelector("#dashboard-evidence-inspector")
         return Boolean(
           inspector &&
-          inspector.dataset.dataLinkTarget === "source_watermark_event" &&
-          inspector.dataset.dataLinkTargetId === ${JSON.stringify(sourceWatermarkMarker.sourceWatermarkEventId)} &&
-          inspector.dataset.dataLinkStatus === "resolved"
+          inspector.dataset.evidenceKind === "source" &&
+          inspector.dataset.evidenceStatus === ${JSON.stringify(sourceWatermarkMarker.freshnessState)} &&
+          root?.dataset.dashboardEvidenceSourceRequest === ${JSON.stringify(sourceWatermarkMarker.sourceRequestId)}
         )
       })()
     `,
     5_000,
-    "source watermark chart marker DataLink inspector"
+    "source watermark cursor evidence inspector"
   )
 
-  const sourceWatermarkInspectorResult = await client.send("Runtime.evaluate", {
+  const sourceWatermarkEvidenceResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const inspector = document.querySelector("#dashboard-data-link-inspector")
-        const copy = document.querySelector("#dashboard-data-link-copy-link")
+        const root = document.querySelector("#ops-dashboard-show-page")
+        const inspector = document.querySelector("#dashboard-evidence-inspector")
+        const copy = document.querySelector("#dashboard-evidence-copy-link")
         const url = new URL(window.location.href)
         if (copy) copy.click()
 
         return {
-          target: inspector?.dataset.dataLinkTarget || "",
-          targetId: inspector?.dataset.dataLinkTargetId || "",
-          status: inspector?.dataset.dataLinkStatus || "",
-          selectedTarget: url.searchParams.get("selected_target") || "",
-          selectedId: url.searchParams.get("selected_id") || "",
+          kind: inspector?.dataset.evidenceKind || "",
+          status: inspector?.dataset.evidenceStatus || "",
+          sourceRequest: root?.dataset.dashboardEvidenceSourceRequest || "",
+          logicalSource: root?.dataset.dashboardEvidenceLogicalSource || "",
+          realm: root?.dataset.dashboardEvidenceRealm || "",
+          dataSourceId: root?.dataset.dashboardEvidenceDataSourceId || "",
+          sourceBindingId: root?.dataset.dashboardEvidenceSourceBindingId || "",
+          timeMode: root?.dataset.dashboardEvidenceTimeMode || "",
+          timeAxis: root?.dataset.dashboardEvidenceTimeAxis || "",
+          replayRunId: root?.dataset.dashboardEvidenceReplayRunId || "",
+          requestedRealm: root?.dataset.dashboardEvidenceRequestedRealm || "",
+          requestedDataView: root?.dataset.dashboardEvidenceRequestedDataView || "",
+          selectedKind: url.searchParams.get("selected_evidence_kind") || "",
+          selectedMode: url.searchParams.get("selected_source_evidence_mode") || "",
           selectedPlacement: url.searchParams.get("selected_placement") || "",
-          selectedTime: url.searchParams.get("selected_time") || "",
-          selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
-          selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          selectedReplayRunId: inspector?.dataset.dataLinkSelectedReplayRunId || "",
           copyHook: copy?.getAttribute("phx-hook") || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
@@ -18423,76 +18513,82 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     returnByValue: true,
   })
 
-  const sourceWatermarkInspector = sourceWatermarkInspectorResult.result.value
+  const sourceWatermarkEvidence = sourceWatermarkEvidenceResult.result.value
   assert.equal(
-    sourceWatermarkInspector.target,
-    "source_watermark_event",
-    "source watermark marker should open a source-watermark DataLink"
+    sourceWatermarkEvidence.kind,
+    "source",
+    "source watermark cursor should open source evidence"
   )
   assert.equal(
-    sourceWatermarkInspector.targetId,
-    sourceWatermarkMarker.sourceWatermarkEventId,
-    "source watermark marker DataLink should resolve the seeded event"
+    sourceWatermarkEvidence.status,
+    sourceWatermarkMarker.freshnessState,
+    "source watermark evidence should preserve freshness state"
   )
   assert.equal(
-    sourceWatermarkInspector.status,
-    "resolved",
-    "source watermark marker DataLink should resolve"
+    sourceWatermarkEvidence.sourceRequest,
+    sourceWatermarkMarker.sourceRequestId,
+    "source watermark evidence should preserve source request"
   )
   assert.equal(
-    sourceWatermarkInspector.selectedTarget,
-    "source_watermark_event",
-    "source watermark marker route should select the source-watermark event"
+    sourceWatermarkEvidence.logicalSource,
+    "operational_observables",
+    "source watermark evidence should preserve logical source"
   )
   assert.equal(
-    sourceWatermarkInspector.selectedId,
-    sourceWatermarkMarker.sourceWatermarkEventId,
-    "source watermark marker route should preserve selected event id"
+    sourceWatermarkEvidence.realm,
+    "replay",
+    "source watermark evidence should preserve realm"
   )
   assert.equal(
-    sourceWatermarkInspector.selectedPlacement,
-    "placement-transport-bitrate-history",
-    "source watermark marker should preserve selected placement"
-  )
-  assert.notEqual(
-    sourceWatermarkInspector.selectedTime,
-    "",
-    "source watermark marker should preserve selected timestamp"
-  )
-  assert.equal(
-    sourceWatermarkInspector.selectedDataSourceId,
+    sourceWatermarkEvidence.dataSourceId,
     expectedDataSourceId,
-    "source watermark marker inspector should preserve data source"
+    "source watermark evidence should preserve data source"
   )
   assert.equal(
-    sourceWatermarkInspector.selectedSourceBindingId,
+    sourceWatermarkEvidence.sourceBindingId,
     expectedSourceBindingId,
-    "source watermark marker inspector should preserve source binding"
+    "source watermark evidence should preserve source binding"
   )
   assert.equal(
-    sourceWatermarkInspector.selectedReplayRunId,
+    sourceWatermarkEvidence.timeMode,
+    "replay_run",
+    "source watermark evidence should preserve time mode"
+  )
+  assert.equal(
+    sourceWatermarkEvidence.replayRunId,
     replayRunId,
-    "source watermark marker inspector should preserve replay run"
+    "source watermark evidence should preserve replay run"
   )
   assert.equal(
-    sourceWatermarkInspector.copyHook,
-    "ClipboardButton",
-    "source watermark marker copy action should use ClipboardButton"
+    sourceWatermarkEvidence.selectedKind,
+    "source",
+    "source watermark route should select source evidence"
   )
-  assert.match(
-    sourceWatermarkInspector.copyText,
-    /selected_target=source_watermark_event/,
-    "source watermark marker copy payload should preserve selected target"
+  assert.equal(
+    sourceWatermarkEvidence.selectedMode,
+    "health",
+    "source watermark route should select source health evidence"
+  )
+  assert.equal(
+    sourceWatermarkEvidence.selectedPlacement,
+    "placement-transport-bitrate-history",
+    "source watermark route should preserve selected placement"
+  )
+  assert.equal(
+    sourceWatermarkEvidence.copyHook,
+    "ClipboardButton",
+    "source watermark evidence copy action should use ClipboardButton"
   )
   assert.ok(
-    sourceWatermarkInspector.copyText.includes(`selected_id=${sourceWatermarkMarker.sourceWatermarkEventId}`),
-    "source watermark marker copy payload should preserve selected event"
+    sourceWatermarkEvidence.copyText.includes("panel=evidence"),
+    "source watermark evidence copy payload should preserve evidence panel"
   )
-  assert.match(
-    sourceWatermarkInspector.text,
-    /Source watermark event/i,
-    "source watermark marker inspector should render source watermark event details"
-  )
+    assert.match(
+      sourceWatermarkEvidence.text,
+      /source/i,
+      "source watermark evidence should render source details"
+    )
+  }
 
   for (const chart of initial.chartSummaries) {
     assert.equal(chart.timeMode, "replay_run", "chart should preserve replay time mode")

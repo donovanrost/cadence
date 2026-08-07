@@ -6,11 +6,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionCommandsTe
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflow,
     HistoricalWorkflowActionOutcome,
-    HistoricalWorkflowParams,
     HistoricalWorkflowPresenter
   }
 
   alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
   alias Phoenix.LiveView.Socket
 
   test "recording a correction request preserves request group context" do

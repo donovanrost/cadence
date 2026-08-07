@@ -6,11 +6,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStageCommandsTe
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflow,
     HistoricalWorkflowActionOutcome,
-    HistoricalWorkflowParams,
     HistoricalWorkflowPresenter
   }
 
   alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
   alias Phoenix.LiveView.Socket
 
   test "recording a group start selects the first event with a failed dispatch result" do

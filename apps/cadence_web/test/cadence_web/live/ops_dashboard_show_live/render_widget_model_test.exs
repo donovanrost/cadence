@@ -133,6 +133,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
     assert widget_item.props.backfill == nil
     assert widget_item.props.limit_markers == []
     assert widget_item.props.event_markers == []
+    assert widget_item.props.annotations == []
     assert widget_item.props.selected_data_ref == selected_ref
     assert widget_item.props.context_spacecraft_id == "SC-1"
     assert widget_item.props.chart_epoch == 3
@@ -151,6 +152,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
              compare_backfill: nil,
              limit_markers: [],
              event_markers: [],
+             annotations: [],
              selected_data_ref: selected_ref,
              time_mode: "replay_run",
              time_from: "2026-06-25T11:55:00Z",

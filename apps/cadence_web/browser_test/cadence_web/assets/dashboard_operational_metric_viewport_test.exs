@@ -24,8 +24,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
   alias Cadence.DataSources.DataBinding
   alias Cadence.DataSources.DataSource
   alias Cadence.Management.DataSources
-  alias Cadence.Projections.DataSources.Health
-  alias Cadence.Projections.DataSources.Watermarks
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
@@ -413,7 +413,8 @@ defmodule CadenceWeb.Assets.DashboardOperationalMetricViewportTest do
         mission,
         alpha_transport.transport_id,
         source_endpoint_id: alpha_endpoint.source_endpoint_id,
-        overlays: [:events]
+        overlays: [:events],
+        annotation_layers: ["source-status"]
       )
 
     app_root = Path.expand("../../..", __DIR__)

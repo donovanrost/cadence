@@ -6,6 +6,9 @@ defmodule Cadence.Dashboards.WidgetDef do
   options. Layout remains on `Cadence.Dashboards.Placement`.
   """
 
+  alias Cadence.DataSources.AdapterRegistry
+  alias Cadence.Platform.ContractNormalization
+
   @type t :: %__MODULE__{
           widget_type_id: binary(),
           widget_type_version: pos_integer(),
@@ -45,17 +48,7 @@ defmodule Cadence.Dashboards.WidgetDef do
   end
 
   defp normalize_binding(binding) do
-    source =
-      normalize_atom(get_attr(binding, :source), :telemetry, %{
-        :telemetry => :telemetry,
-        "telemetry" => :telemetry,
-        :operational_observables => :operational_observables,
-        "operational_observables" => :operational_observables,
-        :limits => :limits,
-        "limits" => :limits,
-        :events => :events,
-        "events" => :events
-      })
+    source = normalize_source(get_attr(binding, :source))
 
     %{
       source: source,
@@ -113,6 +106,12 @@ defmodule Cadence.Dashboards.WidgetDef do
 
   defp default_value_type(:events), do: nil
   defp default_value_type(_source), do: :engineering
+
+  defp normalize_source(nil), do: :telemetry
+
+  defp normalize_source(source) do
+    ContractNormalization.known_atom(source, AdapterRegistry.logical_sources())
+  end
 
   defp normalize_atom(nil, default, _mapping), do: default
   defp normalize_atom(value, _default, mapping), do: Map.get(mapping, value, value)

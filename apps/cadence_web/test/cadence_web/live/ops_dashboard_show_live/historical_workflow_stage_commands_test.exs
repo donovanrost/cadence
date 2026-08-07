@@ -6,11 +6,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageCommandsTest do
   alias CadenceWeb.OpsDashboardShowLive.{
     HistoricalWorkflow,
     HistoricalWorkflowActionOutcome,
-    HistoricalWorkflowParams,
     HistoricalWorkflowPresenter
   }
 
   alias CadenceWeb.OpsDashboardShowLive.SelectionQuery
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
   alias Phoenix.LiveView.Socket
 
   test "recording a stage requires explicit confirmation before invoking commands" do

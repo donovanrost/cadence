@@ -1,7 +1,7 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParamsTest do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParamsTest do
   use ExUnit.Case, async: true
 
-  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams
 
   describe "params extraction" do
     test "unwraps historical workflow form params" do

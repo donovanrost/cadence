@@ -2,6 +2,8 @@ defmodule Cadence.Dashboards.ResultContractsTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
     DataContext,
     DataLink,
     EvidenceRef,
@@ -65,6 +67,44 @@ defmodule Cadence.Dashboards.ResultContractsTest do
              })
   end
 
+  test "annotations normalize provider context into generic time geometry" do
+    assert %Annotation{
+             annotation_id: "contacts:contact-1",
+             provider_id: "cadence.contacts",
+             layer_id: "mission-contacts",
+             kind: "contact_interval",
+             span: %AnnotationSpan{
+               kind: :interval,
+               starts_at: ~U[2026-06-17 12:00:00Z],
+               ends_at: ~U[2026-06-17 12:05:00Z]
+             },
+             severity: :warning,
+             style: %{"color" => "cyan", :primitive => :rail},
+             link: %DataLink{target: :contact, source: :annotation}
+           } =
+             Annotation.normalize(%{
+               "annotation_id" => "contacts:contact-1",
+               "provider_id" => "cadence.contacts",
+               "layer_id" => "mission-contacts",
+               "kind" => "contact_interval",
+               "span" => %{
+                 "kind" => "interval",
+                 "starts_at" => "2026-06-17T12:00:00Z",
+                 "ends_at" => "2026-06-17T12:05:00Z"
+               },
+               "title" => "DSS-14 pass",
+               "severity" => "warning",
+               "style" => %{"primitive" => "rail", "color" => "cyan"},
+               "link" => %{
+                 "link_id" => "contact:contact-1",
+                 "label" => "Open contact",
+                 "target" => "contact",
+                 "target_id" => "contact-1",
+                 "source" => "annotation"
+               }
+             })
+  end
+
   test "placement frames normalize overlays, warnings, and request ids" do
     assert %PlacementFrames{
              primary: [
@@ -83,6 +123,14 @@ defmodule Cadence.Dashboards.ResultContractsTest do
                  }
                ]
              },
+             annotations: [
+               %Annotation{
+                 annotation_id: "contacts:contact-1",
+                 provider_id: "cadence.contacts",
+                 layer_id: "mission-contacts",
+                 span: %AnnotationSpan{kind: :point, starts_at: ~U[2026-06-17 12:00:00Z]}
+               }
+             ],
              warnings: [%ResolveWarning{code: :watermark_unknown, severity: :info}],
              planned_request_ids: ["source-request-1"]
            } =
@@ -103,6 +151,18 @@ defmodule Cadence.Dashboards.ResultContractsTest do
                    }
                  ]
                },
+               "annotations" => [
+                 %{
+                   "annotation_id" => "contacts:contact-1",
+                   "provider_id" => "cadence.contacts",
+                   "layer_id" => "mission-contacts",
+                   "title" => "Contact",
+                   "span" => %{
+                     "kind" => "point",
+                     "starts_at" => "2026-06-17T12:00:00Z"
+                   }
+                 }
+               ],
                "warnings" => [%{"code" => "watermark_unknown", "severity" => "info"}],
                "planned_request_ids" => ["source-request-1"]
              })
@@ -119,6 +179,13 @@ defmodule Cadence.Dashboards.ResultContractsTest do
                },
                "invalid-frame"
              ],
+             annotations: [
+               %Annotation{
+                 annotation_id: "contacts:contact-1",
+                 provider_id: "cadence.contacts",
+                 layer_id: "mission-contacts"
+               }
+             ],
              warnings: [%ResolveWarning{code: :watermark_unknown, severity: :info}],
              watermarks: [%SourceWatermark{logical_source: :telemetry, confidence: :unknown}],
              meta: %{"returned_frame_count" => 1}
@@ -132,6 +199,13 @@ defmodule Cadence.Dashboards.ResultContractsTest do
                    "fields" => [%{"name" => "value", "kind" => "number"}]
                  },
                  "invalid-frame"
+               ],
+               "annotations" => [
+                 %{
+                   "annotation_id" => "contacts:contact-1",
+                   "provider_id" => "cadence.contacts",
+                   "layer_id" => "mission-contacts"
+                 }
                ],
                "warnings" => [
                  %{"code" => "watermark_unknown", "severity" => "info"}
@@ -148,6 +222,7 @@ defmodule Cadence.Dashboards.ResultContractsTest do
              logical_source: :telemetry,
              supported_sampling: [:latest, :decimated_envelope],
              supported_products: [:latest_value],
+             annotation_products: [:latest_value],
              supported_time_axes: [:receipt_time],
              supported_value_types: [:engineering],
              supported_shapes: [:scalar, :wide],
@@ -159,6 +234,7 @@ defmodule Cadence.Dashboards.ResultContractsTest do
                "logical_source" => "telemetry",
                "supported_sampling" => ["latest", "decimated-envelope"],
                "supported_products" => ["latest_value"],
+               "annotation_products" => ["latest_value"],
                "supported_time_axes" => ["receipt-time"],
                "supported_value_types" => ["engineering"],
                "supported_shapes" => ["scalar", "wide"],

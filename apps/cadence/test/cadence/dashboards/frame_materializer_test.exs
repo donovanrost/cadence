@@ -2,6 +2,8 @@ defmodule Cadence.Dashboards.FrameMaterializerTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
     Field,
     Frame,
     FrameMaterializer,
@@ -128,6 +130,62 @@ defmodule Cadence.Dashboards.FrameMaterializerTest do
                meta: %{capability_provenance: ^provenance}
              }
            ] = materialized.frames
+  end
+
+  test "copies request and capability provenance onto annotations without domain knowledge" do
+    provenance = capability_provenance()
+
+    request =
+      source_request(:events,
+        metadata: %{capability_provenance: provenance},
+        data_context: %{
+          realm: :flight,
+          source_contexts: %{
+            events: %{
+              data_source_id: "managed-events",
+              source_binding_id: "events-flight",
+              dataset: "mission_events",
+              view: :canonical
+            }
+          }
+        }
+      )
+
+    source_result = %SourceResult{
+      request_id: request.request_id,
+      annotations: [
+        %Annotation{
+          annotation_id: "provider:annotation-1",
+          provider_id: "provider",
+          layer_id: "operations",
+          title: "Adapter annotation",
+          span: %AnnotationSpan{kind: :point, starts_at: ~U[2026-06-17 12:00:00Z]}
+        }
+      ]
+    }
+
+    materialized =
+      FrameMaterializer.materialize(
+        request,
+        source_result,
+        %{placement_id: "placement_power", role: :events, widget_type_id: "widget_time_series"}
+      )
+
+    assert [
+             %Annotation{
+               provenance: %{
+                 capability_provenance: ^provenance,
+                 source_request_context: %{
+                   source_request_id: "source_req_events",
+                   logical_source: :events,
+                   requested_data_source_id: "managed-events",
+                   requested_source_binding_id: "events-flight",
+                   requested_dataset: "mission_events",
+                   requested_data_view: :canonical
+                 }
+               }
+             }
+           ] = materialized.annotations
   end
 
   test "copies replay source request context onto materialized frames" do

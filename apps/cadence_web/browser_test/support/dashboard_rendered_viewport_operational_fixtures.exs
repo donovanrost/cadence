@@ -321,6 +321,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
       ) do
     data_override = Keyword.get(opts, :data_override)
     overlays = Keyword.get(opts, :overlays, [])
+    annotation_layers = Keyword.get(opts, :annotation_layers, [])
     source_endpoint_id = Keyword.fetch!(opts, :source_endpoint_id)
 
     document = %Document{
@@ -344,7 +345,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
               sampling: :raw_series,
               overlays: overlays
             },
-            options: %{legend: true}
+            options: %{legend: true, annotation_layers: annotation_layers}
           }
         },
         %Placement{
@@ -368,7 +369,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
               sampling: :raw_series,
               overlays: overlays
             },
-            options: %{legend: true}
+            options: %{legend: true, annotation_layers: annotation_layers}
           }
         },
         %Placement{
@@ -386,7 +387,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
               sampling: :raw_series,
               overlays: overlays
             },
-            options: %{legend: true}
+            options: %{legend: true, annotation_layers: annotation_layers}
           }
         },
         %Placement{
@@ -404,7 +405,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
               sampling: :raw_series,
               overlays: overlays
             },
-            options: %{legend: true}
+            options: %{legend: true, annotation_layers: annotation_layers}
           }
         },
         %Placement{
@@ -425,7 +426,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportOperationalFixtures do
               sampling: :raw_series,
               overlays: overlays
             },
-            options: %{legend: true}
+            options: %{legend: true, annotation_layers: annotation_layers}
           }
         }
       ]

@@ -7,10 +7,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
   alias CadenceWeb.OpsDashboardShowLive.DashboardSectionEditing
   alias CadenceWeb.OpsDashboardShowLive.DocumentLifecycle
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter
-  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults
   alias CadenceWeb.OpsDashboardShowLive.Runtime
   alias CadenceWeb.OpsDashboardShowLive.RuntimeQuery
   alias CadenceWeb.OpsDashboardShowLive.WidgetFormPresentation
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowRequestDefaults
 
   def assign_loaded_dashboard(socket, resources, opts \\ []) when is_map(resources) do
     %{

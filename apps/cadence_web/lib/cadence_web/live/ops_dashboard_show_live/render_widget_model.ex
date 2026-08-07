@@ -87,6 +87,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
       compare_backfill: props.compare_backfill,
       limit_markers: props.limit_markers,
       event_markers: props.event_markers,
+      annotations: props.annotations,
       selected_data_ref: props.selected_data_ref,
       time_mode: context.time_mode,
       time_from: context.time_from,
@@ -136,6 +137,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModel do
         placement_frames
         |> WidgetPresentation.event_markers(widget)
         |> MarkerCategories.filter_event_markers(context.hidden_marker_categories),
+      annotations: WidgetPresentation.annotations(placement_frames, widget),
       selected_data_ref: selected_data_ref_for_placement(context.selected_data_ref, placement_id),
       context_spacecraft_id: context.context_spacecraft_id,
       chart_epoch: context.chart_epoch,

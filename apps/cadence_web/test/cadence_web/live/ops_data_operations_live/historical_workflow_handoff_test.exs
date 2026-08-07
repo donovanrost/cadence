@@ -1,7 +1,7 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowHandoffTest do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
   use ExUnit.Case, async: true
 
-  alias CadenceWeb.OpsDashboardShowLive.{
+  alias CadenceWeb.OpsDataOperationsLive.{
     HistoricalWorkflowCorrectionRequestHandoff,
     HistoricalWorkflowGroupStageHandoff,
     HistoricalWorkflowHandoff,

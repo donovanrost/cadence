@@ -1,8 +1,8 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommandsTest do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Telemetry.Storage
-  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands
+  alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommands
 
   @opts [dashboard_runtime_invalidation?: false]
   @scope %{organization_id: "org-dashboard-command", user: %{id: "operator-command"}}

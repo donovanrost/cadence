@@ -10,6 +10,8 @@ defmodule Cadence.Dashboards.DashboardContract do
   """
 
   alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
     DashboardAction,
     DashboardResolveRequest,
     DashboardResolveResult,
@@ -39,8 +41,6 @@ defmodule Cadence.Dashboards.DashboardContract do
 
   @resolve_modes DashboardResolveRequest.resolve_modes()
   @document_modes DashboardResolveRequest.document_modes()
-  @logical_sources PlannedSourceRequest.logical_sources()
-  @frame_sources Frame.sources()
   @frame_shapes Frame.shapes()
   @frame_time_axes Frame.time_axes()
   @field_kinds Field.kinds()
@@ -111,9 +111,14 @@ defmodule Cadence.Dashboards.DashboardContract do
     capabilities = SourceCapabilities.normalize(capabilities)
 
     []
-    |> require_in([:logical_source], capabilities.logical_source, @logical_sources)
+    |> require_in(
+      [:logical_source],
+      capabilities.logical_source,
+      PlannedSourceRequest.logical_sources()
+    )
     |> require_atom_list([:supported_sampling], capabilities.supported_sampling)
     |> require_atom_list([:supported_products], capabilities.supported_products)
+    |> require_atom_list([:annotation_products], capabilities.annotation_products)
     |> require_in_list([:supported_time_axes], capabilities.supported_time_axes, @frame_time_axes)
     |> require_in_list(
       [:supported_value_types],
@@ -165,6 +170,7 @@ defmodule Cadence.Dashboards.DashboardContract do
     []
     |> require_binary([:request_id], result.request_id)
     |> validate_frames([:frames], result.frames)
+    |> validate_annotations([:annotations], result.annotations)
     |> validate_warnings([:warnings], result.warnings)
     |> validate_watermarks([:watermarks], result.watermarks)
     |> require_map([:meta], result.meta)
@@ -245,6 +251,10 @@ defmodule Cadence.Dashboards.DashboardContract do
           placement_frames.primary
         )
         |> require_map([:frames_by_placement, placement_id, :overlays], placement_frames.overlays)
+        |> validate_annotations(
+          [:frames_by_placement, placement_id, :annotations],
+          placement_frames.annotations
+        )
         |> validate_warnings(
           [:frames_by_placement, placement_id, :warnings],
           placement_frames.warnings
@@ -274,7 +284,7 @@ defmodule Cadence.Dashboards.DashboardContract do
     |> Enum.reduce(errors, fn
       {%Frame{} = frame, index}, errors ->
         errors
-        |> require_in(path ++ [index, :source], frame.source, @frame_sources)
+        |> require_in(path ++ [index, :source], frame.source, Frame.sources())
         |> require_in(path ++ [index, :shape], frame.shape, @frame_shapes)
         |> require_optional_in(path ++ [index, :time_axis], frame.time_axis, @frame_time_axes)
         |> validate_fields(path ++ [index, :fields], frame.fields)
@@ -290,6 +300,76 @@ defmodule Cadence.Dashboards.DashboardContract do
 
   defp validate_frames(errors, path, value) do
     error(errors, path, :invalid_list, "expected list, got #{inspect(value)}")
+  end
+
+  defp validate_annotations(errors, path, annotations) when is_list(annotations) do
+    annotations
+    |> Enum.with_index()
+    |> Enum.reduce(errors, fn
+      {%Annotation{} = annotation, index}, errors ->
+        annotation_path = path ++ [index]
+
+        errors
+        |> require_binary(annotation_path ++ [:annotation_id], annotation.annotation_id)
+        |> require_binary(annotation_path ++ [:provider_id], annotation.provider_id)
+        |> require_binary(annotation_path ++ [:layer_id], annotation.layer_id)
+        |> require_binary(annotation_path ++ [:title], annotation.title)
+        |> require_binary_list(annotation_path ++ [:tags], annotation.tags)
+        |> require_in(
+          annotation_path ++ [:severity],
+          annotation.severity,
+          Annotation.severities()
+        )
+        |> validate_annotation_span(annotation_path ++ [:span], annotation.span)
+        |> require_map(annotation_path ++ [:style], annotation.style)
+        |> require_map(annotation_path ++ [:scope], annotation.scope)
+        |> require_map(annotation_path ++ [:provenance], annotation.provenance)
+        |> require_map(annotation_path ++ [:metadata], annotation.metadata)
+        |> validate_optional_annotation_link(annotation_path ++ [:link], annotation.link)
+
+      {value, index}, errors ->
+        error(
+          errors,
+          path ++ [index],
+          :invalid_annotation,
+          "expected %Annotation{}, got #{inspect(value)}"
+        )
+    end)
+  end
+
+  defp validate_annotations(errors, path, value) do
+    error(errors, path, :invalid_list, "expected list, got #{inspect(value)}")
+  end
+
+  defp validate_annotation_span(errors, path, %AnnotationSpan{} = span) do
+    if AnnotationSpan.valid?(span) do
+      errors
+    else
+      error(errors, path, :invalid_annotation_span, "annotation span is not valid")
+    end
+  end
+
+  defp validate_annotation_span(errors, path, value) do
+    error(
+      errors,
+      path,
+      :invalid_annotation_span,
+      "expected %AnnotationSpan{}, got #{inspect(value)}"
+    )
+  end
+
+  defp validate_optional_annotation_link(errors, _path, nil), do: errors
+
+  defp validate_optional_annotation_link(errors, path, %DataLink{} = link),
+    do: validate_data_links(errors, path, [link])
+
+  defp validate_optional_annotation_link(errors, path, value) do
+    error(
+      errors,
+      path,
+      :invalid_data_link,
+      "expected nil or %DataLink{}, got #{inspect(value)}"
+    )
   end
 
   defp validate_fields(errors, path, fields) when is_list(fields) do
@@ -349,7 +429,11 @@ defmodule Cadence.Dashboards.DashboardContract do
         errors
         |> require_in(path ++ [index, :kind], ref.kind, @evidence_kinds)
         |> require_binary(path ++ [index, :id], ref.id)
-        |> require_in(path ++ [index, :source], ref.source, @logical_sources)
+        |> require_in(
+          path ++ [index, :source],
+          ref.source,
+          PlannedSourceRequest.logical_sources()
+        )
         |> require_in(path ++ [index, :confidence], ref.confidence, @evidence_confidences)
 
       {value, index}, errors ->
@@ -485,7 +569,7 @@ defmodule Cadence.Dashboards.DashboardContract do
         |> require_in(
           path ++ [index, :logical_source],
           watermark.logical_source,
-          @logical_sources
+          PlannedSourceRequest.logical_sources()
         )
         |> require_in(path ++ [index, :confidence], watermark.confidence, @watermark_confidences)
         |> require_optional_in(
@@ -577,7 +661,11 @@ defmodule Cadence.Dashboards.DashboardContract do
     |> require_binary(path ++ [:request_id], request.request_id)
     |> require_binary(path ++ [:organization_id], request.organization_id)
     |> require_binary(path ++ [:mission_id], request.mission_id)
-    |> require_in(path ++ [:logical_source], request.logical_source, @logical_sources)
+    |> require_in(
+      path ++ [:logical_source],
+      request.logical_source,
+      PlannedSourceRequest.logical_sources()
+    )
     |> require_binary_list(path ++ [:observables], request.observables)
     |> require_struct(path ++ [:time_context], request.time_context, TimeContext)
     |> require_struct(path ++ [:scope_context], request.scope_context, ScopeContext)
@@ -602,7 +690,7 @@ defmodule Cadence.Dashboards.DashboardContract do
         |> require_in(
           dependency_path ++ [:logical_source],
           Map.get(dependency, :logical_source),
-          @logical_sources
+          PlannedSourceRequest.logical_sources()
         )
         |> require_atom(dependency_path ++ [:reason], Map.get(dependency, :reason))
         |> require_atom_list(dependency_path ++ [:products], Map.get(dependency, :products, []))
@@ -631,6 +719,10 @@ defmodule Cadence.Dashboards.DashboardContract do
         |> require_binary(path ++ [index, :placement_id], Map.get(consumer, :placement_id))
         |> require_atom(path ++ [index, :role], Map.get(consumer, :role))
         |> require_binary(path ++ [index, :widget_type_id], Map.get(consumer, :widget_type_id))
+        |> require_binary_list(
+          path ++ [index, :annotation_layer_ids],
+          Map.get(consumer, :annotation_layer_ids, [])
+        )
       else
         error(
           errors,

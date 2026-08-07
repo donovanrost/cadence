@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowRequestDefaults do
   @moduledoc false
 
   @type t :: %__MODULE__{

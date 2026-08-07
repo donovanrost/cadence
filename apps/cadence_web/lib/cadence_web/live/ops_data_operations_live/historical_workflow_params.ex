@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowParams do
   @moduledoc false
 
   @type kind :: :stage | :group_stage | :request | :correction_request

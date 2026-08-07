@@ -1,4 +1,4 @@
-defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryHandoff do
+defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowJobRecoveryHandoff do
   @moduledoc false
 
   @type action ::

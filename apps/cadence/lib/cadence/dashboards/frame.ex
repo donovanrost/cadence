@@ -6,9 +6,10 @@ defmodule Cadence.Dashboards.Frame do
   """
 
   alias Cadence.Dashboards.Field
+  alias Cadence.DataSources.AdapterRegistry
   alias Cadence.Platform.ContractNormalization
 
-  @type source :: :telemetry | :limits | :events | :operational_observables
+  @type source :: atom()
   @type shape :: :scalar | :wide | :long | :events | :intervals | :matrix
 
   @type t :: %__MODULE__{
@@ -33,12 +34,11 @@ defmodule Cadence.Dashboards.Frame do
     meta: %{}
   ]
 
-  @sources [:telemetry, :limits, :events, :operational_observables]
   @shapes [:scalar, :wide, :long, :events, :intervals, :matrix]
   @time_axes [:generation_time, :receipt_time, :occurred_at]
 
   @spec sources() :: [source()]
-  def sources, do: @sources
+  def sources, do: AdapterRegistry.logical_sources()
 
   @spec shapes() :: [shape()]
   def shapes, do: @shapes
@@ -53,7 +53,7 @@ defmodule Cadence.Dashboards.Frame do
   def normalize(%__MODULE__{} = frame) do
     %__MODULE__{
       frame
-      | source: ContractNormalization.known_atom(frame.source, @sources),
+      | source: ContractNormalization.known_atom(frame.source, sources()),
         shape: ContractNormalization.known_atom(frame.shape, @shapes),
         time_axis: ContractNormalization.known_atom(frame.time_axis, @time_axes),
         scope: ContractNormalization.map_or_default(frame.scope),
@@ -69,7 +69,7 @@ defmodule Cadence.Dashboards.Frame do
       source:
         frame
         |> ContractNormalization.attr(:source)
-        |> ContractNormalization.known_atom(@sources),
+        |> ContractNormalization.known_atom(sources()),
       shape:
         frame
         |> ContractNormalization.attr(:shape)

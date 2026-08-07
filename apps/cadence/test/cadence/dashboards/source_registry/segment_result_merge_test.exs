@@ -1,7 +1,15 @@
 defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Dashboards.{Field, Frame, PlannedSourceRequest, ResolveWarning, SourceResult}
+  alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
+    Field,
+    Frame,
+    PlannedSourceRequest,
+    ResolveWarning,
+    SourceResult
+  }
 
   alias Cadence.DataSources.SourceWatermark
 
@@ -21,6 +29,7 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
              tags: ["first"]
            )
          ],
+         annotations: [annotation("annotation-1", ~U[2026-07-19 10:00:00Z])],
          warnings: [warning(:watermark_unknown, :warning)],
          watermarks: [%SourceWatermark{request_id: "first", logical_source: :telemetry}]
        }},
@@ -35,6 +44,7 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
              truncated?: true
            )
          ],
+         annotations: [annotation("annotation-2", ~U[2026-07-19 10:01:00Z])],
          warnings: [warning(:source_degraded, :error)],
          watermarks: [%SourceWatermark{request_id: "second", logical_source: :telemetry}]
        }}
@@ -46,7 +56,9 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
     assert result.request_id == request.request_id
     assert Enum.map(result.warnings, & &1.code) == [:watermark_unknown, :source_degraded]
     assert Enum.map(result.watermarks, & &1.request_id) == ["first", "second"]
+    assert Enum.map(result.annotations, & &1.annotation_id) == ["annotation-1", "annotation-2"]
     assert result.meta.returned_frame_count == 1
+    assert result.meta.returned_annotation_count == 2
     assert result.meta.degraded?
     assert result.meta.source_binding_segment_count == 2
 
@@ -131,6 +143,16 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
       severity: severity,
       scope: :dashboard,
       message: Atom.to_string(code)
+    }
+  end
+
+  defp annotation(annotation_id, starts_at) do
+    %Annotation{
+      annotation_id: annotation_id,
+      provider_id: "test-provider",
+      layer_id: "test-layer",
+      title: annotation_id,
+      span: %AnnotationSpan{kind: :point, starts_at: starts_at}
     }
   end
 

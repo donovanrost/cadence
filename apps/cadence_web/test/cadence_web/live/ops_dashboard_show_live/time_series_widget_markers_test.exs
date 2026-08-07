@@ -1,7 +1,16 @@
 defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkersTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Dashboards.{DataLink, Field, Frame, PlacementFrames, RenderWidget}
+  alias Cadence.Dashboards.{
+    Annotation,
+    AnnotationSpan,
+    DataLink,
+    Field,
+    Frame,
+    PlacementFrames,
+    RenderWidget
+  }
+
   alias CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkers
 
   test "markers are gated to time-series widgets" do
@@ -15,15 +24,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkersTest do
     assert [%{mission_event_id: "mission-event-1"}] =
              TimeSeriesWidgetMarkers.event_markers(placement_frames, time_series_widget)
 
+    assert [%{annotation_id: "provider:annotation-1"}] =
+             TimeSeriesWidgetMarkers.annotations(placement_frames, time_series_widget)
+
     assert TimeSeriesWidgetMarkers.limit_markers(placement_frames, value_tile_widget) == []
     assert TimeSeriesWidgetMarkers.event_markers(placement_frames, value_tile_widget) == []
+    assert TimeSeriesWidgetMarkers.annotations(placement_frames, value_tile_widget) == []
     assert TimeSeriesWidgetMarkers.append_markers(placement_frames, value_tile_widget) == %{}
   end
 
   test "append_markers returns typed marker buckets" do
     assert %{
              limit_markers: [%{limit_event_id: "limit-event-red"}],
-             event_markers: [%{mission_event_id: "mission-event-1"}]
+             event_markers: [%{mission_event_id: "mission-event-1"}],
+             annotations: [%{annotation_id: "provider:annotation-1"}]
            } =
              TimeSeriesWidgetMarkers.append_markers(
                placement_frames(),
@@ -44,6 +58,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.TimeSeriesWidgetMarkersTest do
 
   defp placement_frames do
     %PlacementFrames{
+      annotations: [
+        %Annotation{
+          annotation_id: "provider:annotation-1",
+          provider_id: "provider",
+          layer_id: "operations",
+          title: "Adapter annotation",
+          span: %AnnotationSpan{kind: :point, starts_at: ~U[2026-06-17 12:02:00Z]}
+        }
+      ],
       overlays: %{
         limits: [
           %Frame{

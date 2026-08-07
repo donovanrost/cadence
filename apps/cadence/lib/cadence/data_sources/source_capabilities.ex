@@ -7,9 +7,8 @@ defmodule Cadence.DataSources.SourceCapabilities do
   top of this adapter-level contract for request-aware planning.
   """
 
+  alias Cadence.DataSources.AdapterRegistry
   alias Cadence.Platform.ContractNormalization
-
-  @logical_sources [:telemetry, :limits, :events, :operational_observables]
   @frame_shapes [:scalar, :wide, :long, :events, :intervals, :matrix]
   @time_axes [:generation_time, :receipt_time, :occurred_at]
 
@@ -17,6 +16,7 @@ defmodule Cadence.DataSources.SourceCapabilities do
           logical_source: atom(),
           supported_sampling: [atom()],
           supported_products: [atom()],
+          annotation_products: [atom()],
           supported_time_axes: [atom()],
           supported_value_types: [atom()],
           supported_shapes: [atom()],
@@ -29,6 +29,7 @@ defmodule Cadence.DataSources.SourceCapabilities do
     :logical_source,
     supported_sampling: [],
     supported_products: [],
+    annotation_products: [],
     supported_time_axes: [],
     supported_value_types: [],
     supported_shapes: [],
@@ -52,10 +53,11 @@ defmodule Cadence.DataSources.SourceCapabilities do
       | logical_source:
           ContractNormalization.known_atom(
             capabilities.logical_source,
-            @logical_sources
+            AdapterRegistry.logical_sources()
           ),
         supported_sampling: ContractNormalization.atom_list(capabilities.supported_sampling),
         supported_products: ContractNormalization.atom_list(capabilities.supported_products),
+        annotation_products: ContractNormalization.atom_list(capabilities.annotation_products),
         supported_time_axes:
           normalize_known_atom_list(capabilities.supported_time_axes, @time_axes),
         supported_value_types:
@@ -73,7 +75,7 @@ defmodule Cadence.DataSources.SourceCapabilities do
       logical_source:
         capabilities
         |> ContractNormalization.attr(:logical_source)
-        |> ContractNormalization.known_atom(@logical_sources),
+        |> ContractNormalization.known_atom(AdapterRegistry.logical_sources()),
       supported_sampling:
         capabilities
         |> ContractNormalization.attr(:supported_sampling, [])
@@ -81,6 +83,10 @@ defmodule Cadence.DataSources.SourceCapabilities do
       supported_products:
         capabilities
         |> ContractNormalization.attr(:supported_products, [])
+        |> ContractNormalization.atom_list(),
+      annotation_products:
+        capabilities
+        |> ContractNormalization.attr(:annotation_products, [])
         |> ContractNormalization.atom_list(),
       supported_time_axes:
         capabilities
@@ -184,7 +190,12 @@ defmodule Cadence.DataSources.SourceCapabilities do
           |> ContractNormalization.atom_list()
           |> Enum.filter(&(&1 in capabilities.supported_products))
 
-        %{capabilities | supported_products: supported_products}
+        %{
+          capabilities
+          | supported_products: supported_products,
+            annotation_products:
+              Enum.filter(capabilities.annotation_products, &(&1 in supported_products))
+        }
 
       _other ->
         capabilities
