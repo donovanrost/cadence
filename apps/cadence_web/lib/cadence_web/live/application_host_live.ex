@@ -221,6 +221,7 @@ defmodule CadenceWeb.ApplicationHostLive do
           action_feedback={@application_action_feedback}
           rows={@streams.application_surface_rows}
           activity_items={@streams.application_surface_activity}
+          packet_groups={@streams.application_surface_packet_groups}
         />
       </div>
     </Layouts.app>
@@ -254,15 +255,22 @@ defmodule CadenceWeb.ApplicationHostLive do
     |> stream_configure(:application_surface_activity,
       dom_id: &"application-surface-activity-#{&1.id}"
     )
+    |> stream_configure(:application_surface_packet_groups,
+      dom_id: &"packet-binding-group-#{&1.id}"
+    )
     |> DocumentState.load()
   end
 
   defp mount_renderer(_socket, %SurfaceDefinition{}),
     do: {:error, :unsupported_application_renderer}
 
-  defp failed_surface_form(nil, _params, _failure), do: nil
+  defp failed_surface_form(%{form: nil, packet_bindings: nil}, _params, _failure), do: nil
 
-  defp failed_surface_form(form_definition, params, %ActionFailure{} = failure) do
+  defp failed_surface_form(%{form: nil, packet_bindings: _bindings}, params, _failure) do
+    to_form(params, as: :application_action)
+  end
+
+  defp failed_surface_form(%{form: form_definition}, params, %ActionFailure{} = failure) do
     errors =
       case Enum.find(form_definition.fields, fn field ->
              Atom.to_string(field.field) == failure.field
@@ -386,7 +394,7 @@ defmodule CadenceWeb.ApplicationHostLive do
     |> assign_action_feedback(:error, failure.code, failure.message)
     |> assign(
       :application_surface_form,
-      failed_surface_form(socket.assigns.application_surface_document.form, params, failure)
+      failed_surface_form(socket.assigns.application_surface_document, params, failure)
     )
   end
 
@@ -399,11 +407,17 @@ defmodule CadenceWeb.ApplicationHostLive do
   end
 
   defp action_success_message(socket, action_id) do
-    case socket.assigns.application_surface_document.form do
-      %{action_id: ^action_id, success_message: message} when is_binary(message) ->
+    document = socket.assigns.application_surface_document
+
+    case {document.form, document.packet_bindings} do
+      {%{action_id: ^action_id, success_message: message}, _packet_bindings}
+      when is_binary(message) ->
         message
 
-      _form ->
+      {_form, %{action_id: ^action_id}} ->
+        "Packet bindings saved. Apply mission changes to make them active."
+
+      _blocks ->
         "Application action completed."
     end
   end
@@ -429,6 +443,13 @@ defmodule CadenceWeb.ApplicationHostLive do
     %ActionFailure{
       code: "configuration_version_conflict",
       message: "The application configuration changed. Reload the surface and try again."
+    }
+  end
+
+  defp action_failure({:packet_binding_configuration_version_conflict, _expected, _current}) do
+    %ActionFailure{
+      code: "packet_binding_version_conflict",
+      message: "Packet bindings changed. Reload the surface and try again."
     }
   end
 

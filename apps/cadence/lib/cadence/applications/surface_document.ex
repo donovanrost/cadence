@@ -1,7 +1,14 @@
 defmodule Cadence.Applications.SurfaceDocument do
   @moduledoc "Typed declarative data returned to the host renderer for one surface."
 
-  alias Cadence.Applications.SurfaceElements.{Activity, Diagnostics, GeneratedForm, Stat, Table}
+  alias Cadence.Applications.SurfaceElements.{
+    Activity,
+    Diagnostics,
+    GeneratedForm,
+    PacketBindings,
+    Stat,
+    Table
+  }
 
   @type t :: %__MODULE__{
           title: binary(),
@@ -9,12 +16,22 @@ defmodule Cadence.Applications.SurfaceDocument do
           stats: [Stat.t()],
           diagnostics: Diagnostics.t() | nil,
           form: GeneratedForm.t() | nil,
+          packet_bindings: PacketBindings.t() | nil,
           table: Table.t() | nil,
           activity: Activity.t() | nil
         }
 
   @enforce_keys [:title]
-  defstruct [:title, :description, :diagnostics, :form, :table, :activity, stats: []]
+  defstruct [
+    :title,
+    :description,
+    :diagnostics,
+    :form,
+    :packet_bindings,
+    :table,
+    :activity,
+    stats: []
+  ]
 
   @max_stats 6
 
@@ -23,6 +40,7 @@ defmodule Cadence.Applications.SurfaceDocument do
           | :invalid_application_surface_stat
           | :invalid_application_surface_diagnostics
           | :invalid_application_surface_form
+          | :invalid_application_surface_packet_bindings
           | :invalid_application_surface_table
           | :invalid_application_surface_activity
           | :undeclared_application_surface_action
@@ -34,6 +52,7 @@ defmodule Cadence.Applications.SurfaceDocument do
          :ok <- validate_stats(document.stats),
          :ok <- validate_diagnostics(document.diagnostics),
          :ok <- validate_form(document.form),
+         :ok <- validate_packet_bindings(document.packet_bindings),
          :ok <- validate_table(document.table),
          :ok <- validate_activity(document.activity),
          true <- unique_block_ids?(document) do
@@ -49,7 +68,9 @@ defmodule Cadence.Applications.SurfaceDocument do
   @spec validate(t(), [binary()]) :: :ok | {:error, validation_error()}
   def validate(%__MODULE__{} = document, declared_actions) when is_list(declared_actions) do
     with :ok <- validate(document) do
-      validate_form_action(document.form, declared_actions)
+      with :ok <- validate_form_action(document.form, declared_actions) do
+        validate_packet_bindings_action(document.packet_bindings, declared_actions)
+      end
     end
   end
 
@@ -79,6 +100,14 @@ defmodule Cadence.Applications.SurfaceDocument do
   defp validate_form(%GeneratedForm{} = form), do: GeneratedForm.validate(form)
   defp validate_form(_form), do: {:error, :invalid_application_surface_form}
 
+  defp validate_packet_bindings(nil), do: :ok
+
+  defp validate_packet_bindings(%PacketBindings{} = bindings),
+    do: PacketBindings.validate(bindings)
+
+  defp validate_packet_bindings(_bindings),
+    do: {:error, :invalid_application_surface_packet_bindings}
+
   defp validate_table(nil), do: :ok
   defp validate_table(%Table{} = table), do: Table.validate(table)
   defp validate_table(_table), do: {:error, :invalid_application_surface_table}
@@ -95,9 +124,26 @@ defmodule Cadence.Applications.SurfaceDocument do
       else: {:error, :undeclared_application_surface_action}
   end
 
+  defp validate_packet_bindings_action(nil, _declared_actions), do: :ok
+
+  defp validate_packet_bindings_action(
+         %PacketBindings{action_id: action_id},
+         declared_actions
+       ) do
+    if action_id in declared_actions,
+      do: :ok,
+      else: {:error, :undeclared_application_surface_action}
+  end
+
   defp unique_block_ids?(document) do
     block_ids =
-      [document.diagnostics, document.form, document.table, document.activity]
+      [
+        document.diagnostics,
+        document.form,
+        document.packet_bindings,
+        document.table,
+        document.activity
+      ]
       |> Enum.reject(&is_nil/1)
       |> Enum.map(& &1.id)
 

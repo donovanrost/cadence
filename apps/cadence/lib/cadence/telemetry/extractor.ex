@@ -9,17 +9,28 @@ defmodule Cadence.Telemetry.Extractor do
           {:ok, [{FieldDefinition.t(), term()}]} | {:error, term()}
   def extract(packet_data, %PacketDefinition{} = packet_definition) when is_binary(packet_data) do
     packet_definition.fields
-    |> Enum.reduce_while({:ok, []}, fn %FieldDefinition{} = field, {:ok, acc} ->
-      case extract_field(packet_data, field) do
-        {:ok, value} -> {:cont, {:ok, [{field, value} | acc]}}
-        {:error, reason} -> {:halt, {:error, {field.name, reason}}}
-      end
-    end)
+    |> Enum.reduce_while({:ok, []}, &extract_telemetry_field(packet_data, &1, &2))
     |> case do
       {:ok, extracted} -> {:ok, Enum.reverse(extracted)}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp extract_telemetry_field(packet_data, %FieldDefinition{} = field, {:ok, acc}) do
+    if telemetry_field?(field),
+      do: extract_and_continue(packet_data, field, acc),
+      else: {:cont, {:ok, acc}}
+  end
+
+  defp extract_and_continue(packet_data, field, acc) do
+    case extract_field(packet_data, field) do
+      {:ok, value} -> {:cont, {:ok, [{field, value} | acc]}}
+      {:error, reason} -> {:halt, {:error, {field.name, reason}}}
+    end
+  end
+
+  defp telemetry_field?(%FieldDefinition{data_type: data_type}),
+    do: data_type in [:uint, :int, :float, :bool]
 
   defp extract_field(packet_data, %FieldDefinition{} = field) do
     total_bits = bit_size(packet_data)

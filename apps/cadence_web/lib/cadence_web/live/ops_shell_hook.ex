@@ -1,4 +1,5 @@
 defmodule CadenceWeb.OpsShellHook do
+  alias Cadence.Applications.OpsDock
   alias Cadence.Reads.{Alarms, Commands}
   alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   alias CadenceWeb.OpsContextSnapshot
@@ -22,9 +23,23 @@ defmodule CadenceWeb.OpsShellHook do
      |> refresh_context()
      |> pin_context_from_params(params)
      |> refresh_dashboard_navigation()
+     |> refresh_ops_dock()
      |> assign(:active_dashboard_id, nil)
      |> assign(:ops_nav_item, :dashboards)
      |> attach_context_refresh()}
+  end
+
+  @doc false
+  def refresh_ops_dock(socket, opts \\ []) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+
+    surfaces =
+      case Keyword.get(opts, :ops_dock_surfaces) do
+        callback when is_function(callback, 2) -> callback.(scope, mission.mission_id)
+        _missing -> resolve_ops_dock_surfaces(scope, mission.mission_id)
+      end
+
+    assign(socket, :ops_dock_surfaces, surfaces)
   end
 
   @doc false
@@ -167,6 +182,13 @@ defmodule CadenceWeb.OpsShellHook do
     |> case do
       %{user_id: user_id} when is_binary(user_id) -> user_id
       _missing -> nil
+    end
+  end
+
+  defp resolve_ops_dock_surfaces(scope, mission_id) do
+    case OpsDock.list(scope, mission_id) do
+      {:ok, surfaces} -> surfaces
+      {:error, _reason} -> []
     end
   end
 

@@ -4,6 +4,7 @@ defmodule CadenceWeb.Layouts do
   use CadenceWeb, :html
 
   import CadenceWeb.Components.OpsShell
+  import CadenceWeb.Components.OpsApplicationDock
   import CadenceWeb.Components.Sidebar
 
   embed_templates "layouts/*"

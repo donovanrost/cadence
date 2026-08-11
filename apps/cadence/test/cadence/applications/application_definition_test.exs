@@ -144,6 +144,27 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
              })
   end
 
+  test "accepts a host-owned Ops Dock placement without replacing workspace coverage" do
+    application = valid_application()
+    [workspace] = application.surfaces
+
+    dock = %SurfaceDefinition{
+      workspace
+      | surface_id: "activity",
+        purpose: :activity,
+        placement: :ops_dock,
+        navigation: %{label: "Activity", order: 30},
+        data_contract: %{query_id: "cadence.example.activity", version: 1},
+        actions: []
+    }
+
+    application = %ApplicationDefinition{application | surfaces: [workspace, dock]}
+
+    assert :ok = ApplicationDefinition.validate(application)
+    assert [resolved] = Cadence.Applications.Registry.ops_dock_surfaces(application, :mission)
+    assert resolved.surface_id == "activity"
+  end
+
   defp valid_application do
     action = %ActionDefinition{
       action_id: "save_configuration",

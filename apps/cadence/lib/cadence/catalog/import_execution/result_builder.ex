@@ -124,7 +124,8 @@ defmodule Cadence.Catalog.ImportExecution.ResultBuilder do
 
     %{
       "packet_count" => length(snapshot.packets),
-      "built_in_telemetry_packet_count" => length(packet_definitions),
+      "built_in_telemetry_packet_count" =>
+        Enum.count(packet_definitions, &built_in_telemetry_packet?/1),
       "compiler_diagnostic_count" => length(diagnostics),
       "custom_application_candidate_packet_count" => length(custom_application_candidate_packets),
       "custom_application_candidate_packets" => custom_application_candidate_packets
@@ -139,6 +140,10 @@ defmodule Cadence.Catalog.ImportExecution.ResultBuilder do
       "custom_application_candidate_packet_count" => 0,
       "custom_application_candidate_packets" => []
     }
+  end
+
+  defp built_in_telemetry_packet?(packet_definition) do
+    Enum.any?(packet_definition.fields, &(&1.data_type in [:uint, :int, :float, :bool]))
   end
 
   defp custom_application_candidate_packets(%TelemetrySnapshot{} = snapshot, diagnostics) do

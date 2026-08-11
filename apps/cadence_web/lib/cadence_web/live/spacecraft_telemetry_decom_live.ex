@@ -40,8 +40,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     {socket, revisions} = resolve_telemetry_revisions(socket, definition, surface)
     selected_revision_id = (config && config.catalog_revision_id) || first_option_value(revisions)
 
-    {apid_rows, points_by_id} = load_apid_rows(organization_id, mission_id, selected_revision_id)
-    conflicts = TelemetryDecom.list_apid_conflicts(organization_id, mission_id, spacecraft_id)
+    apid_rows = load_apid_rows(organization_id, mission_id, selected_revision_id)
     selection = selection_from_config(config)
 
     {:ok,
@@ -52,12 +51,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:revisions, revisions)
      |> assign(:selected_revision_id, selected_revision_id)
      |> assign(:apid_rows, apid_rows)
-     |> assign(:points_by_id, points_by_id)
-     |> assign(:conflicts, conflicts)
      |> assign(:selection, selection)
-     |> assign(:expanded_apids, MapSet.new())
-     |> assign(:filter, "")
-     |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
      |> assign(:activation_preflight, activation_preflight(socket, definition))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
@@ -68,12 +62,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:saved_at, config && config.updated_at)}
   end
 
-  defp load_apid_rows(_organization_id, _mission_id, nil), do: {[], %{}}
+  defp load_apid_rows(_organization_id, _mission_id, nil), do: []
 
   defp load_apid_rows(organization_id, mission_id, revision_id) do
     case TelemetryDecom.list_revision_apid_rows(organization_id, mission_id, revision_id) do
-      {:ok, %{rows: rows, points_by_id: points_by_id}} -> {rows, points_by_id}
-      {:error, _} -> {[], %{}}
+      {:ok, %{rows: rows}} -> rows
+      {:error, _} -> []
     end
   end
 
@@ -81,68 +75,22 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   defp selection_from_config(%{handled_apids: apids}), do: MapSet.new(apids)
 
   @impl true
-  def handle_event("toggle_apid", %{"apid" => apid_string}, socket) do
-    apid = String.to_integer(apid_string)
-
-    if Map.has_key?(socket.assigns.conflicts, apid) do
-      {:noreply, socket}
-    else
-      selection = toggle_member(socket.assigns.selection, apid)
-      save_and_refresh(socket, selection)
-    end
-  end
-
   def handle_event("change_revision", %{"catalog_revision_id" => revision_id}, socket) do
     %{current_scope: scope, current_mission: mission, current_spacecraft: _sc} = socket.assigns
 
-    {apid_rows, points_by_id} =
-      load_apid_rows(scope.organization_id, mission.mission_id, revision_id)
-
-    {selection, dropped} =
-      prune_selection_against_rows(socket.assigns.selection, apid_rows)
+    apid_rows = load_apid_rows(scope.organization_id, mission.mission_id, revision_id)
 
     socket =
       socket
       |> assign(:selected_revision_id, revision_id)
       |> assign(:apid_rows, apid_rows)
-      |> assign(:points_by_id, points_by_id)
-      |> assign(:dropped_unknowns, dropped)
-      |> assign(:selection, selection)
+      |> assign(:selection, MapSet.new())
 
-    if dropped == [] do
-      save_and_refresh(socket, selection, revision_id: revision_id)
-    else
-      {:noreply, socket}
-    end
+    save_and_refresh(socket, revision_id: revision_id)
   end
 
-  def handle_event("filter_apids", %{"filter" => filter}, socket) do
-    {:noreply, assign(socket, :filter, filter)}
-  end
-
-  def handle_event("select_all_unclaimed", _params, socket) do
-    selection =
-      socket.assigns.apid_rows
-      |> Enum.reject(&Map.has_key?(socket.assigns.conflicts, &1.apid))
-      |> Enum.map(& &1.apid)
-      |> MapSet.new()
-
-    save_and_refresh(socket, selection)
-  end
-
-  def handle_event("clear_selection", _params, socket) do
-    save_and_refresh(socket, MapSet.new())
-  end
-
-  def handle_event("drop_unknown_apids", _params, socket) do
-    socket = assign(socket, :dropped_unknowns, [])
-    save_and_refresh(socket, socket.assigns.selection)
-  end
-
-  def handle_event("toggle_apid_expand", %{"apid" => apid_string}, socket) do
-    apid = String.to_integer(apid_string)
-    expanded = toggle_member(socket.assigns.expanded_apids, apid)
-    {:noreply, assign(socket, :expanded_apids, expanded)}
+  def handle_event("save_catalog_revision", _params, socket) do
+    save_and_refresh(socket)
   end
 
   def handle_event("enable", _params, socket) do
@@ -179,33 +127,16 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     end
   end
 
-  defp toggle_member(set, value) do
-    if MapSet.member?(set, value),
-      do: MapSet.delete(set, value),
-      else: MapSet.put(set, value)
-  end
-
-  defp prune_selection_against_rows(selection, rows) do
-    available = MapSet.new(rows, & &1.apid)
-    kept = MapSet.intersection(selection, available)
-    dropped = selection |> MapSet.difference(available) |> Enum.sort()
-    {kept, dropped}
-  end
-
-  defp save_and_refresh(socket, selection, opts \\ []) do
+  defp save_and_refresh(socket, opts \\ []) do
     revision_id = Keyword.get(opts, :revision_id, socket.assigns.selected_revision_id)
 
-    apids = selection |> Enum.sort()
-
-    socket = assign(socket, :selection, selection)
-
-    if revision_id == nil or (apids == [] and socket.assigns.config == nil) do
+    if revision_id == nil do
       {:noreply, assign(socket, :preview, nil)}
     else
       configure_result =
         dispatch_action(socket, "save_configuration", %{
           catalog_revision_id: revision_id,
-          handled_apids: apids
+          handled_apids: []
         })
 
       case configure_result do
@@ -215,6 +146,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
           {:noreply,
            socket
            |> assign(:config, config)
+           |> assign(:selection, selection_from_config(config))
            |> assign(:preview, preview)
            |> refresh_activation_preflight()
            |> assign(:saved_at, config.updated_at)}
@@ -232,7 +164,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     <div class="space-y-6">
       <.page_header
         title="Telemetry Decom"
-        subtitle={"Application packet claims and publication state for #{@current_spacecraft.display_name}."}
+        subtitle={"Application packet inputs and publication state for #{@current_spacecraft.display_name}."}
         breadcrumbs={breadcrumb_items(@current_mission, @current_spacecraft)}
       />
 
@@ -254,15 +186,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
             />
             <div class="border-t border-base-300/30"></div>
 
-            <Components.dropped_unknowns_banner dropped={@dropped_unknowns} />
-
-            <Components.apid_section
+            <Components.packet_bindings_handoff
               rows={@apid_rows}
               selection={@selection}
-              conflicts={@conflicts}
-              expanded_apids={@expanded_apids}
-              filter={@filter}
-              points_by_id={@points_by_id}
+              mission={@current_mission}
+              spacecraft={@current_spacecraft}
             />
             <div class="border-t border-base-300/30"></div>
 

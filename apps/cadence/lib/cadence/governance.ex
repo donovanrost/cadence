@@ -725,6 +725,7 @@ defmodule Cadence.Governance do
   defp telemetry_data_type("int"), do: :int
   defp telemetry_data_type("bool"), do: :bool
   defp telemetry_data_type("float"), do: :float
+  defp telemetry_data_type("binary"), do: :binary
 
   defp telemetry_byte_order("big_endian"), do: :big_endian
   defp telemetry_byte_order("little_endian"), do: :little_endian

@@ -11,9 +11,9 @@ defmodule CadenceWeb.Components.Table do
   render with `phx-update="stream"` and derive row DOM ids automatically.
   The `:col` slot always receives the item itself (never the stream tuple).
 
-  Tables with structural needs beyond this (checkbox selection, expander
-  rows, nested tables) should stay hand-rolled — see
-  `CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable`.
+  Tables with structural needs beyond this (checkbox selection, expander rows,
+  nested tables) should use a bounded, purpose-built host component such as the
+  declarative Packet Bindings renderer.
   """
 
   use Phoenix.Component

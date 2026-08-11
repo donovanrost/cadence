@@ -503,10 +503,17 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
       })
 
     assert %Result{
-             packet_definitions: [],
-             selector_inputs: [],
+             packet_definitions: [packet_definition],
+             selector_inputs: [selector_input],
              diagnostics: [diagnostic]
            } = Compiler.compile(snapshot)
+
+    assert packet_definition.packet_name == "SCIENCE_FRAME"
+
+    assert [%{name: "data_block", data_type: :binary, size_bits: 32_672}] =
+             packet_definition.fields
+
+    assert selector_input.selector.match.apid == 42
 
     assert diagnostic.severity == :warning
     assert diagnostic.code == "telemetry_compiler.available_for_custom_application_binding"
@@ -515,5 +522,82 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
 
     assert diagnostic.metadata["consumption_status"] ==
              "available_for_custom_application_binding"
+  end
+
+  test "keeps scalar telemetry and binary resources in the same packet definition" do
+    snapshot =
+      Snapshot.new(%{
+        snapshot_id: "snapshot-camera",
+        mission_id: "mission-alpha",
+        artifact_id: "artifact-camera",
+        import_run_id: "import-run-camera",
+        importer_key: "cadence_yaml_telemetry",
+        snapshot_name: "Mixed Camera Packet",
+        types: [
+          %{
+            type_id: "type-temperature",
+            snapshot_id: "snapshot-camera",
+            name: "TemperatureType",
+            base_type: :float,
+            encoding: %{encoding_type: :ieee754, size_bits: 32}
+          },
+          %{
+            type_id: "type-camera-bytes",
+            snapshot_id: "snapshot-camera",
+            name: "CameraBytesType",
+            base_type: :binary,
+            encoding: %{encoding_type: :binary, size_bits: 8_192}
+          }
+        ],
+        points: [
+          %{
+            point_id: "point-temperature",
+            snapshot_id: "snapshot-camera",
+            name: "temperature_c",
+            type_ref: "type-temperature"
+          },
+          %{
+            point_id: "point-camera-bytes",
+            snapshot_id: "snapshot-camera",
+            name: "camera_bytes",
+            type_ref: "type-camera-bytes"
+          }
+        ],
+        packets: [
+          %{
+            packet_id: "packet-camera",
+            snapshot_id: "snapshot-camera",
+            name: "CAMERA",
+            apid: 81,
+            entries: [
+              %{
+                packet_entry_id: "entry-temperature",
+                entry_kind: :point_ref,
+                point_ref: "point-temperature",
+                bit_offset: 0
+              },
+              %{
+                packet_entry_id: "entry-camera-bytes",
+                entry_kind: :point_ref,
+                point_ref: "point-camera-bytes",
+                bit_offset: 32
+              }
+            ]
+          }
+        ]
+      })
+
+    assert %Result{
+             packet_definitions: [packet_definition],
+             selector_inputs: [%{selector: %{match: %{apid: 81}}}],
+             diagnostics: [diagnostic]
+           } = Compiler.compile(snapshot)
+
+    assert Enum.map(packet_definition.fields, &{&1.name, &1.data_type}) == [
+             {"temperature_c", :float},
+             {"camera_bytes", :binary}
+           ]
+
+    assert diagnostic.code == "telemetry_compiler.available_for_custom_application_binding"
   end
 end

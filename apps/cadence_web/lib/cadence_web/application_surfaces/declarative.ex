@@ -4,7 +4,7 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
   use CadenceWeb, :html
 
   alias Cadence.Applications.SurfaceDocument
-  alias Cadence.Applications.SurfaceElements.{Activity, GeneratedForm, Table}
+  alias Cadence.Applications.SurfaceElements.{Activity, GeneratedForm, PacketBindings, Table}
   alias Cadence.Extensions.Presentation.FieldDefinition
 
   attr :document, SurfaceDocument, required: true
@@ -14,6 +14,7 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
   attr :action_feedback, :map, default: nil
   attr :rows, :any, required: true
   attr :activity_items, :any, required: true
+  attr :packet_groups, :any, required: true
 
   def surface(assigns) do
     ~H"""
@@ -49,6 +50,14 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
         surface_definition={@surface_definition}
         form={@form}
       />
+      <.packet_bindings
+        :if={@document.packet_bindings}
+        definition={@document.packet_bindings}
+        application_definition={@application_definition}
+        surface_definition={@surface_definition}
+        form={@form}
+        groups={@packet_groups}
+      />
       <.surface_table :if={@document.table} definition={@document.table} rows={@rows} />
       <.activity
         :if={@document.activity}
@@ -58,6 +67,241 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
     </div>
     """
   end
+
+  attr :definition, PacketBindings, required: true
+  attr :application_definition, :any, required: true
+  attr :surface_definition, :any, required: true
+  attr :form, :any, required: true
+  attr :groups, :any, required: true
+
+  defp packet_bindings(assigns) do
+    ~H"""
+    <section
+      id={@definition.id}
+      data-activation-state={@definition.activation_state}
+      class="overflow-hidden border-y border-base-300/80 bg-base-100"
+    >
+      <header class="grid gap-4 border-b border-base-300/70 bg-base-200/35 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="hud-label">Packet input routing</p>
+            <.status_badge status={packet_binding_tone(@definition.activation_state)} />
+            <span class="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-base-content/45">
+              {packet_binding_state_label(@definition.activation_state)}
+            </span>
+          </div>
+          <h2 class="mt-2 text-lg font-semibold tracking-tight">{@definition.title}</h2>
+          <p :if={@definition.description} class="mt-1 max-w-4xl text-sm text-base-content/60">
+            {@definition.description}
+          </p>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-base-content/50">
+          <span>Desired {version_label(@definition.configured_version)}</span>
+          <span aria-hidden="true">·</span>
+          <span>Active {version_label(@definition.applied_version)}</span>
+        </div>
+      </header>
+
+      <.form
+        for={@form}
+        id="packet-bindings-form"
+        phx-submit="application_action"
+        phx-value-action-id={@definition.action_id}
+      >
+        <.input field={@form[:input_id]} type="hidden" />
+        <.input field={@form[:input_version]} type="hidden" />
+        <.input field={@form[:catalog_revision_id]} type="hidden" />
+        <.input field={@form[:expected_configuration_version]} type="hidden" />
+
+        <div class="grid gap-4 border-b border-base-300/60 px-4 py-3 md:grid-cols-[minmax(16rem,28rem)_1fr] md:items-end">
+          <.input
+            field={@form[:source_endpoint_ref]}
+            type="select"
+            label="Source endpoint"
+            options={Enum.map(@definition.source_endpoints, &{&1.label, &1.value})}
+            disabled={!@definition.save_enabled}
+            class="font-mono text-sm"
+          />
+          <p class="pb-3 text-xs text-base-content/50">
+            Shared input policy: another application reading this APID does not block selection.
+          </p>
+        </div>
+
+        <div
+          id="packet-binding-groups"
+          phx-update="stream"
+          class="divide-y divide-base-300/65"
+        >
+          <div id="packet-bindings-empty" class="hidden only:block px-4 py-12 text-center">
+            <.icon name="hero-signal-slash" class="mx-auto size-6 text-base-content/35" />
+            <p class="mt-3 font-medium">{@definition.empty_title}</p>
+            <p :if={@definition.empty_description} class="mt-1 text-sm text-base-content/55">
+              {@definition.empty_description}
+            </p>
+          </div>
+
+          <details
+            :for={{dom_id, group} <- @groups}
+            id={dom_id}
+            open={group.expanded}
+            data-packet-id={group.packet_id}
+            data-apid={group.apid}
+            data-state={group.state}
+            class="group relative"
+          >
+            <summary class="grid cursor-pointer list-none grid-cols-[0.25rem_minmax(0,1fr)_auto] items-stretch gap-4 px-4 py-3 marker:hidden hover:bg-base-200/30">
+              <span class={[
+                "rounded-full",
+                packet_group_rail_class(group.state)
+              ]}>
+              </span>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.13em] text-primary/80">
+                    APID {group.apid}
+                  </span>
+                  <strong class="truncate font-mono text-sm">{group.packet_name}</strong>
+                  <span class="text-xs text-base-content/45">{group.model_label}</span>
+                </div>
+                <p class="mt-1 truncate font-mono text-[0.68rem] text-base-content/45">
+                  {group.selector_summary}
+                </p>
+              </div>
+              <div class="flex items-center gap-3 pl-3">
+                <span :if={group.consumers != []} class="hidden text-xs text-base-content/50 sm:inline">
+                  {Enum.join(group.consumers, ", ")}
+                </span>
+                <label
+                  for={"packet-binding-select-#{group.packet_id}"}
+                  class={[
+                    "flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em]",
+                    group.selectable && "cursor-pointer",
+                    !group.selectable && "cursor-not-allowed text-base-content/35"
+                  ]}
+                >
+                  <input
+                    type="checkbox"
+                    id={"packet-binding-select-#{group.packet_id}"}
+                    name="application_action[selected_packet_ids][]"
+                    value={group.packet_id}
+                    aria-label={"Route #{group.packet_name}, APID #{group.apid}, into #{@application_definition.display_name}"}
+                    checked={group.selected}
+                    disabled={!group.selectable or !@definition.save_enabled}
+                    class="checkbox checkbox-primary checkbox-sm"
+                  />
+                  Route
+                </label>
+                <.icon
+                  name="hero-chevron-down"
+                  class="size-4 text-base-content/45 transition-transform group-open:rotate-180"
+                />
+              </div>
+            </summary>
+
+            <div class="border-t border-base-300/50 bg-base-200/20 px-4 pb-4 pl-8 pt-3">
+              <p :if={group.reason} class="mb-3 text-xs text-warning">{group.reason}</p>
+              <div class="overflow-x-auto">
+                <table class="table table-xs">
+                  <thead>
+                    <tr>
+                      <th>Resource</th>
+                      <th>Type</th>
+                      <th>Size</th>
+                      <th>Consumers</th>
+                      <th>This app</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      :for={resource <- group.resources}
+                      id={"packet-binding-resource-#{resource.id}"}
+                      data-resource-kind={resource.resource_kind}
+                      data-compatibility={resource.compatibility}
+                      class={resource.resource_kind == :binary_region && "border-l-4 border-l-base-content/25"}
+                    >
+                      <td>
+                        <p class="font-mono text-xs">{resource.path}</p>
+                        <p :if={resource.reason} class="mt-1 max-w-xl text-[0.68rem] text-base-content/45">
+                          {resource.reason}
+                        </p>
+                      </td>
+                      <td class="font-mono text-xs">{resource_type_label(resource)}</td>
+                      <td class="font-mono text-xs text-base-content/55">
+                        {resource_size_label(resource.size_bits)}
+                      </td>
+                      <td class="text-xs text-base-content/55">
+                        {consumer_label(resource.consumers)}
+                      </td>
+                      <td>
+                        <span class={[
+                          "badge badge-sm",
+                          resource.selected && "badge-primary",
+                          !resource.selected && resource.compatibility == :compatible && "badge-ghost",
+                          resource.compatibility == :incompatible && "badge-outline opacity-50"
+                        ]}>
+                          {resource_selection_label(resource)}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <footer class="flex flex-wrap items-center justify-between gap-4 border-t border-base-300/70 bg-base-200/30 px-4 py-3">
+          <p id="packet-bindings-status" aria-live="polite" class="text-xs text-base-content/50">
+            Saving changes desired routing only. Mission activation remains separately governed.
+          </p>
+          <.application_domain_action
+            id="packet-bindings-submit"
+            application_definition={@application_definition}
+            surface_definition={@surface_definition}
+            action_id={@definition.action_id}
+            label={@definition.submit_label}
+            type="submit"
+            size={:md}
+            disabled={!@definition.save_enabled}
+          />
+        </footer>
+      </.form>
+    </section>
+    """
+  end
+
+  defp packet_binding_tone(:active), do: :ready
+  defp packet_binding_tone(:outdated), do: :attention
+  defp packet_binding_tone(:configured), do: :attention
+  defp packet_binding_tone(:unavailable), do: :blocked
+  defp packet_binding_tone(:disabled), do: :info
+  defp packet_binding_tone(:unconfigured), do: :info
+
+  defp packet_binding_state_label(state),
+    do: state |> Atom.to_string() |> String.replace("_", " ")
+
+  defp version_label(nil), do: "—"
+  defp version_label(version), do: "v#{version}"
+
+  defp packet_group_rail_class(:selected), do: "bg-primary"
+  defp packet_group_rail_class(:invalid), do: "bg-error"
+  defp packet_group_rail_class(:unavailable), do: "bg-base-content/20"
+  defp packet_group_rail_class(:available), do: "bg-base-content/35"
+
+  defp resource_type_label(%{resource_kind: :binary_region}), do: "binary"
+  defp resource_type_label(%{data_type: nil}), do: "packet"
+  defp resource_type_label(%{data_type: data_type}), do: Atom.to_string(data_type)
+
+  defp resource_size_label(nil), do: "—"
+  defp resource_size_label(size_bits) when rem(size_bits, 8) == 0, do: "#{div(size_bits, 8)} B"
+  defp resource_size_label(size_bits), do: "#{size_bits} bit"
+
+  defp consumer_label([]), do: "Unbound"
+  defp consumer_label(consumers), do: Enum.join(consumers, ", ")
+
+  defp resource_selection_label(%{compatibility: :incompatible}), do: "Not accepted"
+  defp resource_selection_label(%{selected: true}), do: "Selected"
+  defp resource_selection_label(_resource), do: "Available"
 
   attr :feedback, :map, required: true
 

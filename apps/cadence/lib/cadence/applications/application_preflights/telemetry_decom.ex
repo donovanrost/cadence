@@ -28,7 +28,7 @@ defmodule Cadence.Applications.ApplicationPreflights.TelemetryDecom do
     {:ok,
      [
        configuration_check(config),
-       resource_check(organization_id, mission_id, spacecraft_id, config),
+       resource_check(config),
        compilation_check(organization_id, mission_id, config)
      ]}
   end
@@ -75,73 +75,49 @@ defmodule Cadence.Applications.ApplicationPreflights.TelemetryDecom do
     )
   end
 
-  defp resource_check(_organization_id, _mission_id, _spacecraft_id, nil) do
+  defp resource_check(nil) do
     check(
-      "packet-apid-claim",
+      "packet-apid-binding",
       :resource,
       :blocked,
-      "Packet claim unavailable",
+      "Packet binding unavailable",
       "No APIDs are declared because the application is not configured."
     )
   end
 
-  defp resource_check(_organization_id, _mission_id, _spacecraft_id, %Config{
-         enabled: false
-       }) do
+  defp resource_check(%Config{enabled: false}) do
     check(
-      "packet-apid-claim",
+      "packet-apid-binding",
       :resource,
       :ready,
-      "Packet claim release",
-      "The disabled configuration contributes no packet claims to the next mission basis.",
+      "Packet binding disabled",
+      "The disabled configuration contributes no packet bindings to the next mission basis.",
       "0 APIDs"
     )
   end
 
-  defp resource_check(_organization_id, _mission_id, _spacecraft_id, %Config{
-         handled_apids: []
-       }) do
+  defp resource_check(%Config{handled_apids: []}) do
     check(
-      "packet-apid-claim",
+      "packet-apid-binding",
       :resource,
       :blocked,
-      "Packet claim empty",
-      "Select at least one unclaimed APID before requesting mission changes.",
+      "Packet binding empty",
+      "Select at least one compatible packet before requesting mission changes.",
       "0 APIDs"
     )
   end
 
-  defp resource_check(organization_id, mission_id, spacecraft_id, %Config{} = config) do
-    conflicts =
-      TelemetryDecomApplication.list_apid_conflicts(
-        organization_id,
-        mission_id,
-        spacecraft_id
-      )
+  defp resource_check(%Config{} = config) do
+    count = length(config.handled_apids)
 
-    conflicting_apids = Enum.filter(config.handled_apids, &Map.has_key?(conflicts, &1))
-
-    if conflicting_apids == [] do
-      count = length(config.handled_apids)
-
-      check(
-        "packet-apid-claim",
-        :resource,
-        :ready,
-        "Packet claim available",
-        "Every selected APID is available to this spacecraft application.",
-        "#{count} #{pluralize(count, "APID", "APIDs")}"
-      )
-    else
-      check(
-        "packet-apid-claim",
-        :resource,
-        :blocked,
-        "Packet claim conflict",
-        "APIDs #{Enum.join(conflicting_apids, ", ")} are already owned by another enabled application.",
-        "#{length(conflicting_apids)} conflicts"
-      )
-    end
+    check(
+      "packet-apid-binding",
+      :resource,
+      :ready,
+      "Shared packet input ready",
+      "Every selected APID resolves packet-model input for this application; other applications may read the same packet.",
+      "#{count} #{pluralize(count, "APID", "APIDs")}"
+    )
   end
 
   defp compilation_check(_organization_id, _mission_id, nil) do

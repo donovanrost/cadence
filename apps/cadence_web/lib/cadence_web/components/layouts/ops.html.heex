@@ -19,7 +19,13 @@
       operational_focus={@ops_context.pinned_focus}
     />
     <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
-      {@inner_content}
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {@inner_content}
+      </div>
+      <.ops_application_dock
+        :if={(assigns[:ops_dock_surfaces] || []) != []}
+        surfaces={assigns[:ops_dock_surfaces] || []}
+      />
     </main>
     <.mission_context_rail ops_context={@ops_context} />
   </div>

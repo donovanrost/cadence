@@ -56,4 +56,34 @@ defmodule Cadence.Telemetry.ExtractorTest do
     assert {:error, {"counter", {:little_endian_requires_byte_alignment, 4, 16}}} =
              Extractor.extract(<<0, 0, 0>>, packet_definition)
   end
+
+  test "decodes compatible telemetry fields while leaving binary resources untouched" do
+    packet_definition =
+      PacketDefinition.new(%{
+        mission_id: "mission-alpha",
+        packet_name: "CAMERA",
+        apid: 81,
+        fields: [
+          %{
+            name: "temperature_c",
+            offset_bits: 0,
+            size_bits: 32,
+            data_type: :float,
+            byte_order: :big_endian
+          },
+          %{
+            name: "camera_bytes",
+            offset_bits: 32,
+            size_bits: 16,
+            data_type: :binary,
+            byte_order: :big_endian
+          }
+        ]
+      })
+
+    assert {:ok, [{field, 12.5}]} =
+             Extractor.extract(<<12.5::big-float-32, 0xCA, 0xFE>>, packet_definition)
+
+    assert field.name == "temperature_c"
+  end
 end

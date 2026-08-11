@@ -120,6 +120,22 @@ defmodule Cadence.Applications.Registry do
     end
   end
 
+  @spec ops_dock_surfaces(ApplicationDefinition.t(), SurfaceDefinition.scope()) ::
+          [SurfaceDefinition.t()]
+  def ops_dock_surfaces(%ApplicationDefinition{} = definition, scope) do
+    if ApplicationDefinition.validate(definition) == :ok do
+      definition.surfaces
+      |> Enum.filter(fn surface ->
+        surface.scope == scope and surface.placement == :ops_dock
+      end)
+      |> Enum.sort_by(fn surface ->
+        {Map.get(surface.navigation, :order, 0), surface.surface_id}
+      end)
+    else
+      []
+    end
+  end
+
   defp definitions do
     Map.new(all(), &{&1.application_key, &1})
   end
@@ -129,7 +145,7 @@ defmodule Cadence.Applications.Registry do
       application_key: "telemetry_decom",
       version: 1,
       display_name: "Telemetry Decom",
-      description: "Claim packet APIDs and decode selected packets into named telemetry points.",
+      description: "Bind packet fields and decode selected inputs into named telemetry points.",
       trust: :first_party,
       availability: :available,
       installable_scopes: [:spacecraft],
@@ -142,8 +158,9 @@ defmodule Cadence.Applications.Registry do
           %ResourceClaimDefinition{
             claim_type: :packet_apid,
             scope: :spacecraft,
-            mode: :exclusive,
-            description: "Packet APIDs handled by this spacecraft application."
+            mode: :shared,
+            description:
+              "Packet APIDs used to select shared packet-model inputs for this spacecraft application."
           }
         ]
       },
@@ -159,6 +176,26 @@ defmodule Cadence.Applications.Registry do
         }
       ],
       preflight_query_id: "cadence.telemetry_decom.activation_preflight",
+      actions: [
+        %ActionDefinition{
+          action_id: "save_packet_bindings",
+          version: 1,
+          intent: :configuration,
+          scope: :spacecraft,
+          input_contract: %{
+            schema_id: "cadence.packet_bindings.selection_input",
+            version: 1
+          },
+          result_contract: %{
+            schema_id: "cadence.packet_bindings.configuration",
+            version: 1
+          },
+          required_permission: "operate_mission",
+          effect: :durable,
+          execution: :immediate,
+          concurrency: %{strategy: :expected_version}
+        }
+      ],
       capability_contributions: [
         %{kind: :semantic_handler, family_key: :definition_bound_telemetry}
       ],
@@ -183,6 +220,21 @@ defmodule Cadence.Applications.Registry do
           actions: ["save_configuration", "request_activation", "disable"],
           refresh: :after_action,
           renderer: {:trusted, "cadence.telemetry_decom.manage"}
+        },
+        %SurfaceDefinition{
+          surface_id: "packet_bindings",
+          version: 1,
+          purpose: :configuration,
+          scope: :spacecraft,
+          placement: :application_workspace,
+          navigation: %{label: "Packet bindings", order: 20},
+          data_contract: %{
+            query_id: "cadence.packet_bindings.manage",
+            version: 1
+          },
+          actions: ["save_packet_bindings"],
+          refresh: :after_action,
+          renderer: {:declarative, "cadence.host.surface.v1"}
         }
       ]
     }

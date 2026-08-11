@@ -19,6 +19,8 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
       assert has_element?(view, ~s([data-ops-nav-group="#{group}"]))
     end
 
+    refute has_element?(view, "#ops-application-dock")
+
     assert has_element?(
              view,
              ~s([data-ops-nav-item="explore"][href="/missions/#{mission.mission_id}/ops/explore"])

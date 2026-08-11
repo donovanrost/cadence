@@ -228,7 +228,11 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                )
 
       assert request.state == :approval_pending
-      assert request.metadata["application"] == "telemetry_decom"
+      assert request.metadata["composition"] == "mission_applications"
+
+      assert [%{"application_key" => "telemetry_decom"}] =
+               request.metadata["contributors"]
+
       assert config.applied_binding_set_id == nil
 
       assert {:error, :no_active_binding_set} =
@@ -610,7 +614,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
       assert Enum.map(blocked.checks, & &1.id) == [
                "configuration",
-               "packet-apid-claim",
+               "packet-apid-binding",
                "runtime-compilation"
              ]
 
@@ -630,7 +634,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert Enum.all?(ready.checks, &(&1.state == :ready))
     end
 
-    test "blocks a conflicting packet claim in both preflight and action dispatch" do
+    test "allows another application to read the same APID" do
       {spacecraft, revision, endpoint} = setup_mission()
       scope = user_scope("preflight-conflict")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
@@ -664,8 +668,8 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert {:ok, definition} = Registry.fetch_available("telemetry_decom")
       assert {:ok, report} = ApplicationPreflight.load(scope, host_context, definition)
 
-      assert %{state: :blocked, value: "1 conflicts"} =
-               Enum.find(report.checks, &(&1.id == "packet-apid-claim"))
+      assert %{state: :ready, value: "1 APID"} =
+               Enum.find(report.checks, &(&1.id == "packet-apid-binding"))
 
       request = %ActionRequest{
         application_key: "telemetry_decom",
@@ -673,8 +677,10 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         action_id: "request_activation"
       }
 
-      assert {:error, {:application_preflight_blocked, "telemetry_decom"}} =
+      assert {:ok, %{activation_request: activation_request}} =
                ActionDispatcher.dispatch(scope, host_context, request)
+
+      assert activation_request.state == :approval_pending
     end
 
     test "evaluates mission dependencies from a spacecraft host without product coupling" do

@@ -13,6 +13,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     ApplicationBindingStore,
     ApplicationInstallations,
     HostContext,
+    PacketBindings,
     TelemetryDecom
   }
 
@@ -128,7 +129,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
            )
   end
 
-  test "toggling an APID autosaves and updates the preview count" do
+  test "Manage saves catalog context and directs packet selection to the shared surface" do
     {conn, org, mission, spacecraft} = setup_session()
     _revision = persist_revision!(org, mission)
 
@@ -143,34 +144,18 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
              "#spacecraft-application-host[data-application-key='telemetry_decom'][data-application-version='1'][data-surface-id='manage']"
            )
 
-    html =
-      view
-      |> element("input[phx-click='toggle_apid'][phx-value-apid='42']")
-      |> render_click()
-
-    assert html =~ "Matched packets"
+    view
+    |> element("#telemetry-decom-save-revision")
+    |> render_click()
 
     assert has_element?(
              view,
-             "#application-activation-preflight[data-preflight-state='ready'][data-activation-ready='true']"
+             "#application-activation-preflight[data-preflight-state='blocked'][data-activation-ready='false']"
            )
 
-    assert has_element?(view, "#application-preflight-check-packet-apid-claim")
-
-    assert has_element?(
-             view,
-             "#telemetry-decom-enable-button:not([disabled])[data-application-lifecycle-action='request_activation'][data-lifecycle-execution='approval_required'][data-confirmation-required='true'][data-confirmation-title='Request mission changes?']"
-           )
-
-    assert has_element?(
-             view,
-             "#telemetry-decom-enable-button[data-confirm*='will not become live']"
-           )
-
-    assert has_element?(
-             view,
-             "#telemetry-decom-disable-button[data-application-lifecycle-action='disable'][data-lifecycle-execution='immediate'][data-confirmation-required='true'][data-confirmation-tone='attention']"
-           )
+    assert has_element?(view, "#application-preflight-check-packet-apid-binding")
+    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
+    refute has_element?(view, "input[phx-click='toggle_apid']")
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -179,7 +164,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
                spacecraft.spacecraft_id
              )
 
-    assert config.handled_apids == [42]
+    assert config.handled_apids == []
     assert config.configuration_version == 1
 
     assert {:ok, installation} =
@@ -195,10 +180,93 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
              "application_binding:#{spacecraft.spacecraft_id}:telemetry_decom"
   end
 
+  test "renders and saves shared packet-model inputs through the declarative host" do
+    {conn, org, mission, spacecraft} = setup_session()
+    revision = persist_revision!(org, mission)
+
+    {:ok, snapshot} =
+      Catalog.fetch_telemetry_snapshot(
+        org.organization_id,
+        mission.mission_id,
+        revision.telemetry_snapshot_id
+      )
+
+    packet = List.first(snapshot.packets)
+
+    manage_path =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+
+    {:ok, manage, _html} = live(conn, manage_path)
+
+    manage
+    |> element("#telemetry-decom-save-revision")
+    |> render_click()
+
+    packet_bindings_path =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
+
+    {:ok, view, _html} = live(conn, packet_bindings_path)
+
+    assert has_element?(
+             view,
+             "#spacecraft-application-host[data-application-key='telemetry_decom'][data-surface-id='packet_bindings'][data-renderer='declarative']"
+           )
+
+    assert has_element?(view, "#application-surface-navigation")
+    assert has_element?(view, "#packet-bindings-surface[data-activation-state='configured']")
+    assert has_element?(view, "#packet-bindings-form")
+
+    assert has_element?(
+             view,
+             "#packet-binding-groups details[data-apid='42'][data-state='available']"
+           )
+
+    refute has_element?(
+             view,
+             "#packet-binding-groups input[name='application_action[selected_packet_ids][]'][checked]"
+           )
+
+    assert has_element?(
+             view,
+             "#packet-binding-groups tr[data-resource-kind='field'][data-compatibility='compatible']",
+             "mode"
+           )
+
+    view
+    |> form("#packet-bindings-form", %{
+      "application_action" => %{"selected_packet_ids" => [packet.packet_id]}
+    })
+    |> render_submit()
+
+    assert has_element?(
+             view,
+             "#application-action-feedback[data-kind='success'][data-code='action_completed']",
+             "Packet bindings saved"
+           )
+
+    scope = installation_read_scope(org.organization_id)
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+
+    assert {:ok, installation} =
+             ApplicationInstallations.fetch(scope, host_context, "telemetry_decom")
+
+    assert {:ok, [configuration]} =
+             PacketBindings.list(
+               scope,
+               host_context,
+               installation.application_installation_id
+             )
+
+    assert configuration.configuration_version == 1
+    assert Enum.map(configuration.bindings, & &1.apid) == [42]
+    assert has_element?(view, "#packet-bindings-surface[data-activation-state='configured']")
+    assert has_element?(view, "#packet-binding-groups details[data-state='selected']")
+  end
+
   test "renders compiler findings through the host diagnostic contract" do
     {conn, org, mission, spacecraft} = setup_session()
 
-    _revision =
+    revision =
       persist_revision!(org, mission,
         yaml: """
         packets:
@@ -213,15 +281,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         """
       )
 
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: revision.catalog_revision_id,
+               handled_apids: [42]
+             )
+
     {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
-
-    view
-    |> element("input[phx-click='toggle_apid'][phx-value-apid='42']")
-    |> render_click()
 
     assert has_element?(
              view,
@@ -237,15 +310,22 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
   test "disable button rolls back the enabled flag" do
     {conn, org, mission, spacecraft} = setup_session()
-    _revision = persist_revision!(org, mission)
+    revision = persist_revision!(org, mission)
+
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: revision.catalog_revision_id,
+               handled_apids: [42]
+             )
 
     {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
-
-    view |> element("input[phx-click='toggle_apid'][phx-value-apid='42']") |> render_click()
 
     html =
       view
@@ -275,17 +355,22 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
   test "requesting mission changes creates a pending governed activation" do
     {conn, org, mission, spacecraft} = setup_session()
-    _revision = persist_revision!(org, mission)
+    revision = persist_revision!(org, mission)
+
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: revision.catalog_revision_id,
+               handled_apids: [42]
+             )
 
     {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
-
-    view
-    |> element("input[phx-click='toggle_apid'][phx-value-apid='42']")
-    |> render_click()
 
     html =
       view
@@ -319,7 +404,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     }
   end
 
-  test "focuses the page on catalog revision and handled APID selection" do
+  test "focuses the page on catalog revision and packet input selection" do
     {conn, org, mission, spacecraft} = setup_session()
     revision = persist_revision!(org, mission)
 
@@ -330,7 +415,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       )
 
     assert html =~ "Catalog revision"
-    assert html =~ "Packet Claims"
+    assert html =~ "Packet inputs"
+    assert html =~ "Open Packet Bindings"
 
     assert has_element?(
              view,
@@ -357,7 +443,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
              ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
   end
 
-  test "select-all-unclaimed picks every non-conflicting APID and autosaves" do
+  test "Manage exposes no legacy packet-selection mutation controls" do
     {conn, org, mission, spacecraft} = setup_session()
     _revision = persist_revision!(org, mission)
 
@@ -367,22 +453,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    _html =
-      view
-      |> element("#telemetry-decom-select-all")
-      |> render_click()
-
-    assert {:ok, config} =
-             TelemetryDecom.fetch_config(
-               org.organization_id,
-               mission.mission_id,
-               spacecraft.spacecraft_id
-             )
-
-    assert config.handled_apids == [42]
+    refute has_element?(view, "#telemetry-decom-select-all")
+    refute has_element?(view, "#telemetry-decom-clear")
+    refute has_element?(view, "#telemetry-decom-apid-table")
+    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
   end
 
-  test "clear empties the selection and resets handled APIDs in the saved config" do
+  test "saving catalog context without packet bindings remains blocked for activation" do
     {conn, org, mission, spacecraft} = setup_session()
     _revision = persist_revision!(org, mission)
 
@@ -393,19 +470,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       )
 
     view
-    |> element("#telemetry-decom-select-all")
+    |> element("#telemetry-decom-save-revision")
     |> render_click()
-
-    html =
-      view
-      |> element("#telemetry-decom-clear")
-      |> render_click()
-
-    assert html =~ "Packet Claims · 0 / 1"
 
     assert has_element?(
              view,
-             "#application-preflight-check-packet-apid-claim[data-check-state='blocked']"
+             "#application-preflight-check-packet-apid-binding[data-check-state='blocked']"
            )
 
     assert has_element?(view, "#telemetry-decom-enable-button[disabled]")
@@ -420,7 +490,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     assert config.handled_apids == []
   end
 
-  test "shows a blocking resource conflict and prevents activation" do
+  test "shows a shared APID reader without preventing activation" do
     {conn, org, mission, spacecraft} = setup_session()
     revision = persist_revision!(org, mission)
 
@@ -454,50 +524,62 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     assert has_element?(
              view,
-             "#application-preflight-check-packet-apid-claim[data-check-state='blocked']"
+             "#application-preflight-check-packet-apid-binding[data-check-state='ready']"
            )
 
-    assert has_element?(view, "#telemetry-decom-enable-button[disabled]")
+    assert has_element?(view, "#telemetry-decom-enable-button:not([disabled])")
+    html = render(view)
+    refute html =~ "conflict"
+    assert html =~ "other applications may read the same packets"
   end
 
-  test "filter narrows visible rows to matches on APID or name" do
+  test "Packet Bindings groups packet identity and compatible resources" do
     {conn, org, mission, spacecraft} = setup_session()
-    _revision = persist_revision!(org, mission)
+    revision = persist_revision!(org, mission)
+
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: revision.catalog_revision_id,
+               handled_apids: [42]
+             )
 
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
       )
 
-    html =
-      view
-      |> form("#telemetry-decom-filter-form", %{"filter" => "health"})
-      |> render_change()
-
-    assert html =~ "HEALTH"
+    assert has_element?(view, "#packet-binding-groups details[data-apid='42']", "HEALTH")
+    assert has_element?(view, "#packet-binding-groups tr[data-resource-kind='field']", "mode")
   end
 
-  test "clicking a row expands it and shows the packet entries" do
+  test "selected Packet Bindings expand their resource ledger by default" do
     {conn, org, mission, spacecraft} = setup_session()
-    _revision = persist_revision!(org, mission)
+    revision = persist_revision!(org, mission)
+
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: revision.catalog_revision_id,
+               handled_apids: [42]
+             )
 
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
       )
 
-    html =
-      view
-      |> element("#apid-row-42-toggle")
-      |> render_click()
-
-    assert html =~ ~s(id="apid-row-42-detail")
-    assert html =~ "mode"
+    assert has_element?(view, "#packet-binding-groups details[data-state='selected'][open]")
+    assert has_element?(view, "#packet-binding-groups", "mode")
   end
 
-  test "switching to a revision without some selected APIDs shows the drop-unknowns banner" do
+  test "switching catalog revision clears the legacy APID selection without a second mutation UI" do
     {conn, org, mission, spacecraft} = setup_session()
 
     rev_a = persist_revision!(org, mission)
@@ -518,39 +600,39 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         """
       )
 
+    assert {:ok, _config} =
+             TelemetryDecom.configure(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id,
+               catalog_revision_id: rev_a.catalog_revision_id,
+               handled_apids: [42]
+             )
+
     {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    # The page defaults to the highest-numbered revision (rev_b). Switch to rev_a first.
     view
     |> form("#telemetry-decom-revision-form", %{
-      "catalog_revision_id" => rev_a.catalog_revision_id
+      "catalog_revision_id" => rev_b.catalog_revision_id
     })
     |> render_change()
 
-    # select APID 42 in rev A
-    view |> element("input[phx-click='toggle_apid'][phx-value-apid='42']") |> render_click()
+    refute has_element?(view, "#telemetry-decom-dropped-unknowns")
+    refute has_element?(view, "#telemetry-decom-drop-unknowns")
+    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
 
-    # switch to rev B (which only has APID 7)
-    html =
-      view
-      |> form("#telemetry-decom-revision-form", %{
-        "catalog_revision_id" => rev_b.catalog_revision_id
-      })
-      |> render_change()
+    assert {:ok, config} =
+             TelemetryDecom.fetch_config(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id
+             )
 
-    assert html =~ "previously selected"
-    assert html =~ "42"
-
-    # click "Drop them"
-    html =
-      view
-      |> element("#telemetry-decom-drop-unknowns")
-      |> render_click()
-
-    refute html =~ "previously selected"
+    assert config.catalog_revision_id == rev_b.catalog_revision_id
+    assert config.handled_apids == []
   end
 end

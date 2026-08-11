@@ -7,7 +7,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   alias Cadence.Applications.PreflightReport
   alias Cadence.Applications.SurfaceElements.{Diagnostic, Diagnostics}
   alias Cadence.Applications.TelemetryDecom
-  alias CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable
 
   attr :config, :any, default: nil
   attr :active, :any, default: nil
@@ -33,7 +32,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   def revision_section(assigns) do
     ~H"""
-    <form phx-change="change_revision" id="telemetry-decom-revision-form" class="max-w-sm">
+    <form
+      phx-change="change_revision"
+      id="telemetry-decom-revision-form"
+      class="flex max-w-xl items-end gap-3"
+    >
       <.input
         type="select"
         id="telemetry-decom-revision-select"
@@ -42,62 +45,46 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         value={@selected_revision_id}
         options={@revisions}
       />
+      <.button
+        type="button"
+        variant={:ghost}
+        size={:sm}
+        phx-click="save_catalog_revision"
+        id="telemetry-decom-save-revision"
+        class="mb-3 shrink-0"
+      >
+        Use revision
+      </.button>
     </form>
     """
   end
 
   attr :rows, :list, required: true
   attr :selection, :any, required: true
-  attr :conflicts, :map, required: true
-  attr :expanded_apids, :any, required: true
-  attr :filter, :string, required: true
-  attr :points_by_id, :map, required: true
+  attr :mission, :map, required: true
+  attr :spacecraft, :map, required: true
 
-  def apid_section(assigns) do
+  def packet_bindings_handoff(assigns) do
     ~H"""
-    <div>
-      <div class="flex items-center justify-between gap-2">
-        <p class="hud-label">
-          Packet Claims · {MapSet.size(@selection)} / {length(@rows)}
+    <section id="telemetry-decom-packet-bindings-handoff" class="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <div>
+        <p class="hud-label">Packet inputs</p>
+        <p class="mt-2 text-sm text-base-content/70">
+          {MapSet.size(@selection)} of {length(@rows)} packet selectors currently feed Telemetry Decom.
+          Packet and field selection now lives in the shared host surface.
         </p>
-        <div class="flex items-center gap-2">
-          <%!-- -mb-3 cancels the <.input> fieldset margin so the toolbar stays centered. --%>
-          <form phx-change="filter_apids" id="telemetry-decom-filter-form" class="w-80 -mb-3">
-            <.input
-              id="telemetry-decom-filter-input"
-              name="filter"
-              value={@filter}
-              placeholder="Filter…"
-              class="input-sm"
-            />
-          </form>
-          <.button
-            variant={:ghost}
-            size={:xs}
-            phx-click="select_all_unclaimed"
-            id="telemetry-decom-select-all"
-          >
-            Select all unclaimed
-          </.button>
-          <.button
-            variant={:ghost}
-            size={:xs}
-            phx-click="clear_selection"
-            id="telemetry-decom-clear"
-          >
-            Clear
-          </.button>
-        </div>
+        <p class="mt-1 text-xs text-base-content/50">
+          APIDs route traffic; other applications may read the same packets and fields.
+        </p>
       </div>
-      <APIDTable.table
-        rows={@rows}
-        selection={@selection}
-        conflicts={@conflicts}
-        expanded_apids={@expanded_apids}
-        filter={@filter}
-        points_by_id={@points_by_id}
-      />
-    </div>
+      <.button
+        navigate={~p"/missions/#{@mission.mission_id}/spacecraft/#{@spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"}
+        variant={:ghost}
+        id="telemetry-decom-open-packet-bindings"
+      >
+        Open Packet Bindings
+      </.button>
+    </section>
     """
   end
 
@@ -108,7 +95,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     <div>
       <p class="hud-label mb-2">Preview</p>
       <p class="text-sm text-base-content/70">
-        Select one or more packet APIDs to preview the application input claim.
+        Select one or more packet APIDs to preview the application input binding.
       </p>
     </div>
     """
@@ -193,34 +180,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     """
   end
 
-  attr :dropped, :list, default: []
-
-  def dropped_unknowns_banner(%{dropped: []} = assigns), do: ~H""
-
-  def dropped_unknowns_banner(assigns) do
-    ~H"""
-    <.callout
-      variant={:warning}
-      id="telemetry-decom-dropped-unknowns"
-      class="flex items-center justify-between gap-4"
-    >
-      <span>
-        {length(@dropped)} previously selected {if length(@dropped) == 1, do: "APID is", else: "APIDs are"}
-        not in this revision:
-        <span class="font-mono">{Enum.join(@dropped, ", ")}</span>.
-      </span>
-      <.button
-        variant={:ghost}
-        size={:xs}
-        phx-click="drop_unknown_apids"
-        id="telemetry-decom-drop-unknowns"
-      >
-        Drop them
-      </.button>
-    </.callout>
-    """
-  end
-
   attr :current_mission, :map, required: true
 
   def no_revisions_notice(assigns) do
@@ -268,7 +227,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
       "This spacecraft is excluded from Telemetry Decom. Request mission changes to publish the disabled state."
 
   defp status_description(:not_configured),
-    do: "Choose a catalog revision and packet claims, then apply mission changes."
+    do: "Choose a catalog revision and packet inputs, then apply mission changes."
 
   defp compiler_diagnostics([]), do: nil
 

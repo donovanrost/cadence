@@ -215,12 +215,18 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
           engineering_unit: point.unit_id
         })
 
-      {:field, field, []}
+      {:field, field, field_diagnostics(packet, entry, point, point_type)}
     else
       {:error, diagnostics} when is_list(diagnostics) ->
         {:unsupported, diagnostics}
     end
   end
+
+  defp field_diagnostics(packet, entry, point, %Type{base_type: :binary} = point_type) do
+    [custom_application_candidate_diagnostic(packet, entry, point, point_type)]
+  end
+
+  defp field_diagnostics(_packet, _entry, _point, _point_type), do: []
 
   defp validate_entry_layout(%Packet{} = packet, %PacketEntry{} = entry) do
     cond do
@@ -320,7 +326,7 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
         compile_boolean_data_type(packet, source, point, point_type)
 
       :binary ->
-        {:error, [custom_application_candidate_diagnostic(packet, source, point, point_type)]}
+        {:ok, :binary}
 
       unsupported_base_type ->
         {:error,

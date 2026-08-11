@@ -1,6 +1,7 @@
 defmodule Cadence.Capabilities.Definitions.DefinitionBoundTelemetry do
   @moduledoc false
 
+  alias Cadence.Applications.PacketInputDefinition
   alias Cadence.Capabilities.{Descriptor, ValidationContext}
   alias Cadence.Telemetry.PacketDefinition
 
@@ -14,6 +15,20 @@ defmodule Cadence.Capabilities.Definitions.DefinitionBoundTelemetry do
       input_stages: [:space_packet],
       partition_affinity: :source_endpoint,
       config_schema: PacketDefinition,
+      packet_inputs: [
+        %PacketInputDefinition{
+          input_id: "telemetry-fields",
+          version: 1,
+          capability_family_key: :definition_bound_telemetry,
+          accepted_resource_kinds: [:field],
+          accepted_data_types: [:uint, :int, :float, :bool],
+          selection_mode: :compatible_fields,
+          min_selected: 1,
+          max_selected: 4_096,
+          delivery: :decoded_fields,
+          failure_policy: :isolated
+        }
+      ],
       emitted_record_kinds: [:telemetry_sample],
       emitted_action_kinds: [],
       replay_mode: :deterministic,

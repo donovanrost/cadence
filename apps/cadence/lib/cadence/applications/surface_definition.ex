@@ -19,7 +19,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
           | :activity
 
   @type scope :: ActionDefinition.scope()
-  @type placement :: :application_workspace | :ops_workspace | :administration
+  @type placement :: :application_workspace | :ops_workspace | :ops_dock | :administration
   @type refresh ::
           :static
           | :after_action
@@ -81,7 +81,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
     :activity
   ]
   @scopes [:organization, :mission, :spacecraft, :source_endpoint, :transport]
-  @placements [:application_workspace, :ops_workspace, :administration]
+  @placements [:application_workspace, :ops_workspace, :ops_dock, :administration]
   @max_references 32
   @max_actions 32
 

@@ -9,10 +9,14 @@ defmodule Cadence.Applications.SurfaceDocumentTest do
     Diagnostic,
     Diagnostics,
     GeneratedForm,
+    PacketBindingGroup,
+    PacketBindingResource,
+    PacketBindings,
     Stat,
     Table
   }
 
+  alias Cadence.Applications.PacketInputDefinition
   alias Cadence.Extensions.Presentation.FieldDefinition
   alias Cadence.Listing.Page
 
@@ -59,6 +63,18 @@ defmodule Cadence.Applications.SurfaceDocumentTest do
   test "rejects a form action not declared by its surface" do
     assert {:error, :undeclared_application_surface_action} =
              SurfaceDocument.validate(valid_document(), ["inspect_configuration"])
+  end
+
+  test "accepts a bounded Packet Bindings element whose action is surface-declared" do
+    document = %SurfaceDocument{
+      title: "Telemetry Decom",
+      packet_bindings: packet_bindings()
+    }
+
+    assert :ok = SurfaceDocument.validate(document, ["save_packet_bindings"])
+
+    assert {:error, :undeclared_application_surface_action} =
+             SurfaceDocument.validate(document, ["save_configuration"])
   end
 
   defp valid_document do
@@ -119,6 +135,63 @@ defmodule Cadence.Applications.SurfaceDocumentTest do
       title: "Configuration saved",
       detail: "The application configuration changed.",
       tone: :info
+    }
+  end
+
+  defp packet_bindings do
+    %PacketBindings{
+      id: "packet-bindings-surface",
+      title: "Packet bindings",
+      action_id: "save_packet_bindings",
+      submit_label: "Save bindings",
+      input_definition: %PacketInputDefinition{
+        input_id: "telemetry-fields",
+        version: 1,
+        capability_family_key: :definition_bound_telemetry,
+        accepted_resource_kinds: [:field],
+        accepted_data_types: [:uint, :int, :float, :bool],
+        selection_mode: :compatible_fields,
+        min_selected: 1,
+        max_selected: 4_096,
+        delivery: :decoded_fields,
+        failure_policy: :isolated
+      },
+      catalog_revision_id: "revision-1",
+      source_endpoint_ref: "source-1",
+      source_endpoints: [%{label: "Primary", value: "source-1"}],
+      packet_groups: [
+        %PacketBindingGroup{
+          id: "packet-health",
+          packet_id: "health",
+          packet_name: "HEALTH",
+          apid: 42,
+          selector_summary: "space_packet / Primary",
+          model_label: "revision-1",
+          selected: true,
+          expanded: true,
+          selectable: true,
+          state: :selected,
+          consumers: ["Telemetry Decom"],
+          resources: [
+            %PacketBindingResource{
+              id: "resource-mode",
+              resource_id: "mode",
+              path: "mode",
+              resource_kind: :field,
+              data_type: :uint,
+              size_bits: 8,
+              compatibility: :compatible,
+              selected: true,
+              role: :primary,
+              consumers: ["Telemetry Decom"]
+            }
+          ]
+        }
+      ],
+      configured_version: 1,
+      activation_state: :configured,
+      save_enabled: true,
+      empty_title: "No packets"
     }
   end
 end

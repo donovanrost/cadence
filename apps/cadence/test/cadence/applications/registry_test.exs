@@ -52,7 +52,7 @@ defmodule Cadence.Applications.RegistryTest do
                %ResourceClaimDefinition{
                  claim_type: :packet_apid,
                  scope: :spacecraft,
-                 mode: :exclusive
+                 mode: :shared
                }
              ]
            } = definition.resource_contract
@@ -70,6 +70,11 @@ defmodule Cadence.Applications.RegistryTest do
                version: 1
              }
            }
+
+    assert Enum.map(Registry.workspace_surfaces(definition, :spacecraft), & &1.surface_id) == [
+             "manage",
+             "packet_bindings"
+           ]
   end
 
   test "distinguishes unknown applications, unsupported versions, and unavailable definitions" do

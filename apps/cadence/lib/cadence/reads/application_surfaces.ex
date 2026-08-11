@@ -18,12 +18,14 @@ defmodule Cadence.Reads.ApplicationSurfaces do
   alias Cadence.Extensions.Presentation.FieldDefinition
   alias Cadence.Reads.ApplicationSurfaces.DerivedTelemetry, as: DerivedTelemetrySurface
   alias Cadence.Reads.ApplicationSurfaces.Limits, as: LimitsSurface
+  alias Cadence.Reads.ApplicationSurfaces.PacketBindings, as: PacketBindingsSurface
   alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
 
   @providers %{
     "cadence.derived_telemetry.manage" => DerivedTelemetrySurface,
     "cadence.limits.manage" => LimitsSurface,
-    "cadence.limits.activity" => LimitsSurface
+    "cadence.limits.activity" => LimitsSurface,
+    "cadence.packet_bindings.manage" => PacketBindingsSurface
   }
 
   @spec validate_providers() ::
