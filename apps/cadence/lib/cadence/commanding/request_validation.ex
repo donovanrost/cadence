@@ -3,7 +3,7 @@ defmodule Cadence.Commanding.RequestValidation do
   Resolves catalog command definitions and validates command-request arguments.
   """
 
-  alias Cadence.Catalog
+  alias Cadence.{Activations, Catalog}
   alias Cadence.Catalog.Command.Compiler
 
   alias Cadence.Catalog.Command.Compiler.{
@@ -15,7 +15,9 @@ defmodule Cadence.Commanding.RequestValidation do
   alias Cadence.Catalog.Command.Invocation
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.CommandRequest
+  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Missions
+  alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SourceEndpoints
 
   @spec validate_and_enrich(CommandRequest.t()) ::
@@ -80,10 +82,7 @@ defmodule Cadence.Commanding.RequestValidation do
          requested_at: command_request.requested_at || DateTime.utc_now(),
          metadata:
            Map.merge(command_request.metadata, %{
-             "validation_basis" => %{
-               "snapshot_id" => request_basis.snapshot.snapshot_id,
-               "runtime_layout_id" => request_basis.runtime_definition.layout_id
-             }
+             "validation_basis" => validation_basis(request_basis)
            })
        })}
     end
@@ -95,13 +94,29 @@ defmodule Cadence.Commanding.RequestValidation do
              snapshot: CommandSnapshot.t(),
              definition: CommandDefinition.t(),
              runtime_definition: RuntimeDefinition.t(),
+             constraint_plans: [Compiler.ConstraintPlan.t()],
              verifier_plans: [Compiler.VerifierPlan.t()],
-             operational_binding: OperationalBinding.t()
+             operational_binding: OperationalBinding.t(),
+             mission_model_revision_id: binary() | nil,
+             runtime_plan_id: binary() | nil
            }}
           | {:error, term()}
   def resolve_basis(organization_id, mission_id, command_snapshot_id, command_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(command_snapshot_id) and is_binary(command_id) do
+    case active_mission_model_basis(
+           organization_id,
+           mission_id,
+           command_snapshot_id,
+           command_id
+         ) do
+      {:ok, basis} -> {:ok, basis}
+      :legacy -> legacy_basis(organization_id, mission_id, command_snapshot_id, command_id)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp legacy_basis(organization_id, mission_id, command_snapshot_id, command_id) do
     with {:ok, %CommandSnapshot{} = snapshot} <-
            Catalog.fetch_command_snapshot(organization_id, mission_id, command_snapshot_id),
          {:ok, %CommandDefinition{} = definition} <-
@@ -117,10 +132,80 @@ defmodule Cadence.Commanding.RequestValidation do
          snapshot: snapshot,
          definition: definition,
          runtime_definition: runtime_definition,
+         constraint_plans: fetch_constraint_plans(compiler_result, command_id),
          verifier_plans: verifier_plans,
-         operational_binding: operational_binding
+         operational_binding: operational_binding,
+         mission_model_revision_id: nil,
+         runtime_plan_id: nil
        }}
     end
+  end
+
+  defp active_mission_model_basis(organization_id, mission_id, command_snapshot_id, command_id) do
+    with {:ok, activation} <- Activations.fetch_active_activation(organization_id, mission_id),
+         {:ok, runtime_basis} <- MissionModelPromotion.runtime_basis(activation) do
+      resolve_active_runtime_basis(
+        organization_id,
+        mission_id,
+        command_snapshot_id,
+        command_id,
+        runtime_basis
+      )
+    else
+      {:error, :no_active_binding_set} -> :legacy
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_active_runtime_basis(
+         organization_id,
+         mission_id,
+         command_snapshot_id,
+         command_id,
+         %{runtime_plans: plans} = runtime_basis
+       ) do
+    with {:ok, basis} <-
+           MissionModelPlanDecoder.command_basis(plans, command_snapshot_id, command_id) do
+      {:ok, mission_model_basis(organization_id, mission_id, runtime_basis, basis)}
+    end
+  end
+
+  defp resolve_active_runtime_basis(
+         _organization_id,
+         _mission_id,
+         _command_snapshot_id,
+         _command_id,
+         %{}
+       ),
+       do: :legacy
+
+  defp mission_model_basis(organization_id, mission_id, runtime_basis, basis) do
+    basis
+    |> Map.put(
+      :snapshot,
+      mission_model_snapshot(
+        organization_id,
+        mission_id,
+        runtime_basis.mission_model_revision_id,
+        basis
+      )
+    )
+    |> Map.put(:mission_model_revision_id, runtime_basis.mission_model_revision_id)
+    |> Map.put(:runtime_plan_id, basis.plan_id)
+    |> Map.delete(:plan_id)
+  end
+
+  defp mission_model_snapshot(organization_id, mission_id, revision_id, basis) do
+    CommandSnapshot.new(%{
+      snapshot_id: basis.runtime_definition.snapshot_id,
+      organization_id: organization_id,
+      mission_id: mission_id,
+      artifact_id: "mission_model:" <> revision_id,
+      import_run_id: revision_id,
+      importer_key: "mission_model_runtime_plan",
+      snapshot_name: "Mission Model " <> revision_id,
+      command_definitions: [basis.definition]
+    })
   end
 
   defp fetch_command_definition(%CommandSnapshot{} = snapshot, command_id) do
@@ -146,6 +231,19 @@ defmodule Cadence.Commanding.RequestValidation do
 
   defp fetch_verifier_plans(compiler_result, command_id) do
     Enum.filter(compiler_result.verifier_plans, &(&1.command_id == command_id))
+  end
+
+  defp fetch_constraint_plans(compiler_result, command_id) do
+    Enum.filter(compiler_result.constraint_plans, &(&1.command_id == command_id))
+  end
+
+  defp validation_basis(request_basis) do
+    %{
+      "snapshot_id" => request_basis.snapshot.snapshot_id,
+      "runtime_layout_id" => request_basis.runtime_definition.layout_id,
+      "mission_model_revision_id" => request_basis.mission_model_revision_id,
+      "runtime_plan_id" => request_basis.runtime_plan_id
+    }
   end
 
   defp normalize_argument_values(argument_values) when is_map(argument_values) do

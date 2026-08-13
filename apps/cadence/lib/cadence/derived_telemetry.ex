@@ -10,6 +10,7 @@ defmodule Cadence.DerivedTelemetry do
   alias Cadence.DerivedTelemetry.{Definition, ExpressionEvaluator, Run, Sample}
   alias Cadence.DerivedTelemetry.EvaluationRunRow, as: DerivedTelemetryEvaluationRunRow
   alias Cadence.Jobs
+  alias Cadence.MissionModels.LegacyGuard
 
   alias Cadence.DerivedTelemetry.Store
   alias Cadence.Repo
@@ -20,7 +21,8 @@ defmodule Cadence.DerivedTelemetry do
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    with {:ok, definitions} <- definitions_from_opts(mission_id, opts),
+    with :ok <- LegacyGuard.ensure_available(mission_id),
+         {:ok, definitions} <- definitions_from_opts(mission_id, opts),
          run = build_run(mission_id, definitions, opts),
          {:ok, persisted_run} <- insert_run(run) do
       execute_run(persisted_run, Keyword.put(opts, :definitions, definitions))
@@ -29,7 +31,8 @@ defmodule Cadence.DerivedTelemetry do
 
   @spec start_evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def start_evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    with {:ok, definitions} <- definitions_from_opts(mission_id, opts),
+    with :ok <- LegacyGuard.ensure_available(mission_id),
+         {:ok, definitions} <- definitions_from_opts(mission_id, opts),
          run = build_run(mission_id, definitions, opts),
          {:ok, %Run{} = persisted_run} <- insert_run(run) do
       case Jobs.enqueue(
@@ -71,6 +74,7 @@ defmodule Cadence.DerivedTelemetry do
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(derived_run_id) when is_binary(derived_run_id) do
     with {:ok, %Run{} = run} <- fetch_run(derived_run_id),
+         :ok <- LegacyGuard.ensure_available(run.mission_id),
          {:ok, opts} <- opts_from_run(run) do
       execute_run(run, opts)
     end

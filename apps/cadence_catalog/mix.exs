@@ -18,7 +18,7 @@ defmodule CadenceCatalog.MixProject do
 
   def application do
     [
-      extra_applications: [:crypto, :logger]
+      extra_applications: [:crypto, :logger, :xmerl]
     ]
   end
 

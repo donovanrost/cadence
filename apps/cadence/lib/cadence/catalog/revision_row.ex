@@ -23,6 +23,8 @@ defmodule Cadence.Catalog.RevisionRow do
     field(:import_run_id, :string)
     field(:telemetry_snapshot_id, :string)
     field(:command_snapshot_id, :string)
+    field(:mission_model_layer_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:content_sha256, :string)
     field(:created_by, :map, default: %{})
     field(:notes, :string)
@@ -80,6 +82,8 @@ defmodule Cadence.Catalog.RevisionRow do
       import_run_id: row.import_run_id,
       telemetry_snapshot_id: row.telemetry_snapshot_id,
       command_snapshot_id: row.command_snapshot_id,
+      mission_model_layer_id: row.mission_model_layer_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       content_sha256: row.content_sha256,
       created_by: JsonDocument.unwrap_value(row.created_by),
       notes: row.notes,
@@ -100,6 +104,8 @@ defmodule Cadence.Catalog.RevisionRow do
       import_run_id: revision.import_run_id,
       telemetry_snapshot_id: revision.telemetry_snapshot_id,
       command_snapshot_id: revision.command_snapshot_id,
+      mission_model_layer_id: revision.mission_model_layer_id,
+      mission_model_revision_id: revision.mission_model_revision_id,
       content_sha256: revision.content_sha256,
       created_by: JsonDocument.wrap_value(revision.created_by),
       notes: revision.notes,
@@ -120,6 +126,8 @@ defmodule Cadence.Catalog.RevisionRow do
       :import_run_id,
       :telemetry_snapshot_id,
       :command_snapshot_id,
+      :mission_model_layer_id,
+      :mission_model_revision_id,
       :content_sha256,
       :created_by,
       :notes,

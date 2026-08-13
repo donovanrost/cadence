@@ -13,6 +13,7 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow}
+  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Governance
@@ -98,6 +99,13 @@ defmodule Cadence.Control.Activations do
                approved_activation.binding_set_version
              ),
            :ok <- exact_approved_content(approved_activation, binding_set),
+           :ok <-
+             MissionModelPromotion.validate_activation_metadata(
+               approved_activation.organization_id,
+               approved_activation.mission_id,
+               binding_set,
+               approved_activation.metadata
+             ),
            {:ok, %BindingSetActivation{} = activation} <-
              execute_activation(
                approved_activation.organization_id,

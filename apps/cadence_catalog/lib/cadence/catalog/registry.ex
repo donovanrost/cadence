@@ -8,18 +8,21 @@ defmodule Cadence.Catalog.Registry do
   """
 
   alias Cadence.Catalog.ImporterDescriptor
-  alias Cadence.Catalog.Importers.CadenceYamlDatabase
+  alias Cadence.Catalog.Importers.{CadenceYamlDatabase, Xtce13}
 
   @type importer_registration :: %{module: module(), descriptor: ImporterDescriptor.t()}
   @type fetch_error :: :catalog_importer_not_found | :catalog_importer_version_not_found
 
-  @builtin_importers [CadenceYamlDatabase]
+  @builtin_importers [CadenceYamlDatabase, Xtce13]
 
   @extension_by_media_type %{
     "application/yaml" => [".yaml", ".yml"],
     "application/x-yaml" => [".yaml", ".yml"],
     "text/yaml" => [".yaml", ".yml"],
-    "text/x-yaml" => [".yaml", ".yml"]
+    "text/x-yaml" => [".yaml", ".yml"],
+    "application/xtce+xml" => [".xtce", ".xml"],
+    "application/xml" => [".xtce", ".xml"],
+    "text/xml" => [".xtce", ".xml"]
   }
 
   @spec list_importers(keyword()) :: [importer_registration()]

@@ -43,6 +43,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/projections/supervisor.ex" => :composition,
     "lib/cadence/data_sources/probe_scheduler.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
+    "lib/cadence/mission_models/legacy_converter.ex" => :adapter,
+    "lib/cadence/mission_models/legacy_migration.ex" => :adapter,
     "lib/cadence/application_dispatch/binding_rule.ex" => :catalog,
     "lib/cadence/application_dispatch/binding_set.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_config.ex" => :catalog,
@@ -163,7 +165,9 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/catalog.ex",
       "lib/cadence/catalog/",
       "lib/cadence/governance.ex",
-      "lib/cadence/governance/"
+      "lib/cadence/governance/",
+      "lib/cadence/mission_models.ex",
+      "lib/cadence/mission_models/"
     ],
     comms: [
       "lib/cadence/comms/",
@@ -203,6 +207,10 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/protocol/",
       "lib/cadence/replay.ex",
       "lib/cadence/replay/",
+      "lib/cadence/semantic_observations.ex",
+      "lib/cadence/semantic_observations/",
+      "lib/cadence/semantic_runtime.ex",
+      "lib/cadence/semantic_runtime/",
       "lib/cadence/telemetry/"
     ],
     data_sources: ["lib/cadence/data_sources/"],

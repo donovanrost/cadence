@@ -179,7 +179,10 @@ config :cadence,
   generators: [timestamp_type: :utc_datetime_usec]
 
 config :cadence_catalog,
-  catalog_importers: [Cadence.Catalog.Importers.CadenceYamlDatabase]
+  catalog_importers: [
+    Cadence.Catalog.Importers.CadenceYamlDatabase,
+    Cadence.Catalog.Importers.Xtce13
+  ]
 
 config :cadence_web, CadenceWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,

@@ -31,7 +31,9 @@ defmodule Cadence.Catalog.ImportResult do
     Bundle.new(%{
       telemetry_snapshot:
         Map.get(attrs, :telemetry_snapshot, Map.get(attrs, "telemetry_snapshot")),
-      command_snapshot: Map.get(attrs, :command_snapshot, Map.get(attrs, "command_snapshot"))
+      command_snapshot: Map.get(attrs, :command_snapshot, Map.get(attrs, "command_snapshot")),
+      declaration_layers:
+        Map.get(attrs, :declaration_layers, Map.get(attrs, "declaration_layers", []))
     })
   end
 end

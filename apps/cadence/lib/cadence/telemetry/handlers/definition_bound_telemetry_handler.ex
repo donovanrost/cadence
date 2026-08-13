@@ -8,7 +8,7 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
 
   alias Cadence.ApplicationDispatch.WorkItem
   alias Cadence.Capabilities.Definitions.DefinitionBoundTelemetry, as: Definition
-  alias Cadence.Ids
+  alias Cadence.Platform.ContentHash
   alias Cadence.Protocol.PacketRecord
   alias Cadence.Telemetry.{Extractor, PacketDefinition, Sample}
 
@@ -67,11 +67,23 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
     point_name = packet_definition.packet_name <> "." <> field_definition.name
 
     %Sample{
-      sample_id: Ids.new("sample"),
+      sample_id:
+        "sample_" <>
+          ContentHash.term_sha256({
+            packet_record.evidence_id,
+            packet_record.packet_id,
+            packet_definition.packet_definition_id,
+            field_definition.field_id,
+            raw_value
+          }),
       mission_id: packet_record.mission_id,
       spacecraft_id: packet_record.spacecraft_id,
       point_id: point_name,
       point_name: point_name,
+      semantic_id: field_definition.parameter_id,
+      qualified_name: field_definition.qualified_name,
+      producer_kind: :container,
+      producer_id: packet_definition.packet_definition_id,
       packet_definition_id: packet_definition.packet_definition_id,
       packet_definition_version: packet_definition.version,
       packet_id: packet_record.packet_id,
@@ -84,7 +96,11 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       provenance: %{
         evidence_id: packet_record.evidence_id,
         packet_id: packet_record.packet_id,
-        binding_rule_id: work_item.binding_rule_id
+        binding_rule_id: work_item.binding_rule_id,
+        semantic_id: field_definition.parameter_id,
+        qualified_name: field_definition.qualified_name,
+        producer_kind: :container,
+        producer_id: packet_definition.packet_definition_id
       }
     }
   end

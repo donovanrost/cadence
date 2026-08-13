@@ -23,7 +23,7 @@ defmodule Mix.Tasks.Cadence.Extensions.CheckTest do
     assert summary =~ "1 provider connector"
     assert summary =~ "7 widget types"
     assert summary =~ "4 source adapters"
-    assert summary =~ "1 catalog importer"
+    assert summary =~ "2 catalog importers"
     assert summary =~ "action, preflight, status, surface, and reference providers valid"
   end
 

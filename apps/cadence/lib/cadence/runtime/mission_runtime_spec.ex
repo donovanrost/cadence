@@ -8,7 +8,10 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   """
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Catalog.MissionModel.RuntimePlan
   alias Cadence.Platform.ContentHash
+  alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.SemanticRuntime.PlanDecoder
 
   @type t :: %__MODULE__{
           activation_id: binary(),
@@ -20,6 +23,10 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
           binding_set_version: pos_integer(),
           binding_set_content_sha256: binary(),
           binding_set: BindingSet.t(),
+          mission_model_revision_id: binary() | nil,
+          mission_model_content_sha256: binary() | nil,
+          runtime_plans: %{optional(atom()) => RuntimePlan.t()},
+          runtime_basis_sha256: binary(),
           activated_at: DateTime.t(),
           metadata: map()
         }
@@ -32,9 +39,18 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
     :binding_set_version,
     :binding_set_content_sha256,
     :binding_set,
+    :runtime_basis_sha256,
     :activated_at
   ]
-  defstruct @enforce_keys ++ [activation_request_id: nil, organization_id: nil, metadata: %{}]
+  defstruct @enforce_keys ++
+              [
+                :mission_model_revision_id,
+                :mission_model_content_sha256,
+                activation_request_id: nil,
+                organization_id: nil,
+                runtime_plans: %{},
+                metadata: %{}
+              ]
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(attrs) when is_map(attrs) do
@@ -55,7 +71,10 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
          {:ok, %DateTime{} = activated_at} <- fetch_datetime(attrs, :activated_at),
          {:ok, metadata} <- fetch_metadata(attrs),
          content_sha256 <- content_sha256(binding_set),
-         :ok <- validate_content_hash(attrs, content_sha256) do
+         :ok <- validate_content_hash(attrs, content_sha256),
+         {:ok, mission_model} <- fetch_mission_model(attrs),
+         runtime_basis_sha256 <- runtime_basis_sha256(content_sha256, mission_model),
+         :ok <- validate_runtime_basis_hash(attrs, runtime_basis_sha256) do
       {:ok,
        %__MODULE__{
          activation_id: activation_id,
@@ -67,6 +86,10 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
          binding_set_version: binding_set_version,
          binding_set_content_sha256: content_sha256,
          binding_set: binding_set,
+         mission_model_revision_id: mission_model.revision_id,
+         mission_model_content_sha256: mission_model.content_sha256,
+         runtime_plans: mission_model.plans,
+         runtime_basis_sha256: runtime_basis_sha256,
          activated_at: activated_at,
          metadata: metadata
        }}
@@ -80,7 +103,23 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
   @spec identity(t()) :: {binary(), pos_integer(), binary()}
   def identity(%__MODULE__{} = spec) do
-    {spec.activation_id, spec.generation, spec.binding_set_content_sha256}
+    {spec.activation_id, spec.generation, spec.runtime_basis_sha256}
+  end
+
+  @spec runtime_basis_sha256(binary(), map()) :: binary()
+  def runtime_basis_sha256(binding_set_content_sha256, mission_model) do
+    plan_hashes =
+      mission_model.plans
+      |> Enum.map(fn {target, plan} -> {target, plan.content_sha256} end)
+      |> Enum.sort()
+
+    ContentHash.term_sha256({
+      binding_set_content_sha256,
+      mission_model.revision_id,
+      mission_model.content_sha256,
+      plan_hashes,
+      PlanDecoder.registered_execution_basis(mission_model.plans)
+    })
   end
 
   defp fetch_non_empty_binary(attrs, field) do
@@ -143,6 +182,59 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
     case Map.get(attrs, :binding_set_content_sha256, computed_hash) do
       ^computed_hash -> :ok
       _other -> {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}}
+    end
+  end
+
+  defp fetch_mission_model(attrs) do
+    fetch_mission_model(
+      Map.get(attrs, :mission_model_revision_id),
+      Map.get(attrs, :mission_model_content_sha256),
+      Map.get(attrs, :runtime_plans, %{})
+    )
+  end
+
+  defp fetch_mission_model(nil, nil, plans) when plans == %{},
+    do: {:ok, %{revision_id: nil, content_sha256: nil, plans: %{}}}
+
+  defp fetch_mission_model(revision_id, _content_sha256, _plans)
+       when not is_binary(revision_id) or revision_id == "",
+       do: {:error, {:invalid_mission_runtime_spec, :mission_model_revision_id}}
+
+  defp fetch_mission_model(_revision_id, content_sha256, _plans)
+       when not is_binary(content_sha256) or content_sha256 == "",
+       do: {:error, {:invalid_mission_runtime_spec, :mission_model_content_sha256}}
+
+  defp fetch_mission_model(_revision_id, _content_sha256, plans) when not is_map(plans),
+    do: {:error, {:invalid_mission_runtime_spec, :runtime_plans}}
+
+  defp fetch_mission_model(revision_id, content_sha256, plans),
+    do: validate_runtime_plans(revision_id, content_sha256, plans)
+
+  defp validate_runtime_plans(revision_id, content_sha256, plans) do
+    required_targets = MapSet.new([:telemetry, :algorithm, :monitoring, :command])
+
+    valid? =
+      MapSet.new(Map.keys(plans)) == required_targets and
+        Enum.all?(plans, fn {target, plan} ->
+          match?(%RuntimePlan{}, plan) and plan.target == target and plan.status == :ready and
+            plan.mission_model_revision_id == revision_id and
+            plan.mission_model_content_sha256 == content_sha256
+        end)
+
+    if valid? do
+      case MissionModelPlanDecoder.validate(plans) do
+        :ok -> {:ok, %{revision_id: revision_id, content_sha256: content_sha256, plans: plans}}
+        {:error, reason} -> {:error, {:invalid_mission_runtime_spec, {:runtime_plans, reason}}}
+      end
+    else
+      {:error, {:invalid_mission_runtime_spec, :runtime_plans}}
+    end
+  end
+
+  defp validate_runtime_basis_hash(attrs, computed_hash) do
+    case Map.get(attrs, :runtime_basis_sha256, computed_hash) do
+      ^computed_hash -> :ok
+      _other -> {:error, {:mission_runtime_spec_mismatch, :runtime_basis_sha256}}
     end
   end
 end

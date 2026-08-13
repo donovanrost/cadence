@@ -8,7 +8,10 @@ import_config "../../../config/test.exs"
 # The root test config contains overrides only. Keep the catalog importer
 # registration required by simulator-to-Cadence integration tests explicit.
 config :cadence_catalog,
-  catalog_importers: [Cadence.Catalog.Importers.CadenceYamlDatabase]
+  catalog_importers: [
+    Cadence.Catalog.Importers.CadenceYamlDatabase,
+    Cadence.Catalog.Importers.Xtce13
+  ]
 
 config :cadence_simulator,
   provider_http: [enabled: false],

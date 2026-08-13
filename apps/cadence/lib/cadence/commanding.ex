@@ -18,6 +18,7 @@ defmodule Cadence.Commanding do
     CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
+    ConstraintEvaluation,
     Dispatcher,
     DispatchSupervisor,
     LifecyclePolicy,
@@ -544,6 +545,12 @@ defmodule Cadence.Commanding do
              mission_id,
              request_row.command_snapshot_id,
              request_row.command_id
+           ),
+         :ok <-
+           ConstraintEvaluation.validate(
+             organization_id,
+             mission_id,
+             request_basis.constraint_plans
            ),
          {:ok, encoded_command} <-
            ControlCommanding.encode_command(

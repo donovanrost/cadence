@@ -148,12 +148,20 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
 
   @spec to_sample(t()) :: Sample.t()
   def to_sample(%__MODULE__{} = envelope) do
+    provenance = enriched_provenance(envelope)
+
     %Sample{
       sample_id: envelope.sample_id,
       mission_id: envelope.mission_id,
       spacecraft_id: envelope.spacecraft_id,
       point_id: envelope.point_id,
       point_name: envelope.point_name,
+      semantic_id: provenance_value(provenance, :semantic_id),
+      qualified_name: provenance_value(provenance, :qualified_name),
+      producer_kind: provenance_value(provenance, :producer_kind) |> normalize_optional_atom(),
+      producer_id: provenance_value(provenance, :producer_id),
+      mission_model_revision_id: provenance_value(provenance, :mission_model_revision_id),
+      runtime_plan_id: provenance_value(provenance, :runtime_plan_id),
       packet_definition_id: envelope.packet_definition_id,
       packet_definition_version: envelope.packet_definition_version,
       packet_id: envelope.packet_id,
@@ -163,7 +171,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
       quality_state: envelope.quality_state,
       generation_time: envelope.generation_time,
       receipt_time: envelope.receipt_time,
-      provenance: enriched_provenance(envelope)
+      provenance: provenance
     }
   end
 
@@ -255,4 +263,12 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
       "supersedes_observation_id" => envelope.supersedes_observation_id
     })
   end
+
+  defp provenance_value(provenance, key) do
+    Map.get(provenance, key, Map.get(provenance, Atom.to_string(key)))
+  end
+
+  defp normalize_optional_atom(nil), do: nil
+  defp normalize_optional_atom(value) when is_atom(value), do: value
+  defp normalize_optional_atom(value) when is_binary(value), do: String.to_existing_atom(value)
 end

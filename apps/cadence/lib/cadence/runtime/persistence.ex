@@ -14,6 +14,8 @@ defmodule Cadence.Runtime.Persistence do
   alias Cadence.Platform.ContentHash
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Repo
+  alias Cadence.SemanticObservations
+  alias Cadence.SemanticRuntime.Result
 
   alias Cadence.Runtime.{
     DownlinkRecords,
@@ -21,6 +23,7 @@ defmodule Cadence.Runtime.Persistence do
     Facts,
     ManagedRecords,
     ManagedRecordsPersisted,
+    MissionRuntimeSpec,
     ProcessingResultsPersisted,
     TransportRecords,
     TransportRecordsPersisted
@@ -67,6 +70,41 @@ defmodule Cadence.Runtime.Persistence do
   @spec telemetry_samples([term()]) :: {:ok, [Sample.t()]} | {:error, term()}
   def telemetry_samples(outputs) when is_list(outputs) do
     validate_outputs(outputs)
+  end
+
+  @spec persist_semantic_timer_result(MissionRuntimeSpec.t(), Result.t(), [Sample.t()], keyword()) ::
+          :ok | {:error, term()}
+  def persist_semantic_timer_result(
+        %MissionRuntimeSpec{} = runtime_spec,
+        %Result{} = result,
+        samples,
+        opts \\ []
+      )
+      when is_list(samples) and is_list(opts) do
+    at = Keyword.fetch!(opts, :at)
+    timer_key = Keyword.fetch!(opts, :timer_key)
+
+    evidence =
+      RawEvidence.new(%{
+        evidence_id: ContentHash.term_sha256({runtime_spec.runtime_basis_sha256, timer_key, at}),
+        mission_id: runtime_spec.mission_id,
+        source_ref: "semantic_timer:" <> timer_key,
+        source_time: at,
+        receipt_time: at,
+        raw: <<>>
+      })
+
+    prepared = %{
+      raw_evidence: evidence,
+      telemetry_samples: samples,
+      semantic_result: result,
+      runtime_spec: runtime_spec
+    }
+
+    case Storage.persist_prepared_results([prepared], recorded_at: at) do
+      :ok -> SemanticObservations.persist_many([prepared])
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec persist_managed_runtime_records(
@@ -256,7 +294,8 @@ defmodule Cadence.Runtime.Persistence do
     with :ok <- persist_canonical_processing_results(prepared_results),
          :ok <- maybe_archive_raw_evidence(prepared_results, archive?),
          :ok <- RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
-         :ok <- Storage.persist_prepared_results(prepared_results, opts) do
+         :ok <- Storage.persist_prepared_results(prepared_results, opts),
+         :ok <- SemanticObservations.persist_many(prepared_results) do
       publish_processing_results(prepared_results)
     end
   end
@@ -275,7 +314,7 @@ defmodule Cadence.Runtime.Persistence do
         transfer_frame_records: transfer_frame_records,
         protocol_anomalies: protocol_anomalies,
         outputs: outputs
-      },
+      } = processing_result,
       {:ok, acc}
       when is_list(packet_records) and is_list(transfer_frame_records) and
              is_list(protocol_anomalies) and is_list(outputs) ->
@@ -289,7 +328,9 @@ defmodule Cadence.Runtime.Persistence do
                   packet_records: packet_records,
                   transfer_frame_records: transfer_frame_records,
                   protocol_anomalies: protocol_anomalies,
-                  telemetry_samples: telemetry_samples
+                  telemetry_samples: telemetry_samples,
+                  semantic_result: Map.get(processing_result, :semantic_result),
+                  runtime_spec: Map.get(processing_result, :runtime_spec)
                 }
                 | acc
               ]}}

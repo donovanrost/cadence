@@ -32,6 +32,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/governance/",
       "lib/cadence/missions.ex",
       "lib/cadence/missions/",
+      "lib/cadence/mission_models.ex",
+      "lib/cadence/mission_models/",
       "lib/cadence/organizations.ex",
       "lib/cadence/organizations/",
       "lib/cadence/source_endpoints.ex",
@@ -73,6 +75,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/protocol/",
       "lib/cadence/provider_adapters.ex",
       "lib/cadence/provider_adapters/",
+      "lib/cadence/semantic_observations.ex",
+      "lib/cadence/semantic_observations/",
+      "lib/cadence/semantic_runtime.ex",
+      "lib/cadence/semantic_runtime/",
       "lib/cadence/telemetry/"
     ],
     projections: [
@@ -104,6 +110,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/application.ex" => :composition,
     "lib/cadence/extension_catalog.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
+    "lib/cadence/mission_models/legacy_converter.ex" => :adapter,
+    "lib/cadence/mission_models/legacy_migration.ex" => :adapter,
     "lib/cadence/jobs.ex" => :platform,
     "lib/cadence/jobs/runner.ex" => :composition,
     "lib/cadence/jobs/dispatcher.ex" => :composition,

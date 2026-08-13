@@ -215,7 +215,8 @@ defmodule Cadence.Extensions.RegistryTest do
     assert {:ok, package} = ExtensionCatalog.fetch("cadence.catalog-yaml")
 
     assert package.contributions == [
-             %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 1}
+             %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 1},
+             %CatalogImporterContribution{importer_key: "xtce_1_3", importer_version: 1}
            ]
 
     assert {:ok, %{descriptor: %{importer_key: "cadence_yaml", version: 1}}} =
@@ -223,12 +224,12 @@ defmodule Cadence.Extensions.RegistryTest do
 
     assert Enum.map(ExtensionCatalog.catalog_importers(), fn registration ->
              {registration.descriptor.importer_key, registration.descriptor.version}
-           end) == [{"cadence_yaml", 1}]
+           end) == [{"cadence_yaml", 1}, {"xtce_1_3", 1}]
 
     assert {:ok, %{descriptor: %{importer_key: "cadence_yaml"}}} =
              ExtensionCatalog.detect_catalog_importer("mission.yaml", "application/yaml")
 
-    assert {:error, :no_matching_importer} =
+    assert {:ok, %{descriptor: %{importer_key: "xtce_1_3"}}} =
              ExtensionCatalog.detect_catalog_importer("mission.xml", "application/xml")
 
     assert {:error, :unsupported_catalog_importer_contribution_version} =
@@ -250,7 +251,7 @@ defmodule Cadence.Extensions.RegistryTest do
              provider_connectors: 1,
              widget_types: 7,
              source_adapters: 4,
-             catalog_importers: 1
+             catalog_importers: 2
            }
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:spacecraft), & &1.application_key) ==

@@ -18,6 +18,7 @@ defmodule Cadence.Governance do
 
   alias Cadence.Capabilities.{DefinitionRegistry, ValidationContext}
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
+  alias Cadence.MissionModels.LegacyGuard
 
   alias Cadence.Governance.{
     BindingRuleRow,
@@ -220,7 +221,8 @@ defmodule Cadence.Governance do
   @spec persist_derived_definition(DerivedTelemetryDefinition.t()) ::
           {:ok, DerivedTelemetryDefinition.t()} | {:error, term()}
   def persist_derived_definition(%DerivedTelemetryDefinition{} = definition) do
-    with :ok <- DerivedTelemetryDefinition.validate(definition) do
+    with :ok <- LegacyGuard.ensure_available(definition.mission_id),
+         :ok <- DerivedTelemetryDefinition.validate(definition) do
       changeset = GovernedDerivedTelemetryDefinitionRow.changeset(definition)
 
       case Repo.insert(changeset,

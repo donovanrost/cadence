@@ -10,6 +10,8 @@ defmodule Cadence.Telemetry.FieldDefinition do
 
   @type t :: %__MODULE__{
           field_id: binary(),
+          parameter_id: binary() | nil,
+          qualified_name: binary() | nil,
           name: binary(),
           offset_bits: non_neg_integer(),
           size_bits: pos_integer(),
@@ -20,6 +22,8 @@ defmodule Cadence.Telemetry.FieldDefinition do
 
   defstruct [
     :field_id,
+    :parameter_id,
+    :qualified_name,
     :name,
     :offset_bits,
     :size_bits,
@@ -32,6 +36,8 @@ defmodule Cadence.Telemetry.FieldDefinition do
   def new(attrs) when is_map(attrs) do
     %__MODULE__{
       field_id: Map.get(attrs, :field_id, Ids.new("field")),
+      parameter_id: Map.get(attrs, :parameter_id),
+      qualified_name: Map.get(attrs, :qualified_name),
       name: Map.fetch!(attrs, :name),
       offset_bits: Map.get(attrs, :offset_bits, 0),
       size_bits: Map.fetch!(attrs, :size_bits),

@@ -13,8 +13,13 @@ defmodule Cadence.Catalog.ImportExecution do
     ImportResult
   }
 
+  alias Cadence.Catalog.Diagnostic
+  alias Cadence.Catalog.MissionModel.Adapters.Snapshots
+  alias Cadence.Catalog.MissionModel.CompilerResult, as: MissionModelCompilerResult
+
   alias Cadence.Catalog.Telemetry.RuntimeArtifacts
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetrySnapshot
+  alias Cadence.MissionModels
 
   @type outcome :: %{
           snapshot_id: binary() | nil,
@@ -41,7 +46,8 @@ defmodule Cadence.Catalog.ImportExecution do
              telemetry_runtime_artifacts
            ),
          {:ok, persisted_command_snapshot} <-
-           Persistence.maybe_persist_command_snapshot(organization_id, command_snapshot) do
+           Persistence.maybe_persist_command_snapshot(organization_id, command_snapshot),
+         {:ok, mission_model_result} <- compile_mission_model(import_result) do
       {:ok,
        %{
          snapshot_id:
@@ -53,7 +59,8 @@ defmodule Cadence.Catalog.ImportExecution do
          diagnostics:
            import_result.diagnostics ++
              ResultBuilder.telemetry_compiler_diagnostics(telemetry_runtime_artifacts) ++
-             command_compiler_result.diagnostics,
+             command_compiler_result.diagnostics ++
+             mission_model_diagnostics(mission_model_result),
          result_document:
            import_result.metadata
            |> Map.merge(
@@ -66,9 +73,62 @@ defmodule Cadence.Catalog.ImportExecution do
                command_compiler_result
              )
            )
+           |> Map.put("mission_model", mission_model_document(mission_model_result))
        }}
     end
   end
+
+  defp compile_mission_model(%ImportResult{} = import_result) do
+    case import_result.bundle.declaration_layers do
+      [] ->
+        import_result.bundle
+        |> Snapshots.to_layer()
+        |> then(&MissionModels.compile_layers([&1]))
+
+      layers ->
+        MissionModels.compile_layers(layers)
+    end
+  end
+
+  defp mission_model_diagnostics(%MissionModelCompilerResult{} = result) do
+    Enum.map(result.revision.diagnostics, fn diagnostic ->
+      Diagnostic.new(%{
+        severity: diagnostic.severity,
+        code: diagnostic.code,
+        message: diagnostic.message,
+        path: [],
+        metadata: %{
+          "stage" => Atom.to_string(diagnostic.stage),
+          "target" => atom_string(diagnostic.target),
+          "semantic_id" => diagnostic.semantic_id,
+          "support" => atom_string(diagnostic.support)
+        }
+      })
+    end)
+  end
+
+  defp mission_model_document(%MissionModelCompilerResult{} = result) do
+    %{
+      "revision_id" => result.revision.revision_id,
+      "content_sha256" => result.revision.content_sha256,
+      "layer_ids" => result.revision.layer_ids,
+      "declaration_count" => map_size(result.revision.declarations),
+      "diagnostic_count" => length(result.revision.diagnostics),
+      "plans" =>
+        Map.new(result.plans, fn {target, plan} ->
+          {Atom.to_string(target),
+           %{
+             "plan_id" => plan.plan_id,
+             "status" => Atom.to_string(plan.status),
+             "target_contract_version" => plan.target_contract_version,
+             "content_sha256" => plan.content_sha256
+           }}
+        end)
+    }
+  end
+
+  defp atom_string(nil), do: nil
+  defp atom_string(value), do: Atom.to_string(value)
 
   defp compile_telemetry(%TelemetrySnapshot{} = snapshot) do
     RuntimeArtifacts.compile(snapshot,

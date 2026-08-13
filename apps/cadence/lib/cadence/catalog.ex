@@ -658,6 +658,15 @@ defmodule Cadence.Catalog do
              import_run_id: run.import_run_id,
              telemetry_snapshot_id: telemetry_snapshot,
              command_snapshot_id: command_snapshot,
+             mission_model_layer_id:
+               run.result_document
+               |> metadata_value("mission_model")
+               |> metadata_value("layer_ids")
+               |> first_value(),
+             mission_model_revision_id:
+               run.result_document
+               |> metadata_value("mission_model")
+               |> metadata_value("revision_id"),
              content_sha256: artifact.content_sha256,
              created_by: run.requested_by,
              notes: metadata_value(run.metadata, "revision_notes"),
@@ -719,6 +728,9 @@ defmodule Cadence.Catalog do
   end
 
   defp metadata_value(_metadata, _key), do: nil
+
+  defp first_value([value | _rest]), do: value
+  defp first_value(_other), do: nil
 
   defp metadata_atom_key("revision_label"), do: :revision_label
   defp metadata_atom_key("revision_notes"), do: :revision_notes

@@ -15,6 +15,7 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
   """
 
   alias Cadence.Catalog.Diagnostic
+  alias Cadence.Catalog.MissionModel.{Canonical, LegacyNames}
   alias Cadence.Catalog.Telemetry.Compiler.{Result, SelectorInput}
 
   alias Cadence.Catalog.Telemetry.{
@@ -81,7 +82,7 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
     {fields, diagnostics, supported?} =
       Enum.reduce(packet.entries, {[], [], true}, fn %PacketEntry{} = entry,
                                                      {fields, diagnostics, supported?} ->
-        case compile_entry(packet, entry, point_by_id, type_by_id) do
+        case compile_entry(packet, entry, point_by_id, type_by_id, context.parameter_paths) do
           {:field, %FieldDefinition{} = field, entry_diagnostics} ->
             {[field | fields], Enum.reverse(entry_diagnostics, diagnostics), supported?}
 
@@ -153,7 +154,13 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
     })
   end
 
-  defp compile_entry(%Packet{} = packet, %PacketEntry{} = entry, point_by_id, type_by_id) do
+  defp compile_entry(
+         %Packet{} = packet,
+         %PacketEntry{} = entry,
+         point_by_id,
+         type_by_id,
+         parameter_paths
+       ) do
     case entry.entry_kind do
       :fixed_value ->
         {:omit,
@@ -168,7 +175,7 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
          ]}
 
       :point_ref ->
-        compile_point_entry(packet, entry, point_by_id, type_by_id)
+        compile_point_entry(packet, entry, point_by_id, type_by_id, parameter_paths)
 
       :nested_packet_ref ->
         {:unsupported,
@@ -196,7 +203,13 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
     end
   end
 
-  defp compile_point_entry(%Packet{} = packet, %PacketEntry{} = entry, point_by_id, type_by_id) do
+  defp compile_point_entry(
+         %Packet{} = packet,
+         %PacketEntry{} = entry,
+         point_by_id,
+         type_by_id,
+         parameter_paths
+       ) do
     with :ok <- validate_entry_layout(packet, entry),
          {:ok, %Point{} = point} <- fetch_point(packet, entry, point_by_id),
          {:ok, %Type{} = point_type} <- fetch_type(packet, point, type_by_id),
@@ -207,6 +220,11 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
       field =
         FieldDefinition.new(%{
           field_id: point.point_id,
+          parameter_id:
+            parameter_paths
+            |> Map.fetch!(point.point_id)
+            |> then(&Canonical.semantic_id(:parameter, &1)),
+          qualified_name: Map.fetch!(parameter_paths, point.point_id),
           name: point.name,
           offset_bits: entry.bit_offset,
           size_bits: size_bits,
@@ -633,7 +651,8 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
       target_scope: Keyword.get(opts, :target_scope, :mission),
       source_endpoint_ref: Keyword.get(opts, :source_endpoint_ref),
       capability_family_key:
-        Keyword.get(opts, :capability_family_key, :definition_bound_telemetry)
+        Keyword.get(opts, :capability_family_key, :definition_bound_telemetry),
+      parameter_paths: LegacyNames.paths(snapshot.points, & &1.point_id, :parameter, & &1.name)
     }
   end
 

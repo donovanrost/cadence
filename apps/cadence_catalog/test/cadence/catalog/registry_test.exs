@@ -4,7 +4,12 @@ defmodule Cadence.Catalog.RegistryTest do
   alias Cadence.Catalog.{ImporterDescriptor, Registry}
 
   test "publishes an exact validated first-party built-in definition" do
-    assert [%{descriptor: descriptor}] = Registry.list_builtin_importers()
+    importers = Registry.list_builtin_importers()
+    assert Enum.map(importers, & &1.descriptor.importer_key) == ["cadence_yaml", "xtce_1_3"]
+
+    assert %{descriptor: descriptor} =
+             Enum.find(importers, &(&1.descriptor.importer_key == "cadence_yaml"))
+
     assert descriptor.importer_key == "cadence_yaml"
     assert descriptor.version == 1
     assert descriptor.trust == :first_party
@@ -18,6 +23,12 @@ defmodule Cadence.Catalog.RegistryTest do
 
     assert {:error, :catalog_importer_not_found} =
              Registry.fetch_builtin_importer("unknown")
+
+    assert {:ok, %{descriptor: xtce_descriptor}} =
+             Registry.fetch_builtin_importer("xtce_1_3", 1)
+
+    assert xtce_descriptor.trust == :first_party
+    assert :ok = ImporterDescriptor.validate(xtce_descriptor)
   end
 
   test "rejects malformed descriptors" do
@@ -62,9 +73,11 @@ defmodule Cadence.Catalog.RegistryTest do
       assert descriptor.importer_key == "cadence_yaml"
     end
 
-    test "returns :no_matching_importer for unknown files" do
-      assert {:error, :no_matching_importer} =
+    test "detects XTCE XML" do
+      assert {:ok, %{descriptor: descriptor}} =
                Registry.detect_importer("mission.xml", "application/xml")
+
+      assert descriptor.importer_key == "xtce_1_3"
     end
 
     test "returns :no_matching_importer when both filename and media type are unknown" do

@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-07-31
+updated: 2026-08-11
 status: active
 ---
 
@@ -37,6 +37,7 @@ Legacy ADRs remain under
 | [ADR-015](015-management-control-data-plane-architecture.md) | Management Plane, Control Plane, and Data Plane Architecture | Accepted |
 | [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
 | [ADR-019](019-telemetry-data-plane-persistence-and-projection-topology.md) | Telemetry Data-Plane Persistence and Projection Topology | Accepted |
+| [ADR-020](020-xtce-informed-mission-model-intermediate-representation.md) | XTCE-Informed Mission Model Intermediate Representation | Accepted |
 
 ## Proposed Decisions
 

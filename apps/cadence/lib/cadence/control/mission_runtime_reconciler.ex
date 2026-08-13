@@ -9,6 +9,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Control.Activations
+  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntime
   alias Cadence.Governance
   alias Cadence.Runtime.GenerationApplied
@@ -148,19 +149,23 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   end
 
   defp runtime_spec(activation, binding_set) do
-    MissionRuntimeSpec.new(%{
-      activation_id: activation.activation_id,
-      activation_request_id: activation.activation_request_id,
-      organization_id: activation.organization_id,
-      mission_id: activation.mission_id,
-      generation: activation.generation,
-      binding_set_id: activation.binding_set_id,
-      binding_set_version: activation.binding_set_version,
-      binding_set_content_sha256: activation.binding_set_content_sha256,
-      binding_set: binding_set,
-      activated_at: activation.activated_at,
-      metadata: activation.metadata
-    })
+    with {:ok, mission_model_basis} <- MissionModelPromotion.runtime_basis(activation) do
+      %{
+        activation_id: activation.activation_id,
+        activation_request_id: activation.activation_request_id,
+        organization_id: activation.organization_id,
+        mission_id: activation.mission_id,
+        generation: activation.generation,
+        binding_set_id: activation.binding_set_id,
+        binding_set_version: activation.binding_set_version,
+        binding_set_content_sha256: activation.binding_set_content_sha256,
+        binding_set: binding_set,
+        activated_at: activation.activated_at,
+        metadata: activation.metadata
+      }
+      |> Map.merge(mission_model_basis)
+      |> MissionRuntimeSpec.new()
+    end
   end
 
   defp matching_mission(mission_id, mission_id), do: :ok
