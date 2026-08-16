@@ -11,7 +11,6 @@ defmodule Cadence.Catalog.ImportRun do
 
   @type t :: %__MODULE__{
           import_run_id: binary(),
-          snapshot_id: binary() | nil,
           organization_id: binary() | nil,
           mission_id: binary(),
           catalog_database_id: binary() | nil,
@@ -32,7 +31,6 @@ defmodule Cadence.Catalog.ImportRun do
 
   defstruct [
     :import_run_id,
-    :snapshot_id,
     :organization_id,
     :mission_id,
     :catalog_database_id,
@@ -55,7 +53,6 @@ defmodule Cadence.Catalog.ImportRun do
   def new(attrs) when is_map(attrs) do
     %__MODULE__{
       import_run_id: Map.get(attrs, :import_run_id, Ids.new("catalog_import_run")),
-      snapshot_id: Map.get(attrs, :snapshot_id, Map.get(attrs, "snapshot_id")),
       organization_id: Map.get(attrs, :organization_id, Map.get(attrs, "organization_id")),
       mission_id: Map.fetch!(attrs, :mission_id),
       catalog_database_id:

@@ -145,7 +145,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
       catalog_revision(organization_id, mission_id, "catalog-revision-a",
         revision_number: 1,
         revision_label: "FSW 3.6",
-        telemetry_snapshot_id: "telemetry-snapshot-a",
+        mission_model_revision_id: "mission-model-a",
         import_run_id: "import-run-a"
       )
 
@@ -320,7 +320,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
         realized_contact_id: "realized-contact-1",
         path_id: "path-1",
         transport_binding_id: "transport-binding-1",
-        command_snapshot_id: "command-snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         command_id: "noop-command",
         command_name: "NOOP",
         layout_kind: :ccsds_space_packet,
@@ -350,7 +350,7 @@ defmodule Cadence.Dashboards.DataLinkResolverOperationalIntervalsTest do
         command_request_id: "command-request-1",
         command_release_attempt_id: "release-attempt-1",
         source_endpoint_ref: "source-endpoint-alpha",
-        command_snapshot_id: "command-snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         command_id: "noop-command",
         command_name: "NOOP",
         verifier_id: "transport-verifier-1",

@@ -6,7 +6,6 @@ defmodule Cadence.CommandingDispatcherTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.{CommandRequest, DispatchSupervisor}
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Repo
@@ -41,18 +40,18 @@ defmodule Cadence.CommandingDispatcherTest do
     persist_mission_scope(dispatcher_scope.organization_id, dispatcher_scope.mission_id)
 
     source_endpoint = persist_source_endpoint(dispatcher_scope)
-    command_snapshot = import_command_snapshot(dispatcher_scope)
+    command_model = import_command_model(dispatcher_scope)
 
     {:ok,
      dispatcher_scope: dispatcher_scope,
      source_endpoint: source_endpoint,
-     command_snapshot: command_snapshot}
+     command_model: command_model}
   end
 
   test "dispatcher releases queued commands automatically in priority order within a lane", %{
     dispatcher_scope: dispatcher_scope,
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     start_supervised!(
       {DispatchSupervisor,
@@ -63,12 +62,12 @@ defmodule Cadence.CommandingDispatcherTest do
     )
 
     low_priority_request =
-      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 5, %{
+      persist_safe_command_request(dispatcher_scope, command_model, source_endpoint, 5, %{
         "label" => "low"
       })
 
     high_priority_request =
-      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 1, %{
+      persist_safe_command_request(dispatcher_scope, command_model, source_endpoint, 1, %{
         "label" => "high"
       })
 
@@ -148,7 +147,7 @@ defmodule Cadence.CommandingDispatcherTest do
   test "dispatcher retries pending commands until an uplink contact becomes available", %{
     dispatcher_scope: dispatcher_scope,
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     attach_lane_dispatcher_telemetry(self())
 
@@ -161,7 +160,7 @@ defmodule Cadence.CommandingDispatcherTest do
     )
 
     command_request =
-      persist_safe_command_request(dispatcher_scope, command_snapshot, source_endpoint, 1, %{
+      persist_safe_command_request(dispatcher_scope, command_model, source_endpoint, 1, %{
         "label" => "delayed"
       })
 
@@ -313,7 +312,7 @@ defmodule Cadence.CommandingDispatcherTest do
     persisted_source_endpoint
   end
 
-  defp import_command_snapshot(dispatcher_scope) do
+  defp import_command_model(dispatcher_scope) do
     artifact =
       Artifact.new(%{
         artifact_id: "artifact-command-dispatcher-#{dispatcher_scope.suffix}",
@@ -361,21 +360,16 @@ defmodule Cadence.CommandingDispatcherTest do
                queued_run.import_run_id
              )
 
-    command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
-
-    assert {:ok, %CommandSnapshot{} = command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
-               dispatcher_scope.organization_id,
-               dispatcher_scope.mission_id,
-               command_snapshot_id
-             )
-
-    command_snapshot
+    Cadence.MissionModelFixtures.activate_imported_model!(
+      dispatcher_scope.organization_id,
+      dispatcher_scope.mission_id,
+      completed_run.result_document
+    )
   end
 
   defp persist_safe_command_request(
          dispatcher_scope,
-         command_snapshot,
+         command_model,
          source_endpoint,
          priority,
          metadata
@@ -384,8 +378,8 @@ defmodule Cadence.CommandingDispatcherTest do
       CommandRequest.new(%{
         mission_id: dispatcher_scope.mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "NOOP"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "NOOP"),
         priority: priority,
         requested_by: %{"user_id" => "requester-safe"},
         metadata: metadata
@@ -438,9 +432,6 @@ defmodule Cadence.CommandingDispatcherTest do
     realized_contact
   end
 
-  defp fetch_command_id(%CommandSnapshot{} = command_snapshot, command_name) do
-    command_snapshot.command_definitions
-    |> Enum.find(&(&1.name == command_name))
-    |> then(& &1.command_id)
-  end
+  defp fetch_command_id(command_model, command_name),
+    do: Cadence.MissionModelFixtures.command_id!(command_model, command_name)
 end

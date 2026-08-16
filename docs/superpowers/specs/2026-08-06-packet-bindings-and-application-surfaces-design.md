@@ -193,7 +193,8 @@ runtime packet-model reference may be represented conceptually as:
 
 ```elixir
 %PacketModelReference{
-  telemetry_snapshot_id: binary(),
+  mission_model_revision_id: binary(),
+  telemetry_runtime_plan_id: binary(),
   packet_id: binary(),
   content_sha256: binary()
 }

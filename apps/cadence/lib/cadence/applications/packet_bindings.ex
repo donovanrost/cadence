@@ -27,10 +27,9 @@ defmodule Cadence.Applications.PacketBindings do
   alias Cadence.Capabilities.{DefinitionRegistry, Descriptor}
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
-  alias Cadence.Catalog.Telemetry.Compiler.Result, as: CompilerResult
-  alias Cadence.Catalog.Telemetry.RuntimeArtifacts
-  alias Cadence.Catalog.Telemetry.Snapshot
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ContentHash
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -291,13 +290,7 @@ defmodule Cadence.Applications.PacketBindings do
     with {:ok, catalog_revision_id} <- required_text(attrs, :catalog_revision_id),
          {:ok, %Revision{} = revision} <-
            Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
-         {:ok, telemetry_snapshot_id} <- telemetry_snapshot_id(revision),
-         {:ok, %Snapshot{} = snapshot} <-
-           Catalog.fetch_telemetry_snapshot(
-             organization_id,
-             mission_id,
-             telemetry_snapshot_id
-           ),
+         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision),
          {:ok, source_endpoint_ref} <-
            validate_source_endpoint(
              organization_id,
@@ -306,9 +299,9 @@ defmodule Cadence.Applications.PacketBindings do
              value(attrs, :source_endpoint_ref)
            ),
          {:ok, packet_ids} <- selected_packet_ids(attrs),
-         {:ok, packets} <- select_packets(snapshot, packet_ids) do
+         {:ok, packets} <- select_packets(telemetry.packet_definitions, packet_ids) do
       build_packet_bindings(
-        snapshot,
+        telemetry,
         revision,
         packets,
         source_endpoint_ref,
@@ -316,13 +309,6 @@ defmodule Cadence.Applications.PacketBindings do
       )
     end
   end
-
-  defp telemetry_snapshot_id(%Revision{telemetry_snapshot_id: snapshot_id})
-       when is_binary(snapshot_id) and snapshot_id != "",
-       do: {:ok, snapshot_id}
-
-  defp telemetry_snapshot_id(%Revision{}),
-    do: {:error, :catalog_revision_missing_telemetry}
 
   defp validate_source_endpoint(_organization_id, _mission_id, _host_context, nil),
     do: {:error, :packet_binding_source_endpoint_required}
@@ -373,8 +359,8 @@ defmodule Cadence.Applications.PacketBindings do
       else: {:error, :packet_binding_selection_too_large}
   end
 
-  defp select_packets(%Snapshot{} = snapshot, packet_ids) do
-    packet_by_id = Map.new(snapshot.packets, &{&1.packet_id, &1})
+  defp select_packets(packet_definitions, packet_ids) do
+    packet_by_id = Map.new(packet_definitions, &{&1.packet_definition_id, &1})
     missing_ids = Enum.reject(packet_ids, &Map.has_key?(packet_by_id, &1))
 
     case missing_ids do
@@ -384,24 +370,19 @@ defmodule Cadence.Applications.PacketBindings do
   end
 
   defp build_packet_bindings(
-         snapshot,
+         telemetry,
          revision,
          packets,
          source_endpoint_ref,
          %PacketInputDefinition{selection_mode: :compatible_fields} = input_definition
        ) do
-    compiler_result = RuntimeArtifacts.compile(snapshot).compiler_result
-    definitions = Map.new(compiler_result.packet_definitions, &{&1.packet_definition_id, &1})
-
     Enum.reduce_while(packets, {:ok, []}, fn packet, {:ok, bindings} ->
       append_compatible_packet_binding(
         packet,
         bindings,
-        definitions,
-        compiler_result,
         input_definition,
         revision,
-        snapshot,
+        telemetry,
         source_endpoint_ref
       )
     end)
@@ -409,7 +390,7 @@ defmodule Cadence.Applications.PacketBindings do
   end
 
   defp build_packet_bindings(
-         snapshot,
+         telemetry,
          revision,
          packets,
          source_endpoint_ref,
@@ -420,21 +401,21 @@ defmodule Cadence.Applications.PacketBindings do
         resource =
           PacketBindingResource.new(%{
             packet_binding_resource_id:
-              "packet_binding_resource:#{packet.packet_id}:whole_packet",
-            resource_id: packet.packet_id,
+              "packet_binding_resource:#{packet.packet_definition_id}:whole_packet",
+            resource_id: packet.packet_definition_id,
             resource_kind: :whole_packet,
-            path: packet.name,
+            path: packet.packet_name,
             role: :primary
           })
 
-        catalog_binding(revision, snapshot, packet, source_endpoint_ref, [resource])
+        catalog_binding(revision, telemetry, packet, source_endpoint_ref, [resource])
       end)
 
     {:ok, bindings}
   end
 
   defp build_packet_bindings(
-         _snapshot,
+         _telemetry,
          _revision,
          _packets,
          _source_endpoint_ref,
@@ -445,63 +426,33 @@ defmodule Cadence.Applications.PacketBindings do
   defp append_compatible_packet_binding(
          packet,
          bindings,
-         definitions,
-         compiler_result,
          input_definition,
          revision,
-         snapshot,
-         source_endpoint_ref
-       ) do
-    case Map.fetch(definitions, packet.packet_id) do
-      {:ok, packet_definition} ->
-        append_resolved_packet_binding(
-          packet,
-          packet_definition,
-          bindings,
-          input_definition,
-          revision,
-          snapshot,
-          source_endpoint_ref
-        )
-
-      :error ->
-        {:halt,
-         {:error,
-          {:packet_input_incompatible, packet.packet_id, compiler_diagnostics(compiler_result)}}}
-    end
-  end
-
-  defp append_resolved_packet_binding(
-         packet,
-         packet_definition,
-         bindings,
-         input_definition,
-         revision,
-         snapshot,
+         telemetry,
          source_endpoint_ref
        ) do
     resources =
-      packet_definition.fields
+      packet.fields
       |> Enum.filter(&(&1.data_type in input_definition.accepted_data_types))
-      |> Enum.map(&field_resource(packet.packet_id, &1))
+      |> Enum.map(&field_resource(packet.packet_definition_id, &1))
 
     if resources == [] do
-      {:halt, {:error, {:packet_input_incompatible, packet.packet_id}}}
+      {:halt, {:error, {:packet_input_incompatible, packet.packet_definition_id}}}
     else
-      binding = catalog_binding(revision, snapshot, packet, source_endpoint_ref, resources)
+      binding = catalog_binding(revision, telemetry, packet, source_endpoint_ref, resources)
       {:cont, {:ok, [binding | bindings]}}
     end
   end
 
-  defp catalog_binding(revision, snapshot, packet, source_endpoint_ref, resources) do
+  defp catalog_binding(revision, telemetry, packet, source_endpoint_ref, resources) do
     PacketBinding.new(%{
-      packet_binding_id: "packet_binding:#{packet.packet_id}",
+      packet_binding_id: "packet_binding:#{packet.packet_definition_id}",
       source_endpoint_ref: source_endpoint_ref,
       catalog_revision_id: revision.catalog_revision_id,
-      telemetry_snapshot_id: snapshot.snapshot_id,
-      packet_id: packet.packet_id,
-      packet_model_content_sha256: revision.content_sha256,
-      packet_name: packet.name,
+      mission_model_revision_id: telemetry.mission_model_revision.revision_id,
+      packet_id: packet.packet_definition_id,
+      packet_model_content_sha256: telemetry.mission_model_revision.content_sha256,
+      packet_name: packet.packet_name,
       apid: packet.apid,
       selector: %{
         match: %{packet_kind: :space_packet, apid: packet.apid},
@@ -511,7 +462,10 @@ defmodule Cadence.Applications.PacketBindings do
         }
       },
       resources: resources,
-      metadata: %{"catalog_revision_label" => revision.revision_label}
+      metadata: %{
+        "catalog_revision_label" => revision.revision_label,
+        "telemetry_plan_id" => telemetry.telemetry_plan.plan_id
+      }
     })
   end
 
@@ -528,10 +482,6 @@ defmodule Cadence.Applications.PacketBindings do
       size_bits: field.size_bits,
       role: :primary
     })
-  end
-
-  defp compiler_diagnostics(%CompilerResult{} = result) do
-    Enum.map(result.diagnostics, & &1.code)
   end
 
   defp reverse_bindings({:ok, bindings}), do: {:ok, Enum.reverse(bindings)}
@@ -627,7 +577,7 @@ defmodule Cadence.Applications.PacketBindings do
           %{
             source_endpoint_ref: binding.source_endpoint_ref,
             catalog_revision_id: binding.catalog_revision_id,
-            telemetry_snapshot_id: binding.telemetry_snapshot_id,
+            mission_model_revision_id: binding.mission_model_revision_id,
             packet_id: binding.packet_id,
             packet_model_content_sha256: binding.packet_model_content_sha256,
             packet_name: binding.packet_name,
@@ -656,20 +606,23 @@ defmodule Cadence.Applications.PacketBindings do
 
   defp canonicalize_binding_ids(configuration_id, bindings) do
     Enum.map(bindings, fn %PacketBinding{} = binding ->
-      binding_id = "packet_binding:#{configuration_id}:#{binding.packet_id || binding.apid}"
+      binding_id =
+        content_id(:packet_binding, {configuration_id, binding.packet_id || binding.apid})
 
       resources =
         Enum.map(binding.resources, fn %PacketBindingResource{} = resource ->
           %PacketBindingResource{
             resource
             | packet_binding_resource_id:
-                "packet_binding_resource:#{binding_id}:#{resource.resource_id}"
+                content_id(:packet_binding_resource, {binding_id, resource.resource_id})
           }
         end)
 
       %PacketBinding{binding | packet_binding_id: binding_id, resources: resources}
     end)
   end
+
+  defp content_id(kind, basis), do: "#{kind}:#{ContentHash.term_sha256(basis)}"
 
   defp persist_replacement(%PacketBindingConfiguration{} = desired, attrs) do
     case Repo.transaction(fn -> locked_replace(desired, attrs) end) do
@@ -872,7 +825,7 @@ defmodule Cadence.Applications.PacketBindings do
       packet_binding_id: row.packet_binding_id,
       source_endpoint_ref: row.source_endpoint_ref,
       catalog_revision_id: row.catalog_revision_id,
-      telemetry_snapshot_id: row.telemetry_snapshot_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       packet_id: row.packet_id,
       packet_model_content_sha256: row.packet_model_content_sha256,
       packet_name: row.packet_name,

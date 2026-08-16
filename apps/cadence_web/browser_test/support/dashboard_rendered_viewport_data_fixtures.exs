@@ -65,7 +65,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         command_request_id: command_request_id,
         mission_id: mission.mission_id,
         source_endpoint_ref: source_endpoint_ref,
-        command_snapshot_id: command_queue_entry_id <> "-snapshot",
+        mission_model_revision_id: command_queue_entry_id <> "-model",
         command_id: command_queue_entry_id <> "-command",
         command_name: "NOOP",
         command_display_name: "NOOP",
@@ -399,8 +399,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
         catalog_family: :telemetry,
         artifact_id: "#{catalog_revision_id}-artifact",
         import_run_id: "#{catalog_revision_id}-import-run",
-        telemetry_snapshot_id: "#{catalog_revision_id}-telemetry-snapshot",
-        command_snapshot_id: nil,
+        mission_model_revision_id: "#{catalog_revision_id}-mission-model",
         content_sha256: "#{catalog_revision_id}-sha",
         created_by: %{"service_identity_id" => "dashboard-browser-smoke"},
         metadata: %{"source_artifact_name" => "#{catalog_revision_id}.json"}

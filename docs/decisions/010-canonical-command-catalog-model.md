@@ -2,7 +2,7 @@
 title: "ADR-010: Canonical Command Catalog Model"
 aliases: [command catalog, canonical command model, mdb command model]
 tags: [adr, architecture, commanding, catalog, import]
-status: accepted
+status: superseded
 created: 2026-03-30
 updated: 2026-03-30
 ---
@@ -11,7 +11,10 @@ updated: 2026-03-30
 
 ## Status
 
-Accepted
+Superseded by
+[ADR-020](020-xtce-informed-mission-model-intermediate-representation.md).
+The separate canonical command snapshot described below has been removed;
+commanding is now a declaration family in the resolved Mission Model IR.
 
 ## Context
 

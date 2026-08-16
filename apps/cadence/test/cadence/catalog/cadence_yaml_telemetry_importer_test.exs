@@ -3,12 +3,9 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.Artifact
-  alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
-  alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
-  alias Cadence.Ingress.RawEvidence
+  alias Cadence.MissionModels
+  alias Cadence.Runtime.MissionModelPlanDecoder
 
   @organization_id "org-alpha"
   @mission_id "mission-alpha"
@@ -27,7 +24,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     :ok
   end
 
-  test "imports legacy cadence yaml into telemetry and command snapshots plus runnable telemetry runtime artifacts" do
+  test "imports Cadence YAML into one native Mission Model and runnable target plans" do
     persist_mission_scope(@organization_id, @mission_id)
 
     artifact =
@@ -107,121 +104,27 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              )
 
     assert completed_run.status == :completed, inspect(completed_run.failure_reason, pretty: true)
-    assert completed_run.snapshot_id == "telemetry_snapshot:" <> queued_run.import_run_id
     assert completed_run.imported_definition_count == 4
 
-    diagnostic_codes = Enum.map(completed_run.diagnostics, & &1.code)
+    refute Map.has_key?(completed_run.result_document, "telemetry_snapshot")
+    refute Map.has_key?(completed_run.result_document, "command_snapshot")
 
-    assert "cadence_yaml_telemetry.polynomial_preserved_not_executed" in diagnostic_codes
-    refute "cadence_yaml_telemetry.commands_ignored" in diagnostic_codes
+    revision_id = completed_run.result_document["mission_model"]["revision_id"]
 
-    assert {:ok, telemetry_snapshot} =
-             Cadence.Catalog.fetch_telemetry_snapshot(
-               @organization_id,
-               @mission_id,
-               completed_run.snapshot_id
-             )
+    assert {:ok, revision} =
+             MissionModels.fetch_revision(@organization_id, @mission_id, revision_id)
 
-    assert %TelemetryCatalogSnapshot{} = telemetry_snapshot
-    assert telemetry_snapshot.snapshot_name == persisted_artifact.artifact_name
-    assert Enum.map(telemetry_snapshot.packets, & &1.name) == ["THERM"]
-    assert Enum.map(telemetry_snapshot.points, & &1.name) == ["temperature_c", "heater_enabled"]
+    assert revision.status == :candidate
 
-    command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
+    assert {:ok, plans} =
+             MissionModels.fetch_runtime_plans(@organization_id, @mission_id, revision_id)
 
-    assert {:ok, %CommandCatalogSnapshot{} = command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
-               @organization_id,
-               @mission_id,
-               command_snapshot_id
-             )
+    assert Enum.all?(plans, fn {_target, plan} -> plan.status == :ready end)
+    assert "MM_CALIBRATOR_RUNTIME_UNSUPPORTED" in Enum.map(plans.telemetry.diagnostics, & &1.code)
+    assert :ok = MissionModelPlanDecoder.validate(plans)
 
-    assert Enum.map(command_snapshot.command_definitions, & &1.name) == [
-             "NOOP",
-             "SAFE_MODE",
-             "SET_MODE"
-           ]
-
-    command_compilation = CommandCatalogCompiler.compile(command_snapshot)
-
-    assert length(command_compilation.runtime_definitions) == 3
-
-    assert Enum.map(command_compilation.runtime_definitions, & &1.name) == [
-             "NOOP",
-             "SAFE_MODE",
-             "SET_MODE"
-           ]
-
-    assert {:ok, recompilation} =
-             Cadence.Catalog.recompile_telemetry_snapshot(
-               @organization_id,
-               @mission_id,
-               completed_run.snapshot_id
-             )
-
-    assert recompilation.binding_set.binding_set_id ==
-             "catalog_import:" <> completed_run.import_run_id
-
-    assert length(recompilation.compiler_result.packet_definitions) == 1
-    assert length(recompilation.compiler_result.selector_inputs) == 1
-    assert recompilation.compiler_result.diagnostics == []
-
-    assert {:ok, runtime_diff} =
-             Cadence.Catalog.diff_telemetry_snapshot_runtime(
-               @organization_id,
-               @mission_id,
-               completed_run.snapshot_id
-             )
-
-    assert runtime_diff.packet_definitions.matching_count == 1
-    assert runtime_diff.packet_definitions.mismatches == []
-    assert runtime_diff.packet_definitions.missing_existing == []
-    assert runtime_diff.packet_definitions.extra_existing == []
-    assert runtime_diff.capability_instances.matching_count == 1
-    assert runtime_diff.capability_instances.mismatches == []
-    assert runtime_diff.binding_rules.matching_count == 1
-    assert runtime_diff.binding_rules.mismatches == []
-
-    assert {:ok, materialization} =
-             Cadence.Catalog.materialize_telemetry_snapshot_runtime(
-               @organization_id,
-               @mission_id,
-               completed_run.snapshot_id
-             )
-
-    assert materialization.binding_set.binding_set_id ==
-             "catalog_import:" <> completed_run.import_run_id
-
-    assert materialization.binding_set.version == 2
-    assert Enum.map(materialization.compiler_result.packet_definitions, & &1.version) == [2]
-
-    assert {:ok, %BindingSet{} = materialized_binding_set} =
-             Cadence.Governance.fetch_binding_set(
-               @organization_id,
-               @mission_id,
-               "catalog_import:" <> completed_run.import_run_id,
-               2
-             )
-
-    assert materialized_binding_set.version == 2
-
-    assert {:ok, runtime_diff_after_materialization} =
-             Cadence.Catalog.diff_telemetry_snapshot_runtime(
-               @organization_id,
-               @mission_id,
-               completed_run.snapshot_id
-             )
-
-    assert runtime_diff_after_materialization.existing_binding_set.version == 2
-    assert runtime_diff_after_materialization.packet_definitions.matching_count == 1
-    assert runtime_diff_after_materialization.packet_definitions.mismatches == []
-    assert runtime_diff_after_materialization.capability_instances.matching_count == 1
-    assert runtime_diff_after_materialization.capability_instances.mismatches == []
-    assert runtime_diff_after_materialization.binding_rules.matching_count == 1
-    assert runtime_diff_after_materialization.binding_rules.mismatches == []
-
-    [packet_definition] =
-      Cadence.Governance.list_packet_definitions(@organization_id, @mission_id)
+    assert {:ok, [packet_definition]} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(plans)
 
     assert packet_definition.packet_name == "THERM"
 
@@ -230,33 +133,14 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              {"heater_enabled", :bool}
            ]
 
-    binding_set_document = completed_run.result_document["binding_set"]
-
-    assert is_map(binding_set_document)
-
-    assert {:ok, %BindingSet{} = binding_set} =
-             Cadence.Governance.fetch_binding_set(
-               @organization_id,
-               @mission_id,
-               binding_set_document["binding_set_id"],
-               binding_set_document["version"]
-             )
-
-    raw_evidence =
-      RawEvidence.new(%{
-        mission_id: @mission_id,
-        raw: build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
-      })
-
-    assert {:ok, result} = Cadence.process_telemetry_ingress(raw_evidence, binding_set)
-
-    assert Enum.map(result.outputs, &{&1.point_name, &1.raw_value}) == [
-             {"THERM.temperature_c", 12.5},
-             {"THERM.heater_enabled", true}
+    assert Enum.map(plans.command.plan["runtime_definitions"], & &1["name"]) == [
+             "NOOP",
+             "SAFE_MODE",
+             "SET_MODE"
            ]
   end
 
-  test "imports the legacy demo_spacecraft yaml fixture as a combined command and telemetry database" do
+  test "imports the demo spacecraft YAML fixture as a combined native Mission Model" do
     persist_mission_scope(@organization_id, @mission_id)
 
     demo_yaml_path =
@@ -305,31 +189,17 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              )
 
     assert completed_run.status == :completed, inspect(completed_run.failure_reason, pretty: true)
-    assert completed_run.snapshot_id == "telemetry_snapshot:" <> queued_run.import_run_id
     assert completed_run.imported_definition_count > 10
-    assert is_map(completed_run.result_document["telemetry_snapshot"])
-    assert is_map(completed_run.result_document["command_snapshot"])
-    assert completed_run.result_document["command_runtime"]["runtime_definition_count"] > 10
+    revision_id = completed_run.result_document["mission_model"]["revision_id"]
 
-    assert {:ok, command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
-               @organization_id,
-               @mission_id,
-               completed_run.result_document["command_snapshot"]["snapshot_id"]
-             )
+    assert {:ok, plans} =
+             MissionModels.fetch_runtime_plans(@organization_id, @mission_id, revision_id)
 
-    assert {:ok, telemetry_snapshot} =
-             Cadence.Catalog.fetch_telemetry_snapshot(
-               @organization_id,
-               @mission_id,
-               completed_run.result_document["telemetry_snapshot"]["snapshot_id"]
-             )
-
-    assert length(command_snapshot.command_definitions) > 10
-    assert length(telemetry_snapshot.packets) > 5
+    assert length(plans.command.plan["runtime_definitions"]) > 10
+    assert length(plans.telemetry.plan["packet_definitions"]) > 5
   end
 
-  test "summarizes packets preserved for custom application binding when telemetry contains binary payload content" do
+  test "lowers binary telemetry fields into the native telemetry plan" do
     persist_mission_scope(@organization_id, @mission_id)
 
     artifact =
@@ -382,37 +252,17 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
     assert completed_run.status == :completed
 
-    assert "telemetry_compiler.available_for_custom_application_binding" in Enum.map(
-             completed_run.diagnostics,
-             & &1.code
-           )
+    revision_id = completed_run.result_document["mission_model"]["revision_id"]
 
-    telemetry_runtime = completed_run.result_document["telemetry_runtime"]
-    assert telemetry_runtime["packet_count"] == 1
-    assert telemetry_runtime["built_in_telemetry_packet_count"] == 0
-    assert telemetry_runtime["custom_application_candidate_packet_count"] == 1
+    assert {:ok, plans} =
+             MissionModels.fetch_runtime_plans(@organization_id, @mission_id, revision_id)
 
-    assert telemetry_runtime["custom_application_candidate_packets"] == [
-             %{
-               "packet_id" => "telemetry_snapshot:#{queued_run.import_run_id}:packet:0",
-               "packet_name" => "SCIENCE_FRAME",
-               "reason" => "binary_payload_field"
-             }
-           ]
-  end
+    assert {:ok, [packet_definition]} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(plans)
 
-  defp build_space_packet(apid, sequence_count, packet_data) do
-    packet_length = byte_size(packet_data) - 1
+    assert packet_definition.packet_name == "SCIENCE_FRAME"
 
-    <<
-      0::3,
-      0::1,
-      0::1,
-      apid::11,
-      3::2,
-      sequence_count::14,
-      packet_length::16,
-      packet_data::binary
-    >>
+    assert [%{name: "data_block", data_type: :binary, size_bits: 32_672}] =
+             packet_definition.fields
   end
 end

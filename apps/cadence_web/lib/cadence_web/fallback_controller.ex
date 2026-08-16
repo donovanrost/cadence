@@ -71,10 +71,6 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "catalog_import_run_not_found")
   end
 
-  def call(conn, {:error, :catalog_telemetry_snapshot_not_found}) do
-    error_response(conn, :not_found, "catalog_telemetry_snapshot_not_found")
-  end
-
   def call(conn, {:error, :contact_provider_profile_not_found}) do
     error_response(conn, :not_found, "contact_provider_profile_not_found")
   end

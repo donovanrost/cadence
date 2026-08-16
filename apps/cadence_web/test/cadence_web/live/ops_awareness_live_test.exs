@@ -130,7 +130,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
       organization_id: org.organization_id,
       mission_id: mission.mission_id,
       source_endpoint_ref: "uplink-primary",
-      command_snapshot_id: "snapshot-1",
+      mission_model_revision_id: "mission-model-1",
       command_id: "NOOP",
       command_name: "NOOP",
       command_display_name: "No operation",

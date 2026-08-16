@@ -46,8 +46,8 @@ The initial implementation is complete as of 2026-08-12. Cadence now has:
 - immutable declaration layers, resolved Mission Model revisions, typed
   references, provenance, defaults, inheritance checks, semantic validation,
   target capability diagnostics, and deterministic target plans;
-- adapters from the existing telemetry and command snapshots plus governed
-  migration helpers for the transitional Derived Telemetry and Limits models;
+- native XTCE and Cadence YAML frontends that emit declaration layers directly,
+  without constructing telemetry or command snapshots;
 - an XTCE 1.3 frontend with a pinned, offline copy of the normative schema,
   source-location diagnostics, semantic preservation of unsupported executable
   constructs, and deterministic export of the representable core subset;
@@ -59,8 +59,8 @@ The initial implementation is complete as of 2026-08-12. Cadence now has:
   pinned to the active revision and plan;
 - activation-time qualification reports and governed replay corpora for
   higher-risk revisions; and
-- explicit guards that prevent the legacy Derived Telemetry and Limits
-  execution paths from competing with an active Mission Model runtime.
+- native telemetry and command target lowerers plus runtime consumers that
+  require exact Mission Model plans and revision identities.
 
 XTCE schema validation invokes `xmllint --nonet`; installations that import
 XTCE must provide that executable. The checked-in schemas are content-addressed
@@ -68,9 +68,9 @@ and schema URLs supplied by imported documents are never fetched.
 
 This implementation does not claim executable support for every XTCE feature.
 Unsupported required constructs remain preserved with provenance and produce
-target-specific blocking diagnostics. The current telemetry and command
-snapshot adapters remain transitional compatibility boundaries until all
-catalog producers emit Mission Model declarations directly.
+target-specific blocking diagnostics. There is no snapshot-to-Mission-Model
+adapter or fallback execution path: catalog frontends must emit declarations,
+and runtime consumers must receive compiled plans.
 
 ## Context
 
@@ -341,8 +341,9 @@ semantic augmentation layer that contributes parameter and algorithm
 declarations to the effective Mission Model.
 
 The current `Cadence.DerivedTelemetry.Definition` API, one-output expression
-shape, evaluator, and persistence schema are transitional. They may be replaced
-rather than preserved through compatibility adapters indefinitely.
+shape, evaluator, and persistence schema do not constrain this architecture.
+They are replaced rather than adapted when their product workflow moves to the
+Mission Model.
 
 ### 6. Limits And Alarms Become Monitoring Semantics
 
@@ -381,8 +382,8 @@ augmentation to silently replace an imported policy.
 
 The existing Limits product application may remain an operator-facing authoring
 and observability workflow. The current `Cadence.Limits.Definition`, four-
-threshold evaluator, storage schema, and API are transitional and may be
-replaced.
+threshold evaluator, storage schema, and API do not constrain the Mission Model
+and are replaced when that workflow moves to monitoring declarations.
 
 Alarm read models remain projections over runtime monitoring results. They are
 not the authoritative definition store.
@@ -554,19 +555,19 @@ versions, compiler version, and target contract.
 
 ## Impact On Current Cadence Models
 
-The current `Cadence.Catalog.Bundle`, telemetry snapshot, and command snapshot
-may remain as transitional importer outputs or compatibility views while the
-Mission Model is introduced. They will not remain the authoritative top-level
-semantic boundary after migration.
+Mission Model importers populate `Cadence.Catalog.Bundle.declaration_layers`.
+They do not populate a parallel canonical telemetry or command model. The
+retired snapshot types, persistence tables, APIs, routes, adapters, and runtime
+fallbacks are removed; Cadence does not dual-read or dual-write the old model.
 
 Current runtime packet and command definitions remain valid examples of lowered
 runtime artifacts. They should evolve through versioned compiler targets rather
 than absorbing the entire Mission Model.
 
 Current Derived Telemetry and Limits definitions, persistence, actions, and
-evaluators are explicitly not compatibility constraints. Migration should favor
-the clean target model over dual-writing or permanently translating between two
-semantic systems.
+evaluators are explicitly not constraints on the Mission Model. New semantic
+work uses declaration layers and compiled plans; it does not dual-write or
+translate between semantic systems.
 
 Separate operator-facing applications may remain useful for focused workflows:
 
@@ -620,7 +621,7 @@ This ADR does not require Cadence to:
 ### Negative
 
 - The canonical catalog becomes a graph with symbol resolution, not a pair of
-  simple aggregate snapshots.
+  separate aggregate roots.
 - Cadence needs compiler infrastructure, model versioning, deterministic layer
   composition, and target capability contracts.
 - Existing Derived Telemetry and Limits code will likely be replaced rather
@@ -671,26 +672,22 @@ Implementation should proceed in bounded, testable slices:
 
 1. define Mission Model identity, revision, `SpaceSystem`, declaration, symbol
    reference, provenance, and diagnostic contracts in `cadence_catalog`;
-2. introduce adapters that project current telemetry and command snapshots into
-   a minimal Mission Model without changing active runtime behavior;
+2. make every supported format frontend emit canonical declaration layers
+   directly;
 3. implement deterministic namespace construction, reference resolution, and
    runtime target capability diagnostics;
 4. define parameter producer-consumer edges and typed algorithm contracts using
    representative XTCE fixtures;
-5. replace the current Derived Telemetry definition family with governed
-   parameter-and-algorithm augmentation layers and compiled execution plans;
-6. define monitoring policy and replace the current Limits definition family
-   and evaluator with monitoring augmentations and compiled plans;
+5. implement governed parameter-and-algorithm augmentation layers and compiled
+   execution plans for derived parameters;
+6. define monitoring policy and implement monitoring augmentations and compiled
+   plans;
 7. resolve command constraints and verifiers against the shared semantic graph;
 8. add an XTCE frontend with conformance fixtures covering hierarchy,
    references, containers, algorithms, monitoring, and commands;
 9. add semantic XTCE export for the representable subset; and
-10. remove transitional canonical-family adapters after all active consumers use
-    Mission Model revisions or compiled runtime plans.
-
-Each slice must retain current runtime behavior until its replacement path is
-activated and verified. No slice should require a flag day across every runtime
-target.
+10. require exact Mission Model revisions and compiled plans at runtime
+    boundaries.
 
 ## Validation Expectations
 

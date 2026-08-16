@@ -108,7 +108,7 @@ defmodule Cadence.Commanding.StageStore do
            RequestValidation.resolve_basis(
              scoped_item.organization_id,
              scoped_item.mission_id,
-             scoped_item.command_snapshot_id,
+             scoped_item.mission_model_revision_id,
              scoped_item.command_id
            ),
          {:ok, %StagedCommandItemRow{} = row} <-
@@ -146,7 +146,7 @@ defmodule Cadence.Commanding.StageStore do
            RequestValidation.resolve_basis(
              scoped_item.organization_id,
              scoped_item.mission_id,
-             scoped_item.command_snapshot_id,
+             scoped_item.mission_model_revision_id,
              scoped_item.command_id
            ),
          {:ok, %StagedCommandItemRow{} = updated_row} <-
@@ -293,7 +293,7 @@ defmodule Cadence.Commanding.StageStore do
           mission_id: item_row.mission_id,
           organization_id: item_row.organization_id,
           source_endpoint_ref: item_row.source_endpoint_ref,
-          command_snapshot_id: item_row.command_snapshot_id,
+          mission_model_revision_id: item_row.mission_model_revision_id,
           command_id: item_row.command_id,
           priority: item_row.priority,
           not_before: item_row.not_before,

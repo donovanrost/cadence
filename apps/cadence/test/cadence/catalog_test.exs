@@ -136,34 +136,13 @@ defmodule Cadence.CatalogTest do
 
     assert completed_run.status == :completed
     assert completed_run.importer_version == 1
-    assert completed_run.snapshot_id == "telemetry_snapshot:" <> queued_run.import_run_id
     assert completed_run.imported_definition_count == 2
     assert completed_run.result_document["packet_names"] == ["HK_PACKET", "EVENT_PACKET"]
+    assert is_binary(completed_run.result_document["mission_model"]["revision_id"])
 
     assert Enum.map(completed_run.diagnostics, &{&1.code, &1.severity}) == [
-             {"fake_tm_json.warning", :warning},
-             {"telemetry_compiler.apid_required", :error},
-             {"telemetry_compiler.apid_required", :error}
+             {"fake_tm_json.warning", :warning}
            ]
-
-    assert {:ok, telemetry_snapshot} =
-             Cadence.Catalog.fetch_telemetry_snapshot(
-               organization_id(),
-               mission_id(),
-               completed_run.snapshot_id
-             )
-
-    assert telemetry_snapshot.snapshot_name == persisted_artifact.artifact_name
-    assert Enum.map(telemetry_snapshot.packets, & &1.name) == ["HK_PACKET", "EVENT_PACKET"]
-
-    assert [listed_snapshot] =
-             Cadence.Catalog.list_telemetry_snapshots(
-               organization_id(),
-               mission_id(),
-               import_run_id: completed_run.import_run_id
-             )
-
-    assert listed_snapshot.snapshot_id == telemetry_snapshot.snapshot_id
 
     assert [listed_run] =
              Cadence.Catalog.list_import_runs(
@@ -296,8 +275,9 @@ defmodule Cadence.CatalogTest do
       assert revision.revision_number == 1
       assert revision.revision_label == "FSW 3.7"
       assert revision.import_run_id == completed_run.import_run_id
-      assert revision.telemetry_snapshot_id == completed_run.snapshot_id
-      assert revision.command_snapshot_id == nil
+
+      assert revision.mission_model_revision_id ==
+               completed_run.result_document["mission_model"]["revision_id"]
 
       assert {:ok, latest} =
                Catalog.latest_revision(
@@ -324,7 +304,10 @@ defmodule Cadence.CatalogTest do
       assert operational_event.payload["catalog_database_id"] == database.catalog_database_id
       assert operational_event.payload["revision_number"] == 1
       assert operational_event.payload["revision_label"] == "FSW 3.7"
-      assert operational_event.payload["telemetry_snapshot_id"] == completed_run.snapshot_id
+
+      assert operational_event.payload["mission_model_revision_id"] ==
+               revision.mission_model_revision_id
+
       assert operational_event.causality.import_run_id == completed_run.import_run_id
     end
 

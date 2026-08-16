@@ -104,22 +104,6 @@ defmodule CadenceWeb.API.CatalogParams do
     end
   end
 
-  @spec catalog_telemetry_snapshot_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def catalog_telemetry_snapshot_filters(params) when is_map(params) do
-    {:ok,
-     []
-     |> maybe_put_opt(:artifact_id, string_value(params, "artifact_id"))
-     |> maybe_put_opt(:import_run_id, string_value(params, "import_run_id"))}
-  end
-
-  @spec catalog_command_snapshot_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def catalog_command_snapshot_filters(params) when is_map(params) do
-    {:ok,
-     []
-     |> maybe_put_opt(:artifact_id, string_value(params, "artifact_id"))
-     |> maybe_put_opt(:import_run_id, string_value(params, "import_run_id"))}
-  end
-
   @spec binding_set(binary(), binary(), map()) :: {:ok, BindingSet.t()} | {:error, term()}
   def binding_set(organization_id, mission_id, params)
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do

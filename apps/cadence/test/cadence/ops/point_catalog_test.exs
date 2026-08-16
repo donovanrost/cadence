@@ -1,25 +1,12 @@
 defmodule Cadence.Ops.PointCatalogTest do
-  # async: false — registers the fake catalog importer via Application.put_env.
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: false
 
   @moduletag :runtime
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.Catalog
-  alias Cadence.Catalog.Telemetry.Snapshot
   alias Cadence.Telemetry.PacketDefinition
 
   setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.TestSupport.FakeTelemetryCatalogImporter
-    ])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
     organization_id = "org-point-catalog"
     mission_id = "mission-point-catalog"
 
@@ -35,12 +22,11 @@ defmodule Cadence.Ops.PointCatalogTest do
     assert [] = Cadence.list_ops_telemetry_points(organization_id, mission_id)
   end
 
-  test "lists points from the active binding set enriched from catalog snapshots", %{
+  test "lists points from the active Mission Model binding set", %{
     organization_id: organization_id,
     mission_id: mission_id
   } do
     activate_binding_set_fixture(organization_id, mission_id)
-    persist_snapshot_fixture(organization_id, mission_id)
 
     assert [bus_voltage, counter] =
              Cadence.list_ops_telemetry_points(organization_id, mission_id)
@@ -58,8 +44,8 @@ defmodule Cadence.Ops.PointCatalogTest do
              point_id: "HK.counter",
              packet_name: "HK",
              field_name: "counter",
-             stale_timeout_ms: 5_000,
-             description: "Cycle counter"
+             stale_timeout_ms: nil,
+             description: nil
            } = counter
   end
 
@@ -114,56 +100,6 @@ defmodule Cadence.Ops.PointCatalogTest do
         []
       )
 
-    persisted
-  end
-
-  defp persist_snapshot_fixture(organization_id, mission_id) do
-    artifact =
-      Catalog.Artifact.new(%{
-        artifact_id: "artifact-point-catalog",
-        organization_id: organization_id,
-        mission_id: mission_id,
-        catalog_family: :telemetry,
-        artifact_name: "point-catalog.json",
-        format_key: "fake_tm_json",
-        media_type: "application/json",
-        source_artifact: %{"packets" => [%{"name" => "HK"}]},
-        uploaded_by: %{"service_identity_id" => "svc-test"}
-      })
-
-    {:ok, _artifact} = Cadence.Catalog.persist_artifact(organization_id, artifact)
-
-    {:ok, import_run} =
-      Cadence.Catalog.start_import_run(
-        organization_id,
-        mission_id,
-        "artifact-point-catalog",
-        "fake_tm_json",
-        requested_by: %{"service_identity_id" => "svc-test"}
-      )
-
-    snapshot =
-      Snapshot.new(%{
-        snapshot_id: "telemetry_snapshot:point-catalog",
-        organization_id: organization_id,
-        mission_id: mission_id,
-        artifact_id: "artifact-point-catalog",
-        import_run_id: import_run.import_run_id,
-        importer_key: "fake_tm_json",
-        snapshot_name: "Point Catalog Fixture",
-        points: [
-          %{
-            point_id: "field-counter",
-            snapshot_id: "telemetry_snapshot:point-catalog",
-            name: "counter",
-            type_ref: "type-uint",
-            stale_timeout_ms: 5_000,
-            description: "Cycle counter"
-          }
-        ]
-      })
-
-    {:ok, persisted} = Catalog.persist_telemetry_snapshot(organization_id, snapshot)
     persisted
   end
 end

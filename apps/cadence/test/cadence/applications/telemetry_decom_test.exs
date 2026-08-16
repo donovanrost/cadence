@@ -24,8 +24,12 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Platform.ContentHash
   alias Cadence.Runtime
   alias Cadence.Runtime.MissionCoordinator
+  alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.SemanticRuntime
+  alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
 
@@ -545,7 +549,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   end
 
   describe "list_revision_apid_rows/3" do
-    test "groups snapshot packets by APID and sorts by APID" do
+    test "groups Mission Model packet definitions by APID and sorts by APID" do
       {_spacecraft, revision, _endpoint} = setup_mission()
 
       assert {:ok, %{rows: rows, points_by_id: points_by_id}} =
@@ -556,7 +560,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                )
 
       assert [%{apid: 42, packets: packets, def_count: 1} | _] = rows
-      assert [%Cadence.Catalog.Telemetry.Packet{name: "HEALTH", apid: 42}] = packets
+      assert [%Cadence.Telemetry.PacketDefinition{packet_name: "HEALTH", apid: 42}] = packets
       assert is_map(points_by_id)
     end
 
@@ -841,6 +845,65 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
     {:ok, revision} =
       Catalog.fetch_revision_by_import_run(@organization_id, mission_id, completed.import_run_id)
+
+    {:ok, _approved_model} =
+      Cadence.MissionModels.approve_revision(
+        @organization_id,
+        mission_id,
+        revision.mission_model_revision_id,
+        %{"kind" => "test_fixture", "id" => "telemetry-decom"}
+      )
+
+    {:ok, plans} =
+      Cadence.MissionModels.fetch_runtime_plans(
+        @organization_id,
+        mission_id,
+        revision.mission_model_revision_id
+      )
+
+    {:ok, [packet | _rest]} = MissionModelPlanDecoder.telemetry_packet_definitions(plans)
+    [field | _rest] = packet.fields
+
+    update =
+      Update.new(%{
+        update_id: "telemetry-decom-qualification",
+        parameter_id: field.parameter_id,
+        qualified_name: field.qualified_name,
+        value: 1,
+        raw_value: 1,
+        quality: :good,
+        generation_time: ~U[2026-08-12 12:00:00Z],
+        receipt_time: ~U[2026-08-12 12:00:00Z],
+        producer_kind: :container,
+        producer_id: packet.packet_definition_id,
+        metadata: %{mission_id: mission_id}
+      })
+
+    {:ok, result, %State{}} =
+      SemanticRuntime.process(%State{}, [update], PlanDecoder.decode(plans))
+
+    expected_result_sha256 =
+      ContentHash.term_sha256(%{
+        updates:
+          Enum.map(result.parameter_updates, fn parameter_update ->
+            {parameter_update.parameter_id, parameter_update.value, parameter_update.quality,
+             parameter_update.generation_time, parameter_update.receipt_time}
+          end),
+        monitoring:
+          Enum.map(result.monitoring_results, fn monitoring ->
+            {monitoring.policy_id, monitoring.parameter_id, monitoring.effective_state,
+             monitoring.transition}
+          end)
+      })
+
+    {:ok, _qualification_case} =
+      Cadence.MissionModels.register_qualification_case(
+        user_scope(@organization_id, "qualification"),
+        mission_id,
+        "Telemetry Decom nominal packet",
+        [update],
+        expected_result_sha256: expected_result_sha256
+      )
 
     revision
   end

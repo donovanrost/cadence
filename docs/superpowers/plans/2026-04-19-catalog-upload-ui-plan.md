@@ -1,5 +1,8 @@
 # Catalog Upload UI Implementation Plan
 
+> Superseded implementation record. ADR-020 removed the snapshot model this
+> plan targeted; do not use its snapshot tasks as current architecture.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first mission-scoped web UI for command & telemetry catalog upload, import runs, and read-only snapshot summaries, per `docs/superpowers/specs/2026-04-19-catalog-upload-ui-design.md`.

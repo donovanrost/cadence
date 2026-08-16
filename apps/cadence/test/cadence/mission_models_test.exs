@@ -12,7 +12,6 @@ defmodule Cadence.MissionModelsTest do
   alias Cadence.Control.Missions
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.LegacyGuard
   alias Cadence.Runtime
 
   @organization_id "org-mission-models"
@@ -80,32 +79,6 @@ defmodule Cadence.MissionModelsTest do
     snapshot = MissionRuntimeReconciler.snapshot(mission_id)
     assert snapshot.applied_generation == activation.generation
     assert snapshot.last_error == nil
-
-    expected_revision_id = revision.revision_id
-
-    assert {:error, {:legacy_semantic_path_replaced_by_mission_model, ^expected_revision_id}} =
-             LegacyGuard.ensure_available(mission_id)
-  end
-
-  test "direct promotion is disabled in favor of the authenticated activation workflow", %{
-    mission_id: mission_id
-  } do
-    binding_set = persist_binding_set(mission_id)
-    revision = compile_and_approve(mission_id)
-
-    assert {:error, :mission_model_activation_request_required} =
-             MissionModelPromotion.promote(
-               @organization_id,
-               mission_id,
-               revision.revision_id,
-               binding_set.binding_set_id,
-               binding_set.version,
-               %{"status" => "passed"},
-               %{"kind" => "user", "id" => "operator-1"}
-             )
-
-    assert {:error, :no_active_binding_set} =
-             Activations.fetch_active_activation(@organization_id, mission_id)
   end
 
   defp user_scope(prefix) do

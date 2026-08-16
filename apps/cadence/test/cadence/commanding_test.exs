@@ -6,7 +6,6 @@ defmodule Cadence.CommandingTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Transport.COP1.CLCW
@@ -51,9 +50,9 @@ defmodule Cadence.CommandingTest do
     cleanup_static_command_queue_scope()
 
     source_endpoint = persist_source_endpoint()
-    command_snapshot = import_command_snapshot()
+    command_model = import_command_model()
 
-    {:ok, source_endpoint: source_endpoint, command_snapshot: command_snapshot}
+    {:ok, source_endpoint: source_endpoint, command_model: command_model}
   end
 
   test "skips verifier transactions when no runtime observations were produced" do
@@ -78,7 +77,7 @@ defmodule Cadence.CommandingTest do
 
   test "persists and updates command stages and staged command items", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     command_stage =
       CommandStage.new(%{
@@ -97,8 +96,8 @@ defmodule Cadence.CommandingTest do
         mission_id: @mission_id,
         command_stage_id: persisted_stage.command_stage_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 2},
         priority: 4,
         item_order: 1,
@@ -149,7 +148,7 @@ defmodule Cadence.CommandingTest do
   test "submits staged command items into approval-pending command requests when review is required",
        %{
          source_endpoint: source_endpoint,
-         command_snapshot: command_snapshot
+         command_model: command_model
        } do
     command_stage =
       CommandStage.new(%{
@@ -167,8 +166,8 @@ defmodule Cadence.CommandingTest do
         mission_id: @mission_id,
         command_stage_id: persisted_stage.command_stage_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 1},
         priority: 2,
         item_order: 0,
@@ -234,14 +233,14 @@ defmodule Cadence.CommandingTest do
 
   test "approves hazardous command requests with separation of duties and then enqueues them", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     command_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 2},
         requested_by: %{"user_id" => "requester-1"}
       })
@@ -322,16 +321,16 @@ defmodule Cadence.CommandingTest do
 
   test "queues safe command requests by priority within a source endpoint lane", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     low_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 5, %{"label" => "low"})
+      persist_safe_command_request(command_model, source_endpoint, 5, %{"label" => "low"})
 
     first_high_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "high-a"})
+      persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "high-a"})
 
     second_high_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "high-b"})
+      persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "high-b"})
 
     assert low_priority_request.lifecycle_state == :validated
     assert first_high_priority_request.lifecycle_state == :validated
@@ -392,14 +391,14 @@ defmodule Cadence.CommandingTest do
 
   test "rejects invalid direct command requests", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     missing_required_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{}
       })
 
@@ -413,8 +412,8 @@ defmodule Cadence.CommandingTest do
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 2, "bogus" => 9}
       })
 
@@ -428,10 +427,10 @@ defmodule Cadence.CommandingTest do
   test "releases the next queued command through the selected uplink transport and persists an uplink request",
        %{
          source_endpoint: source_endpoint,
-         command_snapshot: command_snapshot
+         command_model: command_model
        } do
     persisted_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "release"})
+      persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "release"})
 
     assert {:ok, %{queue_entry: queue_entry}} =
              Cadence.Commanding.enqueue_command_request(
@@ -568,7 +567,7 @@ defmodule Cadence.CommandingTest do
 
   test "delivers framed uplink bytes through the configured tcp provider adapter", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     {:ok, listener} = :gen_tcp.listen(0, [:binary, packet: 0, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
@@ -578,7 +577,7 @@ defmodule Cadence.CommandingTest do
     end)
 
     persisted_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{
+      persist_safe_command_request(command_model, source_endpoint, 1, %{
         "label" => "tcp-provider"
       })
 
@@ -661,13 +660,13 @@ defmodule Cadence.CommandingTest do
 
   test "enforces queue-lane priority order at release time", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     low_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 5, %{"label" => "low"})
+      persist_safe_command_request(command_model, source_endpoint, 5, %{"label" => "low"})
 
     high_priority_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "high"})
+      persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "high"})
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
              Cadence.Commanding.enqueue_command_request(
@@ -716,14 +715,14 @@ defmodule Cadence.CommandingTest do
   test "creates transport and telemetry verifier instances on release and rolls them up as each phase satisfies",
        %{
          source_endpoint: source_endpoint,
-         command_snapshot: command_snapshot
+         command_model: command_model
        } do
     command_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 2},
         requested_by: %{"user_id" => "requester-verify"}
       })
@@ -846,14 +845,14 @@ defmodule Cadence.CommandingTest do
   test "times out pending verifier instances and rolls timeout state onto the request and release attempt",
        %{
          source_endpoint: source_endpoint,
-         command_snapshot: command_snapshot
+         command_model: command_model
        } do
     command_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "SET_MODE"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "SET_MODE"),
         argument_values: %{"mode" => 1},
         requested_by: %{"user_id" => "requester-timeout"}
       })
@@ -920,14 +919,14 @@ defmodule Cadence.CommandingTest do
 
   test "cop1 clcw reports satisfy start immediately and completion after acknowledgement", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     command_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "TRANSMIT_BURST"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "TRANSMIT_BURST"),
         requested_by: %{"user_id" => "requester-transport-phases"}
       })
 
@@ -1034,10 +1033,10 @@ defmodule Cadence.CommandingTest do
 
   test "cop1 timeout retransmits the framed uplink request", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     persisted_request =
-      persist_safe_command_request(command_snapshot, source_endpoint, 1, %{
+      persist_safe_command_request(command_model, source_endpoint, 1, %{
         "label" => "cop1-timeout"
       })
 
@@ -1124,7 +1123,7 @@ defmodule Cadence.CommandingTest do
     persisted_source_endpoint
   end
 
-  defp import_command_snapshot do
+  defp import_command_model do
     artifact =
       Artifact.new(%{
         artifact_id: "artifact-commanding-alpha",
@@ -1226,25 +1225,20 @@ defmodule Cadence.CommandingTest do
                queued_run.import_run_id
              )
 
-    command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
-
-    assert {:ok, %CommandSnapshot{} = command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
-               @organization_id,
-               @mission_id,
-               command_snapshot_id
-             )
-
-    command_snapshot
+    Cadence.MissionModelFixtures.activate_imported_model!(
+      @organization_id,
+      @mission_id,
+      completed_run.result_document
+    )
   end
 
-  defp persist_safe_command_request(command_snapshot, source_endpoint, priority, metadata) do
+  defp persist_safe_command_request(command_model, source_endpoint, priority, metadata) do
     command_request =
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "NOOP"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: fetch_command_id(command_model, "NOOP"),
         priority: priority,
         requested_by: %{"user_id" => "requester-safe"},
         metadata: metadata
@@ -1316,11 +1310,8 @@ defmodule Cadence.CommandingTest do
     realized_contact
   end
 
-  defp fetch_command_id(%CommandSnapshot{} = command_snapshot, command_name) do
-    command_snapshot.command_definitions
-    |> Enum.find(&(&1.name == command_name))
-    |> then(& &1.command_id)
-  end
+  defp fetch_command_id(command_model, command_name),
+    do: Cadence.MissionModelFixtures.command_id!(command_model, command_name)
 
   defp operational_event_value(event, key) when is_atom(key) do
     Map.get(event.current, key) || Map.get(event.current, Atom.to_string(key))

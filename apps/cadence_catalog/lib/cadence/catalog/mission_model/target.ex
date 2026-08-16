@@ -4,9 +4,9 @@ defmodule Cadence.Catalog.MissionModel.Target do
   alias Cadence.Catalog.MissionModel.{
     Declaration,
     Diagnostic,
-    LegacyTargetLowering,
     Revision,
-    RuntimePlan
+    RuntimePlan,
+    TargetLowering
   }
 
   @contracts %{telemetry: "2", algorithm: "1", monitoring: "1", command: "2"}
@@ -102,7 +102,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
   defp legalize(%Declaration{kind: :calibrator} = declaration, :telemetry) do
     case value(declaration.definition, :algorithm_type) do
       kind when kind in [:polynomial, :table, :state_map, "polynomial", "table", "state_map"] ->
-        []
+        [unsupported(declaration, :telemetry, "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")]
 
       _other ->
         [unsupported(declaration, :telemetry, "MM_CALIBRATOR_UNSUPPORTED")]
@@ -110,7 +110,8 @@ defmodule Cadence.Catalog.MissionModel.Target do
   end
 
   defp legalize(%Declaration{kind: :container} = declaration, :telemetry) do
-    if non_empty_binary?(value(declaration.definition, :packet_id)) do
+    if is_integer(value(declaration.definition, :apid)) and
+         is_list(value(declaration.definition, :entries)) do
       []
     else
       [unsupported_required(declaration, :telemetry, "MM_TELEMETRY_CONTAINER_NOT_LOWERABLE")]
@@ -118,7 +119,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
   end
 
   defp legalize(%Declaration{kind: :command} = declaration, :command) do
-    if non_empty_binary?(value(declaration.definition, :command_id)) do
+    if Enum.any?(declaration.references, &(&1.role == :encoding and is_binary(&1.resolved_id))) do
       []
     else
       [unsupported_required(declaration, :command, "MM_COMMAND_DEFINITION_NOT_LOWERABLE")]
@@ -160,10 +161,10 @@ defmodule Cadence.Catalog.MissionModel.Target do
   end
 
   defp lower_plan(:telemetry, revision, declarations, _edges),
-    do: LegacyTargetLowering.telemetry(revision, declarations)
+    do: TargetLowering.telemetry(revision, declarations)
 
   defp lower_plan(:command, revision, declarations, _edges),
-    do: LegacyTargetLowering.command(revision, declarations)
+    do: TargetLowering.command(revision, declarations)
 
   defp lower_algorithm(declaration) do
     inputs =

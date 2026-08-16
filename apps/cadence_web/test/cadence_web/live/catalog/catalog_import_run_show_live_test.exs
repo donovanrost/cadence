@@ -9,6 +9,7 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Catalog.Events
+  alias Cadence.Runtime.MissionModelPlanDecoder
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
@@ -28,11 +29,11 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
       live(conn, ~p"/missions/#{mission.mission_id}/catalog/imports/#{run.import_run_id}")
 
     assert html =~ "Running"
-    refute html =~ "Telemetry snapshot"
-    assert has_element?(view, "#catalog-importer-version", "cadence_yaml v1")
+    refute has_element?(view, "#catalog-import-mission-model")
+    assert has_element?(view, "#catalog-importer-version")
   end
 
-  test "re-renders snapshot summary after an async completion broadcast" do
+  test "re-renders Mission Model summary after an async completion broadcast" do
     {conn, _org, mission} = signed_in_org_and_mission()
     artifact = TestFixtures.persist_catalog_artifact!(mission)
     run = TestFixtures.persist_catalog_import_run!(artifact)
@@ -44,10 +45,8 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
 
     html = render(view)
     assert html =~ "Completed"
-
-    if completed.snapshot_id do
-      assert html =~ "Telemetry snapshot"
-    end
+    assert has_element?(view, "#catalog-import-mission-model")
+    assert html =~ completed.result_document["mission_model"]["revision_id"]
   end
 
   test "missing run redirects to the catalog index" do
@@ -75,7 +74,7 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
     assert html =~ "boom"
   end
 
-  test "renders resolved catalog diagnostic details from telemetry snapshot metadata" do
+  test "renders native Mission Model lowering diagnostics" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
     artifact =
@@ -95,18 +94,18 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
     run = TestFixtures.persist_catalog_import_run!(artifact)
     completed = TestFixtures.complete_catalog_import_run!(run)
 
+    diagnostic_codes = Enum.map(completed.diagnostics, & &1.code)
+    assert "MM_TELEMETRY_CONTAINER_NOT_LOWERABLE" in diagnostic_codes
+    assert "MM_TELEMETRY_APID_REQUIRED" in diagnostic_codes
+
     {:ok, _view, html} =
       live(conn, ~p"/missions/#{mission.mission_id}/catalog/imports/#{completed.import_run_id}")
 
-    assert html =~ "telemetry_compiler.type_unsupported"
-    assert html =~ "Packet: HEALTH"
-    assert html =~ "Entry: label"
-    assert html =~ "Point: label"
-    assert html =~ "Type: HEALTH_label_type"
-    assert html =~ "Base type: string"
+    assert html =~ "MM_TELEMETRY_APID_REQUIRED"
+    assert html =~ "concrete telemetry containers require an APID"
   end
 
-  test "shows packets preserved for custom application binding in the runtime summary" do
+  test "preserves binary packet fields in the native telemetry plan" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
     artifact =
@@ -128,14 +127,21 @@ defmodule CadenceWeb.CatalogImportRunShowLiveTest do
     run = TestFixtures.persist_catalog_import_run!(artifact, importer_key: "cadence_yaml")
     completed = TestFixtures.complete_catalog_import_run!(run)
 
-    {:ok, _view, html} =
+    {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/catalog/imports/#{completed.import_run_id}")
 
-    assert html =~ "Built-in telemetry runtime"
-    assert html =~ "Available for custom applications"
-    assert html =~ "SCIENCE_FRAME"
-    assert html =~ "binary_payload_field"
-    assert html =~ "Preserved in catalog, not compiled into built-in telemetry"
-    assert html =~ "available_for_custom_application_binding"
+    revision_id = completed.result_document["mission_model"]["revision_id"]
+
+    assert {:ok, plans} =
+             Cadence.MissionModels.fetch_runtime_plans(
+               completed.organization_id,
+               completed.mission_id,
+               revision_id
+             )
+
+    assert {:ok, [packet]} = MissionModelPlanDecoder.telemetry_packet_definitions(plans)
+    assert packet.packet_name == "SCIENCE_FRAME"
+    assert [%{name: "data_block", data_type: :binary}] = packet.fields
+    assert has_element?(view, "#catalog-import-mission-model")
   end
 end

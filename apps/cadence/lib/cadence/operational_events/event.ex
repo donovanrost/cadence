@@ -479,8 +479,8 @@ defmodule Cadence.OperationalEvents.Event do
         catalog_family: revision.catalog_family,
         artifact_id: revision.artifact_id,
         import_run_id: revision.import_run_id,
-        telemetry_snapshot_id: revision.telemetry_snapshot_id,
-        command_snapshot_id: revision.command_snapshot_id,
+        mission_model_layer_id: revision.mission_model_layer_id,
+        mission_model_revision_id: revision.mission_model_revision_id,
         content_sha256: revision.content_sha256,
         notes: revision.notes,
         revision_metadata: revision.metadata
@@ -491,8 +491,7 @@ defmodule Cadence.OperationalEvents.Event do
         revision_number: revision.revision_number,
         revision_label: revision.revision_label,
         catalog_family: revision.catalog_family,
-        telemetry_snapshot_id: revision.telemetry_snapshot_id,
-        command_snapshot_id: revision.command_snapshot_id
+        mission_model_revision_id: revision.mission_model_revision_id
       },
       metadata: revision.metadata
     })

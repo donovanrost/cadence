@@ -18,14 +18,14 @@ defmodule CadenceWeb.CatalogRevisionShowLiveTest do
     {TestFixtures.member_conn(user), org, mission}
   end
 
-  test "renders revision provenance and snapshot summaries" do
+  test "renders revision provenance and mission model summary" do
     {conn, _org, mission} = signed_in_org_and_mission()
     database = TestFixtures.persist_catalog_database!(mission, name: "Bus Catalog")
     run = TestFixtures.start_catalog_revision_import!(database, revision_label: "FSW 3.7")
     completed = TestFixtures.complete_catalog_import_run!(run)
     revision = TestFixtures.fetch_catalog_revision_for_run!(completed)
 
-    {:ok, _view, html} =
+    {:ok, view, html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
@@ -33,10 +33,10 @@ defmodule CadenceWeb.CatalogRevisionShowLiveTest do
 
     assert html =~ "FSW 3.7"
     assert html =~ "Bus Catalog"
-    assert html =~ "Telemetry snapshot"
-    assert html =~ "Command snapshot"
+    assert has_element?(view, "#catalog-mission-model")
+    assert html =~ revision.mission_model_revision_id
+    assert html =~ "Ready plans"
     assert html =~ "No runtime bindings yet"
-    refute html =~ "Combined"
   end
 
   test "missing revision redirects to catalog index" do

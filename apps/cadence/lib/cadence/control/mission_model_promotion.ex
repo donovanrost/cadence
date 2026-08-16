@@ -15,25 +15,11 @@ defmodule Cadence.Control.MissionModelPromotion do
 
   @targets [:telemetry, :algorithm, :monitoring, :command]
 
-  @spec promote(binary(), binary(), binary(), binary(), pos_integer(), map(), map(), keyword()) ::
-          {:ok, BindingSetActivation.t()} | {:error, term()}
-  def promote(
-        _organization_id,
-        _mission_id,
-        _revision_id,
-        _binding_set_id,
-        _binding_set_version,
-        _comparison_report,
-        _actor,
-        _opts \\ []
-      ),
-      do: {:error, :mission_model_activation_request_required}
-
   @doc false
   def validate_activation_metadata(organization_id, mission_id, binding_set, metadata) do
     case value(metadata, :mission_model) do
       nil ->
-        :ok
+        {:error, :mission_model_activation_manifest_required}
 
       manifest when is_map(manifest) ->
         comparison_ref = value(metadata, :mission_model_comparison, %{})
@@ -105,7 +91,7 @@ defmodule Cadence.Control.MissionModelPromotion do
   def runtime_basis(%BindingSetActivation{} = activation) do
     case value(activation.metadata, :mission_model) do
       nil ->
-        {:ok, %{}}
+        {:error, :mission_model_activation_manifest_required}
 
       manifest when is_map(manifest) ->
         resolve_runtime_basis(activation, manifest)

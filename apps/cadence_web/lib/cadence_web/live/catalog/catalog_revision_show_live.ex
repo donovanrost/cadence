@@ -3,9 +3,8 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
 
   use CadenceWeb, :live_view
 
-  import CadenceWeb.Catalog.Components
-
   alias Cadence.Catalog
+  alias Cadence.MissionModels
 
   @impl true
   def mount(%{"catalog_revision_id" => catalog_revision_id}, _session, socket) do
@@ -45,18 +44,30 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
         Catalog.fetch_import_run(organization_id, mission_id, revision.import_run_id)
       end)
 
-    telemetry_snapshot =
-      fetch_snapshot(organization_id, mission_id, revision.telemetry_snapshot_id, :telemetry)
+    mission_model =
+      fetch_optional(fn ->
+        MissionModels.fetch_revision(
+          organization_id,
+          mission_id,
+          revision.mission_model_revision_id
+        )
+      end)
 
-    command_snapshot =
-      fetch_snapshot(organization_id, mission_id, revision.command_snapshot_id, :command)
+    runtime_plans =
+      fetch_optional(fn ->
+        MissionModels.fetch_runtime_plans(
+          organization_id,
+          mission_id,
+          revision.mission_model_revision_id
+        )
+      end)
 
     socket
     |> assign(:database, database)
     |> assign(:artifact, artifact)
     |> assign(:import_run, import_run)
-    |> assign(:telemetry_snapshot, telemetry_snapshot)
-    |> assign(:command_snapshot, command_snapshot)
+    |> assign(:mission_model, mission_model)
+    |> assign(:runtime_plans, runtime_plans || %{})
   end
 
   @impl true
@@ -96,10 +107,7 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
         </.card>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <.telemetry_snapshot_card current_mission={@current_mission} snapshot={@telemetry_snapshot} />
-        <.command_snapshot_card current_mission={@current_mission} snapshot={@command_snapshot} />
-      </div>
+      <.mission_model_card mission_model={@mission_model} runtime_plans={@runtime_plans} />
     </div>
     """
   end
@@ -146,62 +154,30 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :snapshot, :map, default: nil
+  attr :mission_model, :map, default: nil
+  attr :runtime_plans, :map, required: true
 
-  defp telemetry_snapshot_card(%{snapshot: nil} = assigns) do
+  defp mission_model_card(assigns) do
     ~H"""
-    <.card title="Telemetry snapshot">
-      <.empty_state compact title="No telemetry snapshot in this revision." class="mt-2" />
+    <.card id="catalog-mission-model" title="Mission Model">
+      <%= if @mission_model do %>
+        <div class="divide-y divide-base-300 mt-3">
+          <.detail_row label="Revision">
+            <span class="font-mono text-xs break-all">{@mission_model.revision_id}</span>
+          </.detail_row>
+          <.detail_row label="Declarations" value={map_size(@mission_model.declarations)} />
+          <.detail_row label="Space systems" value={map_size(@mission_model.space_systems)} />
+          <.detail_row label="Ready plans" value={ready_plan_count(@runtime_plans)} />
+        </div>
+      <% else %>
+        <.empty_state compact title="Mission Model unavailable." class="mt-2" />
+      <% end %>
     </.card>
     """
   end
 
-  defp telemetry_snapshot_card(assigns) do
-    ~H"""
-    <.snapshot_summary_card
-      title="Telemetry snapshot"
-      icon="hero-signal"
-      counts={[
-        {"Packets", length(@snapshot.packets)},
-        {"Points", length(@snapshot.points)},
-        {"Types", length(@snapshot.types)},
-        {"Units", length(@snapshot.units)}
-      ]}
-      navigate={
-        ~p"/missions/#{@current_mission.mission_id}/catalog/telemetry_snapshots/#{@snapshot.snapshot_id}"
-      }
-    />
-    """
-  end
-
-  attr :current_mission, :map, required: true
-  attr :snapshot, :map, default: nil
-
-  defp command_snapshot_card(%{snapshot: nil} = assigns) do
-    ~H"""
-    <.card title="Command snapshot">
-      <.empty_state compact title="No command snapshot in this revision." class="mt-2" />
-    </.card>
-    """
-  end
-
-  defp command_snapshot_card(assigns) do
-    ~H"""
-    <.snapshot_summary_card
-      title="Command snapshot"
-      icon="hero-command-line"
-      counts={[
-        {"Commands", length(@snapshot.command_definitions)},
-        {"Arguments", length(@snapshot.arguments)},
-        {"Argument types", length(@snapshot.argument_types)},
-        {"Layouts", length(@snapshot.encoding_layouts)}
-      ]}
-      navigate={
-        ~p"/missions/#{@current_mission.mission_id}/catalog/command_snapshots/#{@snapshot.snapshot_id}"
-      }
-    />
-    """
+  defp ready_plan_count(plans) do
+    Enum.count(plans, fn {_target, plan} -> plan.status == :ready end)
   end
 
   defp fetch_optional(fun) when is_function(fun, 0) do
@@ -209,20 +185,6 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
       {:ok, value} -> value
       {:error, _reason} -> nil
     end
-  end
-
-  defp fetch_snapshot(_organization_id, _mission_id, nil, _family), do: nil
-
-  defp fetch_snapshot(organization_id, mission_id, snapshot_id, :telemetry) do
-    fetch_optional(fn ->
-      Catalog.fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id)
-    end)
-  end
-
-  defp fetch_snapshot(organization_id, mission_id, snapshot_id, :command) do
-    fetch_optional(fn ->
-      Catalog.fetch_command_snapshot(organization_id, mission_id, snapshot_id)
-    end)
   end
 
   defp revision_breadcrumb_items(%{current_mission: mission, database: nil, revision: revision}) do

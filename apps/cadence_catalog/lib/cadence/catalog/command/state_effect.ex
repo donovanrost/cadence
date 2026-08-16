@@ -7,7 +7,7 @@ defmodule Cadence.Catalog.Command.StateEffect do
   while another consumer may project the same effect into its own state model.
   """
 
-  alias Cadence.Catalog.Command.{Argument, Normalize}
+  alias Cadence.Catalog.Command.Normalize
   alias Cadence.Catalog.Ids
 
   @type operation :: :set | :increment | :decrement | :toggle
@@ -42,7 +42,6 @@ defmodule Cadence.Catalog.Command.StateEffect do
     }
   end
 
-  defp argument_ref(%Argument{argument_id: argument_id}), do: argument_id
   defp argument_ref(argument_id) when is_binary(argument_id), do: argument_id
   defp argument_ref(_other), do: nil
 

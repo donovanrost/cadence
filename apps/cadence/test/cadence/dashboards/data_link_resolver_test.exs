@@ -58,7 +58,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         organization_id: organization_id,
         mission_id: mission_id,
         source_endpoint_ref: "source-endpoint-alpha",
-        command_snapshot_id: "command-snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         command_id: "noop-command",
         command_name: "NOOP",
         command_display_name: "NOOP",
@@ -85,7 +85,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         realized_contact_id: "realized-contact-1",
         path_id: "path-1",
         transport_binding_id: "transport-binding-1",
-        command_snapshot_id: "command-snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         command_id: "noop-command",
         command_name: "NOOP",
         layout_kind: :ccsds_space_packet,
@@ -158,7 +158,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert row_value(request_inspector.rows, "Command") == "NOOP"
     assert row_value(request_inspector.rows, "Command display name") == "NOOP"
     assert row_value(request_inspector.rows, "Command id") == "noop-command"
-    assert row_value(request_inspector.rows, "Command snapshot") == "command-snapshot-1"
+    assert row_value(request_inspector.rows, "Mission Model revision") == "mission-model-1"
     assert row_value(request_inspector.rows, "Priority") == "2"
     assert row_value(request_inspector.rows, "Requested at") =~ "2026-06-30T11:59:00"
     assert row_value(request_inspector.rows, "Requested by") =~ "resolver-test"

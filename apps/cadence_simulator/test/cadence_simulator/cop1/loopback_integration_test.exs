@@ -6,7 +6,6 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -21,13 +20,13 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
   setup do
     persist_mission_scope(@organization_id, @mission_id)
     source_endpoint = persist_source_endpoint()
-    command_snapshot = import_command_snapshot()
-    {:ok, source_endpoint: source_endpoint, command_snapshot: command_snapshot}
+    command_model = import_command_model()
+    {:ok, source_endpoint: source_endpoint, command_model: command_model}
   end
 
   test "loopback peer satisfies cop1 completion through the tcp provider", %{
     source_endpoint: source_endpoint,
-    command_snapshot: command_snapshot
+    command_model: command_model
   } do
     provider_binding =
       ProviderBinding.new(%{
@@ -83,8 +82,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       CommandRequest.new(%{
         mission_id: @mission_id,
         source_endpoint_ref: source_endpoint.source_endpoint_id,
-        command_snapshot_id: command_snapshot.snapshot_id,
-        command_id: fetch_command_id(command_snapshot, "TRANSMIT_BURST"),
+        mission_model_revision_id: command_model.revision_id,
+        command_id: Cadence.MissionModelFixtures.command_id!(command_model, "TRANSMIT_BURST"),
         requested_by: %{"user_id" => "requester-loopback"}
       })
 
@@ -167,7 +166,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     persisted_source_endpoint
   end
 
-  defp import_command_snapshot do
+  defp import_command_model do
     artifact =
       Artifact.new(%{
         artifact_id: "artifact-simulator-loopback-commanding",
@@ -232,16 +231,11 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
                queued_run.import_run_id
              )
 
-    command_snapshot_id = completed_run.result_document["command_snapshot"]["snapshot_id"]
-
-    assert {:ok, %CommandSnapshot{} = command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
-               @organization_id,
-               @mission_id,
-               command_snapshot_id
-             )
-
-    command_snapshot
+    Cadence.MissionModelFixtures.activate_imported_model!(
+      @organization_id,
+      @mission_id,
+      completed_run.result_document
+    )
   end
 
   defp persist_active_uplink_contact(
@@ -288,12 +282,6 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
              )
 
     realized_contact
-  end
-
-  defp fetch_command_id(%CommandSnapshot{} = command_snapshot, command_name) do
-    command_snapshot.command_definitions
-    |> Enum.find(&(&1.name == command_name))
-    |> then(& &1.command_id)
   end
 
   defp assert_eventually(fun, attempts \\ 20)

@@ -78,7 +78,7 @@ defmodule Cadence.OperationalEvents.EventTest do
         catalog_family: :telemetry,
         artifact_id: "artifact-1",
         import_run_id: "import-run-1",
-        telemetry_snapshot_id: "telemetry-snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         content_sha256: "sha256:abc",
         created_by: %{"service_identity_id" => "svc-importer"},
         notes: "flight software update",
@@ -107,7 +107,7 @@ defmodule Cadence.OperationalEvents.EventTest do
     assert event.payload.revision_number == 3
     assert event.payload.revision_label == "FSW 3.7"
     assert event.payload.catalog_family == :telemetry
-    assert event.payload.telemetry_snapshot_id == "telemetry-snapshot-1"
+    assert event.payload.mission_model_revision_id == "mission-model-1"
     assert event.current.revision_number == 3
     assert event.metadata == %{"source_artifact_name" => "bus.json"}
   end

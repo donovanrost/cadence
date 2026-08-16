@@ -16,7 +16,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
     field(:mission_id, :string)
     field(:organization_id, :string)
     field(:source_endpoint_ref, :string)
-    field(:command_snapshot_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:command_id, :string)
     field(:command_name, :string)
     field(:command_display_name, :string)
@@ -51,7 +51,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
     :command_request_id,
     :mission_id,
     :source_endpoint_ref,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :command_name,
     :lifecycle_state,
@@ -95,7 +95,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
       organization_id: row.organization_id,
       mission_id: row.mission_id,
       source_endpoint_ref: row.source_endpoint_ref,
-      command_snapshot_id: row.command_snapshot_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       command_id: row.command_id,
       command_name: row.command_name,
       command_display_name: row.command_display_name,
@@ -131,7 +131,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
       organization_id: command_request.organization_id,
       mission_id: command_request.mission_id,
       source_endpoint_ref: command_request.source_endpoint_ref,
-      command_snapshot_id: command_request.command_snapshot_id,
+      mission_model_revision_id: command_request.mission_model_revision_id,
       command_id: command_request.command_id,
       command_name: command_request.command_name,
       command_display_name: command_request.command_display_name,
@@ -176,7 +176,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
       :organization_id,
       :mission_id,
       :source_endpoint_ref,
-      :command_snapshot_id,
+      :mission_model_revision_id,
       :command_id,
       :command_name,
       :command_display_name,

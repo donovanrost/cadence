@@ -110,8 +110,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/application.ex" => :composition,
     "lib/cadence/extension_catalog.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
-    "lib/cadence/mission_models/legacy_converter.ex" => :adapter,
-    "lib/cadence/mission_models/legacy_migration.ex" => :adapter,
     "lib/cadence/jobs.ex" => :platform,
     "lib/cadence/jobs/runner.ex" => :composition,
     "lib/cadence/jobs/dispatcher.ex" => :composition,

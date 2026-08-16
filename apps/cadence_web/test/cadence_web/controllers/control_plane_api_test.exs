@@ -362,11 +362,15 @@ defmodule CadenceWeb.ControlPlaneApiTest do
              }
            } = json_response(binding_set_conn, 201)
 
+    mission_model_revision =
+      compile_and_approve_empty_mission_model!(organization_id, mission_id)
+
     activation_conn =
       conn
       |> authorize(api_token)
       |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/activations", %{
         "activation" => %{
+          "mission_model_revision_id" => mission_model_revision.revision_id,
           "binding_set_id" => "ops",
           "version" => 1,
           "metadata" => %{"reason" => "bootstrap"}

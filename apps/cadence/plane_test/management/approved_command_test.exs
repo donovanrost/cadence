@@ -13,7 +13,7 @@ defmodule Cadence.Management.Commanding.ApprovedCommandTest do
         organization_id: "organization-1",
         mission_id: "mission-1",
         source_endpoint_ref: "endpoint-1",
-        command_snapshot_id: "snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         command_id: "command-1",
         lifecycle_state: :approved,
         requested_by: %{"user_id" => "requester"},

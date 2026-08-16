@@ -19,7 +19,7 @@ defmodule Cadence.Commanding.CommandVerifierInstanceRow do
     field(:command_request_id, :string)
     field(:command_release_attempt_id, :string)
     field(:source_endpoint_ref, :string)
-    field(:command_snapshot_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:command_id, :string)
     field(:command_name, :string)
     field(:verifier_id, :string)
@@ -46,7 +46,7 @@ defmodule Cadence.Commanding.CommandVerifierInstanceRow do
     :command_request_id,
     :command_release_attempt_id,
     :source_endpoint_ref,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :verifier_id,
     :verifier_name,
@@ -86,7 +86,7 @@ defmodule Cadence.Commanding.CommandVerifierInstanceRow do
       command_request_id: row.command_request_id,
       command_release_attempt_id: row.command_release_attempt_id,
       source_endpoint_ref: row.source_endpoint_ref,
-      command_snapshot_id: row.command_snapshot_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       command_id: row.command_id,
       command_name: row.command_name,
       verifier_id: row.verifier_id,
@@ -114,7 +114,7 @@ defmodule Cadence.Commanding.CommandVerifierInstanceRow do
       command_request_id: command_verifier_instance.command_request_id,
       command_release_attempt_id: command_verifier_instance.command_release_attempt_id,
       source_endpoint_ref: command_verifier_instance.source_endpoint_ref,
-      command_snapshot_id: command_verifier_instance.command_snapshot_id,
+      mission_model_revision_id: command_verifier_instance.mission_model_revision_id,
       command_id: command_verifier_instance.command_id,
       command_name: command_verifier_instance.command_name,
       verifier_id: command_verifier_instance.verifier_id,
@@ -152,7 +152,7 @@ defmodule Cadence.Commanding.CommandVerifierInstanceRow do
       :command_request_id,
       :command_release_attempt_id,
       :source_endpoint_ref,
-      :command_snapshot_id,
+      :mission_model_revision_id,
       :command_id,
       :command_name,
       :verifier_id,

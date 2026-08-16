@@ -25,8 +25,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
   alias Cadence.Capabilities.Definitions.DefinitionBoundTelemetry
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
-  alias Cadence.Catalog.Telemetry.RuntimeArtifacts
-  alias Cadence.Catalog.Telemetry.Snapshot
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.SourceEndpoints
 
   @max_surface_groups 512
@@ -147,13 +146,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
              mission_id,
              config.catalog_revision_id
            ),
-         {:ok, %Snapshot{} = snapshot} <-
-           Catalog.fetch_telemetry_snapshot(
-             organization_id,
-             mission_id,
-             revision.telemetry_snapshot_id
-           ) do
-      selected_packet_ids = selected_packet_ids(snapshot, config, packet_configuration)
+         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision) do
+      selected_packet_ids =
+        selected_packet_ids(telemetry.packet_definitions, config, packet_configuration)
 
       binding_matches_revision? =
         binding_configuration_matches_revision?(packet_configuration, config.catalog_revision_id)
@@ -172,7 +167,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
         source_endpoints: endpoints,
         packet_groups:
           packet_groups(
-            snapshot,
+            telemetry.packet_definitions,
             revision,
             input_definition,
             selected_packet_ids,
@@ -210,24 +205,18 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
   end
 
   defp packet_groups(
-         snapshot,
+         packet_definitions,
          revision,
          input_definition,
          selected_packet_ids,
          source_endpoint_ref
        ) do
-    definitions =
-      snapshot
-      |> RuntimeArtifacts.compile()
-      |> Map.fetch!(:compiler_result)
-      |> Map.fetch!(:packet_definitions)
-      |> Map.new(&{&1.packet_definition_id, &1})
-
     packets =
-      snapshot.packets
+      packet_definitions
       |> Enum.filter(&is_integer(&1.apid))
       |> Enum.sort_by(fn packet ->
-        {not MapSet.member?(selected_packet_ids, packet.packet_id), packet.apid, packet.packet_id}
+        {not MapSet.member?(selected_packet_ids, packet.packet_definition_id), packet.apid,
+         packet.packet_definition_id}
       end)
       |> Enum.take(@max_surface_groups)
 
@@ -235,16 +224,15 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
       min(div(@max_surface_resources, max(length(packets), 1)), @max_group_resources)
 
     Enum.map(packets, fn packet ->
-      definition = Map.get(definitions, packet.packet_id)
-      selected = MapSet.member?(selected_packet_ids, packet.packet_id)
-      resources = resource_rows(definition, input_definition, selected, resource_budget)
-      compatible? = compatible_packet?(definition, input_definition)
-      resources_truncated? = definition && length(definition.fields) > resource_budget
+      selected = MapSet.member?(selected_packet_ids, packet.packet_definition_id)
+      resources = resource_rows(packet, input_definition, selected, resource_budget)
+      compatible? = compatible_packet?(packet, input_definition)
+      resources_truncated? = length(packet.fields) > resource_budget
 
       %PacketBindingGroup{
-        id: packet.packet_id,
-        packet_id: packet.packet_id,
-        packet_name: packet.name,
+        id: packet.packet_definition_id,
+        packet_id: packet.packet_definition_id,
+        packet_name: packet.packet_name,
         apid: packet.apid,
         selector_summary: "space_packet / #{source_endpoint_ref}",
         model_label: revision.revision_label,
@@ -258,8 +246,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
       }
     end)
   end
-
-  defp compatible_packet?(nil, _input_definition), do: false
 
   defp compatible_packet?(packet_definition, input_definition) do
     Enum.any?(packet_definition.fields, fn field ->
@@ -275,8 +261,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
     do: "Showing the first #{resource_budget} resources to keep this surface bounded."
 
   defp group_reason(true, false, _resource_budget), do: nil
-
-  defp resource_rows(nil, _input_definition, _selected, _resource_budget), do: []
 
   defp resource_rows(packet_definition, input_definition, selected, resource_budget) do
     packet_definition.fields
@@ -315,19 +299,23 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
   defp group_state(true, false), do: :invalid
   defp group_state(false, false), do: :unavailable
 
-  defp selected_packet_ids(snapshot, config, nil) do
+  defp selected_packet_ids(packet_definitions, config, nil) do
     selected_apids = MapSet.new(config.handled_apids)
 
-    snapshot.packets
+    packet_definitions
     |> Enum.filter(&MapSet.member?(selected_apids, &1.apid))
-    |> MapSet.new(& &1.packet_id)
+    |> MapSet.new(& &1.packet_definition_id)
   end
 
-  defp selected_packet_ids(snapshot, config, %PacketBindingConfiguration{} = configuration) do
+  defp selected_packet_ids(
+         packet_definitions,
+         config,
+         %PacketBindingConfiguration{} = configuration
+       ) do
     if binding_configuration_matches_revision?(configuration, config.catalog_revision_id) do
       MapSet.new(configuration.bindings, & &1.packet_id)
     else
-      selected_packet_ids(snapshot, config, nil)
+      selected_packet_ids(packet_definitions, config, nil)
     end
   end
 

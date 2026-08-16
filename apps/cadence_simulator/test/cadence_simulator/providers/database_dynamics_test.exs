@@ -133,16 +133,14 @@ defmodule CadenceSimulator.Providers.DatabaseDynamicsTest do
 
     assert [
              %{
-               target_ref: "HK.mode",
+               target_ref: target_ref,
                operation: :set,
                value: "NOMINAL"
              } = applied_effect
            ] = command_result.applied_effects
 
-    assert String.starts_with?(
-             applied_effect.effect_id,
-             "command_snapshot:simulator_import_"
-           )
+    assert String.starts_with?(target_ref, "semantic:parameter:")
+    assert applied_effect.effect_id == "command_effect:0:0"
 
     assert {:ok, %{"HK.mode" => "NOMINAL"}, ^state} =
              DatabaseDynamics.generate_values(state, 0)

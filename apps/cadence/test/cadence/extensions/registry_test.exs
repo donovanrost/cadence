@@ -215,16 +215,16 @@ defmodule Cadence.Extensions.RegistryTest do
     assert {:ok, package} = ExtensionCatalog.fetch("cadence.catalog-yaml")
 
     assert package.contributions == [
-             %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 1},
+             %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 2},
              %CatalogImporterContribution{importer_key: "xtce_1_3", importer_version: 1}
            ]
 
-    assert {:ok, %{descriptor: %{importer_key: "cadence_yaml", version: 1}}} =
-             ExtensionCatalog.fetch_catalog_importer("cadence_yaml", 1)
+    assert {:ok, %{descriptor: %{importer_key: "cadence_yaml", version: 2}}} =
+             ExtensionCatalog.fetch_catalog_importer("cadence_yaml", 2)
 
     assert Enum.map(ExtensionCatalog.catalog_importers(), fn registration ->
              {registration.descriptor.importer_key, registration.descriptor.version}
-           end) == [{"cadence_yaml", 1}, {"xtce_1_3", 1}]
+           end) == [{"cadence_yaml", 2}, {"xtce_1_3", 1}]
 
     assert {:ok, %{descriptor: %{importer_key: "cadence_yaml"}}} =
              ExtensionCatalog.detect_catalog_importer("mission.yaml", "application/yaml")
@@ -233,7 +233,7 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.detect_catalog_importer("mission.xml", "application/xml")
 
     assert {:error, :unsupported_catalog_importer_contribution_version} =
-             ExtensionCatalog.fetch_catalog_importer("cadence_yaml", 2)
+             ExtensionCatalog.fetch_catalog_importer("cadence_yaml", 1)
 
     assert {:error, :unknown_catalog_importer_contribution} =
              ExtensionCatalog.fetch_catalog_importer("configured-only")

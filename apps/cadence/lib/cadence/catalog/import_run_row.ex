@@ -13,7 +13,6 @@ defmodule Cadence.Catalog.ImportRunRow do
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 
   schema "catalog_import_runs" do
-    field(:snapshot_id, :string)
     field(:organization_id, :string)
     field(:mission_id, :string)
     field(:catalog_database_id, :string)
@@ -64,7 +63,6 @@ defmodule Cadence.Catalog.ImportRunRow do
   def to_domain(%__MODULE__{} = row) do
     %ImportRun{
       import_run_id: row.import_run_id,
-      snapshot_id: row.snapshot_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,
       catalog_database_id: row.catalog_database_id,
@@ -90,7 +88,6 @@ defmodule Cadence.Catalog.ImportRunRow do
   defp domain_attrs(%ImportRun{} = run) do
     %{
       import_run_id: run.import_run_id,
-      snapshot_id: run.snapshot_id,
       organization_id: run.organization_id,
       mission_id: run.mission_id,
       catalog_database_id: run.catalog_database_id,
@@ -113,7 +110,6 @@ defmodule Cadence.Catalog.ImportRunRow do
   defp all_fields do
     [
       :import_run_id,
-      :snapshot_id,
       :organization_id,
       :mission_id,
       :catalog_database_id,

@@ -235,7 +235,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     items =
       diagnostics
       |> Enum.sort_by(fn diagnostic ->
-        {severity_rank(diagnostic.severity), diagnostic.code, diagnostic.path}
+        {severity_rank(diagnostic.severity), diagnostic.code, diagnostic_location(diagnostic)}
       end)
       |> Enum.take(20)
       |> Enum.with_index(1)
@@ -246,7 +246,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
           severity: diagnostic.severity,
           title: diagnostic_title(diagnostic.code),
           detail: diagnostic.message,
-          value: diagnostic_path(diagnostic.path)
+          value: diagnostic_location(diagnostic)
         }
       end)
 
@@ -271,8 +271,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     |> String.capitalize()
   end
 
-  defp diagnostic_path([]), do: nil
-  defp diagnostic_path(path), do: Enum.join(path, " / ")
+  defp diagnostic_location(%{path: []}), do: nil
+  defp diagnostic_location(%{path: path}) when is_list(path), do: Enum.join(path, " / ")
+  defp diagnostic_location(%{semantic_id: semantic_id}), do: semantic_id
+  defp diagnostic_location(_diagnostic), do: nil
 
   defp format_relative(%DateTime{} = dt) do
     diff = DateTime.diff(DateTime.utc_now(), dt, :second)

@@ -40,7 +40,6 @@ defmodule Cadence.Catalog.Xtce13ImportExecutionTest do
     assert {:ok, import_result} = Xtce13.import(source, %{import_run_id: import_run_id})
     assert {:ok, outcome} = ImportExecution.persist(organization_id, import_run_id, import_result)
 
-    assert outcome.snapshot_id == nil
     assert outcome.result_document["mission_model"]["declaration_count"] == 4
     assert map_size(outcome.result_document["mission_model"]["plans"]) == 4
 

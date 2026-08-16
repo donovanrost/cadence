@@ -120,7 +120,7 @@ defmodule Cadence.Control.Commanding do
              command_queue_entry_id: attempt.command_queue_entry_id,
              command_request_id: attempt.command_request_id,
              source_endpoint_ref: attempt.source_endpoint_ref,
-             command_snapshot_id: attempt.command_snapshot_id,
+             mission_model_revision_id: attempt.mission_model_revision_id,
              command_id: attempt.command_id,
              command_name: attempt.command_name,
              layout_kind: attempt.layout_kind,

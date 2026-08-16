@@ -17,9 +17,15 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     TelemetryDecom
   }
 
+  alias Cadence.Accounts.User
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.MissionModels.TelemetryProjection
+  alias Cadence.Platform.ContentHash
+  alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.SemanticRuntime
+  alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
   alias CadenceWeb.TestFixtures
 
   defp setup_session do
@@ -106,6 +112,80 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         completed.import_run_id
       )
 
+    {:ok, _approved_model} =
+      Cadence.MissionModels.approve_revision(
+        org.organization_id,
+        mission.mission_id,
+        revision.mission_model_revision_id,
+        %{"kind" => "test_fixture", "id" => "telemetry-decom-live"}
+      )
+
+    {:ok, plans} =
+      Cadence.MissionModels.fetch_runtime_plans(
+        org.organization_id,
+        mission.mission_id,
+        revision.mission_model_revision_id
+      )
+
+    {:ok, [packet | _rest]} = MissionModelPlanDecoder.telemetry_packet_definitions(plans)
+    [field | _rest] = packet.fields
+
+    update =
+      Update.new(%{
+        update_id: "telemetry-decom-live-qualification",
+        parameter_id: field.parameter_id,
+        qualified_name: field.qualified_name,
+        value: 1,
+        raw_value: 1,
+        quality: :good,
+        generation_time: ~U[2026-08-12 12:00:00Z],
+        receipt_time: ~U[2026-08-12 12:00:00Z],
+        producer_kind: :container,
+        producer_id: packet.packet_definition_id,
+        metadata: %{mission_id: mission.mission_id}
+      })
+
+    {:ok, result, %State{}} =
+      SemanticRuntime.process(%State{}, [update], PlanDecoder.decode(plans))
+
+    expected_result_sha256 =
+      ContentHash.term_sha256(%{
+        updates:
+          Enum.map(result.parameter_updates, fn parameter_update ->
+            {parameter_update.parameter_id, parameter_update.value, parameter_update.quality,
+             parameter_update.generation_time, parameter_update.receipt_time}
+          end),
+        monitoring:
+          Enum.map(result.monitoring_results, fn monitoring ->
+            {monitoring.policy_id, monitoring.parameter_id, monitoring.effective_state,
+             monitoring.transition}
+          end)
+      })
+
+    qualification_user =
+      User.new(%{
+        user_id: "telemetry-decom-live-qualification",
+        email: "telemetry-decom-live-qualification@example.test",
+        display_name: "Telemetry Decom Live Qualification",
+        capabilities: [:platform_admin]
+      })
+
+    qualification_scope =
+      Scope.new(%{
+        user: qualification_user,
+        organization_id: org.organization_id,
+        admin_mode?: true
+      })
+
+    {:ok, _qualification_case} =
+      Cadence.MissionModels.register_qualification_case(
+        qualification_scope,
+        mission.mission_id,
+        "Telemetry Decom Live nominal packet",
+        [update],
+        expected_result_sha256: expected_result_sha256
+      )
+
     revision
   end
 
@@ -184,14 +264,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {conn, org, mission, spacecraft} = setup_session()
     revision = persist_revision!(org, mission)
 
-    {:ok, snapshot} =
-      Catalog.fetch_telemetry_snapshot(
-        org.organization_id,
-        mission.mission_id,
-        revision.telemetry_snapshot_id
-      )
+    {:ok, telemetry} =
+      TelemetryProjection.load(org.organization_id, mission.mission_id, revision)
 
-    packet = List.first(snapshot.packets)
+    packet = List.first(telemetry.packet_definitions)
 
     manage_path =
       ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
@@ -234,7 +310,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     view
     |> form("#packet-bindings-form", %{
-      "application_action" => %{"selected_packet_ids" => [packet.packet_id]}
+      "application_action" => %{"selected_packet_ids" => [packet.packet_definition_id]}
     })
     |> render_submit()
 
@@ -274,9 +350,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
             apid: 42
             items:
               - name: mode
-                data_type: string
+                data_type: uint
                 bit_offset: 0
-                bit_size: 32
+                bit_size: 8
+                conversion:
+                  type: polynomial
+                  coefficients: [0.0, 1.0]
         commands: []
         """
       )
@@ -298,13 +377,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     assert has_element?(
              view,
-             "#telemetry-decom-diagnostics[data-diagnostic-severity='error'][data-diagnostic-count='1'][data-diagnostic-total='1']"
+             "#telemetry-decom-diagnostics[data-diagnostic-severity='warning'][data-diagnostic-count='1'][data-diagnostic-total='1']"
            )
 
     assert has_element?(
              view,
-             "#telemetry-decom-diagnostics-item-compiler-001[data-diagnostic-code='telemetry_compiler.type_unsupported'][data-diagnostic-severity='error']",
-             "Type unsupported"
+             "#telemetry-decom-diagnostics-item-compiler-001[data-diagnostic-code='MM_CALIBRATOR_RUNTIME_UNSUPPORTED'][data-diagnostic-severity='warning']"
            )
   end
 

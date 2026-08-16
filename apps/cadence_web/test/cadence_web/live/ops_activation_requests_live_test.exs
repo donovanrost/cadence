@@ -11,7 +11,9 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
-  alias Cadence.Management.Activations
+  alias Cadence.Catalog.MissionModel.Layer
+  alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.MissionModels
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -39,6 +41,24 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     assert {:ok, ^binding_set} =
              Cadence.Governance.persist_binding_set(organization.organization_id, binding_set)
 
+    layer =
+      Layer.new(%{
+        organization_id: organization.organization_id,
+        mission_id: mission.mission_id,
+        name: "Activation approval model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
+
+    assert {:ok, compilation} = MissionModels.compile_layers([layer])
+
+    assert {:ok, revision} =
+             MissionModels.approve_revision(
+               organization.organization_id,
+               mission.mission_id,
+               compilation.revision.revision_id,
+               %{"kind" => "test_fixture", "id" => "ops-activation-requests-live"}
+             )
+
     requester =
       User.new(%{
         user_id: "activation-requester",
@@ -48,13 +68,14 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
       })
 
     assert {:ok, request} =
-             Activations.request(
+             MissionModels.request_promotion(
                Scope.new(%{
                  user: requester,
                  organization_id: organization.organization_id,
                  admin_mode?: true
                }),
                mission.mission_id,
+               revision.revision_id,
                binding_set.binding_set_id,
                binding_set.version
              )
@@ -86,7 +107,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     refute has_element?(view, review_selector)
 
     assert {:ok, %{generation: 1}} =
-             Cadence.Control.Activations.fetch_active_basis(
+             ControlActivations.fetch_active_basis(
                organization.organization_id,
                mission.mission_id
              )

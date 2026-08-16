@@ -26,7 +26,6 @@ defmodule Cadence.Limits do
   alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
   alias Cadence.Limits.Store
 
-  alias Cadence.MissionModels.LegacyGuard
   alias Cadence.Repo
   alias Cadence.Telemetry.SampleRecords
 
@@ -34,8 +33,7 @@ defmodule Cadence.Limits do
 
   @spec persist_limit_definition(Definition.t()) :: {:ok, Definition.t()} | {:error, term()}
   def persist_limit_definition(%Definition{} = definition) do
-    with :ok <- LegacyGuard.ensure_available(definition.mission_id),
-         :ok <- Definition.validate(definition) do
+    with :ok <- Definition.validate(definition) do
       changeset = GovernedLimitDefinitionRow.changeset(definition)
 
       case Repo.insert(changeset,
@@ -174,18 +172,18 @@ defmodule Cadence.Limits do
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    with :ok <- LegacyGuard.ensure_available(mission_id),
-         run = build_run(mission_id, opts),
-         {:ok, persisted_run} <- insert_run(run) do
+    run = build_run(mission_id, opts)
+
+    with {:ok, persisted_run} <- insert_run(run) do
       execute_run(persisted_run, opts)
     end
   end
 
   @spec start_evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def start_evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
-    with :ok <- LegacyGuard.ensure_available(mission_id),
-         run = build_run(mission_id, opts),
-         {:ok, %Run{} = persisted_run} <- insert_run(run) do
+    run = build_run(mission_id, opts)
+
+    with {:ok, %Run{} = persisted_run} <- insert_run(run) do
       case Jobs.enqueue(
              :telemetry_limit_evaluation,
              mission_id,
@@ -224,8 +222,7 @@ defmodule Cadence.Limits do
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(limit_run_id) when is_binary(limit_run_id) do
-    with {:ok, %Run{} = run} <- fetch_run(limit_run_id),
-         :ok <- LegacyGuard.ensure_available(run.mission_id) do
+    with {:ok, %Run{} = run} <- fetch_run(limit_run_id) do
       execute_run(run, opts_from_run(run))
     end
   end

@@ -21,8 +21,6 @@ defmodule Cadence.Catalog.RevisionRow do
     field(:catalog_family, :string)
     field(:artifact_id, :string)
     field(:import_run_id, :string)
-    field(:telemetry_snapshot_id, :string)
-    field(:command_snapshot_id, :string)
     field(:mission_model_layer_id, :string)
     field(:mission_model_revision_id, :string)
     field(:content_sha256, :string)
@@ -42,6 +40,7 @@ defmodule Cadence.Catalog.RevisionRow do
     :catalog_family,
     :artifact_id,
     :import_run_id,
+    :mission_model_revision_id,
     :content_sha256,
     :created_by,
     :metadata
@@ -58,7 +57,6 @@ defmodule Cadence.Catalog.RevisionRow do
     |> cast(domain_attrs(revision), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
-    |> validate_snapshot_reference()
     |> unique_constraint([:catalog_database_id, :revision_number],
       name: :catalog_revisions_database_number_idx
     )
@@ -80,8 +78,6 @@ defmodule Cadence.Catalog.RevisionRow do
       catalog_family: catalog_family(row.catalog_family),
       artifact_id: row.artifact_id,
       import_run_id: row.import_run_id,
-      telemetry_snapshot_id: row.telemetry_snapshot_id,
-      command_snapshot_id: row.command_snapshot_id,
       mission_model_layer_id: row.mission_model_layer_id,
       mission_model_revision_id: row.mission_model_revision_id,
       content_sha256: row.content_sha256,
@@ -102,8 +98,6 @@ defmodule Cadence.Catalog.RevisionRow do
       catalog_family: Atom.to_string(revision.catalog_family),
       artifact_id: revision.artifact_id,
       import_run_id: revision.import_run_id,
-      telemetry_snapshot_id: revision.telemetry_snapshot_id,
-      command_snapshot_id: revision.command_snapshot_id,
       mission_model_layer_id: revision.mission_model_layer_id,
       mission_model_revision_id: revision.mission_model_revision_id,
       content_sha256: revision.content_sha256,
@@ -124,8 +118,6 @@ defmodule Cadence.Catalog.RevisionRow do
       :catalog_family,
       :artifact_id,
       :import_run_id,
-      :telemetry_snapshot_id,
-      :command_snapshot_id,
       :mission_model_layer_id,
       :mission_model_revision_id,
       :content_sha256,
@@ -133,17 +125,6 @@ defmodule Cadence.Catalog.RevisionRow do
       :notes,
       :metadata
     ]
-  end
-
-  defp validate_snapshot_reference(%Ecto.Changeset{} = changeset) do
-    telemetry_snapshot_id = get_field(changeset, :telemetry_snapshot_id)
-    command_snapshot_id = get_field(changeset, :command_snapshot_id)
-
-    if is_nil(telemetry_snapshot_id) and is_nil(command_snapshot_id) do
-      add_error(changeset, :telemetry_snapshot_id, "or command snapshot is required")
-    else
-      changeset
-    end
   end
 
   defp catalog_family("telemetry"), do: :telemetry

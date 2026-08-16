@@ -6,9 +6,11 @@ defmodule Cadence.ActivationVerticalSliceTest do
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.MissionModels
   alias Cadence.Projections.ActivationStatus
   alias Cadence.Runtime
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -42,9 +44,16 @@ defmodule Cadence.ActivationVerticalSliceTest do
 
     requester = user_scope(organization_id, unique("requester"))
     approver = user_scope(organization_id, unique("approver"))
+    revision = persist_approved_model(organization_id, mission_id)
 
     assert {:ok, request} =
-             ManagementActivations.request(requester, mission_id, binding_set.binding_set_id, 1)
+             MissionModels.request_promotion(
+               requester,
+               mission_id,
+               revision.revision_id,
+               binding_set.binding_set_id,
+               1
+             )
 
     assert {:ok, _request, _decision, approved} =
              ManagementActivations.approve(
@@ -99,11 +108,13 @@ defmodule Cadence.ActivationVerticalSliceTest do
 
     binding_set = persist_binding_set(organization_id, mission_id, "policy-basis")
     requester = user_scope(organization_id, unique("requester"))
+    revision = persist_approved_model(organization_id, mission_id)
 
     assert {:ok, %{state: :approved} = request} =
-             ManagementActivations.request(
+             MissionModels.request_promotion(
                requester,
                mission_id,
+               revision.revision_id,
                binding_set.binding_set_id,
                binding_set.version,
                metadata: %{"source" => "policy-test"}
@@ -113,14 +124,16 @@ defmodule Cadence.ActivationVerticalSliceTest do
              ManagementActivations.fetch_approved(request.activation_request_id)
 
     assert approved.approval_decision_ids == []
-    assert approved.metadata == %{"source" => "policy-test"}
+    assert approved.metadata["source"] == "policy-test"
+    assert approved.metadata["mission_model"]["revision_id"] == revision.revision_id
     assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
 
     assert {:ok, activation} =
              ControlActivations.fetch_active_basis(organization_id, mission_id)
 
     assert activation.activation_request_id == request.activation_request_id
-    assert activation.metadata == %{"source" => "policy-test"}
+    assert activation.metadata["source"] == "policy-test"
+    assert activation.metadata["mission_model"]["revision_id"] == revision.revision_id
 
     assert :ok = Runtime.stop_mission(mission_id)
   end
@@ -162,6 +175,28 @@ defmodule Cadence.ActivationVerticalSliceTest do
              Cadence.Governance.persist_binding_set(organization_id, binding_set)
 
     binding_set
+  end
+
+  defp persist_approved_model(organization_id, mission_id) do
+    layer =
+      Layer.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        name: "Activation vertical slice",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
+
+    assert {:ok, compilation} = MissionModels.compile_layers([layer])
+
+    assert {:ok, revision} =
+             MissionModels.approve_revision(
+               organization_id,
+               mission_id,
+               compilation.revision.revision_id,
+               %{"kind" => "test_fixture", "id" => "activation-vertical-slice"}
+             )
+
+    revision
   end
 
   defp user_scope(organization_id, user_id) do

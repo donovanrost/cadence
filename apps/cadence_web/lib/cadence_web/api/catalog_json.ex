@@ -12,12 +12,6 @@ defmodule CadenceWeb.API.CatalogJSON do
   }
 
   alias Cadence.Catalog.{Artifact, ImporterDescriptor, ImportRun}
-  alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
-  alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
-  alias Cadence.Catalog.Telemetry.Compiler.Result, as: TelemetryCompilerResult
-  alias Cadence.Catalog.Telemetry.Compiler.SelectorInput
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
-  alias Cadence.Persistence.JsonDocument
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @spec packet_definition(PacketDefinition.t()) :: map()
@@ -72,7 +66,6 @@ defmodule CadenceWeb.API.CatalogJSON do
   def catalog_import_run(%ImportRun{} = import_run) do
     %{
       import_run_id: import_run.import_run_id,
-      snapshot_id: import_run.snapshot_id,
       organization_id: import_run.organization_id,
       mission_id: import_run.mission_id,
       catalog_database_id: import_run.catalog_database_id,
@@ -89,144 +82,6 @@ defmodule CadenceWeb.API.CatalogJSON do
       started_at: iso8601(import_run.started_at),
       completed_at: iso8601(import_run.completed_at),
       metadata: import_run.metadata
-    }
-  end
-
-  @spec catalog_telemetry_snapshot_summary(TelemetryCatalogSnapshot.t()) :: map()
-  def catalog_telemetry_snapshot_summary(%TelemetryCatalogSnapshot{} = snapshot) do
-    %{
-      snapshot_id: snapshot.snapshot_id,
-      organization_id: snapshot.organization_id,
-      mission_id: snapshot.mission_id,
-      artifact_id: snapshot.artifact_id,
-      import_run_id: snapshot.import_run_id,
-      importer_key: snapshot.importer_key,
-      snapshot_name: snapshot.snapshot_name,
-      snapshot_version: snapshot.snapshot_version,
-      description: snapshot.description,
-      published_at: iso8601(snapshot.published_at),
-      superseded_at: iso8601(snapshot.superseded_at),
-      packet_count: length(snapshot.packets),
-      point_count: length(snapshot.points),
-      type_count: length(snapshot.types),
-      unit_count: length(snapshot.units),
-      calibration_algorithm_count: length(snapshot.calibration_algorithms)
-    }
-  end
-
-  @spec catalog_telemetry_snapshot(TelemetryCatalogSnapshot.t()) :: map()
-  def catalog_telemetry_snapshot(%TelemetryCatalogSnapshot{} = snapshot) do
-    catalog_telemetry_snapshot_summary(snapshot)
-    |> Map.put(:snapshot_document, JsonDocument.encode(snapshot))
-  end
-
-  @spec catalog_command_snapshot_summary(CommandCatalogSnapshot.t()) :: map()
-  def catalog_command_snapshot_summary(%CommandCatalogSnapshot{} = snapshot) do
-    %{
-      snapshot_id: snapshot.snapshot_id,
-      organization_id: snapshot.organization_id,
-      mission_id: snapshot.mission_id,
-      artifact_id: snapshot.artifact_id,
-      import_run_id: snapshot.import_run_id,
-      importer_key: snapshot.importer_key,
-      snapshot_name: snapshot.snapshot_name,
-      snapshot_version: snapshot.snapshot_version,
-      description: snapshot.description,
-      published_at: iso8601(snapshot.published_at),
-      superseded_at: iso8601(snapshot.superseded_at),
-      command_count: length(snapshot.command_definitions),
-      argument_count: length(snapshot.arguments),
-      argument_type_count: length(snapshot.argument_types),
-      encoding_layout_count: length(snapshot.encoding_layouts)
-    }
-  end
-
-  @spec catalog_command_snapshot(CommandCatalogSnapshot.t()) :: map()
-  def catalog_command_snapshot(%CommandCatalogSnapshot{} = snapshot) do
-    catalog_command_snapshot_summary(snapshot)
-    |> Map.put(:snapshot_document, JsonDocument.encode(snapshot))
-  end
-
-  @spec catalog_telemetry_recompile_result(map()) :: map()
-  def catalog_telemetry_recompile_result(%{
-        snapshot: %TelemetryCatalogSnapshot{} = snapshot,
-        compiler_result: %TelemetryCompilerResult{} = compiler_result,
-        binding_set: %BindingSet{} = binding_set
-      }) do
-    %{
-      snapshot: catalog_telemetry_snapshot_summary(snapshot),
-      compiler_result: %{
-        packet_definition_count: length(compiler_result.packet_definitions),
-        selector_input_count: length(compiler_result.selector_inputs),
-        diagnostic_count: length(compiler_result.diagnostics),
-        diagnostics: Enum.map(compiler_result.diagnostics, &catalog_diagnostic/1),
-        packet_definitions:
-          Enum.map(compiler_result.packet_definitions, fn packet_definition ->
-            %{
-              packet_definition_id: packet_definition.packet_definition_id,
-              packet_name: packet_definition.packet_name,
-              apid: packet_definition.apid,
-              version: packet_definition.version,
-              field_count: length(packet_definition.fields)
-            }
-          end),
-        selector_inputs: Enum.map(compiler_result.selector_inputs, &catalog_selector_input/1)
-      },
-      binding_set: %{
-        binding_set_id: binding_set.binding_set_id,
-        version: binding_set.version,
-        capability_instance_count: length(binding_set.capability_instances),
-        rule_count: length(binding_set.rules)
-      }
-    }
-  end
-
-  @spec catalog_telemetry_runtime_diff(map()) :: map()
-  def catalog_telemetry_runtime_diff(report) when is_map(report) do
-    %{
-      snapshot_id: report.snapshot_id,
-      import_run_id: report.import_run_id,
-      compiler_summary: report.compiler_summary,
-      compiler_diagnostics: Enum.map(report.compiler_diagnostics, &catalog_diagnostic/1),
-      expected_binding_set: report.expected_binding_set,
-      existing_binding_set: report.existing_binding_set,
-      packet_definitions: report.packet_definitions,
-      capability_instances: report.capability_instances,
-      binding_rules: report.binding_rules
-    }
-  end
-
-  @spec catalog_telemetry_materialization_result(map()) :: map()
-  def catalog_telemetry_materialization_result(result) when is_map(result) do
-    catalog_telemetry_recompile_result(result)
-  end
-
-  @spec catalog_command_compile_result(CommandCatalogSnapshot.t(), CommandCompilerResult.t()) ::
-          map()
-  def catalog_command_compile_result(
-        %CommandCatalogSnapshot{} = snapshot,
-        %CommandCompilerResult{} = compiler_result
-      ) do
-    %{
-      snapshot: catalog_command_snapshot_summary(snapshot),
-      compiler_result: %{
-        runtime_definition_count: length(compiler_result.runtime_definitions),
-        constraint_plan_count: length(compiler_result.constraint_plans),
-        verifier_plan_count: length(compiler_result.verifier_plans),
-        operational_binding_count: length(compiler_result.operational_bindings),
-        diagnostic_count: length(compiler_result.diagnostics),
-        diagnostics: Enum.map(compiler_result.diagnostics, &catalog_diagnostic/1),
-        runtime_definitions:
-          Enum.map(compiler_result.runtime_definitions, fn runtime_definition ->
-            %{
-              command_id: runtime_definition.command_id,
-              name: runtime_definition.name,
-              apid: runtime_definition.apid,
-              opcode: runtime_definition.opcode,
-              argument_count: length(runtime_definition.argument_specs)
-            }
-          end)
-      }
     }
   end
 
@@ -313,25 +168,6 @@ defmodule CadenceWeb.API.CatalogJSON do
       size_bits: field_definition.size_bits,
       data_type: Atom.to_string(field_definition.data_type),
       engineering_unit: field_definition.engineering_unit
-    }
-  end
-
-  defp catalog_selector_input(%SelectorInput{} = selector_input) do
-    %{
-      selector_input_id: selector_input.selector_input_id,
-      packet_definition_id: selector_input.packet_definition_id,
-      capability_instance_id: selector_input.capability_instance_id,
-      capability_family_key: Atom.to_string(selector_input.capability_family_key),
-      selector: %{
-        scope: %{
-          target_scope: Atom.to_string(selector_input.selector.scope.target_scope),
-          source_endpoint_ref: selector_input.selector.scope.source_endpoint_ref
-        },
-        match: %{
-          packet_kind: maybe_atom_to_string(selector_input.selector.match.packet_kind),
-          apid: selector_input.selector.match.apid
-        }
-      }
     }
   end
 

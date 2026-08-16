@@ -4,7 +4,7 @@ defmodule CadenceWeb.TestSupport.FakeTelemetryCatalogImporter do
   @behaviour Cadence.Catalog.Importer
 
   alias Cadence.Catalog.{Diagnostic, ImporterDescriptor, ImportResult, Source}
-  alias Cadence.Catalog.Telemetry.{Packet, Snapshot}
+  alias Cadence.Catalog.MissionModel.Layer
 
   @impl true
   def descriptor do
@@ -30,29 +30,26 @@ defmodule CadenceWeb.TestSupport.FakeTelemetryCatalogImporter do
     packets = source.source_artifact["packets"]
     packet_names = Enum.map(packets, &Map.get(&1, "name"))
 
-    snapshot =
-      Snapshot.new(%{
-        snapshot_id: "telemetry_snapshot:" <> import_run_id,
+    layer =
+      Layer.new(%{
         organization_id: source.organization_id,
         mission_id: source.mission_id,
-        artifact_id: source.artifact_id,
-        import_run_id: import_run_id,
-        importer_key: descriptor().importer_key,
-        snapshot_name: source.artifact_name,
-        packets:
-          Enum.with_index(packet_names)
-          |> Enum.map(fn {packet_name, index} ->
-            Packet.new(%{
-              packet_id: "telemetry_snapshot:#{import_run_id}:packet:#{index}",
-              snapshot_id: "telemetry_snapshot:" <> import_run_id,
-              name: packet_name
-            })
-          end)
+        name: source.artifact_name,
+        source: %{"artifact_id" => source.artifact_id, "import_run_id" => import_run_id},
+        declarations:
+          [%{kind: :space_system, qualified_name: "/"}] ++
+            Enum.map(Enum.with_index(packet_names), fn {packet_name, index} ->
+              %{
+                kind: :container,
+                qualified_name: "/packets/#{packet_name}",
+                definition: %{apid: index, entries: []}
+              }
+            end)
       })
 
     {:ok,
      ImportResult.new(%{
-       telemetry_snapshot: snapshot,
+       declaration_layers: [layer],
        imported_definition_count: length(packets),
        diagnostics: [
          Diagnostic.new(%{

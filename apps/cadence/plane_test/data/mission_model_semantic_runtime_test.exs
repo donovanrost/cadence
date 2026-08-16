@@ -25,8 +25,16 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
 
   test "executes the same compiled model in isolated replay with stable identities" do
     mission_id = "semantic-replay"
-    raw_parameter = parameter("/vehicle/pobc/parameters/raw_counter")
+    {raw_type, raw_parameter} = typed_parameter("/vehicle/pobc/parameters/raw_counter", 16)
     derived_parameter = parameter("/vehicle/pobc/parameters/doubled_counter")
+
+    container =
+      telemetry_container(
+        "/vehicle/pobc/containers/pobc_hk",
+        42,
+        raw_parameter,
+        16
+      )
 
     algorithm =
       Declaration.new(%{
@@ -81,7 +89,7 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
           Enum.map(
             ["/", "/vehicle", "/vehicle/pobc"],
             &%{kind: :space_system, qualified_name: &1}
-          ) ++ [raw_parameter, derived_parameter, algorithm, monitoring]
+          ) ++ [raw_type, raw_parameter, container, derived_parameter, algorithm, monitoring]
       })
 
     assert {:ok, compilation} = Compiler.compile([layer])
@@ -90,7 +98,7 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
     packet_definition =
       PacketDefinition.new(%{
         mission_id: mission_id,
-        packet_definition_id: "pobc-hk",
+        packet_definition_id: container.semantic_id,
         packet_name: "POBC_HK",
         apid: 42,
         fields: [
@@ -169,6 +177,8 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
 
   test "pins base telemetry samples to the active Mission Model even without semantic work" do
     mission_id = "semantic-basis-only"
+    {counter_type, counter_parameter} = typed_parameter("/vehicle/parameters/counter", 8)
+    container = telemetry_container("/vehicle/containers/legacy_hk", 7, counter_parameter, 8)
 
     layer =
       Layer.new(%{
@@ -176,7 +186,10 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
         name: "semantic basis only",
         declarations: [
           %{kind: :space_system, qualified_name: "/"},
-          %{kind: :space_system, qualified_name: "/vehicle"}
+          %{kind: :space_system, qualified_name: "/vehicle"},
+          counter_type,
+          counter_parameter,
+          container
         ]
       })
 
@@ -186,7 +199,7 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
     packet_definition =
       PacketDefinition.new(%{
         mission_id: mission_id,
-        packet_definition_id: "legacy-hk",
+        packet_definition_id: container.semantic_id,
         packet_name: "LEGACY_HK",
         apid: 7,
         fields: [%{field_id: "counter", name: "counter", size_bits: 8}]
@@ -247,6 +260,53 @@ defmodule Cadence.Runtime.MissionModelSemanticRuntimeTest do
 
   defp parameter(qualified_name) do
     Declaration.new(%{kind: :parameter, qualified_name: qualified_name})
+  end
+
+  defp typed_parameter(qualified_name, size_bits) do
+    type =
+      Declaration.new(%{
+        kind: :parameter_type,
+        qualified_name: qualified_name <> "_type",
+        definition: %{
+          base_type: :integer,
+          encoding: %{size_bits: size_bits, signed: false, byte_order: :big_endian}
+        }
+      })
+
+    parameter =
+      Declaration.new(%{
+        kind: :parameter,
+        qualified_name: qualified_name,
+        references: [
+          Reference.new(%{
+            expected_kind: :parameter_type,
+            source_ref: type.qualified_name,
+            role: :type
+          })
+        ]
+      })
+
+    {type, parameter}
+  end
+
+  defp telemetry_container(qualified_name, apid, parameter, size_bits) do
+    Declaration.new(%{
+      kind: :container,
+      qualified_name: qualified_name,
+      definition: %{
+        apid: apid,
+        entries: [
+          %{parameter_ref: parameter.qualified_name, bit_offset: 0, size_bits: size_bits}
+        ]
+      },
+      references: [
+        Reference.new(%{
+          expected_kind: :parameter,
+          source_ref: parameter.qualified_name,
+          role: :entry
+        })
+      ]
+    })
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

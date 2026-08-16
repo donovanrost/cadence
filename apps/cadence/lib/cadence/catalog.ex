@@ -11,7 +11,6 @@ defmodule Cadence.Catalog do
   alias Cadence.Catalog.{
     Artifact,
     ArtifactRow,
-    CommandSnapshotRow,
     Database,
     DatabaseRow,
     Events,
@@ -23,14 +22,9 @@ defmodule Cadence.Catalog do
     Registry,
     Revision,
     RevisionRow,
-    Source,
-    TelemetrySnapshotRow
+    Source
   }
 
-  alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
-  alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
-  alias Cadence.Governance
   alias Cadence.Jobs
   alias Cadence.Missions
   alias Cadence.OperationalEvents
@@ -307,114 +301,6 @@ defmodule Cadence.Catalog do
     end)
   end
 
-  @spec persist_telemetry_snapshot(binary(), TelemetryCatalogSnapshot.t()) ::
-          {:ok, TelemetryCatalogSnapshot.t()} | {:error, term()}
-  def persist_telemetry_snapshot(organization_id, %TelemetryCatalogSnapshot{} = snapshot)
-      when is_binary(organization_id) do
-    with {:ok, scoped_snapshot} <-
-           put_telemetry_snapshot_organization_scope(snapshot, organization_id),
-         {:ok, _mission} <- Missions.fetch_mission(organization_id, scoped_snapshot.mission_id),
-         {:ok, _row} <-
-           Repo.insert(TelemetrySnapshotRow.changeset(scoped_snapshot),
-             on_conflict: :nothing,
-             conflict_target: [:snapshot_id]
-           ) do
-      {:ok, scoped_snapshot}
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @spec persist_command_snapshot(binary(), CommandCatalogSnapshot.t()) ::
-          {:ok, CommandCatalogSnapshot.t()} | {:error, term()}
-  def persist_command_snapshot(organization_id, %CommandCatalogSnapshot{} = snapshot)
-      when is_binary(organization_id) do
-    with {:ok, scoped_snapshot} <-
-           put_command_snapshot_organization_scope(snapshot, organization_id),
-         {:ok, _mission} <- Missions.fetch_mission(organization_id, scoped_snapshot.mission_id),
-         {:ok, _row} <-
-           Repo.insert(CommandSnapshotRow.changeset(scoped_snapshot),
-             on_conflict: :nothing,
-             conflict_target: [:snapshot_id]
-           ) do
-      {:ok, scoped_snapshot}
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @spec fetch_telemetry_snapshot(binary(), binary(), binary()) ::
-          {:ok, TelemetryCatalogSnapshot.t()} | {:error, term()}
-  def fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) do
-    case Repo.get_by(
-           TelemetrySnapshotRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           snapshot_id: snapshot_id
-         ) do
-      nil -> {:error, :catalog_telemetry_snapshot_not_found}
-      %TelemetrySnapshotRow{} = row -> {:ok, TelemetrySnapshotRow.to_domain(row)}
-    end
-  end
-
-  @spec list_telemetry_snapshots(binary(), binary(), keyword()) :: [TelemetryCatalogSnapshot.t()]
-  def list_telemetry_snapshots(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    artifact_id = Keyword.get(opts, :artifact_id)
-    import_run_id = Keyword.get(opts, :import_run_id)
-
-    TelemetrySnapshotRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_artifact_id(artifact_id)
-    |> maybe_filter_import_run_id(import_run_id)
-    |> order_by([row], desc: row.inserted_at, desc: row.snapshot_id)
-    |> maybe_limit(Keyword.get(opts, :limit))
-    |> Repo.all()
-    |> Enum.map(&TelemetrySnapshotRow.to_domain/1)
-  end
-
-  defp maybe_limit(query, nil), do: query
-  defp maybe_limit(query, max) when is_integer(max) and max > 0, do: limit(query, ^max)
-
-  @spec fetch_command_snapshot(binary(), binary(), binary()) ::
-          {:ok, CommandCatalogSnapshot.t()} | {:error, term()}
-  def fetch_command_snapshot(organization_id, mission_id, snapshot_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) do
-    case Repo.get_by(
-           CommandSnapshotRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           snapshot_id: snapshot_id
-         ) do
-      nil -> {:error, :catalog_command_snapshot_not_found}
-      %CommandSnapshotRow{} = row -> {:ok, CommandSnapshotRow.to_domain(row)}
-    end
-  end
-
-  @spec list_command_snapshots(binary(), binary(), keyword()) :: [CommandCatalogSnapshot.t()]
-  def list_command_snapshots(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    artifact_id = Keyword.get(opts, :artifact_id)
-    import_run_id = Keyword.get(opts, :import_run_id)
-
-    CommandSnapshotRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> maybe_filter_artifact_id(artifact_id)
-    |> maybe_filter_import_run_id(import_run_id)
-    |> order_by([row], desc: row.inserted_at, desc: row.snapshot_id)
-    |> Repo.all()
-    |> Enum.map(&CommandSnapshotRow.to_domain/1)
-  end
-
   @spec fetch_revision(binary(), binary(), binary()) :: {:ok, Revision.t()} | {:error, term()}
   def fetch_revision(organization_id, mission_id, catalog_revision_id)
       when is_binary(organization_id) and is_binary(mission_id) and
@@ -529,64 +415,6 @@ defmodule Cadence.Catalog do
     end
   end
 
-  @spec recompile_telemetry_snapshot(binary(), binary(), binary(), keyword()) ::
-          {:ok, RuntimeArtifacts.t()} | {:error, term()}
-  def recompile_telemetry_snapshot(organization_id, mission_id, snapshot_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) and
-             is_list(opts) do
-    with {:ok, %TelemetryCatalogSnapshot{} = snapshot} <-
-           fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id),
-         binding_set_version <-
-           resolve_generated_runtime_version(organization_id, mission_id, snapshot) do
-      {:ok,
-       RuntimeArtifacts.compile(
-         snapshot,
-         Keyword.put(opts, :binding_set_version, binding_set_version)
-       )}
-    end
-  end
-
-  @spec diff_telemetry_snapshot_runtime(binary(), binary(), binary(), keyword()) ::
-          {:ok, RuntimeDiff.report()} | {:error, term()}
-  def diff_telemetry_snapshot_runtime(organization_id, mission_id, snapshot_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) and
-             is_list(opts) do
-    with {:ok, compilation} <-
-           recompile_telemetry_snapshot(organization_id, mission_id, snapshot_id, opts) do
-      existing_binding_set =
-        case fetch_generated_runtime_binding_set(
-               organization_id,
-               mission_id,
-               compilation.snapshot.import_run_id
-             ) do
-          {:ok, binding_set} -> binding_set
-          {:error, :binding_set_not_found} -> nil
-        end
-
-      {:ok, RuntimeDiff.diff(compilation, existing_binding_set)}
-    end
-  end
-
-  @spec materialize_telemetry_snapshot_runtime(binary(), binary(), binary(), keyword()) ::
-          {:ok, RuntimeArtifacts.t()} | {:error, term()}
-  def materialize_telemetry_snapshot_runtime(organization_id, mission_id, snapshot_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(snapshot_id) and
-             is_list(opts) do
-    with {:ok, %TelemetryCatalogSnapshot{} = snapshot} <-
-           fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id),
-         next_binding_set_version <-
-           resolve_next_generated_runtime_version(organization_id, mission_id, snapshot),
-         compilation <-
-           RuntimeArtifacts.compile(
-             snapshot,
-             Keyword.put(opts, :binding_set_version, next_binding_set_version)
-           ),
-         {:ok, %{} = persisted_binding_set} <-
-           Governance.persist_binding_set(organization_id, compilation.binding_set) do
-      {:ok, %{compilation | binding_set: persisted_binding_set}}
-    end
-  end
-
   defp build_run(%Artifact{} = artifact, descriptor, opts) do
     ImportRun.new(%{
       organization_id: artifact.organization_id,
@@ -641,9 +469,11 @@ defmodule Cadence.Catalog do
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %Database{} = database} <-
            fetch_database(run.organization_id, run.mission_id, run.catalog_database_id),
-         telemetry_snapshot <- snapshot_id_for_run(TelemetrySnapshotRow, run.import_run_id),
-         command_snapshot <- snapshot_id_for_run(CommandSnapshotRow, run.import_run_id),
-         :ok <- ensure_revision_has_snapshot(telemetry_snapshot, command_snapshot),
+         mission_model_revision_id <-
+           run.result_document
+           |> metadata_value("mission_model")
+           |> metadata_value("revision_id"),
+         :ok <- ensure_revision_basis(mission_model_revision_id),
          revision_number <- next_revision_number(run.catalog_database_id),
          revision_label <- revision_label(run, revision_number),
          revision <-
@@ -656,17 +486,12 @@ defmodule Cadence.Catalog do
              catalog_family: database.catalog_family,
              artifact_id: artifact.artifact_id,
              import_run_id: run.import_run_id,
-             telemetry_snapshot_id: telemetry_snapshot,
-             command_snapshot_id: command_snapshot,
              mission_model_layer_id:
                run.result_document
                |> metadata_value("mission_model")
                |> metadata_value("layer_ids")
                |> first_value(),
-             mission_model_revision_id:
-               run.result_document
-               |> metadata_value("mission_model")
-               |> metadata_value("revision_id"),
+             mission_model_revision_id: mission_model_revision_id,
              content_sha256: artifact.content_sha256,
              created_by: run.requested_by,
              notes: metadata_value(run.metadata, "revision_notes"),
@@ -690,15 +515,10 @@ defmodule Cadence.Catalog do
     end
   end
 
-  defp snapshot_id_for_run(row_module, import_run_id) do
-    case Repo.get_by(row_module, import_run_id: import_run_id) do
-      %{snapshot_id: snapshot_id} -> snapshot_id
-      nil -> nil
-    end
-  end
+  defp ensure_revision_basis(revision_id) when is_binary(revision_id) and revision_id != "",
+    do: :ok
 
-  defp ensure_revision_has_snapshot(nil, nil), do: {:error, :catalog_revision_requires_snapshot}
-  defp ensure_revision_has_snapshot(_telemetry_snapshot_id, _command_snapshot_id), do: :ok
+  defp ensure_revision_basis(_revision_id), do: {:error, :catalog_revision_requires_model}
 
   defp next_revision_number(catalog_database_id) do
     query =
@@ -754,8 +574,7 @@ defmodule Cadence.Catalog do
             completed_run =
               %ImportRun{
                 run
-                | snapshot_id: outcome.snapshot_id,
-                  status: :completed,
+                | status: :completed,
                   imported_definition_count: outcome.imported_definition_count,
                   diagnostics: outcome.diagnostics,
                   result_document: outcome.result_document,
@@ -858,77 +677,6 @@ defmodule Cadence.Catalog do
     case Repo.get(ImportRunRow, import_run_id) do
       nil -> {:error, :catalog_import_run_not_found}
       %ImportRunRow{} = row -> {:ok, ImportRunRow.to_domain(row)}
-    end
-  end
-
-  defp fetch_generated_runtime_binding_set(organization_id, mission_id, import_run_id)
-       when is_binary(organization_id) and is_binary(mission_id) and is_binary(import_run_id) do
-    Governance.fetch_latest_binding_set(
-      organization_id,
-      mission_id,
-      RuntimeArtifacts.binding_set_id(import_run_id)
-    )
-  end
-
-  defp resolve_generated_runtime_version(organization_id, mission_id, snapshot)
-       when is_binary(organization_id) and is_binary(mission_id) do
-    case fetch_generated_runtime_binding_set(
-           organization_id,
-           mission_id,
-           snapshot.import_run_id
-         ) do
-      {:ok, binding_set} -> binding_set.version
-      {:error, :binding_set_not_found} -> 1
-    end
-  end
-
-  defp resolve_next_generated_runtime_version(organization_id, mission_id, snapshot)
-       when is_binary(organization_id) and is_binary(mission_id) do
-    case fetch_generated_runtime_binding_set(
-           organization_id,
-           mission_id,
-           snapshot.import_run_id
-         ) do
-      {:ok, binding_set} -> binding_set.version + 1
-      {:error, :binding_set_not_found} -> 1
-    end
-  end
-
-  defp put_telemetry_snapshot_organization_scope(
-         %TelemetryCatalogSnapshot{} = snapshot,
-         organization_id
-       )
-       when is_binary(organization_id) and organization_id != "" do
-    case snapshot.organization_id do
-      nil ->
-        {:ok, %TelemetryCatalogSnapshot{snapshot | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, snapshot}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          snapshot.mission_id}}
-    end
-  end
-
-  defp put_command_snapshot_organization_scope(
-         %CommandCatalogSnapshot{} = snapshot,
-         organization_id
-       )
-       when is_binary(organization_id) and organization_id != "" do
-    case snapshot.organization_id do
-      nil ->
-        {:ok, %CommandCatalogSnapshot{snapshot | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, snapshot}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          snapshot.mission_id}}
     end
   end
 

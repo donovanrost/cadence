@@ -3,31 +3,18 @@ defmodule CadenceWeb.ActivationParams do
 
   import CadenceWeb.API.ParamParser
 
-  @change_classes [
-    :observational,
-    :mission_data_plane,
-    :transport_provider,
-    :command_safety,
-    :identity_policy
-  ]
-
   @spec request(map()) :: {:ok, map()} | {:error, term()}
   def request(params) when is_map(params) do
-    with {:ok, binding_set_id} <- required_string(params, "binding_set_id"),
+    with {:ok, mission_model_revision_id} <-
+           required_string(params, "mission_model_revision_id"),
+         {:ok, binding_set_id} <- required_string(params, "binding_set_id"),
          {:ok, version} <- positive_integer(params, "version", nil),
-         {:ok, change_class} <-
-           allowed_atom_param(
-             params,
-             "change_class",
-             :mission_data_plane,
-             @change_classes
-           ),
          {:ok, metadata} <- optional_map(params, "metadata", %{}) do
       {:ok,
        %{
+         mission_model_revision_id: mission_model_revision_id,
          binding_set_id: binding_set_id,
          version: version,
-         change_class: change_class,
          metadata: metadata
        }}
     end

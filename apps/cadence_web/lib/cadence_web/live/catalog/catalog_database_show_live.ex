@@ -273,11 +273,8 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
               {"#" <> Integer.to_string(revision.revision_number)}
             </p>
           </:col>
-          <:col :let={revision} label="Telemetry">
-            {if revision.telemetry_snapshot_id, do: "Present", else: "—"}
-          </:col>
-          <:col :let={revision} label="Command">
-            {if revision.command_snapshot_id, do: "Present", else: "—"}
+          <:col :let={revision} label="Mission Model">
+            <span class="font-mono text-xs">{revision.mission_model_revision_id}</span>
           </:col>
           <:col :let={revision} label="Actions" align={:right}>
             <.button

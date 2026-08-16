@@ -3,11 +3,11 @@ defmodule Cadence.Applications.TelemetryDecom do
   Spacecraft-centered configuration for the built-in Telemetry Decom
   application.
 
-  Users think in terms of spacecraft and catalog revisions.
-  This module resolves those choices into the existing runtime path:
+  Users think in terms of spacecraft and imported catalog revisions.
+  This module resolves those choices into the native Mission Model runtime path:
 
-    spacecraft → catalog revision → telemetry snapshot
-    → compiled binding set rules → persisted + activated mission binding set
+    spacecraft → catalog revision → Mission Model revision → telemetry plan
+    → binding set rules → persisted + activated mission binding set
 
   The application-neutral mission binding set id `"mission_applications:<mission_id>"`
   is shared across all application contributions and spacecraft in a mission.
@@ -18,7 +18,7 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   import Ecto.Query
 
-  alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Applications.ApplicationBinding
   alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.ApplicationBindingStore.BindingRow
@@ -29,18 +29,16 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
-  alias Cadence.Catalog.Telemetry.Compiler.Result, as: CompilerResult
-  alias Cadence.Catalog.Telemetry.Packet
-  alias Cadence.Catalog.Telemetry.RuntimeArtifacts
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Governance
-  alias Cadence.Management.Activations
   alias Cadence.Management.Activations.ActivationRequest
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
+  alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled
@@ -69,15 +67,9 @@ defmodule Cadence.Applications.TelemetryDecom do
          {:ok, catalog_revision_id} <- fetch_required(attrs, :catalog_revision_id),
          {:ok, %Revision{} = revision} <-
            Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
-         :ok <- ensure_telemetry_revision(revision),
-         {:ok, snapshot} <-
-           Catalog.fetch_telemetry_snapshot(
-             organization_id,
-             mission_id,
-             revision.telemetry_snapshot_id
-           ),
+         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision),
          {:ok, handled_apids} <- parse_handled_apids(attrs),
-         :ok <- validate_handled_apids(snapshot, handled_apids),
+         :ok <- validate_handled_apids(telemetry.packet_definitions, handled_apids),
          {:ok, source_endpoint_id} <-
            resolve_runtime_source_endpoint_id(
              organization_id,
@@ -305,8 +297,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         %{
           "application_key" => @application_key,
           "spacecraft_id" => config.spacecraft_id,
-          "configuration_version" => config.configuration_version,
-          "configuration_source" => "legacy_application_binding"
+          "configuration_version" => config.configuration_version
         }
       end)
     else
@@ -364,13 +355,20 @@ defmodule Cadence.Applications.TelemetryDecom do
          {:ok, binding_set} <-
            MissionBindingComposer.compose(organization_id, mission_id, [contribution]),
          {:ok, _persisted} <- Governance.persist_binding_set(organization_id, binding_set),
+         {:ok, mission_model_revision_id} <-
+           mission_model_revision_for_apply(
+             organization_id,
+             mission_id,
+             configs,
+             config
+           ),
          {:ok, %ActivationRequest{} = activation_request} <-
-           Activations.request(
+           MissionModels.request_promotion(
              current_scope,
              mission_id,
+             mission_model_revision_id,
              binding_set.binding_set_id,
              binding_set.version,
-             change_class: :mission_data_plane,
              metadata: %{
                "composition" => "mission_applications",
                "contributors" => mission_contributors(organization_id, mission_id),
@@ -378,6 +376,43 @@ defmodule Cadence.Applications.TelemetryDecom do
              }
            ) do
       {:ok, %{config: config, activation_request: activation_request}}
+    end
+  end
+
+  defp mission_model_revision_for_apply(
+         organization_id,
+         mission_id,
+         enabled_configs,
+         triggering_config
+       ) do
+    configs = if enabled_configs == [], do: [triggering_config], else: enabled_configs
+
+    configs
+    |> Enum.reduce_while({:ok, MapSet.new()}, fn config, {:ok, revision_ids} ->
+      case Catalog.fetch_revision(
+             organization_id,
+             mission_id,
+             config.catalog_revision_id
+           ) do
+        {:ok, %Revision{} = revision} ->
+          {:cont, {:ok, MapSet.put(revision_ids, revision.mission_model_revision_id)}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, revision_ids} ->
+        case revision_ids |> MapSet.to_list() |> Enum.sort() do
+          [revision_id] ->
+            {:ok, revision_id}
+
+          ids ->
+            {:error, {:telemetry_decom_requires_one_mission_model_revision, ids}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -477,28 +512,30 @@ defmodule Cadence.Applications.TelemetryDecom do
   @spec preview(binary(), binary(), Config.t()) ::
           {:ok,
            %{
-             snapshot: TelemetryCatalogSnapshot.t(),
-             compilation: RuntimeArtifacts.t(),
-             selected_packets: [Packet.t()],
+             mission_model_revision: Cadence.Catalog.MissionModel.Revision.t(),
+             telemetry_plan: Cadence.Catalog.MissionModel.RuntimePlan.t(),
+             compilation: map(),
+             selected_packets: [PacketDefinition.t()],
              unassigned_apids: [non_neg_integer()]
            }}
           | {:error, term()}
   def preview(organization_id, mission_id, %Config{} = config) do
-    with {:ok, snapshot} <- fetch_snapshot_for_config(organization_id, mission_id, config) do
-      compilation = compile_runtime_artifacts(snapshot, config, 1)
+    with {:ok, telemetry} <- fetch_telemetry_for_config(organization_id, mission_id, config) do
+      compilation = compile_runtime_artifacts(telemetry, config, 1)
 
       {:ok,
        %{
-         snapshot: snapshot,
+         mission_model_revision: telemetry.mission_model_revision,
+         telemetry_plan: telemetry.telemetry_plan,
          compilation: compilation,
-         selected_packets: selected_packets(snapshot, config.handled_apids),
-         unassigned_apids: unassigned_apids(snapshot, config.handled_apids)
+         selected_packets: selected_packets(telemetry.packet_definitions, config.handled_apids),
+         unassigned_apids: unassigned_apids(telemetry.packet_definitions, config.handled_apids)
        }}
     end
   end
 
   @doc """
-  Return legacy advisory visibility for other enabled readers of each APID.
+  Return advisory visibility for other enabled readers of each APID.
 
   The result never blocks configuration or activation. Normalized packet
   bindings deliberately have no cross-application uniqueness constraint.
@@ -518,7 +555,7 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @type apid_row :: %{
           apid: non_neg_integer(),
-          packets: [Packet.t()],
+          packets: [PacketDefinition.t()],
           def_count: non_neg_integer(),
           rate_hz: number() | nil,
           short_description: String.t() | nil
@@ -526,19 +563,16 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @type apid_row_result :: %{
           rows: [apid_row()],
-          points_by_id: %{optional(binary()) => Cadence.Catalog.Telemetry.Point.t()}
+          points_by_id: %{optional(binary()) => FieldDefinition.t()}
         }
 
   @doc """
-  Return one row per APID present in the revision's telemetry snapshot.
+  Return one row per APID present in the revision's Mission Model telemetry plan.
 
-  Each row carries every packet definition that shares the APID, along with
-  a primary rate (from the first packet's `expected_rate_hz`) and a short
-  description derived from the first packet's `short_description` or a
-  truncated `description`. Rows are sorted by APID ascending.
+  Each row carries every lowered packet definition that shares the APID. Rows
+  are sorted by APID ascending.
 
-  Also returns a `points_by_id` map keyed by `point_id` for looking up
-  human-readable point names in the UI.
+  Also returns a parameter map for looking up human-readable field names.
   """
   @spec list_revision_apid_rows(binary(), binary(), binary()) ::
           {:ok, apid_row_result()} | {:error, term()}
@@ -547,15 +581,9 @@ defmodule Cadence.Applications.TelemetryDecom do
              is_binary(catalog_revision_id) do
     with {:ok, %Revision{} = revision} <-
            Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
-         :ok <- ensure_telemetry_revision(revision),
-         {:ok, snapshot} <-
-           Catalog.fetch_telemetry_snapshot(
-             organization_id,
-             mission_id,
-             revision.telemetry_snapshot_id
-           ) do
+         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision) do
       rows =
-        snapshot.packets
+        telemetry.packet_definitions
         |> Enum.filter(&is_integer(&1.apid))
         |> Enum.group_by(& &1.apid)
         |> Enum.sort_by(fn {apid, _} -> apid end)
@@ -564,28 +592,20 @@ defmodule Cadence.Applications.TelemetryDecom do
             apid: apid,
             packets: packets,
             def_count: length(packets),
-            rate_hz: rate_of(packets),
-            short_description: short_description_of(List.first(packets))
+            rate_hz: nil,
+            short_description: nil
           }
         end)
 
-      points_by_id = Map.new(snapshot.points, &{&1.point_id, &1})
+      points_by_id =
+        telemetry.packet_definitions
+        |> Enum.flat_map(& &1.fields)
+        |> Enum.reject(&is_nil(&1.parameter_id))
+        |> Map.new(&{&1.parameter_id, &1})
 
       {:ok, %{rows: rows, points_by_id: points_by_id}}
     end
   end
-
-  defp rate_of([%Packet{expected_rate_hz: hz} | _]), do: hz
-  defp rate_of([]), do: nil
-
-  defp short_description_of(nil), do: nil
-  defp short_description_of(%Packet{short_description: desc}) when is_binary(desc), do: desc
-
-  defp short_description_of(%Packet{description: desc}) when is_binary(desc) do
-    if String.length(desc) <= 160, do: desc, else: String.slice(desc, 0, 157) <> "…"
-  end
-
-  defp short_description_of(_), do: nil
 
   @doc false
   @spec compile_mission_contribution(binary(), binary(), [Config.t()]) ::
@@ -594,9 +614,9 @@ defmodule Cadence.Applications.TelemetryDecom do
       when is_binary(organization_id) and is_binary(mission_id) and is_list(configs) do
     {capability_instances, rules, errors} =
       Enum.reduce(configs, {[], [], []}, fn config, {ci_acc, rule_acc, error_acc} ->
-        case fetch_snapshot_for_config(organization_id, mission_id, config) do
-          {:ok, snapshot} ->
-            compilation = compile_runtime_artifacts(snapshot, config, 1)
+        case fetch_telemetry_for_config(organization_id, mission_id, config) do
+          {:ok, telemetry} ->
+            compilation = compile_runtime_artifacts(telemetry, config, 1)
 
             {
               ci_acc ++ compilation.binding_set.capability_instances,
@@ -635,11 +655,10 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp fetch_snapshot_for_config(organization_id, mission_id, %Config{} = config) do
-    with {:ok, %Revision{telemetry_snapshot_id: snapshot_id} = revision} <-
-           Catalog.fetch_revision(organization_id, mission_id, config.catalog_revision_id),
-         :ok <- ensure_telemetry_revision(revision) do
-      Catalog.fetch_telemetry_snapshot(organization_id, mission_id, snapshot_id)
+  defp fetch_telemetry_for_config(organization_id, mission_id, %Config{} = config) do
+    with {:ok, %Revision{} = revision} <-
+           Catalog.fetch_revision(organization_id, mission_id, config.catalog_revision_id) do
+      TelemetryProjection.load(organization_id, mission_id, revision)
     end
   end
 
@@ -699,65 +718,66 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp compile_runtime_artifacts(snapshot, %Config{} = config, binding_set_version) do
-    compilation =
-      RuntimeArtifacts.compile(
-        snapshot,
-        binding_set_version: binding_set_version,
-        target_scope: :source_endpoint,
-        source_endpoint_ref: config.source_endpoint_id
-      )
+  defp compile_runtime_artifacts(telemetry, %Config{} = config, binding_set_version) do
+    packet_definitions = selected_packets(telemetry.packet_definitions, config.handled_apids)
 
-    filter_runtime_artifacts(compilation, config.handled_apids, binding_set_version)
-  end
-
-  defp filter_runtime_artifacts(compilation, handled_apids, binding_set_version) do
-    allowed_apids = MapSet.new(handled_apids)
-
-    packet_definitions =
-      Enum.filter(compilation.compiler_result.packet_definitions, fn packet_definition ->
-        MapSet.member?(allowed_apids, packet_definition.apid)
+    capability_instances =
+      Enum.map(packet_definitions, fn packet_definition ->
+        CapabilityInstance.new(%{
+          capability_instance_id:
+            capability_instance_id(
+              telemetry.mission_model_revision.revision_id,
+              config.source_endpoint_id,
+              packet_definition.packet_definition_id
+            ),
+          family_key: :definition_bound_telemetry,
+          target_scope: :source_endpoint,
+          source_endpoint_ref: config.source_endpoint_id,
+          runtime_configuration: packet_definition
+        })
       end)
 
-    allowed_definition_ids =
-      MapSet.new(packet_definitions, & &1.packet_definition_id)
+    rules =
+      Enum.map(capability_instances, fn capability_instance ->
+        packet_definition = capability_instance.runtime_configuration
 
-    selected_packet_ids =
-      compilation.snapshot
-      |> selected_packets(handled_apids)
-      |> MapSet.new(& &1.packet_id)
-
-    selector_inputs =
-      Enum.filter(compilation.compiler_result.selector_inputs, fn selector_input ->
-        MapSet.member?(allowed_definition_ids, selector_input.packet_definition_id) and
-          MapSet.member?(selected_packet_ids, selector_input.packet_id)
+        BindingRule.new(%{
+          binding_rule_id: capability_instance.capability_instance_id <> ":rule",
+          capability_instance_id: capability_instance.capability_instance_id,
+          selector: %{
+            scope: %{
+              target_scope: :source_endpoint,
+              source_endpoint_ref: config.source_endpoint_id
+            },
+            match: %{packet_kind: :space_packet, apid: packet_definition.apid}
+          },
+          priority: 100,
+          fanout_mode: :exclusive
+        })
       end)
-
-    diagnostics =
-      Enum.filter(compilation.compiler_result.diagnostics, fn diagnostic ->
-        case Map.get(diagnostic.metadata, "packet_id") do
-          nil -> true
-          packet_id -> MapSet.member?(selected_packet_ids, packet_id)
-        end
-      end)
-
-    compiler_result =
-      CompilerResult.new(%{
-        packet_definitions: packet_definitions,
-        selector_inputs: selector_inputs,
-        diagnostics: diagnostics
-      })
 
     %{
-      compilation
-      | compiler_result: compiler_result,
-        binding_set:
-          RuntimeArtifacts.build_binding_set(
-            compilation.snapshot,
-            compiler_result,
-            binding_set_version: binding_set_version
-          )
+      mission_model_revision: telemetry.mission_model_revision,
+      telemetry_plan: telemetry.telemetry_plan,
+      compiler_result: %{
+        packet_definitions: packet_definitions,
+        diagnostics: telemetry.telemetry_plan.diagnostics
+      },
+      binding_set:
+        BindingSet.new(%{
+          binding_set_id:
+            "mission_model_telemetry:#{telemetry.mission_model_revision.revision_id}:#{config.source_endpoint_id}",
+          organization_id: telemetry.mission_model_revision.organization_id,
+          mission_id: telemetry.mission_model_revision.mission_id,
+          version: binding_set_version,
+          capability_instances: capability_instances,
+          rules: rules
+        })
     }
+  end
+
+  defp capability_instance_id(revision_id, source_endpoint_id, packet_definition_id) do
+    "mission_model_telemetry:#{revision_id}:#{source_endpoint_id}:#{packet_definition_id}"
   end
 
   defp parse_handled_apids(attrs) do
@@ -766,8 +786,8 @@ defmodule Cadence.Applications.TelemetryDecom do
     |> APIDSelection.parse()
   end
 
-  defp validate_handled_apids(%TelemetryCatalogSnapshot{} = snapshot, handled_apids) do
-    available_apids = MapSet.new(all_snapshot_apids(snapshot))
+  defp validate_handled_apids(packet_definitions, handled_apids) do
+    available_apids = MapSet.new(all_packet_apids(packet_definitions))
     unknown_apids = Enum.reject(handled_apids, &MapSet.member?(available_apids, &1))
 
     case unknown_apids do
@@ -776,29 +796,24 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp selected_packets(%TelemetryCatalogSnapshot{} = snapshot, handled_apids) do
+  defp selected_packets(packet_definitions, handled_apids) do
     allowed_apids = MapSet.new(handled_apids)
-    Enum.filter(snapshot.packets, &MapSet.member?(allowed_apids, &1.apid))
+    Enum.filter(packet_definitions, &MapSet.member?(allowed_apids, &1.apid))
   end
 
-  defp unassigned_apids(%TelemetryCatalogSnapshot{} = snapshot, handled_apids) do
-    snapshot
-    |> all_snapshot_apids()
+  defp unassigned_apids(packet_definitions, handled_apids) do
+    packet_definitions
+    |> all_packet_apids()
     |> Enum.reject(&(&1 in handled_apids))
   end
 
-  defp all_snapshot_apids(%TelemetryCatalogSnapshot{} = snapshot) do
-    snapshot.packets
+  defp all_packet_apids(packet_definitions) do
+    packet_definitions
     |> Enum.map(& &1.apid)
     |> Enum.filter(&is_integer/1)
     |> Enum.uniq()
     |> Enum.sort()
   end
-
-  defp ensure_telemetry_revision(%Revision{telemetry_snapshot_id: nil}),
-    do: {:error, :catalog_revision_missing_telemetry}
-
-  defp ensure_telemetry_revision(%Revision{}), do: :ok
 
   defp ensure_endpoint_matches_spacecraft(%SourceEndpoint{spacecraft_id: nil}, _spacecraft_id),
     do: :ok

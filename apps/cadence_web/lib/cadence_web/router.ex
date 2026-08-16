@@ -195,14 +195,6 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/catalog/imports/:import_run_id",
            CatalogImportRunShowLive,
            :show
-
-      live "/missions/:mission_id/catalog/telemetry_snapshots/:snapshot_id",
-           CatalogTelemetrySnapshotShowLive,
-           :show
-
-      live "/missions/:mission_id/catalog/command_snapshots/:snapshot_id",
-           CatalogCommandSnapshotShowLive,
-           :show
     end
 
     live_session :comms,
@@ -586,27 +578,6 @@ defmodule CadenceWeb.Router do
         get "/catalog_import_runs", CatalogImportRunController, :index
         post "/catalog_import_runs", CatalogImportRunController, :create
         get "/catalog_import_runs/:import_run_id", CatalogImportRunController, :show
-        get "/catalog_telemetry_snapshots", CatalogTelemetrySnapshotController, :index
-        get "/catalog_telemetry_snapshots/:snapshot_id", CatalogTelemetrySnapshotController, :show
-        get "/catalog_command_snapshots", CatalogCommandSnapshotController, :index
-        get "/catalog_command_snapshots/:snapshot_id", CatalogCommandSnapshotController, :show
-
-        get "/catalog_command_snapshots/:snapshot_id/compile",
-            CatalogCommandSnapshotController,
-            :compile
-
-        get "/catalog_telemetry_snapshots/:snapshot_id/recompile",
-            CatalogTelemetrySnapshotController,
-            :recompile
-
-        get "/catalog_telemetry_snapshots/:snapshot_id/runtime_diff",
-            CatalogTelemetrySnapshotController,
-            :runtime_diff
-
-        post "/catalog_telemetry_snapshots/:snapshot_id/materialize_runtime",
-             CatalogTelemetrySnapshotController,
-             :materialize_runtime
-
         get "/spacecraft", SpacecraftController, :index
         post "/spacecraft", SpacecraftController, :create
         get "/spacecraft/:spacecraft_id", SpacecraftController, :show

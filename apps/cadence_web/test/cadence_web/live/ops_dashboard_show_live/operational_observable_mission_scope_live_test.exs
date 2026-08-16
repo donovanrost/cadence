@@ -52,7 +52,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
         command_request_id: command_request_id,
         mission_id: mission.mission_id,
         source_endpoint_ref: source_endpoint_ref,
-        command_snapshot_id: command_queue_entry_id <> "-snapshot",
+        mission_model_revision_id: command_queue_entry_id <> "-model",
         command_id: command_queue_entry_id <> "-command",
         command_name: "NOOP",
         command_display_name: "NOOP",

@@ -41,6 +41,12 @@ defmodule Cadence.ReplayTest do
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
+  setup do
+    Cadence.Runtime.stop_mission("mission-alpha")
+    on_exit(fn -> Cadence.Runtime.stop_mission("mission-alpha") end)
+    :ok
+  end
+
   test "replays persisted evidence into replay tables without mutating live canonical data" do
     binding_set = persist_binding_set_fixture()
 
@@ -422,6 +428,14 @@ defmodule Cadence.ReplayTest do
       })
 
     assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
+
+    assert {:ok, _activation} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               binding_set.mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
     binding_set
   end
 
@@ -474,6 +488,14 @@ defmodule Cadence.ReplayTest do
       })
 
     assert {:ok, ^binding_set} = Cadence.Governance.persist_binding_set(binding_set)
+
+    assert {:ok, _activation} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               binding_set.mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
     binding_set
   end
 

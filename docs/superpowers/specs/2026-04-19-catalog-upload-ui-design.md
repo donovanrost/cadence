@@ -1,9 +1,12 @@
 # Design: Command & Telemetry Catalog Upload UI
 
-- Status: draft
+- Status: superseded by ADR-020
 - Created: 2026-04-19
 - Scope: first mission-scoped web UI for catalog artifact upload, import runs, and read-only snapshot summaries
 - Related ADRs: [008](../../decisions/008-multi-format-catalog-import-architecture.md), [009](../../decisions/009-canonical-telemetry-catalog-model.md), [010](../../decisions/010-canonical-command-catalog-model.md)
+
+> Historical design record. Its snapshot summary model was removed by ADR-020;
+> the catalog UI now presents Mission Model revisions and runtime plans.
 
 ## Summary
 

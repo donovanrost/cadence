@@ -543,7 +543,7 @@ defmodule Cadence.Commanding do
            RequestValidation.resolve_basis(
              organization_id,
              mission_id,
-             request_row.command_snapshot_id,
+             request_row.mission_model_revision_id,
              request_row.command_id
            ),
          :ok <-

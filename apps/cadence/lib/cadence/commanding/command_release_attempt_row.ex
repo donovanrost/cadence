@@ -21,7 +21,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
     field(:realized_contact_id, :string)
     field(:path_id, :string)
     field(:transport_binding_id, :string)
-    field(:command_snapshot_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:command_id, :string)
     field(:command_name, :string)
     field(:layout_kind, :string)
@@ -50,7 +50,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
     :command_request_id,
     :source_endpoint_ref,
     :realized_contact_id,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :lifecycle_state,
     :released_by_document,
@@ -101,7 +101,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
       realized_contact_id: row.realized_contact_id,
       path_id: row.path_id,
       transport_binding_id: row.transport_binding_id,
-      command_snapshot_id: row.command_snapshot_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       command_id: row.command_id,
       command_name: row.command_name,
       layout_kind: row.layout_kind,
@@ -133,7 +133,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
       realized_contact_id: command_release_attempt.realized_contact_id,
       path_id: command_release_attempt.path_id,
       transport_binding_id: command_release_attempt.transport_binding_id,
-      command_snapshot_id: command_release_attempt.command_snapshot_id,
+      mission_model_revision_id: command_release_attempt.mission_model_revision_id,
       command_id: command_release_attempt.command_id,
       command_name: command_release_attempt.command_name,
       layout_kind:
@@ -173,7 +173,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
       :realized_contact_id,
       :path_id,
       :transport_binding_id,
-      :command_snapshot_id,
+      :mission_model_revision_id,
       :command_id,
       :command_name,
       :layout_kind,

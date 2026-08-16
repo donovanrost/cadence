@@ -5,9 +5,10 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
-  alias Cadence.Jobs.Runner, as: JobRunner
-
+  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Jobs
+  alias Cadence.Jobs.Runner, as: JobRunner
+  alias Cadence.Runtime.MissionModelPlanDecoder
 
   setup do
     previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
@@ -30,7 +31,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
          api_token,
          organization_id,
          mission_id,
-         binding_set_id
+         binding_set_id,
+         binding_set_version
        ) do
     packet_hex =
       build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
@@ -67,7 +69,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "dispatch_decisions" => [
                  %{
                    "binding_set_id" => ^binding_set_id,
-                   "binding_set_version" => 2,
+                   "binding_set_version" => ^binding_set_version,
                    "status" => "matched"
                  }
                ],
@@ -143,7 +145,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "dispatch_decisions" => [
                  %{
                    "binding_set_id" => ^binding_set_id,
-                   "binding_set_version" => 2,
+                   "binding_set_version" => ^binding_set_version,
                    "status" => "matched"
                  }
                ],
@@ -231,7 +233,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       api_token: api_token,
       organization_id: organization_id,
       mission_id: mission_id,
-      command_snapshot_id: command_snapshot_id,
+      mission_model_revision_id: mission_model_revision_id,
       noop_command_id: noop_command_id,
       set_mode_command_id: set_mode_command_id
     } = context
@@ -280,7 +282,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
           "staged_command_item" => %{
             "staged_command_item_id" => "staged-command-item-alpha",
             "source_endpoint_ref" => "source-endpoint-commanding-001",
-            "command_snapshot_id" => command_snapshot_id,
+            "mission_model_revision_id" => mission_model_revision_id,
             "command_id" => set_mode_command_id,
             "argument_values" => %{"mode" => 2},
             "priority" => 2,
@@ -455,7 +457,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         "command_request" => %{
           "command_request_id" => "command-request-noop",
           "source_endpoint_ref" => "source-endpoint-commanding-001",
-          "command_snapshot_id" => command_snapshot_id,
+          "mission_model_revision_id" => mission_model_revision_id,
           "command_id" => noop_command_id,
           "priority" => 1,
           "requested_by" => %{"user_id" => "requester-2"}
@@ -631,31 +633,25 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert %{
              "data" => %{
                "import_run_id" => ^import_run_id,
-               "snapshot_id" => snapshot_id,
                "status" => "completed",
                "imported_definition_count" => 2,
                "diagnostics" => [
                  %{
                    "code" => "fake_tm_json.warning",
                    "severity" => "warning"
-                 },
-                 %{
-                   "code" => "telemetry_compiler.apid_required",
-                   "severity" => "error"
-                 },
-                 %{
-                   "code" => "telemetry_compiler.apid_required",
-                   "severity" => "error"
                  }
                ],
                "result_document" => %{
-                 "snapshot" => snapshot_document,
+                 "mission_model" => %{
+                   "revision_id" => mission_model_revision_id,
+                   "declaration_count" => 3
+                 },
                  "packet_names" => ["HK_PACKET", "EVENT_PACKET"]
                }
              }
            } = json_response(import_run_show_conn, 200)
 
-    assert snapshot_document["snapshot_id"] == snapshot_id
+    assert is_binary(mission_model_revision_id)
 
     listed_import_runs_conn =
       conn
@@ -668,54 +664,14 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              "data" => [
                %{
                  "import_run_id" => ^import_run_id,
-                 "snapshot_id" => ^snapshot_id,
                  "status" => "completed",
                  "artifact_id" => "artifact-alpha"
                }
              ]
            } = json_response(listed_import_runs_conn, 200)
-
-    listed_snapshots_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots?import_run_id=#{import_run_id}"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "snapshot_id" => ^snapshot_id,
-                 "artifact_id" => "artifact-alpha",
-                 "packet_count" => 2
-               }
-             ]
-           } = json_response(listed_snapshots_conn, 200)
-
-    snapshot_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots/#{snapshot_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot_id" => ^snapshot_id,
-               "snapshot_name" => "mission-alpha-tm.json",
-               "packet_count" => 2,
-               "snapshot_document" => %{
-                 "snapshot_id" => ^snapshot_id,
-                 "packets" => [
-                   %{"name" => "HK_PACKET"},
-                   %{"name" => "EVENT_PACKET"}
-                 ]
-               }
-             }
-           } = json_response(snapshot_show_conn, 200)
   end
 
-  test "authenticated mission API recompiles telemetry snapshots, materializes runtime artifacts, and ingests dev space packets",
+  test "authenticated mission API activates an imported Mission Model and ingests dev space packets",
        %{
          conn: conn
        } do
@@ -798,195 +754,76 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     assert %{
              "data" => %{
-               "snapshot_id" => snapshot_id,
-               "result_document" => %{
-                 "command_snapshot" => %{"snapshot_id" => command_snapshot_id}
-               }
+               "result_document" =>
+                 %{
+                   "mission_model" => %{"revision_id" => mission_model_revision_id}
+                 } = result_document
              }
            } = json_response(import_run_show_conn, 200)
 
-    command_snapshot_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_command_snapshots/#{command_snapshot_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot_id" => ^command_snapshot_id,
-               "command_count" => 1,
-               "snapshot_document" => %{
-                 "snapshot_id" => ^command_snapshot_id
-               }
-             }
-           } = json_response(command_snapshot_conn, 200)
-
-    command_compile_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_command_snapshots/#{command_snapshot_id}/compile"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot" => %{"snapshot_id" => ^command_snapshot_id, "command_count" => 1},
-               "compiler_result" => %{
-                 "runtime_definition_count" => 1,
-                 "diagnostic_count" => 0
-               }
-             }
-           } = json_response(command_compile_conn, 200)
-
-    recompile_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots/#{snapshot_id}/recompile"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot" => %{"snapshot_id" => ^snapshot_id, "packet_count" => 1},
-               "compiler_result" => %{
-                 "packet_definition_count" => 1,
-                 "selector_input_count" => 1,
-                 "diagnostic_count" => 0
-               },
-               "binding_set" => %{
-                 "binding_set_id" => binding_set_id,
-                 "version" => 1,
-                 "capability_instance_count" => 1,
-                 "rule_count" => 1
-               }
-             }
-           } = json_response(recompile_conn, 200)
-
-    assert binding_set_id == "catalog_import:" <> import_run_id
-
-    runtime_diff_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots/#{snapshot_id}/runtime_diff"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot_id" => ^snapshot_id,
-               "existing_binding_set" => %{"binding_set_id" => ^binding_set_id, "version" => 1},
-               "packet_definitions" => %{
-                 "matching_count" => 1,
-                 "mismatches" => [],
-                 "missing_existing" => [],
-                 "extra_existing" => []
-               },
-               "capability_instances" => %{
-                 "matching_count" => 1,
-                 "mismatches" => []
-               },
-               "binding_rules" => %{
-                 "matching_count" => 1,
-                 "mismatches" => []
-               }
-             }
-           } = json_response(runtime_diff_conn, 200)
-
-    materialize_runtime_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots/#{snapshot_id}/materialize_runtime",
-        %{}
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot" => %{"snapshot_id" => ^snapshot_id},
-               "compiler_result" => %{
-                 "packet_definition_count" => 1,
-                 "selector_input_count" => 1,
-                 "diagnostic_count" => 0
-               },
-               "binding_set" => %{
-                 "binding_set_id" => ^binding_set_id,
-                 "version" => 2,
-                 "capability_instance_count" => 1,
-                 "rule_count" => 1
-               }
-             }
-           } = json_response(materialize_runtime_conn, 201)
-
-    runtime_diff_after_materialization_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_telemetry_snapshots/#{snapshot_id}/runtime_diff"
-      )
-
-    assert %{
-             "data" => %{
-               "snapshot_id" => ^snapshot_id,
-               "existing_binding_set" => %{"binding_set_id" => ^binding_set_id, "version" => 2},
-               "packet_definitions" => %{
-                 "matching_count" => 1,
-                 "mismatches" => [],
-                 "missing_existing" => [],
-                 "extra_existing" => []
-               },
-               "capability_instances" => %{
-                 "matching_count" => 1,
-                 "mismatches" => []
-               },
-               "binding_rules" => %{
-                 "matching_count" => 1,
-                 "mismatches" => []
-               }
-             }
-           } = json_response(runtime_diff_after_materialization_conn, 200)
-
-    activation_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/activations", %{
-        "activation" => %{
-          "binding_set_id" => binding_set_id,
-          "version" => 2
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "request" => %{
-                 "activation_request_id" => activation_request_id,
-                 "binding_set_id" => ^binding_set_id,
-                 "binding_set_version" => 2,
-                 "state" => "approval_pending"
-               },
-               "execution" => nil
-             }
-           } = json_response(activation_conn, 202)
-
-    admin_scope = organization_admin_scope(organization_id)
-
-    assert {:ok, approved_request, _decision, approved_activation} =
-             Cadence.Management.Activations.approve(
-               admin_scope,
-               activation_request_id,
-               "approved by a browser-authenticated organization administrator"
+    assert {:ok, plans} =
+             Cadence.MissionModels.fetch_runtime_plans(
+               organization_id,
+               mission_id,
+               mission_model_revision_id
              )
 
-    assert approved_request.state == :approved
-    assert {:ok, execution} = Cadence.Control.Activations.execute(approved_activation)
-    assert execution.status == :succeeded
+    assert {:ok, [packet_definition]} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(plans)
+
+    assert packet_definition.packet_name == "THERM"
+    assert packet_definition.apid == 42
+
+    binding_set_id = "mission-model-import:" <> import_run_id
+    binding_set_version = 1
+    capability_instance_id = "telemetry:" <> packet_definition.packet_definition_id
+
+    binding_set =
+      BindingSet.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        binding_set_id: binding_set_id,
+        version: binding_set_version,
+        capability_instances: [
+          CapabilityInstance.new(%{
+            capability_instance_id: capability_instance_id,
+            family_key: :definition_bound_telemetry,
+            target_scope: :mission,
+            runtime_configuration: packet_definition
+          })
+        ],
+        rules: [
+          BindingRule.new(%{
+            binding_rule_id: "route:" <> packet_definition.packet_definition_id,
+            capability_instance_id: capability_instance_id,
+            selector: %{
+              scope: %{target_scope: :mission},
+              match: %{packet_kind: :space_packet, apid: packet_definition.apid}
+            },
+            priority: 100,
+            fanout_mode: :exclusive
+          })
+        ]
+      })
+
+    activated_model =
+      Cadence.MissionModelFixtures.activate_imported_model!(
+        organization_id,
+        mission_id,
+        result_document,
+        binding_set: binding_set,
+        reconcile?: true
+      )
+
+    assert activated_model.revision_id == mission_model_revision_id
 
     assert_dev_telemetry_ingress(
       conn,
       api_token,
       organization_id,
       mission_id,
-      binding_set_id
+      binding_set_id,
+      binding_set_version
     )
   end
 
@@ -1120,21 +957,31 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     assert %{
              "data" => %{
-               "result_document" => %{
-                 "command_snapshot" => %{"snapshot_id" => command_snapshot_id}
-               }
+               "result_document" =>
+                 %{
+                   "mission_model" => %{"revision_id" => mission_model_revision_id}
+                 } = result_document
              }
            } = json_response(import_run_show_conn, 200)
 
-    assert {:ok, command_snapshot} =
-             Cadence.Catalog.fetch_command_snapshot(
+    assert {:ok, runtime_plans} =
+             Cadence.MissionModels.fetch_runtime_plans(
                organization_id,
                mission_id,
-               command_snapshot_id
+               mission_model_revision_id
              )
 
-    noop_command_id = fetch_command_id(command_snapshot, "NOOP")
-    set_mode_command_id = fetch_command_id(command_snapshot, "SET_MODE")
+    command_model =
+      Cadence.MissionModelFixtures.activate_imported_model!(
+        organization_id,
+        mission_id,
+        result_document
+      )
+
+    assert command_model.revision_id == mission_model_revision_id
+
+    noop_command_id = fetch_command_id(runtime_plans, "NOOP")
+    set_mode_command_id = fetch_command_id(runtime_plans, "SET_MODE")
 
     %{
       noop_queue_entry_id: noop_queue_entry_id,
@@ -1146,7 +993,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         api_token: api_token,
         organization_id: organization_id,
         mission_id: mission_id,
-        command_snapshot_id: command_snapshot_id,
+        mission_model_revision_id: mission_model_revision_id,
         noop_command_id: noop_command_id,
         set_mode_command_id: set_mode_command_id
       })

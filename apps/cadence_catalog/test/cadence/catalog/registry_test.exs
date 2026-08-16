@@ -11,15 +11,15 @@ defmodule Cadence.Catalog.RegistryTest do
              Enum.find(importers, &(&1.descriptor.importer_key == "cadence_yaml"))
 
     assert descriptor.importer_key == "cadence_yaml"
-    assert descriptor.version == 1
+    assert descriptor.version == 2
     assert descriptor.trust == :first_party
     assert :ok = ImporterDescriptor.validate(descriptor)
 
     assert {:ok, %{descriptor: ^descriptor}} =
-             Registry.fetch_builtin_importer("cadence_yaml", 1)
+             Registry.fetch_builtin_importer("cadence_yaml", 2)
 
     assert {:error, :catalog_importer_version_not_found} =
-             Registry.fetch_builtin_importer("cadence_yaml", 2)
+             Registry.fetch_builtin_importer("cadence_yaml", 1)
 
     assert {:error, :catalog_importer_not_found} =
              Registry.fetch_builtin_importer("unknown")

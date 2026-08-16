@@ -12,7 +12,7 @@ defmodule Cadence.Runtime.CommandingBoundaryTest do
     definition =
       RuntimeDefinition.new(%{
         command_id: "command-1",
-        snapshot_id: "snapshot-1",
+        mission_model_revision_id: "mission-model-1",
         name: "NOOP",
         layout_id: "layout-1",
         layout_kind: :raw_payload,
@@ -39,7 +39,7 @@ defmodule Cadence.Runtime.CommandingBoundaryTest do
       command_queue_entry_id: "queue-1",
       command_request_id: "request-1",
       source_endpoint_ref: "endpoint-1",
-      command_snapshot_id: "snapshot-1",
+      mission_model_revision_id: "mission-model-1",
       command_id: "command-1",
       encoded_binary_base64: Base.encode64(<<1, 2, 3>>),
       encoded_size_bytes: 3,

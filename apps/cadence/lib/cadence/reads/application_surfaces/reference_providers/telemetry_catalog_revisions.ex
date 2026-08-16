@@ -1,5 +1,5 @@
 defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.TelemetryCatalogRevisions do
-  @moduledoc "Telemetry-bearing catalog revisions available to a spacecraft application."
+  @moduledoc "Mission Model catalog revisions available to a spacecraft application."
 
   @behaviour Cadence.Reads.ApplicationSurfaces.ReferenceProvider
 
@@ -25,7 +25,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.TelemetryCatalogR
     matches =
       organization_id
       |> Catalog.list_revisions(mission_id)
-      |> Enum.filter(&(&1.telemetry_snapshot_id != nil))
+      |> Enum.filter(&is_binary(&1.mission_model_revision_id))
       |> Enum.map(&option/1)
       |> Enum.filter(&matches?(&1, query))
 
@@ -44,7 +44,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.TelemetryCatalogR
     %ReferenceOption{
       value: revision.catalog_revision_id,
       label: "#{revision.revision_label} (##{revision.revision_number})",
-      description: "Telemetry catalog revision"
+      description: "Mission Model revision"
     }
   end
 

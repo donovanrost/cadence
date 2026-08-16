@@ -113,7 +113,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
       command_queue_entry_id: "queue-1",
       command_request_id: "request-1",
       source_endpoint_ref: "source-1",
-      command_snapshot_id: "snapshot-1",
+      mission_model_revision_id: "mission-model-1",
       command_id: "command-1",
       command_name: "BURST",
       layout_kind: :command,

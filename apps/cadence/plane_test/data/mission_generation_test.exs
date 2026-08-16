@@ -2,6 +2,7 @@ defmodule Cadence.Runtime.MissionGenerationTest do
   use ExUnit.Case, async: false
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.MissionModelFixtures
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions
@@ -57,6 +58,8 @@ defmodule Cadence.Runtime.MissionGenerationTest do
         version: version
       })
 
+    {:ok, compilation} = MissionModelFixtures.compile_empty_model(mission_id)
+
     {:ok, spec} =
       MissionRuntimeSpec.new(%{
         activation_id: activation_id,
@@ -65,6 +68,9 @@ defmodule Cadence.Runtime.MissionGenerationTest do
         binding_set_id: binding_set_id,
         binding_set_version: version,
         binding_set: binding_set,
+        mission_model_revision_id: compilation.revision.revision_id,
+        mission_model_content_sha256: compilation.revision.content_sha256,
+        runtime_plans: compilation.plans,
         activated_at: ~U[2026-07-21 12:00:00Z]
       })
 

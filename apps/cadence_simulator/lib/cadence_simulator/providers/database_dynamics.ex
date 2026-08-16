@@ -15,7 +15,8 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
   alias Cadence.Catalog.Command.StateEffect
-  alias Cadence.Catalog.Telemetry.{Packet, Point, Snapshot, Type}
+  alias Cadence.Catalog.MissionModel.Declaration
+  alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
   alias CadenceSimulator.CatalogDatabase
 
   @boolean_toggle_rate 20
@@ -48,9 +49,8 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     with {:ok, definitions_content, source_attrs} <- load_definitions(config),
          {:ok, catalog_database} <-
            CatalogDatabase.load_yaml(definitions_content, source_attrs),
-         %Snapshot{} = telemetry_snapshot <-
-           catalog_database.import_result.bundle.telemetry_snapshot do
-      {packets, item_count} = extract_definitions(telemetry_snapshot)
+         [_ | _] <- catalog_database.packet_definitions do
+      {packets, item_count} = extract_definitions(catalog_database)
       items_by_qualified_name = index_items(packets)
       command_state_table = init_command_state()
 
@@ -160,17 +160,17 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     end
   end
 
-  defp extract_definitions(%Snapshot{} = snapshot) do
-    points_by_id = Map.new(snapshot.points, &{&1.point_id, &1})
-    types_by_id = Map.new(snapshot.types, &{&1.type_id, &1})
+  defp extract_definitions(%CatalogDatabase{} = database) do
+    declarations = database.compilation.revision.declarations
+    limits_by_parameter = limits_by_parameter(database.compilation.plans.monitoring.plan)
 
-    Enum.reduce(snapshot.packets, {[], 0}, fn %Packet{} = packet, {packets, item_count} ->
-      packet_items = build_packet_items(packet, points_by_id, types_by_id)
+    Enum.reduce(database.packet_definitions, {[], 0}, fn %PacketDefinition{} = packet,
+                                                         {packets, item_count} ->
+      packet_items = build_packet_items(packet, declarations, limits_by_parameter)
 
       packet_spec = %{
-        name: packet.name,
+        name: packet.packet_name,
         apid: packet.apid,
-        description: packet.description,
         items: packet_items
       }
 
@@ -179,36 +179,65 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     |> then(fn {packets, item_count} -> {Enum.reverse(packets), item_count} end)
   end
 
-  defp build_packet_items(%Packet{} = packet, points_by_id, types_by_id) do
-    packet.entries
+  defp build_packet_items(%PacketDefinition{} = packet, declarations, limits_by_parameter) do
+    packet.fields
     |> Enum.with_index()
-    |> Enum.flat_map(&build_packet_item(packet.name, &1, points_by_id, types_by_id))
+    |> Enum.flat_map(
+      &build_packet_item(packet.packet_name, &1, declarations, limits_by_parameter)
+    )
     |> Enum.sort_by(&{&1.bit_offset, &1.sort_index})
   end
 
-  defp build_packet_item(packet_name, {entry, index}, points_by_id, types_by_id) do
-    with point_id when is_binary(point_id) <- entry.point_id,
-         %Point{} = point <- Map.get(points_by_id, point_id),
-         %Type{} = type <- Map.get(types_by_id, point.type_id) do
-      [build_item_spec(packet_name, entry, point, type, index)]
+  defp build_packet_item(packet_name, {%FieldDefinition{} = field, index}, declarations, limits) do
+    with parameter_id when is_binary(parameter_id) <- field.parameter_id,
+         %Declaration{} = parameter <- Map.get(declarations, parameter_id),
+         %Declaration{} = type <- parameter_type(parameter, declarations) do
+      [
+        build_item_spec(
+          packet_name,
+          field,
+          parameter,
+          type,
+          Map.get(limits, parameter_id, %{}),
+          index
+        )
+      ]
     else
       _other -> []
     end
   end
 
-  defp build_item_spec(packet_name, entry, %Point{} = point, %Type{} = type, sort_index) do
-    qualified_name = "#{packet_name}.#{point.name}"
-    phase = :erlang.phash2(point.name) / 1000.0
-    enumerations = Map.new(type.enumerations, &{&1.value, &1.label})
+  defp build_item_spec(packet_name, field, parameter, type, limits, sort_index) do
+    qualified_name = "#{packet_name}.#{field.name}"
+    phase = :erlang.phash2(field.name) / 1000.0
+
+    enumerations =
+      Map.new(value(type.definition, :enumerations, []), &{value(&1, :value), value(&1, :label)})
 
     %{
-      bit_offset: entry.bit_offset || 0,
-      name: point.name,
+      bit_offset: field.offset_bits,
+      name: field.name,
+      parameter_id: parameter.semantic_id,
       qualified_name: qualified_name,
       sort_index: sort_index,
       enumerations: enumerations,
-      generator: build_generator(packet_name, point, type, phase)
+      generator: build_generator(packet_name, field, type, limits, phase)
     }
+  end
+
+  defp parameter_type(parameter, declarations) do
+    parameter.references
+    |> Enum.find(&(&1.role == :type and is_binary(&1.resolved_id)))
+    |> case do
+      nil -> nil
+      reference -> Map.get(declarations, reference.resolved_id)
+    end
+  end
+
+  defp limits_by_parameter(plan) do
+    plan
+    |> value(:policies, [])
+    |> Map.new(&{value(&1, :parameter_id), value(&1, :rules, %{})})
   end
 
   defp build_packet_values(packet_specs, step, noise_amplitude, overrides) do
@@ -233,16 +262,19 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   end
 
   defp item_value(item, step, noise_amplitude, overrides) do
-    Map.get_lazy(
-      overrides,
-      item.qualified_name,
-      fn -> generate_item_value(item.generator, step, noise_amplitude) end
-    )
+    case Map.fetch(overrides, item.parameter_id) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        Map.get_lazy(overrides, item.qualified_name, fn ->
+          generate_item_value(item.generator, step, noise_amplitude)
+        end)
+    end
   end
 
-  defp build_generator(packet_name, %Point{} = point, %Type{} = type, phase) do
-    limits = Map.get(point.extensions, "limits", %{})
-    bit_size = if type.encoding, do: type.encoding.size_bits, else: nil
+  defp build_generator(packet_name, field, type, limits, phase) do
+    bit_size = field.size_bits
 
     case state_values(type) do
       state_values when is_list(state_values) and state_values != [] ->
@@ -251,7 +283,7 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
       _ ->
         build_typed_generator(
           packet_name,
-          point.name,
+          field.name,
           generator_data_type(type),
           bit_size,
           limits,
@@ -513,30 +545,45 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defp index_items(packets) do
     packets
     |> Enum.flat_map(& &1.items)
-    |> Map.new(&{&1.qualified_name, &1})
+    |> Enum.flat_map(fn item -> [{item.qualified_name, item}, {item.parameter_id, item}] end)
+    |> Map.new()
   end
 
-  defp command_count(%CatalogDatabase{command_compilation: nil}), do: 0
+  defp command_count(%CatalogDatabase{} = database), do: length(database.command_definitions)
 
-  defp command_count(%CatalogDatabase{command_compilation: command_compilation}),
-    do: length(command_compilation.runtime_definitions)
-
-  defp state_values(%Type{} = type) do
-    type.enumerations
+  defp state_values(%Declaration{} = type) do
+    type.definition
+    |> value(:enumerations, [])
     |> Enum.sort_by(& &1.value)
     |> Enum.map(& &1.label)
   end
 
-  defp generator_data_type(%Type{base_type: :float}), do: "float"
-  defp generator_data_type(%Type{base_type: :boolean}), do: "boolean"
-  defp generator_data_type(%Type{base_type: :string}), do: "string"
-  defp generator_data_type(%Type{base_type: :binary}), do: "binary"
+  defp generator_data_type(%Declaration{} = type) do
+    encoding = value(type.definition, :encoding, %{})
 
-  defp generator_data_type(%Type{base_type: :integer, encoding: %{signed: true}}),
-    do: "int"
+    case value(type.definition, :base_type) do
+      kind when kind in [:float, "float"] ->
+        "float"
 
-  defp generator_data_type(%Type{base_type: :integer}), do: "uint"
-  defp generator_data_type(%Type{}), do: "float"
+      kind when kind in [:boolean, "boolean"] ->
+        "boolean"
+
+      kind when kind in [:string, "string"] ->
+        "string"
+
+      kind when kind in [:binary, "binary"] ->
+        "binary"
+
+      kind when kind in [:integer, :enumerated, "integer", "enumerated"] ->
+        if(value(encoding, :signed, false), do: "int", else: "uint")
+
+      _other ->
+        "float"
+    end
+  end
+
+  defp value(map, key, default \\ nil),
+    do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))
 
   defp get_float_range(limits, item_name) do
     case range_from_limits(limits) do

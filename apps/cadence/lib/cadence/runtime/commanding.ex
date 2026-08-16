@@ -32,7 +32,7 @@ defmodule Cadence.Runtime.Commanding do
       command_queue_entry_id: request.command_queue_entry_id,
       command_request_id: request.command_request_id,
       source_endpoint_ref: request.source_endpoint_ref,
-      command_snapshot_id: request.command_snapshot_id,
+      mission_model_revision_id: request.mission_model_revision_id,
       command_id: request.command_id,
       command_name: request.command_name,
       layout_kind: request.layout_kind,

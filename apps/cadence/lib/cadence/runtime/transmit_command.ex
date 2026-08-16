@@ -14,7 +14,7 @@ defmodule Cadence.Runtime.TransmitCommand do
           command_queue_entry_id: binary(),
           command_request_id: binary(),
           source_endpoint_ref: binary(),
-          command_snapshot_id: binary(),
+          mission_model_revision_id: binary(),
           command_id: binary(),
           command_name: binary() | nil,
           layout_kind: atom() | nil,
@@ -39,7 +39,7 @@ defmodule Cadence.Runtime.TransmitCommand do
     :command_queue_entry_id,
     :command_request_id,
     :source_endpoint_ref,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :encoded_binary_base64,
     :encoded_size_bytes,
@@ -105,7 +105,7 @@ defmodule Cadence.Runtime.TransmitCommand do
       :command_queue_entry_id,
       :command_request_id,
       :source_endpoint_ref,
-      :command_snapshot_id,
+      :mission_model_revision_id,
       :command_id
     ]
 

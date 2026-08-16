@@ -17,7 +17,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
     field(:organization_id, :string)
     field(:command_stage_id, :string)
     field(:source_endpoint_ref, :string)
-    field(:command_snapshot_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:command_id, :string)
     field(:argument_values_document, :map, default: %{})
     field(:priority, :integer, default: 3)
@@ -37,7 +37,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
     :mission_id,
     :command_stage_id,
     :source_endpoint_ref,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :argument_values_document,
     :priority,
@@ -86,7 +86,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
       mission_id: row.mission_id,
       command_stage_id: row.command_stage_id,
       source_endpoint_ref: row.source_endpoint_ref,
-      command_snapshot_id: row.command_snapshot_id,
+      mission_model_revision_id: row.mission_model_revision_id,
       command_id: row.command_id,
       argument_values: JsonDocument.unwrap_value(row.argument_values_document),
       priority: row.priority,
@@ -107,7 +107,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
       mission_id: staged_command_item.mission_id,
       command_stage_id: staged_command_item.command_stage_id,
       source_endpoint_ref: staged_command_item.source_endpoint_ref,
-      command_snapshot_id: staged_command_item.command_snapshot_id,
+      mission_model_revision_id: staged_command_item.mission_model_revision_id,
       command_id: staged_command_item.command_id,
       argument_values_document: JsonDocument.wrap_value(staged_command_item.argument_values),
       priority: staged_command_item.priority,
@@ -128,7 +128,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
       :mission_id,
       :command_stage_id,
       :source_endpoint_ref,
-      :command_snapshot_id,
+      :mission_model_revision_id,
       :command_id,
       :argument_values_document,
       :priority,

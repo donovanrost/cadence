@@ -237,8 +237,7 @@ defmodule Cadence.DataSourcesFixtures do
       catalog_family: :telemetry,
       artifact_id: "#{catalog_revision_id}-artifact",
       import_run_id: "#{catalog_revision_id}-import-run",
-      telemetry_snapshot_id: "#{catalog_revision_id}-telemetry-snapshot",
-      command_snapshot_id: nil,
+      mission_model_revision_id: "#{catalog_revision_id}-mission-model",
       content_sha256: "#{catalog_revision_id}-sha",
       created_by: %{"service_identity_id" => "svc-importer"},
       metadata: %{"source_artifact_name" => "#{catalog_revision_id}.json"}

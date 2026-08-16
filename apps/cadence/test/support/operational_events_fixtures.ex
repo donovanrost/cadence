@@ -312,8 +312,7 @@ defmodule Cadence.OperationalEventsFixtures do
       catalog_family: :telemetry,
       artifact_id: "#{catalog_revision_id}-artifact",
       import_run_id: Keyword.fetch!(opts, :import_run_id),
-      telemetry_snapshot_id: Keyword.fetch!(opts, :telemetry_snapshot_id),
-      command_snapshot_id: nil,
+      mission_model_revision_id: Keyword.fetch!(opts, :mission_model_revision_id),
       content_sha256: "#{catalog_revision_id}-sha",
       created_by: %{"service_identity_id" => "svc-importer"},
       metadata: %{"source_artifact_name" => "#{catalog_revision_id}.json"}

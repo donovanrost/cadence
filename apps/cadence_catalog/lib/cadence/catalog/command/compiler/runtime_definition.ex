@@ -12,7 +12,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
 
   @type t :: %__MODULE__{
           command_id: binary(),
-          snapshot_id: binary(),
+          mission_model_revision_id: binary(),
           name: binary(),
           display_name: binary() | nil,
           description: binary() | nil,
@@ -36,7 +36,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
 
   defstruct [
     :command_id,
-    :snapshot_id,
+    :mission_model_revision_id,
     :name,
     :display_name,
     :description,
@@ -62,7 +62,7 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
   def new(attrs) when is_map(attrs) do
     %__MODULE__{
       command_id: Map.fetch!(attrs, :command_id),
-      snapshot_id: Map.fetch!(attrs, :snapshot_id),
+      mission_model_revision_id: required_binary(attrs, :mission_model_revision_id),
       name: Map.fetch!(attrs, :name),
       display_name: Map.get(attrs, :display_name),
       description: Map.get(attrs, :description),
@@ -83,5 +83,12 @@ defmodule Cadence.Catalog.Command.Compiler.RuntimeDefinition do
       state_effects: Map.get(attrs, :state_effects, []),
       metadata: Map.get(attrs, :metadata, %{})
     }
+  end
+
+  defp required_binary(attrs, key) do
+    case Map.fetch(attrs, key) do
+      {:ok, value} when is_binary(value) and value != "" -> value
+      _other -> raise KeyError, key: key, term: attrs
+    end
   end
 end

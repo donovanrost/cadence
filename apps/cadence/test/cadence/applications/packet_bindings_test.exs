@@ -11,6 +11,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
 
@@ -44,12 +45,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
 
     revision = persist_revision!()
 
-    {:ok, snapshot} =
-      Catalog.fetch_telemetry_snapshot(
-        @organization_id,
-        @mission_id,
-        revision.telemetry_snapshot_id
-      )
+    {:ok, telemetry} = TelemetryProjection.load(@organization_id, @mission_id, revision)
 
     scope = %Scope{
       actor_kind: :user,
@@ -69,7 +65,8 @@ defmodule Cadence.Applications.PacketBindingsTest do
       installation: installation,
       endpoint: endpoint,
       revision: revision,
-      packet: List.first(snapshot.packets)
+      telemetry: telemetry,
+      packet: List.first(telemetry.packet_definitions)
     }
   end
 
@@ -90,10 +87,14 @@ defmodule Cadence.Applications.PacketBindingsTest do
     assert configuration.enabled
 
     assert [binding] = configuration.bindings
-    assert binding.packet_id == context.packet.packet_id
+    assert binding.packet_id == context.packet.packet_definition_id
     assert binding.apid == 42
     assert binding.catalog_revision_id == context.revision.catalog_revision_id
-    assert binding.packet_model_content_sha256 == context.revision.content_sha256
+    assert binding.mission_model_revision_id == context.revision.mission_model_revision_id
+
+    assert binding.packet_model_content_sha256 ==
+             context.telemetry.mission_model_revision.content_sha256
+
     assert binding.source_endpoint_ref == context.endpoint.source_endpoint_id
     assert [%{resource_kind: :field, path: "mode", data_type: :uint}] = binding.resources
 
@@ -243,7 +244,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
       input_version: 1,
       catalog_revision_id: context.revision.catalog_revision_id,
       source_endpoint_ref: context.endpoint.source_endpoint_id,
-      selected_packet_ids: [context.packet.packet_id]
+      selected_packet_ids: [context.packet.packet_definition_id]
     }
   end
 

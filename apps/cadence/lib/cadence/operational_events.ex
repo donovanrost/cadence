@@ -578,8 +578,8 @@ defmodule Cadence.OperationalEvents do
         "catalog_family" => payload_value(event, :catalog_family),
         "artifact_id" => payload_value(event, :artifact_id),
         "import_run_id" => payload_value(event, :import_run_id),
-        "telemetry_snapshot_id" => payload_value(event, :telemetry_snapshot_id),
-        "command_snapshot_id" => payload_value(event, :command_snapshot_id),
+        "mission_model_layer_id" => payload_value(event, :mission_model_layer_id),
+        "mission_model_revision_id" => payload_value(event, :mission_model_revision_id),
         "content_sha256" => payload_value(event, :content_sha256)
       },
       metadata: %{

@@ -1,28 +1,49 @@
 defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Catalog.Bundle
-  alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, ConstraintPlan, VerifierPlan}
-  alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
-  alias Cadence.Catalog.MissionModel.{Adapters.Snapshots, Compiler, RuntimePlan}
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetrySnapshot
+  alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, VerifierPlan}
+  alias Cadence.Catalog.Importers.CadenceYamlDatabase
+  alias Cadence.Catalog.MissionModel.{Compiler, RuntimePlan}
+  alias Cadence.Catalog.Source
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
-  test "decodes persisted executable telemetry and command plans without source snapshots" do
-    telemetry_snapshot = telemetry_snapshot()
-    command_snapshot = command_snapshot()
+  @database """
+  packets:
+    - name: HK
+      apid: 42
+      items:
+        - name: temperature
+          bit_offset: 0
+          bit_size: 16
+          data_type: uint
+        - name: ready
+          bit_offset: 16
+          bit_size: 1
+          data_type: bool
+  commands:
+    - name: SET_MODE
+      apid: 77
+      opcode: 3
+      is_hazardous: true
+      hazard_description: Changes spacecraft mode
+      parameters:
+        - name: mode
+          data_type: uint
+          bit_offset: 0
+          bit_length: 8
+          valid_values: [0, 1]
+      verifiers:
+        - name: complete
+          phase: completion
+          success_criteria:
+            subject_ref: telemetry:HK.ready
+            comparison: equal
+            value: 1
+  """
 
-    layer =
-      Snapshots.to_layer(
-        Bundle.new(%{
-          telemetry_snapshot: telemetry_snapshot,
-          command_snapshot: command_snapshot
-        })
-      )
-
-    assert {:ok, compilation} = Compiler.compile([layer])
-    assert Enum.all?(compilation.plans, fn {_target, plan} -> plan.status == :ready end)
+  test "decodes persisted native telemetry and command plans" do
+    compilation = compilation()
 
     persisted_plans =
       Map.new(compilation.plans, fn {target, %RuntimePlan{} = plan} ->
@@ -32,201 +53,87 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
 
     assert :ok = MissionModelPlanDecoder.validate(persisted_plans)
 
+    [packet_document] = persisted_plans.telemetry.plan["packet_definitions"]
+
     configured =
       PacketDefinition.new(%{
-        packet_definition_id: "packet-hk",
+        packet_definition_id: packet_document["packet_definition_id"],
         mission_id: "mission-alpha",
         packet_name: "stale binding copy",
         apid: 42,
-        fields: [
-          FieldDefinition.new(%{name: "stale", size_bits: 8, data_type: :uint})
-        ]
+        fields: [FieldDefinition.new(%{name: "stale", size_bits: 8, data_type: :uint})]
       })
 
     assert {:ok, %PacketDefinition{} = packet_definition} =
-             MissionModelPlanDecoder.resolve_telemetry_configuration(
-               persisted_plans,
-               configured
-             )
+             MissionModelPlanDecoder.resolve_telemetry_configuration(persisted_plans, configured)
 
     assert packet_definition.packet_name == "HK"
+    assert Enum.map(packet_definition.fields, & &1.size_bits) == [16, 1]
+    assert Enum.all?(packet_definition.fields, &is_binary(&1.parameter_id))
 
-    assert [%FieldDefinition{size_bits: 16, parameter_id: parameter_id}] =
-             packet_definition.fields
-
-    assert is_binary(parameter_id)
+    [runtime_document] = persisted_plans.command.plan["runtime_definitions"]
 
     assert {:ok, command_basis} =
              MissionModelPlanDecoder.command_basis(
                persisted_plans,
-               command_snapshot.snapshot_id,
-               "cmd-set-mode"
+               runtime_document["command_id"]
              )
 
     assert [%ArgumentSpec{base_type: :enumerated}] =
              command_basis.runtime_definition.argument_specs
 
-    assert [%ConstraintPlan{criteria: %{subject_ref: constraint_parameter_id}}] =
-             command_basis.constraint_plans
+    assert command_basis.runtime_definition.mission_model_revision_id ==
+             compilation.revision.revision_id
 
-    assert String.starts_with?(constraint_parameter_id, "semantic:parameter:")
+    assert [%VerifierPlan{phase: :completion, success_criteria: criteria}] =
+             command_basis.verifier_plans
 
-    assert [%VerifierPlan{phase: :completion}] = command_basis.verifier_plans
-    assert command_basis.operational_binding.significance == :critical
+    assert String.starts_with?(criteria.subject_ref, "semantic:parameter:")
+    assert command_basis.operational_binding.significance == :hazardous
   end
 
-  test "fails closed when an active telemetry plan does not contain the bound definition" do
-    layer = Snapshots.to_layer(Bundle.new(%{telemetry_snapshot: telemetry_snapshot()}))
-    assert {:ok, compilation} = Compiler.compile([layer])
+  test "fails closed without a native plan or matching telemetry definition" do
+    compilation = compilation()
 
     configured =
       PacketDefinition.new(%{
-        packet_definition_id: "packet-other",
+        packet_definition_id: "semantic:container:missing",
         mission_id: "mission-alpha",
         packet_name: "Other",
         apid: 42,
         fields: []
       })
 
-    assert {:error, {:mission_model_packet_definition_not_found, "packet-other"}} =
+    assert {:error, {:mission_model_packet_definition_not_found, "semantic:container:missing"}} =
              MissionModelPlanDecoder.resolve_telemetry_configuration(
                compilation.plans,
                configured
              )
+
+    assert {:error, {:mission_model_runtime_plan_required, :telemetry}} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(
+               Map.delete(compilation.plans, :telemetry)
+             )
   end
 
-  defp telemetry_snapshot do
-    TelemetrySnapshot.new(%{
-      snapshot_id: "telemetry-snapshot-alpha",
-      organization_id: "org-alpha",
-      mission_id: "mission-alpha",
-      artifact_id: "artifact-alpha",
-      import_run_id: "import-alpha",
-      importer_key: "cadence_yaml",
-      snapshot_name: "Alpha Telemetry",
-      types: [
-        %{
-          type_id: "type-temp",
-          snapshot_id: "telemetry-snapshot-alpha",
-          name: "Temperature",
-          base_type: :integer,
-          encoding: %{encoding_type: :integer, size_bits: 16, integer_encoding: :unsigned}
-        }
-      ],
-      points: [
-        %{
-          point_id: "point-temp",
-          snapshot_id: "telemetry-snapshot-alpha",
-          name: "temperature",
-          type_ref: "type-temp"
-        },
-        %{
-          point_id: "point-ready",
-          snapshot_id: "telemetry-snapshot-alpha",
-          name: "subsystem.ready",
-          type_ref: "type-temp"
-        },
-        %{
-          point_id: "point-mode",
-          snapshot_id: "telemetry-snapshot-alpha",
-          name: "subsystem.mode",
-          type_ref: "type-temp"
-        }
-      ],
-      packets: [
-        %{
-          packet_id: "packet-hk",
-          snapshot_id: "telemetry-snapshot-alpha",
-          name: "HK",
-          apid: 42,
-          entries: [
-            %{packet_entry_id: "entry-temp", point_ref: "point-temp", bit_offset: 0}
-          ]
-        }
-      ]
-    })
-  end
+  defp compilation do
+    source =
+      Source.new(%{
+        artifact_id: "mission-model-runtime-test",
+        organization_id: "org-alpha",
+        mission_id: "mission-alpha",
+        catalog_family: :combined,
+        artifact_name: "runtime.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: @database
+      })
 
-  defp command_snapshot do
-    CommandSnapshot.new(%{
-      snapshot_id: "command-snapshot-alpha",
-      organization_id: "org-alpha",
-      mission_id: "mission-alpha",
-      artifact_id: "artifact-alpha",
-      import_run_id: "import-alpha",
-      importer_key: "cadence_yaml",
-      snapshot_name: "Alpha Commands",
-      argument_types: [
-        %{
-          argument_type_id: "arg-type-mode",
-          snapshot_id: "command-snapshot-alpha",
-          name: "ModeType",
-          base_type: :enumerated,
-          encoding: %{encoding_type: :integer, size_bits: 8, signed: false},
-          enumerations: [%{value: 0, label: "SAFE"}, %{value: 1, label: "SCIENCE"}]
-        }
-      ],
-      arguments: [
-        %{
-          argument_id: "arg-mode",
-          snapshot_id: "command-snapshot-alpha",
-          name: "mode",
-          argument_type_ref: "arg-type-mode"
-        }
-      ],
-      encoding_layouts: [
-        %{
-          layout_id: "layout-main",
-          snapshot_id: "command-snapshot-alpha",
-          name: "Main Layout",
-          layout_kind: :space_packet,
-          apid: 77,
-          entries: [
-            %{
-              layout_entry_id: "entry-mode",
-              entry_kind: :argument_ref,
-              argument_ref: "arg-mode",
-              bit_offset: 0
-            }
-          ]
-        }
-      ],
-      command_definitions: [
-        %{
-          command_id: "cmd-set-mode",
-          snapshot_id: "command-snapshot-alpha",
-          name: "SET_MODE",
-          encoding_layout_ref: "layout-main",
-          arguments: ["arg-mode"],
-          transmission_constraints: [
-            %{
-              constraint_id: "constraint-ready",
-              name: "Subsystem Ready",
-              constraint_type: :precondition,
-              criteria: %{
-                criteria_type: :comparison,
-                subject_ref: "telemetry:subsystem.ready",
-                comparison: :equal,
-                value: true
-              }
-            }
-          ],
-          verifiers: [
-            %{
-              verifier_id: "verifier-mode",
-              name: "Mode Accepted",
-              phase: :completion,
-              success_criteria: %{
-                criteria_type: :comparison,
-                subject_ref: "telemetry:subsystem.mode",
-                comparison: :equal,
-                value: 1
-              }
-            }
-          ],
-          operational_metadata: %{significance: :critical, critical: true}
-        }
-      ]
-    })
+    assert {:ok, import_result} =
+             CadenceYamlDatabase.import(source, %{import_run_id: "runtime-test"})
+
+    assert {:ok, compilation} = Compiler.compile(import_result.bundle.declaration_layers)
+    assert Enum.all?(compilation.plans, fn {_target, plan} -> plan.status == :ready end)
+    compilation
   end
 end

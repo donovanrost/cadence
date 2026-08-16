@@ -1,41 +1,38 @@
 defmodule CadenceSimulator.CatalogDatabase do
   @moduledoc """
-  Loads and compiles a command-and-telemetry database without a Cadence runtime.
+  Loads a command-and-telemetry database as a native Mission Model.
 
-  This is the simulator-facing adapter over `cadence_catalog`. It deliberately
-  stops at portable import and compiler results; it does not create Cadence
-  revisions, rows, jobs, bindings, or activation state.
+  The simulator uses the same importer, canonical revision, and target plans as
+  Cadence runtime. It does not create Cadence rows, jobs, bindings, or
+  activation state.
   """
 
-  alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
-  alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
-  alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
-  alias Cadence.Catalog.Command.{Decoder, Invocation}
-  alias Cadence.Catalog.{Ids, ImportResult, Source}
+  alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, EncodingStep, RuntimeDefinition}
+  alias Cadence.Catalog.Command.{Decoder, Invocation, StateEffect, TypeEncoding}
+  alias Cadence.Catalog.Ids
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
-  alias Cadence.Catalog.Telemetry.Compiler, as: TelemetryCompiler
-  alias Cadence.Catalog.Telemetry.Compiler.Result, as: TelemetryCompilerResult
+  alias Cadence.Catalog.ImportResult
+  alias Cadence.Catalog.MissionModel.{Compiler, CompilerResult}
+  alias Cadence.Catalog.Source
+  alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @type t :: %__MODULE__{
           source: Source.t(),
           import_result: ImportResult.t(),
-          telemetry_compilation: TelemetryCompilerResult.t() | nil,
-          command_compilation: CommandCompilerResult.t() | nil
+          compilation: CompilerResult.t(),
+          packet_definitions: [PacketDefinition.t()],
+          command_definitions: [RuntimeDefinition.t()]
         }
 
-  defstruct [
+  @enforce_keys [
     :source,
     :import_result,
-    :telemetry_compilation,
-    :command_compilation
+    :compilation,
+    :packet_definitions,
+    :command_definitions
   ]
+  defstruct @enforce_keys
 
-  @doc """
-  Builds a portable source for YAML content and loads both catalog families.
-
-  Source identity fields may be supplied as atom or string keys. Simulator-safe
-  defaults are generated when they are omitted.
-  """
   @spec load_yaml(binary(), map(), keyword()) :: {:ok, t()} | {:error, term()}
   def load_yaml(content, source_attrs \\ %{}, opts \\ [])
       when is_binary(content) and is_map(source_attrs) and is_list(opts) do
@@ -56,9 +53,6 @@ defmodule CadenceSimulator.CatalogDatabase do
     load(source, opts)
   end
 
-  @doc """
-  Runs the selected portable importer and compiles every snapshot it returns.
-  """
   @spec load(Source.t(), keyword()) :: {:ok, t()} | {:error, term()}
   def load(%Source{} = source, opts \\ []) when is_list(opts) do
     importer = Keyword.get(opts, :importer, CadenceYamlDatabase)
@@ -66,39 +60,39 @@ defmodule CadenceSimulator.CatalogDatabase do
 
     with :ok <- validate(importer, source),
          {:ok, %ImportResult{} = import_result} <-
-           importer.import(source, %{import_run_id: import_run_id}) do
+           importer.import(source, %{import_run_id: import_run_id}),
+         {:ok, %CompilerResult{} = compilation} <-
+           Compiler.compile(import_result.bundle.declaration_layers),
+         {:ok, packet_definitions} <- decode_telemetry(compilation),
+         {:ok, command_definitions} <- decode_commands(compilation) do
       {:ok,
        %__MODULE__{
          source: source,
          import_result: import_result,
-         telemetry_compilation:
-           compile_telemetry(import_result, Keyword.get(opts, :telemetry_compiler, [])),
-         command_compilation: compile_commands(import_result)
+         compilation: compilation,
+         packet_definitions: packet_definitions,
+         command_definitions: command_definitions
        }}
     end
   end
 
-  @doc """
-  Returns importer and compiler diagnostics in execution order.
-  """
-  @spec diagnostics(t()) :: [Cadence.Catalog.Diagnostic.t()]
+  @spec diagnostics(t()) :: list()
   def diagnostics(%__MODULE__{} = database) do
-    database.import_result.diagnostics ++
-      compilation_diagnostics(database.telemetry_compilation) ++
-      compilation_diagnostics(database.command_compilation)
+    target_diagnostics =
+      database.compilation.plans
+      |> Map.values()
+      |> Enum.flat_map(& &1.diagnostics)
+
+    Enum.uniq(
+      database.import_result.diagnostics ++
+        database.compilation.revision.diagnostics ++ target_diagnostics
+    )
   end
 
-  @doc """
-  Fetches one compiled command by its stable ID or catalog name.
-  """
   @spec fetch_command(t(), binary()) :: {:ok, RuntimeDefinition.t()} | {:error, term()}
-  def fetch_command(
-        %__MODULE__{command_compilation: %CommandCompilerResult{} = result},
-        command_ref
-      )
-      when is_binary(command_ref) do
+  def fetch_command(%__MODULE__{} = database, command_ref) when is_binary(command_ref) do
     case Enum.find(
-           result.runtime_definitions,
+           database.command_definitions,
            &(&1.command_id == command_ref or &1.name == command_ref)
          ) do
       %RuntimeDefinition{} = runtime_definition -> {:ok, runtime_definition}
@@ -106,12 +100,6 @@ defmodule CadenceSimulator.CatalogDatabase do
     end
   end
 
-  def fetch_command(%__MODULE__{}, command_ref),
-    do: {:error, {:simulator_command_not_found, command_ref}}
-
-  @doc """
-  Resolves invocation arguments for a command in this database.
-  """
   @spec resolve_command(t(), binary(), map()) ::
           {:ok, RuntimeDefinition.t(), map()} | {:error, term()}
   def resolve_command(%__MODULE__{} = database, command_ref, arguments)
@@ -123,48 +111,152 @@ defmodule CadenceSimulator.CatalogDatabase do
     end
   end
 
-  @doc """
-  Decodes an encoded command payload using this database's compiled commands.
-  """
   @spec decode_command(t(), binary()) ::
           {:ok, %{runtime_definition: RuntimeDefinition.t(), arguments: map()}}
           | {:error, term()}
-  def decode_command(
-        %__MODULE__{command_compilation: %CommandCompilerResult{} = result},
-        payload
-      )
-      when is_binary(payload) do
-    Decoder.decode(result.runtime_definitions, payload)
+  def decode_command(%__MODULE__{} = database, payload) when is_binary(payload) do
+    Decoder.decode(database.command_definitions, payload)
   end
-
-  def decode_command(%__MODULE__{}, _payload), do: {:error, :command_catalog_not_loaded}
 
   defp validate(importer, source) do
-    if function_exported?(importer, :validate, 1) do
-      importer.validate(source)
+    if function_exported?(importer, :validate, 1), do: importer.validate(source), else: :ok
+  end
+
+  defp decode_telemetry(%CompilerResult{plans: %{telemetry: plan}}) do
+    if plan.status == :ready and
+         value(plan.plan, :runtime_contract) == "mission_model_telemetry_v1" do
+      {:ok, Enum.map(list(plan.plan, :packet_definitions), &packet_definition/1)}
     else
-      :ok
+      {:error, {:mission_model_telemetry_plan_not_ready, plan.diagnostics}}
     end
   end
 
-  defp compile_telemetry(%ImportResult{} = result, opts) do
-    case result.bundle.telemetry_snapshot do
-      nil -> nil
-      snapshot -> TelemetryCompiler.compile(snapshot, opts)
+  defp decode_commands(%CompilerResult{plans: %{command: plan}}) do
+    if plan.status == :ready and value(plan.plan, :runtime_contract) == "mission_model_command_v1" do
+      {:ok, Enum.map(list(plan.plan, :runtime_definitions), &runtime_definition/1)}
+    else
+      {:error, {:mission_model_command_plan_not_ready, plan.diagnostics}}
     end
   end
 
-  defp compile_commands(%ImportResult{} = result) do
-    case result.bundle.command_snapshot do
-      nil -> nil
-      snapshot -> CommandCompiler.compile(snapshot)
-    end
+  defp packet_definition(document) do
+    PacketDefinition.new(%{
+      packet_definition_id: value(document, :packet_definition_id),
+      organization_id: value(document, :organization_id),
+      mission_id: value(document, :mission_id),
+      packet_name: value(document, :packet_name),
+      apid: value(document, :apid),
+      version: value(document, :version, 1),
+      fields: Enum.map(list(document, :fields), &field_definition/1)
+    })
   end
 
-  defp compilation_diagnostics(nil), do: []
-  defp compilation_diagnostics(compilation), do: compilation.diagnostics
-
-  defp get(attrs, key, default \\ nil) do
-    Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
+  defp field_definition(document) do
+    FieldDefinition.new(%{
+      field_id: value(document, :field_id),
+      parameter_id: value(document, :parameter_id),
+      qualified_name: value(document, :qualified_name),
+      name: value(document, :name),
+      offset_bits: value(document, :offset_bits, 0),
+      size_bits: value(document, :size_bits),
+      data_type:
+        enum(value(document, :data_type), [:uint, :int, :float, :bool, :binary, :string]),
+      byte_order: enum(value(document, :byte_order), [:big_endian, :little_endian]),
+      engineering_unit: value(document, :engineering_unit)
+    })
   end
+
+  defp runtime_definition(document) do
+    RuntimeDefinition.new(%{
+      command_id: value(document, :command_id),
+      mission_model_revision_id: value(document, :mission_model_revision_id),
+      name: value(document, :name),
+      display_name: value(document, :display_name),
+      description: value(document, :description),
+      layout_id: value(document, :layout_id),
+      layout_kind:
+        enum(value(document, :layout_kind), [
+          :binary_container,
+          :space_packet,
+          :service_data_unit,
+          :raw_payload
+        ]),
+      byte_order: enum(value(document, :byte_order), [:big_endian, :little_endian]),
+      apid: value(document, :apid),
+      service_type: value(document, :service_type),
+      service_subtype: value(document, :service_subtype),
+      opcode: value(document, :opcode),
+      opcode_size_bits: value(document, :opcode_size_bits),
+      size_bits: value(document, :size_bits),
+      max_size_bits: value(document, :max_size_bits),
+      argument_specs: Enum.map(list(document, :argument_specs), &argument_spec/1),
+      encoding_steps: Enum.map(list(document, :encoding_steps), &encoding_step/1),
+      default_argument_values: value(document, :default_argument_values, %{}),
+      fixed_argument_values: value(document, :fixed_argument_values, %{}),
+      state_effects: Enum.map(list(document, :state_effects), &state_effect/1),
+      metadata: value(document, :metadata, %{})
+    })
+  end
+
+  defp argument_spec(document) do
+    ArgumentSpec.new(%{
+      argument_id: value(document, :argument_id),
+      name: value(document, :name),
+      description: value(document, :description),
+      base_type:
+        enum(value(document, :base_type), [
+          :integer,
+          :float,
+          :string,
+          :binary,
+          :boolean,
+          :enumerated
+        ]),
+      required: value(document, :required, true),
+      encoding: TypeEncoding.new(value(document, :encoding, %{})),
+      default_value: value(document, :default_value),
+      fixed_value: value(document, :fixed_value),
+      hazardous_values: value(document, :hazardous_values, []),
+      metadata: value(document, :metadata, %{})
+    })
+  end
+
+  defp encoding_step(document) do
+    EncodingStep.new(%{
+      step_kind: enum(value(document, :step_kind), [:argument_ref, :fixed_value]),
+      argument_id: value(document, :argument_id),
+      bit_offset: value(document, :bit_offset),
+      bit_offset_from: :layout_start,
+      size_bits: value(document, :size_bits),
+      fixed_value: value(document, :fixed_value),
+      display_order: value(document, :display_order),
+      metadata: value(document, :metadata, %{})
+    })
+  end
+
+  defp state_effect(document) do
+    StateEffect.new(%{
+      effect_id: value(document, :effect_id),
+      target_ref: value(document, :target_ref),
+      operation: value(document, :operation),
+      argument_ref: value(document, :argument_id),
+      value: value(document, :value),
+      metadata: value(document, :metadata, %{})
+    })
+  end
+
+  defp enum(value, allowed) when is_atom(value) do
+    if value in allowed, do: value
+  end
+
+  defp enum(value, allowed) when is_binary(value) do
+    Enum.find(allowed, &(Atom.to_string(&1) == value))
+  end
+
+  defp list(map, key), do: value(map, key, [])
+
+  defp value(map, key, default \\ nil),
+    do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))
+
+  defp get(attrs, key, default \\ nil), do: value(attrs, key, default)
 end

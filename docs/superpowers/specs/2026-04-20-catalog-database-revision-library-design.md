@@ -1,9 +1,12 @@
 # Design: Catalog Database and Revision Library
 
-- Status: draft
+- Status: superseded by ADR-020
 - Created: 2026-04-20
 - Scope: first-class mission-scoped catalog databases, immutable catalog revisions, and upload/import UX changes
 - Related ADRs: [001](../../decisions/001-mission-scoped-runtime-and-selector-model.md), [008](../../decisions/008-multi-format-catalog-import-architecture.md), [009](../../decisions/009-canonical-telemetry-catalog-model.md), [010](../../decisions/010-canonical-command-catalog-model.md)
+
+> Historical design record. Its separate command/telemetry snapshot model was
+> removed by ADR-020 and must not be used as an implementation contract.
 
 ## Summary
 

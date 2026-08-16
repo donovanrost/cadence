@@ -19,7 +19,7 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
           realized_contact_id: binary(),
           path_id: binary() | nil,
           transport_binding_id: binary() | nil,
-          command_snapshot_id: binary(),
+          mission_model_revision_id: binary(),
           command_id: binary(),
           command_name: binary() | nil,
           layout_kind: atom() | nil,
@@ -49,7 +49,7 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
     :realized_contact_id,
     :path_id,
     :transport_binding_id,
-    :command_snapshot_id,
+    :mission_model_revision_id,
     :command_id,
     :command_name,
     :layout_kind,
@@ -87,7 +87,7 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
       path_id: Map.get(attrs, :path_id, Map.get(attrs, "path_id")),
       transport_binding_id:
         Map.get(attrs, :transport_binding_id, Map.get(attrs, "transport_binding_id")),
-      command_snapshot_id: Map.fetch!(attrs, :command_snapshot_id),
+      mission_model_revision_id: Map.fetch!(attrs, :mission_model_revision_id),
       command_id: Map.fetch!(attrs, :command_id),
       command_name: Map.get(attrs, :command_name, Map.get(attrs, "command_name")),
       layout_kind:

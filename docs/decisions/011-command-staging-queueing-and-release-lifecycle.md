@@ -107,7 +107,7 @@ It should record:
 - `command_stage_id`
 - target `source_endpoint_ref`
 - compiled command source references:
-  - `command_snapshot_id`
+  - `mission_model_revision_id`
   - `command_id`
 - operator-supplied argument values
 - optional notes and review metadata

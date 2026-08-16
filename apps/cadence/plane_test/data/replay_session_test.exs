@@ -3,6 +3,7 @@ defmodule Cadence.Runtime.ReplaySessionTest do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.MissionModelFixtures
   alias Cadence.Runtime.{MissionRuntimeSpec, ReplaySession}
 
   test "processes a bounded replay without management, control, projections, or Repo" do
@@ -20,6 +21,8 @@ defmodule Cadence.Runtime.ReplaySessionTest do
         version: 1
       })
 
+    assert {:ok, compilation} = MissionModelFixtures.compile_empty_model(mission_id)
+
     assert {:ok, runtime_spec} =
              MissionRuntimeSpec.new(%{
                activation_id: "isolated-replay-activation",
@@ -28,6 +31,9 @@ defmodule Cadence.Runtime.ReplaySessionTest do
                binding_set_id: binding_set.binding_set_id,
                binding_set_version: binding_set.version,
                binding_set: binding_set,
+               mission_model_revision_id: compilation.revision.revision_id,
+               mission_model_content_sha256: compilation.revision.content_sha256,
+               runtime_plans: compilation.plans,
                activated_at: ~U[2026-07-23 12:00:00Z],
                metadata: %{"replay" => true}
              })

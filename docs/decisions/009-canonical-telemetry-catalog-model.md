@@ -2,7 +2,7 @@
 title: "ADR-009: Canonical Telemetry Catalog Model"
 aliases: [telemetry catalog, canonical telemetry model, mdb telemetry model]
 tags: [adr, architecture, telemetry, catalog, import]
-status: accepted
+status: superseded
 created: 2026-03-29
 updated: 2026-03-29
 ---
@@ -11,7 +11,10 @@ updated: 2026-03-29
 
 ## Status
 
-Accepted
+Superseded by
+[ADR-020](020-xtce-informed-mission-model-intermediate-representation.md).
+The separate canonical telemetry snapshot described below has been removed;
+telemetry is now a declaration family in the resolved Mission Model IR.
 
 ## Context
 

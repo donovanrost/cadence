@@ -22,8 +22,6 @@ defmodule Cadence.MissionModels do
     RuntimePlanRow
   }
 
-  alias Cadence.MissionModels.LegacyMigration
-
   alias Cadence.Repo
 
   @spec compile_layers([Layer.t()], keyword()) ::
@@ -193,31 +191,6 @@ defmodule Cadence.MissionModels do
   @doc "Registers an approved, mission-scoped replay case for high-risk comparisons."
   def register_qualification_case(%Scope{} = current_scope, mission_id, name, updates, opts \\ []) do
     Comparison.register_case(current_scope, mission_id, name, updates, opts)
-  end
-
-  @deprecated "Use request_promotion/6 and the authenticated activation approval workflow"
-  def promote_revision(
-        _organization_id,
-        _mission_id,
-        _revision_id,
-        _binding_set_id,
-        _binding_set_version,
-        _comparison_report,
-        _actor,
-        _opts \\ []
-      ),
-      do: {:error, :mission_model_activation_request_required}
-
-  @doc """
-  Converts the latest transitional Derived Telemetry and Limits definitions
-  into one immutable authored layer on an exact base revision.
-  """
-  @spec convert_legacy_definitions(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, CompilerResult.t()} | {:error, term()}
-  def convert_legacy_definitions(organization_id, mission_id, base_revision_id, actor, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(base_revision_id) and is_map(actor) and is_list(opts) do
-    LegacyMigration.convert(organization_id, mission_id, base_revision_id, actor, opts)
   end
 
   @spec approve_revision(binary(), binary(), binary(), map(), keyword()) ::

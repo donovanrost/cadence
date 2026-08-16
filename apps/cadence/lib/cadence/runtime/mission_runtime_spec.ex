@@ -23,9 +23,9 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
           binding_set_version: pos_integer(),
           binding_set_content_sha256: binary(),
           binding_set: BindingSet.t(),
-          mission_model_revision_id: binary() | nil,
-          mission_model_content_sha256: binary() | nil,
-          runtime_plans: %{optional(atom()) => RuntimePlan.t()},
+          mission_model_revision_id: binary(),
+          mission_model_content_sha256: binary(),
+          runtime_plans: %{required(atom()) => RuntimePlan.t()},
           runtime_basis_sha256: binary(),
           activated_at: DateTime.t(),
           metadata: map()
@@ -39,16 +39,16 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
     :binding_set_version,
     :binding_set_content_sha256,
     :binding_set,
+    :mission_model_revision_id,
+    :mission_model_content_sha256,
+    :runtime_plans,
     :runtime_basis_sha256,
     :activated_at
   ]
   defstruct @enforce_keys ++
               [
-                :mission_model_revision_id,
-                :mission_model_content_sha256,
                 activation_request_id: nil,
                 organization_id: nil,
-                runtime_plans: %{},
                 metadata: %{}
               ]
 
@@ -192,9 +192,6 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
       Map.get(attrs, :runtime_plans, %{})
     )
   end
-
-  defp fetch_mission_model(nil, nil, plans) when plans == %{},
-    do: {:ok, %{revision_id: nil, content_sha256: nil, plans: %{}}}
 
   defp fetch_mission_model(revision_id, _content_sha256, _plans)
        when not is_binary(revision_id) or revision_id == "",

@@ -638,7 +638,7 @@ defmodule Cadence.Runtime.TransportRuntime do
       command_queue_entry_id: action_request.command_queue_entry_id,
       command_request_id: action_request.command_request_id,
       source_endpoint_ref: action_request.source_endpoint_ref,
-      command_snapshot_id: action_request.command_snapshot_id,
+      mission_model_revision_id: action_request.mission_model_revision_id,
       command_id: action_request.command_id,
       command_name: action_request.command_name,
       layout_kind:
@@ -680,7 +680,7 @@ defmodule Cadence.Runtime.TransportRuntime do
       command_queue_entry_id: action_request.command_queue_entry_id,
       command_request_id: action_request.command_request_id,
       source_endpoint_ref: action_request.source_endpoint_ref,
-      command_snapshot_id: action_request.command_snapshot_id,
+      mission_model_revision_id: action_request.mission_model_revision_id,
       command_id: action_request.command_id,
       command_name: action_request.command_name,
       transport_profile:

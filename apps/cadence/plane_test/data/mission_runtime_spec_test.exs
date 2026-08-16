@@ -2,6 +2,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
   use ExUnit.Case, async: true
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.MissionModelFixtures
   alias Cadence.Runtime.MissionRuntimeSpec
 
   test "constructs an exact specification with a deterministic content hash" do
@@ -29,6 +30,8 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
   end
 
   defp runtime_spec(binding_set, generation, activation_id, overrides \\ []) do
+    assert {:ok, compilation} = MissionModelFixtures.compile_empty_model(binding_set.mission_id)
+
     attrs = %{
       activation_id: activation_id,
       mission_id: binding_set.mission_id,
@@ -36,6 +39,9 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
       binding_set_id: binding_set.binding_set_id,
       binding_set_version: binding_set.version,
       binding_set: binding_set,
+      mission_model_revision_id: compilation.revision.revision_id,
+      mission_model_content_sha256: compilation.revision.content_sha256,
+      runtime_plans: compilation.plans,
       activated_at: ~U[2026-07-21 12:00:00Z]
     }
 

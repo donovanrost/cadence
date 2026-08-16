@@ -1,5 +1,8 @@
 # Telemetry Decom UI Redesign Implementation Plan
 
+> Superseded implementation record. ADR-020 removed the telemetry snapshot
+> model this plan targeted; current Decom work consumes Mission Model plans.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the Telemetry Decom spacecraft-configuration LiveView with a single-card, progressively-disclosed APID table plus autosave, per the design spec at `docs/superpowers/specs/2026-04-23-telemetry-decom-ui-redesign-design.md`.

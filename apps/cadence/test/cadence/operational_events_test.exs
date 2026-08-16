@@ -807,7 +807,7 @@ defmodule Cadence.OperationalEventsTest do
         "catalog-revision-a",
         revision_number: 1,
         revision_label: "FSW 3.6",
-        telemetry_snapshot_id: "telemetry-snapshot-a",
+        mission_model_revision_id: "mission-model-a",
         import_run_id: "import-run-a"
       )
 
@@ -818,7 +818,7 @@ defmodule Cadence.OperationalEventsTest do
         "catalog-revision-b",
         revision_number: 2,
         revision_label: "FSW 3.7",
-        telemetry_snapshot_id: "telemetry-snapshot-b",
+        mission_model_revision_id: "mission-model-b",
         import_run_id: "import-run-b"
       )
 
@@ -848,7 +848,7 @@ defmodule Cadence.OperationalEventsTest do
     assert first_interval.payload["revision_number"] == 1
     assert first_interval.payload["revision_label"] == "FSW 3.6"
     assert first_interval.payload["catalog_family"] == "telemetry"
-    assert first_interval.payload["telemetry_snapshot_id"] == "telemetry-snapshot-a"
+    assert first_interval.payload["mission_model_revision_id"] == "mission-model-a"
     assert first_interval.metadata["source_record_kind"] == :catalog_revision
     assert first_interval.metadata["source_record_id"] == "catalog-revision-a"
 

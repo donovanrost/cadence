@@ -35,6 +35,8 @@ defmodule Cadence.Replay do
     ReplaySession
   }
 
+  alias Cadence.Runtime.Missions, as: RuntimeMissions
+
   alias Cadence.Telemetry.Sample
 
   @spec replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::
@@ -401,16 +403,21 @@ defmodule Cadence.Replay do
   end
 
   defp replay_runtime_spec(%Run{} = run, binding_set) do
-    MissionRuntimeSpec.new(%{
-      activation_id: run.replay_run_id <> ":replay",
-      mission_id: run.mission_id,
-      generation: 1,
-      binding_set_id: run.binding_set_id,
-      binding_set_version: run.binding_set_version,
-      binding_set: binding_set,
-      activated_at: run.started_at,
-      metadata: %{"replay" => true, "replay_run_id" => run.replay_run_id}
-    })
+    with {:ok, active_spec} <- RuntimeMissions.applied_spec(run.mission_id) do
+      MissionRuntimeSpec.new(%{
+        activation_id: run.replay_run_id <> ":replay",
+        mission_id: run.mission_id,
+        generation: 1,
+        binding_set_id: run.binding_set_id,
+        binding_set_version: run.binding_set_version,
+        binding_set: binding_set,
+        mission_model_revision_id: active_spec.mission_model_revision_id,
+        mission_model_content_sha256: active_spec.mission_model_content_sha256,
+        runtime_plans: active_spec.runtime_plans,
+        activated_at: run.started_at,
+        metadata: %{"replay" => true, "replay_run_id" => run.replay_run_id}
+      })
+    end
   end
 
   defp processing_result_packet_records(%{packet_records: packet_records})

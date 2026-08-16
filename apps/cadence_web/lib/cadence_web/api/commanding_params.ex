@@ -105,7 +105,7 @@ defmodule CadenceWeb.API.CommandingParams do
     with {:ok, scoped_command_stage_id} <-
            resolve_scoped_command_stage_id(params, command_stage_id),
          {:ok, source_endpoint_ref} <- required_string(params, "source_endpoint_ref"),
-         {:ok, command_snapshot_id} <- required_string(params, "command_snapshot_id"),
+         {:ok, mission_model_revision_id} <- required_string(params, "mission_model_revision_id"),
          {:ok, command_id} <- required_string(params, "command_id"),
          {:ok, priority} <- non_neg_integer(params, "priority", 3),
          {:ok, item_order} <- non_neg_integer(params, "item_order", 0),
@@ -118,7 +118,7 @@ defmodule CadenceWeb.API.CommandingParams do
          mission_id: mission_id,
          command_stage_id: scoped_command_stage_id,
          source_endpoint_ref: source_endpoint_ref,
-         command_snapshot_id: command_snapshot_id,
+         mission_model_revision_id: mission_model_revision_id,
          command_id: command_id,
          argument_values: map_value(params, "argument_values"),
          priority: priority,
@@ -155,11 +155,11 @@ defmodule CadenceWeb.API.CommandingParams do
              "source_endpoint_ref",
              existing_staged_command_item.source_endpoint_ref
            ),
-         command_snapshot_id:
+         mission_model_revision_id:
            maybe_string_override(
              params,
-             "command_snapshot_id",
-             existing_staged_command_item.command_snapshot_id
+             "mission_model_revision_id",
+             existing_staged_command_item.mission_model_revision_id
            ),
          command_id:
            maybe_string_override(params, "command_id", existing_staged_command_item.command_id),
@@ -209,7 +209,7 @@ defmodule CadenceWeb.API.CommandingParams do
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) and
              is_list(opts) do
     with {:ok, source_endpoint_ref} <- required_string(params, "source_endpoint_ref"),
-         {:ok, command_snapshot_id} <- required_string(params, "command_snapshot_id"),
+         {:ok, mission_model_revision_id} <- required_string(params, "mission_model_revision_id"),
          {:ok, command_id} <- required_string(params, "command_id"),
          {:ok, priority} <- non_neg_integer(params, "priority", 3),
          {:ok, not_before} <- optional_datetime(params, "not_before"),
@@ -222,7 +222,7 @@ defmodule CadenceWeb.API.CommandingParams do
          organization_id: organization_id,
          mission_id: mission_id,
          source_endpoint_ref: source_endpoint_ref,
-         command_snapshot_id: command_snapshot_id,
+         mission_model_revision_id: mission_model_revision_id,
          command_id: command_id,
          priority: priority,
          not_before: not_before,

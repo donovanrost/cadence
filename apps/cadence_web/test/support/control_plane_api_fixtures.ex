@@ -6,6 +6,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
@@ -74,10 +75,32 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
     scope
   end
 
-  def fetch_command_id(command_snapshot, command_name) do
-    command_snapshot.command_definitions
-    |> Enum.find(&(&1.name == command_name))
-    |> then(& &1.command_id)
+  def fetch_command_id(runtime_plans, command_name) do
+    runtime_plans.command.plan["runtime_definitions"]
+    |> Enum.find(&(&1["name"] == command_name))
+    |> Map.fetch!("command_id")
+  end
+
+  def compile_and_approve_empty_mission_model!(organization_id, mission_id) do
+    layer =
+      Layer.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        name: "Control-plane activation model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
+
+    assert {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
+
+    assert {:ok, revision} =
+             Cadence.MissionModels.approve_revision(
+               organization_id,
+               mission_id,
+               compilation.revision.revision_id,
+               %{"kind" => "test_fixture", "id" => "control-plane-api"}
+             )
+
+    revision
   end
 
   def seed_mission_read_models(organization_id, mission_id) do

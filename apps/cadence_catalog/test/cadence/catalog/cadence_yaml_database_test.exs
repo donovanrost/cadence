@@ -1,11 +1,9 @@
 defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
-  alias Cadence.Catalog.Command.Decoder
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
+  alias Cadence.Catalog.MissionModel.Compiler
   alias Cadence.Catalog.Source
-  alias Cadence.Catalog.Telemetry.Compiler, as: TelemetryCompiler
 
   @database """
   version: "1.0.0"
@@ -60,29 +58,29 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
              CadenceYamlDatabase.import(source, %{import_run_id: "simulator-import"})
 
     assert import_result.imported_definition_count == 2
-    assert import_result.bundle.telemetry_snapshot.snapshot_name == "simulator.yaml"
-    assert import_result.bundle.command_snapshot.snapshot_name == "simulator.yaml"
+    assert [layer] = import_result.bundle.declaration_layers
 
-    assert %{packet_definitions: [packet_definition], diagnostics: []} =
-             TelemetryCompiler.compile(import_result.bundle.telemetry_snapshot)
+    assert Enum.any?(layer.declarations, &(&1.kind == :container and &1.name == "HK"))
+    assert Enum.any?(layer.declarations, &(&1.kind == :monitoring_policy)) == false
 
-    assert packet_definition.packet_name == "HK"
-    assert Enum.map(packet_definition.fields, & &1.name) == ["temperature_c", "mode"]
+    assert {:ok, compilation} = Compiler.compile([layer])
+    assert compilation.revision.diagnostics == []
 
-    assert %{runtime_definitions: [runtime_definition], diagnostics: []} =
-             CommandCompiler.compile(import_result.bundle.command_snapshot)
+    assert [packet_definition] = compilation.plans.telemetry.plan["packet_definitions"]
+    assert packet_definition["packet_name"] == "HK"
+    assert Enum.map(packet_definition["fields"], & &1["name"]) == ["temperature_c", "mode"]
 
-    assert runtime_definition.name == "SET_MODE"
-    assert runtime_definition.apid == 77
-    assert [state_effect] = runtime_definition.state_effects
-    assert state_effect.target_ref == "HK.mode"
-    assert state_effect.operation == :set
-    assert state_effect.argument_id == hd(runtime_definition.argument_specs).argument_id
+    assert [runtime_definition] = compilation.plans.command.plan["runtime_definitions"]
+    assert runtime_definition["name"] == "SET_MODE"
+    assert runtime_definition["apid"] == 77
+    assert runtime_definition["mission_model_revision_id"] == compilation.revision.revision_id
 
-    assert {:ok, decoded} = Decoder.decode([runtime_definition], <<3, 1>>)
+    assert [state_effect] = runtime_definition["state_effects"]
+    assert String.starts_with?(state_effect["target_ref"], "semantic:parameter:")
+    assert state_effect["operation"] == "set"
 
-    assert decoded.runtime_definition.command_id == runtime_definition.command_id
-    assert decoded.arguments == %{"mode" => 1}
+    assert state_effect["argument_id"] ==
+             runtime_definition["argument_specs"] |> hd() |> Map.fetch!("argument_id")
   end
 
   test "rejects command APIDs outside the Space Packet field" do

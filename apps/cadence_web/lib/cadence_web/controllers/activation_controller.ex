@@ -8,6 +8,7 @@ defmodule CadenceWeb.ActivationController do
   alias Cadence.Control.Activations.ActivationExecution
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.{ActivationDecision, ActivationRequest}
+  alias Cadence.MissionModels
   alias CadenceWeb.{ActivationJSON, ActivationParams, ControlPlaneAccess}
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -37,12 +38,12 @@ defmodule CadenceWeb.ActivationController do
            ),
          {:ok, request_params} <- ActivationParams.request(activation_params),
          {:ok, %ActivationRequest{} = request} <-
-           ManagementActivations.request(
+           MissionModels.request_promotion(
              conn.assigns.current_scope,
              mission_id,
+             request_params.mission_model_revision_id,
              request_params.binding_set_id,
              request_params.version,
-             change_class: request_params.change_class,
              metadata: request_params.metadata
            ) do
       respond_to_request(conn, request)

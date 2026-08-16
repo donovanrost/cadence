@@ -397,7 +397,8 @@ context that interpreted them:
 
 ```text
 catalog_revision_id
-telemetry_snapshot_id
+mission_model_revision_id
+telemetry_runtime_plan_id
 binding_set_id
 binding_set_version
 activation_id

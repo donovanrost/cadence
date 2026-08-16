@@ -5,7 +5,7 @@ defmodule Cadence.Telemetry.FieldDefinition do
 
   alias Cadence.Catalog.Ids
 
-  @type data_type :: :uint | :int | :bool | :float | :binary
+  @type data_type :: :uint | :int | :bool | :float | :binary | :string
   @type byte_order :: :big_endian | :little_endian
 
   @type t :: %__MODULE__{

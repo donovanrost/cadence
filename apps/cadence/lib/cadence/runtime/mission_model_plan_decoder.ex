@@ -8,7 +8,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
   content.
   """
 
-  alias Cadence.Catalog.Command.{Definition, MatchCriteria, StateEffect, TypeEncoding}
+  alias Cadence.Catalog.Command.{MatchCriteria, StateEffect, TypeEncoding}
 
   alias Cadence.Catalog.Command.Compiler.{
     ArgumentSpec,
@@ -43,9 +43,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     end
   end
 
-  def resolve_telemetry_configuration(_plans, configuration), do: {:ok, configuration}
-
-  defp find_telemetry_configuration([], configured), do: {:ok, configured}
+  def resolve_telemetry_configuration(_plans, configuration),
+    do: {:error, {:invalid_mission_model_telemetry_binding, configuration}}
 
   defp find_telemetry_configuration(definitions, configured) do
     case Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id)) do
@@ -62,7 +61,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
   def telemetry_packet_definitions(plans) when is_map(plans) do
     case Map.get(plans, :telemetry) do
       nil ->
-        {:ok, []}
+        {:error, {:mission_model_runtime_plan_required, :telemetry}}
 
       %RuntimePlan{
         status: :ready,
@@ -80,10 +79,9 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     end
   end
 
-  @spec command_basis(map(), binary(), binary()) ::
+  @spec command_basis(map(), binary()) ::
           {:ok,
            %{
-             definition: Definition.t(),
              runtime_definition: RuntimeDefinition.t(),
              constraint_plans: [ConstraintPlan.t()],
              verifier_plans: [VerifierPlan.t()],
@@ -91,25 +89,14 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
              plan_id: binary()
            }}
           | {:error, term()}
-  def command_basis(plans, snapshot_id, command_id)
-      when is_map(plans) and is_binary(snapshot_id) and is_binary(command_id) do
+  def command_basis(plans, command_id) when is_map(plans) and is_binary(command_id) do
     with {:ok, catalog} <- command_catalog(plans),
          {:ok, runtime_definition} <-
            find_runtime_definition(catalog.runtime_definitions, command_id),
-         :ok <- exact_snapshot(runtime_definition, snapshot_id),
          {:ok, operational_binding} <-
            find_operational_binding(catalog.operational_bindings, command_id) do
       {:ok,
        %{
-         definition:
-           Definition.new(%{
-             command_id: runtime_definition.command_id,
-             snapshot_id: runtime_definition.snapshot_id,
-             name: runtime_definition.name,
-             display_name: runtime_definition.display_name,
-             description: runtime_definition.description,
-             encoding_layout_ref: runtime_definition.layout_id
-           }),
          runtime_definition: runtime_definition,
          constraint_plans: Enum.filter(catalog.constraint_plans, &(&1.command_id == command_id)),
          verifier_plans: Enum.filter(catalog.verifier_plans, &(&1.command_id == command_id)),
@@ -121,13 +108,10 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
 
   defp decode_telemetry_plan(plan) when is_map(plan) do
     case value(plan, :runtime_contract) do
-      "definition_bound_telemetry_v1" ->
+      "mission_model_telemetry_v1" ->
         plan
         |> list(:packet_definitions)
         |> decode_many(&decode_packet_definition/1, :telemetry)
-
-      "mission_model_container_v1" ->
-        require_empty_plan_list(plan, :packet_definitions, :telemetry)
 
       contract ->
         {:error, {:unsupported_mission_model_runtime_contract, :telemetry, contract}}
@@ -169,7 +153,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
   defp command_catalog(plans) do
     case Map.get(plans, :command) do
       nil ->
-        {:ok, empty_command_catalog(nil)}
+        {:error, {:mission_model_runtime_plan_required, :command}}
 
       %RuntimePlan{
         status: :ready,
@@ -190,16 +174,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
 
   defp decode_command_plan(plan_id, plan) when is_map(plan) do
     case value(plan, :runtime_contract) do
-      "command_runtime_v1" ->
-        decode_command_runtime_plan(plan_id, plan)
-
       "mission_model_command_v1" ->
-        with {:ok, []} <- require_empty_plan_list(plan, :runtime_definitions, :command),
-             {:ok, []} <- require_empty_plan_list(plan, :constraint_plans, :command),
-             {:ok, []} <- require_empty_plan_list(plan, :verifier_plans, :command),
-             {:ok, []} <- require_empty_plan_list(plan, :operational_bindings, :command) do
-          {:ok, empty_command_catalog(plan_id)}
-        end
+        decode_command_runtime_plan(plan_id, plan)
 
       contract ->
         {:error, {:unsupported_mission_model_runtime_contract, :command, contract}}
@@ -236,7 +212,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
   defp decode_runtime_definition(document) do
     RuntimeDefinition.new(%{
       command_id: value(document, :command_id),
-      snapshot_id: value(document, :snapshot_id),
+      mission_model_revision_id: value(document, :mission_model_revision_id),
       name: value(document, :name),
       display_name: value(document, :display_name),
       description: value(document, :description),
@@ -386,33 +362,11 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     end
   end
 
-  defp exact_snapshot(%RuntimeDefinition{snapshot_id: snapshot_id}, snapshot_id), do: :ok
-
-  defp exact_snapshot(%RuntimeDefinition{snapshot_id: actual}, expected),
-    do: {:error, {:mission_model_command_snapshot_mismatch, expected, actual}}
-
   defp decode_many(documents, decoder, target) do
     {:ok, Enum.map(documents, decoder)}
   rescue
     error in [KeyError, ArgumentError] ->
       {:error, {:invalid_mission_model_runtime_plan, target, Exception.message(error)}}
-  end
-
-  defp require_empty_plan_list(plan, key, target) do
-    case list(plan, key) do
-      [] -> {:ok, []}
-      _items -> {:error, {:invalid_mission_model_runtime_plan, target, key}}
-    end
-  end
-
-  defp empty_command_catalog(plan_id) do
-    %{
-      plan_id: plan_id,
-      runtime_definitions: [],
-      constraint_plans: [],
-      verifier_plans: [],
-      operational_bindings: []
-    }
   end
 
   defp enum(value, allowed) when is_binary(value) do

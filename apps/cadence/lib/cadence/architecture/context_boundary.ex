@@ -43,8 +43,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/projections/supervisor.ex" => :composition,
     "lib/cadence/data_sources/probe_scheduler.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
-    "lib/cadence/mission_models/legacy_converter.ex" => :adapter,
-    "lib/cadence/mission_models/legacy_migration.ex" => :adapter,
     "lib/cadence/application_dispatch/binding_rule.ex" => :catalog,
     "lib/cadence/application_dispatch/binding_set.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_config.ex" => :catalog,

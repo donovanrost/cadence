@@ -224,7 +224,7 @@ defmodule Cadence.Extensions.Registry do
       trust: :first_party,
       compatibility: %{cadence_catalog_importer_contract: 1},
       contributions: [
-        %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 1},
+        %CatalogImporterContribution{importer_key: "cadence_yaml", importer_version: 2},
         %CatalogImporterContribution{importer_key: "xtce_1_3", importer_version: 1}
       ]
     }

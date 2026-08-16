@@ -15,7 +15,7 @@ defmodule Cadence.Applications.PacketBindings.BindingRow do
     field(:packet_binding_configuration_id, :string)
     field(:source_endpoint_ref, :string)
     field(:catalog_revision_id, :string)
-    field(:telemetry_snapshot_id, :string)
+    field(:mission_model_revision_id, :string)
     field(:packet_id, :string)
     field(:packet_model_content_sha256, :string)
     field(:packet_name, :string)
@@ -31,7 +31,7 @@ defmodule Cadence.Applications.PacketBindings.BindingRow do
     :packet_binding_configuration_id,
     :source_endpoint_ref,
     :catalog_revision_id,
-    :telemetry_snapshot_id,
+    :mission_model_revision_id,
     :packet_id,
     :packet_model_content_sha256,
     :packet_name,
@@ -63,7 +63,7 @@ defmodule Cadence.Applications.PacketBindings.BindingRow do
       packet_binding_configuration_id: configuration_id,
       source_endpoint_ref: binding.source_endpoint_ref,
       catalog_revision_id: binding.catalog_revision_id,
-      telemetry_snapshot_id: binding.telemetry_snapshot_id,
+      mission_model_revision_id: binding.mission_model_revision_id,
       packet_id: binding.packet_id,
       packet_model_content_sha256: binding.packet_model_content_sha256,
       packet_name: binding.packet_name,
