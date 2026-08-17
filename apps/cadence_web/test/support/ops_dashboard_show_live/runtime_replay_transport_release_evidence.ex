@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportReleaseEvidence 
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
   def run(context) do

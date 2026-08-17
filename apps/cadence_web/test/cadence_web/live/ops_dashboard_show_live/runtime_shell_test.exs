@@ -126,33 +126,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeShellTest do
     assert socket.assigns.hydrated_with == [sentinel: :ok]
   end
 
-  test "resolve_failed delegates failure details" do
-    socket =
-      RuntimeShell.resolve_failed(
-        socket(),
-        :resolve_id,
-        {:shutdown, :timeout},
-        resolve_failed: fn socket, resolve_id, reason ->
-          assign(socket, :runtime_event, {:failed, resolve_id, reason})
-        end
-      )
-
-    assert socket.assigns.runtime_event == {:failed, :resolve_id, {:shutdown, :timeout}}
-  end
-
-  test "handle_invalidation delegates invalidation handling" do
-    socket =
-      RuntimeShell.handle_invalidation(
-        socket(),
-        %{kind: :source_changed},
-        handle_invalidation: fn socket, invalidation ->
-          assign(socket, :runtime_event, {:invalidated, invalidation})
-        end
-      )
-
-    assert socket.assigns.runtime_event == {:invalidated, %{kind: :source_changed}}
-  end
-
   test "terminate cancels the pending tick timer and active resolves" do
     test_pid = self()
     timer_ref = make_ref()

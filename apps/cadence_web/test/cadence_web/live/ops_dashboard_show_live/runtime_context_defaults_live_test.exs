@@ -4,10 +4,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
-
-  alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -202,44 +201,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
     document
   end
 
-  defp render_dashboard_async(view) do
-    track_dashboard_view(view)
-    render_async(view, 5_000)
-  end
-
-  defp track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do
-    tracked_views = Process.get(:ops_dashboard_live_test_views, MapSet.new())
-
-    unless MapSet.member?(tracked_views, pid) do
-      Process.put(:ops_dashboard_live_test_views, MapSet.put(tracked_views, pid))
-
-      on_exit({:ops_dashboard_live_view, pid}, fn ->
-        stop_dashboard_view(view)
-      end)
-    end
-  end
-
-  defp stop_dashboard_view(view) do
-    if Process.alive?(view.pid) do
-      drain_dashboard_view(view)
-
-      ref = Process.monitor(view.pid)
-      {_proxy_ref, _topic, proxy_pid} = view.proxy
-      ClientProxy.stop(proxy_pid, {:shutdown, :dashboard_test_cleanup})
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000
-    end
-
-    :ok
-  end
-
-  defp drain_dashboard_view(view) do
-    render_async(view, 5_000)
-    :ok
-  catch
-    :exit, _reason -> :ok
-  end
-
   defp configure_telemetry_storage_source!(realm, data_source_id, binding_id) do
     previous_config = Application.get_env(:cadence, :telemetry_storage, [])
 
@@ -349,9 +310,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
       assert get_in(cleared_document.defaults, ["data", "realm"]) == "rehearsal"
       assert get_in(cleared_document.defaults, ["data", "source_contexts"]) == %{}
 
-      stop_dashboard_view(view)
-      stop_dashboard_view(default_view)
-      stop_dashboard_view(override_view)
+      stop_dashboard_views([view, settings_view, default_view, override_view])
     end
 
     test "runtime default saves create drafts without changing published operator defaults" do
@@ -481,9 +440,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
              )
 
       assert has_element?(
+               editor_view,
+               ~s(#ops-dashboard-show-page[data-runtime-decision-actions="start_resolve accept_result"])
+             )
+
+      assert has_element?(
                published_view,
                ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-data-realm="flight"])
              )
+
+      stop_dashboard_views([view, settings_view, updated_view, published_view, editor_view])
     end
   end
 end

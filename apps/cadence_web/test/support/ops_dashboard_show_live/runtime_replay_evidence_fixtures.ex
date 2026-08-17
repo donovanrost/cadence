@@ -7,8 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
   import ExUnit.Callbacks
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
-
-  alias Phoenix.LiveViewTest.ClientProxy
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -1021,44 +1020,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
-  end
-
-  def render_dashboard_async(view) do
-    track_dashboard_view(view)
-    render_async(view, 5_000)
-  end
-
-  def track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do
-    tracked_views = Process.get(:ops_dashboard_live_test_views, MapSet.new())
-
-    unless MapSet.member?(tracked_views, pid) do
-      Process.put(:ops_dashboard_live_test_views, MapSet.put(tracked_views, pid))
-
-      on_exit({:ops_dashboard_live_view, pid}, fn ->
-        stop_dashboard_view(view)
-      end)
-    end
-  end
-
-  def stop_dashboard_view(view) do
-    if Process.alive?(view.pid) do
-      drain_dashboard_view(view)
-
-      ref = Process.monitor(view.pid)
-      {_proxy_ref, _topic, proxy_pid} = view.proxy
-      ClientProxy.stop(proxy_pid, {:shutdown, :dashboard_test_cleanup})
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000
-    end
-
-    :ok
-  end
-
-  def drain_dashboard_view(view) do
-    render_async(view, 5_000)
-    :ok
-  catch
-    :exit, _reason -> :ok
   end
 
   def enable_dashboard_engine_inline_resolves! do

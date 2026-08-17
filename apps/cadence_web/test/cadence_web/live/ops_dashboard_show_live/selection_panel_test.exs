@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanelTest do
-  use Cadence.DataCase, async: false
+  use ExUnit.Case, async: true
 
   import Phoenix.Component, only: [assign: 3]
 
@@ -241,6 +241,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanelTest do
     assert updated_socket.assigns.dashboard_selected_data_ref == selected_ref
     assert updated_socket.assigns.dashboard_selection_state == "active"
     assert query == %{"time_mode" => "live"}
+  end
+
+  test "extracts observable ids from atom-keyed and string-keyed selected refs" do
+    assert SelectionPanel.selected_data_ref_observable_id(
+             socket(%{dashboard_selected_data_ref: %{observable_id: "HK.counter"}})
+           ) == "HK.counter"
+
+    assert SelectionPanel.selected_data_ref_observable_id(
+             socket(%{dashboard_selected_data_ref: %{"point_id" => "HK.voltage"}})
+           ) == "HK.voltage"
+  end
+
+  test "data link index falls back to runtime result frames when cached assign is missing" do
+    placement_frames = %PlacementFrames{}
+
+    socket =
+      socket(%{
+        dashboard_engine_result: %{
+          "frames_by_placement" => %{"placement-1" => placement_frames}
+        },
+        dashboard_engine_frames_by_placement: nil
+      })
+
+    assert SelectionPanel.data_link_index(socket).frames_by_placement == %{
+             "placement-1" => placement_frames
+           }
   end
 
   defp socket(assigns) do

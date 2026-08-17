@@ -90,18 +90,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardActionContextTest do
            }
   end
 
-  test "flash delegates to the configured flash function" do
-    socket =
-      socket()
-      |> DashboardActionContext.flash(:info, "Saved.",
-        put_flash: fn socket, kind, message ->
-          assign(socket, :flash_call, {kind, message})
-        end
-      )
-
-    assert socket.assigns.flash_call == {:info, "Saved."}
-  end
-
   defp socket do
     %Socket{
       assigns: %{

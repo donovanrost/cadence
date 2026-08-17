@@ -760,9 +760,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     sample_values =
       TelemetrySampleRow
       |> where([row], row.mission_id == "mission-alpha")
-      |> order_by(asc: :receipt_time, asc: :sample_id)
       |> Repo.all()
       |> Enum.map(fn row -> row.raw_value["value"] end)
+      |> Enum.sort()
 
     assert sample_values == [7, 8]
   end

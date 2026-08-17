@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 

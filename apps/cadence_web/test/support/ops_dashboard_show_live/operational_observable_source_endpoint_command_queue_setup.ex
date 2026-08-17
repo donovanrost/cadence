@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
 
   alias Cadence.SourceEndpoints.SourceEndpoint

@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
 

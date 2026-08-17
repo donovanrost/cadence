@@ -38,7 +38,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.StagedEditor do
         |> assign(:editor_external_candidate_fingerprint, nil)
         |> assign(:panel, nil)
         |> assign(:chart_epoch, socket.assigns.chart_epoch + 1)
-        |> Runtime.resolve_engine(:context_change, reason: :editor_opened)
 
       {:error, reason} ->
         socket

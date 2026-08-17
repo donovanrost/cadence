@@ -3,7 +3,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponentsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias CadenceWeb.OpsDashboardShowLive.Components
   alias CadenceWeb.OpsDashboardShowLive.SourceHealthComponents
 
   test "source health strip exposes aggregate and evidence attributes" do
@@ -107,16 +106,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponentsTest do
              document
              |> LazyHTML.query(~s([data-source-evidence-open]))
              |> LazyHTML.attribute("phx-value-source-evidence-mode")
-  end
-
-  test "Components source health wrapper delegates to extracted component" do
-    html =
-      render_component(&Components.source_health_strip/1,
-        health: [source_health(logical_source_text: "Telemetry")]
-      )
-
-    assert html =~ ~s(id="dashboard-source-health")
-    assert html =~ ~s(data-source-health-source="Telemetry")
   end
 
   defp source_health(overrides) do

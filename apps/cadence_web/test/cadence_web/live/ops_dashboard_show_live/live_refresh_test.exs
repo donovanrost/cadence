@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LiveRefreshTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   @moduletag :config
 

@@ -6,7 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   def run(context) do
     %{

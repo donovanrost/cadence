@@ -146,8 +146,14 @@ defmodule CadenceWeb.OpsDataOperationsLive.Presentation do
   end
 
   defp event_sort_key(event) do
-    {Map.get(event, :occurred_at), Map.get(event, :backfill_lifecycle_event_id)}
+    {occurred_at_sort_key(Map.get(event, :occurred_at)),
+     Map.get(event, :backfill_lifecycle_event_id)}
   end
+
+  defp occurred_at_sort_key(%DateTime{} = occurred_at),
+    do: DateTime.to_unix(occurred_at, :microsecond)
+
+  defp occurred_at_sort_key(_occurred_at), do: 0
 
   defp compact(map) do
     map

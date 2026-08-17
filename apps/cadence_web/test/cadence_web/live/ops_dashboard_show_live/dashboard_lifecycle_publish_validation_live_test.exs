@@ -2,8 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-
-  alias Phoenix.LiveViewTest.ClientProxy
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -64,48 +63,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
   defp with_unknown_widget(%Document{placements: [placement | rest]} = document) do
     widget_def = %{placement.widget_def | widget_type_id: "partner.spectrum_waterfall"}
     Document.replace_placements(document, [%{placement | widget_def: widget_def} | rest])
-  end
-
-  defp render_dashboard_async(view) do
-    track_dashboard_view(view)
-    render_async(view, 5_000)
-  end
-
-  defp track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do
-    tracked_views =
-      Process.get(:ops_dashboard_lifecycle_publish_validation_views, MapSet.new())
-
-    unless MapSet.member?(tracked_views, pid) do
-      Process.put(
-        :ops_dashboard_lifecycle_publish_validation_views,
-        MapSet.put(tracked_views, pid)
-      )
-
-      on_exit({:ops_dashboard_lifecycle_publish_validation_view, pid}, fn ->
-        stop_dashboard_view(view)
-      end)
-    end
-  end
-
-  defp stop_dashboard_view(view) do
-    if Process.alive?(view.pid) do
-      drain_dashboard_view(view)
-
-      ref = Process.monitor(view.pid)
-      {_proxy_ref, _topic, proxy_pid} = view.proxy
-      ClientProxy.stop(proxy_pid, {:shutdown, :dashboard_test_cleanup})
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000
-    end
-
-    :ok
-  end
-
-  defp drain_dashboard_view(view) do
-    render_async(view, 5_000)
-    :ok
-  catch
-    :exit, _reason -> :ok
   end
 
   describe "dashboard lifecycle publish validation" do

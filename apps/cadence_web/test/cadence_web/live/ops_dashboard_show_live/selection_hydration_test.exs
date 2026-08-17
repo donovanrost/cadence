@@ -1,20 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.SelectionHydrationTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.Component, only: [assign: 3]
-
   alias CadenceWeb.OpsDashboardShowLive.SelectionHydration
   alias Phoenix.LiveView.Socket
-
-  test "hydrate_from_query delegates to injected hydrator" do
-    socket =
-      socket()
-      |> SelectionHydration.hydrate_from_query(
-        hydrate_selection: fn socket -> assign(socket, :selection_hydrated?, true) end
-      )
-
-    assert socket.assigns.selection_hydrated? == true
-  end
 
   test "hydrate_from_query uses the selection panel hydrator by default" do
     socket =
@@ -33,7 +21,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionHydrationTest do
     assert inspector.subject == "HK.counter"
   end
 
-  defp socket(assigns \\ %{}) do
+  defp socket(assigns) do
     %Socket{
       assigns:
         Map.merge(

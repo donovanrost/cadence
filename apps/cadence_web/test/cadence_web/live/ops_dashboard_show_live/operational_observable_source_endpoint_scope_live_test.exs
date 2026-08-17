@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
 
   use Phoenix.VerifiedRoutes,

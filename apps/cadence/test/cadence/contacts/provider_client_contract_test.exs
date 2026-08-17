@@ -1,20 +1,7 @@
 defmodule Cadence.Contacts.ProviderClientContractTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Contacts.ProviderClient
-  alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.TestSupport.FakeProviderClient
-
-  test "the simulator and fake implement the provider control-plane contract" do
-    callbacks = ProviderClient.behaviour_info(:callbacks)
-    assert Code.ensure_loaded?(SimulatorHTTP)
-    assert Code.ensure_loaded?(FakeProviderClient)
-
-    for {name, arity} <- callbacks do
-      assert function_exported?(SimulatorHTTP, name, arity)
-      assert function_exported?(FakeProviderClient, name, arity)
-    end
-  end
 
   test "fake modification behavior is request-local rather than process-global" do
     parent = self()

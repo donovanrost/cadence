@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -462,6 +463,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert version_count(org, mission, dashboard) == 1
 
     {:ok, editor, _html} = live(conn, editor_path)
+    render_dashboard_async(editor)
 
     assert has_element?(
              editor,
@@ -472,12 +474,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert {:ok, %Document{placements: []}} = fetch_document(org, mission, dashboard)
 
     editor |> element("#dashboard-editor-save") |> render_click()
+    render_dashboard_async(editor)
 
     assert version_count(org, mission, dashboard) == 2
 
     assert {:ok, %Document{placements: [placement]}} = fetch_document(org, mission, dashboard)
     assert placement.widget_def.title == "Counter investigation"
     assert placement.widget_def.binding.observables == ["HK.counter"]
+
+    stop_dashboard_view(editor)
   end
 
   defp version_count(org, mission, dashboard) do

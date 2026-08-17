@@ -137,32 +137,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanelDataLinkContextTest do
            }
   end
 
-  test "extracts observable ids from atom-keyed and string-keyed selected refs" do
-    assert SelectionPanel.selected_data_ref_observable_id(
-             socket(%{dashboard_selected_data_ref: %{observable_id: "HK.counter"}})
-           ) == "HK.counter"
-
-    assert SelectionPanel.selected_data_ref_observable_id(
-             socket(%{dashboard_selected_data_ref: %{"point_id" => "HK.voltage"}})
-           ) == "HK.voltage"
-  end
-
-  test "data link index falls back to runtime result frames when cached assign is missing" do
-    placement_frames = %PlacementFrames{}
-
-    socket =
-      socket(%{
-        dashboard_engine_result: %{
-          "frames_by_placement" => %{"placement-1" => placement_frames}
-        },
-        dashboard_engine_frames_by_placement: nil
-      })
-
-    assert SelectionPanel.data_link_index(socket).frames_by_placement == %{
-             "placement-1" => placement_frames
-           }
-  end
-
   defp socket(assigns) do
     %Socket{
       assigns:

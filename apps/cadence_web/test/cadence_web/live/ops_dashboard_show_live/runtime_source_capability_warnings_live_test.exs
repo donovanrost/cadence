@@ -2,10 +2,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
-
-  alias Phoenix.LiveViewTest.ClientProxy
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -148,44 +147,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp render_dashboard_async(view) do
-    track_dashboard_view(view)
-    render_async(view, 5_000)
-  end
-
-  defp track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do
-    tracked_views = Process.get(:ops_dashboard_live_test_views, MapSet.new())
-
-    unless MapSet.member?(tracked_views, pid) do
-      Process.put(:ops_dashboard_live_test_views, MapSet.put(tracked_views, pid))
-
-      on_exit({:ops_dashboard_live_view, pid}, fn ->
-        stop_dashboard_view(view)
-      end)
-    end
-  end
-
-  defp stop_dashboard_view(view) do
-    if Process.alive?(view.pid) do
-      drain_dashboard_view(view)
-
-      ref = Process.monitor(view.pid)
-      {_proxy_ref, _topic, proxy_pid} = view.proxy
-      ClientProxy.stop(proxy_pid, {:shutdown, :dashboard_test_cleanup})
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1_000
-    end
-
-    :ok
-  end
-
-  defp drain_dashboard_view(view) do
-    render_async(view, 5_000)
-    :ok
-  catch
-    :exit, _reason -> :ok
-  end
-
   describe "runtime unsupported source capability warnings" do
     test "surfaces unsupported source capability warnings on widgets" do
       {conn, org, mission} = signed_in_org_and_mission()
@@ -299,6 +260,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
                view,
                ~s(#dashboard-data-link-inspector [data-data-link-context="Source request"])
              )
+
+      stop_dashboard_view(view)
     end
   end
 end
