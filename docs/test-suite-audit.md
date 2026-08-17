@@ -186,6 +186,19 @@ not merely test-runner noise.
   generator. A test should move below the database layer only after a no-sandbox
   run proves the complete call path is independent of persistence.
 
+### Explicit dashboard hydration boundary
+
+- Added a typed `HydratedResolveRequest` boundary that rejects unresolved
+  library placements before dashboard planning.
+- Moved persistence-backed library materialization behind
+  `ResolveRequestHydrator`; `Engine.plan_hydrated/2` now consumes the typed,
+  already-materialized request without performing that database step.
+- Kept `Engine.plan/2` and `resolve/2` as compatibility orchestration APIs. Both
+  hydrate once, and `resolve/2` no longer repeats library resolution through a
+  nested call to `plan/2`.
+- The pure boundary test runs in `UnitCase`; repository hydration and missing
+  pinned-version fallback remain explicit `DataCase` integration tests.
+
 ### Batch persistence ordering
 
 - The batch-ingress persistence test asserted values in input order after sorting

@@ -9,6 +9,7 @@ defmodule Cadence.Dashboards.EngineTest do
     Document,
     Engine,
     Frame,
+    HydratedResolveRequest,
     LimitContext,
     Placement,
     ResolveWarning,
@@ -17,11 +18,11 @@ defmodule Cadence.Dashboards.EngineTest do
     WidgetDef
   }
 
-  test "plans Tier 0 value tile source requests without reading telemetry stores" do
+  test "plans a hydrated Tier 0 value tile request without persistence hydration" do
     document = load_fixture!("value_tile_latest.v1.json")
 
     result =
-      Engine.plan(%DashboardResolveRequest{
+      %DashboardResolveRequest{
         organization_id: document.organization_id,
         mission_id: document.mission_id,
         dashboard_id: document.dashboard_id,
@@ -31,7 +32,9 @@ defmodule Cadence.Dashboards.EngineTest do
         interaction_context: %{
           placement_sizes: %{"placement_battery_voltage" => %{width_px: 320, height_px: 128}}
         }
-      })
+      }
+      |> HydratedResolveRequest.new!()
+      |> Engine.plan_hydrated()
 
     assert result.dashboard_id == "dashboard_value_tile_latest"
     assert result.resolve_mode == :initial

@@ -15,13 +15,14 @@ defmodule Cadence.Dashboards.Engine do
     DashboardResolveRequest,
     DashboardResolveResult,
     FrameMaterializer,
+    HydratedResolveRequest,
     LimitSelectedClockAudit,
-    Management,
     Placement,
     PlacementExpansion,
     PlacementFrames,
     PlannedRequestValidation,
     PlannedSourceRequest,
+    ResolveRequestHydrator,
     ResolveWarning,
     RuntimeCache,
     RuntimeCacheKey,
@@ -35,9 +36,9 @@ defmodule Cadence.Dashboards.Engine do
 
   @spec resolve(DashboardResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def resolve(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
-    request = DashboardResolveRequest.normalize(request)
-    request = resolve_library_document(request)
-    plan_result = plan(request, opts)
+    hydrated_request = ResolveRequestHydrator.hydrate(request)
+    plan_result = plan_hydrated(hydrated_request, opts)
+    request = HydratedResolveRequest.unwrap(hydrated_request)
 
     request
     |> execute_plan(plan_result, opts)
@@ -46,8 +47,22 @@ defmodule Cadence.Dashboards.Engine do
 
   @spec plan(DashboardResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def plan(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
-    request = DashboardResolveRequest.normalize(request)
-    request = resolve_library_document(request)
+    request
+    |> ResolveRequestHydrator.hydrate()
+    |> plan_hydrated(opts)
+  end
+
+  @doc """
+  Plans a request whose persisted library references have already been hydrated.
+
+  Unlike `plan/2`, this function does not perform dashboard-library persistence
+  reads. Use it for pure planning tests and for orchestration that already owns
+  the hydration boundary.
+  """
+  @spec plan_hydrated(HydratedResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
+  def plan_hydrated(%HydratedResolveRequest{} = hydrated_request, opts \\ [])
+      when is_list(opts) do
+    request = HydratedResolveRequest.unwrap(hydrated_request)
     validate_request_contract!(request, opts)
 
     opts = plan_dependency_opts(opts)
@@ -72,17 +87,6 @@ defmodule Cadence.Dashboards.Engine do
     end
     |> validate_plan_contract!(opts)
   end
-
-  defp resolve_library_document(
-         %DashboardResolveRequest{document: %Cadence.Dashboards.Document{}} = request
-       ) do
-    %DashboardResolveRequest{
-      request
-      | document: Management.resolve_document(request.document)
-    }
-  end
-
-  defp resolve_library_document(%DashboardResolveRequest{} = request), do: request
 
   defp validate_request_contract!(%DashboardResolveRequest{} = request, opts) do
     if validate_dashboard_contract?(opts) do
