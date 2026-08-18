@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -16,13 +14,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
 
   describe "operational observable widget creation flows" do
     test "adds an operational observable status matrix through the slide-over panel" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Ops")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
 
@@ -86,7 +82,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
       )
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
       view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)
@@ -147,20 +143,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
              )
 
     dashboard_version
-  end
-
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
   end
 end

@@ -17,20 +17,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
-  setup do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-        value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-
-    :ok
-  end
-
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -172,7 +158,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert {:ok, %Document{} = _current} =
                Cadence.Dashboards.update_document(
@@ -190,7 +176,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
       |> render_submit()
 
+      await_dashboard_resolved(view)
+
       view |> element("#dashboard-editor-save") |> render_click()
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -223,7 +212,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       initial_document = fetch_dashboard_document!(org, mission, dashboard)
       widget_id = placement_by_title(initial_document, "Counter").placement_id
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
       assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
 
       assert has_element?(view, "#edit-paused-note")
@@ -258,7 +247,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       # Live data is frozen while editing…
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 5678, 1_700_000_110)
       send(view.pid, :tick)
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
       assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
       refute has_element?(view, "#widget-#{widget_id} [data-widget-value]", "5678")
 
@@ -269,7 +258,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
           ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
         )
 
-      render_dashboard_async(viewer)
+      await_dashboard_resolved(viewer)
       refute has_element?(viewer, "#edit-paused-note")
       assert has_element?(viewer, "#widget-#{widget_id} [data-widget-value]", "5678")
 
@@ -297,7 +286,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       fleet = placement_by_title(initial_document, "Fleet")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       # Reconfigure: prefilled form, save preserves placement identity and layout.
       view
@@ -314,7 +303,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       )
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(view, ~s(button[aria-label="Configure Renamed Tile"]))
       assert Document.version(fetch_dashboard_document!(org, mission, dashboard)) == 1
@@ -326,7 +315,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       )
       |> render_click()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#dashboard-editor-save") |> render_click()
       document = fetch_dashboard_document!(org, mission, dashboard)

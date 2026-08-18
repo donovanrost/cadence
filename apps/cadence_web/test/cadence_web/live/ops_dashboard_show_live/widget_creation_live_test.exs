@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -138,32 +136,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
     dashboard_version
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   describe "widget creation flows" do
     test "adds a widget through the slide-over panel" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       binding_set = persist_binding_set!(org, mission)
       activate_binding_set!(org, mission, binding_set)
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
       assert has_element?(view, "#dashboard-panel")
@@ -174,7 +155,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
@@ -196,13 +177,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
     end
 
     test "adds an event timeline widget without selecting telemetry points" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
 
@@ -210,7 +189,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       |> form("#widget-form", widget: %{type: "event_timeline", title: "Mission Events"})
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-event-timeline]))
@@ -243,15 +222,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
     end
 
     test "adds a state timeline widget from a selected telemetry point" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
       binding_set = persist_binding_set!(org, mission)
       activate_binding_set!(org, mission, binding_set)
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
       view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
@@ -262,7 +239,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       )
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-state-timeline]))
@@ -295,15 +272,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
     end
 
     test "adds a status matrix with multiple points through the slide-over panel" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       binding_set = persist_matrix_binding_set!(org, mission)
       activate_binding_set!(org, mission, binding_set)
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
 
@@ -335,7 +310,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       )
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
       view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)
@@ -352,15 +327,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
     end
 
     test "adds a data table with multiple points through the slide-over panel" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       binding_set = persist_matrix_binding_set!(org, mission)
       activate_binding_set!(org, mission, binding_set)
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       view |> element("#add-widget-button") |> render_click()
 
@@ -392,7 +365,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       )
       |> render_submit()
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
       view |> element("#dashboard-editor-save") |> render_click()
       stop_dashboard_view(view)

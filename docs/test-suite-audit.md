@@ -212,6 +212,15 @@ not merely test-runner noise.
   modules remain synchronous because their LiveViews share an SQL Sandbox owner;
   this tranche removes global configuration coupling but does not yet prove
   database-process isolation suitable for `async: true`.
+- Extended the same boundary to widget creation and lifecycle workflows. Initial
+  hydration, staged create/reconfigure/remove operations, viewer reopen, and the
+  stale-edit conflict reload now wait for the rendered runtime outcome while
+  exercising production `start_async/3` execution.
+- At this checkpoint the inline-resolution switch remains in six test/support
+  files with 18 application-environment mutations, down from 15 files and 45
+  mutations at the start of this audit. The intentional delayed-cancellation test
+  remains separate because its test control needs an owner-scoped design rather
+  than mechanical removal.
 
 ### Batch persistence ordering
 
