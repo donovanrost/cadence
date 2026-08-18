@@ -154,18 +154,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-        value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   defp configure_dashboard_source_health!(now) do
     previous = Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
 
@@ -274,7 +262,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
   describe "live widget frame evidence" do
     test "opens operational observable source-health interval evidence from rendered frame panel" do
       observed_at = ~U[2026-06-26 12:00:00Z]
-      enable_dashboard_engine_inline_resolves!()
       configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
       {conn, org, mission} = signed_in_org_and_mission()
@@ -294,7 +281,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       matrix_widget_id = matrix_widget.widget_id
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       row_selector =
         ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:#{transport.transport_id}"])
@@ -421,6 +408,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
 
       {:ok, reopened_source_health_event_view, _html} =
         live(conn, source_health_event_copied_path)
+
+      await_dashboard_resolved(reopened_source_health_event_view)
 
       assert has_element?(
                reopened_source_health_event_view,

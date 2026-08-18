@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -89,24 +87,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     document
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   test "runs the dashboard lifecycle across the Editor, Activity, Settings, Directory, and Viewer" do
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, user, org, mission} = signed_in_user_org_and_mission()
     binding_set = persist_binding_set!(org, mission)
     activate_binding_set!(org, mission, binding_set)
@@ -141,7 +122,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     assert dashboard.placements == []
 
     {:ok, editor, _html} = live(conn, dashboard_path)
-    render_dashboard_async(editor)
+    await_dashboard_resolved(editor)
 
     assert has_element?(
              editor,
@@ -155,7 +136,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
     |> render_submit()
 
-    render_dashboard_async(editor)
+    await_dashboard_resolved(editor)
 
     assert Document.version(fetch_dashboard_document!(org, mission, created_summary)) == 1
     editor |> element("#dashboard-editor-save") |> render_click()
@@ -243,7 +224,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
              )
 
     {:ok, restored_view, _html} = live(conn, show_path(mission, created_summary))
-    render_dashboard_async(restored_view)
+    await_dashboard_resolved(restored_view)
 
     assert has_element?(
              restored_view,

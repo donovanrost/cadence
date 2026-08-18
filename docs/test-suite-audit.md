@@ -216,11 +216,16 @@ not merely test-runner noise.
   hydration, staged create/reconfigure/remove operations, viewer reopen, and the
   stale-edit conflict reload now wait for the rendered runtime outcome while
   exercising production `start_async/3` execution.
-- At this checkpoint the inline-resolution switch remains in six test/support
-  files with 18 application-environment mutations, down from 15 files and 45
-  mutations at the start of this audit. The intentional delayed-cancellation test
-  remains separate because its test control needs an owner-scoped design rather
-  than mechanical removal.
+- Migrated the remaining ordinary dashboard lifecycle, operational-observable
+  rendering, frame-evidence, and source-capability timeline tests. Initial mounts
+  and copied-link reopens now prove the idle-and-resolved UI outcome under the
+  production async path.
+- At this checkpoint the inline-resolution switch remains in only two
+  test/support files with eight application-environment accesses, down from 15
+  files and 45 accesses at the start of this audit. The intentional
+  delayed-cancellation test remains separate because its timing control needs an
+  owner-scoped design; the broad replay fixture remains a separately inventoried
+  migration rather than a mechanical change.
 
 ### Batch persistence ordering
 

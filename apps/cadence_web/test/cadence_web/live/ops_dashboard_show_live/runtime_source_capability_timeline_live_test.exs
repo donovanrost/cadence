@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -19,8 +17,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
   alias CadenceWeb.TestFixtures
 
   test "event timeline source-capability posture rows open canonical operational-event inspectors" do
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
 
     assert {:ok, _events_source} =
@@ -99,7 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
           "?time_mode=archive&time_axis=occurred_at&from=2026-06-17T12:00:00Z&to=2026-06-17T12:05:00Z"
       )
 
-    render_dashboard_async(view)
+    await_dashboard_resolved(view)
 
     row_selector =
       ~s(#widget-#{events_widget.widget_id} [data-event-timeline-record-id="#{source_capability_posture_id}"])
@@ -199,20 +195,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
-  end
-
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
   end
 end

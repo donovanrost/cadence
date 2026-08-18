@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -72,21 +70,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   defp assert_antenna_pointing_copied_path(path, event_route_id, event_at_ms) do
     assert path =~ "panel=data_link"
     assert path =~ "selected_target=operational_event"
@@ -114,6 +97,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     )
 
     {:ok, reopened_view, _html} = live(context.conn, copied_path)
+    await_dashboard_resolved(reopened_view)
 
     assert has_element?(
              reopened_view,
@@ -266,8 +250,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
 
   describe "operational observable rendering" do
     test "renders contact phase operational observable rows with phase presentation" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       scheduled_contact =
@@ -302,7 +284,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       matrix_widget = render_item_by_title(document, "Contact Phase").widget
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       row_selector =
         ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="contacts.phase:dashboard-contact-phase-alpha"])
@@ -347,15 +329,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     end
 
     test "renders connection state operational observable rows with connection presentation" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       {source_endpoint, transport, observed_at, connection_interval, dashboard, matrix_widget_id} =
         persist_connection_state_rendering_fixture!(org, mission)
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       row_selector =
         ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
@@ -488,6 +468,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                "source_binding_id=default_flight_operational_observables"
 
       {:ok, reopened_connection_event_view, _html} = live(conn, connection_event_copied_path)
+      await_dashboard_resolved(reopened_connection_event_view)
 
       assert has_element?(
                reopened_connection_event_view,
@@ -588,7 +569,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
           "?panel=data_link&selected_target=transport&selected_id=dashboard-transport-alpha&selected_transport_id=dashboard-transport-alpha&realm=flight&data_source_id=managed_operational_observables&source_binding_id=default_flight_operational_observables"
 
       {:ok, transport_link_view, _html} = live(conn, transport_link_path)
-      render_dashboard_async(transport_link_view)
+      await_dashboard_resolved(transport_link_view)
 
       assert has_element?(
                transport_link_view,
@@ -618,8 +599,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
     end
 
     test "opens live antenna-pointing operational-event copied route from rendered frame panel" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       ground_station =
@@ -732,7 +711,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       {:ok, view, _html} =
         live(conn, show_path(mission, dashboard) <> "?scope_kind=ground_station&scope_id=dss-14")
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
