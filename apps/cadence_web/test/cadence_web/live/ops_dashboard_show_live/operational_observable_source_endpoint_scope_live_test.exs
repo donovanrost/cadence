@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
@@ -24,8 +22,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
 
   describe "source endpoint operational observable scope rendering" do
     test "filters operational observable transport rows and preserves DataLink context" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       alpha_endpoint =
@@ -131,7 +127,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
             "?scope_kind=source_endpoint&scope_id=#{alpha_endpoint.source_endpoint_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -201,8 +197,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
     end
 
     test "opens live source-endpoint ingress-latency operational-event copied route from frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       source_endpoint =
@@ -268,7 +262,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
             "?scope_kind=source_endpoint&scope_id=#{source_endpoint.source_endpoint_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -389,6 +383,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
       assert metric_event_copied_path =~ "scope_id=#{source_endpoint.source_endpoint_id}"
 
       {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
+
+      await_dashboard_resolved(reopened_metric_event_view)
 
       assert has_element?(
                reopened_metric_event_view,

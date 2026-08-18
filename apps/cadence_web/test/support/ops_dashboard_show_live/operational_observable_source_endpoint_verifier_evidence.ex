@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   def run(context) do
     %{
@@ -25,6 +26,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
 
     {:ok, reopened_release_attempt_for_verifier_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_for_verifier_view)
 
     release_attempt_verifier_related_selector =
       ~s(#dashboard-data-link-inspector [data-data-link-related-target="command verifier instance"][data-data-link-related-id="#{verifier_instance.command_verifier_instance_id}"])
@@ -110,6 +113,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
 
     {:ok, reopened_release_attempt_verifier_view, _html} =
       live(conn, release_attempt_verifier_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_verifier_view)
 
     assert has_element?(
              reopened_release_attempt_verifier_view,
@@ -243,6 +248,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
 
     {:ok, reopened_verifier_transport_action_view, _html} =
       live(conn, verifier_transport_action_copied_path)
+
+    await_dashboard_resolved(reopened_verifier_transport_action_view)
 
     assert has_element?(
              reopened_verifier_transport_action_view,
@@ -387,6 +394,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
     {:ok, reopened_verifier_transport_action_event_view, _html} =
       live(conn, verifier_transport_action_event_copied_path)
 
+    await_dashboard_resolved(reopened_verifier_transport_action_event_view)
+
     assert has_element?(
              reopened_verifier_transport_action_event_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -451,6 +460,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointVer
 
     {:ok, reopened_release_attempt_for_transport_action_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_for_transport_action_view)
 
     Map.merge(context, %{
       reopened_release_attempt_for_transport_action_view:

@@ -131,6 +131,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
     {:ok, reopened_release_attempt_command_request_view, _html} =
       live(conn, release_attempt_command_request_copied_path)
 
+    await_dashboard_resolved(reopened_release_attempt_command_request_view)
+
     assert has_element?(
              reopened_release_attempt_command_request_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -242,6 +244,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_release_attempt_queue_entry_view, _html} =
       live(conn, release_attempt_queue_entry_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_queue_entry_view)
 
     assert has_element?(
              reopened_release_attempt_queue_entry_view,

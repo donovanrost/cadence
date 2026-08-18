@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -123,21 +121,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
-  end
-
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
   end
 
   defp mount_link_scope_fixture(conn, org, mission) do
@@ -306,7 +289,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
       )
 
-    render_dashboard_async(view)
+    await_dashboard_resolved(view)
 
     %{
       alpha_endpoint: alpha_endpoint,
@@ -346,8 +329,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
   describe "link operational observable scope rendering" do
     test "filters operational observable rows and preserves setup DataLink context" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       fixture = mount_link_scope_fixture(conn, org, mission)
@@ -474,6 +455,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
       assert rf_event_copied_path =~ "scope_id=link-alpha"
 
       {:ok, reopened_rf_event_view, _html} = live(conn, rf_event_copied_path)
+      await_dashboard_resolved(reopened_rf_event_view)
 
       assert has_element?(
                reopened_rf_event_view,
@@ -651,8 +633,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
   end
 
   defp assert_metric_operational_event_route(scenario) do
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
 
     source_endpoint =
@@ -746,7 +726,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         show_path(mission, dashboard) <> "?scope_kind=link&scope_id=link-alpha"
       )
 
-    render_dashboard_async(view)
+    await_dashboard_resolved(view)
 
     assert has_element?(
              view,
@@ -867,6 +847,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
     assert metric_event_copied_path =~ "scope_id=link-alpha"
 
     {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
+    await_dashboard_resolved(reopened_metric_event_view)
 
     assert has_element?(
              reopened_metric_event_view,

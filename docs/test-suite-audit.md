@@ -199,6 +199,20 @@ not merely test-runner noise.
 - The pure boundary test runs in `UnitCase`; repository hydration and missing
   pinned-version fallback remain explicit `DataCase` integration tests.
 
+### Production-path dashboard resolution
+
+- Migrated the operational-observable scope LiveView group off the VM-global
+  `:dashboard_engine_resolve_inline?` test switch. These tests now exercise the
+  same `start_async/3` resolution topology used in production.
+- Added a shared outcome-based wait that drains LiveView async work and verifies
+  the keyed dashboard root reports an idle, resolved runtime before assertions
+  continue. Copied-link dashboard reopens use the same boundary and are tracked
+  for deterministic teardown.
+- Removed the group's obsolete `:config` tags and inline-resolution setup. The
+  modules remain synchronous because their LiveViews share an SQL Sandbox owner;
+  this tranche removes global configuration coupling but does not yet prove
+  database-process isolation suitable for `async: true`.
+
 ### Batch persistence ordering
 
 - The batch-ingress persistence test asserted values in input order after sorting

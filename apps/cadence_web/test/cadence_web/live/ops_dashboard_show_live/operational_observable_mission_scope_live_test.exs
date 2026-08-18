@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -117,25 +115,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   describe "mission operational observable scope rendering" do
     test "renders aggregate operational observable rows" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       persist_command_queue_entry!(
@@ -185,7 +166,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
             "?scope_kind=mission&scope_id=#{mission.mission_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,

@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointTra
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   def run(context) do
     %{
@@ -108,6 +109,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointTra
 
     {:ok, reopened_release_attempt_transport_action_view, _html} =
       live(conn, release_attempt_transport_action_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_transport_action_view)
 
     assert has_element?(
              reopened_release_attempt_transport_action_view,
@@ -333,6 +336,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointTra
     {:ok, reopened_release_attempt_transport_action_event_view, _html} =
       live(conn, release_attempt_transport_action_event_copied_path)
 
+    await_dashboard_resolved(reopened_release_attempt_transport_action_event_view)
+
     assert has_element?(
              reopened_release_attempt_transport_action_event_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -460,6 +465,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointTra
     {:ok, reopened_release_attempt_event_back_view, _html} =
       live(conn, release_attempt_event_back_copied_path)
 
+    await_dashboard_resolved(reopened_release_attempt_event_back_view)
+
     assert has_element?(
              reopened_release_attempt_event_back_view,
              ~s(#dashboard-data-link-inspector[data-data-link-target="command_release_attempt"][data-data-link-target-id="#{release_attempt.command_release_attempt_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"][data-data-link-selected-time-mode="live"])
@@ -485,6 +492,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointTra
 
     {:ok, reopened_release_attempt_for_command_request_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_for_command_request_view)
 
     Map.merge(context, %{
       reopened_release_attempt_event_back_view: reopened_release_attempt_event_back_view,

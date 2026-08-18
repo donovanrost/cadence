@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   def run(context) do
     %{
@@ -105,6 +106,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
     {:ok, reopened_release_attempt_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
 
+    await_dashboard_resolved(reopened_release_attempt_view)
+
     assert has_element?(
              reopened_release_attempt_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -183,6 +186,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_release_attempt_for_source_endpoint_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_for_source_endpoint_view)
 
     release_attempt_source_endpoint_related_selector =
       ~s(#dashboard-data-link-inspector [data-data-link-related-target="source endpoint"][data-data-link-related-id="#{source_endpoint.source_endpoint_id}"])
@@ -269,6 +274,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_release_attempt_source_endpoint_view, _html} =
       live(conn, release_attempt_source_endpoint_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_source_endpoint_view)
 
     assert has_element?(
              reopened_release_attempt_source_endpoint_view,
@@ -364,6 +371,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
     {:ok, reopened_source_endpoint_release_attempt_view, _html} =
       live(conn, source_endpoint_release_attempt_back_copied_path)
 
+    await_dashboard_resolved(reopened_source_endpoint_release_attempt_view)
+
     assert has_element?(
              reopened_source_endpoint_release_attempt_view,
              ~s(#dashboard-data-link-inspector[data-data-link-target="command_release_attempt"][data-data-link-target-id="#{release_attempt.command_release_attempt_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"][data-data-link-selected-time-mode="live"])
@@ -389,6 +398,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_release_attempt_for_contact_view, _html} =
       live(conn, command_request_release_attempt_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_for_contact_view)
 
     release_attempt_contact_related_selector =
       ~s(#dashboard-data-link-inspector [data-data-link-related-target="contact"][data-data-link-related-id="#{realized_contact.realized_contact_id}"])
@@ -468,6 +479,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_release_attempt_contact_view, _html} =
       live(conn, release_attempt_contact_copied_path)
+
+    await_dashboard_resolved(reopened_release_attempt_contact_view)
 
     assert has_element?(
              reopened_release_attempt_contact_view,
@@ -562,6 +575,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointRel
 
     {:ok, reopened_contact_release_attempt_view, _html} =
       live(conn, contact_release_attempt_back_copied_path)
+
+    await_dashboard_resolved(reopened_contact_release_attempt_view)
 
     assert has_element?(
              reopened_contact_release_attempt_view,

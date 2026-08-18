@@ -2,15 +2,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   @moduledoc false
 
   import ExUnit.Assertions, only: [flunk: 1]
-  import Phoenix.LiveViewTest, only: [render_async: 2]
+  import Phoenix.LiveViewTest, only: [has_element?: 2, render_async: 2]
 
   alias Phoenix.LiveViewTest.ClientProxy
 
   @default_timeout 5_000
+  @resolved_runtime_selector ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-resolved="true"])
 
   def render_dashboard_async(view, timeout \\ @default_timeout) do
     track_dashboard_view(view)
     render_async(view, timeout)
+  end
+
+  def await_dashboard_resolved(view, timeout \\ @default_timeout) do
+    render_dashboard_async(view, timeout)
+
+    if has_element?(view, @resolved_runtime_selector) do
+      view
+    else
+      flunk("dashboard runtime did not resolve within #{timeout}ms")
+    end
   end
 
   def track_dashboard_view(%{pid: pid} = view) when is_pid(pid) do

@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -53,21 +51,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
-  end
-
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
   end
 
   defp persist_transport_execution_fixture!(org, mission) do
@@ -169,8 +152,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
   describe "transport operational observable scope rendering" do
     test "filters operational observable rows and resolves setup DataLink" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       alpha_endpoint =
@@ -276,7 +257,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
             "?scope_kind=transport&scope_id=#{alpha_transport.transport_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -348,8 +329,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
     end
 
     test "opens live transport execution operational-event copied route from frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       {source_endpoint, transport, observed_at, transport_execution_interval, dashboard,
@@ -362,7 +341,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
             "?scope_kind=transport&scope_id=#{transport.transport_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       row_id =
         "state:comms.transport.execution_state:#{DateTime.to_unix(observed_at, :millisecond)}:0"
@@ -503,6 +482,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       {:ok, reopened_transport_execution_event_view, _html} =
         live(conn, transport_execution_event_copied_path)
 
+      await_dashboard_resolved(reopened_transport_execution_event_view)
+
       assert has_element?(
                reopened_transport_execution_event_view,
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{transport_execution_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
@@ -590,8 +571,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
     end
 
     test "opens live transport-bitrate operational-event copied route from frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       source_endpoint =
@@ -681,7 +660,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
             "?scope_kind=transport&scope_id=#{transport.transport_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -788,6 +767,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert metric_event_copied_path =~ "scope_id=#{transport.transport_id}"
 
       {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
+      await_dashboard_resolved(reopened_metric_event_view)
 
       assert has_element?(
                reopened_metric_event_view,
@@ -846,8 +826,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
     end
 
     test "opens live transport-uplink-bitrate operational-event copied route from frame evidence" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       source_endpoint =
@@ -937,7 +915,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
             "?scope_kind=transport&scope_id=#{transport.transport_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -1044,6 +1022,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert metric_event_copied_path =~ "scope_id=#{transport.transport_id}"
 
       {:ok, reopened_metric_event_view, _html} = live(conn, metric_event_copied_path)
+      await_dashboard_resolved(reopened_metric_event_view)
 
       assert has_element?(
                reopened_metric_event_view,

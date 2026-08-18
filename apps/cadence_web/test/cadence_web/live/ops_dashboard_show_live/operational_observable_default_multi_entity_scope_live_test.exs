@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableDefaultMultiEntityScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -71,25 +69,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableDefaultMultiEntit
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
-  end
-
   describe "default multi-entity operational observable scope rendering" do
     test "document multi-entity scope filters operational observable rows" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       alpha_endpoint =
@@ -254,7 +235,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableDefaultMultiEntit
       matrix_widget = render_item_by_title(document, "Connection State").widget
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,

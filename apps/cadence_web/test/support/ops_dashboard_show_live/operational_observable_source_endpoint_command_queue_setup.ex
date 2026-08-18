@@ -13,8 +13,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
   alias CadenceWeb.TestFixtures
 
   def run do
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
 
     source_endpoint =
@@ -100,7 +98,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
           "?scope_kind=source_endpoint&scope_id=#{source_endpoint.source_endpoint_id}"
       )
 
-    render_dashboard_async(view)
+    await_dashboard_resolved(view)
 
     assert has_element?(
              view,
@@ -238,6 +236,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
     {:ok, reopened_command_queue_entry_view, _html} =
       live(conn, command_queue_entry_copied_path)
 
+    await_dashboard_resolved(reopened_command_queue_entry_view)
+
     assert has_element?(
              reopened_command_queue_entry_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -354,6 +354,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
              "source_binding_id=default_flight_operational_observables"
 
     {:ok, reopened_command_request_view, _html} = live(conn, command_request_copied_path)
+    await_dashboard_resolved(reopened_command_request_view)
 
     assert has_element?(
              reopened_command_request_view,
@@ -473,6 +474,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
     {:ok, reopened_command_request_queue_entry_view, _html} =
       live(conn, command_request_queue_entry_copied_path)
 
+    await_dashboard_resolved(reopened_command_request_queue_entry_view)
+
     assert has_element?(
              reopened_command_request_queue_entry_view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
@@ -497,6 +500,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
 
     {:ok, reopened_command_request_for_release_view, _html} =
       live(conn, command_request_copied_path)
+
+    await_dashboard_resolved(reopened_command_request_for_release_view)
 
     %{
       command_queue_entry_route_id: command_queue_entry_route_id,

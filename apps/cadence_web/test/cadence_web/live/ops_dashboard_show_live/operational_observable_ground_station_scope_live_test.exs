@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -52,21 +50,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
-  end
-
-  defp enable_dashboard_engine_inline_resolves! do
-    previous_inline? = Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
-
-    on_exit(fn ->
-      case previous_inline? do
-        nil ->
-          Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-
-        value ->
-          Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
-    end)
   end
 
   defp persist_ground_station_scope_fixture(org, mission) do
@@ -236,8 +219,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
 
   describe "ground station operational observable scope rendering" do
     test "filters operational observable rows and resolves setup DataLink" do
-      enable_dashboard_engine_inline_resolves!()
-
       {conn, org, mission} = signed_in_org_and_mission()
 
       %{
@@ -257,7 +238,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
             "?scope_kind=ground_station&scope_id=#{dss_14.ground_station_id}"
         )
 
-      render_dashboard_async(view)
+      await_dashboard_resolved(view)
 
       assert has_element?(
                view,
@@ -403,6 +384,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
 
       {:ok, reopened_ground_station_event_view, _html} =
         live(conn, ground_station_event_copied_path)
+
+      await_dashboard_resolved(reopened_ground_station_event_view)
 
       assert has_element?(
                reopened_ground_station_event_view,
