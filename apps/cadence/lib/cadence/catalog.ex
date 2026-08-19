@@ -180,7 +180,11 @@ defmodule Cadence.Catalog do
              is_binary(importer_key) and is_list(opts) do
     with {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
-           Registry.fetch_importer(importer_key, Keyword.get(opts, :importer_version, :latest)),
+           Registry.fetch_importer(
+             importer_key,
+             Keyword.get(opts, :importer_version, :latest),
+             opts
+           ),
          :ok <- ensure_catalog_family_match(artifact.catalog_family, descriptor.catalog_family),
          catalog_database_id <-
            Keyword.get(opts, :catalog_database_id, artifact.catalog_database_id),
@@ -218,13 +222,14 @@ defmodule Cadence.Catalog do
   end
 
   @doc false
-  @spec execute_enqueued_run(binary()) :: {:ok, ImportRun.t()} | {:error, term()}
-  def execute_enqueued_run(import_run_id) when is_binary(import_run_id) do
+  @spec execute_enqueued_run(binary(), keyword()) :: {:ok, ImportRun.t()} | {:error, term()}
+  def execute_enqueued_run(import_run_id, opts \\ [])
+      when is_binary(import_run_id) and is_list(opts) do
     with {:ok, %ImportRun{} = run} <- fetch_import_run_by_id(import_run_id),
          {:ok, %Artifact{} = artifact} <-
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
-           Registry.fetch_importer(run.importer_key, run.importer_version),
+           Registry.fetch_importer(run.importer_key, run.importer_version, opts),
          :ok <- ensure_catalog_family_match(artifact.catalog_family, descriptor.catalog_family),
          :ok <- validate_artifact(importer_module, artifact) do
       execute_run(run, artifact, importer_module)

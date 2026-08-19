@@ -3,14 +3,16 @@ defmodule Cadence.Catalog.Registry do
   Registry of built-in and configured catalog importers.
 
   The portable Cadence YAML importer is available without application
-  configuration. Consumers may replace or extend the registry through the
-  `:catalog_importers` application environment.
+  configuration. `registrations/1` builds an immutable, request-local registry
+  while `list_importers/1` preserves the `:catalog_importers`
+  application-environment fallback used by the running application.
   """
 
   alias Cadence.Catalog.ImporterDescriptor
   alias Cadence.Catalog.Importers.{CadenceYamlDatabase, Xtce13}
 
   @type importer_registration :: %{module: module(), descriptor: ImporterDescriptor.t()}
+  @type t :: [importer_registration()]
   @type fetch_error :: :catalog_importer_not_found | :catalog_importer_version_not_found
 
   @builtin_importers [CadenceYamlDatabase, Xtce13]
@@ -29,7 +31,8 @@ defmodule Cadence.Catalog.Registry do
   def list_importers(opts \\ []) when is_list(opts) do
     catalog_family = Keyword.get(opts, :catalog_family)
 
-    configured_importers()
+    opts
+    |> Keyword.get_lazy(:importer_registrations, &configured_importers/0)
     |> filter_and_sort(catalog_family)
   end
 
@@ -56,9 +59,16 @@ defmodule Cadence.Catalog.Registry do
   @spec fetch_importer(binary(), pos_integer() | :latest | nil) ::
           {:ok, importer_registration()} | {:error, fetch_error()}
   def fetch_importer(importer_key, version \\ :latest) when is_binary(importer_key) do
+    fetch_importer(importer_key, version, [])
+  end
+
+  @spec fetch_importer(binary(), pos_integer() | :latest | nil, keyword()) ::
+          {:ok, importer_registration()} | {:error, fetch_error()}
+  def fetch_importer(importer_key, version, opts)
+      when is_binary(importer_key) and is_list(opts) do
     importers =
       list_builtin_importers()
-      |> Kernel.++(list_importers())
+      |> Kernel.++(list_importers(opts))
       |> Enum.uniq_by(fn registration ->
         {registration.descriptor.importer_key, registration.descriptor.version}
       end)
@@ -129,13 +139,9 @@ defmodule Cadence.Catalog.Registry do
     end)
   end
 
-  defp configured_importers do
-    :cadence_catalog
-    |> Application.get_env(:catalog_importers, @builtin_importers)
-    |> registrations()
-  end
-
-  defp registrations(modules) do
+  @doc "Builds an immutable registry from importer modules."
+  @spec registrations([module()]) :: t()
+  def registrations(modules) when is_list(modules) do
     modules
     |> Enum.reduce([], fn module, acc ->
       with true <- Code.ensure_loaded?(module),
@@ -148,6 +154,12 @@ defmodule Cadence.Catalog.Registry do
         _other -> acc
       end
     end)
+  end
+
+  defp configured_importers do
+    :cadence_catalog
+    |> Application.get_env(:catalog_importers, @builtin_importers)
+    |> registrations()
   end
 
   defp fetch_from(importers, importer_key, version) do

@@ -3,25 +3,22 @@ defmodule Cadence.Catalog.BroadcastsTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Catalog.{Artifact, Events}
+  alias Cadence.Catalog.{Artifact, Events, Registry}
 
   @organization_id "org-broadcasts"
   @mission_id "mission-broadcasts"
 
   setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.TestSupport.FakeTelemetryCatalogImporter,
-      Cadence.TestSupport.FakeFailingImporter
-    ])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
     persist_mission_scope(@organization_id, @mission_id)
-    :ok
+
+    {:ok,
+     importer_opts: [
+       importer_registrations:
+         Registry.registrations([
+           Cadence.TestSupport.FakeTelemetryCatalogImporter,
+           Cadence.TestSupport.FakeFailingImporter
+         ])
+     ]}
   end
 
   defp build_and_persist_artifact(format_key, source_artifact) do
@@ -41,14 +38,24 @@ defmodule Cadence.Catalog.BroadcastsTest do
     persisted
   end
 
-  defp run_enqueued_job(import_run_id) do
+  defp run_enqueued_job(import_run_id, importer_opts) do
     {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, import_run_id)
     [_] = Cadence.Jobs.claim_jobs(1)
-    {:ok, completed_job} = JobRunner.run_job(job.job_id)
+
+    runner =
+      JobRunner.new(%{
+        catalog_import_run: fn run_id ->
+          Cadence.Catalog.execute_enqueued_run(run_id, importer_opts)
+        end
+      })
+
+    {:ok, completed_job} = JobRunner.run_job(runner, job.job_id)
     completed_job
   end
 
-  test "broadcasts :import_run_started when a run is inserted" do
+  test "broadcasts :import_run_started when a run is inserted", %{
+    importer_opts: importer_opts
+  } do
     artifact =
       build_and_persist_artifact("fake_tm_json", %{
         "packets" => [%{"name" => "HK"}]
@@ -61,7 +68,8 @@ defmodule Cadence.Catalog.BroadcastsTest do
         @organization_id,
         @mission_id,
         artifact.artifact_id,
-        "fake_tm_json"
+        "fake_tm_json",
+        importer_opts
       )
 
     assert_receive {:import_run_started, received_run}
@@ -69,7 +77,9 @@ defmodule Cadence.Catalog.BroadcastsTest do
     assert received_run.status == :running
   end
 
-  test "broadcasts :import_run_completed when an async run succeeds" do
+  test "broadcasts :import_run_completed when an async run succeeds", %{
+    importer_opts: importer_opts
+  } do
     artifact =
       build_and_persist_artifact("fake_tm_json", %{
         "packets" => [%{"name" => "HK"}]
@@ -82,19 +92,22 @@ defmodule Cadence.Catalog.BroadcastsTest do
         @organization_id,
         @mission_id,
         artifact.artifact_id,
-        "fake_tm_json"
+        "fake_tm_json",
+        importer_opts
       )
 
     assert_receive {:import_run_started, _}
 
-    _ = run_enqueued_job(run.import_run_id)
+    _ = run_enqueued_job(run.import_run_id, importer_opts)
 
     assert_receive {:import_run_completed, completed}
     assert completed.import_run_id == run.import_run_id
     assert completed.status == :completed
   end
 
-  test "broadcasts :import_run_failed when an async run fails" do
+  test "broadcasts :import_run_failed when an async run fails", %{
+    importer_opts: importer_opts
+  } do
     artifact = build_and_persist_artifact("fake_failing", %{"irrelevant" => true})
 
     :ok = Events.subscribe_import_runs(@mission_id)
@@ -104,12 +117,13 @@ defmodule Cadence.Catalog.BroadcastsTest do
         @organization_id,
         @mission_id,
         artifact.artifact_id,
-        "fake_failing"
+        "fake_failing",
+        importer_opts
       )
 
     assert_receive {:import_run_started, _}
 
-    _ = run_enqueued_job(run.import_run_id)
+    _ = run_enqueued_job(run.import_run_id, importer_opts)
 
     assert_receive {:import_run_failed, failed}
     assert failed.import_run_id == run.import_run_id

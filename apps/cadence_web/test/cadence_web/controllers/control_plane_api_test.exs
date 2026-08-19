@@ -6,18 +6,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
-    ])
-
     reset_control_plane_state!()
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
     :ok
   end
 

@@ -25,16 +25,6 @@ defmodule Cadence.CommandingDispatcherTest do
   ]
 
   setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.Catalog.Importers.CadenceYamlDatabase
-    ])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
     dispatcher_scope = dispatcher_scope()
 
     persist_mission_scope(dispatcher_scope.organization_id, dispatcher_scope.mission_id)

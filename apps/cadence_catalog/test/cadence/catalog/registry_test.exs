@@ -44,6 +44,25 @@ defmodule Cadence.Catalog.RegistryTest do
              })
   end
 
+  test "uses immutable importer registrations supplied in options" do
+    yaml_registrations =
+      Registry.registrations([Cadence.Catalog.Importers.CadenceYamlDatabase])
+
+    xtce_registrations = Registry.registrations([Cadence.Catalog.Importers.Xtce13])
+
+    assert [%{descriptor: %{importer_key: "cadence_yaml"}}] =
+             Registry.list_importers(importer_registrations: yaml_registrations)
+
+    assert [%{descriptor: %{importer_key: "xtce_1_3"}}] =
+             Registry.list_importers(importer_registrations: xtce_registrations)
+
+    assert {:ok, %{descriptor: %{importer_key: "xtce_1_3", version: 1}}} =
+             Registry.fetch_importer("xtce_1_3", 1, importer_registrations: xtce_registrations)
+
+    assert {:ok, %{descriptor: %{importer_key: "xtce_1_3"}}} =
+             Registry.detect_importer("mission.xml", "application/xml", xtce_registrations)
+  end
+
   describe "detect_importer/2" do
     test "matches by media type" do
       assert {:ok, %{descriptor: descriptor}} =

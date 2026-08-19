@@ -10,20 +10,6 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
   @organization_id "org-alpha"
   @mission_id "mission-alpha"
 
-  setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.Catalog.Importers.CadenceYamlDatabase
-    ])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
-    :ok
-  end
-
   test "imports Cadence YAML into one native Mission Model and runnable target plans" do
     persist_mission_scope(@organization_id, @mission_id)
 

@@ -49,14 +49,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     assert html =~ "mission.bin"
   end
 
-  test "discovers packaged built-ins independently of configured runtime importers" do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-    Application.put_env(:cadence_catalog, :catalog_importers, [])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
+  test "discovers packaged built-ins through the extension catalog" do
     {conn, _org, mission} = signed_in_org_and_mission()
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 

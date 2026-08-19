@@ -4,7 +4,7 @@ defmodule Cadence.CatalogTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Database}
+  alias Cadence.Catalog.{Artifact, Database, Registry}
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
@@ -31,17 +31,11 @@ defmodule Cadence.CatalogTest do
     Process.put(:catalog_test_organization_id, organization_id)
     Process.put(:catalog_test_mission_id, mission_id)
 
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.TestSupport.FakeTelemetryCatalogImporter
-    ])
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
-    :ok
+    {:ok,
+     importer_opts: [
+       importer_registrations:
+         Registry.registrations([Cadence.TestSupport.FakeTelemetryCatalogImporter])
+     ]}
   end
 
   defp organization_id,
@@ -50,7 +44,8 @@ defmodule Cadence.CatalogTest do
   defp mission_id,
     do: Process.get(:catalog_test_mission_id) || raise("missing catalog test mission")
 
-  test "persists artifacts, lists importers, and executes import runs through the durable job queue" do
+  test "persists artifacts, lists importers, and executes import runs through the durable job queue",
+       %{importer_opts: importer_opts} do
     persist_mission_scope(organization_id(), mission_id())
 
     artifact =
@@ -71,7 +66,8 @@ defmodule Cadence.CatalogTest do
         uploaded_by: %{"service_identity_id" => "svc-bootstrap"}
       })
 
-    assert [%{descriptor: %{importer_key: "fake_tm_json"}}] = Cadence.Catalog.list_importers()
+    assert [%{descriptor: %{importer_key: "fake_tm_json"}}] =
+             Cadence.Catalog.list_importers(importer_opts)
 
     assert {:ok, persisted_artifact} =
              Cadence.Catalog.persist_artifact(organization_id(), artifact)
@@ -102,8 +98,10 @@ defmodule Cadence.CatalogTest do
                mission_id(),
                persisted_artifact.artifact_id,
                "fake_tm_json",
-               requested_by: %{"service_identity_id" => "svc-bootstrap"},
-               metadata: %{"reason" => "test"}
+               catalog_opts(importer_opts,
+                 requested_by: %{"service_identity_id" => "svc-bootstrap"},
+                 metadata: %{"reason" => "test"}
+               )
              )
 
     assert queued_run.status == :running
@@ -116,7 +114,7 @@ defmodule Cadence.CatalogTest do
                mission_id(),
                persisted_artifact.artifact_id,
                "fake_tm_json",
-               importer_version: 2
+               catalog_opts(importer_opts, importer_version: 2)
              )
 
     assert {:ok, queued_job} =
@@ -124,7 +122,7 @@ defmodule Cadence.CatalogTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == queued_job.job_id
-    assert {:ok, completed_job} = JobRunner.run_job(queued_job.job_id)
+    assert {:ok, completed_job} = run_catalog_job(queued_job.job_id, importer_opts)
     assert completed_job.status == :completed
 
     assert {:ok, completed_run} =
@@ -166,18 +164,18 @@ defmodule Cadence.CatalogTest do
       assert Catalog.latest_import_run_by_artifact(organization_id, mission_id) == %{}
     end
 
-    test "returns the most recent run per artifact" do
+    test "returns the most recent run per artifact", %{importer_opts: importer_opts} do
       persist_mission_scope(organization_id(), mission_id())
 
       artifact_a = persist_artifact!("artifact-a")
       artifact_b = persist_artifact!("artifact-b")
 
-      {:ok, older_a} = start_import_run!(artifact_a.artifact_id)
+      {:ok, older_a} = start_import_run!(artifact_a.artifact_id, importer_opts)
       # Ensure monotonic started_at even on fast clocks.
       Process.sleep(10)
-      {:ok, newer_a} = start_import_run!(artifact_a.artifact_id)
+      {:ok, newer_a} = start_import_run!(artifact_a.artifact_id, importer_opts)
       Process.sleep(10)
-      {:ok, only_b} = start_import_run!(artifact_b.artifact_id)
+      {:ok, only_b} = start_import_run!(artifact_b.artifact_id, importer_opts)
 
       result =
         Catalog.latest_import_run_by_artifact(organization_id(), mission_id())
@@ -187,7 +185,7 @@ defmodule Cadence.CatalogTest do
       refute result[artifact_a.artifact_id].import_run_id == older_a.import_run_id
     end
 
-    test "scopes by mission" do
+    test "scopes by mission", %{importer_opts: importer_opts} do
       %{organization: _org, mission: mission_a} =
         persist_mission_scope(organization_id(), mission_id())
 
@@ -205,7 +203,7 @@ defmodule Cadence.CatalogTest do
         )
 
       artifact = persist_artifact!("artifact-scope", mission_id: mission_a.mission_id)
-      {:ok, _} = start_import_run!(artifact.artifact_id)
+      {:ok, _} = start_import_run!(artifact.artifact_id, importer_opts)
 
       assert Catalog.latest_import_run_by_artifact(
                organization_id(),
@@ -215,7 +213,9 @@ defmodule Cadence.CatalogTest do
   end
 
   describe "catalog database revisions" do
-    test "creates a database and revision from a successful revision import" do
+    test "creates a database and revision from a successful revision import", %{
+      importer_opts: importer_opts
+    } do
       persist_mission_scope(organization_id(), mission_id())
 
       assert {:ok, %Database{} = database} =
@@ -246,14 +246,16 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 metadata: %{"revision_label" => "FSW 3.7"},
-                 requested_by: %{"service_identity_id" => "svc-bootstrap"}
+                 catalog_opts(importer_opts,
+                   metadata: %{"revision_label" => "FSW 3.7"},
+                   requested_by: %{"service_identity_id" => "svc-bootstrap"}
+                 )
                )
 
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
-      assert {:ok, _completed_job} = JobRunner.run_job(job.job_id)
+      assert {:ok, _completed_job} = run_catalog_job(job.job_id, importer_opts)
 
       assert {:ok, completed_run} =
                Cadence.Catalog.fetch_import_run(
@@ -311,7 +313,9 @@ defmodule Cadence.CatalogTest do
       assert operational_event.causality.import_run_id == completed_run.import_run_id
     end
 
-    test "successful revision import invalidates matching dashboard runtime caches" do
+    test "successful revision import invalidates matching dashboard runtime caches", %{
+      importer_opts: importer_opts
+    } do
       cache = start_supervised!({RuntimeCache, name: nil})
       use_dashboard_runtime_cache!(cache)
       persist_mission_scope(organization_id(), mission_id())
@@ -375,13 +379,14 @@ defmodule Cadence.CatalogTest do
                  mission_id(),
                  database.catalog_database_id,
                  artifact,
-                 "fake_tm_json"
+                 "fake_tm_json",
+                 importer_opts
                )
 
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
-      assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
+      assert {:ok, _completed_job} = run_catalog_job(claimed_job.job_id, importer_opts)
 
       assert RuntimeCache.get_plan(telemetry_plan_key, cache) == :miss
       assert RuntimeCache.get_plan(limits_plan_key, cache) == :miss
@@ -394,7 +399,9 @@ defmodule Cadence.CatalogTest do
       assert {:ok, ^other_frames} = RuntimeCache.get_frame(other_frame_key, cache)
     end
 
-    test "does not create a revision for a failed revision import" do
+    test "does not create a revision for a failed revision import", %{
+      importer_opts: importer_opts
+    } do
       persist_mission_scope(organization_id(), mission_id())
 
       {:ok, database} =
@@ -423,7 +430,7 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 metadata: %{"revision_label" => "Bad"}
+                 catalog_opts(importer_opts, metadata: %{"revision_label" => "Bad"})
                )
 
       assert [] =
@@ -453,15 +460,28 @@ defmodule Cadence.CatalogTest do
     persisted
   end
 
-  defp start_import_run!(artifact_id) do
+  defp start_import_run!(artifact_id, importer_opts) do
     Cadence.Catalog.start_import_run(
       organization_id(),
       mission_id(),
       artifact_id,
       "fake_tm_json",
-      requested_by: %{"service_identity_id" => "svc-test"}
+      catalog_opts(importer_opts, requested_by: %{"service_identity_id" => "svc-test"})
     )
   end
+
+  defp run_catalog_job(job_id, importer_opts) do
+    runner =
+      JobRunner.new(%{
+        catalog_import_run: fn import_run_id ->
+          Catalog.execute_enqueued_run(import_run_id, importer_opts)
+        end
+      })
+
+    JobRunner.run_job(runner, job_id)
+  end
+
+  defp catalog_opts(importer_opts, opts), do: Keyword.merge(opts, importer_opts)
 
   defp use_dashboard_runtime_cache!(cache) do
     previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])

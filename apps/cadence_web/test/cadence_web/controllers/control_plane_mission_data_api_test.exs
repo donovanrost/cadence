@@ -11,18 +11,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   alias Cadence.Runtime.MissionModelPlanDecoder
 
   setup do
-    previous_importers = Application.get_env(:cadence_catalog, :catalog_importers, [])
-
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      CadenceWeb.TestSupport.FakeTelemetryCatalogImporter
-    ])
-
     reset_control_plane_state!()
-
-    on_exit(fn ->
-      Application.put_env(:cadence_catalog, :catalog_importers, previous_importers)
-    end)
-
     :ok
   end
 
@@ -523,14 +512,10 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> authorize(api_token)
       |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/catalog/importers")
 
-    assert %{
-             "data" => [
-               %{
-                 "importer_key" => "fake_tm_json",
-                 "catalog_family" => "telemetry"
-               }
-             ]
-           } = json_response(importers_conn, 200)
+    assert %{"data" => importers} = json_response(importers_conn, 200)
+
+    assert %{"catalog_family" => "combined", "importer_version" => 2} =
+             Enum.find(importers, &(&1["importer_key"] == "cadence_yaml"))
 
     artifact_conn =
       conn
@@ -540,15 +525,18 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         %{
           "catalog_artifact" => %{
             "artifact_id" => "artifact-alpha",
-            "catalog_family" => "telemetry",
-            "artifact_name" => "mission-alpha-tm.json",
-            "format_key" => "fake_tm_json",
-            "media_type" => "application/json",
+            "catalog_family" => "combined",
+            "artifact_name" => "mission-alpha-command.yaml",
+            "format_key" => "cadence_yaml",
+            "media_type" => "application/yaml",
             "source_artifact" => %{
-              "packets" => [
-                %{"name" => "HK_PACKET"},
-                %{"name" => "EVENT_PACKET"}
-              ]
+              "yaml" => """
+              commands:
+                - name: NOOP
+                  opcode: 1
+                - name: RESET
+                  opcode: 2
+              """
             }
           }
         }
@@ -559,8 +547,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "artifact_id" => "artifact-alpha",
                "organization_id" => ^organization_id,
                "mission_id" => ^mission_id,
-               "catalog_family" => "telemetry",
-               "format_key" => "fake_tm_json",
+               "catalog_family" => "combined",
+               "format_key" => "cadence_yaml",
                "content_sha256" => content_sha256,
                "uploaded_by" => %{
                  "service_identity_id" => "svc-bootstrap"
@@ -575,14 +563,14 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       conn
       |> authorize(api_token)
       |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts?catalog_family=telemetry"
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts?catalog_family=combined"
       )
 
     assert %{
              "data" => [
                %{
                  "artifact_id" => "artifact-alpha",
-                 "catalog_family" => "telemetry"
+                 "catalog_family" => "combined"
                }
              ]
            } = json_response(listed_artifacts_conn, 200)
@@ -595,8 +583,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         %{
           "catalog_import_run" => %{
             "artifact_id" => "artifact-alpha",
-            "importer_key" => "fake_tm_json",
-            "importer_version" => 1,
+            "importer_key" => "cadence_yaml",
+            "importer_version" => 2,
             "metadata" => %{"reason" => "bootstrap"}
           }
         }
@@ -608,8 +596,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "organization_id" => ^organization_id,
                "mission_id" => ^mission_id,
                "artifact_id" => "artifact-alpha",
-               "importer_key" => "fake_tm_json",
-               "importer_version" => 1,
+               "importer_key" => "cadence_yaml",
+               "importer_version" => 2,
                "status" => "running",
                "requested_by" => %{
                  "service_identity_id" => "svc-bootstrap"
@@ -635,18 +623,13 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                "import_run_id" => ^import_run_id,
                "status" => "completed",
                "imported_definition_count" => 2,
-               "diagnostics" => [
-                 %{
-                   "code" => "fake_tm_json.warning",
-                   "severity" => "warning"
-                 }
-               ],
+               "diagnostics" => [],
                "result_document" => %{
                  "mission_model" => %{
                    "revision_id" => mission_model_revision_id,
-                   "declaration_count" => 3
+                   "declaration_count" => 5
                  },
-                 "packet_names" => ["HK_PACKET", "EVENT_PACKET"]
+                 "import_run_id" => ^import_run_id
                }
              }
            } = json_response(import_run_show_conn, 200)
@@ -675,10 +658,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
        %{
          conn: conn
        } do
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.Catalog.Importers.CadenceYamlDatabase
-    ])
-
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
@@ -829,10 +808,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   test "authenticated mission API manages command stages, requests, approvals, and queue entries",
        %{conn: conn} do
-    Application.put_env(:cadence_catalog, :catalog_importers, [
-      Cadence.Catalog.Importers.CadenceYamlDatabase
-    ])
-
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
