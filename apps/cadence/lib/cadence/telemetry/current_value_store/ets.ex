@@ -16,22 +16,27 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   @impl true
   def child_spec(opts) do
     %{
-      id: __MODULE__,
+      id: Keyword.get(opts, :child_id, __MODULE__),
       start: {__MODULE__, :start_link, [opts]}
     }
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @impl true
   def hot_path_safe?, do: true
 
   @impl true
-  def init(_opts) do
+  def hot_path_safe?(_backend_opts), do: true
+
+  @impl true
+  def init(opts) do
+    table_name = Keyword.get(opts, :table_name, @table_name)
+
     _table =
-      :ets.new(@table_name, [
+      :ets.new(table_name, [
         :named_table,
         :public,
         :set,
@@ -39,12 +44,15 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
         write_concurrency: true
       ])
 
-    {:ok, @table_name}
+    {:ok, table_name}
   end
 
   @impl true
-  def record_samples(samples) when is_list(samples) do
-    table = ensure_table!()
+  def record_samples(samples) when is_list(samples), do: record_samples(samples, [])
+
+  @impl true
+  def record_samples(samples, backend_opts) when is_list(samples) and is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
 
     samples
     |> SelectionPolicy.selected_samples([])
@@ -57,9 +65,16 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
-  def replace_value(mission_id, point_id, nil, opts)
+  def replace_value(mission_id, point_id, sample_or_nil, opts)
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    table = ensure_table!()
+    replace_value(mission_id, point_id, sample_or_nil, opts, [])
+  end
+
+  @impl true
+  def replace_value(mission_id, point_id, nil, opts, backend_opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) and
+             is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
     spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
 
     table
@@ -69,20 +84,25 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     :ok
   end
 
-  @impl true
-  def replace_value(mission_id, point_id, %Sample{} = sample, opts)
-      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+  def replace_value(mission_id, point_id, %Sample{} = sample, opts, backend_opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) and
+             is_list(backend_opts) do
     with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
-      table = ensure_table!()
+      table = ensure_table!(backend_opts)
       true = :ets.insert(table, {key(sample), sample})
       :ok
     end
   end
 
   @impl true
-  def replace_values_for_scope(mission_id, samples, opts)
-      when is_binary(mission_id) and is_list(samples) and is_list(opts) do
-    table = ensure_table!()
+  def replace_values_for_scope(mission_id, samples, opts),
+    do: replace_values_for_scope(mission_id, samples, opts, [])
+
+  @impl true
+  def replace_values_for_scope(mission_id, samples, opts, backend_opts)
+      when is_binary(mission_id) and is_list(samples) and is_list(opts) and
+             is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
 
     :ets.foldl(
@@ -113,8 +133,13 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
-  def latest_value(mission_id, point_id, opts) do
-    table = ensure_table!()
+  def latest_value(mission_id, point_id, opts), do: latest_value(mission_id, point_id, opts, [])
+
+  @impl true
+  def latest_value(mission_id, point_id, opts, backend_opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) and
+             is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
     spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
 
     table
@@ -126,9 +151,14 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
-  def latest_values_for_mission(mission_id, opts) do
+  def latest_values_for_mission(mission_id, opts),
+    do: latest_values_for_mission(mission_id, opts, [])
+
+  @impl true
+  def latest_values_for_mission(mission_id, opts, backend_opts)
+      when is_binary(mission_id) and is_list(opts) and is_list(backend_opts) do
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
-    table = ensure_table!()
+    table = ensure_table!(backend_opts)
 
     :ets.foldl(
       fn
@@ -154,21 +184,28 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
-  def reset do
-    table = ensure_table!()
+  def reset, do: reset(:all, [])
+
+  @impl true
+  def reset(mission_id) when is_binary(mission_id), do: reset(mission_id, [])
+
+  @impl true
+  def reset(:all, backend_opts) when is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
     true = :ets.delete_all_objects(table)
     :ok
   end
 
-  @impl true
-  def reset(mission_id) when is_binary(mission_id) do
-    table = ensure_table!()
+  def reset(mission_id, backend_opts) when is_binary(mission_id) and is_list(backend_opts) do
+    table = ensure_table!(backend_opts)
     true = :ets.match_delete(table, {{mission_id, :_, :_, :_, :_, :_}, :_})
     :ok
   end
 
-  defp ensure_table! do
-    case :ets.whereis(@table_name) do
+  defp ensure_table!(backend_opts) do
+    table_name = Keyword.get(backend_opts, :table_name, @table_name)
+
+    case :ets.whereis(table_name) do
       :undefined -> raise "#{inspect(__MODULE__)} is not started"
       table -> table
     end

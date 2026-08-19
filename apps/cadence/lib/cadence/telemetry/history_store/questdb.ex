@@ -19,6 +19,7 @@ defmodule Cadence.Telemetry.HistoryStore.QuestDB do
     Storage.persist_samples(samples)
   end
 
+  @impl true
   def persist_samples(samples, opts) when is_list(samples) and is_list(opts) do
     Storage.persist_samples(Keyword.fetch!(opts, :storage_policy), samples, [])
   end

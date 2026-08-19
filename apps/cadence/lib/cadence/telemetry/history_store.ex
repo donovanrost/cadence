@@ -15,18 +15,33 @@ defmodule Cadence.Telemetry.HistoryStore do
 
   @callback child_spec(keyword()) :: Supervisor.child_spec() | nil
   @callback persist_samples([Sample.t()]) :: :ok | {:error, term()}
+  @callback persist_samples([Sample.t()], keyword()) :: :ok | {:error, term()}
   @callback sample_history(binary(), binary(), keyword()) :: [Sample.t()]
+  @callback sample_history(binary(), binary(), keyword(), keyword()) :: [Sample.t()]
   @callback sample_history_result(binary(), binary(), keyword()) ::
+              {:ok, %{samples: [Sample.t()], diagnostics: map()}} | {:error, term()}
+  @callback sample_history_result(binary(), binary(), keyword(), keyword()) ::
               {:ok, %{samples: [Sample.t()], diagnostics: map()}} | {:error, term()}
   @callback sample_watermark_result(binary(), binary(), keyword()) ::
               {:ok, map()} | {:error, term()}
+  @callback sample_watermark_result(binary(), binary(), keyword(), keyword()) ::
+              {:ok, map()} | {:error, term()}
   @callback decimated_sample_history_result(binary(), binary(), keyword()) ::
               {:ok, %{buckets: [map()], diagnostics: map()}} | {:error, term()}
+  @callback decimated_sample_history_result(binary(), binary(), keyword(), keyword()) ::
+              {:ok, %{buckets: [map()], diagnostics: map()}} | {:error, term()}
   @callback reset() :: :ok
+  @callback reset(keyword()) :: :ok
 
   @optional_callbacks decimated_sample_history_result: 3,
+                      decimated_sample_history_result: 4,
+                      persist_samples: 2,
                       sample_history_result: 3,
-                      sample_watermark_result: 3
+                      sample_history_result: 4,
+                      sample_history: 4,
+                      sample_watermark_result: 3,
+                      sample_watermark_result: 4,
+                      reset: 1
 
   @doc """
   Builds a child spec from the current application configuration.
@@ -75,7 +90,7 @@ defmodule Cadence.Telemetry.HistoryStore do
   @spec sample_history(policy(), binary(), binary(), keyword()) :: [Sample.t()]
   def sample_history(%{} = policy, mission_id, point_id, opts)
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
-    backend(policy).sample_history(mission_id, point_id, operation_opts(policy, opts))
+    sample_history_from_backend(policy, backend(policy), mission_id, point_id, opts)
   end
 
   @spec sample_history(binary(), binary(), binary(), keyword()) :: [Sample.t()]
@@ -96,12 +111,20 @@ defmodule Cadence.Telemetry.HistoryStore do
   def sample_history_result(%{} = policy, mission_id, point_id, opts)
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
     backend = backend(policy)
-    opts = operation_opts(policy, opts)
 
-    if function_exported?(backend, :sample_history_result, 3) do
-      backend.sample_history_result(mission_id, point_id, opts)
-    else
-      {:ok, %{samples: backend.sample_history(mission_id, point_id, opts), diagnostics: %{}}}
+    cond do
+      function_exported?(backend, :sample_history_result, 4) ->
+        backend.sample_history_result(mission_id, point_id, opts, policy.backend_opts)
+
+      function_exported?(backend, :sample_history_result, 3) ->
+        backend.sample_history_result(mission_id, point_id, operation_opts(policy, opts))
+
+      true ->
+        {:ok,
+         %{
+           samples: sample_history_from_backend(policy, backend, mission_id, point_id, opts),
+           diagnostics: %{}
+         }}
     end
   end
 
@@ -156,14 +179,26 @@ defmodule Cadence.Telemetry.HistoryStore do
   def decimated_sample_history_result(%{} = policy, mission_id, point_id, opts)
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
     backend = backend(policy)
-    opts = operation_opts(policy, opts)
 
-    if function_exported?(backend, :decimated_sample_history_result, 3) do
-      normalize_decimated_history_result(
-        backend.decimated_sample_history_result(mission_id, point_id, opts)
-      )
-    else
-      {:error, {:unsupported_history_capability, backend, :decimated_sample_history_result}}
+    result =
+      cond do
+        function_exported?(backend, :decimated_sample_history_result, 4) ->
+          backend.decimated_sample_history_result(mission_id, point_id, opts, policy.backend_opts)
+
+        function_exported?(backend, :decimated_sample_history_result, 3) ->
+          backend.decimated_sample_history_result(
+            mission_id,
+            point_id,
+            operation_opts(policy, opts)
+          )
+
+        true ->
+          {:error, {:unsupported_history_capability, backend, :decimated_sample_history_result}}
+      end
+
+    case result do
+      {:error, {:unsupported_history_capability, _, _}} = error -> error
+      result -> normalize_decimated_history_result(result)
     end
   end
 
@@ -189,12 +224,16 @@ defmodule Cadence.Telemetry.HistoryStore do
   def sample_watermark_result(%{} = policy, mission_id, point_id, opts)
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
     backend = backend(policy)
-    opts = operation_opts(policy, opts)
 
-    if function_exported?(backend, :sample_watermark_result, 3) do
-      backend.sample_watermark_result(mission_id, point_id, opts)
-    else
-      {:error, {:unsupported_history_capability, backend, :sample_watermark_result}}
+    cond do
+      function_exported?(backend, :sample_watermark_result, 4) ->
+        backend.sample_watermark_result(mission_id, point_id, opts, policy.backend_opts)
+
+      function_exported?(backend, :sample_watermark_result, 3) ->
+        backend.sample_watermark_result(mission_id, point_id, operation_opts(policy, opts))
+
+      true ->
+        {:error, {:unsupported_history_capability, backend, :sample_watermark_result}}
     end
   end
 
@@ -213,13 +252,13 @@ defmodule Cadence.Telemetry.HistoryStore do
   def reset, do: reset(configured_policy())
 
   @spec reset(policy()) :: :ok
-  def reset(%{} = policy) do
+  def reset(%{backend_opts: backend_opts} = policy) do
     backend = backend(policy)
 
-    if function_exported?(backend, :reset, 0) do
-      backend.reset()
-    else
-      :ok
+    cond do
+      function_exported?(backend, :reset, 1) -> backend.reset(backend_opts)
+      function_exported?(backend, :reset, 0) -> backend.reset()
+      true -> :ok
     end
   end
 
@@ -249,6 +288,14 @@ defmodule Cadence.Telemetry.HistoryStore do
 
   defp operation_opts(%{backend_opts: backend_opts}, opts),
     do: Keyword.merge(backend_opts, opts)
+
+  defp sample_history_from_backend(policy, backend, mission_id, point_id, opts) do
+    if function_exported?(backend, :sample_history, 4) do
+      backend.sample_history(mission_id, point_id, opts, policy.backend_opts)
+    else
+      backend.sample_history(mission_id, point_id, operation_opts(policy, opts))
+    end
+  end
 
   defp backend_context(%{backend_opts: backend_opts, storage_policy: storage_policy}) do
     Keyword.put(backend_opts, :storage_policy, storage_policy)

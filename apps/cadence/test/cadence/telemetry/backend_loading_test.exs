@@ -41,4 +41,35 @@ defmodule Cadence.Telemetry.BackendLoadingTest do
     assert HistoryStore.child_spec() == nil
     assert match?({:file, _path}, :code.is_loaded(backend))
   end
+
+  test "store facades retain compatibility with optionless backends" do
+    current_policy =
+      CurrentValueStore.policy(
+        module: Cadence.TestSupport.LazyCurrentValueStore,
+        client_identity: :ignored_by_legacy_backend
+      )
+
+    history_policy =
+      HistoryStore.policy(
+        module: Cadence.TestSupport.LazyHistoryStore,
+        client_identity: :ignored_by_legacy_backend
+      )
+
+    assert CurrentValueStore.hot_path_safe?(current_policy)
+    assert :ok = CurrentValueStore.record_samples(current_policy, [])
+    assert :ok = CurrentValueStore.replace_value(current_policy, "mission", "point", nil, [])
+    assert :ok = CurrentValueStore.replace_values_for_scope(current_policy, "mission", [], [])
+    assert CurrentValueStore.latest_value(current_policy, "mission", "point", []) == nil
+    assert CurrentValueStore.latest_values_for_mission(current_policy, "mission", []) == []
+    assert :ok = CurrentValueStore.reset(current_policy, "mission")
+    assert :ok = CurrentValueStore.reset(current_policy)
+
+    assert :ok = HistoryStore.persist_samples(history_policy, [])
+    assert HistoryStore.sample_history(history_policy, "mission", "point", []) == []
+
+    assert {:ok, %{samples: [], diagnostics: %{}}} =
+             HistoryStore.sample_history_result(history_policy, "mission", "point", [])
+
+    assert :ok = HistoryStore.reset(history_policy)
+  end
 end

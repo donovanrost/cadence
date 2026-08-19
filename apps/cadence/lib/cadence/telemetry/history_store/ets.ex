@@ -17,19 +17,22 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   @impl true
   def child_spec(opts) do
     %{
-      id: __MODULE__,
+      id: Keyword.get(opts, :child_id, __MODULE__),
       start: {__MODULE__, :start_link, [opts]}
     }
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @impl true
   def init(opts) do
+    table_name = Keyword.get(opts, :table_name, @table_name)
+    config_table_name = Keyword.get(opts, :config_table_name, @config_table_name)
+
     _table =
-      :ets.new(@table_name, [
+      :ets.new(table_name, [
         :named_table,
         :public,
         :ordered_set,
@@ -38,7 +41,7 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
       ])
 
     _config_table =
-      :ets.new(@config_table_name, [
+      :ets.new(config_table_name, [
         :named_table,
         :protected,
         :set,
@@ -47,30 +50,40 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
 
     true =
       :ets.insert(
-        @config_table_name,
+        config_table_name,
         {:max_samples_per_point,
          Keyword.get(opts, :max_samples_per_point, @default_max_samples_per_point)}
       )
 
-    {:ok, @table_name}
+    {:ok, %{config_table_name: config_table_name, table_name: table_name}}
   end
 
   @impl true
-  def persist_samples(samples) when is_list(samples) do
-    table = ensure_table!()
+  def persist_samples(samples) when is_list(samples), do: persist_samples(samples, [])
+
+  @impl true
+  def persist_samples(samples, backend_opts) when is_list(samples) and is_list(backend_opts) do
+    table = ensure_table!(backend_opts, :table_name, @table_name)
+    config_table = ensure_table!(backend_opts, :config_table_name, @config_table_name)
 
     samples
     |> Enum.each(fn %Sample{} = sample ->
       true = :ets.insert(table, {key(sample), sample})
     end)
 
-    prune_points(table, samples)
+    prune_points(table, config_table, samples)
     :ok
   end
 
   @impl true
-  def sample_history(mission_id, point_id, opts) do
-    table = ensure_table!()
+  def sample_history(mission_id, point_id, opts),
+    do: sample_history(mission_id, point_id, opts, [])
+
+  @impl true
+  def sample_history(mission_id, point_id, opts, backend_opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) and
+             is_list(backend_opts) do
+    table = ensure_table!(backend_opts, :table_name, @table_name)
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
     from_receipt_time = Keyword.get(opts, :from_receipt_time)
     to_receipt_time = Keyword.get(opts, :to_receipt_time)
@@ -93,14 +106,19 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   end
 
   @impl true
-  def reset do
-    table = ensure_table!()
+  def reset, do: reset([])
+
+  @impl true
+  def reset(backend_opts) when is_list(backend_opts) do
+    table = ensure_table!(backend_opts, :table_name, @table_name)
     true = :ets.delete_all_objects(table)
     :ok
   end
 
-  defp ensure_table! do
-    case :ets.whereis(@table_name) do
+  defp ensure_table!(backend_opts, option, default) do
+    table_name = Keyword.get(backend_opts, option, default)
+
+    case :ets.whereis(table_name) do
       :undefined -> raise "#{inspect(__MODULE__)} is not started"
       table -> table
     end
@@ -169,8 +187,8 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   defp sort_history(samples, :asc, _axis), do: Enum.sort_by(samples, &sort_key/1, :asc)
   defp sort_history(samples, _order, _axis), do: Enum.sort_by(samples, &sort_key/1, :desc)
 
-  defp prune_points(table, samples) do
-    case max_samples_per_point() do
+  defp prune_points(table, config_table, samples) do
+    case max_samples_per_point(config_table) do
       :infinity ->
         :ok
 
@@ -204,8 +222,8 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
     |> Enum.each(&:ets.delete(table, &1))
   end
 
-  defp max_samples_per_point do
-    case :ets.lookup(@config_table_name, :max_samples_per_point) do
+  defp max_samples_per_point(config_table) do
+    case :ets.lookup(config_table, :max_samples_per_point) do
       [{:max_samples_per_point, value}] -> value
       [] -> @default_max_samples_per_point
     end
