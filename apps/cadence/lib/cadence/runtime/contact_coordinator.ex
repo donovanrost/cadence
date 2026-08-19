@@ -16,7 +16,12 @@ defmodule Cadence.Runtime.ContactCoordinator do
   @type state :: %{
           realized_contact: RealizedContactRuntimeSpec.t(),
           path_ids: [binary()],
-          paths: %{required(binary()) => ContactPathSpec.t()}
+          paths: %{required(binary()) => ContactPathSpec.t()},
+          lifecycle_status: :active | :quiescing | :quiesced,
+          quiesce_waiters: [GenServer.from()],
+          quiescence_worker_pid: pid() | nil,
+          quiescence_worker_ref: reference() | nil,
+          quiescence_settlement: map() | nil
         }
 
   def start_link(opts) when is_list(opts) do
@@ -93,7 +98,12 @@ defmodule Cadence.Runtime.ContactCoordinator do
        %{
          realized_contact: realized_contact,
          path_ids: path_ids,
-         paths: Map.new(realized_contact.paths, &{&1.path_id, &1})
+         paths: Map.new(realized_contact.paths, &{&1.path_id, &1}),
+         lifecycle_status: :active,
+         quiesce_waiters: [],
+         quiescence_worker_pid: nil,
+         quiescence_worker_ref: nil,
+         quiescence_settlement: nil
        }}
     else
       {:error, reason} -> {:stop, reason}
@@ -101,35 +111,35 @@ defmodule Cadence.Runtime.ContactCoordinator do
   end
 
   @impl true
-  def handle_call(:quiesce, _from, state) do
-    reply =
-      Enum.reduce_while(state.path_ids, {:ok, []}, fn path_id, {:ok, acc} ->
-        with {:ok, path_runtime} <-
-               path_runtime(
-                 state.realized_contact.mission_id,
-                 state.realized_contact.realized_contact_id,
-                 path_id
-               ),
-             {:ok, settlement} <- PathCoordinator.quiesce(path_runtime) do
-          {:cont, {:ok, acc ++ [settlement]}}
-        else
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-      end)
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, state.quiescence_settlement}, state}
+  end
 
-    case reply do
-      {:ok, path_runtimes} ->
-        {:reply,
-         {:ok,
-          %{
-            status: :quiesced,
-            realized_contact_id: state.realized_contact.realized_contact_id,
-            path_runtimes: path_runtimes
-          }}, state}
+  def handle_call(:quiesce, from, %{lifecycle_status: :quiescing} = state) do
+    {:noreply, %{state | quiesce_waiters: [from | state.quiesce_waiters]}}
+  end
 
-      {:error, _reason} = error ->
-        {:reply, error, state}
-    end
+  def handle_call(:quiesce, from, state) do
+    realized_contact = state.realized_contact
+    path_ids = state.path_ids
+
+    task =
+      Task.Supervisor.async_nolink(
+        MissionRuntime.realized_contact_quiescence_supervisor_name(
+          realized_contact.mission_id,
+          realized_contact.realized_contact_id
+        ),
+        fn -> quiesce_path_runtimes(realized_contact, path_ids) end
+      )
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiescing,
+         quiesce_waiters: [from],
+         quiescence_worker_pid: task.pid,
+         quiescence_worker_ref: task.ref
+     }}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -138,6 +148,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
       snapshot = %{
         realized_contact_id: state.realized_contact.realized_contact_id,
         mission_id: state.realized_contact.mission_id,
+        lifecycle_status: state.lifecycle_status,
         source_endpoint_refs: state.realized_contact.source_endpoint_refs,
         contact_intents: Enum.map(state.realized_contact.contact_intents, &Atom.to_string/1),
         clock_mode: state.realized_contact.clock_mode,
@@ -169,6 +180,15 @@ defmodule Cadence.Runtime.ContactCoordinator do
   end
 
   def handle_call(
+        {:handle_transport_event, _path_id, _transport_binding_id, _event, _opts},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :contact_runtime_quiesced}, state}
+  end
+
+  def handle_call(
         {:handle_transport_event, path_id, transport_binding_id, event, opts},
         _from,
         state
@@ -196,6 +216,15 @@ defmodule Cadence.Runtime.ContactCoordinator do
   end
 
   def handle_call(
+        {:handle_control_input, _path_id, _transport_binding_id, _control_input, _opts},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :contact_runtime_quiesced}, state}
+  end
+
+  def handle_call(
         {:handle_control_input, path_id, transport_binding_id, control_input, opts},
         _from,
         state
@@ -218,6 +247,15 @@ defmodule Cadence.Runtime.ContactCoordinator do
     {:reply, reply, state}
   end
 
+  def handle_call(
+        {:advance_time, %DateTime{}},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :contact_runtime_quiesced}, state}
+  end
+
   def handle_call({:advance_time, %DateTime{} = target_time}, _from, state) do
     reply =
       Enum.reduce_while(state.path_ids, :ok, fn path_id, :ok ->
@@ -235,6 +273,89 @@ defmodule Cadence.Runtime.ContactCoordinator do
       end)
 
     {:reply, reply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {worker_ref, result},
+        %{quiescence_worker_ref: worker_ref} = state
+      ) do
+    Process.demonitor(worker_ref, [:flush])
+
+    case result do
+      {:ok, path_runtimes} ->
+        settlement = %{
+          status: :quiesced,
+          realized_contact_id: state.realized_contact.realized_contact_id,
+          path_runtimes: path_runtimes
+        }
+
+        reply_quiesce_waiters(state.quiesce_waiters, {:ok, settlement})
+
+        {:noreply,
+         %{
+           state
+           | lifecycle_status: :quiesced,
+             quiesce_waiters: [],
+             quiescence_worker_pid: nil,
+             quiescence_worker_ref: nil,
+             quiescence_settlement: settlement
+         }}
+
+      {:error, _reason} = error ->
+        reply_quiesce_waiters(state.quiesce_waiters, error)
+
+        {:noreply,
+         %{
+           state
+           | lifecycle_status: :active,
+             quiesce_waiters: [],
+             quiescence_worker_pid: nil,
+             quiescence_worker_ref: nil
+         }}
+    end
+  end
+
+  def handle_info(
+        {:DOWN, worker_ref, :process, worker_pid, reason},
+        %{quiescence_worker_pid: worker_pid, quiescence_worker_ref: worker_ref} = state
+      ) do
+    error = {:error, {:contact_quiescence_worker_exited, reason}}
+    reply_quiesce_waiters(state.quiesce_waiters, error)
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :active,
+         quiesce_waiters: [],
+         quiescence_worker_pid: nil,
+         quiescence_worker_ref: nil
+     }}
+  end
+
+  defp quiesce_path_runtimes(realized_contact, path_ids) do
+    path_ids
+    |> Enum.reduce_while({:ok, []}, fn path_id, {:ok, acc} ->
+      with {:ok, path_runtime} <-
+             path_runtime(
+               realized_contact.mission_id,
+               realized_contact.realized_contact_id,
+               path_id
+             ),
+           {:ok, settlement} <- PathCoordinator.quiesce(path_runtime) do
+        {:cont, {:ok, [settlement | acc]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp reply_quiesce_waiters(waiters, reply) do
+    Enum.each(waiters, &GenServer.reply(&1, reply))
   end
 
   defp start_path_runtimes(%RealizedContactRuntimeSpec{} = realized_contact) do

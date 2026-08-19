@@ -23,6 +23,14 @@ defmodule Cadence.Jobs.Dispatcher do
     end
   end
 
+  @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, :noproc}
+  def quiesce(server \\ @default_name) do
+    case GenServer.whereis(server) do
+      nil -> {:error, :noproc}
+      pid when is_pid(pid) -> GenServer.call(pid, :quiesce, :infinity)
+    end
+  end
+
   @impl true
   def init(opts) do
     state = %{
@@ -30,7 +38,9 @@ defmodule Cadence.Jobs.Dispatcher do
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       max_concurrency: Keyword.get(opts, :max_concurrency, @default_max_concurrency),
       safety_timer: nil,
-      worker_refs: %{}
+      worker_refs: %{},
+      lifecycle_status: :active,
+      quiesce_waiters: []
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -43,7 +53,26 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   @impl true
-  def handle_cast(:dispatch_available, state) do
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, from, %{lifecycle_status: :quiescing} = state) do
+    {:noreply, %{state | quiesce_waiters: [from | state.quiesce_waiters]}}
+  end
+
+  def handle_call(:quiesce, from, state) do
+    state =
+      state
+      |> cancel_safety_timer()
+      |> Map.put(:lifecycle_status, :quiescing)
+      |> Map.put(:quiesce_waiters, [from])
+
+    settle_if_quiescent(state)
+  end
+
+  @impl true
+  def handle_cast(:dispatch_available, %{lifecycle_status: :active} = state) do
     emit(:notification, state, %{count: 1}, %{})
 
     state =
@@ -54,8 +83,10 @@ defmodule Cadence.Jobs.Dispatcher do
     {:noreply, state}
   end
 
+  def handle_cast(:dispatch_available, state), do: {:noreply, state}
+
   @impl true
-  def handle_info({:safety_dispatch, token}, state) do
+  def handle_info({:safety_dispatch, token}, %{lifecycle_status: :active} = state) do
     case state.safety_timer do
       %{token: ^token} ->
         state =
@@ -71,6 +102,8 @@ defmodule Cadence.Jobs.Dispatcher do
     end
   end
 
+  def handle_info({:safety_dispatch, _token}, state), do: {:noreply, state}
+
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
     state =
       state
@@ -78,9 +111,10 @@ defmodule Cadence.Jobs.Dispatcher do
 
     emit(:worker_finished, state, %{count: 1}, %{outcome: worker_outcome(reason)})
 
-    state = dispatch_available_jobs(state, :worker_available)
-
-    {:noreply, state}
+    case state.lifecycle_status do
+      :active -> {:noreply, dispatch_available_jobs(state, :worker_available)}
+      _quiescing_or_quiesced -> settle_if_quiescent(state)
+    end
   end
 
   defp dispatch_available_jobs(state, reason) do
@@ -177,6 +211,29 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   defp clear_safety_timer(state), do: %{state | safety_timer: nil}
+
+  defp settle_if_quiescent(%{lifecycle_status: :quiescing, worker_refs: worker_refs} = state)
+       when map_size(worker_refs) == 0 do
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiesced,
+         quiesce_waiters: []
+     }}
+  end
+
+  defp settle_if_quiescent(state), do: {:noreply, state}
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      active_worker_count: map_size(state.worker_refs),
+      safety_timer_active?: not is_nil(state.safety_timer)
+    }
+  end
 
   defp worker_outcome(:normal), do: :ok
   defp worker_outcome(:shutdown), do: :ok

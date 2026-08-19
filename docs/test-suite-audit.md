@@ -115,7 +115,8 @@ intended outcome but the responsible process tree had not yet become idle:
   quiescence tranche below;
 - simulator traffic can already be inside the TCP ingress executor or async
   persistence projector when the producer is stopped and the global mission
-  runtime is torn down.
+  runtime is torn down; this path is addressed by the provider-ingress
+  quiescence tranche below.
 
 SQL Sandbox ownership only grants these processes access to the test
 transaction. It does not establish that their asynchronous work has completed.
@@ -319,6 +320,61 @@ not merely test-runner noise.
   295 CCSDS, 133 simulator, and 1,727 web tests. The core and web runs each
   emitted one PostgreSQL client-exit log outside the clean focused slice. Browser
   tests remained excluded by the agreed audit boundary.
+
+### Provider-ingress quiescence
+
+- Extended the provider-adapter ABI with an explicit quiescence boundary. The
+  TCP adapter closes its listener and connected socket, synchronously stops its
+  receiver, rejects later uplink delivery, and ignores stale accept results only
+  after the external producer boundary is closed.
+- Realized-contact quiescence now runs in a task owned by the realized-contact
+  supervisor. This keeps the contact coordinator mailbox responsive so accepted
+  transport events cannot deadlock by calling back through the owner while its
+  path is draining.
+- The path owner quiesces in producer-first order: transport runtimes, provider
+  adapters, journal processing consumers, raw-archive consumers, ordered ingress
+  executors, and persistence projectors. Each asynchronous stage has an explicit
+  lifecycle and only reports settlement after its accepted queue and in-flight
+  work are complete.
+- Added a controllable persistence adapter proving projector quiescence waits for
+  an operation already executing inside the persistence boundary. Journal and
+  archive consumer tests now use their production settlement contracts instead
+  of repository polling for the covered shutdown cases.
+- The TCP integration contract observes the journal append event, immediately
+  stops the realized contact, and then proves the accepted frames and telemetry
+  are already durable and the runtime is gone. It no longer waits for those final
+  database outcomes before requesting shutdown.
+- The focused executor, projector, consumer, TCP, contact, and transport slice
+  passed 21 consecutive runs (609 tests) without a PostgreSQL client-exit log.
+- The simulator bootstrap, coordinator, runtime, and COP-1 integration slice also
+  passed 21 consecutive runs (336 tests) without a PostgreSQL client-exit log.
+- The affected gate passed with 1,803 core, 133 simulator, and 1,727 web tests.
+  None of those application suites emitted a PostgreSQL client-exit log.
+- The first authoritative root gate after this tranche passed with 1,803 core,
+  26 catalog, 295 CCSDS, 133 simulator, and 1,727 web tests. It emitted one
+  core and one web PostgreSQL client-exit log. Exact-seed tracing localized the
+  core exit to the durable-job tests; the serialized web trace passed all 1,727
+  tests without reproducing its concurrency-sensitive exit.
+
+### Durable-job dispatcher settlement
+
+- Added a dispatcher quiescence boundary that closes notification and safety
+  timer ingress, lets already-started workers exit, and reports settlement only
+  after the monitored worker set is empty.
+- The dispatcher tests now quiesce and explicitly stop their owned supervisor
+  before the shared sandbox owner is released. Observing a terminal job row is
+  no longer treated as proof that the worker and dispatcher process tree has
+  stopped using the database.
+- The eight durable-job tests passed 101 seed permutations (808 tests) without
+  a PostgreSQL client-exit log, including the permutation that reproduced two
+  exits before the explicit supervisor stop was added.
+- The final affected gate passed with 1,803 core, 133 simulator, and 1,727 web
+  tests. Core and simulator were clean; web emitted one PostgreSQL client-exit
+  log outside the focused provider-ingress and durable-job slices.
+- The final authoritative root gate passed with 1,803 core, 26 catalog, 295
+  CCSDS, 133 simulator, and 1,727 web tests. Only the web run emitted a
+  PostgreSQL client-exit log. Browser tests remained excluded by the agreed
+  audit boundary, and the remaining web owner race is not claimed as resolved.
 
 ### Batch persistence ordering
 

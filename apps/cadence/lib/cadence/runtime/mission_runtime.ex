@@ -52,6 +52,14 @@ defmodule Cadence.Runtime.MissionRuntime do
      {Cadence.Runtime.Registry, {:realized_contact_coordinator, mission_id, realized_contact_id}}}
   end
 
+  @spec realized_contact_quiescence_supervisor_name(binary(), binary()) ::
+          {:via, Registry, {module(), term()}}
+  def realized_contact_quiescence_supervisor_name(mission_id, realized_contact_id) do
+    {:via, Registry,
+     {Cadence.Runtime.Registry,
+      {:realized_contact_quiescence_supervisor, mission_id, realized_contact_id}}}
+  end
+
   @spec downlink_combiner_name(binary(), binary()) :: {:via, Registry, {module(), term()}}
   def downlink_combiner_name(mission_id, realized_contact_id) do
     {:via, Registry,

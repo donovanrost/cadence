@@ -27,9 +27,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           path_id: binary(),
           provider_binding_id: binary(),
           organization_id: binary() | nil,
+          persistence_module: module(),
           queue: :queue.queue(ProcessedIngressBatch.t()),
           queue_depth: non_neg_integer(),
           processing?: boolean(),
+          lifecycle_status: :active | :quiescing | :quiesced,
+          quiesce_waiters: [GenServer.from()],
           retry_delay_ms: pos_integer(),
           enqueued_count: non_neg_integer(),
           persisted_count: non_neg_integer(),
@@ -70,6 +73,13 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   def snapshot(projector) do
     with {:ok, pid} <- lookup(projector) do
       GenServer.call(pid, :snapshot)
+    end
+  end
+
+  @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def quiesce(projector) do
+    with {:ok, pid} <- lookup(projector) do
+      GenServer.call(pid, :quiesce, :infinity)
     end
   end
 
@@ -117,9 +127,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        path_id: Keyword.fetch!(opts, :path_id),
        provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
        organization_id: Keyword.get(opts, :organization_id),
+       persistence_module: Keyword.get(opts, :persistence_module, Persistence),
        queue: :queue.new(),
        queue_depth: 0,
        processing?: false,
+       lifecycle_status: :active,
+       quiesce_waiters: [],
        retry_delay_ms: Keyword.get(opts, :retry_delay_ms, @default_retry_delay_ms),
        enqueued_count: 0,
        persisted_count: 0,
@@ -131,11 +144,34 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, from, state) do
+    state = %{
+      state
+      | lifecycle_status: :quiescing,
+        quiesce_waiters: [from | state.quiesce_waiters]
+    }
+
+    state =
+      if state.queue_depth > 0 and not state.processing? do
+        send(self(), :process_queue)
+        %{state | processing?: true}
+      else
+        state
+      end
+
+    settle_if_quiescent(state)
+  end
+
   def handle_call(:snapshot, _from, state) do
     {:reply,
      {:ok,
       %{
         provider_binding_id: state.provider_binding_id,
+        lifecycle_status: state.lifecycle_status,
         queue_depth: state.queue_depth,
         processing?: state.processing?,
         enqueued_count: state.enqueued_count,
@@ -165,6 +201,11 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   end
 
   @impl true
+  def handle_cast({:enqueue, %ProcessedIngressBatch{}}, %{lifecycle_status: status} = state)
+      when status in [:quiescing, :quiesced] do
+    {:noreply, state}
+  end
+
   def handle_cast({:enqueue, %ProcessedIngressBatch{} = batch}, state) do
     case ProcessedIngressBatch.size(batch) do
       0 ->
@@ -188,13 +229,19 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   end
 
   @impl true
+  def handle_info(:process_queue, %{lifecycle_status: :quiesced} = state),
+    do: {:noreply, state}
+
   def handle_info(:process_queue, state) do
     case dequeue_persist_batch(state) do
       {:ok, %ProcessedIngressBatch{} = batch, rest, batch_size} ->
         handle_dequeued_persist_batch(state, batch, rest, batch_size)
 
       :empty ->
-        {:noreply, notify_capacity_waiters(%{state | queue_depth: 0, processing?: false})}
+        state
+        |> Map.merge(%{queue_depth: 0, processing?: false})
+        |> notify_capacity_waiters()
+        |> settle_if_quiescent()
     end
   end
 
@@ -206,7 +253,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
          %ProcessedIngressBatch{
            processing_results: processing_results
          } = batch,
-         organization_id
+         organization_id,
+         persistence_module
        )
        when is_list(processing_results) and processing_results != [] do
     links = Observability.links(batch.trace_contexts)
@@ -220,7 +268,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       },
       fn ->
         started_at = System.monotonic_time()
-        result = do_persist_batch(batch, organization_id)
+        result = do_persist_batch(batch, organization_id, persistence_module)
         emit_persist_result(result, batch, elapsed_us(started_at))
         _ = mark_persistence_result(result, batch)
         result
@@ -228,14 +276,16 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     )
   end
 
-  defp persist_batch(%ProcessedIngressBatch{}, _organization_id), do: {:error, :empty_batch}
+  defp persist_batch(%ProcessedIngressBatch{}, _organization_id, _persistence_module),
+    do: {:error, :empty_batch}
 
   defp do_persist_batch(
          %ProcessedIngressBatch{
            mission_id: mission_id,
            processing_results: processing_results
          },
-         organization_id
+         organization_id,
+         persistence_module
        ) do
     persistence_started_at = System.monotonic_time()
 
@@ -243,7 +293,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       run_persistence(fn ->
         raw_evidence = first_raw_evidence(processing_results)
 
-        persist_processing_results(raw_evidence, processing_results, organization_id)
+        persist_processing_results(
+          raw_evidence,
+          processing_results,
+          organization_id,
+          persistence_module
+        )
       end)
 
     case result do
@@ -270,7 +325,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp first_raw_evidence([]), do: raise(ArgumentError, "processed ingress batch is empty")
 
   defp handle_dequeued_persist_batch(state, %ProcessedIngressBatch{} = batch, rest, batch_size) do
-    case persist_batch(batch, state.organization_id) do
+    case persist_batch(batch, state.organization_id, state.persistence_module) do
       :ok ->
         notify_batch_completed(batch)
 
@@ -307,7 +362,9 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       send(self(), :process_queue)
       {:noreply, %{next_state | processing?: true}}
     else
-      {:noreply, %{next_state | processing?: false}}
+      next_state
+      |> Map.put(:processing?, false)
+      |> settle_if_quiescent()
     end
   end
 
@@ -383,21 +440,59 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp persist_processing_results(
          %RawEvidence{} = raw_evidence,
          processing_results,
-         organization_id
+         organization_id,
+         persistence_module
        ) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
-      persist_processing_results_with_stage(processing_results, organization_id)
+      persist_processing_results_with_stage(
+        processing_results,
+        organization_id,
+        persistence_module
+      )
     end)
   end
 
-  defp persist_processing_results_with_stage(processing_results, organization_id) do
+  defp persist_processing_results_with_stage(
+         processing_results,
+         organization_id,
+         persistence_module
+       ) do
     TelemetryProfiler.with_stage(:persistence, fn ->
-      Persistence.persist_semantic_processing_results(
+      persistence_module.persist_semantic_processing_results(
         processing_results,
         record_current_values?: not CurrentValueStore.hot_path_safe?(),
         organization_id: organization_id
       )
     end)
+  end
+
+  defp settle_if_quiescent(
+         %{
+           lifecycle_status: :quiescing,
+           queue_depth: 0,
+           processing?: false
+         } = state
+       ) do
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiesced,
+         quiesce_waiters: []
+     }}
+  end
+
+  defp settle_if_quiescent(state), do: {:noreply, state}
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      provider_binding_id: state.provider_binding_id,
+      persisted_count: state.persisted_count,
+      queue_depth: state.queue_depth
+    }
   end
 
   defp elapsed_us(started_at),

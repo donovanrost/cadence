@@ -28,6 +28,12 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
            realized_contact.mission_id,
            realized_contact.realized_contact_id
          )},
+      {Task.Supervisor,
+       name:
+         MissionRuntime.realized_contact_quiescence_supervisor_name(
+           realized_contact.mission_id,
+           realized_contact.realized_contact_id
+         )},
       {Cadence.Runtime.DownlinkCombiner, realized_contact: realized_contact},
       {Cadence.Runtime.ContactCoordinator, realized_contact: realized_contact}
     ]

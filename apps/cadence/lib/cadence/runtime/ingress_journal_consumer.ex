@@ -43,6 +43,13 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
     end
   end
 
+  @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def quiesce(consumer) do
+    with {:ok, pid} <- lookup(consumer) do
+      GenServer.call(pid, :quiesce, :infinity)
+    end
+  end
+
   @spec lookup(GenServer.server()) :: {:ok, pid()} | {:error, term()}
   def lookup(server) when is_pid(server) do
     if Process.alive?(server),
@@ -78,6 +85,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         ),
       max_batch_bytes:
         positive_option(opts, config, :processing_max_batch_bytes, @default_max_batch_bytes),
+      lifecycle_status: :active,
+      quiesce_waiters: [],
       in_flight: nil,
       delivered_batches: 0,
       delivered_entries: 0,
@@ -97,6 +106,21 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, from, state) do
+    send(self(), :consume)
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiescing,
+         quiesce_waiters: [from | state.quiesce_waiters]
+     }}
+  end
+
   def handle_call(:snapshot, _from, state) do
     in_flight =
       case state.in_flight do
@@ -118,6 +142,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
      {:ok,
       %{
         provider_binding_id: state.provider_binding_id,
+        lifecycle_status: state.lifecycle_status,
         max_batch_entries: state.max_batch_entries,
         max_batch_bytes: state.max_batch_bytes,
         in_flight: in_flight,
@@ -136,6 +161,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   @impl true
+  def handle_info(:consume, %{lifecycle_status: :quiesced} = state),
+    do: {:noreply, state}
+
   def handle_info(:consume, %{in_flight: nil} = state) do
     case FileSystem.next_entries(
            state.journal_name,
@@ -147,8 +175,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         consume_entries(state, compatible_prefix(entries))
 
       :empty ->
-        schedule_consume(state.poll_interval_ms)
-        {:noreply, state}
+        settle_or_schedule(state)
 
       {:error, reason} ->
         schedule_consume(state.poll_interval_ms)
@@ -270,6 +297,33 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   defp record_failure(state, reason) do
     %{state | failed_count: state.failed_count + 1, last_error: inspect(reason)}
+  end
+
+  defp settle_or_schedule(%{lifecycle_status: :quiescing} = state) do
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiesced,
+         quiesce_waiters: []
+     }}
+  end
+
+  defp settle_or_schedule(state) do
+    schedule_consume(state.poll_interval_ms)
+    {:noreply, state}
+  end
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      provider_binding_id: state.provider_binding_id,
+      acknowledged_batches: state.acknowledged_batches,
+      acknowledged_entries: state.acknowledged_entries,
+      acknowledged_bytes: state.acknowledged_bytes
+    }
   end
 
   defp schedule_consume(interval_ms), do: Process.send_after(self(), :consume, interval_ms)

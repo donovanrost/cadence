@@ -260,36 +260,41 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     assert sample_row.raw_value == %{"value" => 21}
 
+    append_handler_id = "tcp-accepted-ingress-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        append_handler_id,
+        [:cadence, :ingress_journal, :append],
+        fn event, measurements, metadata, test_pid ->
+          send(test_pid, {:ingress_journal_append, event, measurements, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(append_handler_id) end)
+
     [frame_three, frame_four] = build_tm_space_packet_frames(42, 5, <<0, 22>>, frame_size)
     assert :ok = :gen_tcp.send(socket, frame_three <> frame_four)
 
-    assert_eventually(fn ->
-      count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 2
-    end)
+    assert_receive {:ingress_journal_append, [:cadence, :ingress_journal, :append],
+                    %{bytes: accepted_bytes}, %{provider_binding_id: ^provider_binding_id}},
+                   1_000
 
-    assert {:ok, final_snapshot} =
-             Cadence.path_runtime_snapshot(
-               organization_id,
+    assert accepted_bytes == byte_size(frame_three <> frame_four)
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(
                mission_id,
-               realized_contact.realized_contact_id,
-               downlink_path_id
+               realized_contact.realized_contact_id
              )
 
-    [final_provider_runtime_snapshot] = final_snapshot.provider_runtimes
-    assert final_provider_runtime_snapshot.downlink_message_count == 4
-    assert final_provider_runtime_snapshot.tcp_read_count >= 2
+    refute Cadence.Runtime.realized_contact_running?(
+             mission_id,
+             realized_contact.realized_contact_id
+           )
 
-    assert final_provider_runtime_snapshot.ingress_executor.processed_count ==
-             final_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
-
-    assert final_provider_runtime_snapshot.ingress_executor.queue_bytes == 0
-    assert final_provider_runtime_snapshot.ingress_executor.oldest_queued_age_ms == 0.0
-
-    assert final_provider_runtime_snapshot.ingress_persistence_projector.persisted_count ==
-             final_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
-
-    assert final_provider_runtime_snapshot.ingress_journal.cursors.processing == 4 * frame_size
-    assert final_provider_runtime_snapshot.ingress_journal.cursors.archive == 4 * frame_size
+    assert count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 2
 
     assert TransferFrameRecordRow
            |> where([row], row.mission_id == ^mission_id)

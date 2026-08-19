@@ -73,6 +73,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   @impl true
+  def quiesce(provider_runtime) do
+    GenServer.call(provider_runtime, :quiesce, :infinity)
+  catch
+    :exit, {:noproc, _details} -> {:error, :tcp_provider_not_running}
+    :exit, {:normal, _details} -> {:error, :tcp_provider_not_running}
+  end
+
+  @impl true
   def deliver_uplink(provider_runtime, %ProviderRequest{} = provider_request) do
     GenServer.call(provider_runtime, {:deliver_uplink, provider_request})
   end
@@ -123,7 +131,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       last_ingress_at: nil,
       last_ingress_error: nil,
       accept_ref: nil,
-      reads_paused?: false
+      reads_paused?: false,
+      lifecycle_status: :active
     }
 
     case ensure_ingress_dependencies(base_state) do
@@ -165,6 +174,20 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, _from, state) do
+    case quiesce_socket_io(state) do
+      {:ok, quiesced_state} ->
+        {:reply, {:ok, quiescence_settlement(quiesced_state)}, quiesced_state}
+
+      {:error, reason, next_state} ->
+        {:reply, {:error, reason}, next_state}
+    end
+  end
+
   def handle_call(:snapshot, _from, state) do
     ingress_executor =
       case ProviderIngressExecutor.snapshot(state.ingress_executor_name) do
@@ -194,6 +217,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       %{
         provider_binding_id: state.provider_binding_id,
         adapter_key: :tcp_socket,
+        lifecycle_status: state.lifecycle_status,
         direction: state.direction,
         source_endpoint_ref: state.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
@@ -227,6 +251,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         ingress_executor: ingress_executor,
         ingress_persistence_projector: ingress_persistence_projector
       }}, state}
+  end
+
+  def handle_call(
+        {:deliver_uplink, %ProviderRequest{}},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ) do
+    {:reply, {:error, :tcp_provider_quiesced}, state}
   end
 
   def handle_call({:deliver_uplink, %ProviderRequest{} = provider_request}, _from, state) do
@@ -323,6 +355,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, %{state | accept_ref: nil}}
   end
 
+  def handle_info({:accept_result, _stale_ref, {:ok, socket, _handoff}}, state) do
+    close_socket(socket)
+    {:noreply, state}
+  end
+
+  def handle_info({:accept_result, _stale_ref, {:error, _reason}}, state),
+    do: {:noreply, state}
+
   def handle_info({:tcp_receiver_batch, receiver_pid, batch_status}, state) do
     next_state =
       if receiver_matches?(state, receiver_pid) do
@@ -343,6 +383,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       end
 
     {:noreply, next_state}
+  end
+
+  def handle_info(
+        {:DOWN, monitor_ref, :process, executor_pid, _reason},
+        %{
+          lifecycle_status: :quiesced,
+          ingress_executor_monitor_ref: monitor_ref,
+          ingress_executor_pid: executor_pid
+        } = state
+      ) do
+    {:noreply, %{state | ingress_executor_pid: nil, ingress_executor_monitor_ref: nil}}
   end
 
   def handle_info(
@@ -464,7 +515,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     end
   end
 
-  defp schedule_accept(%{listener: listener} = state) when not is_nil(listener) do
+  defp schedule_accept(%{lifecycle_status: :active, listener: listener} = state)
+       when not is_nil(listener) do
     accept_ref = make_ref()
     parent = self()
 
@@ -924,8 +976,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp maybe_put_receiver_down_error(state, reason),
     do: %{state | last_ingress_error: inspect(reason)}
 
-  defp maybe_schedule_accept_after_disconnect(%{mode: :listen} = state),
-    do: schedule_accept(state)
+  defp maybe_schedule_accept_after_disconnect(
+         %{lifecycle_status: :active, mode: :listen} = state
+       ),
+       do: schedule_accept(state)
 
   defp maybe_schedule_accept_after_disconnect(state), do: state
 
@@ -950,6 +1004,64 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp maybe_demonitor_socket_receiver(state), do: state
+
+  defp quiesce_socket_io(state) do
+    close_socket(state.listener)
+    close_socket(state.socket)
+
+    case stop_socket_receiver_and_wait(state) do
+      {:ok, stopped_state} ->
+        {:ok,
+         %{
+           stopped_state
+           | lifecycle_status: :quiesced,
+             listener: nil,
+             socket: nil,
+             accept_ref: nil,
+             reads_paused?: false
+         }}
+
+      {:error, reason, stopped_state} ->
+        {:error, reason, %{stopped_state | listener: nil, socket: nil, accept_ref: nil}}
+    end
+  end
+
+  defp stop_socket_receiver_and_wait(%{socket_receiver_pid: pid} = state) when is_pid(pid) do
+    monitor_ref = state.socket_receiver_monitor_ref || Process.monitor(pid)
+    Process.exit(pid, :shutdown)
+
+    receive do
+      {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
+        {:ok,
+         %{
+           state
+           | socket_receiver_pid: nil,
+             socket_receiver_monitor_ref: nil
+         }}
+    after
+      5_000 ->
+        {:error, :tcp_provider_receiver_stop_timeout, state}
+    end
+  end
+
+  defp stop_socket_receiver_and_wait(state), do: {:ok, state}
+
+  defp close_socket(socket) when is_port(socket) do
+    _ = :gen_tcp.close(socket)
+    :ok
+  end
+
+  defp close_socket(_socket), do: :ok
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      provider_binding_id: state.provider_binding_id,
+      socket_closed?: is_nil(state.socket),
+      listener_closed?: is_nil(state.listener),
+      receiver_stopped?: is_nil(state.socket_receiver_pid)
+    }
+  end
 
   defp ingress_journal_snapshot(%{ingress_journal_name: nil}), do: nil
 

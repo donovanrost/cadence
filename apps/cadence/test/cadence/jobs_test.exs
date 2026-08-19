@@ -181,6 +181,11 @@ defmodule Cadence.JobsTest do
     failed_job = wait_for_job_status(job.job_id, :failed)
     assert failed_job.attempt_count == 1
     assert failed_job.completed_at
+
+    assert {:ok, %{status: :quiesced, active_worker_count: 0, safety_timer_active?: false}} =
+             Cadence.Jobs.Supervisor.quiesce()
+
+    stop_supervised!(Cadence.Jobs.Supervisor)
   end
 
   test "safety dispatch recovers queued jobs when notification is missed" do
@@ -206,6 +211,11 @@ defmodule Cadence.JobsTest do
     failed_job = wait_for_job_status(job.job_id, :failed)
     assert failed_job.attempt_count == 1
     assert failed_job.completed_at
+
+    assert {:ok, %{status: :quiesced, active_worker_count: 0, safety_timer_active?: false}} =
+             Cadence.Jobs.Supervisor.quiesce()
+
+    stop_supervised!(Cadence.Jobs.Supervisor)
   end
 
   defp insert_background_job!(job_type, mission_id, run_id) do

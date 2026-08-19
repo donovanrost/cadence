@@ -46,6 +46,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           telemetry_queue_bytes: non_neg_integer(),
           telemetry_enqueued_at_queue: :queue.queue(integer()),
           processing?: boolean(),
+          lifecycle_status: :active | :quiescing | :quiesced | :quiescence_failed,
+          quiesce_waiters: [GenServer.from()],
+          quiescence_error: term() | nil,
           enqueued_count: non_neg_integer(),
           processed_count: non_neg_integer(),
           failed_count: non_neg_integer(),
@@ -117,6 +120,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     call_if_running(executor, :snapshot)
   end
 
+  @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def quiesce(executor) do
+    call_if_running(executor, :quiesce, :infinity)
+  end
+
   @spec notify_when_below(GenServer.server(), non_neg_integer(), pid(), reference()) ::
           :ok | {:error, term()}
   def notify_when_below(executor, threshold, subscriber_pid, ref)
@@ -169,6 +177,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
        telemetry_queue_bytes: 0,
        telemetry_enqueued_at_queue: :queue.new(),
        processing?: false,
+       lifecycle_status: :active,
+       quiesce_waiters: [],
+       quiescence_error: nil,
        enqueued_count: 0,
        processed_count: 0,
        failed_count: 0,
@@ -181,11 +192,39 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiescence_failed} = state) do
+    {:reply, {:error, state.quiescence_error}, state}
+  end
+
+  def handle_call(:quiesce, from, state) do
+    state = %{
+      state
+      | lifecycle_status: :quiescing,
+        quiesce_waiters: [from | state.quiesce_waiters]
+    }
+
+    state =
+      if work_pending?(state) and not state.processing? do
+        send(self(), :process_queue)
+        %{state | processing?: true}
+      else
+        state
+      end
+
+    settle_if_quiescent(state)
+  end
+
   def handle_call(:snapshot, _from, state) do
     {:reply,
      {:ok,
       %{
         provider_binding_id: state.provider_binding_id,
+        lifecycle_status: state.lifecycle_status,
+        quiescence_error: state.quiescence_error,
         queue_depth: state.queue_depth,
         queue_bytes: state.telemetry_queue_bytes,
         oldest_queued_age_ms: oldest_queued_age_ms(state.telemetry_enqueued_at_queue),
@@ -224,6 +263,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   @impl true
+  def handle_cast({:enqueue, _item}, %{lifecycle_status: status} = state)
+      when status in [:quiescing, :quiesced, :quiescence_failed] do
+    {:noreply, state}
+  end
+
   def handle_cast({:enqueue, item}, state) do
     next_state = enqueue_items(state, [item])
 
@@ -233,6 +277,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       send(self(), :process_queue)
       {:noreply, %{next_state | processing?: true}}
     end
+  end
+
+  def handle_cast({:enqueue_many, _items}, %{lifecycle_status: status} = state)
+      when status in [:quiescing, :quiesced, :quiescence_failed] do
+    {:noreply, state}
   end
 
   def handle_cast({:enqueue_many, items}, state) do
@@ -253,6 +302,10 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   @impl true
+  def handle_info(:process_queue, %{lifecycle_status: status} = state)
+      when status in [:quiesced, :quiescence_failed],
+      do: {:noreply, state}
+
   def handle_info(:process_queue, state) do
     case flush_pending_persistence_batches(state) do
       {:ok, ready_state} ->
@@ -278,15 +331,22 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       ) do
     Instrumentation.log_projector_exit(state.provider_binding_id, reason)
 
-    {:noreply,
-     %{
-       state
-       | persistence_projector_pid: nil,
-         persistence_projector_monitor_ref: nil,
-         projector_capacity_wait_ref: nil,
-         projector_in_flight_count: 0,
-         projector_backpressured?: false
-     }}
+    next_state = %{
+      state
+      | persistence_projector_pid: nil,
+        persistence_projector_monitor_ref: nil,
+        projector_capacity_wait_ref: nil,
+        projector_in_flight_count: 0,
+        projector_backpressured?: false
+    }
+
+    case state.lifecycle_status do
+      :quiescing ->
+        fail_quiescence(next_state, {:persistence_projector_exited, reason})
+
+      _other ->
+        {:noreply, next_state}
+    end
   end
 
   def handle_info(
@@ -301,7 +361,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       |> Map.put(:projector_in_flight_count, in_flight_count)
       |> maybe_release_local_projector_backpressure()
 
-    {:noreply, next_state}
+    settle_if_quiescent(next_state)
   end
 
   def handle_info(
@@ -329,9 +389,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     end
   end
 
-  defp call_if_running(server, request) do
+  defp call_if_running(server, request, timeout \\ 5_000) do
     with {:ok, pid} <- lookup(server) do
-      GenServer.call(pid, request)
+      GenServer.call(pid, request, timeout)
     end
   end
 
@@ -632,8 +692,60 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       send(self(), :process_queue)
       {:noreply, %{persisted_state | processing?: true}}
     else
-      {:noreply, %{persisted_state | processing?: false}}
+      persisted_state
+      |> Map.put(:processing?, false)
+      |> settle_if_quiescent()
     end
+  end
+
+  defp settle_if_quiescent(
+         %{
+           lifecycle_status: :quiescing,
+           queue_depth: 0,
+           processing?: false,
+           pending_persistence_batches: [],
+           projector_in_flight_count: 0
+         } = state
+       ) do
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiesced,
+         quiesce_waiters: [],
+         quiescence_error: nil
+     }}
+  end
+
+  defp settle_if_quiescent(state), do: {:noreply, state}
+
+  defp fail_quiescence(state, reason) do
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:error, reason}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiescence_failed,
+         quiesce_waiters: [],
+         quiescence_error: reason
+     }}
+  end
+
+  defp work_pending?(state) do
+    state.queue_depth > 0 or state.pending_persistence_batches != []
+  end
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      provider_binding_id: state.provider_binding_id,
+      processed_count: state.processed_count,
+      failed_count: state.failed_count,
+      queue_depth: state.queue_depth,
+      projector_in_flight_count: state.projector_in_flight_count
+    }
   end
 
   defp put_capacity_waiter(state, threshold, subscriber_pid, ref) do

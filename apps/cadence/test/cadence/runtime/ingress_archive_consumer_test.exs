@@ -43,13 +43,20 @@ defmodule Cadence.Runtime.IngressArchiveConsumerTest do
     second = append!(ctx.journal_name, :binary.copy(<<2>>, 96))
     consumer = start_consumer!(ctx)
 
-    assert_eventually(fn ->
-      assert {:ok, journal} = IngressJournal.snapshot(ctx.journal_name)
-      assert journal.cursors.archive == second.end_offset
-      assert journal.cursors.processing == 0
-    end)
+    assert {:ok,
+            %{
+              status: :quiesced,
+              batch_count: 1,
+              archived_entries: 2,
+              archived_bytes: 160
+            }} = IngressArchiveConsumer.quiesce(consumer)
+
+    assert {:ok, journal} = IngressJournal.snapshot(ctx.journal_name)
+    assert journal.cursors.archive == second.end_offset
+    assert journal.cursors.processing == 0
 
     assert {:ok, snapshot} = IngressArchiveConsumer.snapshot(consumer)
+    assert snapshot.lifecycle_status == :quiesced
     assert snapshot.batch_count == 1
     assert snapshot.archived_entries == 2
     assert snapshot.archived_bytes == 160

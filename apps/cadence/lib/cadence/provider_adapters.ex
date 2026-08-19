@@ -40,6 +40,18 @@ defmodule Cadence.ProviderAdapters do
     end
   end
 
+  @spec quiesce(binary(), binary(), binary(), binary(), atom()) ::
+          {:ok, map()} | {:error, term()}
+  def quiesce(mission_id, realized_contact_id, path_id, provider_binding_id, adapter_key)
+      when is_binary(mission_id) and is_binary(realized_contact_id) and is_binary(path_id) and
+             is_binary(provider_binding_id) and is_atom(adapter_key) do
+    with {:ok, adapter_module} <- ProviderRegistry.fetch_module(adapter_key),
+         {:ok, provider_runtime} <-
+           provider_runtime(mission_id, realized_contact_id, path_id, provider_binding_id) do
+      adapter_module.quiesce(provider_runtime)
+    end
+  end
+
   defp provider_runtime(mission_id, realized_contact_id, path_id, provider_binding_id) do
     case Elixir.Registry.lookup(
            Cadence.Runtime.Registry,

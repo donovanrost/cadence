@@ -49,6 +49,13 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
     end
   end
 
+  @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  def quiesce(consumer) do
+    with {:ok, pid} <- lookup(consumer) do
+      GenServer.call(pid, :quiesce, :infinity)
+    end
+  end
+
   @spec lookup(GenServer.server()) :: {:ok, pid()} | {:error, term()}
   def lookup(server) when is_pid(server) do
     if Process.alive?(server),
@@ -122,6 +129,8 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
           :retry_initial_ms,
           Keyword.get(config, :retry_initial_ms, @default_retry_initial_ms)
         ),
+      lifecycle_status: :active,
+      quiesce_waiters: [],
       pending: nil,
       dwell_started_at_ms: nil,
       attempt_count: 0,
@@ -143,11 +152,27 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, quiescence_settlement(state)}, state}
+  end
+
+  def handle_call(:quiesce, from, state) do
+    state = %{
+      state
+      | lifecycle_status: :quiescing,
+        quiesce_waiters: [from | state.quiesce_waiters]
+    }
+
+    send(self(), if(state.pending, do: :retry, else: :flush))
+    {:noreply, state}
+  end
+
   def handle_call(:snapshot, _from, state) do
     {:reply,
      {:ok,
       %{
         provider_binding_id: state.provider_binding_id,
+        lifecycle_status: state.lifecycle_status,
         required_completion: state.required_completion,
         pending_batch: pending_snapshot(state.pending),
         pending_entries: pending_value(state.pending, :item_count),
@@ -169,6 +194,11 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   end
 
   @impl true
+  def handle_info(message, %{lifecycle_status: :quiesced} = state)
+      when message in [:consume, :flush, :retry] do
+    {:noreply, state}
+  end
+
   def handle_info(:consume, %{pending: nil, dwell_started_at_ms: nil} = state) do
     case FileSystem.next_entries(
            state.journal_name,
@@ -185,8 +215,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
         end
 
       :empty ->
-        schedule(:consume, state.poll_interval_ms)
-        {:noreply, state}
+        settle_or_schedule_consume(state)
 
       {:error, reason} ->
         fail_without_batch(state, reason)
@@ -406,8 +435,46 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   end
 
   defp resume_consuming(state) do
+    state = %{state | dwell_started_at_ms: nil}
+
+    case state.lifecycle_status do
+      :quiescing ->
+        settle_archive_consumer(state)
+
+      :active ->
+        schedule(:consume, state.poll_interval_ms)
+        {:noreply, state}
+    end
+  end
+
+  defp settle_or_schedule_consume(%{lifecycle_status: :quiescing} = state),
+    do: settle_archive_consumer(state)
+
+  defp settle_or_schedule_consume(state) do
     schedule(:consume, state.poll_interval_ms)
-    {:noreply, %{state | dwell_started_at_ms: nil}}
+    {:noreply, state}
+  end
+
+  defp settle_archive_consumer(state) do
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    {:noreply,
+     %{
+       state
+       | lifecycle_status: :quiesced,
+         quiesce_waiters: []
+     }}
+  end
+
+  defp quiescence_settlement(state) do
+    %{
+      status: :quiesced,
+      provider_binding_id: state.provider_binding_id,
+      batch_count: state.batch_count,
+      archived_entries: state.archived_entries,
+      archived_bytes: state.archived_bytes
+    }
   end
 
   defp error_type(reason) when is_atom(reason), do: Atom.to_string(reason)

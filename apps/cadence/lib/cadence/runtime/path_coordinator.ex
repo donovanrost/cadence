@@ -36,6 +36,8 @@ defmodule Cadence.Runtime.PathCoordinator do
           binding_set_version: pos_integer(),
           clock_mode: :live | :replay,
           initial_time: DateTime.t(),
+          lifecycle_status: :active | :quiescing | :quiesced,
+          quiescence_settlement: map() | nil,
           provider_bindings: %{required(binary()) => ProviderBindingSpec.t()},
           transport_bindings: %{required(binary()) => TransportBindingSpec.t()}
         }
@@ -109,6 +111,8 @@ defmodule Cadence.Runtime.PathCoordinator do
       binding_set_version: 1,
       clock_mode: clock_mode,
       initial_time: initial_time,
+      lifecycle_status: :active,
+      quiescence_settlement: nil,
       provider_bindings: Map.new(path.provider_bindings, &{&1.provider_binding_id, &1}),
       transport_bindings: Map.new(path.transport_bindings, &{&1.transport_binding_id, &1})
     }
@@ -126,18 +130,45 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
+    {:reply, {:ok, state.quiescence_settlement}, state}
+  end
+
   def handle_call(:quiesce, _from, state) do
+    state = %{state | lifecycle_status: :quiescing}
+
     reply =
-      with {:ok, transport_runtimes} <- quiesce_transport_runtimes(state) do
+      with {:ok, transport_runtimes} <- quiesce_transport_runtimes(state),
+           {:ok, provider_runtimes} <- quiesce_provider_runtimes(state),
+           {:ok, journal_consumers} <- quiesce_ingress_journal_consumers(state),
+           {:ok, archive_consumers} <- quiesce_ingress_archive_consumers(state),
+           {:ok, ingress_executors} <- quiesce_ingress_executors(state),
+           {:ok, persistence_projectors} <- quiesce_persistence_projectors(state) do
         {:ok,
          %{
            status: :quiesced,
            path_id: state.path.path_id,
-           transport_runtimes: transport_runtimes
+           transport_runtimes: transport_runtimes,
+           provider_runtimes: provider_runtimes,
+           journal_consumers: journal_consumers,
+           archive_consumers: archive_consumers,
+           ingress_executors: ingress_executors,
+           persistence_projectors: persistence_projectors
          }}
       end
 
-    {:reply, reply, state}
+    case reply do
+      {:ok, settlement} ->
+        {:reply, {:ok, settlement},
+         %{
+           state
+           | lifecycle_status: :quiesced,
+             quiescence_settlement: settlement
+         }}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -147,6 +178,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         realized_contact_id: state.realized_contact_id,
         mission_id: state.mission_id,
         path_id: state.path.path_id,
+        lifecycle_status: state.lifecycle_status,
         direction: state.path.direction,
         selection_role: state.path.selection_role,
         source_endpoint_ref: state.path.source_endpoint_ref,
@@ -164,6 +196,15 @@ defmodule Cadence.Runtime.PathCoordinator do
     end
   end
 
+  def handle_call(
+        {:handle_transport_event, _transport_binding_id, _event, _opts},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :path_runtime_quiesced}, state}
+  end
+
   def handle_call({:handle_transport_event, transport_binding_id, event, opts}, _from, state) do
     reply =
       with {:ok, transport_runtime} <- transport_runtime(state, transport_binding_id) do
@@ -171,6 +212,15 @@ defmodule Cadence.Runtime.PathCoordinator do
       end
 
     {:reply, reply, state}
+  end
+
+  def handle_call(
+        {:handle_control_input, _transport_binding_id, _control_input, _opts},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :path_runtime_quiesced}, state}
   end
 
   def handle_call(
@@ -184,6 +234,15 @@ defmodule Cadence.Runtime.PathCoordinator do
       end
 
     {:reply, reply, state}
+  end
+
+  def handle_call(
+        {:advance_time, %DateTime{}},
+        _from,
+        %{lifecycle_status: status} = state
+      )
+      when status in [:quiescing, :quiesced] do
+    {:reply, {:error, :path_runtime_quiesced}, state}
   end
 
   def handle_call({:advance_time, %DateTime{} = target_time}, _from, state) do
@@ -568,16 +627,110 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   defp quiesce_transport_runtimes(state) do
-    Enum.reduce_while(state.path.transport_bindings, {:ok, []}, fn transport_binding,
-                                                                   {:ok, acc} ->
+    reduce_settlements(state.path.transport_bindings, fn transport_binding ->
       with {:ok, transport_runtime} <-
-             transport_runtime(state, transport_binding.transport_binding_id),
-           {:ok, settlement} <- TransportRuntime.quiesce(transport_runtime) do
-        {:cont, {:ok, acc ++ [settlement]}}
-      else
+             transport_runtime(state, transport_binding.transport_binding_id) do
+        TransportRuntime.quiesce(transport_runtime)
+      end
+    end)
+  end
+
+  defp quiesce_provider_runtimes(state) do
+    reduce_settlements(state.path.provider_bindings, fn provider_binding ->
+      ProviderAdapters.quiesce(
+        state.mission_id,
+        state.realized_contact_id,
+        state.path.path_id,
+        provider_binding.provider_binding_id,
+        provider_binding.adapter_key
+      )
+    end)
+  end
+
+  defp quiesce_ingress_journal_consumers(state) do
+    state.path.provider_bindings
+    |> Enum.filter(&journaled_provider?(state, &1))
+    |> reduce_settlements(fn provider_binding ->
+      state
+      |> provider_ingress_journal_consumer_name(provider_binding)
+      |> IngressJournalConsumer.quiesce()
+    end)
+  end
+
+  defp quiesce_ingress_archive_consumers(state) do
+    state.path.provider_bindings
+    |> Enum.filter(&journaled_provider?(state, &1))
+    |> reduce_settlements(fn provider_binding ->
+      state
+      |> provider_ingress_archive_consumer_name(provider_binding)
+      |> IngressArchiveConsumer.quiesce()
+    end)
+  end
+
+  defp quiesce_ingress_executors(state) do
+    reduce_settlements(state.path.provider_bindings, fn provider_binding ->
+      state
+      |> provider_ingress_executor_name(provider_binding)
+      |> ProviderIngressExecutor.quiesce()
+    end)
+  end
+
+  defp quiesce_persistence_projectors(state) do
+    reduce_settlements(state.path.provider_bindings, fn provider_binding ->
+      state
+      |> provider_persistence_projector_name(provider_binding)
+      |> IngressPersistenceProjector.quiesce()
+    end)
+  end
+
+  defp reduce_settlements(enumerable, fun) do
+    enumerable
+    |> Enum.reduce_while({:ok, []}, fn item, {:ok, acc} ->
+      case fun.(item) do
+        {:ok, settlement} -> {:cont, {:ok, [settlement | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp provider_ingress_journal_consumer_name(state, provider_binding) do
+    MissionRuntime.provider_ingress_journal_consumer_name(
+      state.mission_id,
+      state.realized_contact_id,
+      state.path.path_id,
+      provider_binding.provider_binding_id
+    )
+  end
+
+  defp provider_ingress_archive_consumer_name(state, provider_binding) do
+    MissionRuntime.provider_ingress_archive_consumer_name(
+      state.mission_id,
+      state.realized_contact_id,
+      state.path.path_id,
+      provider_binding.provider_binding_id
+    )
+  end
+
+  defp provider_ingress_executor_name(state, provider_binding) do
+    MissionRuntime.provider_ingress_executor_name(
+      state.mission_id,
+      state.realized_contact_id,
+      state.path.path_id,
+      provider_binding.provider_binding_id
+    )
+  end
+
+  defp provider_persistence_projector_name(state, provider_binding) do
+    MissionRuntime.provider_persistence_projector_name(
+      state.mission_id,
+      state.realized_contact_id,
+      state.path.path_id,
+      provider_binding.provider_binding_id
+    )
   end
 
   defp collect_provider_runtime_snapshots(state) do

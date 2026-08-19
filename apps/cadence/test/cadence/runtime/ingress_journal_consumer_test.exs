@@ -54,13 +54,22 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     assert raw_evidence.metadata["journal_start_offset"] == entry.start_offset
     assert raw_evidence.metadata["journal_end_offset"] == entry.end_offset
 
+    quiesce_task = Task.async(fn -> IngressJournalConsumer.quiesce(consumer) end)
+    assert Task.yield(quiesce_task, 0) == nil
+
     send(consumer, {:provider_ingress_persisted, self(), ref})
 
-    assert_eventually(fn ->
-      assert {:ok, snapshot} = IngressJournal.snapshot(journal_name)
-      assert snapshot.cursors.processing == entry.end_offset
-      assert snapshot.cursors.archive == 0
-    end)
+    assert {:ok,
+            %{
+              status: :quiesced,
+              acknowledged_batches: 1,
+              acknowledged_entries: 1,
+              acknowledged_bytes: 4
+            }} = Task.await(quiesce_task)
+
+    assert {:ok, snapshot} = IngressJournal.snapshot(journal_name)
+    assert snapshot.cursors.processing == entry.end_offset
+    assert snapshot.cursors.archive == 0
   end
 
   @tag :tmp_dir
