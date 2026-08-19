@@ -27,17 +27,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
   alias CadenceWeb.OpsDashboardShowLive.StagedEditor
   alias CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents
   alias CadenceWeb.OpsShellHook
-  alias CadenceWeb.ScopeLoader
 
   @impl true
-  def mount(%{"dashboard_id" => dashboard_id}, session, socket) do
-    socket =
-      assign(
-        socket,
-        :dashboard_browser_test_sandbox_owner_key,
-        ScopeLoader.browser_test_sandbox_owner_key(session)
-      )
-
+  def mount(%{"dashboard_id" => dashboard_id}, _session, socket) do
     connected? = connected?(socket)
 
     socket

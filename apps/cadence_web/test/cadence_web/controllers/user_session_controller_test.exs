@@ -6,21 +6,7 @@ defmodule CadenceWeb.UserSessionControllerTest do
   alias CadenceWeb.TestFixtures
 
   describe "POST /sign-in" do
-    test "preserves the browser test sandbox owner marker when configured", %{conn: conn} do
-      previous_owner = Application.get_env(:cadence_web, :browser_test_sandbox_owner)
-
-      Application.put_env(:cadence_web, :browser_test_sandbox_owner, %{
-        owner: self(),
-        key: "browser-sandbox-test-key"
-      })
-
-      on_exit(fn ->
-        case previous_owner do
-          nil -> Application.delete_env(:cadence_web, :browser_test_sandbox_owner)
-          owner -> Application.put_env(:cadence_web, :browser_test_sandbox_owner, owner)
-        end
-      end)
-
+    test "stores durable authentication state", %{conn: conn} do
       user = TestFixtures.persist_user!()
       org = TestFixtures.persist_org!()
       _membership = TestFixtures.grant_membership!(user, org)
@@ -34,7 +20,8 @@ defmodule CadenceWeb.UserSessionControllerTest do
         })
 
       assert redirected_to(conn) == "/"
-      assert get_session(conn, :browser_test_sandbox_owner_key) == "browser-sandbox-test-key"
+      assert is_binary(get_session(conn, :user_session_token))
+      assert get_session(conn, :current_organization_id) == org.organization_id
     end
   end
 

@@ -59,7 +59,6 @@ defmodule CadenceWeb.UserSessionController do
     conn
     |> renew_browser_session()
     |> put_session(:user_session_token, issued_session.session_token)
-    |> maybe_put_browser_test_sandbox_owner_key()
     |> maybe_put_current_organization(issued_session.current_organization_id)
     |> maybe_enable_admin_mode(issued_session)
     |> put_flash(:info, "Signed in.")
@@ -108,13 +107,6 @@ defmodule CadenceWeb.UserSessionController do
         {:ok, _membership} -> :ok
         {:error, reason} -> {:error, reason}
       end
-    end
-  end
-
-  defp maybe_put_browser_test_sandbox_owner_key(conn) do
-    case Application.get_env(:cadence_web, :browser_test_sandbox_owner) do
-      %{key: key} when is_binary(key) -> put_session(conn, :browser_test_sandbox_owner_key, key)
-      _owner -> conn
     end
   end
 

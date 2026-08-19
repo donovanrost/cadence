@@ -327,7 +327,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
     request = EngineResolution.request(socket, resolve_mode)
     comparison_request = EngineResolution.comparison_request(socket, resolve_mode)
     resolution_context = socket.assigns.dashboard_resolution_context
-    browser_test_sandbox_owner_key = browser_test_sandbox_owner_key(socket)
 
     socket =
       socket
@@ -339,14 +338,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
         resolve_id,
         request,
         comparison_request,
-        resolution_context,
-        browser_test_sandbox_owner_key
+        resolution_context
       )
     end)
-  end
-
-  defp browser_test_sandbox_owner_key(socket) do
-    Map.get(socket.assigns, :dashboard_browser_test_sandbox_owner_key)
   end
 
   defp push_live_tick_appends(socket, resolve_id, %{resolve_mode: :live_tick}) do

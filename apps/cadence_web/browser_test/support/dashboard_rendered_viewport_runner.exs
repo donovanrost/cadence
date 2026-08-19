@@ -106,23 +106,14 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   end
 
   def start_browser_endpoint!(port, sandbox_owner) do
-    previous_owner = Application.get_env(:cadence_web, :browser_test_sandbox_owner)
-    sandbox_owner_key = "browser-sandbox-#{System.unique_integer([:positive])}"
     endpoint_id = {:dashboard_browser_endpoint, port}
 
-    Application.put_env(:cadence_web, :browser_test_sandbox_owner, %{
-      owner: sandbox_owner,
-      key: sandbox_owner_key
-    })
+    :ok = Sandbox.mode(Cadence.Repo, {:shared, sandbox_owner})
 
     endpoint_pid =
       start_supervised!(
         Supervisor.child_spec(
-          {Bandit,
-           plug: {__MODULE__, sandbox_owner: sandbox_owner},
-           scheme: :http,
-           ip: {127, 0, 0, 1},
-           port: port},
+          {Bandit, plug: CadenceWeb.Endpoint, scheme: :http, ip: {127, 0, 0, 1}, port: port},
           id: endpoint_id,
           restart: :temporary
         )
@@ -131,11 +122,6 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     on_exit(fn ->
       stop_browser_endpoint(endpoint_pid)
       Process.sleep(50)
-
-      case previous_owner do
-        nil -> Application.delete_env(:cadence_web, :browser_test_sandbox_owner)
-        owner -> Application.put_env(:cadence_web, :browser_test_sandbox_owner, owner)
-      end
     end)
 
     endpoint_pid
@@ -153,16 +139,6 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     after
       1_000 -> Process.demonitor(ref, [:flush])
     end
-  end
-
-  def init(opts), do: opts
-
-  def call(conn, opts) do
-    opts
-    |> Keyword.fetch!(:sandbox_owner)
-    |> then(&Sandbox.allow(Cadence.Repo, &1, self()))
-
-    CadenceWeb.Endpoint.call(conn, [])
   end
 
   def rendered_dashboard_artifact!(html, app_root) do
