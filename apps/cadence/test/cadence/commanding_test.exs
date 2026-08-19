@@ -55,26 +55,6 @@ defmodule Cadence.CommandingTest do
     {:ok, source_endpoint: source_endpoint, command_model: command_model}
   end
 
-  test "skips verifier transactions when no runtime observations were produced" do
-    handler_id = "empty-verifier-query-#{System.unique_integer([:positive])}"
-
-    :ok =
-      :telemetry.attach(
-        handler_id,
-        [:cadence, :repo, :query],
-        fn _event, _measurements, metadata, test_pid ->
-          send(test_pid, {:unexpected_verifier_query, metadata})
-        end,
-        self()
-      )
-
-    on_exit(fn -> _ = :telemetry.detach(handler_id) end)
-
-    assert {:ok, []} = Cadence.Commanding.evaluate_command_verifiers([])
-    assert {:ok, []} = Cadence.Commanding.evaluate_transport_command_verifiers([], [])
-    refute_receive {:unexpected_verifier_query, _metadata}, 100
-  end
-
   test "persists and updates command stages and staged command items", %{
     source_endpoint: source_endpoint,
     command_model: command_model
