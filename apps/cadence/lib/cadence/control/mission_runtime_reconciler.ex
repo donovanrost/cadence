@@ -11,16 +11,22 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   alias Cadence.Control.Activations
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntime
+  alias Cadence.Control.ProcessNamespace
   alias Cadence.Governance
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
+  alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
 
   @default_safety_poll_interval_ms 30_000
 
   def start_link(opts) when is_list(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
-    GenServer.start_link(__MODULE__, opts, name: MissionRuntime.reconciler_name(mission_id))
+    process_namespace = process_namespace(opts)
+
+    GenServer.start_link(__MODULE__, opts,
+      name: MissionRuntime.reconciler_name(process_namespace, mission_id)
+    )
   end
 
   @spec apply_generation(binary(), BindingSetActivation.t(), BindingSet.t()) ::
@@ -30,21 +36,49 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
         %BindingSetActivation{} = activation,
         %BindingSet{} = binding_set
       ) do
+    apply_generation(ProcessNamespace.default(), mission_id, activation, binding_set)
+  end
+
+  @spec apply_generation(
+          ProcessNamespace.t(),
+          binary(),
+          BindingSetActivation.t(),
+          BindingSet.t()
+        ) :: {:ok, GenerationApplied.t()} | {:error, term()}
+  def apply_generation(
+        %ProcessNamespace{} = process_namespace,
+        mission_id,
+        %BindingSetActivation{} = activation,
+        %BindingSet{} = binding_set
+      ) do
     GenServer.call(
-      MissionRuntime.reconciler_name(mission_id),
+      MissionRuntime.reconciler_name(process_namespace, mission_id),
       {:apply_generation, activation, binding_set},
       :infinity
     )
   end
 
   @spec reconcile(binary()) :: {:ok, GenerationApplied.t()} | {:error, term()}
-  def reconcile(mission_id) when is_binary(mission_id) do
-    GenServer.call(MissionRuntime.reconciler_name(mission_id), :reconcile, :infinity)
+  def reconcile(mission_id) when is_binary(mission_id),
+    do: reconcile(ProcessNamespace.default(), mission_id)
+
+  @spec reconcile(ProcessNamespace.t(), binary()) ::
+          {:ok, GenerationApplied.t()} | {:error, term()}
+  def reconcile(%ProcessNamespace{} = process_namespace, mission_id) when is_binary(mission_id) do
+    GenServer.call(
+      MissionRuntime.reconciler_name(process_namespace, mission_id),
+      :reconcile,
+      :infinity
+    )
   end
 
   @spec snapshot(binary()) :: map()
-  def snapshot(mission_id) when is_binary(mission_id) do
-    GenServer.call(MissionRuntime.reconciler_name(mission_id), :snapshot)
+  def snapshot(mission_id) when is_binary(mission_id),
+    do: snapshot(ProcessNamespace.default(), mission_id)
+
+  @spec snapshot(ProcessNamespace.t(), binary()) :: map()
+  def snapshot(%ProcessNamespace{} = process_namespace, mission_id) when is_binary(mission_id) do
+    GenServer.call(MissionRuntime.reconciler_name(process_namespace, mission_id), :snapshot)
   end
 
   @doc """
@@ -53,8 +87,18 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   The periodic safety timer may remain scheduled.
   """
   @spec await_settled(binary()) :: {:ok, map()} | {:error, :noproc}
-  def await_settled(mission_id) when is_binary(mission_id) do
-    {:ok, GenServer.call(MissionRuntime.reconciler_name(mission_id), :await_settled, :infinity)}
+  def await_settled(mission_id) when is_binary(mission_id),
+    do: await_settled(ProcessNamespace.default(), mission_id)
+
+  @spec await_settled(ProcessNamespace.t(), binary()) :: {:ok, map()} | {:error, :noproc}
+  def await_settled(%ProcessNamespace{} = process_namespace, mission_id)
+      when is_binary(mission_id) do
+    {:ok,
+     GenServer.call(
+       MissionRuntime.reconciler_name(process_namespace, mission_id),
+       :await_settled,
+       :infinity
+     )}
   catch
     :exit, {:noproc, _details} -> {:error, :noproc}
     :exit, {:normal, _details} -> {:error, :noproc}
@@ -64,16 +108,23 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   def init(opts) do
     state = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
+      process_namespace: process_namespace(opts),
+      runtime_process_namespace: runtime_process_namespace(opts),
       desired_generation: nil,
       applied_generation: nil,
       last_observation: nil,
       last_error: nil,
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
+      safety_poll?: Keyword.get(opts, :safety_poll?, true),
       safety_timer: nil
     }
 
-    {:ok, state, {:continue, :reconcile}}
+    if Keyword.get(opts, :reconcile_on_start?, true) do
+      {:ok, state, {:continue, :reconcile}}
+    else
+      {:ok, state}
+    end
   end
 
   @impl true
@@ -128,7 +179,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   defp apply_state(state, activation, binding_set) do
     with :ok <- matching_mission(state.mission_id, activation.mission_id),
          {:ok, %MissionRuntimeSpec{} = runtime_spec} <- runtime_spec(activation, binding_set),
-         {:ok, %GenerationApplied{} = observation} <- RuntimeMissions.apply(runtime_spec) do
+         {:ok, %GenerationApplied{} = observation} <-
+           RuntimeMissions.apply(state.runtime_process_namespace, runtime_spec) do
       {{:ok, observation},
        %{
          state
@@ -188,6 +240,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   defp matching_mission(mission_id, mission_id), do: :ok
   defp matching_mission(_mission_id, _other), do: {:error, :activation_mission_mismatch}
 
+  defp schedule_safety_poll(%{safety_poll?: false} = state), do: state
+
   defp schedule_safety_poll(state) do
     if is_reference(state.safety_timer), do: Process.cancel_timer(state.safety_timer)
 
@@ -199,8 +253,25 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
 
   defp snapshot_from_state(state) do
     state
-    |> Map.drop([:safety_timer])
+    |> Map.drop([
+      :process_namespace,
+      :runtime_process_namespace,
+      :safety_poll?,
+      :safety_timer
+    ])
     |> Map.put(:status, :settled)
     |> Map.put(:safety_timer_scheduled?, is_reference(state.safety_timer))
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+  end
+
+  defp runtime_process_namespace(opts) do
+    Keyword.get_lazy(
+      opts,
+      :runtime_process_namespace,
+      &RuntimeProcessNamespace.default/0
+    )
   end
 end

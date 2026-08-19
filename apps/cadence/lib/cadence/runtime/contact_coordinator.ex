@@ -11,9 +11,11 @@ defmodule Cadence.Runtime.ContactCoordinator do
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.PathCoordinator
   alias Cadence.Runtime.PathRuntime
+  alias Cadence.Runtime.ProcessNamespace
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @type state :: %{
+          process_namespace: ProcessNamespace.t(),
           realized_contact: RealizedContactRuntimeSpec.t(),
           path_ids: [binary()],
           paths: %{required(binary()) => ContactPathSpec.t()},
@@ -26,12 +28,14 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   def start_link(opts) when is_list(opts) do
     %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    process_namespace = process_namespace(opts)
 
     GenServer.start_link(
       __MODULE__,
       opts,
       name:
         MissionRuntime.realized_contact_coordinator_name(
+          process_namespace,
           realized_contact.mission_id,
           realized_contact.realized_contact_id
         )
@@ -91,11 +95,13 @@ defmodule Cadence.Runtime.ContactCoordinator do
   @impl true
   def init(opts) do
     %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    process_namespace = process_namespace(opts)
 
     with :ok <- validate_realized_contact(realized_contact),
-         {:ok, path_ids} <- start_path_runtimes(realized_contact) do
+         {:ok, path_ids} <- start_path_runtimes(process_namespace, realized_contact) do
       {:ok,
        %{
+         process_namespace: process_namespace,
          realized_contact: realized_contact,
          path_ids: path_ids,
          paths: Map.new(realized_contact.paths, &{&1.path_id, &1}),
@@ -126,10 +132,11 @@ defmodule Cadence.Runtime.ContactCoordinator do
     task =
       Task.Supervisor.async_nolink(
         MissionRuntime.realized_contact_quiescence_supervisor_name(
+          state.process_namespace,
           realized_contact.mission_id,
           realized_contact.realized_contact_id
         ),
-        fn -> quiesce_path_runtimes(realized_contact, path_ids) end
+        fn -> quiesce_path_runtimes(state.process_namespace, realized_contact, path_ids) end
       )
 
     {:noreply,
@@ -143,8 +150,14 @@ defmodule Cadence.Runtime.ContactCoordinator do
   end
 
   def handle_call(:snapshot, _from, state) do
-    with {:ok, path_snapshots} <- collect_path_snapshots(state.realized_contact, state.path_ids),
-         {:ok, downlink_combiner} <- downlink_combiner_snapshot(state.realized_contact) do
+    with {:ok, path_snapshots} <-
+           collect_path_snapshots(
+             state.process_namespace,
+             state.realized_contact,
+             state.path_ids
+           ),
+         {:ok, downlink_combiner} <-
+           downlink_combiner_snapshot(state.process_namespace, state.realized_contact) do
       snapshot = %{
         realized_contact_id: state.realized_contact.realized_contact_id,
         mission_id: state.realized_contact.mission_id,
@@ -169,6 +182,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     reply =
       with {:ok, path_runtime} <-
              path_runtime(
+               state.process_namespace,
                state.realized_contact.mission_id,
                state.realized_contact.realized_contact_id,
                path_id
@@ -196,6 +210,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     reply =
       with {:ok, path_runtime} <-
              path_runtime(
+               state.process_namespace,
                state.realized_contact.mission_id,
                state.realized_contact.realized_contact_id,
                path_id
@@ -232,6 +247,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     reply =
       with {:ok, path_runtime} <-
              path_runtime(
+               state.process_namespace,
                state.realized_contact.mission_id,
                state.realized_contact.realized_contact_id,
                path_id
@@ -261,6 +277,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
       Enum.reduce_while(state.path_ids, :ok, fn path_id, :ok ->
         with {:ok, path_runtime} <-
                path_runtime(
+                 state.process_namespace,
                  state.realized_contact.mission_id,
                  state.realized_contact.realized_contact_id,
                  path_id
@@ -333,11 +350,12 @@ defmodule Cadence.Runtime.ContactCoordinator do
      }}
   end
 
-  defp quiesce_path_runtimes(realized_contact, path_ids) do
+  defp quiesce_path_runtimes(process_namespace, realized_contact, path_ids) do
     path_ids
     |> Enum.reduce_while({:ok, []}, fn path_id, {:ok, acc} ->
       with {:ok, path_runtime} <-
              path_runtime(
+               process_namespace,
                realized_contact.mission_id,
                realized_contact.realized_contact_id,
                path_id
@@ -358,7 +376,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
     Enum.each(waiters, &GenServer.reply(&1, reply))
   end
 
-  defp start_path_runtimes(%RealizedContactRuntimeSpec{} = realized_contact) do
+  defp start_path_runtimes(process_namespace, %RealizedContactRuntimeSpec{} = realized_contact) do
     Enum.reduce_while(realized_contact.paths, {:ok, []}, fn %ContactPathSpec{} = path,
                                                             {:ok, acc} ->
       child_spec =
@@ -366,6 +384,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
           {PathRuntime,
            organization_id: realized_contact.organization_id,
            mission_id: realized_contact.mission_id,
+           process_namespace: process_namespace,
            realized_contact_id: realized_contact.realized_contact_id,
            path: path,
            clock_mode: realized_contact.clock_mode,
@@ -375,6 +394,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
       case DynamicSupervisor.start_child(
              MissionRuntime.path_supervisor_name(
+               process_namespace,
                realized_contact.mission_id,
                realized_contact.realized_contact_id
              ),
@@ -392,10 +412,15 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end)
   end
 
-  defp collect_path_snapshots(%RealizedContactRuntimeSpec{} = realized_contact, path_ids) do
+  defp collect_path_snapshots(
+         process_namespace,
+         %RealizedContactRuntimeSpec{} = realized_contact,
+         path_ids
+       ) do
     Enum.reduce_while(path_ids, {:ok, []}, fn path_id, {:ok, acc} ->
       with {:ok, path_runtime} <-
              path_runtime(
+               process_namespace,
                realized_contact.mission_id,
                realized_contact.realized_contact_id,
                path_id
@@ -408,9 +433,9 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end)
   end
 
-  defp path_runtime(mission_id, realized_contact_id, path_id) do
+  defp path_runtime(process_namespace, mission_id, realized_contact_id, path_id) do
     case Registry.lookup(
-           Cadence.Runtime.Registry,
+           process_namespace.registry,
            {:path_coordinator, mission_id, realized_contact_id, path_id}
          ) do
       [{path_runtime, _value}] -> {:ok, path_runtime}
@@ -418,16 +443,23 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end
   end
 
-  defp downlink_combiner_snapshot(%RealizedContactRuntimeSpec{} = realized_contact) do
+  defp downlink_combiner_snapshot(
+         process_namespace,
+         %RealizedContactRuntimeSpec{} = realized_contact
+       ) do
     with {:ok, downlink_combiner} <-
-           downlink_combiner(realized_contact.mission_id, realized_contact.realized_contact_id) do
+           downlink_combiner(
+             process_namespace,
+             realized_contact.mission_id,
+             realized_contact.realized_contact_id
+           ) do
       DownlinkCombiner.snapshot(downlink_combiner)
     end
   end
 
-  defp downlink_combiner(mission_id, realized_contact_id) do
+  defp downlink_combiner(process_namespace, mission_id, realized_contact_id) do
     case Registry.lookup(
-           Cadence.Runtime.Registry,
+           process_namespace.registry,
            {:downlink_combiner, mission_id, realized_contact_id}
          ) do
       [{downlink_combiner, _value}] -> {:ok, downlink_combiner}
@@ -448,6 +480,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
                ),
              {:ok, downlink_combiner} <-
                downlink_combiner(
+                 state.process_namespace,
                  state.realized_contact.mission_id,
                  state.realized_contact.realized_contact_id
                ) do
@@ -557,5 +590,9 @@ defmodule Cadence.Runtime.ContactCoordinator do
         {:halt, {:error, {:duplicate_transport_binding_id, path.path_id}}}
       end
     end)
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end

@@ -16,31 +16,58 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         }
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @spec fetch_family(atom()) :: {:ok, module()} | {:error, term()}
-  def fetch_family(family_key) when is_atom(family_key) do
-    GenServer.call(__MODULE__, {:fetch_family, family_key})
-  end
+  def fetch_family(family_key) when is_atom(family_key), do: fetch_family(__MODULE__, family_key)
+
+  @spec fetch_family(GenServer.server(), atom()) :: {:ok, module()} | {:error, term()}
+  def fetch_family(server, family_key) when is_atom(family_key),
+    do: GenServer.call(server, {:fetch_family, family_key})
 
   @spec fetch_descriptor(atom()) :: {:ok, Descriptor.t()} | {:error, term()}
-  def fetch_descriptor(family_key) when is_atom(family_key) do
-    GenServer.call(__MODULE__, {:fetch_descriptor, family_key})
-  end
+  def fetch_descriptor(family_key) when is_atom(family_key),
+    do: fetch_descriptor(__MODULE__, family_key)
+
+  @spec fetch_descriptor(GenServer.server(), atom()) :: {:ok, Descriptor.t()} | {:error, term()}
+  def fetch_descriptor(server, family_key) when is_atom(family_key),
+    do: GenServer.call(server, {:fetch_descriptor, family_key})
 
   @spec build_instance(atom(), term(), ActivationContext.t()) :: {:ok, term()} | {:error, term()}
   def build_instance(family_key, configuration, %ActivationContext{} = activation_context)
       when is_atom(family_key) do
-    GenServer.call(__MODULE__, {:build_instance, family_key, configuration, activation_context})
+    build_instance(__MODULE__, family_key, configuration, activation_context)
   end
+
+  @spec build_instance(GenServer.server(), atom(), term(), ActivationContext.t()) ::
+          {:ok, term()} | {:error, term()}
+  def build_instance(server, family_key, configuration, %ActivationContext{} = activation_context)
+      when is_atom(family_key),
+      do: GenServer.call(server, {:build_instance, family_key, configuration, activation_context})
 
   @spec init_managed_application(atom(), term(), ExecutionContext.t()) ::
           {:ok, ExecutionResult.t()} | {:error, term()}
   def init_managed_application(family_key, configuration, %ExecutionContext{} = execution_context)
       when is_atom(family_key) do
+    init_managed_application(__MODULE__, family_key, configuration, execution_context)
+  end
+
+  @spec init_managed_application(
+          GenServer.server(),
+          atom(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def init_managed_application(
+        server,
+        family_key,
+        configuration,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:init_managed_application, family_key, configuration, execution_context}
     )
   end
@@ -54,8 +81,26 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) do
+    handle_managed_record(__MODULE__, family_key, record, application_state, execution_context)
+  end
+
+  @spec handle_managed_record(
+          GenServer.server(),
+          atom(),
+          term(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def handle_managed_record(
+        server,
+        family_key,
+        record,
+        application_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:handle_managed_record, family_key, record, application_state, execution_context}
     )
   end
@@ -69,8 +114,32 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) and is_binary(timer_key) do
-    GenServer.call(
+    handle_managed_timer(
       __MODULE__,
+      family_key,
+      timer_key,
+      application_state,
+      execution_context
+    )
+  end
+
+  @spec handle_managed_timer(
+          GenServer.server(),
+          atom(),
+          binary(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def handle_managed_timer(
+        server,
+        family_key,
+        timer_key,
+        application_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) and is_binary(timer_key) do
+    GenServer.call(
+      server,
       {:handle_managed_timer, family_key, timer_key, application_state, execution_context}
     )
   end
@@ -83,8 +152,24 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) do
+    snapshot_managed_state(__MODULE__, family_key, application_state, execution_context)
+  end
+
+  @spec snapshot_managed_state(
+          GenServer.server(),
+          atom(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, term()} | {:error, term()}
+  def snapshot_managed_state(
+        server,
+        family_key,
+        application_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:snapshot_managed_state, family_key, application_state, execution_context}
     )
   end
@@ -93,8 +178,24 @@ defmodule Cadence.Runtime.CapabilityRegistry do
           {:ok, ExecutionResult.t()} | {:error, term()}
   def init_transport_extension(family_key, configuration, %ExecutionContext{} = execution_context)
       when is_atom(family_key) do
+    init_transport_extension(__MODULE__, family_key, configuration, execution_context)
+  end
+
+  @spec init_transport_extension(
+          GenServer.server(),
+          atom(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def init_transport_extension(
+        server,
+        family_key,
+        configuration,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:init_transport_extension, family_key, configuration, execution_context}
     )
   end
@@ -108,8 +209,26 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) do
+    handle_transport_event(__MODULE__, family_key, event, transport_state, execution_context)
+  end
+
+  @spec handle_transport_event(
+          GenServer.server(),
+          atom(),
+          term(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def handle_transport_event(
+        server,
+        family_key,
+        event,
+        transport_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:handle_transport_event, family_key, event, transport_state, execution_context}
     )
   end
@@ -123,8 +242,32 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) do
-    GenServer.call(
+    handle_transport_control_input(
       __MODULE__,
+      family_key,
+      control_input,
+      transport_state,
+      execution_context
+    )
+  end
+
+  @spec handle_transport_control_input(
+          GenServer.server(),
+          atom(),
+          term(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def handle_transport_control_input(
+        server,
+        family_key,
+        control_input,
+        transport_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
+    GenServer.call(
+      server,
       {:handle_transport_control_input, family_key, control_input, transport_state,
        execution_context}
     )
@@ -139,8 +282,26 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) and is_binary(timer_key) do
+    handle_transport_timer(__MODULE__, family_key, timer_key, transport_state, execution_context)
+  end
+
+  @spec handle_transport_timer(
+          GenServer.server(),
+          atom(),
+          binary(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, ExecutionResult.t()} | {:error, term()}
+  def handle_transport_timer(
+        server,
+        family_key,
+        timer_key,
+        transport_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) and is_binary(timer_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:handle_transport_timer, family_key, timer_key, transport_state, execution_context}
     )
   end
@@ -153,8 +314,24 @@ defmodule Cadence.Runtime.CapabilityRegistry do
         %ExecutionContext{} = execution_context
       )
       when is_atom(family_key) do
+    snapshot_transport_state(__MODULE__, family_key, transport_state, execution_context)
+  end
+
+  @spec snapshot_transport_state(
+          GenServer.server(),
+          atom(),
+          term(),
+          ExecutionContext.t()
+        ) :: {:ok, term()} | {:error, term()}
+  def snapshot_transport_state(
+        server,
+        family_key,
+        transport_state,
+        %ExecutionContext{} = execution_context
+      )
+      when is_atom(family_key) do
     GenServer.call(
-      __MODULE__,
+      server,
       {:snapshot_transport_state, family_key, transport_state, execution_context}
     )
   end

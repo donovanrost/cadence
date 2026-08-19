@@ -5,32 +5,54 @@ defmodule Cadence.Runtime.Supervisor do
 
   alias Cadence.IngressArchive
   alias Cadence.Protocol.RecordArchive
-  alias Cadence.Runtime.{IngressArchiveConsumer, Persistence}
+  alias Cadence.Runtime.{IngressArchiveConsumer, Persistence, ProcessNamespace}
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Storage}
 
+  def child_spec(opts) do
+    process_namespace = process_namespace(opts)
+
+    %{
+      id: process_namespace.root_supervisor,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :supervisor
+    }
+  end
+
   def start_link(opts \\ []) do
-    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+    process_namespace = process_namespace(opts)
+    Supervisor.start_link(__MODULE__, opts, name: process_namespace.root_supervisor)
   end
 
   @impl true
   def init(opts) do
     policies = persistence_policies(opts)
+    process_namespace = process_namespace(opts)
 
     children =
-      [Cadence.Telemetry.Profiler] ++
-        ingress_archive_children(policies) ++
-        protocol_record_archive_children(policies) ++
-        telemetry_backend_children(policies) ++
+      resource_children(opts, policies) ++
         [
-          {Cadence.Runtime.CapabilityRegistry, []},
-          {Registry, keys: :unique, name: Cadence.Runtime.Registry},
+          {Cadence.Runtime.CapabilityRegistry, name: process_namespace.capability_registry},
+          {Registry, keys: :unique, name: process_namespace.registry},
           {DynamicSupervisor,
            strategy: :one_for_one,
-           name: Cadence.Runtime.MissionSupervisor,
-           extra_arguments: [runtime_child_opts(policies)]}
+           name: process_namespace.mission_supervisor,
+           extra_arguments: [runtime_child_opts(opts, policies, process_namespace)]}
         ]
 
     Supervisor.init(children, strategy: :one_for_all)
+  end
+
+  defp resource_children(opts, policies) do
+    case Keyword.fetch(opts, :resource_children) do
+      {:ok, children} when is_list(children) ->
+        children
+
+      :error ->
+        [Cadence.Telemetry.Profiler] ++
+          ingress_archive_children(policies) ++
+          protocol_record_archive_children(policies) ++
+          telemetry_backend_children(policies)
+    end
   end
 
   defp telemetry_backend_children(policies) do
@@ -94,12 +116,17 @@ defmodule Cadence.Runtime.Supervisor do
     }
   end
 
-  defp runtime_child_opts(policies) do
-    [
-      persistence_policy: policies.runtime_persistence,
-      current_value_store_policy: policies.current_value_store,
-      telemetry_storage_policy: policies.telemetry_storage,
-      ingress_archive_consumer_policy: policies.ingress_archive_consumer
-    ]
+  defp runtime_child_opts(opts, policies, process_namespace) do
+    opts
+    |> Keyword.get(:mission_runtime_opts, [])
+    |> Keyword.put(:process_namespace, process_namespace)
+    |> Keyword.put(:persistence_policy, policies.runtime_persistence)
+    |> Keyword.put(:current_value_store_policy, policies.current_value_store)
+    |> Keyword.put(:telemetry_storage_policy, policies.telemetry_storage)
+    |> Keyword.put(:ingress_archive_consumer_policy, policies.ingress_archive_consumer)
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end

@@ -29,6 +29,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     MissionRuntimeSpec,
     PartitionKey,
     Persistence,
+    ProcessNamespace,
     TimerService
   }
 
@@ -40,6 +41,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @max_async_outputs 20
 
   @type state :: %{
+          process_namespace: ProcessNamespace.t(),
           mission_id: binary(),
           partition_key: PartitionKey.t(),
           active_activation: MissionRuntimeSpec.t(),
@@ -61,11 +63,12 @@ defmodule Cadence.Runtime.PartitionOwner do
   def start_link(opts) when is_list(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     partition_key = Keyword.fetch!(opts, :partition_key)
+    process_namespace = process_namespace(opts)
     register? = Keyword.get(opts, :register?, true)
 
     if register? do
       GenServer.start_link(__MODULE__, opts,
-        name: MissionRuntime.partition_owner_name(mission_id, partition_key)
+        name: MissionRuntime.partition_owner_name(process_namespace, mission_id, partition_key)
       )
     else
       GenServer.start_link(__MODULE__, opts)
@@ -77,9 +80,19 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   @spec lookup(binary(), PartitionKey.t()) :: {:ok, pid()} | {:error, :partition_not_running}
-  def lookup(mission_id, %PartitionKey{} = partition_key) when is_binary(mission_id) do
+  def lookup(mission_id, %PartitionKey{} = partition_key) when is_binary(mission_id),
+    do: lookup(ProcessNamespace.default(), mission_id, partition_key)
+
+  @spec lookup(ProcessNamespace.t(), binary(), PartitionKey.t()) ::
+          {:ok, pid()} | {:error, :partition_not_running}
+  def lookup(
+        %ProcessNamespace{} = process_namespace,
+        mission_id,
+        %PartitionKey{} = partition_key
+      )
+      when is_binary(mission_id) do
     case Registry.lookup(
-           Cadence.Runtime.Registry,
+           process_namespace.registry,
            {:partition_owner, mission_id, PartitionKey.registry_key(partition_key)}
          ) do
       [{partition_pid, _value}] -> {:ok, partition_pid}
@@ -125,6 +138,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @impl true
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
+    process_namespace = process_namespace(opts)
     partition_key = Keyword.fetch!(opts, :partition_key)
     active_activation = Keyword.fetch!(opts, :active_activation)
     binding_set = Keyword.fetch!(opts, :binding_set)
@@ -143,6 +157,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     with {:ok, tm_pipeline_state} <- TMFrameIngress.init(),
          {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} <-
            build_runtime_partition_state(
+             process_namespace,
              binding_set,
              active_activation,
              partition_key,
@@ -169,6 +184,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:ok, pending_runtime_records} ->
           {:ok,
            %{
+             process_namespace: process_namespace,
              mission_id: mission_id,
              partition_key: partition_key,
              active_activation: active_activation,
@@ -260,6 +276,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     state = refresh_live_clock(state)
 
     case build_runtime_partition_state(
+           state.process_namespace,
            binding_set,
            activation,
            state.partition_key,
@@ -789,13 +806,21 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp build_runtime_partition_state(
+         %ProcessNamespace{} = process_namespace,
          %BindingSet{} = binding_set,
          %MissionRuntimeSpec{} = activation,
          %PartitionKey{} = partition_key,
          clock_mode,
          %DateTime{} = current_time
        ) do
-    PartitionBuilder.build(binding_set, activation, partition_key, clock_mode, current_time)
+    PartitionBuilder.build(
+      binding_set,
+      activation,
+      partition_key,
+      clock_mode,
+      current_time,
+      process_namespace: process_namespace
+    )
   end
 
   defp decode_packet_records(%RawEvidence{protocol_family: protocol_family} = raw_evidence, state)
@@ -914,7 +939,10 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp execute_work_item(%PacketRecord{} = packet_record, %WorkItem{} = work_item, state) do
     with {:ok, %Descriptor{} = descriptor} <-
-           CapabilityRegistry.fetch_descriptor(work_item.handler_key) do
+           CapabilityRegistry.fetch_descriptor(
+             state.process_namespace.capability_registry,
+             work_item.handler_key
+           ) do
       case descriptor.kind do
         :semantic_handler ->
           execute_semantic_handler(packet_record, work_item, state)
@@ -929,7 +957,11 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp execute_semantic_handler(%PacketRecord{} = packet_record, %WorkItem{} = work_item, state) do
-    with {:ok, handler_module} <- CapabilityRegistry.fetch_family(work_item.handler_key),
+    with {:ok, handler_module} <-
+           CapabilityRegistry.fetch_family(
+             state.process_namespace.capability_registry,
+             work_item.handler_key
+           ),
          {:ok, runtime_configuration} <-
            MissionModelPlanDecoder.resolve_telemetry_configuration(
              state.active_activation.runtime_plans,
@@ -964,6 +996,7 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.handle_managed_record(
+             state.process_namespace.capability_registry,
              capability_instance.family_key,
              packet_record,
              application_state,
@@ -977,6 +1010,7 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          {:ok, state_snapshot} <-
            CapabilityRegistry.snapshot_managed_state(
+             state.process_namespace.capability_registry,
              capability_instance.family_key,
              execution_result.state,
              execution_context
@@ -1022,6 +1056,7 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.handle_managed_timer(
+             state.process_namespace.capability_registry,
              capability_instance.family_key,
              timer_key,
              application_state,
@@ -1035,6 +1070,7 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          {:ok, state_snapshot} <-
            CapabilityRegistry.snapshot_managed_state(
+             state.process_namespace.capability_registry,
              capability_instance.family_key,
              execution_result.state,
              execution_context
@@ -1516,4 +1552,8 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp value(map, key, default \\ nil),
     do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+  end
 end

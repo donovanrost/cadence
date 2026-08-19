@@ -17,6 +17,7 @@ defmodule Cadence.Runtime.TransportRuntime do
     Clock,
     MissionRuntime,
     PartitionKey,
+    ProcessNamespace,
     TimerService,
     TransportActionRequest,
     TransportCapabilityRecord,
@@ -29,6 +30,7 @@ defmodule Cadence.Runtime.TransportRuntime do
   alias Cadence.Telemetry.Sample
 
   @type state :: %{
+          process_namespace: ProcessNamespace.t(),
           mission_id: binary(),
           realized_contact_id: binary() | nil,
           path_id: binary() | nil,
@@ -95,6 +97,7 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   @impl true
   def init(opts) do
+    process_namespace = process_namespace(opts)
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.get(opts, :realized_contact_id)
     path_id = Keyword.get(opts, :path_id)
@@ -117,7 +120,10 @@ defmodule Cadence.Runtime.TransportRuntime do
     timer_service = TimerService.new(mode: clock_mode, current_time: initial_time)
 
     with {:ok, %Descriptor{kind: :transport_extension}} <-
-           CapabilityRegistry.fetch_descriptor(family_key),
+           CapabilityRegistry.fetch_descriptor(
+             process_namespace.capability_registry,
+             family_key
+           ),
          execution_context <-
            build_execution_context(%{
              mission_id: mission_id,
@@ -131,6 +137,7 @@ defmodule Cadence.Runtime.TransportRuntime do
            }),
          {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.init_transport_extension(
+             process_namespace.capability_registry,
              family_key,
              configuration,
              execution_context
@@ -142,6 +149,7 @@ defmodule Cadence.Runtime.TransportRuntime do
              timer_service
            ) do
       state = %{
+        process_namespace: process_namespace,
         mission_id: mission_id,
         realized_contact_id: realized_contact_id,
         path_id: path_id,
@@ -205,6 +213,7 @@ defmodule Cadence.Runtime.TransportRuntime do
     reply =
       with {:ok, snapshot_state} <-
              CapabilityRegistry.snapshot_transport_state(
+               state.process_namespace.capability_registry,
                state.family_key,
                state.extension_state,
                execution_context(state)
@@ -248,6 +257,7 @@ defmodule Cadence.Runtime.TransportRuntime do
       with {:ok, state} <- prepare_for_interaction(state, opts),
            {:ok, %ExecutionResult{} = execution_result} <-
              CapabilityRegistry.handle_transport_event(
+               state.process_namespace.capability_registry,
                state.family_key,
                event,
                state.extension_state,
@@ -282,6 +292,7 @@ defmodule Cadence.Runtime.TransportRuntime do
       with {:ok, state} <- prepare_for_interaction(state, opts),
            {:ok, %ExecutionResult{} = execution_result} <-
              CapabilityRegistry.handle_transport_control_input(
+               state.process_namespace.capability_registry,
                state.family_key,
                control_input,
                state.extension_state,
@@ -384,6 +395,7 @@ defmodule Cadence.Runtime.TransportRuntime do
   defp execute_timer(state, timer_key, timer_entry) do
     with {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.handle_transport_timer(
+             state.process_namespace.capability_registry,
              state.family_key,
              timer_key,
              state.extension_state,
@@ -471,6 +483,7 @@ defmodule Cadence.Runtime.TransportRuntime do
     |> Enum.filter(&match?(%ProviderRequest{}, &1))
     |> Enum.reduce_while({:ok, []}, fn %ProviderRequest{} = provider_request, {:ok, acc} ->
       case ProviderAdapters.deliver_uplink(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path_id,
@@ -806,6 +819,7 @@ defmodule Cadence.Runtime.TransportRuntime do
          capability_instance_id when is_binary(capability_instance_id) <-
            Keyword.get(opts, :capability_instance_id) do
       MissionRuntime.transport_runtime_name(
+        process_namespace(opts),
         mission_id,
         realized_contact_id,
         path_id,
@@ -814,5 +828,9 @@ defmodule Cadence.Runtime.TransportRuntime do
     else
       _missing_context -> nil
     end
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end

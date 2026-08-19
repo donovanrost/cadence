@@ -10,6 +10,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
     CapabilityRegistry,
     MissionRuntimeSpec,
     PartitionKey,
+    ProcessNamespace,
     TimerService
   }
 
@@ -22,6 +23,23 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
         clock_mode,
         %DateTime{} = current_time
       ) do
+    build(binding_set, activation, partition_key, clock_mode, current_time, [])
+  end
+
+  def build(
+        %BindingSet{} = binding_set,
+        %MissionRuntimeSpec{} = activation,
+        %PartitionKey{} = partition_key,
+        clock_mode,
+        %DateTime{} = current_time,
+        opts
+      )
+      when is_list(opts) do
+    process_namespace =
+      Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+
+    capability_registry = process_namespace.capability_registry
+
     activation_context =
       ActivationContext.new(%{
         mission_id: activation.mission_id,
@@ -37,7 +55,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
              binding_set.rules,
              binding_set.capability_instances,
              partition_key,
-             activation_context
+             activation_context,
+             capability_registry
            ) do
       runtime_binding_set =
         %BindingSet{
@@ -52,7 +71,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
                activation,
                partition_key,
                clock_mode,
-               current_time
+               current_time,
+               capability_registry
              ) do
         {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records}
       end
@@ -64,7 +84,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %MissionRuntimeSpec{} = activation,
          %PartitionKey{} = partition_key,
          clock_mode,
-         %DateTime{} = current_time
+         %DateTime{} = current_time,
+         capability_registry
        ) do
     runtime_binding_set.capability_instances
     |> Enum.reduce_while(
@@ -76,7 +97,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
           reduce_state,
           activation,
           runtime_binding_set,
-          partition_key
+          partition_key,
+          capability_registry
         )
       end
     )
@@ -87,9 +109,13 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          {:ok, acc, timer_service, runtime_records},
          %MissionRuntimeSpec{} = activation,
          %BindingSet{} = runtime_binding_set,
-         %PartitionKey{} = partition_key
+         %PartitionKey{} = partition_key,
+         capability_registry
        ) do
-    case CapabilityRegistry.fetch_descriptor(capability_instance.family_key) do
+    case CapabilityRegistry.fetch_descriptor(
+           capability_registry,
+           capability_instance.family_key
+         ) do
       {:ok, %Descriptor{} = descriptor} ->
         maybe_initialize_managed_application_instance(
           descriptor,
@@ -99,7 +125,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
           capability_instance,
           timer_service,
           acc,
-          runtime_records
+          runtime_records,
+          capability_registry
         )
 
       {:error, reason} ->
@@ -116,7 +143,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %CapabilityInstance{} = capability_instance,
          %TimerService{} = timer_service,
          acc,
-         runtime_records
+         runtime_records,
+         capability_registry
        ) do
     initialize_managed_application_instance(
       activation,
@@ -125,7 +153,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
       capability_instance,
       timer_service,
       acc,
-      runtime_records
+      runtime_records,
+      capability_registry
     )
   end
 
@@ -137,7 +166,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %CapabilityInstance{},
          %TimerService{} = timer_service,
          acc,
-         runtime_records
+         runtime_records,
+         _capability_registry
        ) do
     {:cont, {:ok, acc, timer_service, runtime_records}}
   end
@@ -149,7 +179,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %CapabilityInstance{} = capability_instance,
          %TimerService{} = timer_service,
          acc,
-         runtime_records
+         runtime_records,
+         capability_registry
        ) do
     execution_context =
       execution_context(
@@ -162,12 +193,14 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
     with {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.init_managed_application(
+             capability_registry,
              capability_instance.family_key,
              capability_instance.runtime_configuration,
              execution_context
            ),
          {:ok, state_snapshot} <-
            CapabilityRegistry.snapshot_managed_state(
+             capability_registry,
              capability_instance.family_key,
              execution_result.state,
              execution_context
@@ -216,14 +249,16 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          rules,
          capability_instances,
          %PartitionKey{} = partition_key,
-         %ActivationContext{} = activation_context
+         %ActivationContext{} = activation_context,
+         capability_registry
        )
        when is_list(rules) and is_list(capability_instances) do
     with {:ok, runtime_capability_instances} <-
            build_runtime_capability_instances(
              capability_instances,
              partition_key,
-             activation_context
+             activation_context,
+             capability_registry
            ) do
       runtime_capability_instance_ids =
         runtime_capability_instances
@@ -247,7 +282,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   defp build_runtime_capability_instances(
          capability_instances,
          %PartitionKey{} = partition_key,
-         %ActivationContext{} = activation_context
+         %ActivationContext{} = activation_context,
+         capability_registry
        )
        when is_list(capability_instances) do
     Enum.reduce_while(capability_instances, {:ok, []}, fn %CapabilityInstance{} =
@@ -257,7 +293,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
         capability_instance,
         acc,
         partition_key,
-        activation_context
+        activation_context,
+        capability_registry
       )
     end)
   end
@@ -266,12 +303,14 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %CapabilityInstance{} = capability_instance,
          acc,
          %PartitionKey{} = partition_key,
-         %ActivationContext{} = activation_context
+         %ActivationContext{} = activation_context,
+         capability_registry
        ) do
     case build_runtime_capability_instance(
            capability_instance,
            partition_key,
-           activation_context
+           activation_context,
+           capability_registry
          ) do
       {:ok, runtime_capability_instance} ->
         {:cont, {:ok, acc ++ [runtime_capability_instance]}}
@@ -287,10 +326,14 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
   defp build_runtime_capability_instance(
          %CapabilityInstance{} = capability_instance,
          %PartitionKey{} = partition_key,
-         %ActivationContext{} = activation_context
+         %ActivationContext{} = activation_context,
+         capability_registry
        ) do
     with {:ok, %Descriptor{} = descriptor} <-
-           CapabilityRegistry.fetch_descriptor(capability_instance.family_key),
+           CapabilityRegistry.fetch_descriptor(
+             capability_registry,
+             capability_instance.family_key
+           ),
          :ok <-
            validate_runtime_capability_partition(
              descriptor,
@@ -300,7 +343,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          {:ok, instance_configuration} <-
            build_runtime_capability_instance_configuration(
              capability_instance,
-             activation_context
+             activation_context,
+             capability_registry
            ) do
       {:ok,
        %CapabilityInstance{capability_instance | runtime_configuration: instance_configuration}}
@@ -370,9 +414,11 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp build_runtime_capability_instance_configuration(
          %CapabilityInstance{} = capability_instance,
-         %ActivationContext{} = activation_context
+         %ActivationContext{} = activation_context,
+         capability_registry
        ) do
     case CapabilityRegistry.build_instance(
+           capability_registry,
            capability_instance.family_key,
            capability_instance.runtime_configuration,
            activation_context
@@ -437,12 +483,16 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp snapshot_managed_application(state, %CapabilityInstance{} = capability_instance) do
     with {:ok, %Descriptor{} = descriptor} <-
-           CapabilityRegistry.fetch_descriptor(capability_instance.family_key),
+           CapabilityRegistry.fetch_descriptor(
+             state.process_namespace.capability_registry,
+             capability_instance.family_key
+           ),
          :ok <- ensure_managed_application_descriptor(descriptor),
          {:ok, application_state} <-
            fetch_managed_application_state(state, capability_instance.capability_instance_id),
          {:ok, snapshot_state} <-
            CapabilityRegistry.snapshot_managed_state(
+             state.process_namespace.capability_registry,
              capability_instance.family_key,
              application_state,
              snapshot_execution_context(state, capability_instance)

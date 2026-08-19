@@ -14,6 +14,7 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.MissionRuntime
+  alias Cadence.Runtime.ProcessNamespace
   alias Cadence.Runtime.Persistence
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
@@ -29,12 +30,14 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   def start_link(opts) when is_list(opts) do
     %RealizedContactRuntimeSpec{} = realized_contact = Keyword.fetch!(opts, :realized_contact)
+    process_namespace = process_namespace(opts)
 
     GenServer.start_link(
       __MODULE__,
       opts,
       name:
         MissionRuntime.downlink_combiner_name(
+          process_namespace,
           realized_contact.mission_id,
           realized_contact.realized_contact_id
         )
@@ -178,6 +181,10 @@ defmodule Cadence.Runtime.DownlinkCombiner do
       %ContactPathSpec{} = path -> path.path_id
       nil -> nil
     end
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 
   defp select_winner(nil, %DownlinkObservation{} = observation, _selected_downlink_path_id) do

@@ -38,6 +38,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/observability.ex" => :adapter,
     "lib/cadence/persistence.ex" => :platform,
     "lib/cadence/management/supervisor.ex" => :composition,
+    "lib/cadence/control/process_namespace.ex" => :composition,
     "lib/cadence/control/supervisor.ex" => :composition,
     "lib/cadence/platform/supervisor.ex" => :composition,
     "lib/cadence/projections/supervisor.ex" => :composition,

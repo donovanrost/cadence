@@ -19,6 +19,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     IngressPersistenceProjector,
     MissionRuntime,
     PartitionKey,
+    ProcessNamespace,
     ProviderBindingSpec,
     ProviderIngressExecutor,
     TransportBindingSpec
@@ -27,6 +28,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   alias Cadence.Runtime.TransportRuntime
 
   @type state :: %{
+          process_namespace: ProcessNamespace.t(),
           organization_id: binary() | nil,
           mission_id: binary(),
           realized_contact_id: binary(),
@@ -40,6 +42,7 @@ defmodule Cadence.Runtime.PathCoordinator do
           current_value_store_policy: map(),
           telemetry_storage_policy: map(),
           ingress_archive_consumer_policy: map(),
+          persist_runtime_records?: boolean(),
           lifecycle_status: :active | :quiescing | :quiesced,
           quiescence_settlement: map() | nil,
           provider_bindings: %{required(binary()) => ProviderBindingSpec.t()},
@@ -49,12 +52,19 @@ defmodule Cadence.Runtime.PathCoordinator do
   def start_link(opts) when is_list(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
+    process_namespace = process_namespace(opts)
     %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
 
     GenServer.start_link(
       __MODULE__,
       opts,
-      name: MissionRuntime.path_coordinator_name(mission_id, realized_contact_id, path.path_id)
+      name:
+        MissionRuntime.path_coordinator_name(
+          process_namespace,
+          mission_id,
+          realized_contact_id,
+          path.path_id
+        )
     )
   end
 
@@ -104,8 +114,10 @@ defmodule Cadence.Runtime.PathCoordinator do
     %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
     clock_mode = Keyword.get(opts, :clock_mode, :live)
     initial_time = Keyword.get(opts, :initial_time, DateTime.utc_now())
+    process_namespace = process_namespace(opts)
 
     state = %{
+      process_namespace: process_namespace,
       organization_id: Keyword.get(opts, :organization_id),
       persistence_policy:
         Keyword.get_lazy(
@@ -131,6 +143,7 @@ defmodule Cadence.Runtime.PathCoordinator do
           :ingress_archive_consumer_policy,
           &IngressArchiveConsumer.configured_policy/0
         ),
+      persist_runtime_records?: Keyword.get(opts, :persist_runtime_records?, true),
       mission_id: mission_id,
       realized_contact_id: realized_contact_id,
       path: path,
@@ -317,6 +330,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         {IngressJournal,
          name:
            MissionRuntime.provider_ingress_journal_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -342,6 +356,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         {IngressJournalConsumer,
          name:
            MissionRuntime.provider_ingress_journal_consumer_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -354,6 +369,7 @@ defmodule Cadence.Runtime.PathCoordinator do
          policy: state.ingress_archive_consumer_policy,
          journal_name:
            MissionRuntime.provider_ingress_journal_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -361,6 +377,7 @@ defmodule Cadence.Runtime.PathCoordinator do
            ),
          executor_name:
            MissionRuntime.provider_ingress_executor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -382,6 +399,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         {IngressArchiveConsumer,
          name:
            MissionRuntime.provider_ingress_archive_consumer_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -393,6 +411,7 @@ defmodule Cadence.Runtime.PathCoordinator do
          provider_binding_id: provider_binding.provider_binding_id,
          journal_name:
            MissionRuntime.provider_ingress_journal_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -410,6 +429,7 @@ defmodule Cadence.Runtime.PathCoordinator do
       {IngressPersistenceProjector,
        name:
          MissionRuntime.provider_persistence_projector_name(
+           state.process_namespace,
            state.mission_id,
            state.realized_contact_id,
            state.path.path_id,
@@ -425,6 +445,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id
@@ -442,6 +463,7 @@ defmodule Cadence.Runtime.PathCoordinator do
       {ProviderIngressExecutor,
        name:
          MissionRuntime.provider_ingress_executor_name(
+           state.process_namespace,
            state.mission_id,
            state.realized_contact_id,
            state.path.path_id,
@@ -456,6 +478,7 @@ defmodule Cadence.Runtime.PathCoordinator do
        current_value_store_policy: state.current_value_store_policy,
        persistence_projector_name:
          MissionRuntime.provider_persistence_projector_name(
+           state.process_namespace,
            state.mission_id,
            state.realized_contact_id,
            state.path.path_id,
@@ -464,6 +487,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id
@@ -481,6 +505,7 @@ defmodule Cadence.Runtime.PathCoordinator do
       [
         name:
           MissionRuntime.provider_runtime_name(
+            state.process_namespace,
             state.mission_id,
             state.realized_contact_id,
             state.path.path_id,
@@ -495,6 +520,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         direction: state.path.direction,
         ingress_executor_name:
           MissionRuntime.provider_ingress_executor_name(
+            state.process_namespace,
             state.mission_id,
             state.realized_contact_id,
             state.path.path_id,
@@ -508,6 +534,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id
@@ -526,6 +553,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         opts,
         :ingress_journal_name,
         MissionRuntime.provider_ingress_journal_name(
+          state.process_namespace,
           state.mission_id,
           state.realized_contact_id,
           state.path.path_id,
@@ -540,6 +568,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   defp start_provider_child(state, child_spec) do
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id
@@ -581,7 +610,10 @@ defmodule Cadence.Runtime.PathCoordinator do
                                                                transport_binding,
                                                              :ok ->
       with {:ok, %Descriptor{kind: :transport_extension}} <-
-             CapabilityRegistry.fetch_descriptor(transport_binding.family_key),
+             CapabilityRegistry.fetch_descriptor(
+               state.process_namespace.capability_registry,
+               transport_binding.family_key
+             ),
            {:ok, built_configuration} <- build_transport_configuration(state, transport_binding),
            {:ok, _transport_runtime} <-
              start_transport_runtime(state, transport_binding, built_configuration) do
@@ -598,6 +630,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp build_transport_configuration(state, %TransportBindingSpec{} = transport_binding) do
     CapabilityRegistry.build_instance(
+      state.process_namespace.capability_registry,
       transport_binding.family_key,
       transport_binding.configuration,
       ActivationContext.new(%{
@@ -626,14 +659,17 @@ defmodule Cadence.Runtime.PathCoordinator do
        binding_set_version: state.binding_set_version,
        capability_instance_id: transport_binding.transport_binding_id,
        family_key: transport_binding.family_key,
+       process_namespace: state.process_namespace,
        configuration: configuration,
        scope_ref: transport_scope_ref(state.path, transport_binding),
        partition_key: transport_partition_key(state.path, transport_binding),
        clock_mode: state.clock_mode,
-       initial_time: state.initial_time}
+       initial_time: state.initial_time,
+       persist_runtime_records?: state.persist_runtime_records?}
 
     case DynamicSupervisor.start_child(
            MissionRuntime.transport_supervisor_name(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id
@@ -671,6 +707,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   defp quiesce_provider_runtimes(state) do
     reduce_settlements(state.path.provider_bindings, fn provider_binding ->
       ProviderAdapters.quiesce(
+        state.process_namespace,
         state.mission_id,
         state.realized_contact_id,
         state.path.path_id,
@@ -732,6 +769,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp provider_ingress_journal_consumer_name(state, provider_binding) do
     MissionRuntime.provider_ingress_journal_consumer_name(
+      state.process_namespace,
       state.mission_id,
       state.realized_contact_id,
       state.path.path_id,
@@ -741,6 +779,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp provider_ingress_archive_consumer_name(state, provider_binding) do
     MissionRuntime.provider_ingress_archive_consumer_name(
+      state.process_namespace,
       state.mission_id,
       state.realized_contact_id,
       state.path.path_id,
@@ -750,6 +789,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp provider_ingress_executor_name(state, provider_binding) do
     MissionRuntime.provider_ingress_executor_name(
+      state.process_namespace,
       state.mission_id,
       state.realized_contact_id,
       state.path.path_id,
@@ -759,6 +799,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp provider_persistence_projector_name(state, provider_binding) do
     MissionRuntime.provider_persistence_projector_name(
+      state.process_namespace,
       state.mission_id,
       state.realized_contact_id,
       state.path.path_id,
@@ -769,6 +810,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   defp collect_provider_runtime_snapshots(state) do
     Enum.reduce_while(state.path.provider_bindings, {:ok, []}, fn provider_binding, {:ok, acc} ->
       case ProviderAdapters.snapshot(
+             state.process_namespace,
              state.mission_id,
              state.realized_contact_id,
              state.path.path_id,
@@ -786,7 +828,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp transport_runtime(state, transport_binding_id) do
     case Registry.lookup(
-           Cadence.Runtime.Registry,
+           state.process_namespace.registry,
            {:transport_runtime, state.mission_id, state.realized_contact_id, state.path.path_id,
             transport_binding_id}
          ) do
@@ -822,5 +864,9 @@ defmodule Cadence.Runtime.PathCoordinator do
          }
        ) do
     PartitionKey.new(%{affinity: :transport, value: transport_binding_id})
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end
