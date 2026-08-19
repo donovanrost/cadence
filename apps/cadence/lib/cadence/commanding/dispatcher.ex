@@ -3,8 +3,7 @@ defmodule Cadence.Commanding.Dispatcher do
 
   use GenServer
 
-  alias Cadence.Commanding.DispatchSupervisor
-  alias Cadence.Commanding.LaneDispatcher
+  alias Cadence.Commanding.{DispatchSupervisor, LaneDispatcher, ProcessNamespace}
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
@@ -12,20 +11,53 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
-    name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+    process_namespace = process_namespace(opts)
+
+    case Keyword.get(opts, :name, process_namespace.dispatcher) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
-  @spec reconcile_now(GenServer.server()) :: {:ok, map()} | {:error, term()}
+  @spec reconcile_now(GenServer.server() | ProcessNamespace.t()) ::
+          {:ok, map()} | {:error, term()}
   def reconcile_now(server \\ __MODULE__) do
-    GenServer.call(server, :reconcile_now, :infinity)
+    GenServer.call(dispatcher_server(server), :reconcile_now, :infinity)
   end
 
   @spec kick_lane(binary(), binary(), binary(), keyword()) :: :ok | {:error, term()}
-  def kick_lane(organization_id, mission_id, queue_lane_key, opts \\ [])
+  def kick_lane(organization_id, mission_id, queue_lane_key),
+    do: kick_lane(organization_id, mission_id, queue_lane_key, [])
+
+  def kick_lane(organization_id, mission_id, queue_lane_key, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_list(opts) do
-    case drain_lane(organization_id, mission_id, queue_lane_key, opts) do
+    process_namespace =
+      Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+
+    kick_lane(process_namespace, organization_id, mission_id, queue_lane_key, opts)
+  end
+
+  @spec kick_lane(ProcessNamespace.t(), binary(), binary(), binary(), keyword()) ::
+          :ok | {:error, term()}
+  def kick_lane(
+        %ProcessNamespace{} = process_namespace,
+        organization_id,
+        mission_id,
+        queue_lane_key
+      ),
+      do: kick_lane(process_namespace, organization_id, mission_id, queue_lane_key, [])
+
+  def kick_lane(
+        %ProcessNamespace{} = process_namespace,
+        organization_id,
+        mission_id,
+        queue_lane_key,
+        opts
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
+             is_list(opts) do
+    case drain_lane(process_namespace, organization_id, mission_id, queue_lane_key, opts) do
       {:ok, _summary} -> :ok
       {:error, :dispatcher_not_running} -> :ok
       {:error, :noproc} -> :ok
@@ -36,18 +68,52 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @spec drain_lane(binary(), binary(), binary(), keyword()) ::
           {:ok, LaneDispatcher.drain_summary()} | {:error, term()}
-  def drain_lane(organization_id, mission_id, queue_lane_key, opts \\ [])
+  def drain_lane(organization_id, mission_id, queue_lane_key),
+    do: drain_lane(organization_id, mission_id, queue_lane_key, [])
+
+  def drain_lane(organization_id, mission_id, queue_lane_key, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
+             is_list(opts) do
+    process_namespace =
+      Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+
+    drain_lane(process_namespace, organization_id, mission_id, queue_lane_key, opts)
+  end
+
+  @spec drain_lane(ProcessNamespace.t(), binary(), binary(), binary(), keyword()) ::
+          {:ok, LaneDispatcher.drain_summary()} | {:error, term()}
+  def drain_lane(
+        %ProcessNamespace{} = process_namespace,
+        organization_id,
+        mission_id,
+        queue_lane_key
+      ),
+      do: drain_lane(process_namespace, organization_id, mission_id, queue_lane_key, [])
+
+  def drain_lane(
+        %ProcessNamespace{} = process_namespace,
+        organization_id,
+        mission_id,
+        queue_lane_key,
+        opts
+      )
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_list(opts) do
     with :ok <-
            DispatchSupervisor.ensure_lane_dispatcher_started(
+             process_namespace,
              organization_id,
              mission_id,
              queue_lane_key,
              Keyword.put_new(opts, :run_on_boot?, false)
            ),
          {:ok, lane_dispatcher} <-
-           DispatchSupervisor.lane_dispatcher(organization_id, mission_id, queue_lane_key) do
+           DispatchSupervisor.lane_dispatcher(
+             process_namespace,
+             organization_id,
+             mission_id,
+             queue_lane_key
+           ) do
       LaneDispatcher.drain(lane_dispatcher)
     else
       :error -> {:error, :dispatcher_not_running}
@@ -58,6 +124,16 @@ defmodule Cadence.Commanding.Dispatcher do
   @impl true
   def init(opts) do
     state = %{
+      process_namespace: process_namespace(opts),
+      requeue_release_pending_fun:
+        Keyword.get(
+          opts,
+          :requeue_release_pending_fun,
+          &Commanding.requeue_release_pending_queue_entries/0
+        ),
+      list_pending_queue_lanes_fun:
+        Keyword.get(opts, :list_pending_queue_lanes_fun, &Commanding.list_pending_queue_lanes/0),
+      lane_dispatcher_opts: lane_dispatcher_opts(opts),
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       lane_safety_poll_interval_ms:
@@ -71,7 +147,7 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @impl true
   def handle_continue(:bootstrap, state) do
-    _ = Commanding.requeue_release_pending_queue_entries()
+    _ = state.requeue_release_pending_fun.()
 
     if state.run_on_boot? do
       _ = reconcile_dispatch_lanes(state, :boot)
@@ -95,15 +171,20 @@ defmodule Cadence.Commanding.Dispatcher do
   end
 
   defp reconcile_dispatch_lanes(state, reason) do
-    pending_lanes = Commanding.list_pending_queue_lanes()
+    pending_lanes = state.list_pending_queue_lanes_fun.()
 
     Enum.each(pending_lanes, fn lane ->
       :ok =
         DispatchSupervisor.ensure_lane_dispatcher_started(
+          state.process_namespace,
           lane.organization_id,
           lane.mission_id,
           lane.queue_lane_key,
-          safety_poll_interval_ms: state.lane_safety_poll_interval_ms
+          Keyword.put(
+            state.lane_dispatcher_opts,
+            :safety_poll_interval_ms,
+            state.lane_safety_poll_interval_ms
+          )
         )
     end)
 
@@ -129,6 +210,28 @@ defmodule Cadence.Commanding.Dispatcher do
         safety_poll_interval_ms: state.safety_poll_interval_ms,
         lane_safety_poll_interval_ms: state.lane_safety_poll_interval_ms
       })
+    )
+  end
+
+  defp dispatcher_server(%ProcessNamespace{} = process_namespace),
+    do: process_namespace.dispatcher
+
+  defp dispatcher_server(server), do: server
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+  end
+
+  defp lane_dispatcher_opts(opts) do
+    opts
+    |> Keyword.get(:lane_dispatcher_opts, [])
+    |> Keyword.put_new(
+      :reference_time_fun,
+      Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0)
+    )
+    |> Keyword.put_new(
+      :dispatch_fun,
+      Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5)
     )
   end
 end

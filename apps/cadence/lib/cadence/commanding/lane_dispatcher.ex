@@ -3,6 +3,7 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   use GenServer
 
+  alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
@@ -22,10 +23,13 @@ defmodule Cadence.Commanding.LaneDispatcher do
     organization_id = Keyword.fetch!(opts, :organization_id)
     mission_id = Keyword.fetch!(opts, :mission_id)
     queue_lane_key = Keyword.fetch!(opts, :queue_lane_key)
+    process_namespace = process_namespace(opts)
 
     default_name =
-      {:via, Registry,
-       {Cadence.Commanding.DispatchRegistry, {organization_id, mission_id, queue_lane_key}}}
+      ProcessNamespace.via(
+        process_namespace,
+        {organization_id, mission_id, queue_lane_key}
+      )
 
     case Keyword.get(opts, :name, default_name) do
       nil -> GenServer.start_link(__MODULE__, opts)
@@ -241,5 +245,9 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   defp datetime_diff_ms(%DateTime{} = target_time, %DateTime{} = current_time) do
     DateTime.diff(target_time, current_time, :millisecond)
+  end
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end

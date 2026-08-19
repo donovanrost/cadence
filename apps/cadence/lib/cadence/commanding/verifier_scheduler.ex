@@ -5,7 +5,7 @@ defmodule Cadence.Commanding.VerifierScheduler do
 
   use GenServer
 
-  alias Cadence.Commanding.CommandVerifierInstance
+  alias Cadence.Commanding.{CommandVerifierInstance, ProcessNamespace}
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
@@ -14,8 +14,12 @@ defmodule Cadence.Commanding.VerifierScheduler do
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
-    name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+    process_namespace = process_namespace(opts)
+
+    case Keyword.get(opts, :name, process_namespace.verifier_scheduler) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
   @spec notify_verifier_instances_changed(
@@ -40,20 +44,35 @@ defmodule Cadence.Commanding.VerifierScheduler do
     end
   end
 
-  @spec snapshot(GenServer.server()) :: map()
+  @spec snapshot(GenServer.server() | ProcessNamespace.t()) :: map()
   def snapshot(server \\ __MODULE__) do
-    GenServer.call(server, :snapshot)
+    GenServer.call(scheduler_server(server), :snapshot)
   end
 
-  @spec reconcile_now(GenServer.server(), DateTime.t()) ::
+  @spec reconcile_now(GenServer.server() | ProcessNamespace.t(), DateTime.t()) ::
           {:ok, [Cadence.Commanding.CommandVerifierInstance.t()]} | {:error, term()}
   def reconcile_now(server \\ __MODULE__, %DateTime{} = reference_time) do
-    GenServer.call(server, {:reconcile_now, reference_time}, :infinity)
+    GenServer.call(scheduler_server(server), {:reconcile_now, reference_time}, :infinity)
   end
 
   @impl true
   def init(opts) do
     state = %{
+      process_namespace: process_namespace(opts),
+      bootstrap_gate_fun: Keyword.get(opts, :bootstrap_gate_fun, fn -> :ok end),
+      projection_query_fun:
+        Keyword.get(
+          opts,
+          :projection_query_fun,
+          &Commanding.command_verifier_timeout_projection/0
+        ),
+      timeout_reconcile_fun:
+        Keyword.get(
+          opts,
+          :timeout_reconcile_fun,
+          &Commanding.timeout_command_verifier_instances/1
+        ),
+      telemetry_metadata: telemetry_metadata(opts),
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       auto_schedule?: Keyword.get(opts, :auto_schedule?, true),
@@ -69,6 +88,8 @@ defmodule Cadence.Commanding.VerifierScheduler do
 
   @impl true
   def handle_continue(:bootstrap, state) do
+    :ok = state.bootstrap_gate_fun.()
+
     state =
       state
       |> maybe_reconcile_on_boot()
@@ -82,7 +103,7 @@ defmodule Cadence.Commanding.VerifierScheduler do
   @impl true
   def handle_call({:reconcile_now, %DateTime{} = reference_time}, _from, state) do
     {reply, measurements} =
-      timed(fn -> Commanding.timeout_command_verifier_instances(reference_time) end)
+      timed(fn -> state.timeout_reconcile_fun.(reference_time) end)
 
     emit(:reconcile, state, measurements_for_reconcile(reply, measurements), %{reason: :manual})
 
@@ -152,7 +173,7 @@ defmodule Cadence.Commanding.VerifierScheduler do
   defp reconcile_due_timeouts(state, reason) do
     {reply, measurements} =
       timed(fn ->
-        Commanding.timeout_command_verifier_instances(resolve_reference_time(state))
+        state.timeout_reconcile_fun.(resolve_reference_time(state))
       end)
 
     event = if reason == :safety, do: :safety_reconcile, else: :reconcile
@@ -170,7 +191,7 @@ defmodule Cadence.Commanding.VerifierScheduler do
 
   defp rebuild_projection(state) do
     {verifier_instances, measurements} =
-      timed(fn -> Commanding.command_verifier_timeout_projection() end)
+      timed(state.projection_query_fun)
 
     projection = projection_from_instances(verifier_instances)
 
@@ -324,6 +345,9 @@ defmodule Cadence.Commanding.VerifierScheduler do
     |> min(@max_timer_ms)
   end
 
+  defp server_pid(%ProcessNamespace{} = process_namespace),
+    do: GenServer.whereis(process_namespace.verifier_scheduler)
+
   defp server_pid(server) when is_pid(server), do: server
   defp server_pid(server), do: GenServer.whereis(server)
 
@@ -360,6 +384,7 @@ defmodule Cadence.Commanding.VerifierScheduler do
       measurements,
       state
       |> scheduler_metadata()
+      |> Map.merge(state.telemetry_metadata)
       |> Map.merge(metadata)
     )
   end
@@ -369,5 +394,21 @@ defmodule Cadence.Commanding.VerifierScheduler do
       projected_verifier_count: map_size(state.projection),
       timeout_timer_count: if(is_nil(state.timeout_timer), do: 0, else: 1)
     }
+  end
+
+  defp scheduler_server(%ProcessNamespace{} = process_namespace),
+    do: process_namespace.verifier_scheduler
+
+  defp scheduler_server(server), do: server
+
+  defp process_namespace(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+  end
+
+  defp telemetry_metadata(opts) do
+    case Keyword.get(opts, :telemetry_metadata, %{}) do
+      metadata when is_map(metadata) -> metadata
+      other -> raise ArgumentError, "telemetry_metadata must be a map, got: #{inspect(other)}"
+    end
   end
 end
