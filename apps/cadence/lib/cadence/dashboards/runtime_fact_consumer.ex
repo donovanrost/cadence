@@ -21,6 +21,7 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
 
   alias Cadence.Dashboards.{RuntimeComposition, RuntimeInvalidation}
   alias Cadence.Limits.DefinitionLifecycleEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Telemetry.{
     BackfillLifecycleChanged,
@@ -37,12 +38,13 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
   @impl true
   def init(opts) do
     opts = with_configured_defaults(opts)
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
 
-    :ok = Cadence.Catalog.Facts.subscribe(self())
-    :ok = Cadence.Contacts.Facts.subscribe(self())
-    :ok = Cadence.DataSources.Facts.subscribe(self())
-    :ok = Cadence.Limits.Facts.subscribe(self())
-    :ok = Cadence.Telemetry.Facts.subscribe(self())
+    :ok = Cadence.Catalog.Facts.subscribe(event_bus, self())
+    :ok = Cadence.Contacts.Facts.subscribe(event_bus, self())
+    :ok = Cadence.DataSources.Facts.subscribe(event_bus, self())
+    :ok = Cadence.Limits.Facts.subscribe(event_bus, self())
+    :ok = Cadence.Telemetry.Facts.subscribe(event_bus, self())
 
     {:ok,
      %{
