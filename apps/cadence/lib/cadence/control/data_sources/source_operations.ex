@@ -113,6 +113,7 @@ defmodule Cadence.Control.DataSources.SourceOperations do
       :credential_material_resolver,
       :credential_material_authorizer,
       :credential_secret_backend,
+      :credential_configuration,
       :secret_backend,
       :env_material_profiles,
       :env_reader
@@ -125,13 +126,7 @@ defmodule Cadence.Control.DataSources.SourceOperations do
   end
 
   defp credential_material_resolver_configured?(opts) do
-    configured = Application.get_env(:cadence, :data_source_credentials, [])
-
-    Keyword.has_key?(opts, :credential_material_resolver) ||
-      Keyword.has_key?(opts, :credential_secret_backend) ||
-      Keyword.has_key?(opts, :secret_backend) ||
-      Keyword.has_key?(configured, :material_resolver) ||
-      Keyword.has_key?(configured, :secret_backend)
+    Cadence.Secrets.ResolverConfiguration.data_source_configured?(opts)
   end
 
   defp put_probe_connection_profile(opts, _data_source, nil), do: opts

@@ -7,7 +7,7 @@ defmodule CadenceSimulator.Provider.Auth do
 
   @spec authenticate(Plug.Conn.t(), atom()) :: Plug.Conn.t()
   def authenticate(conn, config_key) when is_atom(config_key) do
-    expected_token = Application.get_env(:cadence_simulator, config_key)
+    expected_token = expected_token(conn, config_key)
 
     if authorized?(conn, expected_token) do
       conn
@@ -45,4 +45,17 @@ defmodule CadenceSimulator.Provider.Auth do
   defp secure_compare(_left, _right), do: false
 
   defp missing_token?(token), do: not (is_binary(token) and token != "")
+
+  defp expected_token(conn, config_key) do
+    case conn.assigns do
+      %{provider_router_config: opts} when is_list(opts) ->
+        case Keyword.fetch(opts, :provider_auth) do
+          {:ok, auth} when is_list(auth) -> Keyword.get(auth, config_key)
+          _missing_explicit_configuration -> Application.get_env(:cadence_simulator, config_key)
+        end
+
+      _compatibility_call ->
+        Application.get_env(:cadence_simulator, config_key)
+    end
+  end
 end

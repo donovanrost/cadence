@@ -7,19 +7,15 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
   alias Plug.Conn
   alias Plug.Test
 
-  @config_keys [
-    :provider_admin_api_token,
-    :provider_api_token
+  @router_options [
+    provider_auth: [
+      provider_admin_api_token: "admin-secret",
+      provider_api_token: "provider-secret"
+    ]
   ]
 
   setup do
     :ok = Store.clear()
-    previous = Map.new(@config_keys, &{&1, Application.get_env(:cadence_simulator, &1)})
-
-    Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
-    Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
-
-    on_exit(fn -> restore_config(previous) end)
     :ok
   end
 
@@ -72,6 +68,23 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
     assert request(:get, "/v1/contact-opportunities/search", nil, "provider-secret").status == 404
   end
 
+  test "empty router options retain the application-config compatibility boundary" do
+    previous_token = Application.get_env(:cadence_simulator, :provider_admin_api_token)
+    Application.put_env(:cadence_simulator, :provider_admin_api_token, "compatibility-secret")
+
+    on_exit(fn ->
+      restore_application_env(:provider_admin_api_token, previous_token)
+    end)
+
+    conn =
+      :get
+      |> Test.conn("/admin/v1/scenarios")
+      |> Conn.put_req_header("authorization", "Bearer compatibility-secret")
+      |> Router.call([])
+
+    assert conn.status == 200
+  end
+
   defp request(method, path, body, token) do
     conn =
       if is_map(body) do
@@ -84,13 +97,11 @@ defmodule CadenceSimulator.Provider.AdminRouterTest do
 
     conn
     |> Conn.put_req_header("authorization", "Bearer #{token}")
-    |> Router.call([])
+    |> Router.call(@router_options)
   end
 
-  defp restore_config(previous) do
-    Enum.each(previous, fn
-      {key, nil} -> Application.delete_env(:cadence_simulator, key)
-      {key, value} -> Application.put_env(:cadence_simulator, key, value)
-    end)
-  end
+  defp restore_application_env(key, nil), do: Application.delete_env(:cadence_simulator, key)
+
+  defp restore_application_env(key, value),
+    do: Application.put_env(:cadence_simulator, key, value)
 end

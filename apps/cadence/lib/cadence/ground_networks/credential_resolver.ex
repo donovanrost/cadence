@@ -3,19 +3,36 @@ defmodule Cadence.GroundNetworks.CredentialResolver do
 
   alias Cadence.GroundNetworks.ProviderCredentials
   alias Cadence.Secrets.{EnvBackend, Resolver}
+  alias Cadence.Secrets.ResolverConfiguration
 
   @type resolver :: (binary() -> {:ok, binary()} | {:error, term()})
 
   @spec resolver(keyword()) :: resolver()
   def resolver(opts \\ []) do
+    opts = ResolverConfiguration.provider_options(opts)
+
     case Keyword.get(opts, :credential_resolver) do
-      resolver when is_function(resolver, 1) -> resolver
-      _other -> &resolve(&1, opts)
+      resolver when is_function(resolver, 1) ->
+        resolver
+
+      {module, function} when is_atom(module) and is_atom(function) ->
+        &apply(module, function, [&1])
+
+      {module, function, extra_args}
+      when is_atom(module) and is_atom(function) and is_list(extra_args) ->
+        &apply(module, function, [&1 | extra_args])
+
+      _other ->
+        &do_resolve(&1, opts)
     end
   end
 
   @spec resolve(binary(), keyword()) :: {:ok, binary()} | {:error, term()}
   def resolve(reference, opts \\ []) when is_binary(reference) and is_list(opts) do
+    do_resolve(reference, ResolverConfiguration.provider_options(opts))
+  end
+
+  defp do_resolve(reference, opts) do
     case ProviderCredentials.resolve_registered(reference, opts) do
       {:ok, resolved} -> provider_material(resolved.material)
       {:error, :provider_credential_not_found} -> resolve_local_reference(reference, opts)
@@ -47,7 +64,7 @@ defmodule Cadence.GroundNetworks.CredentialResolver do
 
   defp resolve_local_reference("config://" <> name = reference, opts) when name != "" do
     if local_credentials_enabled?(opts) do
-      credentials = Application.get_env(:cadence, :ground_network_credentials, %{})
+      credentials = Keyword.get(opts, :ground_network_credentials, %{})
 
       backend = fn _descriptor, _backend_opts -> configured_material(credentials, name) end
 
@@ -82,9 +99,6 @@ defmodule Cadence.GroundNetworks.CredentialResolver do
   end
 
   defp local_credentials_enabled?(opts) do
-    Keyword.get(opts, :allow_local_provider_credentials?, false) ||
-      :cadence
-      |> Application.get_env(:provider_local_credentials, [])
-      |> Keyword.get(:enabled, false)
+    Keyword.get(opts, :allow_local_provider_credentials?, false)
   end
 end

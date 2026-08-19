@@ -11,23 +11,22 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
   alias CadenceSimulator.Provider.{Contacts, FleetScenarios, Router, Store}
   alias CadenceSimulator.TestProviderFixtures
 
-  @config_keys [:provider_admin_api_token, :provider_api_token]
+  @router_options [
+    provider_auth: [
+      provider_admin_api_token: "admin-secret",
+      provider_api_token: "provider-secret"
+    ]
+  ]
 
   setup do
     :ok = Store.clear()
-    previous = Map.new(@config_keys, &{&1, Application.get_env(:cadence_simulator, &1)})
-    Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
-    Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
-
-    on_exit(fn ->
-      Enum.each(previous, fn
-        {key, nil} -> Application.delete_env(:cadence_simulator, key)
-        {key, value} -> Application.put_env(:cadence_simulator, key, value)
-      end)
-    end)
 
     port = free_port()
-    start_supervised!({Bandit, plug: Router, scheme: :http, ip: {127, 0, 0, 1}, port: port})
+
+    start_supervised!(
+      {Bandit, plug: {Router, @router_options}, scheme: :http, ip: {127, 0, 0, 1}, port: port}
+    )
+
     %{base_url: "http://127.0.0.1:#{port}"}
   end
 

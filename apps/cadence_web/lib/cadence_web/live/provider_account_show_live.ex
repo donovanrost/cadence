@@ -18,6 +18,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
   def mount(%{"provider_account_id" => provider_account_id}, _session, socket) do
     socket =
       socket
+      |> assign(:provider_account_opts, provider_account_live_opts())
       |> stream_configure(:account_grants,
         dom_id: &"account-grant-#{&1.provider_account_grant_id}"
       )
@@ -39,7 +40,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
   def handle_event("validate-account", _params, %{assigns: %{account_action: nil}} = socket) do
     scope = socket.assigns.current_scope
     account = socket.assigns.provider_account
-    opts = provider_account_live_opts()
+    opts = socket.assigns.provider_account_opts
 
     {:noreply,
      socket
@@ -53,7 +54,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
 
   def handle_event("rotate-credential", _params, %{assigns: %{account_action: nil}} = socket) do
     %{current_scope: scope, provider_account: account, credential: credential} = socket.assigns
-    opts = provider_account_live_opts()
+    opts = socket.assigns.provider_account_opts
 
     {:noreply,
      socket
@@ -72,7 +73,7 @@ defmodule CadenceWeb.ProviderAccountShowLive do
 
   def handle_event("revoke-credential", _params, %{assigns: %{account_action: nil}} = socket) do
     %{current_scope: scope, provider_account: account, credential: credential} = socket.assigns
-    opts = provider_account_live_opts()
+    opts = socket.assigns.provider_account_opts
 
     {:noreply,
      socket

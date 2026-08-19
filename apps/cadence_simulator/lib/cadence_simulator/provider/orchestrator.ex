@@ -33,7 +33,13 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   def init(opts) do
     tick_ms = Keyword.get(opts, :tick_ms, @tick_ms)
     schedule_tick(tick_ms)
-    {:ok, %{tick_ms: tick_ms, streams: %{}}}
+
+    {:ok,
+     %{
+       tick_ms: tick_ms,
+       streams: %{},
+       provider_defaults: Keyword.get(opts, :provider_defaults, [])
+     }}
   end
 
   @impl true
@@ -458,7 +464,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
        do: {:ok, state}
 
   defp maybe_start_stream(state, reservation, run, data_plane, resource_type) do
-    with {:ok, opts} <- stream_options(data_plane, reservation, run),
+    with {:ok, opts} <-
+           stream_options(data_plane, reservation, run, state.provider_defaults),
          {:ok, pid} <- CadenceSimulator.start_simulator(opts) do
       reference = Process.monitor(pid)
       stream = %{pid: pid, reference: reference, resource_type: resource_type}
@@ -466,9 +473,9 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     end
   end
 
-  defp stream_options(data_plane, reservation, run) do
+  defp stream_options(data_plane, reservation, run, provider_defaults) do
     telemetry_profile = run["scenario_snapshot"]["telemetry_profile"]
-    definitions_path = resolve_definitions_path(data_plane, telemetry_profile)
+    definitions_path = resolve_definitions_path(data_plane, telemetry_profile, provider_defaults)
 
     with definitions_path when is_binary(definitions_path) <- definitions_path,
          host when is_binary(host) <- data_plane["host"],
@@ -505,11 +512,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     end
   end
 
-  defp resolve_definitions_path(data_plane, telemetry_profile) do
+  defp resolve_definitions_path(data_plane, telemetry_profile, provider_defaults) do
     data_plane["definitions_path"] ||
       telemetry_profile["definitions_path"] ||
-      Application.get_env(:cadence_simulator, :provider_defaults, [])
-      |> Keyword.get(:definitions_path)
+      Keyword.get(provider_defaults, :definitions_path)
   end
 
   defp stop_stream(state, reservation_id) do

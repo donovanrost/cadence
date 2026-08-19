@@ -17,6 +17,7 @@ defmodule CadenceWeb.ProviderAccountNewLive do
      socket
      |> assign(:page_title, "New Provider Account")
      |> assign(:nav_item, :provider_accounts)
+     |> assign(:provider_account_opts, provider_account_live_opts())
      |> assign(:selected_backend_type, "external")
      |> assign(:provider_connector, connector)
      |> assign(:provider_connector_options, provider_connector_options())
@@ -35,7 +36,7 @@ defmodule CadenceWeb.ProviderAccountNewLive do
   @impl true
   def handle_event("save", %{"provider_account" => params}, socket) do
     scope = socket.assigns.current_scope
-    opts = provider_account_live_opts()
+    opts = socket.assigns.provider_account_opts
 
     with {:ok, credential_attrs} <- credential_attrs(params),
          {:ok, _credential} <-

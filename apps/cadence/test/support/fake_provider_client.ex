@@ -50,6 +50,16 @@ defmodule Cadence.TestSupport.FakeProviderClient do
     resolve_response(opts, :validate_response, fn -> {:ok, %{"state" => "running"}} end)
   end
 
+  def resolve_credential("config://simulator-test"), do: {:ok, "test-token"}
+  def resolve_credential("provider-credential-" <> _suffix), do: {:ok, "test-token"}
+
+  def resolve_credential(reference),
+    do: {:error, {:credential_reference_not_found, reference}}
+
+  def secret_backend(_descriptor, _opts) do
+    {:ok, %{material: %{value: "ephemeral-test-secret"}, backend_version: "test-v1"}}
+  end
+
   @impl true
   def capabilities(_context, opts) do
     resolve_response(opts, :capabilities_response, fn ->

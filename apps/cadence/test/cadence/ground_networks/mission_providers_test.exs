@@ -236,24 +236,21 @@ defmodule Cadence.GroundNetworks.MissionProvidersTest do
 
   describe "credential references" do
     test "resolves configured and environment-backed secrets without accepting literals" do
-      previous_credentials = Application.get_env(:cadence, :ground_network_credentials)
-      previous_environment = System.get_env("CADENCE_PROVIDER_TEST_TOKEN")
+      resolver =
+        CredentialResolver.resolver(
+          provider_credential_configuration: %{
+            local: [enabled: true],
+            credentials: %{"simulator" => "configured"}
+          },
+          env_reader: fn "CADENCE_PROVIDER_TEST_TOKEN" -> "environment" end
+        )
 
-      on_exit(fn ->
-        restore_application_env(:cadence, :ground_network_credentials, previous_credentials)
-        restore_system_env("CADENCE_PROVIDER_TEST_TOKEN", previous_environment)
-      end)
+      assert resolver.("config://simulator") == {:ok, "configured"}
 
-      Application.put_env(:cadence, :ground_network_credentials, %{"simulator" => "configured"})
-      System.put_env("CADENCE_PROVIDER_TEST_TOKEN", "environment")
-
-      assert CredentialResolver.resolve("config://simulator") == {:ok, "configured"}
-
-      assert CredentialResolver.resolve("env://CADENCE_PROVIDER_TEST_TOKEN") ==
-               {:ok, "environment"}
+      assert resolver.("env://CADENCE_PROVIDER_TEST_TOKEN") == {:ok, "environment"}
 
       assert {:error, {:unsupported_credential_reference, "literal-secret"}} =
-               CredentialResolver.resolve("literal-secret")
+               resolver.("literal-secret")
     end
   end
 
@@ -280,10 +277,4 @@ defmodule Cadence.GroundNetworks.MissionProvidersTest do
 
   defp test_credential_resolver(reference),
     do: {:error, {:credential_reference_not_found, reference}}
-
-  defp restore_application_env(app, key, nil), do: Application.delete_env(app, key)
-  defp restore_application_env(app, key, value), do: Application.put_env(app, key, value)
-
-  defp restore_system_env(key, nil), do: System.delete_env(key)
-  defp restore_system_env(key, value), do: System.put_env(key, value)
 end

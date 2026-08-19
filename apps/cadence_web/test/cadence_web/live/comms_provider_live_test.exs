@@ -23,28 +23,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     ProviderCredentials
   }
 
-  alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.TestFixtures
-
-  setup do
-    previous_opts = Application.get_env(:cadence_web, :ground_network_provider_live_opts)
-
-    Application.put_env(
-      :cadence_web,
-      :ground_network_provider_live_opts,
-      client: FakeProviderClient,
-      credential_resolver: &credential_resolver/1
-    )
-
-    on_exit(fn ->
-      case previous_opts do
-        nil -> Application.delete_env(:cadence_web, :ground_network_provider_live_opts)
-        value -> Application.put_env(:cadence_web, :ground_network_provider_live_opts, value)
-      end
-    end)
-
-    :ok
-  end
 
   test "lists mission providers and exposes the mission-scoped setup path" do
     {conn, _organization, mission} = signed_in_org_and_mission()
@@ -305,8 +284,4 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
     {account, version, grant}
   end
-
-  defp credential_resolver("config://simulator-test"), do: {:ok, "test-token"}
-  defp credential_resolver("provider-credential-" <> _suffix), do: {:ok, "test-token"}
-  defp credential_resolver(reference), do: {:error, {:credential_reference_not_found, reference}}
 end

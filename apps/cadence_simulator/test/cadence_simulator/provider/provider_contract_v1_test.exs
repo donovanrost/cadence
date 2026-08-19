@@ -8,7 +8,12 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   alias Plug.Conn
   alias Plug.Test
 
-  @config_keys [:provider_admin_api_token, :provider_api_token]
+  @router_options [
+    provider_auth: [
+      provider_admin_api_token: "admin-secret",
+      provider_api_token: "provider-secret"
+    ]
+  ]
   @definitions Path.expand(
                  "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
                  __DIR__
@@ -16,11 +21,6 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
   setup do
     :ok = Store.clear()
-    previous = Map.new(@config_keys, &{&1, Application.get_env(:cadence_simulator, &1)})
-    Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
-    Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
-
-    on_exit(fn -> restore_config(previous) end)
 
     {:ok, scenario} =
       Provider.create_scenario(%{
@@ -479,7 +479,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     |> Conn.put_req_header("authorization", "Bearer provider-secret")
     |> Conn.put_req_header("x-simulator-environment-ref", environment_ref)
     |> put_headers(headers)
-    |> Router.call([])
+    |> Router.call(@router_options)
   end
 
   defp put_headers(conn, headers) do
@@ -493,13 +493,6 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
       {:ok, _bytes} -> drain_socket(socket)
       {:error, _reason} -> :ok
     end
-  end
-
-  defp restore_config(previous) do
-    Enum.each(previous, fn
-      {key, nil} -> Application.delete_env(:cadence_simulator, key)
-      {key, value} -> Application.put_env(:cadence_simulator, key, value)
-    end)
   end
 
   defp shift_time(value, seconds) do

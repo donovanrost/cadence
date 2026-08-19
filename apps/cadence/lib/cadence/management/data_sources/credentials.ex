@@ -28,6 +28,7 @@ defmodule Cadence.Management.DataSources.Credentials do
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Repo
+  alias Cadence.Secrets.ResolverConfiguration
 
   @type write_result ::
           {:ok, SourceCredentialReference.t(), SourceCredentialEvent.t()} | {:error, term()}
@@ -132,6 +133,8 @@ defmodule Cadence.Management.DataSources.Credentials do
              | {:credential_material_resolution_failed, term()}}
   def resolve_material(credentials_ref, opts \\ [])
       when is_binary(credentials_ref) and is_list(opts) do
+    opts = ResolverConfiguration.data_source_options(opts)
+
     with {:ok, %ResolvedSourceCredential{} = credential} <- resolve(credentials_ref, opts) do
       result =
         with :ok <- authorize_material_resolution(credential, opts),
@@ -529,30 +532,23 @@ defmodule Cadence.Management.DataSources.Credentials do
   defp material_authorizer_identity(authorizer), do: inspect(authorizer)
 
   defp material_resolver(opts) do
-    configured = Application.get_env(:cadence, :data_source_credentials, [])
-
     Keyword.get(opts, :credential_material_resolver) ||
-      Keyword.get(configured, :material_resolver) ||
-      default_secret_material_resolver(opts, configured)
+      default_secret_material_resolver(opts)
   end
 
-  defp default_secret_material_resolver(opts, configured) do
-    if secret_backend_configured?(opts, configured) do
+  defp default_secret_material_resolver(opts) do
+    if secret_backend_configured?(opts) do
       {SecretMaterialResolver, :resolve}
     end
   end
 
-  defp secret_backend_configured?(opts, configured) do
+  defp secret_backend_configured?(opts) do
     Keyword.has_key?(opts, :credential_secret_backend) ||
-      Keyword.has_key?(opts, :secret_backend) ||
-      Keyword.has_key?(configured, :secret_backend)
+      Keyword.has_key?(opts, :secret_backend)
   end
 
   defp material_authorizer(opts) do
-    Keyword.get(opts, :credential_material_authorizer) ||
-      :cadence
-      |> Application.get_env(:data_source_credentials, [])
-      |> Keyword.get(:material_authorizer)
+    Keyword.get(opts, :credential_material_authorizer)
   end
 
   defp call_material_resolver(%ResolvedSourceCredential{} = credential, opts, resolver)

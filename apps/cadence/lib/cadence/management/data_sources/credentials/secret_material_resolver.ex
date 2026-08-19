@@ -3,11 +3,13 @@ defmodule Cadence.Management.DataSources.Credentials.SecretMaterialResolver do
 
   alias Cadence.DataSources.ResolvedSourceCredential
   alias Cadence.Secrets.{MaterialPolicy, Resolver}
+  alias Cadence.Secrets.ResolverConfiguration
 
   @spec resolve(ResolvedSourceCredential.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def resolve(%ResolvedSourceCredential{} = credential, opts \\ []) when is_list(opts) do
     opts =
       opts
+      |> ResolverConfiguration.data_source_options()
       |> Keyword.put(:secret_backend, secret_backend(opts))
       |> Keyword.put(:allowed_material_keys, MaterialPolicy.dashboard_keys())
       |> Keyword.put(:sanitize_secret_errors?, false)
@@ -24,19 +26,12 @@ defmodule Cadence.Management.DataSources.Credentials.SecretMaterialResolver do
     end
   end
 
-  @spec configured?() :: boolean()
-  def configured? do
-    :cadence
-    |> Application.get_env(:data_source_credentials, [])
-    |> Keyword.has_key?(:secret_backend)
-  end
+  @spec configured?(keyword()) :: boolean()
+  def configured?(opts \\ []), do: ResolverConfiguration.data_source_configured?(opts)
 
   @spec secret_backend(keyword()) :: term()
   def secret_backend(opts) do
-    Keyword.get(opts, :credential_secret_backend) ||
-      Keyword.get(opts, :secret_backend) ||
-      :cadence
-      |> Application.get_env(:data_source_credentials, [])
-      |> Keyword.get(:secret_backend)
+    opts = ResolverConfiguration.data_source_options(opts)
+    Keyword.get(opts, :credential_secret_backend) || Keyword.get(opts, :secret_backend)
   end
 end

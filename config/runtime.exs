@@ -191,17 +191,13 @@ case System.get_env("CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES") ||
   encoded_profiles ->
     case Jason.decode(encoded_profiles) do
       {:ok, profiles} when is_map(profiles) ->
-        current_config = Application.get_env(:cadence, :data_source_credentials, [])
-
         config :cadence,
                :data_source_credentials,
-               Keyword.merge(current_config,
-                 material_resolver:
-                   {Cadence.Management.DataSources.Credentials.SecretMaterialResolver, :resolve},
-                 secret_backend:
-                   {Cadence.Management.DataSources.Credentials.EnvSecretBackend, :fetch_material},
-                 env_material_profiles: profiles
-               )
+               material_resolver:
+                 {Cadence.Management.DataSources.Credentials.SecretMaterialResolver, :resolve},
+               secret_backend:
+                 {Cadence.Management.DataSources.Credentials.EnvSecretBackend, :fetch_material},
+               env_material_profiles: profiles
 
       {:ok, _other} ->
         raise "CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES must decode to a JSON object"

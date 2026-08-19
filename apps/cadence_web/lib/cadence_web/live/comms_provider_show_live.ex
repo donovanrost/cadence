@@ -15,6 +15,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
 
   @impl true
   def mount(%{"provider_id" => provider_id}, _session, socket) do
+    socket = assign(socket, :provider_action_opts, provider_action_opts())
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
     case ManagementProviders.fetch_provider(
@@ -56,7 +57,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
   @impl true
   def handle_event("validate-provider", _params, %{assigns: %{provider_action: nil}} = socket) do
     %{current_scope: scope, current_mission: mission, provider: provider} = socket.assigns
-    opts = provider_action_opts()
+    opts = socket.assigns.provider_action_opts
 
     {:noreply,
      socket
@@ -70,7 +71,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
 
   def handle_event("sync-provider", _params, %{assigns: %{provider_action: nil}} = socket) do
     %{current_scope: scope, current_mission: mission, provider: provider} = socket.assigns
-    opts = provider_action_opts()
+    opts = socket.assigns.provider_action_opts
 
     {:noreply,
      socket

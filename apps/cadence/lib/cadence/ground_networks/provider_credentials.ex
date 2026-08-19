@@ -10,6 +10,7 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   alias Cadence.GroundNetworks.ProviderCredentials.CredentialRow, as: ProviderCredentialRow
   alias Cadence.Repo
   alias Cadence.Secrets.{EnvBackend, ExternalBackend, ResolvedSecret, Resolver}
+  alias Cadence.Secrets.ResolverConfiguration
 
   @spec create(Scope.t() | binary(), binary(), map(), keyword()) ::
           {:ok, ProviderCredential.t()} | {:error, term()}
@@ -242,10 +243,9 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   defp maybe_allow_local_env_backend(%ProviderCredential{}, opts), do: opts
 
   defp local_credentials_enabled?(opts) do
-    Keyword.get(opts, :allow_local_provider_credentials?, false) ||
-      :cadence
-      |> Application.get_env(:provider_local_credentials, [])
-      |> Keyword.get(:enabled, false)
+    opts
+    |> ResolverConfiguration.provider_options()
+    |> Keyword.get(:allow_local_provider_credentials?, false)
   end
 
   defp backend_module(:env), do: EnvBackend

@@ -23,26 +23,6 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
   alias CadenceWeb.TestFixtures
 
-  setup do
-    previous_opts = Application.get_env(:cadence_web, :provider_account_live_opts)
-
-    Application.put_env(
-      :cadence_web,
-      :provider_account_live_opts,
-      manage_backend?: false,
-      secret_backend: &secret_backend/2
-    )
-
-    on_exit(fn ->
-      case previous_opts do
-        nil -> Application.delete_env(:cadence_web, :provider_account_live_opts)
-        value -> Application.put_env(:cadence_web, :provider_account_live_opts, value)
-      end
-    end)
-
-    :ok
-  end
-
   test "organization administrators can navigate to the account registry" do
     {conn, _user, _organization} = signed_in_organization_admin()
 
@@ -274,9 +254,6 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
     {account, version, credential}
   end
-
-  defp secret_backend(_descriptor, _opts),
-    do: {:ok, %{material: %{value: "ephemeral-test-secret"}, backend_version: "test-v1"}}
 
   defp provider_event(id, type) do
     %{

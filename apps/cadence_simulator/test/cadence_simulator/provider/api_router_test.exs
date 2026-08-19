@@ -8,16 +8,15 @@ defmodule CadenceSimulator.Provider.ApiRouterTest do
   alias Plug.Conn
   alias Plug.Test
 
-  @config_keys [:provider_admin_api_token, :provider_api_token]
+  @router_options [
+    provider_auth: [
+      provider_admin_api_token: "admin-secret",
+      provider_api_token: "provider-secret"
+    ]
+  ]
 
   setup do
     :ok = Store.clear()
-    previous = Map.new(@config_keys, &{&1, Application.get_env(:cadence_simulator, &1)})
-
-    Application.put_env(:cadence_simulator, :provider_admin_api_token, "admin-secret")
-    Application.put_env(:cadence_simulator, :provider_api_token, "provider-secret")
-
-    on_exit(fn -> restore_config(previous) end)
 
     {:ok, scenario} =
       Provider.create_scenario(%{
@@ -129,13 +128,6 @@ defmodule CadenceSimulator.Provider.ApiRouterTest do
         conn
       end
 
-    Router.call(conn, [])
-  end
-
-  defp restore_config(previous) do
-    Enum.each(previous, fn
-      {key, nil} -> Application.delete_env(:cadence_simulator, key)
-      {key, value} -> Application.put_env(:cadence_simulator, key, value)
-    end)
+    Router.call(conn, @router_options)
   end
 end

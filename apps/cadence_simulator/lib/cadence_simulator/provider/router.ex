@@ -1,7 +1,7 @@
 defmodule CadenceSimulator.Provider.Router do
   @moduledoc "HTTP boundary for the canonical ground-station provider API."
 
-  use Plug.Router
+  use Plug.Router, copy_opts_to_assign: :provider_router_config
 
   alias CadenceSimulator.Provider.{AdminRouter, ApiRouter, Contract}
 
