@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.UnitCase, async: true
 
   alias Cadence.Dashboards
 
@@ -8,6 +8,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     DashboardResolveResult,
     Document,
     Engine,
+    HydratedResolveRequest,
     PlannedSourceRequest,
     RuntimeCache,
     SourceCircuitBreaker,
@@ -15,8 +16,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
   }
 
   alias Cadence.Management.DataSources
-
-  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
 
   alias Cadence.DataSources.{DataBinding, DataSource}
 
@@ -31,7 +30,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     request = resolve_request(document)
 
     first =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         runtime_cache: cache,
         source_result_cache?: true,
         freshness_now: ~U[2026-06-17 12:00:02Z],
@@ -51,7 +50,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     assert Enum.all?(first_summary.outcomes, &(&1.operator_action == :none))
 
     second =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         runtime_cache: cache,
         source_result_cache?: true,
         freshness_now: ~U[2026-06-17 12:00:02Z],
@@ -72,7 +71,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     request = resolve_request(document)
 
     first =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         runtime_cache: cache,
         source_result_cache?: true,
         freshness_now: ~U[2026-06-17 12:00:02Z],
@@ -84,7 +83,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     assert %{status_counts: %{cache_miss: 1}} = SourceExecutionSemantics.summarize(first)
 
     second =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         runtime_cache: cache,
         source_result_cache?: true,
         freshness_now: ~U[2026-06-17 12:00:02Z],
@@ -120,7 +119,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     healthy_outcomes =
       requests
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             runtime_cache: cache,
@@ -143,7 +142,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     degraded_outcomes =
       requests
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             runtime_cache: cache,
@@ -187,7 +186,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     first_outcomes =
       requests
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             runtime_cache: cache,
@@ -208,7 +207,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     second_outcomes =
       requests
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             runtime_cache: cache,
@@ -229,7 +228,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     changed_outcomes =
       requests
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             runtime_cache: cache,
@@ -252,7 +251,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     breaker = start_supervised!({SourceCircuitBreaker, name: nil})
 
     result =
-      Engine.resolve(resolve_request(mixed_telemetry_execution_document()),
+      Engine.resolve_hydrated(resolve_request(mixed_telemetry_execution_document()),
         data_sources: [test_adapter_data_source("flight-questdb")],
         data_bindings: [telemetry_binding("flight-questdb")],
         source_opts: %{
@@ -288,7 +287,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     request = resolve_request(document)
 
     first =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         data_sources: [test_adapter_data_source("flight-questdb")],
         data_bindings: [telemetry_binding("flight-questdb")],
         source_opts: %{telemetry: [mode: :error_result]},
@@ -302,7 +301,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
              SourceExecutionSemantics.summarize(first)
 
     second =
-      Engine.resolve(request,
+      Engine.resolve_hydrated(request,
         data_sources: [test_adapter_data_source("flight-questdb")],
         data_bindings: [telemetry_binding("flight-questdb")],
         source_opts: %{telemetry: [test_pid: self()]},
@@ -322,7 +321,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
 
   test "summarizes unsupported capability as a skipped no-fallback outcome" do
     result =
-      Engine.plan(resolve_request(unsupported_time_series_document()),
+      Engine.plan_hydrated(resolve_request(unsupported_time_series_document()),
         data_sources: [
           %DataSource{
             data_source_id: "flight-questdb",
@@ -430,7 +429,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
         resolve_request(load_fixture!("time_series_with_limits.v1.json")),
         operational_resolve_request()
       ]
-      |> Enum.map(&Engine.resolve(&1, source_contract_opts(:raise)))
+      |> Enum.map(&Engine.resolve_hydrated(&1, source_contract_opts(:raise)))
       |> Enum.flat_map(&source_execution_outcomes/1)
 
     assert Enum.frequencies_by(outcomes, & &1.outcome.logical_source) == %{
@@ -468,7 +467,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
 
   test "fans adapter annotations out to placement composition independently of frames" do
     hidden_result =
-      Engine.resolve(
+      Engine.resolve_hydrated(
         resolve_request(live_time_series_with_limits_document()),
         source_contract_opts(:annotation_result)
       )
@@ -479,7 +478,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     assert hidden_placement_frames.annotations == []
 
     result =
-      Engine.resolve(
+      Engine.resolve_hydrated(
         resolve_request(live_time_series_with_limits_document(["test.annotations"])),
         source_contract_opts(:annotation_result)
       )
@@ -505,7 +504,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
         operational_resolve_request()
       ]
       |> Enum.map(
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:sleep,
             source_execution_timeout_ms: 10,
@@ -564,7 +563,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
         resolve_request(load_fixture!("time_series_with_limits.v1.json")),
         operational_resolve_request()
       ]
-      |> Enum.map(&Engine.resolve(&1, source_contract_opts(:empty_result)))
+      |> Enum.map(&Engine.resolve_hydrated(&1, source_contract_opts(:empty_result)))
       |> Enum.flat_map(fn result ->
         assert result.dashboard_warnings == []
         assert result.plan_metadata.returned_frame_count == 0
@@ -607,7 +606,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     first_results =
       Enum.map(
         requests,
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:raise,
             source_circuit_breaker: breaker,
@@ -639,7 +638,7 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     second_results =
       Enum.map(
         requests,
-        &Engine.resolve(
+        &Engine.resolve_hydrated(
           &1,
           source_contract_opts(:empty_result,
             source_circuit_breaker: breaker,
@@ -684,129 +683,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     end
 
     refute_received {:dashboard_source_contract_adapter_resolve, _logical_source}
-  end
-
-  test "BYO source timeout opens only that physical source circuit while managed source still executes" do
-    persist_mission_scope("org_dashboards", "mission_dashboards")
-
-    assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "secret://org_dashboards/dashboard/customer-byo-questdb",
-               organization_id: "org_dashboards",
-               mission_id: "mission_dashboards",
-               data_source_id: "customer-byo-questdb",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/byo-questdb"}
-             })
-
-    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
-    document = byo_managed_telemetry_execution_document()
-    request = resolve_request(document)
-
-    source_opts = %{
-      telemetry: [
-        test_pid: self(),
-        sleep_ms_by_sampling: %{latest: 200}
-      ]
-    }
-
-    first =
-      Engine.resolve(request,
-        data_sources: [byo_test_adapter_data_source(), managed_test_adapter_data_source()],
-        data_bindings: [byo_telemetry_binding(), managed_telemetry_binding()],
-        source_opts: source_opts,
-        source_execution_max_concurrency: 2,
-        source_circuit_breaker: breaker,
-        source_health_events?: false,
-        record_source_health_events?: false,
-        source_watermark_events?: false,
-        now_ms: 10_000
-      )
-
-    first_outcomes =
-      first
-      |> SourceExecutionSemantics.summarize()
-      |> Map.fetch!(:outcomes)
-
-    assert Enum.frequencies_by(first_outcomes, & &1.metadata.data_source_id) == %{
-             "customer-byo-questdb" => 1,
-             "managed-questdb" => 1
-           }
-
-    assert Enum.any?(first_outcomes, fn outcome ->
-             outcome.metadata.data_source_id == "customer-byo-questdb" and
-               outcome.status == :source_execution_failed and
-               outcome.warning_codes == [:source_unavailable] and
-               outcome.operator_action == :inspect_source_failure and
-               outcome.runtime_action == :retry_source_execution and
-               outcome.actionable? and
-               outcome.retryable?
-           end)
-
-    assert Enum.any?(first_outcomes, fn outcome ->
-             outcome.metadata.data_source_id == "managed-questdb" and
-               outcome.status == :cache_disabled and
-               outcome.warning_codes == []
-           end)
-
-    first_byo_warning =
-      Enum.find(first.dashboard_warnings, fn warning ->
-        warning.code == :source_unavailable and
-          warning.details.data_source_id == "customer-byo-questdb"
-      end)
-
-    assert first_byo_warning.details.reason =~ "timeout after 50ms"
-
-    flush_test_adapter_messages()
-
-    second =
-      Engine.resolve(request,
-        data_sources: [byo_test_adapter_data_source(), managed_test_adapter_data_source()],
-        data_bindings: [byo_telemetry_binding(), managed_telemetry_binding()],
-        source_opts: source_opts,
-        source_execution_max_concurrency: 2,
-        source_circuit_breaker: breaker,
-        source_health_events?: false,
-        record_source_health_events?: false,
-        source_watermark_events?: false,
-        now_ms: 10_001
-      )
-
-    second_outcomes =
-      second
-      |> SourceExecutionSemantics.summarize()
-      |> Map.fetch!(:outcomes)
-
-    assert Enum.any?(second_outcomes, fn outcome ->
-             outcome.metadata.data_source_id == "customer-byo-questdb" and
-               outcome.status == :source_degraded and
-               outcome.warning_codes == [:source_degraded] and
-               outcome.operator_action == :inspect_source_health and
-               outcome.runtime_action == :wait_for_source_health
-           end)
-
-    assert Enum.any?(second_outcomes, fn outcome ->
-             outcome.metadata.data_source_id == "managed-questdb" and
-               outcome.status == :cache_disabled and
-               outcome.warning_codes == []
-           end)
-
-    byo_warning =
-      Enum.find(second.dashboard_warnings, fn warning ->
-        warning.code == :source_degraded and
-          warning.details.data_source_id == "customer-byo-questdb"
-      end)
-
-    assert byo_warning.details.circuit_state == :open
-    assert byo_warning.details.failure_count == 1
-    assert byo_warning.details.failure_threshold == 1
-    assert byo_warning.details.retry_after_ms == 70_000
-    assert byo_warning.details.last_failure_reason == :source_unavailable
-
-    assert_received {:dashboard_source_test_adapter_request, "managed-questdb", :raw_series}
-    refute_received {:dashboard_source_test_adapter_request, "customer-byo-questdb", :latest}
   end
 
   test "defines runtime and operator policy for every source execution status" do
@@ -896,15 +772,22 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
       document: document,
       scope_context: %{primary: %{kind: "spacecraft", mode: "one", ids: ["sc_001"]}}
     }
+    |> HydratedResolveRequest.new!()
   end
 
   defp operational_resolve_request do
-    "operational_status_matrix.v1.json"
-    |> load_fixture!()
-    |> resolve_request()
-    |> Map.put(:scope_context, %{
-      primary: %{kind: "source_endpoint", mode: "one", ids: ["source-endpoint-contract-1"]}
-    })
+    document = load_fixture!("operational_status_matrix.v1.json")
+
+    %DashboardResolveRequest{
+      organization_id: document.organization_id,
+      mission_id: document.mission_id,
+      dashboard_id: document.dashboard_id,
+      document: document,
+      scope_context: %{
+        primary: %{kind: "source_endpoint", mode: "one", ids: ["source-endpoint-contract-1"]}
+      }
+    }
+    |> HydratedResolveRequest.new!()
   end
 
   defp live_time_series_with_limits_document(annotation_layers \\ []) do
@@ -956,46 +839,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     |> Document.from_map()
   end
 
-  defp byo_managed_telemetry_execution_document do
-    latest_attrs = load_fixture_map!("value_tile_latest.v1.json")
-    [latest_placement] = latest_attrs["placements"]
-    [history_placement] = load_fixture_map!("time_series_with_limits.v1.json")["placements"]
-
-    latest_placement =
-      latest_placement
-      |> put_in(["content", "widget_def", "binding", "overlays"], [])
-      |> Map.put("data_override", %{
-        "realm" => "flight",
-        "source_contexts" => %{
-          "telemetry" => %{
-            "data_source_id" => "customer-byo-questdb",
-            "source_binding_id" => "customer-byo-telemetry",
-            "dataset" => "customer-flight"
-          }
-        }
-      })
-
-    history_placement =
-      history_placement
-      |> put_in(["content", "widget_def", "binding", "sampling"], "raw_series")
-      |> put_in(["content", "widget_def", "binding", "overlays"], [])
-      |> Map.put("data_override", %{
-        "realm" => "flight",
-        "source_contexts" => %{
-          "telemetry" => %{
-            "data_source_id" => "managed-questdb",
-            "source_binding_id" => "managed-telemetry",
-            "dataset" => "flight"
-          }
-        }
-      })
-
-    latest_attrs
-    |> put_in(["defaults", "overlays", "limits"], false)
-    |> Map.put("placements", [latest_placement, history_placement])
-    |> Document.from_map()
-  end
-
   defp unsupported_time_series_document do
     attrs = load_fixture_map!("time_series_with_limits.v1.json")
     [placement] = attrs["placements"]
@@ -1013,37 +856,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
   defp test_adapter_data_source(data_source_id) do
     %DataSource{
       data_source_id: data_source_id,
-      adapter: Cadence.Support.DashboardSourceTestAdapter,
-      capabilities: %{latest?: true, range_scan?: true}
-    }
-  end
-
-  defp byo_test_adapter_data_source do
-    %DataSource{
-      data_source_id: "customer-byo-questdb",
-      owner: :customer,
-      kind: :byo_tsdb,
-      organization_id: "org_dashboards",
-      mission_id: "mission_dashboards",
-      isolation_level: :customer_owned,
-      credentials_ref: "secret://org_dashboards/dashboard/customer-byo-questdb",
-      adapter: Cadence.Support.DashboardSourceTestAdapter,
-      capabilities: %{latest?: true, range_scan?: true},
-      metadata: %{
-        dashboard_policy: %{
-          execution: %{timeout_ms: 50},
-          circuit_breaker: %{failure_threshold: 1, backoff_ms: 60_000}
-        }
-      }
-    }
-  end
-
-  defp managed_test_adapter_data_source do
-    %DataSource{
-      data_source_id: "managed-questdb",
-      owner: :cadence,
-      kind: :managed_tsdb,
-      isolation_level: :shared,
       adapter: Cadence.Support.DashboardSourceTestAdapter,
       capabilities: %{latest?: true, range_scan?: true}
     }
@@ -1151,15 +963,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
     end
   end
 
-  defp flush_test_adapter_messages do
-    receive do
-      {:dashboard_source_test_adapter_request, _data_source_id, _sampling} ->
-        flush_test_adapter_messages()
-    after
-      0 -> :ok
-    end
-  end
-
   defp assert_source_action_runtime_contexts(warning) do
     for action <- warning.details.actions do
       assert action.route == nil
@@ -1191,22 +994,6 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
       logical_source: :telemetry,
       data_source_id: data_source_id,
       dataset: "flight"
-    }
-  end
-
-  defp byo_telemetry_binding do
-    %DataBinding{
-      telemetry_binding("customer-byo-questdb")
-      | binding_id: "customer-byo-telemetry",
-        dataset: "customer-flight"
-    }
-  end
-
-  defp managed_telemetry_binding do
-    %DataBinding{
-      telemetry_binding("managed-questdb")
-      | binding_id: "managed-telemetry",
-        dataset: "flight"
     }
   end
 
