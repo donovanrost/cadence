@@ -6,6 +6,7 @@ defmodule Cadence.Control.ContactFactConsumer do
   alias Cadence.Contacts.Facts
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Control.Commanding
+  alias Cadence.Platform.EventBus
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -14,7 +15,8 @@ defmodule Cadence.Control.ContactFactConsumer do
 
   @impl true
   def init(opts) do
-    :ok = Facts.subscribe(self())
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+    :ok = Facts.subscribe(event_bus, self())
 
     {:ok,
      %{

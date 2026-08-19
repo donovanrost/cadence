@@ -3,6 +3,7 @@ defmodule Cadence.Projections.RuntimeFactConsumer do
 
   use GenServer
 
+  alias Cadence.Platform.EventBus
   alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
 
@@ -19,7 +20,8 @@ defmodule Cadence.Projections.RuntimeFactConsumer do
 
   @impl true
   def init(opts) do
-    :ok = Facts.subscribe(self())
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+    :ok = Facts.subscribe(event_bus, self())
     {:ok, %{project_records: Keyword.get(opts, :project_records, &persist_projected_events/1)}}
   end
 

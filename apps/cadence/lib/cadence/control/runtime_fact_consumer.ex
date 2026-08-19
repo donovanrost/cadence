@@ -10,6 +10,7 @@ defmodule Cadence.Control.RuntimeFactConsumer do
   use GenServer
 
   alias Cadence.Control.Commanding
+  alias Cadence.Platform.EventBus
   alias Cadence.Runtime.{Facts, ProcessingResultsPersisted, TransportRecordsPersisted}
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -19,7 +20,8 @@ defmodule Cadence.Control.RuntimeFactConsumer do
 
   @impl true
   def init(opts) do
-    :ok = Facts.subscribe(self())
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+    :ok = Facts.subscribe(event_bus, self())
 
     {:ok,
      %{

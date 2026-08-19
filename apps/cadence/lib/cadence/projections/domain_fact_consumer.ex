@@ -9,6 +9,7 @@ defmodule Cadence.Projections.DomainFactConsumer do
   alias Cadence.Contacts.Facts, as: ContactFacts
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.Limits.Facts, as: LimitFacts
+  alias Cadence.Platform.EventBus
   alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
 
@@ -19,9 +20,10 @@ defmodule Cadence.Projections.DomainFactConsumer do
 
   @impl true
   def init(opts) do
-    :ok = ActivationFacts.subscribe(self())
-    :ok = ContactFacts.subscribe(self())
-    :ok = LimitFacts.subscribe(self())
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+    :ok = ActivationFacts.subscribe(event_bus, self())
+    :ok = ContactFacts.subscribe(event_bus, self())
+    :ok = LimitFacts.subscribe(event_bus, self())
 
     {:ok, %{project_fact: Keyword.get(opts, :project_fact, &project_fact/1)}}
   end

@@ -5,6 +5,7 @@ defmodule Cadence.Projections.TelemetryFactConsumer do
 
   require Logger
 
+  alias Cadence.Platform.EventBus
   alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Telemetry.{Facts, ObservationIdentitySelectionChanged}
 
@@ -15,7 +16,8 @@ defmodule Cadence.Projections.TelemetryFactConsumer do
 
   @impl true
   def init(opts) do
-    :ok = Facts.subscribe(self())
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+    :ok = Facts.subscribe(event_bus, self())
 
     {:ok,
      %{refresh_point: Keyword.get(opts, :refresh_point, &TelemetryLatestValues.refresh_point/3)}}
