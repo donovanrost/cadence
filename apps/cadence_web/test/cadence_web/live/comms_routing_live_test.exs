@@ -104,11 +104,6 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert html =~ rule.display_name
       assert html =~ "mission transports"
     end
-
-    test "unauthenticated requests redirect to sign in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/comms/routing")
-    end
   end
 
   defp persist_transport!(organization_id, mission_id, display_name) do

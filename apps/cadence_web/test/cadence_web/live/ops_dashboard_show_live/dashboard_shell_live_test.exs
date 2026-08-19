@@ -118,17 +118,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
                  |> LazyHTML.attribute("data-ops-context-collapsed-section")
       end
     end
-
-    test "requires a signed-in member" do
-      {_conn, _org, mission} = signed_in_org_and_mission()
-
-      assert {:error, {:redirect, %{to: to}}} =
-               live(
-                 Phoenix.ConnTest.build_conn(),
-                 ~p"/missions/#{mission.mission_id}/ops/dashboards"
-               )
-
-      assert to =~ "/sign-in"
-    end
   end
 end

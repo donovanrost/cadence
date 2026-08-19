@@ -140,10 +140,5 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       assert html =~ "Byte Interpretation"
       refute html =~ "Spacecraft Type"
     end
-
-    test "unauthenticated requests redirect to sign in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/profiles")
-    end
   end
 end

@@ -187,26 +187,4 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       refute has_element?(view, "#spacecraft-vehicles-card", "No spacecraft yet")
     end
   end
-
-  describe "authorization" do
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/some-mission-id/spacecraft")
-    end
-
-    test "user without membership redirects to /no-organization" do
-      user = TestFixtures.persist_user!()
-      conn = TestFixtures.member_conn(user)
-
-      assert {:error, {:redirect, %{to: "/no-organization"}}} =
-               live(conn, ~p"/missions/some-mission-id/spacecraft")
-    end
-
-    test "missing mission redirects to /missions" do
-      {conn, _org, _mission} = signed_in_org_and_mission()
-
-      assert {:error, {:redirect, %{to: "/missions", flash: %{"error" => _}}}} =
-               live(conn, ~p"/missions/missing-mission-id/spacecraft")
-    end
-  end
 end

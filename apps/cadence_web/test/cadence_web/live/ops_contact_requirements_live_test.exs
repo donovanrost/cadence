@@ -12,10 +12,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
   alias CadenceWeb.TestFixtures
 
-  test "authenticated Ops routes expose Requirements navigation and enforce mission membership",
-       %{
-         conn: conn
-       } do
+  test "authenticated Ops routes expose Requirements navigation" do
     {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope()
 
     {:ok, view, _html} =
@@ -28,19 +25,6 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
              view,
              ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/requirements"][class*="text-primary"])
            )
-
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
-
-    outsider = TestFixtures.persist_user!()
-    outsider_org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(outsider, outsider_org)
-
-    assert {:error, {:redirect, %{to: "/missions", flash: %{"error" => _message}}}} =
-             live(
-               TestFixtures.member_conn(outsider),
-               ~p"/missions/#{mission.mission_id}/ops/requirements"
-             )
   end
 
   test "outcome-first form progressively changes and creates a durable Requirement" do

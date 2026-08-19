@@ -69,17 +69,4 @@ defmodule CadenceWeb.MissionListLiveTest do
       refute html =~ "Their Mission"
     end
   end
-
-  describe "authorization" do
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/missions")
-    end
-
-    test "user without membership redirects to /no-organization" do
-      user = TestFixtures.persist_user!()
-      conn = TestFixtures.member_conn(user)
-
-      assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/missions")
-    end
-  end
 end

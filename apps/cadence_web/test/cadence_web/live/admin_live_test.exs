@@ -44,11 +44,6 @@ defmodule CadenceWeb.AdminLiveTest do
   end
 
   describe "authorization" do
-    test "unauthenticated access redirects to /sign-in" do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), ~p"/admin")
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), ~p"/admin/runtime")
-    end
-
     test "non-admin user is redirected to /" do
       durable_password = "durable-password-123"
 

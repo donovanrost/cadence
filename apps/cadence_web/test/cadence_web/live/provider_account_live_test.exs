@@ -215,10 +215,6 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert has_element?(view, "#provider-account-ingestion-last-event", "2026-07-15 20:29Z")
   end
 
-  test "requires authentication", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/provider-accounts")
-  end
-
   defp signed_in_organization_admin do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()

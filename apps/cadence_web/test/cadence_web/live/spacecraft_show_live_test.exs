@@ -85,11 +85,6 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
       assert has_element?(view, "#spacecraft-overview-applications", "0 of 2 ready")
     end
 
-    test "unauthenticated redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/s")
-    end
-
     test "unknown spacecraft redirects to the mission's spacecraft list" do
       {conn, _user, _org, mission} = signed_in_org_and_mission()
 

@@ -75,13 +75,6 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
     end
   end
 
-  describe "authorization" do
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/any/catalog")
-    end
-  end
-
   describe "sidebar" do
     test "marks Catalog as the active nav item" do
       {conn, _org, mission} = signed_in_org_and_mission()

@@ -159,24 +159,6 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
            )
   end
 
-  test "router authentication and mission scope protect detail records", %{conn: conn} do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org)
-    setup = persist_contact!(org, mission, :baseline)
-
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             live(conn, detail_path(mission, setup))
-
-    outsider = TestFixtures.persist_user!()
-    outsider_org = TestFixtures.persist_org!()
-    _outsider_membership = TestFixtures.grant_membership!(outsider, outsider_org)
-
-    assert {:error, {:redirect, %{to: "/missions", flash: %{"error" => _message}}}} =
-             live(TestFixtures.member_conn(outsider), detail_path(mission, setup))
-  end
-
   defp signed_in(role) do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()

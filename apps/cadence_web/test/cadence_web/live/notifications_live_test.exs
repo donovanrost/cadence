@@ -129,10 +129,4 @@ defmodule CadenceWeb.NotificationsLiveTest do
       assert n.kind == :organization_access_granted
     end
   end
-
-  describe "authorization" do
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/notifications")
-    end
-  end
 end

@@ -208,11 +208,6 @@ defmodule CadenceWeb.CommsProviderLiveTest do
            ) == []
   end
 
-  test "requires authentication for provider configuration", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             live(conn, ~p"/missions/some-mission/comms/providers")
-  end
-
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()

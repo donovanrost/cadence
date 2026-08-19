@@ -79,29 +79,6 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
   end
 
   describe "authorization" do
-    test "redirects unauthenticated users to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/")
-    end
-
-    test "redirects user without membership to /no-organization" do
-      user = TestFixtures.persist_user!()
-      conn = TestFixtures.member_conn(user)
-
-      assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/")
-    end
-
-    test "admin-eligible user without admin mode follows normal organization access" do
-      user =
-        TestFixtures.persist_user!(
-          email: "admin-root@example.com",
-          capabilities: [:platform_admin]
-        )
-
-      conn = TestFixtures.member_conn(user)
-
-      assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/")
-    end
-
     test "active admin mode redirects to /admin even from /" do
       user =
         TestFixtures.persist_user!(

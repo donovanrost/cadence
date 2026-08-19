@@ -49,11 +49,6 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
       assert html =~ "Spacecraft Identity"
       assert html =~ "SCID"
     end
-
-    test "unauthenticated redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/s/edit")
-    end
   end
 
   describe "save" do

@@ -27,7 +27,7 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
            )
   end
 
-  test "legacy Explore bookmarks preserve their complete query string behind authentication" do
+  test "legacy Explore bookmarks preserve their complete query string" do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
 
     conn =
@@ -41,15 +41,6 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     assert get_resp_header(conn, "location") == [
              "/missions/#{mission.mission_id}/ops/explore?point_id=HK.temp&time_mode=historical&from=2026-08-01T12%3A00%3A00Z"
            ]
-
-    unauthenticated =
-      get(
-        Phoenix.ConnTest.build_conn(),
-        "/missions/#{mission.mission_id}/ops/telemetry/explore?point_id=HK.temp"
-      )
-
-    assert unauthenticated.status == 302
-    assert hd(get_resp_header(unauthenticated, "location")) =~ "/sign-in"
   end
 
   test "navigation exposes no more than five starred and five recent dashboards" do

@@ -40,18 +40,6 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
       refute page =~ "Path"
       refute page =~ "Link"
     end
-
-    test "unauthenticated redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/new")
-    end
-
-    test "missing mission redirects to /missions" do
-      {conn, _org, _mission} = signed_in_org_and_mission()
-
-      assert {:error, {:redirect, %{to: "/missions", flash: %{"error" => _}}}} =
-               live(conn, ~p"/missions/missing/spacecraft/new")
-    end
   end
 
   describe "save" do

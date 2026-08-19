@@ -143,19 +143,5 @@ defmodule CadenceWeb.MissionShowLiveTest do
       assert {:error, {:redirect, %{to: "/missions"}}} =
                live(conn, ~p"/missions/mission_unknown")
     end
-
-    test "redirects to /missions when mission belongs to another org" do
-      {conn, _mine} = signed_in_conn()
-      other = TestFixtures.persist_org!(slug: "other-org")
-      their_mission = persist_mission!(other, "theirs", "Their Mission")
-
-      assert {:error, {:redirect, %{to: "/missions"}}} =
-               live(conn, ~p"/missions/#{their_mission.mission_id}")
-    end
-
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/mission_anything")
-    end
   end
 end

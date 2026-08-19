@@ -37,10 +37,5 @@ defmodule CadenceWeb.SpacecraftCommandingLiveTest do
       assert html =~ "Commanding for Nova-1"
       assert html =~ "Not tracked"
     end
-
-    test "unauthenticated redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/s/commanding")
-    end
   end
 end

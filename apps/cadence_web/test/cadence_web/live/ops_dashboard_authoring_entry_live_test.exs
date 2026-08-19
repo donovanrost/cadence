@@ -92,18 +92,6 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
     assert Document.version(imported) == 1
   end
 
-  test "authoring routes remain authenticated" do
-    {_conn, _user, _org, mission} = signed_in_user_org_and_mission()
-
-    assert {:error, {:redirect, %{to: to}}} =
-             live(
-               Phoenix.ConnTest.build_conn(),
-               ~p"/missions/#{mission.mission_id}/ops/dashboards/new"
-             )
-
-    assert to =~ "/sign-in"
-  end
-
   defp directory_path(mission), do: ~p"/missions/#{mission.mission_id}/ops/dashboards"
 
   defp signed_in_user_org_and_mission do

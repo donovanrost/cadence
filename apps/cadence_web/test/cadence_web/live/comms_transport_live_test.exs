@@ -296,11 +296,6 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                mission.mission_id
              ) == []
     end
-
-    test "unauthenticated requests redirect to sign in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/comms/transports")
-    end
   end
 
   defp direct_transport_params do

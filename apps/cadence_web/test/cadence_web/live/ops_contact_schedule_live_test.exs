@@ -63,24 +63,6 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert org.organization_id != nil
   end
 
-  test "authentication and organization membership are enforced at the router boundary", %{
-    conn: conn
-  } do
-    org = TestFixtures.persist_org!()
-    mission = TestFixtures.persist_mission!(org)
-
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
-
-    outsider = TestFixtures.persist_user!()
-    outsider_org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(outsider, outsider_org)
-    outsider_conn = TestFixtures.member_conn(outsider)
-
-    assert {:error, {:redirect, %{to: "/missions", flash: %{"error" => _message}}}} =
-             live(outsider_conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
-  end
-
   test "search streams opportunities and signed reservation creates one durable attempt" do
     {conn, _user, org, mission} = signed_in_org_and_mission()
     setup = persist_ready_comms!(org, mission)

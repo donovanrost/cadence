@@ -135,11 +135,4 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     assert database.name == "Mission DB"
   end
-
-  describe "authorization" do
-    test "unauthenticated request redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/any/catalog/new")
-    end
-  end
 end

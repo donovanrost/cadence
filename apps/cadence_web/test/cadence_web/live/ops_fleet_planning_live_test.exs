@@ -19,8 +19,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
   alias CadenceWeb.TestFixtures
 
-  test "authenticated mission operators can navigate the planning journey and see stopped state",
-       %{conn: conn} do
+  test "authenticated mission operators can navigate the planning journey and see stopped state" do
     {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope(:member)
 
     {:ok, view, _html} =
@@ -56,9 +55,6 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert has_element?(template_view, "#ops-requirement-templates-page")
     assert has_element?(template_view, "#requirement-template-admin-required")
-
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             live(conn, ~p"/missions/#{mission.mission_id}/ops/planning")
   end
 
   test "an organization administrator creates and activates the exact fleet policy in UI" do

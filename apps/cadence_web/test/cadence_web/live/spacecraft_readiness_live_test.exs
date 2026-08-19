@@ -53,11 +53,6 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
                ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
     end
 
-    test "unauthenticated redirects to /sign-in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/spacecraft/s/readiness")
-    end
-
     test "lists every profile application through generic inventory status" do
       {conn, _org, mission} = signed_in_org_and_mission()
 

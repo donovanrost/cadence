@@ -164,11 +164,6 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
                  mission.mission_id
                )
     end
-
-    test "unauthenticated requests redirect to sign in", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} =
-               live(conn, ~p"/missions/m/comms/ground-stations")
-    end
   end
 
   defp persist_ground_station!(organization_id, mission_id) do

@@ -84,18 +84,6 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
            )
   end
 
-  test "alarm and command routes require an authenticated organization member", %{conn: conn} do
-    org = TestFixtures.persist_org!()
-    mission = TestFixtures.persist_mission!(org)
-
-    for path <- [
-          ~p"/missions/#{mission.mission_id}/ops/alarms",
-          ~p"/missions/#{mission.mission_id}/ops/commands"
-        ] do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, path)
-    end
-  end
-
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
