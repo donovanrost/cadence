@@ -37,8 +37,8 @@ defmodule Cadence.Dashboards.Frame do
   @shapes [:scalar, :wide, :long, :events, :intervals, :matrix]
   @time_axes [:generation_time, :receipt_time, :occurred_at]
 
-  @spec sources() :: [source()]
-  def sources, do: AdapterRegistry.logical_sources()
+  @spec sources(keyword()) :: [source()]
+  def sources(opts \\ []), do: opts |> adapter_policy() |> AdapterRegistry.logical_sources()
 
   @spec shapes() :: [shape()]
   def shapes, do: @shapes
@@ -46,14 +46,16 @@ defmodule Cadence.Dashboards.Frame do
   @spec time_axes() :: [:generation_time | :receipt_time | :occurred_at]
   def time_axes, do: @time_axes
 
-  @spec new(map() | t()) :: t()
-  def new(attrs), do: normalize(attrs)
+  @spec new(map() | t(), keyword()) :: t()
+  def new(attrs, opts \\ []), do: normalize(attrs, opts)
 
-  @spec normalize(map() | t()) :: t() | nil
-  def normalize(%__MODULE__{} = frame) do
+  @spec normalize(map() | t(), keyword()) :: t() | nil
+  def normalize(frame, opts \\ [])
+
+  def normalize(%__MODULE__{} = frame, opts) do
     %__MODULE__{
       frame
-      | source: ContractNormalization.known_atom(frame.source, sources()),
+      | source: ContractNormalization.known_atom(frame.source, sources(opts)),
         shape: ContractNormalization.known_atom(frame.shape, @shapes),
         time_axis: ContractNormalization.known_atom(frame.time_axis, @time_axes),
         scope: ContractNormalization.map_or_default(frame.scope),
@@ -63,13 +65,13 @@ defmodule Cadence.Dashboards.Frame do
     }
   end
 
-  def normalize(frame) when is_map(frame) do
+  def normalize(frame, opts) when is_map(frame) do
     %__MODULE__{
       frame_id: ContractNormalization.attr(frame, :frame_id),
       source:
         frame
         |> ContractNormalization.attr(:source)
-        |> ContractNormalization.known_atom(sources()),
+        |> ContractNormalization.known_atom(sources(opts)),
       shape:
         frame
         |> ContractNormalization.attr(:shape)
@@ -97,7 +99,11 @@ defmodule Cadence.Dashboards.Frame do
     }
   end
 
-  def normalize(_other), do: nil
+  def normalize(_other, _opts), do: nil
+
+  defp adapter_policy(opts) do
+    Keyword.get_lazy(opts, :data_source_adapter_policy, &AdapterRegistry.default_policy/0)
+  end
 
   defp normalize_fields(fields) when is_list(fields),
     do: Enum.map(fields, &(Field.normalize(&1) || &1))

@@ -16,16 +16,6 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   @run_id "managed-questdb-provisioning-run"
 
   setup do
-    previous_config = Application.get_env(:cadence, :managed_questdb_provisioning)
-
-    on_exit(fn ->
-      if is_nil(previous_config) do
-        Application.delete_env(:cadence, :managed_questdb_provisioning)
-      else
-        Application.put_env(:cadence, :managed_questdb_provisioning, previous_config)
-      end
-    end)
-
     persist_mission_scope(@organization_id, @mission_id)
     :ok
   end
@@ -67,14 +57,15 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   test "runs a queued provisioning job through the managed provisioner" do
     migration = migration("20260630020202", "job_provisioned")
 
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      execution_opts: [
-        migrator: fn migration_config ->
-          assert migration_config[:http_endpoint] == "http://mission-questdb:9000"
-          {:ok, [migration]}
-        end
-      ]
-    )
+    policy =
+      ManagedQuestDBProvisioningJobs.policy(
+        execution_opts: [
+          migrator: fn migration_config ->
+            assert migration_config[:http_endpoint] == "http://mission-questdb:9000"
+            {:ok, [migration]}
+          end
+        ]
+      )
 
     assert {:ok, job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -87,7 +78,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
     assert claimed_job.status == :running
     assert DeploymentStatus.from_job(claimed_job).status == :provisioning
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = run_job(claimed_job.job_id, policy)
     assert completed_job.status == :completed
     assert completed_job.attempt_count == 1
     assert completed_job.failure_reason == nil
@@ -98,12 +89,11 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   end
 
   test "marks provisioning job failed with redacted failure evidence when execution fails" do
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn attrs, _opts ->
+    policy =
+      provisioning_policy(fn attrs, _opts ->
         assert attrs["data_source_id"] == @data_source_id
         {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
-      end
-    )
+      end)
 
     assert {:ok, job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -112,7 +102,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = run_job(claimed_job.job_id, policy)
 
     assert failed_job.job_id == job.job_id
     assert failed_job.status == :failed
@@ -135,12 +125,11 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   test "lists managed QuestDB provisioning runs for a mission" do
     persist_mission_scope(@organization_id, "other-managed-questdb-provisioning-jobs")
 
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn attrs, _opts ->
+    policy =
+      provisioning_policy(fn attrs, _opts ->
         assert attrs["data_source_id"] == "failed-managed-questdb-source"
         {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
-      end
-    )
+      end)
 
     assert {:ok, failed_job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -152,7 +141,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
 
     assert [claimed_failed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_failed_job.job_id == failed_job.job_id
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_failed_job.job_id)
+    assert {:ok, failed_job} = run_job(claimed_failed_job.job_id, policy)
 
     assert {:ok, queued_job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -197,12 +186,11 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   test "retry preserves the redacted durable request for a later provisioning attempt" do
     test_pid = self()
 
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn _attrs, _opts ->
+    policy =
+      provisioning_policy(fn _attrs, _opts ->
         send(test_pid, :provisioner_called)
         {:error, :first_attempt_failed}
-      end
-    )
+      end)
 
     assert {:ok, job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -211,7 +199,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = run_job(claimed_job.job_id, policy)
     assert failed_job.status == :failed
     assert_receive :provisioner_called
 
@@ -222,12 +210,11 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   end
 
   test "retries failed managed QuestDB provisioning runs through the control boundary" do
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn attrs, _opts ->
+    policy =
+      provisioning_policy(fn attrs, _opts ->
         assert attrs["data_source_id"] == @data_source_id
         {:error, :questdb_unavailable}
-      end
-    )
+      end)
 
     assert {:ok, job} =
              ManagedQuestDBProvisioningJobs.enqueue(
@@ -236,7 +223,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
              )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = run_job(claimed_job.job_id, policy)
     assert failed_job.status == :failed
 
     assert {:ok, retried_run} =
@@ -319,5 +306,19 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
       sql: "SELECT 1",
       checksum: "checksum-#{version}"
     }
+  end
+
+  defp provisioning_policy(provisioner) do
+    ManagedQuestDBProvisioningJobs.policy(provisioner: provisioner)
+  end
+
+  defp run_job(job_id, policy) do
+    runner =
+      JobRunner.new(%{
+        ManagedQuestDBProvisioningJobs.job_type() =>
+          ManagedQuestDBProvisioningJobs.handler(policy)
+      })
+
+    JobRunner.run_job(runner, job_id)
   end
 end

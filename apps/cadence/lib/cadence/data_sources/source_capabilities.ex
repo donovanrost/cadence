@@ -43,17 +43,19 @@ defmodule Cadence.DataSources.SourceCapabilities do
   @spec completeness_values() :: [:known | :unknown | :partial]
   def completeness_values, do: @completeness_values
 
-  @spec new(map() | t()) :: t()
-  def new(attrs), do: normalize(attrs)
+  @spec new(map() | t(), keyword()) :: t()
+  def new(attrs, opts \\ []), do: normalize(attrs, opts)
 
-  @spec normalize(map() | t()) :: t() | nil
-  def normalize(%__MODULE__{} = capabilities) do
+  @spec normalize(map() | t(), keyword()) :: t() | nil
+  def normalize(capabilities, opts \\ [])
+
+  def normalize(%__MODULE__{} = capabilities, opts) do
     %__MODULE__{
       capabilities
       | logical_source:
           ContractNormalization.known_atom(
             capabilities.logical_source,
-            AdapterRegistry.logical_sources()
+            adapter_logical_sources(opts)
           ),
         supported_sampling: ContractNormalization.atom_list(capabilities.supported_sampling),
         supported_products: ContractNormalization.atom_list(capabilities.supported_products),
@@ -70,12 +72,12 @@ defmodule Cadence.DataSources.SourceCapabilities do
     }
   end
 
-  def normalize(capabilities) when is_map(capabilities) do
+  def normalize(capabilities, opts) when is_map(capabilities) do
     %__MODULE__{
       logical_source:
         capabilities
         |> ContractNormalization.attr(:logical_source)
-        |> ContractNormalization.known_atom(AdapterRegistry.logical_sources()),
+        |> ContractNormalization.known_atom(adapter_logical_sources(opts)),
       supported_sampling:
         capabilities
         |> ContractNormalization.attr(:supported_sampling, [])
@@ -115,7 +117,7 @@ defmodule Cadence.DataSources.SourceCapabilities do
     }
   end
 
-  def normalize(_other), do: nil
+  def normalize(_other, _opts), do: nil
 
   @spec supports_sampling?(t(), atom()) :: boolean()
   def supports_sampling?(%__MODULE__{} = capabilities, mode) do
@@ -150,6 +152,13 @@ defmodule Cadence.DataSources.SourceCapabilities do
   defp normalize_boolean("true"), do: true
   defp normalize_boolean("false"), do: false
   defp normalize_boolean(value), do: value
+
+  defp adapter_logical_sources(opts) do
+    policy =
+      Keyword.get_lazy(opts, :data_source_adapter_policy, &AdapterRegistry.default_policy/0)
+
+    AdapterRegistry.logical_sources(policy)
+  end
 
   defp maybe_set_latest(%__MODULE__{} = capabilities, physical_capabilities) do
     case capability_value(physical_capabilities, :latest?) do

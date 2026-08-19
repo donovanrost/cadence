@@ -32,6 +32,10 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
 
   @type enqueue_result :: {:ok, Job.t()} | {:error, term()}
   @type run_result :: {:ok, map()} | {:error, term()}
+  @type policy :: %{
+          required(:executor) => (map(), keyword() -> {:ok, term()} | {:error, term()}),
+          required(:execution_opts) => keyword()
+        }
 
   @spec request_provisioning(binary(), map(), keyword()) ::
           {:ok, DataSource.t(), Job.t()} | {:error, term()}
@@ -70,10 +74,27 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
     end
   end
 
+  @doc """
+  Executes with the current application configuration for public compatibility.
+
+  The application-started durable worker uses `handler/1` with a policy captured
+  at startup, so its runs do not reread global configuration.
+  """
   @spec execute_enqueued_run(binary()) :: run_result()
   def execute_enqueued_run(run_id) when is_binary(run_id) do
+    configured_policy =
+      :cadence
+      |> Application.get_env(:tsdb_backend_lifecycle, [])
+      |> policy()
+
+    execute_enqueued_run(run_id, configured_policy)
+  end
+
+  @spec execute_enqueued_run(binary(), policy()) :: run_result()
+  def execute_enqueued_run(run_id, %{executor: executor, execution_opts: execution_opts})
+      when is_binary(run_id) and is_function(executor, 2) and is_list(execution_opts) do
     with {:ok, %Job{job_type: @job_type} = job} <- Jobs.fetch_job_for_run(@job_type, run_id),
-         {:ok, executor_result} <- lifecycle_executor().(job.payload, execution_opts()),
+         {:ok, executor_result} <- executor.(job.payload, execution_opts),
          {:ok, %DataSource{} = source} <- complete_job_lifecycle(job, executor_result) do
       {:ok,
        %{
@@ -82,6 +103,21 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
          executor_result: executor_result
        }}
     end
+  end
+
+  @doc false
+  @spec policy(keyword()) :: policy()
+  def policy(config) when is_list(config) do
+    %{
+      executor: Keyword.get(config, :executor, &missing_lifecycle_executor/2),
+      execution_opts: Keyword.get(config, :execution_opts, [])
+    }
+  end
+
+  @doc false
+  @spec handler(policy()) :: (binary() -> run_result())
+  def handler(%{} = policy) do
+    fn run_id -> execute_enqueued_run(run_id, policy) end
   end
 
   @spec list_for_mission(binary(), keyword()) :: [map()]
@@ -226,18 +262,6 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
     |> Map.new(fn {key, value} -> {to_string(key), text_or_nil(value)} end)
     |> Map.put("provisioning_kind", "byo_tsdb")
     |> Map.put("redacted_fields", [])
-  end
-
-  defp lifecycle_executor do
-    :cadence
-    |> Application.get_env(:tsdb_backend_lifecycle, [])
-    |> Keyword.get(:executor, &missing_lifecycle_executor/2)
-  end
-
-  defp execution_opts do
-    :cadence
-    |> Application.get_env(:tsdb_backend_lifecycle, [])
-    |> Keyword.get(:execution_opts, [])
   end
 
   defp missing_lifecycle_executor(_payload, _opts),

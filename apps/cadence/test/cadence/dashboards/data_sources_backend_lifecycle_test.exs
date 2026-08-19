@@ -6,6 +6,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Control.ManagedResources
+  alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
 
   alias Cadence.DataSources.DeploymentStatus
 
@@ -229,22 +230,12 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "worker completes dedicated BYO TSDB backend provisioning" do
     test_pid = self()
-    previous_config = Application.get_env(:cadence, :tsdb_backend_lifecycle)
 
-    Application.put_env(:cadence, :tsdb_backend_lifecycle,
-      executor: fn payload, opts ->
+    policy =
+      lifecycle_policy(fn payload, opts ->
         send(test_pid, {:tsdb_backend_lifecycle_executor, payload, opts})
         {:ok, %{"status" => "physical_provisioned"}}
-      end,
-      execution_opts: [worker: "test-lifecycle-worker"]
-    )
-
-    on_exit(fn ->
-      case previous_config do
-        nil -> Application.delete_env(:cadence, :tsdb_backend_lifecycle)
-        config -> Application.put_env(:cadence, :tsdb_backend_lifecycle, config)
-      end
-    end)
+      end)
 
     assert {:ok, _reference, _event} =
              SourceCredentials.register_reference(%{
@@ -298,7 +289,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = run_lifecycle_job(claimed_job.job_id, policy)
     assert completed_job.status == :completed
 
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}
@@ -337,22 +328,12 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "worker completes dedicated BYO TSDB backend deprovisioning" do
     test_pid = self()
-    previous_config = Application.get_env(:cadence, :tsdb_backend_lifecycle)
 
-    Application.put_env(:cadence, :tsdb_backend_lifecycle,
-      executor: fn payload, opts ->
+    policy =
+      lifecycle_policy(fn payload, opts ->
         send(test_pid, {:tsdb_backend_lifecycle_executor, payload, opts})
         {:ok, %{"status" => "physical_deprovisioned"}}
-      end,
-      execution_opts: [worker: "test-lifecycle-worker"]
-    )
-
-    on_exit(fn ->
-      case previous_config do
-        nil -> Application.delete_env(:cadence, :tsdb_backend_lifecycle)
-        config -> Application.put_env(:cadence, :tsdb_backend_lifecycle, config)
-      end
-    end)
+      end)
 
     assert {:ok, _reference, _event} =
              SourceCredentials.register_reference(%{
@@ -405,7 +386,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} = run_lifecycle_job(claimed_job.job_id, policy)
     assert completed_job.status == :completed
 
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}
@@ -559,5 +540,21 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              mission_changeset,
              :mission_id
            )
+  end
+
+  defp lifecycle_policy(executor) do
+    TSDBBackendLifecycleJobs.policy(
+      executor: executor,
+      execution_opts: [worker: "test-lifecycle-worker"]
+    )
+  end
+
+  defp run_lifecycle_job(job_id, policy) do
+    runner =
+      JobRunner.new(%{
+        TSDBBackendLifecycleJobs.job_type() => TSDBBackendLifecycleJobs.handler(policy)
+      })
+
+    JobRunner.run_job(runner, job_id)
   end
 end

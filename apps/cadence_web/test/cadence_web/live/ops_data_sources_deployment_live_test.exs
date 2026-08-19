@@ -317,22 +317,14 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
   test "renders managed TSDB deployment runs before sources exist" do
     {conn, _user, org, mission} = signed_in_org_and_mission()
-    previous_config = Application.get_env(:cadence, :managed_questdb_provisioning)
 
-    on_exit(fn ->
-      if is_nil(previous_config) do
-        Application.delete_env(:cadence, :managed_questdb_provisioning)
-      else
-        Application.put_env(:cadence, :managed_questdb_provisioning, previous_config)
-      end
-    end)
-
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn attrs, _opts ->
-        assert attrs["data_source_id"] == "failed-managed-questdb"
-        {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
-      end
-    )
+    policy =
+      ManagedQuestDBProvisioningJobs.policy(
+        provisioner: fn attrs, _opts ->
+          assert attrs["data_source_id"] == "failed-managed-questdb"
+          {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
+        end
+      )
 
     assert {:ok, failed_job} =
              ManagedQuestDBProvisioningJobs.enqueue(%{
@@ -348,7 +340,14 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == failed_job.job_id
-    assert {:ok, _failed_job} = JobRunner.run_job(claimed_job.job_id)
+
+    runner =
+      JobRunner.new(%{
+        ManagedQuestDBProvisioningJobs.job_type() =>
+          ManagedQuestDBProvisioningJobs.handler(policy)
+      })
+
+    assert {:ok, _failed_job} = JobRunner.run_job(runner, claimed_job.job_id)
 
     assert {:ok, running_job} =
              ManagedQuestDBProvisioningJobs.enqueue(%{

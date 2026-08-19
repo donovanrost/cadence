@@ -14,6 +14,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
   alias Cadence.DataSources.{DataBinding, DataSource, DataSourceEvent}
 
   alias Cadence.Control.DataSources, as: DataSourceControl
+  alias Cadence.Control.DataSources.Probes.QuestDB
 
   setup do
     persist_mission_scope("org-dash-source", "mission-dash-source")
@@ -305,6 +306,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:15:00Z]},
                actor_id: "operator-questdb",
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_fun(test_pid, :schema_ok),
                invalidate_runtime_cache?: false
              )
@@ -353,6 +355,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:17:00Z]},
                actor_id: "operator-questdb",
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_fun(self(), :schema_missing_identity),
                invalidate_runtime_cache?: false
              )
@@ -397,6 +400,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:20:00Z]},
                actor_id: "operator-questdb",
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_fun(self(), :schema_error),
                invalidate_runtime_cache?: false
              )
@@ -438,6 +442,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:22:00Z]},
                actor_id: "operator-questdb",
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_fun(self(), :connection_error),
                invalidate_runtime_cache?: false
              )
@@ -500,6 +505,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:23:00Z]},
                actor_id: "operator-questdb",
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                credential_material_resolver: fn _credential, _opts ->
                  {:ok,
                   %{
@@ -742,12 +748,17 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 22:25:00Z]},
                actor_id: "operator-byo-questdb",
                questdb_probe?: true,
-               questdb_exec_fun: questdb_probe_exec_with_opts_fun(test_pid, :schema_ok),
+               data_source_probe_policy:
+                 QuestDB.policy(
+                   questdb_exec_fun: questdb_probe_exec_with_opts_fun(test_pid, :schema_ok),
+                   questdb_timeout: 1_234
+                 ),
                invalidate_runtime_cache?: false
              )
 
     assert_receive {:questdb_probe_sql, "SELECT 1", questdb_opts}
     assert questdb_opts[:http_endpoint] == "http://customer-questdb:9000"
+    assert questdb_opts[:timeout] == 1_234
 
     assert_receive {:questdb_probe_sql, schema_sql, schema_opts}
     assert schema_sql =~ "FROM telemetry_observations LIMIT 0"
@@ -837,6 +848,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                actor_id: "operator-byo-questdb",
                credential_material_resolver: resolver,
                questdb_probe?: true,
+               data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_with_opts_fun(test_pid, :schema_ok),
                invalidate_runtime_cache?: false
              )

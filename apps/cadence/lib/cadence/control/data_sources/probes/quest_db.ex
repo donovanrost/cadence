@@ -6,21 +6,44 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
   alias Cadence.DataSources.DataSource
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow, RestClient}
 
+  @type policy :: %{
+          required(:enabled?) => boolean(),
+          required(:exec_fun) => (binary(), keyword() -> {:ok, term()} | {:error, term()}),
+          required(:timeout) => timeout(),
+          optional(:http_endpoint) => binary() | nil
+        }
+
+  @doc """
+  Probes with a policy resolved from current application configuration.
+
+  Call `probe/3` from option-aware paths that already hold an immutable policy
+  snapshot; this arity remains the compatibility boundary for legacy callers.
+  """
   @spec probe(DataSource.t(), keyword()) :: SourceProbe.t()
   def probe(%DataSource{} = data_source, opts) when is_list(opts) do
-    if probe_enabled?(opts) do
-      with {:ok, _body} <- probe_exec("SELECT 1", opts),
-           {:ok, schema_metadata} <- schema_probe_metadata(opts) do
+    configured_policy =
+      :cadence
+      |> Application.get_env(:data_source_probe, [])
+      |> policy()
+
+    probe(data_source, opts, configured_policy)
+  end
+
+  @spec probe(DataSource.t(), keyword(), policy()) :: SourceProbe.t()
+  def probe(%DataSource{} = data_source, opts, %{} = policy) when is_list(opts) do
+    if probe_enabled?(opts, policy) do
+      with {:ok, _body} <- probe_exec("SELECT 1", opts, policy),
+           {:ok, schema_metadata} <- schema_probe_metadata(opts, policy) do
         SourceProbe.healthy(
           :source_probe_succeeded,
-          Map.merge(probe_metadata(data_source, opts), schema_metadata),
+          Map.merge(probe_metadata(data_source, opts, policy), schema_metadata),
           probe_kind: :adapter
         )
       else
         {:schema_error, reason, schema_metadata} ->
           SourceProbe.degraded(
             :source_schema_probe_failed,
-            probe_metadata(data_source, opts)
+            probe_metadata(data_source, opts, policy)
             |> Map.merge(schema_metadata)
             |> Map.merge(schema_diagnostic_metadata(reason))
             |> Map.put(:adapter_error, safe_error(reason)),
@@ -30,7 +53,7 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
         {:error, reason} ->
           SourceProbe.unavailable(
             :source_connection_failed,
-            probe_metadata(data_source, opts)
+            probe_metadata(data_source, opts, policy)
             |> Map.merge(connection_diagnostic_metadata(reason))
             |> Map.put(:adapter_error, safe_error(reason)),
             probe_kind: :adapter
@@ -38,7 +61,7 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
       end
     else
       SourceProbe.unsupported(
-        Map.merge(probe_metadata(data_source, opts), %{
+        Map.merge(probe_metadata(data_source, opts, policy), %{
           probe_enabled?: false,
           reason: "QuestDB live probe is disabled for this environment"
         })
@@ -46,8 +69,19 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
     end
   end
 
-  defp schema_probe_metadata(opts) do
-    case probe_exec(schema_probe_sql(), opts) do
+  @doc false
+  @spec policy(keyword()) :: policy()
+  def policy(config) when is_list(config) do
+    %{
+      enabled?: Keyword.get(config, :questdb_enabled?, false),
+      exec_fun: Keyword.get(config, :questdb_exec_fun, &RestClient.exec/2),
+      http_endpoint: Keyword.get(config, :questdb_http_endpoint),
+      timeout: Keyword.get(config, :questdb_timeout, 2_000)
+    }
+  end
+
+  defp schema_probe_metadata(opts, policy) do
+    case probe_exec(schema_probe_sql(), opts, policy) do
       {:ok, result} ->
         columns = result_columns(result)
         missing = probe_columns() -- columns
@@ -227,37 +261,30 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
 
   defp http_error_text?(text), do: text =~ "http_error"
 
-  defp probe_exec(sql, opts) do
-    config = Application.get_env(:cadence, :data_source_probe, [])
-
+  defp probe_exec(sql, opts, policy) do
     exec_fun =
       Keyword.get(opts, :questdb_exec_fun) ||
-        Keyword.get(config, :questdb_exec_fun) ||
-        (&RestClient.exec/2)
+        Map.fetch!(policy, :exec_fun)
 
-    exec_fun.(sql, probe_opts(opts))
+    exec_fun.(sql, probe_opts(opts, policy))
   end
 
-  defp probe_metadata(%DataSource{} = data_source, opts) do
-    config = Application.get_env(:cadence, :data_source_probe, [])
-
+  defp probe_metadata(%DataSource{} = data_source, opts, policy) do
     %{
       adapter: "telemetry",
       storage: "questdb",
       data_source_id: data_source.data_source_id,
-      http_endpoint: http_endpoint(opts, config),
+      http_endpoint: http_endpoint(opts, policy),
       connection_profile?: is_map(Keyword.get(opts, :source_connection_profile))
     }
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()
   end
 
-  defp probe_opts(opts) do
-    config = Application.get_env(:cadence, :data_source_probe, [])
-
+  defp probe_opts(opts, policy) do
     [
-      http_endpoint: http_endpoint(opts, config),
-      timeout: Keyword.get(opts, :questdb_timeout, Keyword.get(config, :questdb_timeout, 2_000)),
+      http_endpoint: http_endpoint(opts, policy),
+      timeout: Keyword.get(opts, :questdb_timeout, Map.fetch!(policy, :timeout)),
       headers: auth_headers(opts)
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) or value == [] end)
@@ -295,7 +322,7 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
 
   defp normalize_headers(_headers), do: []
 
-  defp http_endpoint(opts, config) do
+  defp http_endpoint(opts, policy) do
     Keyword.get(opts, :questdb_http_endpoint) ||
       opts
       |> Keyword.get(:source_connection_material, [])
@@ -303,12 +330,11 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
       opts
       |> Keyword.get(:source_connection_profile, %{})
       |> metadata_value(:http_endpoint) ||
-      Keyword.get(config, :questdb_http_endpoint)
+      Map.get(policy, :http_endpoint)
   end
 
-  defp probe_enabled?(opts) do
-    config = Application.get_env(:cadence, :data_source_probe, [])
-    Keyword.get(opts, :questdb_probe?, Keyword.get(config, :questdb_enabled?, false))
+  defp probe_enabled?(opts, policy) do
+    Keyword.get(opts, :questdb_probe?, Map.fetch!(policy, :enabled?))
   end
 
   defp metadata_value(metadata, key) when is_map(metadata) do

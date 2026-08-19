@@ -6,18 +6,11 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvisionTest do
 
   setup do
     previous_shell = Mix.shell()
-    previous_config = Application.get_env(:cadence, :managed_questdb_provisioning)
 
     Mix.shell(Mix.Shell.Process)
 
     on_exit(fn ->
       Mix.shell(previous_shell)
-
-      if is_nil(previous_config) do
-        Application.delete_env(:cadence, :managed_questdb_provisioning)
-      else
-        Application.put_env(:cadence, :managed_questdb_provisioning, previous_config)
-      end
     end)
 
     :ok
@@ -59,50 +52,54 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvisionTest do
   test "apply mode delegates to configured provisioner and prints migration summary" do
     test_pid = self()
 
-    Application.put_env(:cadence, :managed_questdb_provisioning,
-      provisioner: fn attrs, opts ->
-        send(test_pid, {:provision_args, attrs, opts})
+    policy =
+      ManagedQuestdbProvision.policy(
+        provisioner: fn attrs, opts ->
+          send(test_pid, {:provision_args, attrs, opts})
 
-        {:ok,
-         %{
-           data_source: %DataSource{
-             data_source_id: attrs.data_source_id,
-             organization_id: attrs.organization_id,
-             mission_id: attrs.mission_id,
-             isolation_level: :mission_isolated,
-             metadata: %{
-               "endpoint_ref" => attrs.endpoint_ref,
-               "topology_ref" => attrs.topology_ref
-             }
-           },
-           applied_migrations: [
-             %{version: "20260630010101", name: "create_observations"}
-           ],
-           isolation_profile: %{physical_boundary: :mission},
-           provisioning: %{applied_migration_count: 1}
-         }}
-      end
+          {:ok,
+           %{
+             data_source: %DataSource{
+               data_source_id: attrs.data_source_id,
+               organization_id: attrs.organization_id,
+               mission_id: attrs.mission_id,
+               isolation_level: :mission_isolated,
+               metadata: %{
+                 "endpoint_ref" => attrs.endpoint_ref,
+                 "topology_ref" => attrs.topology_ref
+               }
+             },
+             applied_migrations: [
+               %{version: "20260630010101", name: "create_observations"}
+             ],
+             isolation_profile: %{physical_boundary: :mission},
+             provisioning: %{applied_migration_count: 1}
+           }}
+        end
+      )
+
+    ManagedQuestdbProvision.run(
+      [
+        "--apply",
+        "--organization-id",
+        "org-task",
+        "--mission-id",
+        "mission-task",
+        "--data-source-id",
+        "mission-task-questdb",
+        "--endpoint-ref",
+        "endpoint://cadence/task",
+        "--topology-ref",
+        "topology://cadence/task",
+        "--http-endpoint",
+        "http://task-questdb:9000",
+        "--actor-id",
+        "operator-task",
+        "--password",
+        "task-secret"
+      ],
+      policy
     )
-
-    ManagedQuestdbProvision.run([
-      "--apply",
-      "--organization-id",
-      "org-task",
-      "--mission-id",
-      "mission-task",
-      "--data-source-id",
-      "mission-task-questdb",
-      "--endpoint-ref",
-      "endpoint://cadence/task",
-      "--topology-ref",
-      "topology://cadence/task",
-      "--http-endpoint",
-      "http://task-questdb:9000",
-      "--actor-id",
-      "operator-task",
-      "--password",
-      "task-secret"
-    ])
 
     assert_received {:provision_args, attrs, opts}
     assert attrs.organization_id == "org-task"

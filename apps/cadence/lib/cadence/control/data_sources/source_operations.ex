@@ -48,8 +48,8 @@ defmodule Cadence.Control.DataSources.SourceOperations do
   defp probe_data_source_health(%DataSource{} = data_source, opts) do
     with :ok <- validate_probe_configuration(data_source),
          {:ok, credential} <- resolve_probe_credentials(data_source, opts),
-         {:ok, adapter} <- resolve_adapter(data_source),
-         {:ok, probe_adapter} <- resolve_probe_adapter(data_source) do
+         {:ok, adapter} <- resolve_adapter(data_source, opts),
+         {:ok, probe_adapter} <- resolve_probe_adapter(data_source, opts) do
       materialized_source = %DataSource{data_source | adapter: adapter}
 
       run_adapter_probe(
@@ -283,8 +283,8 @@ defmodule Cadence.Control.DataSources.SourceOperations do
     |> Map.new()
   end
 
-  defp resolve_adapter(%DataSource{} = source) do
-    case AdapterRegistry.resolve(source.adapter) do
+  defp resolve_adapter(%DataSource{} = source, opts) do
+    case AdapterRegistry.resolve(source.adapter, nil, adapter_policy(opts)) do
       {:ok, adapter} ->
         if Code.ensure_loaded?(adapter) do
           {:ok, adapter}
@@ -297,8 +297,8 @@ defmodule Cadence.Control.DataSources.SourceOperations do
     end
   end
 
-  defp resolve_probe_adapter(%DataSource{} = source) do
-    case AdapterRegistry.resolve_probe(source.adapter) do
+  defp resolve_probe_adapter(%DataSource{} = source, opts) do
+    case AdapterRegistry.resolve_probe(source.adapter, adapter_policy(opts)) do
       {:ok, adapter} ->
         if Code.ensure_loaded?(adapter) do
           {:ok, adapter}
@@ -433,7 +433,8 @@ defmodule Cadence.Control.DataSources.SourceOperations do
     %{
       organization_id: data_source.organization_id,
       mission_id: mission_id,
-      logical_source: AdapterRegistry.logical_source(data_source.adapter) || :unknown,
+      logical_source:
+        AdapterRegistry.logical_source(data_source.adapter, adapter_policy(opts)) || :unknown,
       data_source_id: data_source.data_source_id,
       source_health: probe.source_health,
       reason: probe.reason,
@@ -490,6 +491,10 @@ defmodule Cadence.Control.DataSources.SourceOperations do
       kind: :descriptor_preflight,
       message: "Connection test was blocked before adapter IO."
     }
+  end
+
+  defp adapter_policy(opts) do
+    Keyword.get_lazy(opts, :data_source_adapter_policy, &AdapterRegistry.default_policy/0)
   end
 
   defp annotate_capability_probe_drift(attrs) when is_map(attrs) do

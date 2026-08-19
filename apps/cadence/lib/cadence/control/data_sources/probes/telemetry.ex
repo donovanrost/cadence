@@ -8,7 +8,10 @@ defmodule Cadence.Control.DataSources.Probes.Telemetry do
   def probe(%DataSource{} = data_source, opts \\ []) when is_list(opts) do
     case metadata_value(data_source.metadata, :storage) do
       storage when storage in [:questdb, "questdb"] ->
-        QuestDB.probe(data_source, opts)
+        case Keyword.fetch(opts, :data_source_probe_policy) do
+          {:ok, policy} -> QuestDB.probe(data_source, opts, policy)
+          :error -> QuestDB.probe(data_source, opts)
+        end
 
       storage ->
         SourceProbe.unsupported(%{

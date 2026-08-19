@@ -34,8 +34,24 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvision do
 
   @shortdoc "Plan or apply managed QuestDB source provisioning"
 
+  @type policy :: %{
+          required(:planner) => (map(), keyword() -> {:ok, map()} | {:error, term()}),
+          required(:provisioner) => (map(), keyword() -> {:ok, map()} | {:error, term()})
+        }
+
   @impl true
   def run(args) do
+    policy =
+      :cadence
+      |> Application.get_env(:managed_questdb_provisioning, [])
+      |> policy()
+
+    run(args, policy)
+  end
+
+  @doc false
+  @spec run([binary()], policy()) :: :ok
+  def run(args, %{planner: planner, provisioner: provisioner}) do
     {opts, remaining, invalid} =
       OptionParser.parse(
         args,
@@ -65,10 +81,19 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvision do
     validate_mode!(opts)
 
     if opts[:plan] do
-      plan!(opts)
+      plan!(opts, planner)
     else
-      apply!(opts)
+      apply!(opts, provisioner)
     end
+  end
+
+  @doc false
+  @spec policy(keyword()) :: policy()
+  def policy(config) when is_list(config) do
+    %{
+      planner: Keyword.get(config, :planner, &ManagedQuestDBProvisioning.plan/2),
+      provisioner: Keyword.get(config, :provisioner, &ManagedQuestDBProvisioning.provision/2)
+    }
   end
 
   defp maybe_handle_help_or_invalid_opts(opts, remaining, invalid) do
@@ -97,8 +122,8 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvision do
     end
   end
 
-  defp plan!(opts) do
-    case planner().(provision_attrs(opts), provision_opts(opts)) do
+  defp plan!(opts, planner) do
+    case planner.(provision_attrs(opts), provision_opts(opts)) do
       {:ok, plan} ->
         print_plan(plan)
 
@@ -107,8 +132,8 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvision do
     end
   end
 
-  defp apply!(opts) do
-    case provisioner().(provision_attrs(opts), provision_opts(opts)) do
+  defp apply!(opts, provisioner) do
+    case provisioner.(provision_attrs(opts), provision_opts(opts)) do
       {:ok, result} ->
         print_result(result)
 
@@ -174,16 +199,6 @@ defmodule Mix.Tasks.Cadence.DataSources.ManagedQuestdbProvision do
       actor_id: opts[:actor_id]
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp planner do
-    configured = Application.get_env(:cadence, :managed_questdb_provisioning, [])
-    Keyword.get(configured, :planner, &ManagedQuestDBProvisioning.plan/2)
-  end
-
-  defp provisioner do
-    configured = Application.get_env(:cadence, :managed_questdb_provisioning, [])
-    Keyword.get(configured, :provisioner, &ManagedQuestDBProvisioning.provision/2)
   end
 
   defp migration_versions([]), do: "none"

@@ -8,24 +8,52 @@ defmodule Cadence.DataSources.AdapterRegistry do
 
   alias Cadence.DataSources.{AdapterDefinition, DataSource}
 
+  @configured_adapters Application.compile_env(:cadence, :data_source_adapters, [])
+
   @type definition_fetch_error ::
           :unknown_source_adapter
           | :unsupported_source_adapter_version
           | :invalid_source_adapter_definition
 
+  @type policy :: %{
+          required(:definitions) => [AdapterDefinition.t()],
+          required(:by_logical_source) => %{optional(atom()) => AdapterDefinition.t()}
+        }
+
   @spec list_definitions() :: [AdapterDefinition.t()]
-  def list_definitions do
-    :cadence
-    |> Application.get_env(:data_source_adapters, [])
-    |> Enum.map(&definition_from_config/1)
+  def list_definitions, do: list_definitions(default_policy())
+
+  @spec list_definitions(policy()) :: [AdapterDefinition.t()]
+  def list_definitions(%{definitions: definitions}), do: definitions
+
+  @doc false
+  @spec policy(keyword() | map()) :: policy()
+  def policy(config) when is_list(config) or is_map(config) do
+    definitions = Enum.map(config, &definition_from_config/1)
+
+    %{
+      definitions: definitions,
+      by_logical_source: Map.new(definitions, &{&1.logical_source, &1})
+    }
   end
+
+  @doc false
+  @spec default_policy() :: policy()
+  def default_policy, do: policy(@configured_adapters)
 
   @spec fetch_definition(atom(), pos_integer() | :latest | nil) ::
           {:ok, AdapterDefinition.t()} | {:error, definition_fetch_error()}
   def fetch_definition(logical_source, version \\ :latest)
 
-  def fetch_definition(logical_source, version) when is_atom(logical_source) do
-    case Enum.find(list_definitions(), &(&1.logical_source == logical_source)) do
+  def fetch_definition(logical_source, version) do
+    fetch_definition(logical_source, version, default_policy())
+  end
+
+  @spec fetch_definition(atom(), pos_integer() | :latest | nil, policy()) ::
+          {:ok, AdapterDefinition.t()} | {:error, definition_fetch_error()}
+  def fetch_definition(logical_source, version, policy)
+      when is_atom(logical_source) and is_map(policy) do
+    case get_in(policy, [:by_logical_source, logical_source]) do
       %AdapterDefinition{} = definition
       when version in [:latest, nil, definition.version] ->
         case AdapterDefinition.validate(definition) do
@@ -44,43 +72,65 @@ defmodule Cadence.DataSources.AdapterRegistry do
     end
   end
 
-  def fetch_definition(_logical_source, _version), do: {:error, :unknown_source_adapter}
+  def fetch_definition(_logical_source, _version, _policy), do: {:error, :unknown_source_adapter}
 
   @spec logical_sources() :: [atom()]
-  def logical_sources, do: list_definitions() |> Enum.map(& &1.logical_source) |> Enum.sort()
+  def logical_sources, do: logical_sources(default_policy())
+
+  @spec logical_sources(policy()) :: [atom()]
+  def logical_sources(%{by_logical_source: definitions}) do
+    definitions |> Map.keys() |> Enum.sort()
+  end
 
   @spec fetch(atom()) :: {:ok, module()} | :error
-  def fetch(logical_source) do
-    case fetch_definition(logical_source) do
+  def fetch(logical_source), do: fetch(logical_source, default_policy())
+
+  @spec fetch(atom(), policy()) :: {:ok, module()} | :error
+  def fetch(logical_source, policy) do
+    case fetch_definition(logical_source, :latest, policy) do
       {:ok, definition} -> {:ok, definition.module}
       {:error, _reason} -> :error
     end
   end
 
   @spec logical_source(atom() | nil) :: atom() | nil
-  def logical_source(adapter) when is_atom(adapter) and not is_nil(adapter) do
-    case fetch(adapter) do
+  def logical_source(adapter), do: logical_source(adapter, default_policy())
+
+  @spec logical_source(atom() | nil, policy()) :: atom() | nil
+  def logical_source(adapter, policy)
+      when is_atom(adapter) and not is_nil(adapter) and is_map(policy) do
+    case fetch(adapter, policy) do
       {:ok, _module} ->
         adapter
 
       :error ->
-        Enum.find_value(list_definitions(), &logical_source_for_adapter(&1, adapter))
+        Enum.find_value(list_definitions(policy), &logical_source_for_adapter(&1, adapter))
     end
   end
 
-  def logical_source(_adapter), do: nil
+  def logical_source(_adapter, _policy), do: nil
 
   @spec resolve(atom() | nil, atom() | nil) :: {:ok, module()} | :error
   def resolve(adapter, logical_source \\ nil)
 
-  def resolve(adapter, _logical_source) when is_atom(adapter) and not is_nil(adapter),
-    do: fetch(adapter) |> resolve_configured_or_module(adapter)
+  def resolve(adapter, logical_source) do
+    resolve(adapter, logical_source, default_policy())
+  end
 
-  def resolve(_adapter, _logical_source), do: :error
+  @spec resolve(atom() | nil, atom() | nil, policy()) :: {:ok, module()} | :error
+  def resolve(adapter, _logical_source, policy)
+      when is_atom(adapter) and not is_nil(adapter) and is_map(policy),
+      do: fetch(adapter, policy) |> resolve_configured_or_module(adapter)
+
+  def resolve(_adapter, _logical_source, _policy), do: :error
 
   @spec resolve_probe(atom() | nil) :: {:ok, module()} | :error
-  def resolve_probe(adapter) when is_atom(adapter) and not is_nil(adapter) do
-    case definition_for_adapter(adapter) do
+  def resolve_probe(adapter), do: resolve_probe(adapter, default_policy())
+
+  @spec resolve_probe(atom() | nil, policy()) :: {:ok, module()} | :error
+  def resolve_probe(adapter, policy)
+      when is_atom(adapter) and not is_nil(adapter) and is_map(policy) do
+    case definition_for_adapter(adapter, policy) do
       %AdapterDefinition{probe_module: probe_module, module: module} ->
         {:ok, probe_module || module}
 
@@ -89,11 +139,16 @@ defmodule Cadence.DataSources.AdapterRegistry do
     end
   end
 
-  def resolve_probe(_adapter), do: :error
+  def resolve_probe(_adapter, _policy), do: :error
 
   @spec materialize(DataSource.t(), atom() | nil) :: DataSource.t()
   def materialize(%DataSource{} = source, logical_source) do
-    case resolve(source.adapter, logical_source) do
+    materialize(source, logical_source, default_policy())
+  end
+
+  @spec materialize(DataSource.t(), atom() | nil, policy()) :: DataSource.t()
+  def materialize(%DataSource{} = source, logical_source, policy) do
+    case resolve(source.adapter, logical_source, policy) do
       {:ok, adapter} -> %DataSource{source | adapter: adapter}
       :error -> source
     end
@@ -120,8 +175,8 @@ defmodule Cadence.DataSources.AdapterRegistry do
     }
   end
 
-  defp definition_for_adapter(adapter) do
-    Enum.find(list_definitions(), fn definition ->
+  defp definition_for_adapter(adapter, policy) do
+    Enum.find(list_definitions(policy), fn definition ->
       definition.logical_source == adapter or definition.module == adapter
     end)
   end

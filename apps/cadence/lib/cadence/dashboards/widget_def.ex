@@ -25,13 +25,13 @@ defmodule Cadence.Dashboards.WidgetDef do
     options: %{}
   ]
 
-  @spec from_map(map()) :: t()
-  def from_map(attrs) when is_map(attrs) do
+  @spec from_map(map(), keyword()) :: t()
+  def from_map(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
     %__MODULE__{
       widget_type_id: get_attr(attrs, :widget_type_id),
       widget_type_version: get_attr(attrs, :widget_type_version) || 1,
       title: get_attr(attrs, :title),
-      binding: normalize_binding(get_attr(attrs, :binding) || %{}),
+      binding: normalize_binding(get_attr(attrs, :binding) || %{}, opts),
       options: get_attr(attrs, :options) || %{}
     }
   end
@@ -47,8 +47,8 @@ defmodule Cadence.Dashboards.WidgetDef do
     }
   end
 
-  defp normalize_binding(binding) do
-    source = normalize_source(get_attr(binding, :source))
+  defp normalize_binding(binding, opts) do
+    source = normalize_source(get_attr(binding, :source), opts)
 
     %{
       source: source,
@@ -107,10 +107,13 @@ defmodule Cadence.Dashboards.WidgetDef do
   defp default_value_type(:events), do: nil
   defp default_value_type(_source), do: :engineering
 
-  defp normalize_source(nil), do: :telemetry
+  defp normalize_source(nil, _opts), do: :telemetry
 
-  defp normalize_source(source) do
-    ContractNormalization.known_atom(source, AdapterRegistry.logical_sources())
+  defp normalize_source(source, opts) do
+    policy =
+      Keyword.get_lazy(opts, :data_source_adapter_policy, &AdapterRegistry.default_policy/0)
+
+    ContractNormalization.known_atom(source, AdapterRegistry.logical_sources(policy))
   end
 
   defp normalize_atom(nil, default, _mapping), do: default

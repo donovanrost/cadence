@@ -17,6 +17,8 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
   alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
 
   alias Cadence.DataSources.{DataBinding, DataSource}
+  alias Cadence.Control.DataSources, as: DataSourceControl
+  alias Cadence.Control.DataSources.Probes.QuestDB
 
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
   alias CadenceWeb.TestFixtures
@@ -33,7 +35,6 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
   defp configure_customer_questdb_probe! do
     test_pid = self()
     previous_credential_config = Application.get_env(:cadence, :data_source_credentials, [])
-    previous_probe_config = Application.get_env(:cadence, :data_source_probe, [])
 
     System.put_env("OPS_CUSTOMER_QUESTDB_HTTP", "http://ops-customer-questdb:9000")
 
@@ -46,19 +47,15 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
       )
     )
 
-    Application.put_env(
-      :cadence,
-      :data_source_probe,
-      Keyword.merge(previous_probe_config,
-        questdb_exec_fun: questdb_probe_exec_fun(test_pid)
-      )
-    )
-
     on_exit(fn ->
       Application.put_env(:cadence, :data_source_credentials, previous_credential_config)
-      Application.put_env(:cadence, :data_source_probe, previous_probe_config)
       System.delete_env("OPS_CUSTOMER_QUESTDB_HTTP")
     end)
+
+    QuestDB.policy(
+      questdb_exec_fun: questdb_probe_exec_fun(test_pid),
+      questdb_timeout: 2_000
+    )
   end
 
   defp persist_seed_telemetry!(org, mission) do
@@ -109,7 +106,7 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
 
   test "registers a BYO mission data source and exposes it to binding changes" do
     {conn, user, org, mission} = signed_in_org_and_mission()
-    configure_customer_questdb_probe!()
+    probe_policy = configure_customer_questdb_probe!()
     persist_seed_telemetry!(org, mission)
 
     {:ok, view, _html} =
@@ -204,9 +201,13 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
              "customer-telemetry-questdb"
            )
 
-    view
-    |> element("#probe-source-customer-telemetry-questdb")
-    |> render_click()
+    probe_customer_source!(user, mission, probe_policy)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/customer-telemetry-questdb/settings"
+      )
 
     assert_receive {:questdb_probe_sql, "SELECT 1", first_probe_opts}
     assert first_probe_opts[:http_endpoint] == "http://ops-customer-questdb:9000"
@@ -301,9 +302,13 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
                | capabilities: %{range_scan?: false}
              })
 
-    view
-    |> element("#probe-source-customer-telemetry-questdb")
-    |> render_click()
+    probe_customer_source!(user, mission, probe_policy)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/customer-telemetry-questdb/settings"
+      )
 
     assert has_element?(
              view,
@@ -403,6 +408,19 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
       send(test_pid, {:questdb_probe_sql, sql, opts})
       questdb_probe_response(sql)
     end
+  end
+
+  defp probe_customer_source!(user, mission, probe_policy) do
+    assert {:ok, _event_or_unchanged, _status} =
+             DataSourceControl.probe(
+               "customer-telemetry-questdb",
+               %{mission_id: mission.mission_id},
+               actor_id: user.user_id,
+               materialize_adapter_capabilities?: true,
+               payload: %{source: "ops_data_sources_live"},
+               questdb_probe?: true,
+               data_source_probe_policy: probe_policy
+             )
   end
 
   defp questdb_probe_response("SELECT 1"),

@@ -63,20 +63,22 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
     metadata: %{}
   ]
 
-  @spec logical_sources() :: [atom()]
-  def logical_sources, do: AdapterSelection.logical_sources()
+  @spec logical_sources(keyword()) :: [atom()]
+  def logical_sources(opts \\ []), do: AdapterSelection.logical_sources(opts)
 
-  @spec logical_source?(term()) :: boolean()
-  def logical_source?(logical_source), do: logical_source in logical_sources()
+  @spec logical_source?(term(), keyword()) :: boolean()
+  def logical_source?(logical_source, opts \\ []), do: logical_source in logical_sources(opts)
 
-  @spec new(map() | t()) :: t()
-  def new(attrs), do: normalize(attrs)
+  @spec new(map() | t(), keyword()) :: t()
+  def new(attrs, opts \\ []), do: normalize(attrs, opts)
 
-  @spec normalize(map() | t()) :: t()
-  def normalize(%__MODULE__{} = request) do
+  @spec normalize(map() | t(), keyword()) :: t()
+  def normalize(request, opts \\ [])
+
+  def normalize(%__MODULE__{} = request, opts) do
     %__MODULE__{
       request
-      | logical_source: normalize_logical_source(request.logical_source),
+      | logical_source: normalize_logical_source(request.logical_source, opts),
         observables: ContractNormalization.binary_list(request.observables),
         scope_context:
           ContractNormalization.normalize_context(request.scope_context, ScopeContext),
@@ -85,14 +87,14 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
         limit_context:
           ContractNormalization.normalize_context(request.limit_context, LimitContext),
         overlays: ContractNormalization.atom_list(request.overlays),
-        source_dependencies: normalize_source_dependencies(request.source_dependencies),
+        source_dependencies: normalize_source_dependencies(request.source_dependencies, opts),
         consumers: normalize_consumers(request.consumers),
         sampling: ContractNormalization.map_or_default(request.sampling),
         metadata: ContractNormalization.map_or_default(request.metadata)
     }
   end
 
-  def normalize(request) when is_map(request) do
+  def normalize(request, opts) when is_map(request) do
     %__MODULE__{
       request_id: ContractNormalization.attr(request, :request_id),
       organization_id: ContractNormalization.attr(request, :organization_id),
@@ -100,7 +102,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
       logical_source:
         request
         |> ContractNormalization.attr(:logical_source)
-        |> normalize_logical_source(),
+        |> normalize_logical_source(opts),
       observables:
         request
         |> ContractNormalization.attr(:observables, [])
@@ -136,7 +138,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
       source_dependencies:
         request
         |> ContractNormalization.attr(:source_dependencies, [])
-        |> normalize_source_dependencies(),
+        |> normalize_source_dependencies(opts),
       consumers:
         request
         |> ContractNormalization.attr(:consumers, [])
@@ -148,7 +150,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
     }
   end
 
-  defp normalize_source_dependencies(dependencies) when is_list(dependencies) do
+  defp normalize_source_dependencies(dependencies, opts) when is_list(dependencies) do
     Enum.map(dependencies, fn
       dependency when is_map(dependency) ->
         dependency
@@ -158,7 +160,7 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
           |> Map.update(
             :logical_source,
             nil,
-            &normalize_logical_source/1
+            &normalize_logical_source(&1, opts)
           )
           |> Map.update(:reason, nil, &ContractNormalization.existing_atom/1)
           |> Map.update(:products, [], &ContractNormalization.atom_list/1)
@@ -170,11 +172,11 @@ defmodule Cadence.Dashboards.PlannedSourceRequest do
     end)
   end
 
-  defp normalize_source_dependencies(nil), do: []
-  defp normalize_source_dependencies(dependencies), do: dependencies
+  defp normalize_source_dependencies(nil, _opts), do: []
+  defp normalize_source_dependencies(dependencies, _opts), do: dependencies
 
-  defp normalize_logical_source(logical_source) do
-    ContractNormalization.known_atom(logical_source, logical_sources())
+  defp normalize_logical_source(logical_source, opts) do
+    ContractNormalization.known_atom(logical_source, logical_sources(opts))
   end
 
   defp normalize_dependency_key(key) when is_atom(key), do: key
