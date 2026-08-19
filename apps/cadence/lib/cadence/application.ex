@@ -6,6 +6,7 @@ defmodule Cadence.Application do
   use Application
 
   alias Cadence.Auth
+  alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.DataSources
   @impl true
   def start(_type, _args) do
@@ -57,7 +58,17 @@ defmodule Cadence.Application do
 
   defp background_job_children do
     if Application.get_env(:cadence, :start_background_jobs, true) do
-      [{Cadence.Jobs.Supervisor, Application.get_env(:cadence, :background_jobs, [])}]
+      job_runner =
+        :cadence
+        |> Application.get_env(:job_handlers, %{})
+        |> JobRunner.new()
+
+      background_job_opts =
+        :cadence
+        |> Application.get_env(:background_jobs, [])
+        |> Keyword.put_new(:runner, job_runner)
+
+      [{Cadence.Jobs.Supervisor, background_job_opts}]
     else
       []
     end

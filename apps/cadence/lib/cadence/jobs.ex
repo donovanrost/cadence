@@ -7,10 +7,8 @@ defmodule Cadence.Jobs do
 
   alias Ecto.Changeset
 
-  alias Cadence.Jobs.{BackgroundJobRow, Job}
+  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
   alias Cadence.Repo
-
-  @dispatcher_name :cadence_job_dispatcher
 
   @spec enqueue(Job.job_type(), binary(), binary(), map()) :: {:ok, Job.t()} | {:error, term()}
   def enqueue(job_type, mission_id, run_id, payload)
@@ -237,9 +235,6 @@ defmodule Cadence.Jobs do
   end
 
   defp notify_available do
-    case Process.whereis(@dispatcher_name) do
-      nil -> :ok
-      pid when is_pid(pid) -> GenServer.cast(pid, :dispatch_available)
-    end
+    Dispatcher.notify_available()
   end
 end

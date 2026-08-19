@@ -3,7 +3,7 @@ defmodule Cadence.JobsTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Jobs.{BackgroundJobRow, Job}
+  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
 
   @dispatcher_event_prefix [:cadence, :jobs, :dispatcher]
   @dispatcher_events [
@@ -103,17 +103,11 @@ defmodule Cadence.JobsTest do
   end
 
   test "fails explicitly when a domain job handler is not configured" do
-    configured_handlers = Application.fetch_env!(:cadence, :job_handlers)
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :job_handlers, configured_handlers)
-    end)
-
-    Application.put_env(
-      :cadence,
-      :job_handlers,
-      Map.delete(configured_handlers, :catalog_import_run)
-    )
+    runner =
+      :cadence
+      |> Application.fetch_env!(:job_handlers)
+      |> Map.delete(:catalog_import_run)
+      |> JobRunner.new()
 
     assert {:ok, job} =
              Cadence.Jobs.enqueue(
@@ -126,7 +120,7 @@ defmodule Cadence.JobsTest do
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == job.job_id
 
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} = JobRunner.run_job(runner, claimed_job.job_id)
     assert failed_job.status == :failed
 
     assert failed_job.failure_reason == %{
@@ -150,9 +144,12 @@ defmodule Cadence.JobsTest do
   test "enqueue notification wakes dispatcher without waiting for safety scan" do
     attach_dispatcher_telemetry(self())
 
-    start_supervised!(
-      {Cadence.Jobs.Supervisor, safety_poll_interval_ms: :timer.hours(1), max_concurrency: 1}
-    )
+    runtime =
+      start_job_runtime(
+        dispatcher_name: Dispatcher.default_name(),
+        safety_poll_interval_ms: :timer.hours(1),
+        max_concurrency: 1
+      )
 
     assert_dispatcher_event(:jobs_claimed, fn measurements, metadata ->
       measurements.count == 0 and metadata.reason == :boot
@@ -183,7 +180,7 @@ defmodule Cadence.JobsTest do
     assert failed_job.completed_at
 
     assert {:ok, %{status: :quiesced, active_worker_count: 0, safety_timer_active?: false}} =
-             Cadence.Jobs.Supervisor.quiesce()
+             Cadence.Jobs.Supervisor.quiesce(runtime.supervisor)
 
     stop_supervised!(Cadence.Jobs.Supervisor)
   end
@@ -191,7 +188,14 @@ defmodule Cadence.JobsTest do
   test "safety dispatch recovers queued jobs when notification is missed" do
     attach_dispatcher_telemetry(self())
 
-    start_supervised!({Cadence.Jobs.Supervisor, safety_poll_interval_ms: 20, max_concurrency: 1})
+    runtime =
+      start_job_runtime(
+        worker_supervisor_name: nil,
+        safety_poll_interval_ms: 20,
+        max_concurrency: 1
+      )
+
+    assert is_pid(GenServer.whereis(runtime.dispatcher))
 
     assert_dispatcher_event(:jobs_claimed, fn measurements, metadata ->
       measurements.count == 0 and metadata.reason == :boot
@@ -213,7 +217,7 @@ defmodule Cadence.JobsTest do
     assert failed_job.completed_at
 
     assert {:ok, %{status: :quiesced, active_worker_count: 0, safety_timer_active?: false}} =
-             Cadence.Jobs.Supervisor.quiesce()
+             Cadence.Jobs.Supervisor.quiesce(runtime.supervisor)
 
     stop_supervised!(Cadence.Jobs.Supervisor)
   end
@@ -231,6 +235,25 @@ defmodule Cadence.JobsTest do
     |> BackgroundJobRow.changeset()
     |> Repo.insert!()
     |> BackgroundJobRow.to_domain()
+  end
+
+  defp start_job_runtime(opts) do
+    unique = make_ref()
+
+    runtime_opts =
+      [
+        name: nil,
+        dispatcher_name: {:global, {__MODULE__, :dispatcher, unique}},
+        worker_supervisor_name: {:global, {__MODULE__, :worker_supervisor, unique}},
+        runner:
+          :cadence
+          |> Application.fetch_env!(:job_handlers)
+          |> JobRunner.new()
+      ]
+      |> Keyword.merge(opts)
+
+    supervisor = start_supervised!({Cadence.Jobs.Supervisor, runtime_opts})
+    %{dispatcher: Keyword.fetch!(runtime_opts, :dispatcher_name), supervisor: supervisor}
   end
 
   defp wait_for_job_status(job_id, status, attempts_left \\ 40)

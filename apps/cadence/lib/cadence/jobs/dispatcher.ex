@@ -12,8 +12,15 @@ defmodule Cadence.Jobs.Dispatcher do
   @event_prefix [:cadence, :jobs, :dispatcher]
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, @default_name))
+    case Keyword.get(opts, :name, @default_name) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
+
+  @doc false
+  @spec default_name() :: atom()
+  def default_name, do: @default_name
 
   @spec notify_available(GenServer.server()) :: :ok
   def notify_available(server \\ @default_name) do
@@ -37,6 +44,8 @@ defmodule Cadence.Jobs.Dispatcher do
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       max_concurrency: Keyword.get(opts, :max_concurrency, @default_max_concurrency),
+      worker_supervisor: Keyword.fetch!(opts, :worker_supervisor),
+      runner: Keyword.fetch!(opts, :runner),
       safety_timer: nil,
       worker_refs: %{},
       lifecycle_status: :active,
@@ -118,7 +127,7 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   defp dispatch_available_jobs(state, reason) do
-    available_slots = available_slots(state.max_concurrency)
+    available_slots = available_slots(state)
 
     emit(:dispatch_attempt, state, %{available_slots: available_slots}, %{reason: reason})
 
@@ -144,13 +153,21 @@ defmodule Cadence.Jobs.Dispatcher do
     end)
   end
 
-  defp available_slots(max_concurrency) do
-    active_workers = DynamicSupervisor.count_children(Cadence.Jobs.WorkerSupervisor).active
-    max(max_concurrency - active_workers, 0)
+  defp available_slots(state) do
+    active_workers =
+      state.worker_supervisor
+      |> resolve_worker_supervisor()
+      |> DynamicSupervisor.count_children()
+      |> Map.fetch!(:active)
+
+    max(state.max_concurrency - active_workers, 0)
   end
 
   defp start_worker(state, job) do
-    case DynamicSupervisor.start_child(Cadence.Jobs.WorkerSupervisor, {Worker, job.job_id}) do
+    worker_supervisor = resolve_worker_supervisor(state.worker_supervisor)
+    worker_opts = [job_id: job.job_id, runner: state.runner]
+
+    case DynamicSupervisor.start_child(worker_supervisor, {Worker, worker_opts}) do
       {:ok, pid} ->
         monitor_started_worker(state, job, pid)
 
@@ -187,6 +204,21 @@ defmodule Cadence.Jobs.Dispatcher do
   defp unmonitor_worker(state, ref) do
     %{state | worker_refs: Map.delete(state.worker_refs, ref)}
   end
+
+  defp resolve_worker_supervisor({:supervisor_child, supervisor, child_id}) do
+    supervisor
+    |> Supervisor.which_children()
+    |> Enum.find_value(fn
+      {^child_id, pid, :supervisor, _modules} when is_pid(pid) -> pid
+      _child -> nil
+    end)
+    |> case do
+      nil -> raise "jobs worker supervisor is not running"
+      pid -> pid
+    end
+  end
+
+  defp resolve_worker_supervisor(worker_supervisor), do: worker_supervisor
 
   defp schedule_safety_dispatch(state) do
     state = cancel_safety_timer(state)
