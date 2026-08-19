@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   alias Cadence.Dashboards.RuntimeCoordinator
   alias CadenceWeb.OpsDashboardShowLive.ChartAppends
   alias CadenceWeb.OpsDashboardShowLive.EngineResolution
+  alias CadenceWeb.OpsDashboardShowLive.RuntimeDecisionExecutor
   alias CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask
 
   @type resolve_mode :: :initial | :context_change | :live_tick | :stream_append
@@ -22,6 +23,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   def assign_runtime(socket) do
     socket
     |> assign(:dashboard_runtime_coordinator, RuntimeCoordinator.new())
+    |> assign(:dashboard_resolution_context, EngineResolution.resolution_context())
     |> assign(:dashboard_runtime_decisions, [])
     |> assign(:dashboard_runtime_resolved?, false)
     |> assign(:dashboard_runtime_pending_appends, %{})
@@ -308,24 +310,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   end
 
   defp apply_decisions(socket, decisions, opts) do
-    Enum.reduce(decisions, socket, fn
-      %{action: :cancel_obsolete, superseded_resolve_id: resolve_id}, socket ->
-        socket
-        |> cleanup_pending_append(resolve_id)
-        |> cleanup_pending_chart_remount(resolve_id)
-        |> cancel_async(async_name(resolve_id), {:shutdown, :obsolete_dashboard_resolve})
+    RuntimeDecisionExecutor.apply(socket, decisions, opts,
+      cancel_resolve: &cancel_obsolete_resolve/2,
+      start_resolve: &start_resolve/4
+    )
+  end
 
-      %{action: :start_resolve, resolve_mode: resolve_mode, resolve_id: resolve_id}, socket ->
-        start_resolve(socket, resolve_mode, resolve_id, opts)
-
-      _decision, socket ->
-        socket
-    end)
+  defp cancel_obsolete_resolve(socket, resolve_id) do
+    socket
+    |> cleanup_pending_append(resolve_id)
+    |> cleanup_pending_chart_remount(resolve_id)
+    |> cancel_async(async_name(resolve_id), {:shutdown, :obsolete_dashboard_resolve})
   end
 
   defp start_resolve(socket, resolve_mode, resolve_id, opts) do
     request = EngineResolution.request(socket, resolve_mode)
     comparison_request = EngineResolution.comparison_request(socket, resolve_mode)
+    resolution_context = socket.assigns.dashboard_resolution_context
     browser_test_sandbox_owner_key = browser_test_sandbox_owner_key(socket)
 
     socket =
@@ -333,30 +334,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
       |> maybe_put_pending_append(resolve_id, resolve_mode, opts)
       |> maybe_put_pending_chart_remount(resolve_id, opts)
 
-    if inline_resolves?() do
-      resolve_finished(
-        socket,
+    start_async(socket, async_name(resolve_id), fn ->
+      RuntimeResolveTask.resolve(
         resolve_id,
-        EngineResolution.resolve_request_bundle(request, comparison_request)
+        request,
+        comparison_request,
+        resolution_context,
+        browser_test_sandbox_owner_key
       )
-    else
-      start_async(socket, async_name(resolve_id), fn ->
-        RuntimeResolveTask.resolve(
-          resolve_id,
-          request,
-          comparison_request,
-          browser_test_sandbox_owner_key
-        )
-      end)
-    end
+    end)
   end
 
   defp browser_test_sandbox_owner_key(socket) do
     Map.get(socket.assigns, :dashboard_browser_test_sandbox_owner_key)
-  end
-
-  defp inline_resolves? do
-    Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?, false)
   end
 
   defp push_live_tick_appends(socket, resolve_id, %{resolve_mode: :live_tick}) do

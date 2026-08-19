@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -18,8 +18,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   test "opens replay metric sample operational-event copied route from rendered metric-history frame evidence" do
     replay_run_id = "replay_run_metric_sample_ops"
     observed_at = ~U[2026-06-17 12:04:00Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -248,8 +246,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   test "opens replay RF Eb/N0 operational-event copied route from rendered metric-history frame evidence" do
     replay_run_id = "replay_run_rf_eb_n0_ops"
     observed_at = ~U[2026-06-17 12:04:55Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -515,8 +511,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   test "opens replay RF Doppler operational-event copied route from rendered metric-history frame evidence" do
     replay_run_id = "replay_run_rf_doppler_ops"
     observed_at = ~U[2026-06-17 12:05:05Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -784,8 +778,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   test "opens replay RF symbol-rate operational-event copied route from rendered metric-history frame evidence" do
     replay_run_id = "replay_run_rf_symbol_rate_ops"
     observed_at = ~U[2026-06-17 12:05:15Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

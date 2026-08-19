@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
     Frame,
     PlacementFrames,
     RenderWidget,
+    ResolutionContext,
     ResolveWarning
   }
 
@@ -61,6 +62,52 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
              data_context: %{"realm" => "flight", "view" => "canonical"},
              resolve_mode: :context_change
            } = EngineResolution.comparison_request(socket, :context_change)
+  end
+
+  test "builds one explicit resolution context for the mounted runtime" do
+    context =
+      EngineResolution.build_resolution_context(
+        [source_execution_timeout_ms: 2_500],
+        [enabled?: true, source_result_cache?: false, frame_cache?: true],
+        :runtime_cache
+      )
+
+    assert %ResolutionContext{
+             persisted?: true,
+             validate_dashboard_contract?: true,
+             persist_limit_selected_clock_audit_events?: true,
+             runtime_cache: :runtime_cache,
+             plan_cache?: true,
+             source_result_cache?: false,
+             frame_cache?: true
+           } = context
+
+    assert context.source_execution_opts[:source_execution_timeout_ms] == 2_500
+
+    assert is_function(
+             get_in(context.source_execution_opts, [
+               :source_opts,
+               :telemetry,
+               :backfill_lifecycle_events_fun
+             ]),
+             2
+           )
+  end
+
+  test "disables every cache layer when no runtime cache owner exists" do
+    context =
+      EngineResolution.build_resolution_context(
+        [source_execution_timeout_ms: :infinity],
+        [enabled?: true],
+        nil
+      )
+
+    assert %ResolutionContext{
+             runtime_cache: false,
+             plan_cache?: false,
+             source_result_cache?: false,
+             frame_cache?: false
+           } = context
   end
 
   test "apply_result attaches comparison results from runtime bundles" do

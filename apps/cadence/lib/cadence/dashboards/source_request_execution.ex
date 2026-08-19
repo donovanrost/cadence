@@ -698,18 +698,9 @@ defmodule Cadence.Dashboards.SourceRequestExecution do
       server = Keyword.get(opts, :runtime_cache) ->
         {:ok, server}
 
-      dashboard_runtime_cache_enabled?() and Process.whereis(RuntimeCache) ->
-        {:ok, RuntimeCache}
-
       true ->
         :disabled
     end
-  end
-
-  defp dashboard_runtime_cache_enabled? do
-    :cadence
-    |> Application.get_env(:dashboard_runtime_cache, [])
-    |> Keyword.get(:enabled?, true)
   end
 
   defp validate_source_result_contract!(%SourceResult{} = result, opts) do

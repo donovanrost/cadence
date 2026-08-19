@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -216,8 +216,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
   end
 
   test "replay URL runtime params drive event and operational observable source families" do
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
     replay_sources = persist_replay_event_and_operational_sources!(mission)
@@ -388,8 +386,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
 
   test "opens replay command queue entry evidence from rendered operational observable frame panel" do
     replay_run_id = "replay_run_command_queue_ops"
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

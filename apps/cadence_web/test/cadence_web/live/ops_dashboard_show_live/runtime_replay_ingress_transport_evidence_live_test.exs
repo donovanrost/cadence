@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -19,8 +19,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
   test "opens replay source-endpoint ingress-latency operational-event copied route from frame evidence" do
     replay_run_id = "replay_run_ingress_latency_ops"
     observed_at = ~U[2026-06-17 12:04:30Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -272,8 +270,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
     replay_run_id = "replay_run_transport_bitrate_ops"
     observed_at = ~U[2026-06-17 12:04:45Z]
 
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
     replay_sources = persist_replay_event_and_operational_sources!(mission)
@@ -521,8 +517,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
   test "opens replay transport-uplink-bitrate operational-event copied route from frame evidence" do
     replay_run_id = "replay_run_transport_uplink_bitrate_ops"
     observed_at = ~U[2026-06-17 12:04:50Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

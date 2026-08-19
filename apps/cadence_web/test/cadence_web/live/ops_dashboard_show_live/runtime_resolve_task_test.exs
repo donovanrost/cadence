@@ -8,7 +8,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTaskTest do
     owner = self()
 
     result =
-      RuntimeResolveTask.resolve(:resolve_1, :request, nil, "browser-key",
+      RuntimeResolveTask.resolve(:resolve_1, :request, nil, :resolution_context, "browser-key",
         allow_browser_test_sandbox_owner: fn key ->
           send(test_pid, {:allow_current, key, self()})
           :ok
@@ -18,7 +18,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTaskTest do
           send(test_pid, {:allow_worker, key, worker_pid})
           :ok
         end,
-        resolve_request_bundle: fn :request, nil ->
+        resolve_request_bundle: fn :request, nil, :resolution_context ->
           send(test_pid, {:resolved, self()})
           :engine_result
         end
@@ -41,11 +41,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTaskTest do
         outcome =
           try do
             {:ok,
-             RuntimeResolveTask.resolve(:resolve_1, :request, nil, "browser-key",
+             RuntimeResolveTask.resolve(
+               :resolve_1,
+               :request,
+               nil,
+               :resolution_context,
+               "browser-key",
                allow_browser_test_sandbox_owner: fn _key -> :ok end,
                browser_test_sandbox_owner: fn "browser-key" -> {:ok, owner} end,
                allow_browser_test_sandbox_owner_for: fn _key, _worker_pid -> :ok end,
-               resolve_request_bundle: fn :request, nil ->
+               resolve_request_bundle: fn :request, nil, :resolution_context ->
                  send(test_pid, {:worker_started, self()})
 
                  receive do

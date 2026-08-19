@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -237,8 +237,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     replay_run_id = "replay_run_managed_runtime_ops"
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:30Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -495,8 +493,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
   test "opens live managed runtime action and timer operational-event copied routes from frame evidence" do
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:30Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
 
@@ -792,8 +788,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     initialized_at = ~U[2026-06-17 12:00:30Z]
     record_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:30Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
 

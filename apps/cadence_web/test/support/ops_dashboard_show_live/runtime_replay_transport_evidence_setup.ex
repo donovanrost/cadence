@@ -6,7 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
 
@@ -18,8 +18,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     record_at = ~U[2026-06-17 12:01:00Z]
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:00Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

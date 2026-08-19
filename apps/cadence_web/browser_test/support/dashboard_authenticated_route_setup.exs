@@ -20,16 +20,12 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
   alias Cadence.Telemetry.Storage
   alias CadenceWeb.TestFixtures
 
-  def run(sandbox_owner, mode \\ :legacy_inline) do
+  def run(sandbox_owner, mode \\ :full) do
     previous_live_deps = Application.get_env(:cadence_web, :ops_dashboard_show_live, [])
-
-    previous_inline_resolve? =
-      Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
 
     previous_live_refresh_ms =
       Application.get_env(:cadence_web, :dashboard_live_refresh_ms)
 
-    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
     Application.put_env(:cadence_web, :dashboard_live_refresh_ms, 1_000)
 
     Application.put_env(
@@ -44,11 +40,6 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
 
     on_exit(fn ->
       Application.put_env(:cadence_web, :ops_dashboard_show_live, previous_live_deps)
-
-      case previous_inline_resolve? do
-        nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-        value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
 
       case previous_live_refresh_ms do
         nil -> Application.delete_env(:cadence_web, :dashboard_live_refresh_ms)
@@ -182,7 +173,7 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     assert output =~ "\"contextRail\""
     assert output =~ "\"sectionKeys\""
 
-    if mode == :legacy_inline do
+    if mode == :full do
       assert_live_stream_motion!(
         sandbox_owner,
         mission,
@@ -303,8 +294,6 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
 
       assert late_data_policy_event.payload["dashboard_context"]["dashboard_limit_mode"] ==
                "compare"
-
-      Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
 
       for limit_mode <- ["current", "recomputed"] do
         completed_event =
@@ -534,11 +523,6 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
                )
 
       assert replay_completed_output =~ "dashboard_viewport_smoke passed"
-
-      case previous_inline_resolve? do
-        nil -> Application.delete_env(:cadence_web, :dashboard_engine_resolve_inline?)
-        value -> Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, value)
-      end
 
       %{
         app_root: app_root,

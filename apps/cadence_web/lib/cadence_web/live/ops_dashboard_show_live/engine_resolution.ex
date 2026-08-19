@@ -7,9 +7,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    Engine,
     Frame,
     PlacementFrames,
+    Resolution,
+    ResolutionContext,
     RuntimeCache
   }
 
@@ -30,29 +31,69 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     DataViewComparison.request(socket, resolve_mode)
   end
 
-  @spec resolve_request_bundle(RuntimeDataRequest.t(), RuntimeDataRequest.t() | nil) ::
+  @spec resolution_context() :: ResolutionContext.t()
+  def resolution_context do
+    source_execution_opts =
+      Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
+
+    cache_config = Application.get_env(:cadence, :dashboard_runtime_cache, [])
+    cache_server = if Process.whereis(RuntimeCache), do: RuntimeCache, else: nil
+
+    build_resolution_context(source_execution_opts, cache_config, cache_server)
+  end
+
+  @doc false
+  @spec build_resolution_context(keyword(), keyword(), GenServer.server() | nil) ::
+          ResolutionContext.t()
+  def build_resolution_context(source_execution_opts, cache_config, cache_server)
+      when is_list(source_execution_opts) and is_list(cache_config) do
+    cache_enabled? =
+      Keyword.get(cache_config, :enabled?, true) == true and not is_nil(cache_server)
+
+    source_execution_opts = put_dashboard_runtime_source_opts(source_execution_opts)
+
+    ResolutionContext.new!(
+      persisted?: true,
+      validate_dashboard_contract?: true,
+      persist_limit_selected_clock_audit_events?: true,
+      runtime_cache: if(cache_enabled?, do: cache_server, else: false),
+      plan_cache?: cache_enabled?,
+      source_result_cache?:
+        cache_enabled? and Keyword.get(cache_config, :source_result_cache?, true) == true,
+      frame_cache?: cache_enabled? and Keyword.get(cache_config, :frame_cache?, true) == true,
+      source_execution_opts: source_execution_opts
+    )
+  end
+
+  @spec resolve_request_bundle(
+          RuntimeDataRequest.t(),
+          RuntimeDataRequest.t() | nil,
+          ResolutionContext.t()
+        ) ::
           RuntimeResult.result() | DataViewComparison.t()
-  def resolve_request_bundle(primary_request, nil) do
-    resolve_request(primary_request)
+  def resolve_request_bundle(primary_request, nil, context) do
+    resolve_request(primary_request, context)
   end
 
-  def resolve_request_bundle(primary_request, comparison_request) do
+  def resolve_request_bundle(primary_request, comparison_request, context) do
     primary_request
-    |> resolve_request()
-    |> DataViewComparison.new(resolve_request(comparison_request))
+    |> resolve_request(context)
+    |> DataViewComparison.new(resolve_request(comparison_request, context))
   end
 
-  @spec resolve_request(RuntimeDataRequest.t() | DashboardResolveRequest.t()) ::
+  @spec resolve_request(
+          RuntimeDataRequest.t() | DashboardResolveRequest.t(),
+          ResolutionContext.t()
+        ) ::
           Cadence.Dashboards.DashboardResolveResult.t()
-  def resolve_request(%RuntimeDataRequest{} = request) do
+  def resolve_request(%RuntimeDataRequest{} = request, %ResolutionContext{} = context) do
     request
     |> RuntimeDataRequest.to_engine_request()
-    |> resolve_request()
+    |> resolve_request(context)
   end
 
-  def resolve_request(%DashboardResolveRequest{} = request) do
-    maybe_delay_engine_resolve()
-    Engine.resolve(request, engine_resolve_opts(request))
+  def resolve_request(%DashboardResolveRequest{} = request, %ResolutionContext{} = context) do
+    Resolution.resolve(request, context)
   end
 
   @spec apply_result(Phoenix.LiveView.Socket.t(), RuntimeResult.result()) ::
@@ -99,21 +140,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     end
   end
 
-  defp engine_resolve_opts(%DashboardResolveRequest{}) do
-    [
-      persisted?: true,
-      validate_dashboard_contract?: true,
-      persist_limit_selected_clock_audit_events?: true
-    ]
-    |> Keyword.merge(dashboard_engine_source_execution_opts())
-    |> put_dashboard_runtime_source_opts()
-    |> maybe_enable_runtime_cache()
-  end
-
-  defp dashboard_engine_source_execution_opts do
-    Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
-  end
-
   defp put_dashboard_runtime_source_opts(opts) do
     opts
     |> put_default_source_opt(
@@ -140,31 +166,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
   defp normalize_adapter_opts(adapter_opts) when is_list(adapter_opts), do: adapter_opts
   defp normalize_adapter_opts(_adapter_opts), do: []
 
-  defp maybe_enable_runtime_cache(opts) do
-    cache_config = Application.get_env(:cadence, :dashboard_runtime_cache, [])
-
-    cond do
-      Keyword.get(cache_config, :enabled?, true) != true ->
-        opts
-
-      is_nil(Process.whereis(RuntimeCache)) ->
-        opts
-
-      true ->
-        opts
-        |> maybe_put_cache_opt(:source_result_cache?, cache_config)
-        |> maybe_put_cache_opt(:frame_cache?, cache_config)
-    end
-  end
-
-  defp maybe_put_cache_opt(opts, key, cache_config) do
-    if Keyword.get(cache_config, key, true) == true do
-      Keyword.put(opts, key, true)
-    else
-      opts
-    end
-  end
-
   defp apply_full_result(socket, result) do
     frames_by_placement = RuntimeResult.frames_by_placement(result)
 
@@ -188,13 +189,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     |> assign(:dashboard_engine_frames_by_placement, merged_frames)
     |> DataViewComparison.assign_result(nil)
     |> assign_widget_data(widget_frames)
-  end
-
-  defp maybe_delay_engine_resolve do
-    case Application.get_env(:cadence_web, :dashboard_engine_resolve_test_delay_ms, 0) do
-      delay_ms when is_integer(delay_ms) and delay_ms > 0 -> Process.sleep(delay_ms)
-      _other -> :ok
-    end
   end
 
   defp merge_frames(previous_frames, result) when is_map(previous_frames) do

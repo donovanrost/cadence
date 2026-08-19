@@ -9,6 +9,8 @@ defmodule Cadence.Dashboards.ResolveRequestHydratorTest do
     HydratedResolveRequest,
     Management,
     Placement,
+    Resolution,
+    ResolutionContext,
     ResolveRequestHydrator,
     WidgetDef
   }
@@ -84,6 +86,35 @@ defmodule Cadence.Dashboards.ResolveRequestHydratorTest do
              widget_type_id: "unavailable_library_reference",
              title: "Unavailable library item"
            } = placement.widget_def
+  end
+
+  test "resolution service owns hydration before invoking the engine" do
+    organization_id = "org-resolution-service"
+    mission_id = "mission-resolution-service"
+    persist_mission_scope(organization_id, mission_id)
+
+    request =
+      resolve_request(
+        organization_id,
+        mission_id,
+        "dashboard-resolution-service",
+        %Placement{
+          placement_id: "placement-resolution-service",
+          content_kind: :library,
+          library_widget_id: "library-widget-missing",
+          library_version: 404
+        }
+      )
+
+    result =
+      Resolution.resolve(
+        request,
+        ResolutionContext.new!(runtime_cache: false, plan_cache?: false)
+      )
+
+    assert result.dashboard_id == "dashboard-resolution-service"
+    assert result.planned_source_requests == []
+    assert Map.has_key?(result.frames_by_placement, "placement-resolution-service")
   end
 
   defp fixture_widget_def do

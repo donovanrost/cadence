@@ -48,7 +48,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetBindingPreview do
           |> Map.put(:document, document)
           |> Map.put(:document_mode, :draft_preview)
 
-        result = resolve_request_fn(opts).(request)
+        result =
+          resolve_request_fn(opts).(request, socket.assigns.dashboard_resolution_context)
+
         {:ok, summarize(result, placement.placement_id)}
 
       {:error, {_kind, message}} ->
@@ -148,5 +150,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetBindingPreview do
     do: Map.get(attrs, key, Map.get(attrs, Atom.to_string(key)))
 
   defp resolve_request_fn(opts),
-    do: Keyword.get(opts, :resolve_widget_binding, &EngineResolution.resolve_request/1)
+    do: Keyword.get(opts, :resolve_widget_binding, &EngineResolution.resolve_request/2)
 end

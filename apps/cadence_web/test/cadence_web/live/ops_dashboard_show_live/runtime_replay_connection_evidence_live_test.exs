@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -360,7 +360,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_source_health_ops"
 
-    enable_dashboard_engine_inline_resolves!()
     configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()
@@ -582,7 +581,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     observed_at = ~U[2026-07-11 12:02:00Z]
     replay_run_id = "replay_run_source_health_interval_route"
 
-    enable_dashboard_engine_inline_resolves!()
     configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()
@@ -725,7 +723,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     observed_at = ~U[2026-06-17 12:03:00Z]
     replay_run_id = "replay_run_antenna_pointing_ops"
 
-    enable_dashboard_engine_inline_resolves!()
     configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()

@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
 
@@ -37,8 +37,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     record_at = ~U[2026-06-17 12:01:00Z]
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:00Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
 
@@ -234,8 +232,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     record_at = ~U[2026-06-17 12:01:00Z]
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:00Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
 
@@ -461,8 +457,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     action_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:00Z]
 
-    enable_dashboard_engine_inline_resolves!()
-
     {conn, org, mission} = signed_in_org_and_mission()
 
     transport_events =
@@ -657,8 +651,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     initialized_at = ~U[2026-06-17 12:00:30Z]
     record_at = ~U[2026-06-17 12:01:30Z]
     timer_at = ~U[2026-06-17 12:02:30Z]
-
-    enable_dashboard_engine_inline_resolves!()
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

@@ -6,7 +6,13 @@ defmodule Cadence.Dashboards.DocumentStoreFixtures do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{DashboardResolveRequest, Document, Engine, RuntimeInvalidation}
+  alias Cadence.Dashboards.{
+    DashboardResolveRequest,
+    Document,
+    Engine,
+    RuntimeCache,
+    RuntimeInvalidation
+  }
 
   alias Cadence.Management.DataSources
 
@@ -124,7 +130,7 @@ defmodule Cadence.Dashboards.DocumentStoreFixtures do
   def plan_cache_status(%Document{} = document) do
     document
     |> resolve_request()
-    |> Engine.plan()
+    |> Engine.plan(runtime_cache: RuntimeCache)
     |> get_in([Access.key!(:plan_metadata), Access.key!(:cache), Access.key!(:plan_cache)])
     |> Map.fetch!(:status)
   end

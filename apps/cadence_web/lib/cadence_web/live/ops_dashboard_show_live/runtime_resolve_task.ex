@@ -6,14 +6,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
 
   @worker_result :dashboard_engine_resolve_worker_result
 
-  @spec resolve(term(), term(), term(), binary() | nil, keyword()) :: {term(), term()}
-  def resolve(resolve_id, request, comparison_request, browser_test_sandbox_owner_key, opts \\ []) do
+  @spec resolve(term(), term(), term(), term(), binary() | nil, keyword()) :: {term(), term()}
+  def resolve(
+        resolve_id,
+        request,
+        comparison_request,
+        resolution_context,
+        browser_test_sandbox_owner_key,
+        opts \\ []
+      ) do
     case allow_current(browser_test_sandbox_owner_key, opts) do
       :ok ->
         resolve_allowed(
           resolve_id,
           request,
           comparison_request,
+          resolution_context,
           browser_test_sandbox_owner_key,
           opts
         )
@@ -27,6 +35,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
          resolve_id,
          request,
          comparison_request,
+         resolution_context,
          browser_test_sandbox_owner_key,
          opts
        ) do
@@ -36,13 +45,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
           resolve_id,
           request,
           comparison_request,
+          resolution_context,
           browser_test_sandbox_owner_key,
           owner,
           opts
         )
 
       :none ->
-        {resolve_id, resolve_request_bundle(request, comparison_request, opts)}
+        {resolve_id,
+         resolve_request_bundle(request, comparison_request, resolution_context, opts)}
 
       {:error, reason} ->
         exit({:shutdown, {:browser_test_sandbox_owner_unavailable, reason}})
@@ -53,6 +64,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
          resolve_id,
          request,
          comparison_request,
+         resolution_context,
          browser_test_sandbox_owner_key,
          owner,
          opts
@@ -66,7 +78,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
           :run ->
             send(
               parent,
-              {@worker_result, self(), resolve_request_bundle(request, comparison_request, opts)}
+              {@worker_result, self(),
+               resolve_request_bundle(request, comparison_request, resolution_context, opts)}
             )
 
           :stop ->
@@ -128,8 +141,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
     end
   end
 
-  defp resolve_request_bundle(request, comparison_request, opts) do
-    resolve_request_bundle_fn(opts).(request, comparison_request)
+  defp resolve_request_bundle(request, comparison_request, resolution_context, opts) do
+    resolve_request_bundle_fn(opts).(request, comparison_request, resolution_context)
   end
 
   defp allow_current(browser_test_sandbox_owner_key, opts) do
@@ -145,7 +158,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask do
   end
 
   defp resolve_request_bundle_fn(opts) do
-    Keyword.get(opts, :resolve_request_bundle, &EngineResolution.resolve_request_bundle/2)
+    Keyword.get(opts, :resolve_request_bundle, &EngineResolution.resolve_request_bundle/3)
   end
 
   defp allow_current_fn(opts) do

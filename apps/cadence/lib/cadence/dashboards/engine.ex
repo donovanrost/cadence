@@ -1,11 +1,13 @@
 defmodule Cadence.Dashboards.Engine do
   @moduledoc """
-  Dashboard engine planner.
+  Dashboard engine planner and executor.
 
   `plan/1` validates the document, expands widget contracts into logical source
   requests, batches equivalent requests, and returns placement request mappings.
-  `resolve/2` executes those planned source requests through source adapters and
-  fans frames back to placement buckets.
+  `resolve_hydrated/2` executes those planned source requests through source
+  adapters and fans frames back to placement buckets without hydrating persisted
+  library references. `resolve/2` remains a compatibility convenience; new
+  application paths should own hydration through `Cadence.Dashboards.Resolution`.
   """
 
   alias Cadence.Dashboards.{
@@ -36,7 +38,21 @@ defmodule Cadence.Dashboards.Engine do
 
   @spec resolve(DashboardResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def resolve(%DashboardResolveRequest{} = request, opts \\ []) when is_list(opts) do
-    hydrated_request = ResolveRequestHydrator.hydrate(request)
+    request
+    |> ResolveRequestHydrator.hydrate()
+    |> resolve_hydrated(opts)
+  end
+
+  @doc """
+  Resolves a request whose persisted library references have already been
+  hydrated.
+
+  The caller owns persistence hydration and must pass execution dependencies in
+  `opts` explicitly when process-wide defaults are not desired.
+  """
+  @spec resolve_hydrated(HydratedResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
+  def resolve_hydrated(%HydratedResolveRequest{} = hydrated_request, opts \\ [])
+      when is_list(opts) do
     plan_result = plan_hydrated(hydrated_request, opts)
     request = HydratedResolveRequest.unwrap(hydrated_request)
 
@@ -304,9 +320,6 @@ defmodule Cadence.Dashboards.Engine do
       server = Keyword.get(opts, :runtime_cache) ->
         {:ok, server}
 
-      dashboard_runtime_cache_enabled?() and Process.whereis(RuntimeCache) ->
-        {:ok, RuntimeCache}
-
       true ->
         :disabled
     end
@@ -323,18 +336,9 @@ defmodule Cadence.Dashboards.Engine do
       server = Keyword.get(opts, :runtime_cache) ->
         {:ok, server}
 
-      dashboard_runtime_cache_enabled?() and Process.whereis(RuntimeCache) ->
-        {:ok, RuntimeCache}
-
       true ->
         :disabled
     end
-  end
-
-  defp dashboard_runtime_cache_enabled? do
-    :cadence
-    |> Application.get_env(:dashboard_runtime_cache, [])
-    |> Keyword.get(:enabled?, true)
   end
 
   defp plan_placement(%DashboardResolveRequest{} = request, %Placement{} = placement, opts) do

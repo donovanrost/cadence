@@ -60,6 +60,12 @@ Desired direction is an explicit pipeline:
 This is a targeted seam, not evidence that all Phoenix contexts should stop
 calling `Repo` directly.
 
+Current status: the production dashboard path now enters through
+`Cadence.Dashboards.Resolution`, which owns hydration and passes a typed
+`ResolutionContext` into `Engine.resolve_hydrated/2`. `Engine.plan/2` and
+`Engine.resolve/2` remain compatibility conveniences, so callers that use those
+APIs still opt into hydration.
+
 ### A3. Global application configuration is frequently used as dependency injection
 
 Production modules read adapter and runtime choices from application environment,
@@ -220,12 +226,35 @@ not merely test-runner noise.
   rendering, frame-evidence, and source-capability timeline tests. Initial mounts
   and copied-link reopens now prove the idle-and-resolved UI outcome under the
   production async path.
-- At this checkpoint the inline-resolution switch remains in only two
-  test/support files with eight application-environment accesses, down from 15
-  files and 45 accesses at the start of this audit. The intentional
-  delayed-cancellation test remains separate because its timing control needs an
-  owner-scoped design; the broad replay fixture remains a separately inventoried
-  migration rather than a mechanical change.
+- The inline-resolution switch and delayed-resolution setting have now been
+  removed from production, standard tests, test support, and the browser setup.
+  The replay/evidence tranche exercises production async resolution, including
+  copied-link reopens through an outcome-based resolved-dashboard harness.
+
+### Explicit dashboard resolution context and deterministic cancellation
+
+- Added `Cadence.Dashboards.ResolutionContext` as the typed policy and dependency
+  input for one mounted dashboard runtime. The web composition boundary reads
+  application configuration once at mount and records explicit persistence,
+  contract validation, source execution, audit, and cache choices in the socket.
+- Added `Cadence.Dashboards.Resolution` as the application service that owns
+  persistence-backed hydration before calling `Engine.resolve_hydrated/2`.
+  `Engine` and `SourceRequestExecution` no longer discover a named runtime cache
+  or cache enablement through `Application` configuration; cache use requires an
+  explicit server argument.
+- Dashboard refreshes now always use `start_async/3`. The production branch that
+  ran resolution inline and the unconditional test-delay hook were deleted.
+- Replaced the sleep-driven LiveView cancellation test with a small
+  `RuntimeDecisionExecutor` contract. `RuntimeCoordinator` proves supersession
+  and stale-result rejection; the executor test proves the cancel effect occurs
+  before the replacement start effect. Existing LiveView tests continue to prove
+  the normal production async path.
+- The 23 replay and runtime-evidence LiveView tests now wait on the keyed runtime
+  outcome for every dashboard open and copied-link reopen. Their focused tranche
+  passes without either global timing switch.
+- Browser setup no longer enables inline resolution, but browser execution was
+  intentionally not part of this tranche's verification. Its SQL Sandbox owner
+  bridge remains the architectural smell recorded in A5.
 
 ### Batch persistence ordering
 
