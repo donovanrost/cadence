@@ -907,7 +907,7 @@ defmodule Cadence.Commanding do
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
     case DispatchSupervisor.lane_dispatcher(organization_id, mission_id, queue_lane_key) do
       {:ok, lane_dispatcher} when lane_dispatcher == self() ->
-        send(self(), :dispatch)
+        :ok
 
       _other ->
         _ = Dispatcher.kick_lane(organization_id, mission_id, queue_lane_key)

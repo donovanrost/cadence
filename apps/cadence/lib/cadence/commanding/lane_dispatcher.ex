@@ -8,29 +8,68 @@ defmodule Cadence.Commanding.LaneDispatcher do
   @default_safety_poll_interval_ms 60_000
   @event_prefix [:cadence, :commanding, :lane_dispatcher]
 
+  @type quiescence_status ::
+          :empty | :waiting_for_not_before | :waiting_for_release_target
+  @type drain_summary :: %{
+          released_count: non_neg_integer(),
+          status: quiescence_status(),
+          next_not_before: DateTime.t() | nil
+        }
+  @type drain_error :: %{released_count: non_neg_integer(), reason: term()}
+
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
     organization_id = Keyword.fetch!(opts, :organization_id)
     mission_id = Keyword.fetch!(opts, :mission_id)
     queue_lane_key = Keyword.fetch!(opts, :queue_lane_key)
 
-    name =
-      Keyword.get(
-        opts,
-        :name,
-        {:via, Registry,
-         {Cadence.Commanding.DispatchRegistry, {organization_id, mission_id, queue_lane_key}}}
-      )
+    default_name =
+      {:via, Registry,
+       {Cadence.Commanding.DispatchRegistry, {organization_id, mission_id, queue_lane_key}}}
 
-    GenServer.start_link(__MODULE__, opts, name: name)
+    case Keyword.get(opts, :name, default_name) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
-  @spec dispatch_now(GenServer.server()) :: :ok | {:error, term()}
+  @spec drain(GenServer.server()) :: {:ok, drain_summary()} | {:error, drain_error() | :noproc}
+  def drain(server) do
+    case GenServer.whereis(server) do
+      pid when is_pid(pid) -> drain_pid(pid)
+      nil -> {:error, :noproc}
+    end
+  end
+
+  @spec dispatch_now(GenServer.server()) ::
+          {:ok, drain_summary()} | {:error, drain_error() | :noproc}
   def dispatch_now(server) do
-    GenServer.call(server, :dispatch_now, :infinity)
-  catch
-    :exit, {:noproc, _details} -> {:error, :noproc}
+    drain(server)
   end
+
+  defp drain_pid(pid) do
+    monitor = Process.monitor(pid)
+
+    try do
+      pid
+      |> GenServer.call(:drain, :infinity)
+      |> await_empty_lane_exit(monitor, pid)
+    catch
+      :exit, {:noproc, _details} -> {:error, :noproc}
+      :exit, {:normal, _details} -> {:error, :noproc}
+    after
+      Process.demonitor(monitor, [:flush])
+    end
+  end
+
+  defp await_empty_lane_exit({:ok, %{status: :empty}} = result, monitor, pid) do
+    receive do
+      {:DOWN, ^monitor, :process, ^pid, :normal} -> result
+      {:DOWN, ^monitor, :process, ^pid, _reason} -> {:error, :noproc}
+    end
+  end
+
+  defp await_empty_lane_exit(result, _monitor, _pid), do: result
 
   @impl true
   def init(opts) do
@@ -41,6 +80,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       reference_time_fun: Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0),
+      dispatch_fun: Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5),
+      run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
       dispatch_timer: nil,
       released_by:
         Keyword.get_lazy(opts, :released_by, fn ->
@@ -58,45 +99,43 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   @impl true
   def handle_continue(:bootstrap, state) do
-    {:noreply, schedule_dispatch(state, 0, :bootstrap)}
-  end
-
-  @impl true
-  def handle_call(:dispatch_now, _from, state) do
-    state = cancel_dispatch_timer(state)
-
-    case dispatch_once(state, :notification) do
-      {:stop, reason, reply, state} ->
-        {:stop, reason, reply, state}
-
-      {:continue, reply, state} ->
-        {:reply, reply, state}
+    if state.run_on_boot? do
+      {:noreply, schedule_dispatch(state, 0, :bootstrap)}
+    else
+      {:noreply, state}
     end
   end
 
   @impl true
-  def handle_info(:dispatch, state) do
+  def handle_call(:drain, _from, state) do
     state = cancel_dispatch_timer(state)
 
-    case dispatch_once(state, :notification) do
-      {:stop, reason, _reply, state} ->
-        {:stop, reason, state}
+    case drain_available(state, :notification, 0) do
+      {:stop, summary, state} ->
+        {:stop, :normal, {:ok, summary}, state}
 
-      {:continue, _reply, state} ->
-        {:noreply, state}
+      {:quiescent, summary, state} ->
+        {:reply, {:ok, summary}, state}
+
+      {:error, error, state} ->
+        {:reply, {:error, error}, state}
     end
   end
 
+  @impl true
   def handle_info({:dispatch, token}, state) do
     case state.dispatch_timer do
       %{token: ^token} ->
         state = clear_dispatch_timer(state)
 
-        case dispatch_once(state, :timer) do
-          {:stop, reason, _reply, state} ->
-            {:stop, reason, state}
+        case drain_available(state, :timer, 0) do
+          {:stop, _summary, state} ->
+            {:stop, :normal, state}
 
-          {:continue, _reply, state} ->
+          {:quiescent, _summary, state} ->
+            {:noreply, state}
+
+          {:error, _error, state} ->
             {:noreply, state}
         end
 
@@ -106,28 +145,28 @@ defmodule Cadence.Commanding.LaneDispatcher do
     end
   end
 
-  defp dispatch_once(state, reason) do
+  defp drain_available(state, reason, released_count) do
     attempted_at = state.reference_time_fun.()
 
     emit(:dispatch_attempt, state, %{count: 1}, %{reason: reason})
 
-    case Commanding.dispatch_queue_lane(
+    case state.dispatch_fun.(
            state.organization_id,
            state.mission_id,
            state.queue_lane_key,
            state.released_by,
            attempted_at: attempted_at
          ) do
-      {:ok, _release_result} = result ->
+      {:ok, _release_result} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :released})
-        {:continue, result, schedule_dispatch(state, 0, :released)}
+        drain_available(state, :continuation, released_count + 1)
 
-      {:error, :command_queue_lane_empty} = result ->
+      {:error, :command_queue_lane_empty} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :empty})
-        {:stop, :normal, result, state}
+        {:stop, quiescence_summary(:empty, released_count), state}
 
       {:error, {:command_queue_lane_waiting_for_not_before, _, %DateTime{} = next_not_before}} =
-          result ->
+          _result ->
         delay_ms = max(datetime_diff_ms(next_not_before, attempted_at), 0)
 
         emit(:dispatch_result, state, %{count: 1}, %{
@@ -135,17 +174,31 @@ defmodule Cadence.Commanding.LaneDispatcher do
           next_not_before: next_not_before
         })
 
-        {:continue, result, schedule_dispatch(state, delay_ms, :not_before)}
+        state = schedule_dispatch(state, delay_ms, :not_before)
+
+        {:quiescent, quiescence_summary(:waiting_for_not_before, released_count, next_not_before),
+         state}
 
       {:error, {:command_queue_lane_no_release_target, _source_endpoint_ref, _mission_id}} =
-          result ->
+          _result ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :no_release_target})
-        {:continue, result, schedule_dispatch(state, state.safety_poll_interval_ms, :safety)}
+        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
 
-      {:error, _reason} = result ->
+        {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
+
+      {:error, reason} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :error})
-        {:continue, result, schedule_dispatch(state, state.safety_poll_interval_ms, :safety)}
+        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
+        {:error, %{released_count: released_count, reason: reason}, state}
     end
+  end
+
+  defp quiescence_summary(status, released_count, next_not_before \\ nil) do
+    %{
+      released_count: released_count,
+      status: status,
+      next_not_before: next_not_before
+    }
   end
 
   defp schedule_dispatch(state, delay_ms, reason) when is_integer(delay_ms) and delay_ms >= 0 do

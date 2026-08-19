@@ -51,7 +51,8 @@ defmodule Cadence.Commanding.DispatchSupervisor do
            mission_id: mission_id,
            queue_lane_key: queue_lane_key
          )},
-        id: {:command_lane_dispatcher, organization_id, mission_id, queue_lane_key}
+        id: {:command_lane_dispatcher, organization_id, mission_id, queue_lane_key},
+        restart: :transient
       )
 
     normalize_start_child_result(DynamicSupervisor.start_child(@lane_supervisor, child_spec))

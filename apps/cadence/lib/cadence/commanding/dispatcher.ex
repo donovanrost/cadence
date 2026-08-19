@@ -25,19 +25,32 @@ defmodule Cadence.Commanding.Dispatcher do
   def kick_lane(organization_id, mission_id, queue_lane_key, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_list(opts) do
+    case drain_lane(organization_id, mission_id, queue_lane_key, opts) do
+      {:ok, _summary} -> :ok
+      {:error, :dispatcher_not_running} -> :ok
+      {:error, :noproc} -> :ok
+      {:error, %{reason: reason}} -> {:error, reason}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec drain_lane(binary(), binary(), binary(), keyword()) ::
+          {:ok, LaneDispatcher.drain_summary()} | {:error, term()}
+  def drain_lane(organization_id, mission_id, queue_lane_key, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
+             is_list(opts) do
     with :ok <-
            DispatchSupervisor.ensure_lane_dispatcher_started(
              organization_id,
              mission_id,
              queue_lane_key,
-             opts
+             Keyword.put_new(opts, :run_on_boot?, false)
            ),
          {:ok, lane_dispatcher} <-
            DispatchSupervisor.lane_dispatcher(organization_id, mission_id, queue_lane_key) do
-      LaneDispatcher.dispatch_now(lane_dispatcher)
+      LaneDispatcher.drain(lane_dispatcher)
     else
-      :error -> :ok
-      {:error, :noproc} -> :ok
+      :error -> {:error, :dispatcher_not_running}
       {:error, reason} -> {:error, reason}
     end
   end

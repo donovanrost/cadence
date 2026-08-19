@@ -103,14 +103,15 @@ responsible for Ecto sandbox ownership.
 
 ### A6. Async workflow completion and process-tree ownership are misaligned
 
-Three deterministic PostgreSQL client-exit logs remain after the dashboard
-lifecycle cleanup. They occur when a test has observed its intended outcome but
-the responsible process tree has not yet become idle:
+Earlier attribution found three deterministic PostgreSQL client-exit paths after
+the dashboard lifecycle cleanup. They occurred when a test had observed its
+intended outcome but the responsible process tree had not yet become idle:
 
 - the contact scheduler can reconcile a contact and activate descendants in the
   global mission runtime after the test-owned scheduler reports reconciliation;
-- a command lane dispatcher schedules a zero-delay follow-up database pass after
-  reporting a successful release;
+- a command lane dispatcher scheduled a zero-delay follow-up database pass after
+  reporting a successful release; this path is addressed by the command-lane
+  quiescence tranche below;
 - simulator traffic can already be inside the TCP ingress executor or async
   persistence projector when the producer is stopped and the global mission
   runtime is torn down.
@@ -255,6 +256,32 @@ not merely test-runner noise.
 - Browser setup no longer enables inline resolution, but browser execution was
   intentionally not part of this tranche's verification. Its SQL Sandbox owner
   bridge remains the architectural smell recorded in A5.
+
+### Command-lane quiescence and ownership
+
+- Added `LaneDispatcher.drain/1` as an explicit lifecycle contract. It processes
+  every immediately eligible command before returning the released count and the
+  reason the lane became quiescent: empty, waiting for `not_before`, or waiting
+  for a release target.
+- Removed both continuation mechanisms that followed a successful release. The
+  command context no longer sends the owner a redundant `:dispatch` message, and
+  the owner no longer schedules a zero-delay database pass; the owner continues
+  synchronously until it reaches a real blocking condition.
+- Lane children are transient, so reaching an empty lane and exiting normally no
+  longer causes the dynamic supervisor to restart an empty dispatcher.
+- The owner can now start anonymously with an injected dispatch function. Three
+  async unit contracts prove full drain, future-timer cancellation, and partial
+  progress on failure without a repository or SQL Sandbox owner.
+- The database integration coverage now uses the production drain boundary. It
+  proves priority ordering, retry after a release target appears, persisted
+  release outcomes, and normal child termination without sleeps or repository
+  polling.
+- The pure and database dispatcher slice passed 20 consecutive in-VM repetitions
+  (100 tests), and the affected gate passed with 1,801 core, 133 simulator, and
+  1,727 web tests. Suite-wide gates still emitted PostgreSQL client-exit logs
+  outside the clean focused dispatcher slice, with counts varying by seed, so
+  exact attribution plus the contact and simulator ownership work in A6 remains
+  open.
 
 ### Batch persistence ordering
 

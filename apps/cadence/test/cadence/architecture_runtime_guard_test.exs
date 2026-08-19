@@ -22,7 +22,7 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
       required_markers: [
         "@default_safety_poll_interval_ms",
         "kick_lane",
-        "LaneDispatcher.dispatch_now",
+        "LaneDispatcher.drain",
         "list_pending_queue_lanes",
         ":reconcile"
       ]
@@ -32,6 +32,7 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
       path: "lib/cadence/commanding/lane_dispatcher.ex",
       required_markers: [
         "@default_safety_poll_interval_ms",
+        "drain",
         "dispatch_now",
         ":notification",
         "command_queue_lane_waiting_for_not_before",

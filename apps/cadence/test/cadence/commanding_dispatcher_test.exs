@@ -6,7 +6,7 @@ defmodule Cadence.CommandingDispatcherTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.Commanding.{CommandRequest, DispatchSupervisor}
+  alias Cadence.Commanding.{CommandRequest, Dispatcher, DispatchSupervisor}
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Repo
   alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
@@ -53,14 +53,6 @@ defmodule Cadence.CommandingDispatcherTest do
     source_endpoint: source_endpoint,
     command_model: command_model
   } do
-    start_supervised!(
-      {DispatchSupervisor,
-       safety_poll_interval_ms: :timer.hours(1),
-       lane_safety_poll_interval_ms: :timer.hours(1),
-       run_on_boot?: false,
-       auto_schedule?: false}
-    )
-
     low_priority_request =
       persist_safe_command_request(dispatcher_scope, command_model, source_endpoint, 5, %{
         "label" => "low"
@@ -95,20 +87,26 @@ defmodule Cadence.CommandingDispatcherTest do
     _realized_contact =
       persist_active_uplink_contact(dispatcher_scope, source_endpoint.source_endpoint_id)
 
-    release_attempts =
-      wait_until(fn ->
-        attempts =
-          Cadence.Commanding.list_command_release_attempts(
-            dispatcher_scope.organization_id,
-            dispatcher_scope.mission_id
-          )
+    start_supervised!(
+      {DispatchSupervisor,
+       safety_poll_interval_ms: :timer.hours(1),
+       lane_safety_poll_interval_ms: :timer.hours(1),
+       run_on_boot?: false,
+       auto_schedule?: false}
+    )
 
-        if length(attempts) == 2 and Enum.all?(attempts, &(&1.lifecycle_state == :released)) do
-          {:ok, attempts}
-        else
-          :retry
-        end
-      end)
+    assert {:ok, %{released_count: 2, status: :empty}} =
+             Dispatcher.drain_lane(
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
+               source_endpoint.source_endpoint_id
+             )
+
+    release_attempts =
+      Cadence.Commanding.list_command_release_attempts(
+        dispatcher_scope.organization_id,
+        dispatcher_scope.mission_id
+      )
 
     assert Enum.map(release_attempts, & &1.command_request_id) == [
              high_priority_request.command_request_id,
@@ -177,7 +175,12 @@ defmodule Cadence.CommandingDispatcherTest do
         metadata.queue_lane_key == source_endpoint.source_endpoint_id
     end)
 
-    Process.sleep(80)
+    assert {:ok, %{released_count: 0, status: :waiting_for_release_target}} =
+             Dispatcher.drain_lane(
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
+               source_endpoint.source_endpoint_id
+             )
 
     assert Cadence.Commanding.list_command_release_attempts(
              dispatcher_scope.organization_id,
@@ -192,19 +195,11 @@ defmodule Cadence.CommandingDispatcherTest do
         metadata.queue_lane_key == source_endpoint.source_endpoint_id
     end)
 
-    release_attempt =
-      wait_until(fn ->
-        case Cadence.Commanding.list_command_release_attempts(
+    assert [release_attempt] =
+             Cadence.Commanding.list_command_release_attempts(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id
-             ) do
-          [release_attempt] when release_attempt.lifecycle_state == :released ->
-            {:ok, release_attempt}
-
-          _other ->
-            :retry
-        end
-      end)
+             )
 
     assert release_attempt.command_queue_entry_id == queue_entry.command_queue_entry_id
     assert release_attempt.lifecycle_state == :released
@@ -217,21 +212,6 @@ defmodule Cadence.CommandingDispatcherTest do
              )
 
     assert released_queue_entry.lifecycle_state == :released
-  end
-
-  defp wait_until(fun, attempts_left \\ 40)
-
-  defp wait_until(_fun, 0), do: flunk("condition not met before timeout")
-
-  defp wait_until(fun, attempts_left) when is_function(fun, 0) and attempts_left > 0 do
-    case fun.() do
-      {:ok, value} ->
-        value
-
-      :retry ->
-        Process.sleep(25)
-        wait_until(fun, attempts_left - 1)
-    end
   end
 
   defp attach_lane_dispatcher_telemetry(test_pid) do
