@@ -15,9 +15,9 @@ defmodule Cadence.TestSupport.TelemetryPersistencePolicies do
         [
           writer: Cadence.Telemetry.Storage.Writers.PostgresReadModel,
           organization_id: Keyword.get(opts, :organization_id, "org-test"),
-          realm: :flight,
-          data_source_id: "managed_questdb_primary",
-          binding_id: "default_flight_telemetry"
+          realm: Keyword.get(opts, :realm, :flight),
+          data_source_id: Keyword.get(opts, :data_source_id, "managed_questdb_primary"),
+          binding_id: Keyword.get(opts, :binding_id, "default_flight_telemetry")
         ],
         current_value_store_policy: current_value_store
       )

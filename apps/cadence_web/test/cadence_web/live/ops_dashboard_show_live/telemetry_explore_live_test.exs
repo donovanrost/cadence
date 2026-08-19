@@ -3,8 +3,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -19,6 +17,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
   alias CadenceWeb.TestFixtures
 
   defp signed_in_user_org_and_mission do
@@ -74,6 +73,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   end
 
   defp ingest!(mission, binding_set, spacecraft_id, value, unix_seconds, opts \\ []) do
+    {persistence_policy, persistence_opts} = Keyword.pop(opts, :persistence_policy)
+
     evidence =
       RawEvidence.new(%{
         mission_id: mission.mission_id,
@@ -88,7 +89,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
              binding_set.binding_set_id,
              binding_set.version
            ) do
-      RuntimePersistence.persist_processing_result(result, opts)
+      case persistence_policy do
+        nil -> RuntimePersistence.persist_processing_result(result, persistence_opts)
+        policy -> RuntimePersistence.persist_processing_result(policy, result, persistence_opts)
+      end
     end
   end
 
@@ -127,23 +131,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     %{data_source_id: data_source_id, binding_id: binding_id}
   end
 
-  defp configure_telemetry_storage_source!(realm, data_source_id, binding_id) do
-    previous_config = Application.get_env(:cadence, :telemetry_storage, [])
-
-    Application.put_env(
-      :cadence,
-      :telemetry_storage,
-      previous_config
-      |> Keyword.put(:realm, realm)
-      |> Keyword.put(:data_source_id, data_source_id)
-      |> Keyword.put(:binding_id, binding_id)
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_config)
-    end)
-  end
-
   test "telemetry explore route renders point context and matching samples" do
     {conn, org, mission} = signed_in_org_and_mission()
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Alpha")
@@ -157,14 +144,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
         "explore-rehearsal-binding"
       )
 
-    configure_telemetry_storage_source!(
-      :rehearsal,
-      source_context.data_source_id,
-      source_context.binding_id
+    persistence_policies =
+      TelemetryPersistencePolicies.postgres(
+        organization_id: org.organization_id,
+        realm: :rehearsal,
+        data_source_id: source_context.data_source_id,
+        binding_id: source_context.binding_id
+      )
+
+    ingest!(mission, binding_set, spacecraft.spacecraft_id, 14, 1_700_000_090,
+      persistence_policy: persistence_policies.persistence
     )
 
-    ingest!(mission, binding_set, spacecraft.spacecraft_id, 14, 1_700_000_090)
-    ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100)
+    ingest!(mission, binding_set, spacecraft.spacecraft_id, 15, 1_700_000_100,
+      persistence_policy: persistence_policies.persistence
+    )
 
     assert [older_sample, _latest_sample] =
              TelemetryReads.sample_history(
@@ -172,7 +166,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
                mission.mission_id,
                "HK.counter",
                spacecraft_id: spacecraft.spacecraft_id,
-               order: :asc
+               order: :asc,
+               realm: :rehearsal,
+               data_source_id: source_context.data_source_id,
+               binding_id: source_context.binding_id,
+               history_store_policy: persistence_policies.history_store
              )
 
     dashboard =
