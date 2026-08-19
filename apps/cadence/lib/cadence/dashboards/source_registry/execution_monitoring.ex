@@ -148,18 +148,29 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
   end
 
   defp source_circuit_breaker(opts) do
-    cond do
-      Keyword.get(opts, :source_circuit_breaker?) == false ->
+    case Keyword.fetch(opts, :source_circuit_breaker?) do
+      {:ok, false} ->
         :disabled
 
-      server = Keyword.get(opts, :source_circuit_breaker) ->
-        {:ok, server}
+      {:ok, true} ->
+        case Keyword.get(opts, :source_circuit_breaker) do
+          nil -> :disabled
+          server -> {:ok, server}
+        end
 
-      dashboard_source_circuit_breaker_enabled?() and Process.whereis(SourceCircuitBreaker) ->
-        {:ok, SourceCircuitBreaker}
+      :error ->
+        case Keyword.get(opts, :source_circuit_breaker) do
+          nil -> configured_source_circuit_breaker()
+          server -> {:ok, server}
+        end
+    end
+  end
 
-      true ->
-        :disabled
+  defp configured_source_circuit_breaker do
+    if dashboard_source_circuit_breaker_enabled?() and Process.whereis(SourceCircuitBreaker) do
+      {:ok, SourceCircuitBreaker}
+    else
+      :disabled
     end
   end
 
@@ -221,7 +232,10 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
   end
 
   defp source_health_recording_enabled?(opts) do
-    Keyword.get(opts, :record_source_health_events?, SourceHealth.enabled?(opts))
+    case Keyword.fetch(opts, :record_source_health_events?) do
+      {:ok, enabled?} -> enabled?
+      :error -> SourceHealth.enabled?(opts)
+    end
   end
 
   defp source_health_payload(%SourceResult{} = result, circuit_status) do

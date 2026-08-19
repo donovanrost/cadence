@@ -19,7 +19,7 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
     SourceWatermarkEvent
   }
 
-  alias Cadence.Dashboards.RuntimeInvalidation
+  alias Cadence.Dashboards.{RuntimeComposition, RuntimeInvalidation}
   alias Cadence.Limits.DefinitionLifecycleEvent
 
   alias Cadence.Telemetry.{
@@ -36,6 +36,8 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
 
   @impl true
   def init(opts) do
+    opts = with_configured_defaults(opts)
+
     :ok = Cadence.Catalog.Facts.subscribe(self())
     :ok = Cadence.Contacts.Facts.subscribe(self())
     :ok = Cadence.DataSources.Facts.subscribe(self())
@@ -44,8 +46,8 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
 
     {:ok,
      %{
-       enabled?: Keyword.get(opts, :enabled?, :configured),
-       runtime_cache: Keyword.get(opts, :runtime_cache, :configured)
+       enabled?: Keyword.fetch!(opts, :enabled?),
+       runtime_cache: Keyword.get(opts, :runtime_cache)
      }}
   end
 
@@ -283,23 +285,21 @@ defmodule Cadence.Dashboards.RuntimeFactConsumer do
 
   defp enabled?(%{enabled?: enabled?}) when is_boolean(enabled?), do: enabled?
 
-  defp enabled?(%{enabled?: :configured}) do
-    :cadence
-    |> Application.get_env(:dashboard_runtime_invalidation, [])
-    |> Keyword.get(:enabled?, true)
-  end
-
   defp invalidation_opts(%{runtime_cache: nil}), do: []
 
-  defp invalidation_opts(%{runtime_cache: :configured}) do
-    case Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-         |> Keyword.get(:runtime_cache) do
-      nil -> []
-      runtime_cache -> [runtime_cache: runtime_cache]
+  defp invalidation_opts(%{runtime_cache: runtime_cache}), do: [runtime_cache: runtime_cache]
+
+  defp with_configured_defaults(opts) do
+    if Keyword.has_key?(opts, :enabled?) and Keyword.has_key?(opts, :runtime_cache) do
+      opts
+    else
+      composition = RuntimeComposition.from_application()
+
+      opts
+      |> Keyword.put_new(:enabled?, composition.runtime_invalidation?)
+      |> Keyword.put_new(:runtime_cache, composition.runtime_invalidation_cache)
     end
   end
-
-  defp invalidation_opts(%{runtime_cache: runtime_cache}), do: [runtime_cache: runtime_cache]
 
   defp logical_source(adapter)
        when adapter in [:telemetry, :limits, :operational_observables, :events],

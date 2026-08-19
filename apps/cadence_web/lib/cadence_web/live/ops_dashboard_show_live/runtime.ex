@@ -19,11 +19,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   @type resolve_mode :: :initial | :context_change | :live_tick | :stream_append
   @async_prefix :dashboard_engine_resolve
 
-  @spec assign_runtime(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
-  def assign_runtime(socket) do
+  @spec assign_runtime(Phoenix.LiveView.Socket.t(), keyword()) :: Phoenix.LiveView.Socket.t()
+  def assign_runtime(socket, opts \\ []) when is_list(opts) do
+    resolution_context =
+      Keyword.get_lazy(opts, :resolution_context, &EngineResolution.resolution_context/0)
+
     socket
     |> assign(:dashboard_runtime_coordinator, RuntimeCoordinator.new())
-    |> assign(:dashboard_resolution_context, EngineResolution.resolution_context())
+    |> assign(:dashboard_resolution_context, resolution_context)
     |> assign(:dashboard_runtime_decisions, [])
     |> assign(:dashboard_runtime_resolved?, false)
     |> assign(:dashboard_runtime_pending_appends, %{})

@@ -28,11 +28,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountState do
       |> Map.merge(%{document: document, document_mode: document_mode})
 
     default_live_refresh_ms = default_live_refresh_ms(opts)
+    resolution_context = resolution_context(opts)
 
     socket =
       socket
       |> InitialState.assign_loaded_dashboard(resources,
-        default_live_refresh_ms: default_live_refresh_ms
+        default_live_refresh_ms: default_live_refresh_ms,
+        resolution_context: resolution_context
       )
       |> assign_versions(opts)
       |> assign_publish_validation(opts)
@@ -88,5 +90,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.MountState do
 
   defp engine_refresh_ms(opts) do
     Keyword.get(opts, :engine_refresh_ms, &EngineResolution.refresh_ms/2)
+  end
+
+  defp resolution_context(opts) do
+    Keyword.get_lazy(opts, :resolution_context, &EngineResolution.resolution_context/0)
   end
 end

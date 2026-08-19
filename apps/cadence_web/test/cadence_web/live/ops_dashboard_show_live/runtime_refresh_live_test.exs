@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -109,44 +107,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
     ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
   end
 
-  defp enable_dashboard_runtime_cache! do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_cache)
-    Application.put_env(:cadence, :dashboard_runtime_cache, enabled?: true)
-
-    if is_nil(Process.whereis(RuntimeCache)) do
-      start_supervised!(RuntimeCache)
-    end
-
+  defp reset_dashboard_runtime_cache! do
+    assert Process.whereis(RuntimeCache)
     RuntimeCache.reset()
-
-    on_exit(fn ->
-      RuntimeCache.reset()
-
-      case previous_config do
-        nil -> Application.delete_env(:cadence, :dashboard_runtime_cache)
-        value -> Application.put_env(:cadence, :dashboard_runtime_cache, value)
-      end
-    end)
-  end
-
-  defp disable_telemetry_storage_runtime_invalidation! do
-    previous_config = Application.get_env(:cadence, :telemetry_storage, [])
-
-    Application.put_env(
-      :cadence,
-      :telemetry_storage,
-      Keyword.put(previous_config, :dashboard_runtime_invalidation?, false)
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_config)
-    end)
+    on_exit(&RuntimeCache.reset/0)
   end
 
   describe "dashboard runtime refresh" do
     test "ticks push chart appends for new samples only" do
-      disable_telemetry_storage_runtime_invalidation!()
-
       {conn, org, mission} = signed_in_org_and_mission()
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Beta")
       binding_set = persist_binding_set!(org, mission)
@@ -225,8 +193,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
     end
 
     test "ticks run conservative dashboard engine live refresh" do
-      disable_telemetry_storage_runtime_invalidation!()
-      enable_dashboard_runtime_cache!()
+      reset_dashboard_runtime_cache!()
 
       {conn, org, mission} = signed_in_org_and_mission()
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Engine")

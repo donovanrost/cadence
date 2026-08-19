@@ -20,8 +20,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_ground_station_connection_ops"
 
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
-
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
     replay_sources = persist_replay_event_and_operational_sources!(mission)
@@ -78,8 +76,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
   defp setup_transport_execution_interval_evidence! do
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_transport_execution_ops"
-
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
@@ -697,8 +693,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
   test "opens replay RF state interval evidence from rendered operational observable frame panel" do
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_rf_state_ops"
-
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

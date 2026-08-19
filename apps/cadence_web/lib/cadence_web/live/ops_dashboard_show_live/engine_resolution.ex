@@ -11,7 +11,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     PlacementFrames,
     Resolution,
     ResolutionContext,
-    RuntimeCache
+    RuntimeCache,
+    RuntimeComposition,
+    SourceCircuitBreaker
   }
 
   alias CadenceWeb.OpsDashboardShowLive.{
@@ -36,10 +38,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     source_execution_opts =
       Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
 
-    cache_config = Application.get_env(:cadence, :dashboard_runtime_cache, [])
-    cache_server = if Process.whereis(RuntimeCache), do: RuntimeCache, else: nil
+    composition =
+      RuntimeComposition.from_application(
+        runtime_cache_server: running_server(RuntimeCache),
+        source_circuit_breaker_server: running_server(SourceCircuitBreaker)
+      )
 
-    build_resolution_context(source_execution_opts, cache_config, cache_server)
+    build_resolution_context(composition, source_execution_opts)
+  end
+
+  @doc false
+  @spec build_resolution_context(RuntimeComposition.t(), keyword()) :: ResolutionContext.t()
+  def build_resolution_context(%RuntimeComposition{} = composition, source_execution_opts)
+      when is_list(source_execution_opts) do
+    ResolutionContext.from_composition!(composition,
+      persisted?: true,
+      validate_dashboard_contract?: true,
+      persist_limit_selected_clock_audit_events?: true,
+      source_execution_opts: put_dashboard_runtime_source_opts(source_execution_opts)
+    )
   end
 
   @doc false
@@ -50,19 +67,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
     cache_enabled? =
       Keyword.get(cache_config, :enabled?, true) == true and not is_nil(cache_server)
 
-    source_execution_opts = put_dashboard_runtime_source_opts(source_execution_opts)
+    composition =
+      RuntimeComposition.from_application(
+        runtime_cache_server: cache_server,
+        source_circuit_breaker_server: running_server(SourceCircuitBreaker)
+      )
 
-    ResolutionContext.new!(
-      persisted?: true,
-      validate_dashboard_contract?: true,
-      persist_limit_selected_clock_audit_events?: true,
-      runtime_cache: if(cache_enabled?, do: cache_server, else: false),
-      plan_cache?: cache_enabled?,
-      source_result_cache?:
-        cache_enabled? and Keyword.get(cache_config, :source_result_cache?, true) == true,
-      frame_cache?: cache_enabled? and Keyword.get(cache_config, :frame_cache?, true) == true,
-      source_execution_opts: source_execution_opts
-    )
+    runtime_cache =
+      if(cache_enabled?, do: RuntimeCache.client(cache_server, cache_config), else: false)
+
+    composition = %RuntimeComposition{
+      composition
+      | runtime_cache_enabled?: cache_enabled?,
+        runtime_cache: runtime_cache,
+        runtime_cache_child_opts: cache_config,
+        plan_cache?: cache_enabled?,
+        source_result_cache?:
+          cache_enabled? and Keyword.get(cache_config, :source_result_cache?, true) == true,
+        frame_cache?: cache_enabled? and Keyword.get(cache_config, :frame_cache?, true) == true
+    }
+
+    build_resolution_context(composition, source_execution_opts)
   end
 
   @spec resolve_request_bundle(
@@ -142,6 +167,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
 
   defp put_dashboard_runtime_source_opts(opts) do
     opts
+    |> Keyword.put_new(:source_health_events?, true)
+    |> Keyword.put_new(:source_watermark_events?, true)
     |> put_default_source_opt(
       :telemetry,
       :backfill_lifecycle_events_fun,
@@ -165,6 +192,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolution do
 
   defp normalize_adapter_opts(adapter_opts) when is_list(adapter_opts), do: adapter_opts
   defp normalize_adapter_opts(_adapter_opts), do: []
+
+  defp running_server(server) do
+    case Process.whereis(server) do
+      pid when is_pid(pid) -> server
+      nil -> nil
+    end
+  end
 
   defp apply_full_result(socket, result) do
     frames_by_placement = RuntimeResult.frames_by_placement(result)

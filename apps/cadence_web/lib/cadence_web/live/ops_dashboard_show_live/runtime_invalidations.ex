@@ -7,7 +7,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
 
   alias Cadence.Telemetry.RuntimeHealth, as: RuntimeHealth
 
-  alias Cadence.Dashboards.{Document, RuntimeInvalidation, RuntimeInvalidationRelevance}
+  alias Cadence.Dashboards.{
+    Document,
+    ResolutionContext,
+    RuntimeCache,
+    RuntimeInvalidation,
+    RuntimeInvalidationRelevance
+  }
+
   alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias CadenceWeb.OpsDashboardShowLive.Runtime
   alias CadenceWeb.OpsDashboardShowLive.RuntimeAssigns
@@ -230,7 +237,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
 
   defp emit_decision(%Event{} = invalidation, socket, event_relevance, refresh_relevance, opts) do
     decision = decision(invalidation, socket, event_relevance, refresh_relevance)
-    emit_opts = [invalidation_event_id: RuntimeInvalidationDiagnostics.event_id(invalidation)]
+
+    emit_opts = [
+      invalidation_event_id: RuntimeInvalidationDiagnostics.event_id(invalidation),
+      runtime_cache: runtime_cache_server(socket)
+    ]
 
     case Keyword.get(opts, :emit_decision) do
       callback when is_function(callback, 3) ->
@@ -252,4 +263,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidations do
   end
 
   defp emit_decision(_invalidation, _socket, _event_relevance, _refresh_relevance, _opts), do: :ok
+
+  defp runtime_cache_server(%{assigns: assigns}) do
+    case Map.get(assigns, :dashboard_resolution_context) do
+      %ResolutionContext{runtime_cache: %RuntimeCache{} = cache} -> RuntimeCache.server(cache)
+      _missing -> nil
+    end
+  end
 end

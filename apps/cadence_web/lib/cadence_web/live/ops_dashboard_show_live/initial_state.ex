@@ -131,7 +131,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
     |> assign(:dashboard_tick_timer_ref, nil)
     |> assign(:dashboard_last_runtime_invalidation, nil)
     |> assign(:dashboard_runtime_context_since, runtime_context_since)
-    |> Runtime.assign_runtime()
+    |> Runtime.assign_runtime(runtime_opts(opts))
   end
 
   defp stale_timeouts(points) do
@@ -139,5 +139,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.InitialState do
         is_integer(timeout),
         into: %{},
         do: {point.point_id, timeout}
+  end
+
+  defp runtime_opts(opts) do
+    Keyword.take(opts, [:resolution_context])
   end
 end

@@ -8,6 +8,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
     PlacementFrames,
     RenderWidget,
     ResolutionContext,
+    RuntimeCache,
+    RuntimeComposition,
     ResolveWarning
   }
 
@@ -65,24 +67,39 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
   end
 
   test "builds one explicit resolution context for the mounted runtime" do
+    composition =
+      RuntimeComposition.new!(
+        runtime_cache: RuntimeCache.client(:runtime_cache, call_timeout_ms: 375),
+        source_result_cache?: false,
+        frame_cache?: true,
+        source_health_events?: false,
+        record_source_health_events?: false,
+        source_watermark_events?: false
+      )
+
     context =
       EngineResolution.build_resolution_context(
-        [source_execution_timeout_ms: 2_500],
-        [enabled?: true, source_result_cache?: false, frame_cache?: true],
-        :runtime_cache
+        composition,
+        source_execution_timeout_ms: 2_500
       )
 
     assert %ResolutionContext{
              persisted?: true,
              validate_dashboard_contract?: true,
              persist_limit_selected_clock_audit_events?: true,
-             runtime_cache: :runtime_cache,
+             runtime_cache: %RuntimeCache{
+               server: :runtime_cache,
+               call_timeout_ms: 375
+             },
              plan_cache?: true,
              source_result_cache?: false,
              frame_cache?: true
            } = context
 
     assert context.source_execution_opts[:source_execution_timeout_ms] == 2_500
+    assert context.source_execution_opts[:source_health_events?]
+    refute context.source_execution_opts[:record_source_health_events?]
+    assert context.source_execution_opts[:source_watermark_events?]
 
     assert is_function(
              get_in(context.source_execution_opts, [
@@ -97,9 +114,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
   test "disables every cache layer when no runtime cache owner exists" do
     context =
       EngineResolution.build_resolution_context(
-        [source_execution_timeout_ms: :infinity],
-        [enabled?: true],
-        nil
+        RuntimeComposition.new!(),
+        source_execution_timeout_ms: :infinity
       )
 
     assert %ResolutionContext{

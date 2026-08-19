@@ -7,6 +7,7 @@ defmodule Cadence.Telemetry.StorageTest do
     PlannedSourceRequest,
     RuntimeCache,
     RuntimeCacheKey,
+    RuntimeFactConsumer,
     RuntimeInvalidation,
     SourceResult
   }
@@ -21,12 +22,10 @@ defmodule Cadence.Telemetry.StorageTest do
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
 
-  setup context do
+  setup do
     current_value_store_policy = current_value_store_policy()
     start_supervised!(CurrentValueStore.child_spec(current_value_store_policy))
     CurrentValueStore.reset(current_value_store_policy)
-
-    if context[:dashboard_storage_compatibility], do: configure_dashboard_storage_compatibility!()
 
     :ok
   end
@@ -355,7 +354,6 @@ defmodule Cadence.Telemetry.StorageTest do
              )
   end
 
-  @tag dashboard_storage_compatibility: true
   test "replay telemetry writes emit replay-scoped runtime invalidations" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -363,6 +361,7 @@ defmodule Cadence.Telemetry.StorageTest do
 
     assert :ok =
              Storage.persist_samples(
+               storage_policy(storage_opts: [dashboard_runtime_invalidation?: true]),
                [sample("sample-replay-invalidation", "mission-storage-replay", "HK.counter", 42)],
                organization_id: "org-storage",
                realm: :replay,
@@ -370,7 +369,7 @@ defmodule Cadence.Telemetry.StorageTest do
                data_source_id: "managed_questdb_replay",
                binding_id: "replay_telemetry",
                recorded_at: ~U[2026-06-17 12:00:05Z],
-               dashboard_runtime_cache: cache,
+               runtime_cache: RuntimeCache.client(cache),
                dashboard_runtime_invalidation?: true
              )
 
@@ -390,7 +389,6 @@ defmodule Cadence.Telemetry.StorageTest do
     end)
   end
 
-  @tag dashboard_storage_compatibility: true
   test "telemetry writes invalidate live and overlapping snapshot dashboard caches" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -412,9 +410,11 @@ defmodule Cadence.Telemetry.StorageTest do
     assert :ok = RuntimeCache.put_frame(live_frame_key, live_frames, cache)
 
     assert :ok =
-             Storage.persist_samples([sample("sample-1", "mission-storage", "HK.counter", 42)],
+             Storage.persist_samples(
+               storage_policy(storage_opts: [dashboard_runtime_invalidation?: true]),
+               [sample("sample-1", "mission-storage", "HK.counter", 42)],
                organization_id: "org-storage",
-               dashboard_runtime_cache: cache,
+               runtime_cache: RuntimeCache.client(cache),
                dashboard_runtime_invalidation?: true
              )
 
@@ -439,7 +439,6 @@ defmodule Cadence.Telemetry.StorageTest do
     assert RuntimeCache.get_frame(live_frame_key, cache) == :miss
   end
 
-  @tag dashboard_storage_compatibility: true
   test "telemetry writes leave non-overlapping snapshot dashboard caches in place" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -453,9 +452,11 @@ defmodule Cadence.Telemetry.StorageTest do
     assert :ok = RuntimeCache.put_frame(snapshot_frame_key, snapshot_frames, cache)
 
     assert :ok =
-             Storage.persist_samples([sample("sample-1", "mission-storage", "HK.counter", 42)],
+             Storage.persist_samples(
+               storage_policy(storage_opts: [dashboard_runtime_invalidation?: true]),
+               [sample("sample-1", "mission-storage", "HK.counter", 42)],
                organization_id: "org-storage",
-               dashboard_runtime_cache: cache,
+               runtime_cache: RuntimeCache.client(cache),
                dashboard_runtime_invalidation?: true
              )
 
@@ -491,31 +492,6 @@ defmodule Cadence.Telemetry.StorageTest do
       ] ++ storage_opts
 
     Storage.policy(config, current_value_store_policy: current_value_store_policy())
-  end
-
-  defp configure_dashboard_storage_compatibility! do
-    previous_storage = Application.get_env(:cadence, :telemetry_storage, [])
-
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
-    )
-
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_storage)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
   end
 
   defp sample(sample_id, mission_id, point_id, raw_value) do
@@ -671,15 +647,8 @@ defmodule Cadence.Telemetry.StorageTest do
   end
 
   defp use_dashboard_runtime_cache!(cache) do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    Application.put_env(:cadence, :dashboard_runtime_invalidation,
-      enabled?: true,
-      runtime_cache: cache
+    start_supervised!(
+      {RuntimeFactConsumer, name: nil, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
     )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
-    end)
   end
 end

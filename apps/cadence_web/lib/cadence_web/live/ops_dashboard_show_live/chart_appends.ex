@@ -125,14 +125,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ChartAppends do
   defp refresh_interval_ms(socket) do
     case Map.get(socket.assigns, :dashboard_live_refresh_ms) do
       value when is_integer(value) and value > 0 -> value
-      _missing -> configured_refresh_interval_ms()
-    end
-  end
-
-  defp configured_refresh_interval_ms do
-    case Application.get_env(:cadence_web, :dashboard_live_refresh_ms, 1_000) do
-      value when is_integer(value) and value > 0 -> value
-      _invalid -> 1_000
+      _missing -> 1_000
     end
   end
 

@@ -15,6 +15,9 @@ defmodule Cadence.Dashboards.RuntimeCache do
 
   @default_call_timeout_ms 1_000
 
+  @enforce_keys [:server, :call_timeout_ms]
+  defstruct [:server, :call_timeout_ms]
+
   @source_result_live_lineage_fields [
     :cache_policy,
     :organization_id,
@@ -41,7 +44,36 @@ defmodule Cadence.Dashboards.RuntimeCache do
                                ]
 
   @type server :: GenServer.server()
+  @type t :: %__MODULE__{server: server(), call_timeout_ms: pos_integer()}
+  @type client :: t() | server()
   @type invalidation_filters :: keyword() | map()
+
+  @doc """
+  Builds an immutable cache client from an explicit server and timeout policy.
+
+  Callers that own a runtime composition should retain this value and pass it
+  through every cache operation. `configured_client/1` is the narrow
+  compatibility constructor for application boundaries that still own config.
+  """
+  @spec client(server(), keyword()) :: t()
+  def client(server, opts \\ []) when is_list(opts) do
+    %__MODULE__{
+      server: server,
+      call_timeout_ms:
+        opts
+        |> Keyword.get(:call_timeout_ms, @default_call_timeout_ms)
+        |> normalize_call_timeout()
+    }
+  end
+
+  @spec configured_client(server()) :: t()
+  def configured_client(server \\ __MODULE__) do
+    config = Application.get_env(:cadence, :dashboard_runtime_cache, [])
+    client(server, config)
+  end
+
+  @spec server(t()) :: server()
+  def server(%__MODULE__{server: server}), do: server
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -62,79 +94,105 @@ defmodule Cadence.Dashboards.RuntimeCache do
     end
   end
 
-  @spec get_plan(RuntimeCacheKey.t(), server()) :: {:ok, DashboardResolveResult.t()} | :miss
-  def get_plan(%RuntimeCacheKey{layer: :plan} = key, server \\ __MODULE__) do
-    cache_call(server, {:get, :plan, key.fingerprint}, :miss)
+  @spec get_plan(RuntimeCacheKey.t()) :: {:ok, DashboardResolveResult.t()} | :miss
+  def get_plan(%RuntimeCacheKey{} = key), do: get_plan(key, configured_client())
+
+  @spec get_plan(RuntimeCacheKey.t(), client()) :: {:ok, DashboardResolveResult.t()} | :miss
+  def get_plan(%RuntimeCacheKey{layer: :plan} = key, cache) do
+    cache_call(cache, {:get, :plan, key.fingerprint}, :miss)
   end
 
-  @spec put_plan(RuntimeCacheKey.t(), DashboardResolveResult.t(), server()) :: :ok
+  @spec put_plan(RuntimeCacheKey.t(), DashboardResolveResult.t()) :: :ok
+  def put_plan(%RuntimeCacheKey{} = key, %DashboardResolveResult{} = result) do
+    put_plan(key, result, configured_client())
+  end
+
+  @spec put_plan(RuntimeCacheKey.t(), DashboardResolveResult.t(), client()) :: :ok
   def put_plan(
         %RuntimeCacheKey{layer: :plan} = key,
         %DashboardResolveResult{} = result,
-        server \\ __MODULE__
+        cache
       ) do
-    cache_call(server, {:put, :plan, key, result}, :ok)
+    cache_call(cache, {:put, :plan, key, result}, :ok)
   end
 
-  @spec get_source_result(RuntimeCacheKey.t(), server()) :: {:ok, SourceResult.t()} | :miss
-  def get_source_result(%RuntimeCacheKey{layer: :source_result} = key, server \\ __MODULE__) do
-    cache_call(server, {:get, :source_result, key.fingerprint}, :miss)
+  @spec get_source_result(RuntimeCacheKey.t()) :: {:ok, SourceResult.t()} | :miss
+  def get_source_result(%RuntimeCacheKey{} = key),
+    do: get_source_result(key, configured_client())
+
+  @spec get_source_result(RuntimeCacheKey.t(), client()) :: {:ok, SourceResult.t()} | :miss
+  def get_source_result(%RuntimeCacheKey{layer: :source_result} = key, cache) do
+    cache_call(cache, {:get, :source_result, key.fingerprint}, :miss)
   end
 
-  @spec put_source_result(RuntimeCacheKey.t(), SourceResult.t(), server()) :: :ok
+  @spec put_source_result(RuntimeCacheKey.t(), SourceResult.t()) :: :ok
+  def put_source_result(%RuntimeCacheKey{} = key, %SourceResult{} = result) do
+    put_source_result(key, result, configured_client())
+  end
+
+  @spec put_source_result(RuntimeCacheKey.t(), SourceResult.t(), client()) :: :ok
   def put_source_result(
         %RuntimeCacheKey{layer: :source_result} = key,
         %SourceResult{} = result,
-        server \\ __MODULE__
+        cache
       ) do
-    cache_call(server, {:put, :source_result, key, result}, :ok)
+    cache_call(cache, {:put, :source_result, key, result}, :ok)
   end
 
-  @spec get_frame(RuntimeCacheKey.t(), server()) :: {:ok, [Frame.t()]} | :miss
-  def get_frame(%RuntimeCacheKey{layer: :frame} = key, server \\ __MODULE__) do
-    cache_call(server, {:get, :frame, key.fingerprint}, :miss)
+  @spec get_frame(RuntimeCacheKey.t()) :: {:ok, [Frame.t()]} | :miss
+  def get_frame(%RuntimeCacheKey{} = key), do: get_frame(key, configured_client())
+
+  @spec get_frame(RuntimeCacheKey.t(), client()) :: {:ok, [Frame.t()]} | :miss
+  def get_frame(%RuntimeCacheKey{layer: :frame} = key, cache) do
+    cache_call(cache, {:get, :frame, key.fingerprint}, :miss)
   end
 
-  @spec put_frame(RuntimeCacheKey.t(), [Frame.t()], server()) :: :ok
-  def put_frame(%RuntimeCacheKey{layer: :frame} = key, frames, server \\ __MODULE__)
+  @spec put_frame(RuntimeCacheKey.t(), [Frame.t()]) :: :ok
+  def put_frame(%RuntimeCacheKey{} = key, frames) when is_list(frames) do
+    put_frame(key, frames, configured_client())
+  end
+
+  @spec put_frame(RuntimeCacheKey.t(), [Frame.t()], client()) :: :ok
+  def put_frame(%RuntimeCacheKey{layer: :frame} = key, frames, cache)
       when is_list(frames) do
-    cache_call(server, {:put, :frame, key, frames}, :ok)
+    cache_call(cache, {:put, :frame, key, frames}, :ok)
   end
 
   @spec invalidate_plans(invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_plans(filters) when is_list(filters) or is_map(filters) do
-    invalidate_plans(__MODULE__, filters)
+    invalidate_plans(configured_client(), filters)
   end
 
-  @spec invalidate_plans(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
-  def invalidate_plans(server, filters) when is_list(filters) or is_map(filters) do
-    cache_call(server, {:invalidate, :plan, normalize_filters(filters)}, {:ok, 0})
+  @spec invalidate_plans(client(), invalidation_filters()) :: {:ok, non_neg_integer()}
+  def invalidate_plans(cache, filters) when is_list(filters) or is_map(filters) do
+    cache_call(cache, {:invalidate, :plan, normalize_filters(filters)}, {:ok, 0})
   end
 
   @spec invalidate_source_results(invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_source_results(filters) when is_list(filters) or is_map(filters) do
-    invalidate_source_results(__MODULE__, filters)
+    invalidate_source_results(configured_client(), filters)
   end
 
-  @spec invalidate_source_results(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
-  def invalidate_source_results(server, filters) when is_list(filters) or is_map(filters) do
-    cache_call(server, {:invalidate, :source_result, normalize_filters(filters)}, {:ok, 0})
+  @spec invalidate_source_results(client(), invalidation_filters()) :: {:ok, non_neg_integer()}
+  def invalidate_source_results(cache, filters) when is_list(filters) or is_map(filters) do
+    cache_call(cache, {:invalidate, :source_result, normalize_filters(filters)}, {:ok, 0})
   end
 
   @spec invalidate_frames(invalidation_filters()) :: {:ok, non_neg_integer()}
   def invalidate_frames(filters) when is_list(filters) or is_map(filters) do
-    invalidate_frames(__MODULE__, filters)
+    invalidate_frames(configured_client(), filters)
   end
 
-  @spec invalidate_frames(server(), invalidation_filters()) :: {:ok, non_neg_integer()}
-  def invalidate_frames(server, filters) when is_list(filters) or is_map(filters) do
-    cache_call(server, {:invalidate, :frame, normalize_filters(filters)}, {:ok, 0})
+  @spec invalidate_frames(client(), invalidation_filters()) :: {:ok, non_neg_integer()}
+  def invalidate_frames(cache, filters) when is_list(filters) or is_map(filters) do
+    cache_call(cache, {:invalidate, :frame, normalize_filters(filters)}, {:ok, 0})
   end
 
-  @spec reset(server()) :: :ok
-  def reset(server \\ __MODULE__) do
-    cache_call(server, :reset, :ok)
-  end
+  @spec reset() :: :ok
+  def reset, do: reset(configured_client())
+
+  @spec reset(client()) :: :ok
+  def reset(cache), do: cache_call(cache, :reset, :ok)
 
   @impl true
   def init(_opts) do
@@ -200,14 +258,16 @@ defmodule Cadence.Dashboards.RuntimeCache do
     {:reply, :ok, state}
   end
 
-  defp cache_call(server, request, fallback) do
-    case server_pid(server) do
+  defp cache_call(cache, request, fallback) do
+    client = normalize_client(cache)
+
+    case server_pid(client.server) do
       nil ->
         fallback
 
       _pid ->
         try do
-          GenServer.call(server, request, call_timeout_ms())
+          GenServer.call(client.server, request, client.call_timeout_ms)
         catch
           :exit, reason ->
             Logger.warning(
@@ -220,11 +280,11 @@ defmodule Cadence.Dashboards.RuntimeCache do
     end
   end
 
-  defp call_timeout_ms do
-    :cadence
-    |> Application.get_env(:dashboard_runtime_cache, [])
-    |> Keyword.get(:call_timeout_ms, @default_call_timeout_ms)
-  end
+  defp normalize_client(%__MODULE__{} = client), do: client
+  defp normalize_client(server), do: client(server)
+
+  defp normalize_call_timeout(value) when is_integer(value) and value > 0, do: value
+  defp normalize_call_timeout(_value), do: @default_call_timeout_ms
 
   defp cache_operation({operation, _layer, _value}), do: operation
   defp cache_operation({operation, _layer, _key, _value}), do: operation

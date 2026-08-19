@@ -360,8 +360,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_source_health_ops"
 
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
-
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
     replay_sources = persist_replay_event_and_operational_sources!(mission)
@@ -581,8 +579,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     observed_at = ~U[2026-07-11 12:02:00Z]
     replay_run_id = "replay_run_source_health_interval_route"
 
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
-
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)
     replay_sources = persist_replay_event_and_operational_sources!(mission)
@@ -722,8 +718,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
   test "opens replay antenna pointing operational-event copied route from rendered operational observable frame panel" do
     observed_at = ~U[2026-06-17 12:03:00Z]
     replay_run_id = "replay_run_antenna_pointing_ops"
-
-    configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
     {conn, org, mission} = signed_in_org_and_mission()
     _telemetry_replay_source = persist_dashboard_realm!(mission, :replay)

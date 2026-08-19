@@ -1,27 +1,13 @@
 defmodule Cadence.Dashboards.RuntimeCacheResilienceTest do
-  use Cadence.UnitCase, async: false
+  use Cadence.UnitCase, async: true
 
   import ExUnit.CaptureLog
 
   alias Cadence.Dashboards.{RuntimeCache, RuntimeCacheKey}
 
-  setup do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_cache)
-    config = Keyword.put(previous_config || [], :call_timeout_ms, 10)
-    Application.put_env(:cadence, :dashboard_runtime_cache, config)
-
-    on_exit(fn ->
-      case previous_config do
-        nil -> Application.delete_env(:cadence, :dashboard_runtime_cache)
-        config -> Application.put_env(:cadence, :dashboard_runtime_cache, config)
-      end
-    end)
-
-    :ok
-  end
-
   test "cache timeouts fail open instead of terminating callers" do
     blocked_cache = spawn(fn -> receive do: (:stop -> :ok) end)
+    cache = RuntimeCache.client(blocked_cache, call_timeout_ms: 10)
 
     on_exit(fn ->
       if Process.alive?(blocked_cache), do: Process.exit(blocked_cache, :kill)
@@ -31,9 +17,9 @@ defmodule Cadence.Dashboards.RuntimeCacheResilienceTest do
 
     log =
       capture_log(fn ->
-        assert RuntimeCache.get_frame(key, blocked_cache) == :miss
+        assert RuntimeCache.get_frame(key, cache) == :miss
 
-        assert RuntimeCache.invalidate_frames(blocked_cache, mission_id: "mission-one") ==
+        assert RuntimeCache.invalidate_frames(cache, mission_id: "mission-one") ==
                  {:ok, 0}
       end)
 

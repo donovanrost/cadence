@@ -13,7 +13,15 @@ defmodule Cadence.DataSourcesFixtures do
 
   alias Cadence.Catalog.Revision
 
-  alias Cadence.Dashboards.{Document, Frame, PlannedSourceRequest, RuntimeCacheKey, SourceResult}
+  alias Cadence.Dashboards.{
+    Document,
+    Frame,
+    PlannedSourceRequest,
+    RuntimeCache,
+    RuntimeCacheKey,
+    RuntimeFactConsumer,
+    SourceResult
+  }
 
   alias Cadence.DataSources.SourceWatermark
 
@@ -122,16 +130,9 @@ defmodule Cadence.DataSourcesFixtures do
   end
 
   def use_dashboard_runtime_cache!(cache) do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    Application.put_env(:cadence, :dashboard_runtime_invalidation,
-      enabled?: true,
-      runtime_cache: cache
+    start_supervised!(
+      {RuntimeFactConsumer, name: nil, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
     )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
-    end)
   end
 
   def dashboard_source_result_key(logical_source, opts) do

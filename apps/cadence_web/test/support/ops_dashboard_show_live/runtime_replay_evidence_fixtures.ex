@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
   @endpoint CadenceWeb.Endpoint
 
   import ExUnit.Assertions
-  import ExUnit.Callbacks
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
   use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
@@ -732,24 +731,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
              ~s(#dashboard-data-link-inspector [data-data-link-field="Timer metadata"]),
              "managed-action-request-live-1"
            )
-  end
-
-  def configure_dashboard_source_health!(now) do
-    previous = Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
-
-    Application.put_env(
-      :cadence_web,
-      :dashboard_engine_source_execution,
-      previous
-      |> Keyword.put(:source_health_events?, true)
-      |> Keyword.put(:record_source_health_events?, false)
-      |> Keyword.put(:now, now)
-      |> Keyword.put(:source_health_freshness, %{default_max_age_ms: 86_400_000})
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence_web, :dashboard_engine_source_execution, previous)
-    end)
   end
 
   def operational_observable_state_event(

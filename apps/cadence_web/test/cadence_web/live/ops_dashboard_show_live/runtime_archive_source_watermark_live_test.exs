@@ -1,8 +1,6 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -74,7 +72,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     persisted
   end
 
-  defp ingest!(mission, binding_set, spacecraft_id, value, unix_seconds, opts \\ []) do
+  defp ingest!(mission, binding_set, spacecraft_id, value, unix_seconds, opts) do
     evidence =
       RawEvidence.new(%{
         mission_id: mission.mission_id,
@@ -83,13 +81,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
         raw: build_space_packet(42, 1, <<value::16>>)
       })
 
+    {persistence_policy, persistence_opts} = Keyword.pop(opts, :persistence_policy)
+
     with {:ok, result} <-
            Cadence.process_telemetry_ingress(
              evidence,
              binding_set.binding_set_id,
              binding_set.version
            ) do
-      RuntimePersistence.persist_processing_result(result, opts)
+      case persistence_policy do
+        nil ->
+          RuntimePersistence.persist_processing_result(result, persistence_opts)
+
+        %{} ->
+          RuntimePersistence.persist_processing_result(
+            persistence_policy,
+            result,
+            persistence_opts
+          )
+      end
     end
   end
 
@@ -143,35 +153,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     id
   end
 
-  defp configure_telemetry_storage_source!(realm, data_source_id, binding_id) do
-    previous_config = Application.get_env(:cadence, :telemetry_storage, [])
+  defp telemetry_persistence_policy(realm, data_source_id, binding_id) do
+    policy = RuntimePersistence.configured_policy()
 
-    Application.put_env(
-      :cadence,
-      :telemetry_storage,
-      previous_config
-      |> Keyword.put(:realm, realm)
-      |> Keyword.put(:data_source_id, data_source_id)
-      |> Keyword.put(:binding_id, binding_id)
-    )
+    storage_policy = %{
+      policy.telemetry_storage
+      | storage_opts:
+          policy.telemetry_storage.storage_opts
+          |> Keyword.put(:realm, realm)
+          |> Keyword.put(:data_source_id, data_source_id)
+          |> Keyword.put(:binding_id, binding_id)
+    }
 
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_config)
-    end)
-  end
-
-  defp enable_data_source_watermark_events! do
-    previous_config = Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
-
-    Application.put_env(
-      :cadence_web,
-      :dashboard_engine_source_execution,
-      Keyword.put(previous_config, :source_watermark_events?, true)
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence_web, :dashboard_engine_source_execution, previous_config)
-    end)
+    %{policy | telemetry_storage: storage_policy}
   end
 
   defp chart_attribute(html, widget_id, attribute) do
@@ -185,8 +179,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
   end
 
   test "archive time-series charts expose source watermark retention gaps" do
-    enable_data_source_watermark_events!()
-
     {conn, org, mission} = signed_in_org_and_mission()
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Retention Gap")
     binding_set = persist_binding_set!(org, mission)
@@ -246,14 +238,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
                invalidate_runtime_cache?: false
              )
 
-    configure_telemetry_storage_source!(:rehearsal, data_source_id, binding_id)
+    persistence_policy =
+      telemetry_persistence_policy(:rehearsal, data_source_id, binding_id)
 
     ingest!(
       mission,
       binding_set,
       spacecraft.spacecraft_id,
       33,
-      DateTime.to_unix(sample_time)
+      DateTime.to_unix(sample_time),
+      persistence_policy: persistence_policy
     )
 
     dashboard =

@@ -13,6 +13,7 @@ defmodule Cadence.LimitsTest do
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
+    RuntimeFactConsumer,
     RuntimeCacheKey,
     SourceResult
   }
@@ -207,17 +208,9 @@ defmodule Cadence.LimitsTest do
   test "persisting a limit definition invalidates matching dashboard runtime caches" do
     cache = start_supervised!({RuntimeCache, name: nil})
 
-    previous_invalidation_config =
-      Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    Application.put_env(:cadence, :dashboard_runtime_invalidation,
-      enabled?: true,
-      runtime_cache: cache
+    start_supervised!(
+      {RuntimeFactConsumer, name: nil, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
     )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_invalidation_config)
-    end)
 
     persist_mission_scope("org-limit-cache", "mission-limit-cache")
 

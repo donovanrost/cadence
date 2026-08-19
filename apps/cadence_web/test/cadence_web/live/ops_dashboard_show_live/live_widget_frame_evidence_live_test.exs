@@ -4,8 +4,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
@@ -154,24 +152,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
     |> Enum.find(&(&1.widget.title == title))
   end
 
-  defp configure_dashboard_source_health!(now) do
-    previous = Application.get_env(:cadence_web, :dashboard_engine_source_execution, [])
-
-    Application.put_env(
-      :cadence_web,
-      :dashboard_engine_source_execution,
-      previous
-      |> Keyword.put(:source_health_events?, true)
-      |> Keyword.put(:record_source_health_events?, false)
-      |> Keyword.put(:now, now)
-      |> Keyword.put(:source_health_freshness, %{default_max_age_ms: 86_400_000})
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence_web, :dashboard_engine_source_execution, previous)
-    end)
-  end
-
   defp persist_connection_state_resources!(org, mission) do
     source_endpoint =
       SourceEndpoint.new(%{
@@ -262,7 +242,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
   describe "live widget frame evidence" do
     test "opens operational observable source-health interval evidence from rendered frame panel" do
       observed_at = ~U[2026-06-26 12:00:00Z]
-      configure_dashboard_source_health!(DateTime.add(observed_at, 60, :second))
 
       {conn, org, mission} = signed_in_org_and_mission()
       {_source_endpoint, transport} = persist_connection_state_resources!(org, mission)

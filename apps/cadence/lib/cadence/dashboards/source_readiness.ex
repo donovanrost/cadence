@@ -42,14 +42,19 @@ defmodule Cadence.Dashboards.SourceReadiness do
   @spec readiness_reasons() :: [atom()]
   def readiness_reasons, do: @readiness_reasons
 
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    :cadence
+    |> Application.get_env(:dashboard_source_readiness_policy, [])
+    |> normalize_policy()
+  end
+
   @spec policy(keyword()) :: policy()
   def policy(opts \\ []) when is_list(opts) do
-    opts
-    |> Keyword.get_lazy(:source_readiness_policy, fn ->
-      :cadence
-      |> Application.get_env(:dashboard_source_readiness_policy, [])
-    end)
-    |> normalize_policy()
+    case Keyword.fetch(opts, :source_readiness_policy) do
+      {:ok, policy} -> normalize_policy(policy)
+      :error -> configured_policy()
+    end
   end
 
   @spec normalize_policy(term()) :: policy()

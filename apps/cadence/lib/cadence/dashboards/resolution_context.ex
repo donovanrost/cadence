@@ -8,11 +8,14 @@ defmodule Cadence.Dashboards.ResolutionContext do
   flight.
   """
 
+  alias Cadence.Dashboards.{RuntimeCache, RuntimeComposition}
+
   @enforce_keys [
     :persisted?,
     :validate_dashboard_contract?,
     :persist_limit_selected_clock_audit_events?,
     :runtime_cache,
+    :runtime_invalidation?,
     :plan_cache?,
     :source_result_cache?,
     :frame_cache?,
@@ -22,6 +25,7 @@ defmodule Cadence.Dashboards.ResolutionContext do
             validate_dashboard_contract?: false,
             persist_limit_selected_clock_audit_events?: false,
             runtime_cache: false,
+            runtime_invalidation?: true,
             plan_cache?: false,
             source_result_cache?: false,
             frame_cache?: false,
@@ -32,6 +36,7 @@ defmodule Cadence.Dashboards.ResolutionContext do
     :validate_dashboard_contract?,
     :persist_limit_selected_clock_audit_events?,
     :runtime_cache,
+    :runtime_invalidation?,
     :plan_cache?,
     :source_result_cache?,
     :frame_cache?
@@ -41,7 +46,8 @@ defmodule Cadence.Dashboards.ResolutionContext do
           persisted?: boolean(),
           validate_dashboard_contract?: boolean(),
           persist_limit_selected_clock_audit_events?: boolean(),
-          runtime_cache: false | GenServer.server(),
+          runtime_cache: false | RuntimeCache.t(),
+          runtime_invalidation?: boolean(),
           plan_cache?: boolean(),
           source_result_cache?: boolean(),
           frame_cache?: boolean(),
@@ -59,11 +65,40 @@ defmodule Cadence.Dashboards.ResolutionContext do
       persist_limit_selected_clock_audit_events?:
         boolean_opt!(opts, :persist_limit_selected_clock_audit_events?, false),
       runtime_cache: Keyword.get(opts, :runtime_cache, false),
+      runtime_invalidation?: boolean_opt!(opts, :runtime_invalidation?, true),
       plan_cache?: boolean_opt!(opts, :plan_cache?, false),
       source_result_cache?: boolean_opt!(opts, :source_result_cache?, false),
       frame_cache?: boolean_opt!(opts, :frame_cache?, false),
       source_execution_opts: source_execution_opts
     }
+  end
+
+  @doc """
+  Builds one resolution context from a captured runtime composition.
+
+  This is the preferred constructor for production runtime roots and focused
+  tests. `new!/1` remains a pure compatibility constructor for callers that
+  already own every individual option.
+  """
+  @spec from_composition!(RuntimeComposition.t(), keyword()) :: t()
+  def from_composition!(%RuntimeComposition{} = composition, opts \\ [])
+      when is_list(opts) do
+    source_execution_opts =
+      composition
+      |> RuntimeComposition.source_execution_opts(Keyword.get(opts, :source_execution_opts, []))
+
+    new!(
+      persisted?: Keyword.get(opts, :persisted?, composition.data_sources_persisted?),
+      validate_dashboard_contract?: Keyword.get(opts, :validate_dashboard_contract?, false),
+      persist_limit_selected_clock_audit_events?:
+        Keyword.get(opts, :persist_limit_selected_clock_audit_events?, false),
+      runtime_cache: composition.runtime_cache,
+      runtime_invalidation?: composition.runtime_invalidation?,
+      plan_cache?: composition.plan_cache?,
+      source_result_cache?: composition.source_result_cache?,
+      frame_cache?: composition.frame_cache?,
+      source_execution_opts: source_execution_opts
+    )
   end
 
   @spec to_engine_opts(t()) :: keyword()

@@ -6,6 +6,7 @@ defmodule Cadence.Dashboards.SourceHealthTest do
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
+    RuntimeFactConsumer,
     RuntimeCacheKey,
     SourceFacts,
     SourceRegistry,
@@ -779,16 +780,9 @@ defmodule Cadence.Dashboards.SourceHealthTest do
   end
 
   defp use_dashboard_runtime_cache!(cache) do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    Application.put_env(:cadence, :dashboard_runtime_invalidation,
-      enabled?: true,
-      runtime_cache: cache
+    start_supervised!(
+      {RuntimeFactConsumer, name: nil, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
     )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
-    end)
   end
 
   defp best_effort_watermark(_organization_id, _mission_id, _point_id, _opts) do

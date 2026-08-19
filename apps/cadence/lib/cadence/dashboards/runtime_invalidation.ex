@@ -266,7 +266,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
 
     metadata =
       event
-      |> Event.to_telemetry_metadata(Keyword.get(opts, :runtime_cache, RuntimeCache))
+      |> Event.to_telemetry_metadata(runtime_cache_server(opts))
       |> Map.put(:invalidation_event_id, Keyword.get(opts, :invalidation_event_id))
       |> Map.put(:decision, decision)
       |> Map.merge(Map.take(decision, decision_metadata_keys()))
@@ -458,11 +458,11 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
   end
 
   defp invalidate_layers(layers, filters, opts) do
-    server = Keyword.get(opts, :runtime_cache, RuntimeCache)
+    cache = runtime_cache(opts)
 
     Enum.reduce(layers, empty_result(), fn layer, result ->
       layer_filters = layer_filters(layer, filters)
-      count = invalidate_layer(layer, server, layer_filters)
+      count = invalidate_layer(layer, cache, layer_filters)
       Map.update!(result, result_key(layer), &(&1 + count))
     end)
   end
@@ -514,8 +514,19 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
     :telemetry.execute(
       @telemetry_event,
       event.measurements,
-      Event.to_telemetry_metadata(event, Keyword.get(opts, :runtime_cache, RuntimeCache))
+      Event.to_telemetry_metadata(event, runtime_cache_server(opts))
     )
+  end
+
+  defp runtime_cache(opts) do
+    Keyword.get_lazy(opts, :runtime_cache, &RuntimeCache.configured_client/0)
+  end
+
+  defp runtime_cache_server(opts) do
+    case runtime_cache(opts) do
+      %RuntimeCache{} = cache -> RuntimeCache.server(cache)
+      server -> server
+    end
   end
 
   defp decision_metadata_keys do

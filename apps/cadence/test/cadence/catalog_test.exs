@@ -13,6 +13,7 @@ defmodule Cadence.CatalogTest do
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
+    RuntimeFactConsumer,
     RuntimeCacheKey,
     SourceResult
   }
@@ -484,16 +485,9 @@ defmodule Cadence.CatalogTest do
   defp catalog_opts(importer_opts, opts), do: Keyword.merge(opts, importer_opts)
 
   defp use_dashboard_runtime_cache!(cache) do
-    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
-
-    Application.put_env(:cadence, :dashboard_runtime_invalidation,
-      enabled?: true,
-      runtime_cache: cache
+    start_supervised!(
+      {RuntimeFactConsumer, name: nil, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
     )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
-    end)
   end
 
   defp dashboard_plan_key(mission_id, logical_source) do

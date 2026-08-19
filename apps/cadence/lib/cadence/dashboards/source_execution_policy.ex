@@ -30,32 +30,40 @@ defmodule Cadence.Dashboards.SourceExecutionPolicy do
   @default_circuit_failure_threshold 3
   @default_circuit_backoff_ms 30_000
 
+  @spec default() :: t()
+  def default do
+    build_policy(default_values(), %{
+      app_defaults?: false,
+      explicit_opts?: false
+    })
+  end
+
+  @doc """
+  Captures application-configured source execution defaults once.
+
+  Runtime request paths should receive the returned policy through
+  `:source_execution_defaults`; `resolve/1` remains the compatibility entrypoint
+  for callers that have not yet assembled a runtime composition.
+  """
+  @spec configured_defaults() :: t()
+  def configured_defaults do
+    build_policy(app_policy(), %{
+      app_defaults?: true,
+      explicit_opts?: false
+    })
+  end
+
   @spec resolve(keyword()) :: t()
   def resolve(opts \\ []) when is_list(opts) do
-    config = app_policy() |> Map.merge(explicit_policy(opts))
+    {defaults, app_defaults?} = defaults(opts)
+    explicit_policy = explicit_policy(opts)
 
-    %__MODULE__{
-      max_concurrency:
-        config
-        |> Map.get(:max_concurrency)
-        |> positive_integer(@default_max_concurrency),
-      timeout_ms:
-        config
-        |> Map.get(:timeout_ms)
-        |> timeout(@default_timeout_ms),
-      circuit_failure_threshold:
-        config
-        |> Map.get(:circuit_failure_threshold)
-        |> positive_integer(@default_circuit_failure_threshold),
-      circuit_backoff_ms:
-        config
-        |> Map.get(:circuit_backoff_ms)
-        |> non_negative_integer(@default_circuit_backoff_ms),
-      provenance: %{
-        app_defaults?: true,
-        explicit_opts?: explicit_policy(opts) != %{}
-      }
-    }
+    defaults
+    |> Map.merge(explicit_policy)
+    |> build_policy(%{
+      app_defaults?: app_defaults?,
+      explicit_opts?: explicit_policy != %{}
+    })
   end
 
   @spec resolve(PlannedSourceRequest.t(), ResolvedSourceBinding.t(), keyword()) :: t()
@@ -65,48 +73,30 @@ defmodule Cadence.Dashboards.SourceExecutionPolicy do
         opts
       )
       when is_list(opts) do
-    app_policy = app_policy()
+    {defaults, app_defaults?} = defaults(opts)
     data_source_policy = metadata_policy(resolved_binding.data_source.metadata)
     binding_policy = metadata_policy(resolved_binding.binding.metadata)
     explicit_policy = explicit_policy(opts)
 
     config =
-      app_policy
+      defaults
       |> Map.merge(data_source_policy)
       |> Map.merge(binding_policy)
       |> Map.merge(explicit_policy)
 
-    %__MODULE__{
-      max_concurrency:
-        config
-        |> Map.get(:max_concurrency)
-        |> positive_integer(@default_max_concurrency),
-      timeout_ms:
-        config
-        |> Map.get(:timeout_ms)
-        |> timeout(@default_timeout_ms),
-      circuit_failure_threshold:
-        config
-        |> Map.get(:circuit_failure_threshold)
-        |> positive_integer(@default_circuit_failure_threshold),
-      circuit_backoff_ms:
-        config
-        |> Map.get(:circuit_backoff_ms)
-        |> non_negative_integer(@default_circuit_backoff_ms),
-      provenance: %{
-        app_defaults?: true,
-        data_source_policy?: data_source_policy != %{},
-        binding_policy?: binding_policy != %{},
-        explicit_opts?: explicit_policy != %{},
-        organization_id: request.organization_id,
-        mission_id: request.mission_id,
-        logical_source: request.logical_source,
-        data_source_id: resolved_binding.data_source.data_source_id,
-        source_binding_id: resolved_binding.binding.binding_id,
-        realm: resolved_binding.realm,
-        dataset: resolved_binding.dataset
-      }
-    }
+    build_policy(config, %{
+      app_defaults?: app_defaults?,
+      data_source_policy?: data_source_policy != %{},
+      binding_policy?: binding_policy != %{},
+      explicit_opts?: explicit_policy != %{},
+      organization_id: request.organization_id,
+      mission_id: request.mission_id,
+      logical_source: request.logical_source,
+      data_source_id: resolved_binding.data_source.data_source_id,
+      source_binding_id: resolved_binding.binding.binding_id,
+      realm: resolved_binding.realm,
+      dataset: resolved_binding.dataset
+    })
   end
 
   @spec metadata(t()) :: map()
@@ -163,14 +153,47 @@ defmodule Cadence.Dashboards.SourceExecutionPolicy do
       |> Map.new()
       |> normalize_policy()
 
+    default_values()
+    |> Map.merge(execution_config)
+    |> Map.merge(circuit_config)
+  end
+
+  defp defaults(opts) do
+    case Keyword.get(opts, :source_execution_defaults) do
+      %__MODULE__{} = policy -> {policy_values(policy), false}
+      _missing -> {app_policy(), true}
+    end
+  end
+
+  defp default_values do
     %{
       max_concurrency: @default_max_concurrency,
       timeout_ms: @default_timeout_ms,
       circuit_failure_threshold: @default_circuit_failure_threshold,
       circuit_backoff_ms: @default_circuit_backoff_ms
     }
-    |> Map.merge(execution_config)
-    |> Map.merge(circuit_config)
+  end
+
+  defp build_policy(config, provenance) do
+    %__MODULE__{
+      max_concurrency:
+        config
+        |> Map.get(:max_concurrency)
+        |> positive_integer(@default_max_concurrency),
+      timeout_ms:
+        config
+        |> Map.get(:timeout_ms)
+        |> timeout(@default_timeout_ms),
+      circuit_failure_threshold:
+        config
+        |> Map.get(:circuit_failure_threshold)
+        |> positive_integer(@default_circuit_failure_threshold),
+      circuit_backoff_ms:
+        config
+        |> Map.get(:circuit_backoff_ms)
+        |> non_negative_integer(@default_circuit_backoff_ms),
+      provenance: provenance
+    }
   end
 
   defp explicit_policy(opts) do

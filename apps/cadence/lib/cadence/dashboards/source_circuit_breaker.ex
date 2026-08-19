@@ -67,7 +67,7 @@ defmodule Cadence.Dashboards.SourceCircuitBreaker do
 
   @spec allow?(source_key(), keyword()) :: {:allow, status()} | {:blocked, status()}
   def allow?(source_key, opts \\ []) do
-    allow?(__MODULE__, source_key, opts)
+    allow?(__MODULE__, source_key, configured_opts(opts))
   end
 
   @spec allow?(server(), source_key(), keyword()) :: {:allow, status()} | {:blocked, status()}
@@ -95,7 +95,7 @@ defmodule Cadence.Dashboards.SourceCircuitBreaker do
 
   @spec record_failure(source_key(), term(), keyword()) :: status()
   def record_failure(source_key, reason, opts \\ []) do
-    record_failure(__MODULE__, source_key, reason, opts)
+    record_failure(__MODULE__, source_key, reason, configured_opts(opts))
   end
 
   @spec record_failure(server(), source_key(), term(), keyword()) :: status()
@@ -109,7 +109,7 @@ defmodule Cadence.Dashboards.SourceCircuitBreaker do
 
   @spec status(source_key(), keyword()) :: status()
   def status(source_key, opts \\ []) do
-    status(__MODULE__, source_key, opts)
+    status(__MODULE__, source_key, configured_opts(opts))
   end
 
   @spec status(server(), source_key(), keyword()) :: status()
@@ -131,7 +131,14 @@ defmodule Cadence.Dashboards.SourceCircuitBreaker do
 
   @impl true
   def init(opts) do
-    {:ok, %{circuits: %{}, default_config: config(opts)}}
+    default_config =
+      if Keyword.get(opts, :runtime_composed?, false) do
+        config(opts)
+      else
+        opts |> configured_opts() |> config()
+      end
+
+    {:ok, %{circuits: %{}, default_config: default_config}}
   end
 
   @impl true
@@ -254,22 +261,23 @@ defmodule Cadence.Dashboards.SourceCircuitBreaker do
   end
 
   defp config(opts) do
-    config =
-      :cadence
-      |> Application.get_env(:dashboard_source_circuit_breaker, [])
-      |> Keyword.merge(opts)
-
     %{
       failure_threshold:
-        config
+        opts
         |> Keyword.get(:failure_threshold, @default_failure_threshold)
         |> positive_integer(@default_failure_threshold),
       backoff_ms:
-        config
+        opts
         |> Keyword.get(:backoff_ms, @default_backoff_ms)
         |> non_negative_integer(@default_backoff_ms),
-      now_ms: Keyword.get(config, :now_ms)
+      now_ms: Keyword.get(opts, :now_ms)
     }
+  end
+
+  defp configured_opts(opts) do
+    :cadence
+    |> Application.get_env(:dashboard_source_circuit_breaker, [])
+    |> Keyword.merge(opts)
   end
 
   defp now_ms(%{now_ms: now_ms}) when is_integer(now_ms), do: now_ms
