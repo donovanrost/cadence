@@ -7,9 +7,15 @@ defmodule Cadence.RuntimeCase do
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.CurrentValueStore.ETS
 
-  using do
+  using opts do
+    isolated? = Keyword.get(opts, :isolated, false)
+
     quote do
       @moduletag :runtime
+
+      if unquote(isolated?) do
+        @moduletag runtime_case: :isolated
+      end
 
       alias Cadence.Repo
 
@@ -22,6 +28,16 @@ defmodule Cadence.RuntimeCase do
 
   setup tags do
     setup_owned_runtime(tags)
+  end
+
+  def setup_owned_runtime(%{runtime_case: :isolated} = tags) do
+    pid = Cadence.DataCase.start_sandbox_owner!(tags, shared?: false)
+
+    on_exit(fn ->
+      stop_isolated_sandbox_owner(pid)
+    end)
+
+    %{sandbox_owner_pid: pid}
   end
 
   def setup_owned_runtime(tags) do
@@ -49,5 +65,15 @@ defmodule Cadence.RuntimeCase do
   defp stop_all_control_missions do
     ControlMissions.running_mission_ids()
     |> Enum.each(&ControlMissions.stop/1)
+  end
+
+  defp stop_isolated_sandbox_owner(pid) do
+    if Process.alive?(pid) do
+      Cadence.DataCase.stop_sandbox_owner(pid)
+    end
+
+    :ok
+  catch
+    :exit, _reason -> :ok
   end
 end
