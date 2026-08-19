@@ -41,6 +41,7 @@ defmodule Cadence.Runtime.PathCoordinator do
           persistence_policy: map(),
           current_value_store_policy: map(),
           telemetry_storage_policy: map(),
+          ingress_journal_policy: IngressJournal.policy(),
           ingress_archive_consumer_policy: map(),
           persist_runtime_records?: boolean(),
           lifecycle_status: :active | :quiescing | :quiesced,
@@ -137,6 +138,8 @@ defmodule Cadence.Runtime.PathCoordinator do
           :telemetry_storage_policy,
           &Cadence.Telemetry.Storage.configured_policy/0
         ),
+      ingress_journal_policy:
+        Keyword.get_lazy(opts, :ingress_journal_policy, &IngressJournal.configured_policy/0),
       ingress_archive_consumer_policy:
         Keyword.get_lazy(
           opts,
@@ -339,7 +342,8 @@ defmodule Cadence.Runtime.PathCoordinator do
          mission_id: state.mission_id,
          realized_contact_id: state.realized_contact_id,
          path_id: state.path.path_id,
-         provider_binding_id: provider_binding.provider_binding_id}
+         provider_binding_id: provider_binding.provider_binding_id,
+         policy: state.ingress_journal_policy}
 
       start_provider_child(state, child_spec)
     else
@@ -366,7 +370,7 @@ defmodule Cadence.Runtime.PathCoordinator do
          realized_contact_id: state.realized_contact_id,
          path_id: state.path.path_id,
          provider_binding_id: provider_binding.provider_binding_id,
-         policy: state.ingress_archive_consumer_policy,
+         policy: state.ingress_journal_policy,
          journal_name:
            MissionRuntime.provider_ingress_journal_name(
              state.process_namespace,
@@ -409,6 +413,7 @@ defmodule Cadence.Runtime.PathCoordinator do
          realized_contact_id: state.realized_contact_id,
          path_id: state.path.path_id,
          provider_binding_id: provider_binding.provider_binding_id,
+         policy: state.ingress_archive_consumer_policy,
          journal_name:
            MissionRuntime.provider_ingress_journal_name(
              state.process_namespace,
@@ -582,15 +587,9 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   defp journaled_provider?(state, %ProviderBindingSpec{} = provider_binding) do
-    ingress_journal_enabled?() and state.path.direction == :downlink and
+    state.ingress_journal_policy.enabled? and state.path.direction == :downlink and
       provider_binding.adapter_key == :tcp_socket and
       provider_protocol_family(provider_binding.configuration) in [:tm, :tm_transfer_frame]
-  end
-
-  defp ingress_journal_enabled? do
-    :cadence
-    |> Application.get_env(:ingress_journal, [])
-    |> Keyword.get(:enabled?, false)
   end
 
   defp provider_protocol_family(configuration) when is_map(configuration) do

@@ -26,9 +26,28 @@ defmodule Cadence.IngressJournal.FileSystem do
   @default_checkpoint_interval_ms 250
   @default_consumers [:processing, :archive]
   @event_prefix [:cadence, :ingress_journal]
+  @file_system_policy_keys [
+    :base_path,
+    :durability,
+    :consumers,
+    :capture_record_bytes,
+    :checkpoint_interval_ms,
+    :max_bytes,
+    :segment_bytes
+  ]
+  @consumer_policy_keys [
+    :processing_poll_interval_ms,
+    :processing_max_batch_entries,
+    :processing_max_batch_bytes
+  ]
 
   @type consumer :: atom()
   @type durability :: :sync | :page_cache
+  @type policy :: %{
+          required(:enabled?) => boolean(),
+          required(:file_system_opts) => keyword(),
+          required(:consumer_opts) => keyword()
+        }
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
@@ -119,6 +138,26 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
+  @doc false
+  @spec policy(keyword() | map()) :: policy()
+  def policy(config) when is_list(config) or is_map(config) do
+    config = if is_map(config), do: Map.to_list(config), else: config
+
+    %{
+      enabled?: Keyword.get(config, :enabled?, false),
+      file_system_opts: Keyword.take(config, @file_system_policy_keys),
+      consumer_opts: Keyword.take(config, @consumer_policy_keys)
+    }
+  end
+
+  @doc false
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    :cadence
+    |> Application.get_env(:ingress_journal, [])
+    |> policy()
+  end
+
   @impl true
   def init(opts) do
     context = %{
@@ -128,7 +167,11 @@ defmodule Cadence.IngressJournal.FileSystem do
       provider_binding_id: Keyword.fetch!(opts, :provider_binding_id)
     }
 
-    config = Application.get_env(:cadence, :ingress_journal, [])
+    config =
+      opts
+      |> Keyword.get_lazy(:policy, &configured_policy/0)
+      |> Map.fetch!(:file_system_opts)
+
     base_path = Keyword.get_lazy(opts, :base_path, fn -> Keyword.fetch!(config, :base_path) end)
     stream_id = stream_id(context)
     stream_path = Path.join(base_path, stream_id)

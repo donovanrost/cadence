@@ -66,7 +66,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   @impl true
   def init(opts) do
-    config = Application.get_env(:cadence, :ingress_journal, [])
+    config =
+      opts
+      |> Keyword.get_lazy(:policy, &FileSystem.configured_policy/0)
+      |> Map.fetch!(:consumer_opts)
 
     state = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
@@ -75,7 +78,12 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
       journal_name: Keyword.fetch!(opts, :journal_name),
       executor_name: Keyword.fetch!(opts, :executor_name),
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
+      poll_interval_ms:
+        Keyword.get(
+          opts,
+          :poll_interval_ms,
+          Keyword.get(config, :processing_poll_interval_ms, @default_poll_interval_ms)
+        ),
       max_batch_entries:
         positive_option(
           opts,
