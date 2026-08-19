@@ -1,7 +1,7 @@
 defmodule CadenceWeb.UITest do
-  use CadenceWeb.ConnCase, async: true
+  use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest
+  import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias Cadence.Accounts.User
   alias Cadence.Organizations.Organization
@@ -35,202 +35,189 @@ defmodule CadenceWeb.UITest do
     )
   end
 
+  defp render_user_menu(opts \\ []) do
+    [
+      id: "user-menu",
+      scope: scope(user_fixture()),
+      memberships: [],
+      platform_admin?: false
+    ]
+    |> Keyword.merge(opts)
+    |> then(fn assigns -> render_component(&UI.user_menu/1, assigns) end)
+    |> LazyHTML.from_fragment()
+  end
+
+  defp organization_block(document) do
+    document
+    |> LazyHTML.query("#user-menu-menu .hud-label")
+    |> LazyHTML.parent_node()
+  end
+
   describe "user_menu/1" do
     test "renders display_name as trigger text" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
+      trigger =
+        render_user_menu()
+        |> LazyHTML.query("#user-menu > button[data-dropdown-trigger]")
 
-      assert html =~ "Jane Rost"
+      assert LazyHTML.text(trigger) =~ "Jane Rost"
     end
 
     test "renders identity block with name and email" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
+      identity =
+        render_user_menu()
+        |> LazyHTML.query("#user-menu-menu > div[role='presentation']")
 
-      assert html =~ "Jane Rost"
-      assert html =~ "jane@example.com"
+      assert LazyHTML.text(identity) =~ "Jane Rost"
+      assert LazyHTML.text(identity) =~ "jane@example.com"
     end
 
     test "always renders sign-out form targeting DELETE /session" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
+      document = render_user_menu()
+      sign_out_form = LazyHTML.query(document, "#user-menu-menu form[action='/session']")
 
-      assert html =~ ~s|action="/session"|
-      assert html =~ ~s|name="_method"|
-      assert html =~ ~s|value="delete"|
-      assert html =~ "Sign out"
+      assert Enum.count(sign_out_form) == 1
+
+      assert sign_out_form
+             |> LazyHTML.query("input[name='_method'][value='delete']")
+             |> Enum.count() == 1
+
+      assert sign_out_form
+             |> LazyHTML.query("button[type='submit'][role='menuitem']")
+             |> LazyHTML.text() =~ "Sign out"
     end
 
     test "omits the organization block entirely when scope.organization is nil" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
-
-      refute html =~ "ORGANIZATION"
+      assert render_user_menu()
+             |> LazyHTML.query("#user-menu-menu .hud-label")
+             |> Enum.empty?()
     end
 
     test "renders label-only org row for single-membership users" do
       org = org_fixture(%{display_name: "Acme Space"})
       membership_map = %{membership: %{}, organization: org}
 
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture(), org),
-          memberships: [membership_map],
-          platform_admin?: false
-        )
+      org_block =
+        render_user_menu(scope: scope(user_fixture(), org), memberships: [membership_map])
+        |> organization_block()
 
-      assert html =~ "ORGANIZATION"
-      assert html =~ "Acme Space"
-      refute html =~ "<details"
-      refute html =~ ~s|action="/session/organization"|
+      assert LazyHTML.text(org_block) =~ "ORGANIZATION"
+      assert LazyHTML.text(org_block) =~ "Acme Space"
+      assert org_block |> LazyHTML.query("details") |> Enum.empty?()
+
+      assert org_block
+             |> LazyHTML.query("form[action='/session/organization']")
+             |> Enum.empty?()
     end
 
     test "renders expandable switcher for multi-membership users" do
       current_org = org_fixture(%{display_name: "Acme Space"})
       other_org = org_fixture(%{display_name: "Beta Labs"})
 
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
+      org_block =
+        render_user_menu(
           scope: scope(user_fixture(), current_org),
           memberships: [
             %{membership: %{}, organization: current_org},
             %{membership: %{}, organization: other_org}
-          ],
-          platform_admin?: false
+          ]
         )
+        |> organization_block()
 
-      assert html =~ "ORGANIZATION"
-      assert html =~ "Acme Space"
-      assert html =~ "Beta Labs"
-      assert html =~ ~s|action="/session/organization"|
-      assert html =~ ~s|name="_method"|
-      assert html =~ ~s|value="put"|
-      assert html =~ ~s|name="organization_id"|
-      assert html =~ ~s|value="#{other_org.organization_id}"|
-      refute html =~ ~s|value="#{current_org.organization_id}"|
+      assert LazyHTML.text(org_block) =~ "ORGANIZATION"
+      assert LazyHTML.text(org_block) =~ "Acme Space"
+      assert LazyHTML.text(org_block) =~ "Beta Labs"
+      assert org_block |> LazyHTML.query("details") |> Enum.count() == 1
+
+      switch_form = LazyHTML.query(org_block, "form[action='/session/organization']")
+
+      assert switch_form
+             |> LazyHTML.query("input[name='_method'][value='put']")
+             |> Enum.count() == 1
+
+      assert switch_form
+             |> LazyHTML.query(
+               ~s|input[name="organization_id"][value="#{other_org.organization_id}"]|
+             )
+             |> Enum.count() == 1
+
+      assert switch_form
+             |> LazyHTML.query(
+               ~s|input[name="organization_id"][value="#{current_org.organization_id}"]|
+             )
+             |> Enum.empty?()
     end
 
     test "does not render the system administration link when platform_admin? is false" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
+      document = render_user_menu()
 
-      refute html =~ "System administration"
-      refute html =~ "Enter admin mode"
+      assert document
+             |> LazyHTML.query("#user-menu-menu a[href='/admin']")
+             |> Enum.empty?()
+
+      assert document
+             |> LazyHTML.query("#user-menu-menu a[href='/admin-mode']")
+             |> Enum.empty?()
     end
 
     test "renders the admin-mode entry link for an eligible user" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: true
-        )
+      document = render_user_menu(platform_admin?: true)
+      admin_mode_link = LazyHTML.query(document, "#user-menu-menu a[href='/admin-mode']")
 
-      assert html =~ "Enter admin mode"
-      assert html =~ ~s|href="/admin-mode"|
-      refute html =~ "Leave admin mode"
+      assert LazyHTML.text(admin_mode_link) =~ "Enter admin mode"
+
+      assert document
+             |> LazyHTML.query("#user-menu-menu form[action='/admin-mode']")
+             |> Enum.empty?()
     end
 
     test "renders administration and exit actions while admin mode is active" do
       admin_scope = %{scope(user_fixture()) | admin_mode?: true}
 
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: admin_scope,
-          memberships: [],
-          platform_admin?: true
-        )
+      document = render_user_menu(scope: admin_scope, platform_admin?: true)
+      administration_link = LazyHTML.query(document, "#user-menu-menu a[href='/admin']")
+      exit_form = LazyHTML.query(document, "#user-menu-menu form[action='/admin-mode']")
 
-      assert html =~ "System administration"
-      assert html =~ ~s|href="/admin"|
-      assert html =~ "Leave admin mode"
-      assert html =~ ~s|action="/admin-mode"|
+      assert LazyHTML.text(administration_link) =~ "System administration"
+      assert LazyHTML.text(exit_form) =~ "Leave admin mode"
+
+      assert exit_form
+             |> LazyHTML.query("input[name='_method'][value='delete']")
+             |> Enum.count() == 1
     end
 
     test "identity block wrapper is a div so it doesn't trigger menu hover" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture()),
-          memberships: [],
-          platform_admin?: false
-        )
+      identity_name =
+        render_user_menu()
+        |> LazyHTML.query("#user-menu-menu > div[role='presentation'] > p:first-child")
 
-      # The identity block lives inside a <div role="presentation"> (not <li>),
-      # so daisyUI's .menu > li > * hover selector doesn't reach the name/email.
-      assert html =~ ~r|<div role="presentation"[^>]*>\s*<p[^>]*>\s*Jane Rost|
+      assert LazyHTML.text(identity_name) =~ "Jane Rost"
     end
 
     test "organization block wrapper is a div so it doesn't trigger menu hover" do
       org = org_fixture(%{display_name: "Acme Space"})
 
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
+      org_label =
+        render_user_menu(
           scope: scope(user_fixture(), org),
-          memberships: [%{membership: %{}, organization: org}],
-          platform_admin?: false
+          memberships: [%{membership: %{}, organization: org}]
         )
+        |> LazyHTML.query("#user-menu-menu > div[role='presentation'] > span.hud-label")
 
-      # The org block lives inside a <div role="presentation"> (not <li>),
-      # so daisyUI's hover selector doesn't reach the ORGANIZATION label or the
-      # single-org display name.
-      assert html =~ ~r|<div role="presentation"[^>]*>\s*<span class="hud-label|
+      assert LazyHTML.text(org_label) =~ "ORGANIZATION"
     end
 
     test "identity block falls back to email when display_name is blank" do
-      html =
-        render_component(&UI.user_menu/1,
-          id: "user-menu",
-          scope: scope(user_fixture(%{display_name: ""})),
-          memberships: [],
-          platform_admin?: false
-        )
+      document = render_user_menu(scope: scope(user_fixture(%{display_name: ""})))
 
-      # Email appears in the identity block's primary slot.
-      assert html =~ "jane@example.com"
-      # No stray empty primary name paragraph.
-      refute html =~ ~r|<p class="text-sm font-semibold text-base-content">\s*</p>|
-      # The secondary email <p> is suppressed when display_name is blank — so
-      # email renders exactly once in the identity block (no duplicate line).
-      refute html =~ ~r|<p class="text-xs text-base-content/50 truncate">\s*</p>|
+      trigger_label =
+        LazyHTML.query(document, "#user-menu > button[data-dropdown-trigger] > span:first-child")
 
-      assert html
-             |> String.split("jane@example.com")
-             |> length()
-             |> Kernel.-(1) == 2
+      identity_lines =
+        LazyHTML.query(document, "#user-menu-menu > div[role='presentation'] > p")
 
-      # Trigger also falls back to email rather than showing an empty span.
-      refute html =~ ~r|<span class="text-xs text-base-content/60">\s*</span>|
+      assert LazyHTML.text(trigger_label) =~ "jane@example.com"
+      assert Enum.count(identity_lines) == 1
+      assert LazyHTML.text(identity_lines) =~ "jane@example.com"
     end
   end
 end
