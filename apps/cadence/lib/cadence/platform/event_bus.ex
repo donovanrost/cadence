@@ -17,30 +17,43 @@ defmodule Cadence.Platform.EventBus do
 
   use GenServer
 
+  @type server :: GenServer.server()
   @type topic :: term()
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
+  @spec subscribe(topic()) :: :ok
+  def subscribe(topic), do: subscribe(__MODULE__, topic, self())
+
   @spec subscribe(topic(), GenServer.server()) :: :ok
-  def subscribe(topic, subscriber \\ self()) do
-    case Process.whereis(__MODULE__) do
+  def subscribe(topic, subscriber), do: subscribe(__MODULE__, topic, subscriber)
+
+  @spec subscribe(server(), topic(), GenServer.server()) :: :ok
+  def subscribe(server, topic, subscriber) do
+    case GenServer.whereis(server) do
       nil -> :ok
-      _pid -> GenServer.call(__MODULE__, {:subscribe, topic, subscriber})
+      event_bus -> GenServer.call(event_bus, {:subscribe, topic, subscriber})
     end
   end
 
   @spec publish(topic(), term()) :: :ok
-  def publish(topic, fact) do
-    case Process.whereis(__MODULE__) do
+  def publish(topic, fact), do: publish(__MODULE__, topic, fact)
+
+  @spec publish(server(), topic(), term()) :: :ok
+  def publish(server, topic, fact) do
+    case GenServer.whereis(server) do
       nil ->
         :ok
 
-      _pid ->
+      event_bus ->
         {:deliver, subscribers, delivery, before_notify} =
-          GenServer.call(__MODULE__, {:prepare_publish, topic})
+          GenServer.call(event_bus, {:prepare_publish, topic})
 
         Enum.each(subscribers, fn subscriber ->
           notify_subscriber(subscriber, topic, fact, self(), delivery, before_notify)
