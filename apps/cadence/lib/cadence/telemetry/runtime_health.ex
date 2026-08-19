@@ -14,6 +14,8 @@ defmodule Cadence.Telemetry.RuntimeHealth do
   alias Cadence.Telemetry.Profiler
 
   @default_recent_limit 50
+  @client_tag {__MODULE__, :client}
+  @event_route_key :cadence_runtime_health_route
 
   @events [
     [:cadence, :contacts, :scheduler, :notification],
@@ -94,23 +96,54 @@ defmodule Cadence.Telemetry.RuntimeHealth do
           subscribed_events: [[atom()]]
         }
 
+  @type client :: %{
+          required(:tag) => {module(), :client},
+          required(:server) => pid(),
+          required(:event_route) => term()
+        }
+
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
-    name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
   @spec events() :: [[atom()]]
   def events, do: @events
 
-  @spec snapshot(GenServer.server()) :: snapshot()
+  @doc """
+  Returns the immutable routing client captured by a runtime-health instance.
+  """
+  @spec client(GenServer.server() | client()) :: client()
+  def client(server \\ __MODULE__)
+  def client(%{tag: @client_tag} = client), do: client
+  def client(server), do: GenServer.call(server, :client)
+
+  @spec snapshot(GenServer.server() | client()) :: snapshot()
   def snapshot(server \\ __MODULE__) do
-    GenServer.call(server, :snapshot)
+    GenServer.call(resolve_server(server), :snapshot)
   end
 
-  @spec reset(GenServer.server()) :: :ok
+  @spec reset(GenServer.server() | client()) :: :ok
   def reset(server \\ __MODULE__) do
-    GenServer.call(server, :reset)
+    GenServer.call(resolve_server(server), :reset)
+  end
+
+  @doc """
+  Executes a telemetry event routed only to the selected runtime-health instance.
+  """
+  @spec execute(GenServer.server() | client(), [atom()], map(), map()) :: :ok
+  def execute(server_or_client, event_name, measurements, metadata)
+      when is_list(event_name) and is_map(measurements) and is_map(metadata) do
+    client = resolve_client(server_or_client)
+
+    :telemetry.execute(
+      event_name,
+      measurements,
+      Map.put(metadata, @event_route_key, client.event_route)
+    )
   end
 
   @impl true
@@ -118,22 +151,35 @@ defmodule Cadence.Telemetry.RuntimeHealth do
     Process.flag(:trap_exit, true)
 
     name = Keyword.get(opts, :name, __MODULE__)
-    handler_id = Keyword.get(opts, :handler_id, default_handler_id(name))
+    handler_id = Keyword.get_lazy(opts, :handler_id, fn -> {__MODULE__, self(), make_ref()} end)
     recent_limit = Keyword.get(opts, :recent_limit, @default_recent_limit)
+    event_route = Keyword.get(opts, :event_route, :default)
+
+    client = %{
+      tag: @client_tag,
+      server: self(),
+      event_route: event_route
+    }
 
     state =
       empty_state(%{
+        client: client,
         name: name,
         handler_id: handler_id,
         recent_limit: recent_limit
       })
 
-    attach_handlers(handler_id, name)
-
-    {:ok, state}
+    case attach_handlers(handler_id, client) do
+      :ok -> {:ok, state}
+      {:error, reason} -> {:stop, reason}
+    end
   end
 
   @impl true
+  def handle_call(:client, _from, state) do
+    {:reply, state.client, state}
+  end
+
   def handle_call(:snapshot, _from, state) do
     {:reply, snapshot_from_state(state), state}
   end
@@ -192,30 +238,40 @@ defmodule Cadence.Telemetry.RuntimeHealth do
   end
 
   @spec handle_event([atom()], map(), map(), map()) :: :ok
-  def handle_event(event_name, measurements, metadata, %{server: server}) do
-    GenServer.cast(
-      server,
-      {:runtime_event, event_name, measurements, metadata, DateTime.utc_now()}
-    )
-  end
-
-  defp attach_handlers(handler_id, server) do
-    _ = :telemetry.detach(handler_id)
-
-    :ok =
-      :telemetry.attach_many(
-        handler_id,
-        @events,
-        &__MODULE__.handle_event/4,
-        %{server: server}
+  def handle_event(event_name, measurements, metadata, %{client: client}) do
+    if Map.get(metadata, @event_route_key, :default) == client.event_route do
+      GenServer.cast(
+        client.server,
+        {:runtime_event, event_name, measurements, metadata, DateTime.utc_now()}
       )
+    end
+
+    :ok
   end
 
-  defp default_handler_id(name) when is_atom(name), do: "#{__MODULE__}.#{name}"
-  defp default_handler_id(_name), do: "#{__MODULE__}.#{System.unique_integer([:positive])}"
+  defp attach_handlers(handler_id, client) do
+    case :telemetry.attach_many(
+           handler_id,
+           @events,
+           &__MODULE__.handle_event/4,
+           %{client: client}
+         ) do
+      :ok ->
+        :ok
 
-  defp empty_state(%{name: name, handler_id: handler_id, recent_limit: recent_limit}) do
+      {:error, :already_exists} ->
+        {:error, {:telemetry_handler_already_exists, handler_id}}
+    end
+  end
+
+  defp empty_state(%{
+         client: client,
+         name: name,
+         handler_id: handler_id,
+         recent_limit: recent_limit
+       }) do
     %{
+      client: client,
       name: name,
       handler_id: handler_id,
       recent_limit: recent_limit,
@@ -426,4 +482,10 @@ defmodule Cadence.Telemetry.RuntimeHealth do
         |> Enum.sort_by(&{Map.get(&1, :mission_id), Map.get(&1, :source_endpoint_id, "")})
     }
   end
+
+  defp resolve_client(%{tag: @client_tag} = client), do: client
+  defp resolve_client(server), do: client(server)
+
+  defp resolve_server(%{tag: @client_tag, server: server}), do: server
+  defp resolve_server(server), do: server
 end

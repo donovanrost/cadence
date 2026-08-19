@@ -6,7 +6,7 @@ defmodule Cadence.Telemetry.Profiler do
 
   - ingress work is tagged with mission/stage context in the process dictionary
   - `Repo` query telemetry updates mission-scoped counters directly
-  - snapshots are aggregated on read from mission-scoped counter references
+  - snapshots are aggregated on read from instance- and mission-scoped counter references
 
   This lets `mix cadence.profile` observe actual downlink behavior while the
   simulator is exercising the runtime.
@@ -19,13 +19,17 @@ defmodule Cadence.Telemetry.Profiler do
   alias Cadence.IngressArchive
   alias Cadence.Protocol.RecordArchive
 
-  @table_name :cadence_telemetry_profiler
   @repo_query_event [:cadence, :repo, :query]
   @ingress_result_event [:cadence, :runtime, :telemetry_ingress, :processing_result]
-  @repo_handler_id "#{__MODULE__}.repo-query"
+  @client_tag {__MODULE__, :client}
   @context_key {__MODULE__, :context}
   @stage_key {__MODULE__, :stage}
   @stages [:resolve, :runtime, :persistence]
+  @stage_slot_pairs %{
+    resolve: {:resolve_count, :resolve_total_us},
+    runtime: {:runtime_count, :runtime_total_us},
+    persistence: {:persistence_count, :persistence_total_us}
+  }
   @runtime_components [
     :runtime_boundary,
     :telemetry_sample_extraction,
@@ -97,6 +101,15 @@ defmodule Cadence.Telemetry.Profiler do
   }
 
   @slot_count map_size(@slots)
+
+  @type client :: %{
+          required(:tag) => {module(), :client},
+          required(:server) => pid(),
+          required(:table) => :ets.tid(),
+          required(:route) => reference(),
+          required(:ingress_archive_policy) => IngressArchive.policy(),
+          required(:record_archive_policy) => RecordArchive.policy()
+        }
 
   @type snapshot :: %{
           mission_id: binary(),
@@ -203,41 +216,63 @@ defmodule Cadence.Telemetry.Profiler do
         }
 
   def start_link(opts \\ []) when is_list(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
+
+  @doc """
+  Returns the immutable client captured by a profiler instance at startup.
+
+  Operational APIs accept this client as their first argument. The zero-arity
+  form preserves the default registered profiler behavior.
+  """
+  @spec client(GenServer.server() | client()) :: client()
+  def client(server \\ __MODULE__)
+  def client(%{tag: @client_tag} = client), do: client
+  def client(server), do: GenServer.call(server, :client)
 
   @spec with_ingress_context(RawEvidence.t(), (-> result)) :: result when result: var
   def with_ingress_context(%RawEvidence{} = raw_evidence, fun) when is_function(fun, 0) do
-    previous_context = Process.get(@context_key)
+    with_ingress_context(current_client(), raw_evidence, fun)
+  end
 
-    Process.put(@context_key, %{
-      mission_id: raw_evidence.mission_id,
-      protocol_family: raw_evidence.protocol_family,
-      source_endpoint_ref: raw_evidence.source_endpoint_ref
-    })
+  @spec with_ingress_context(client() | GenServer.server(), RawEvidence.t(), (-> result)) ::
+          result
+        when result: var
+  def with_ingress_context(client_or_server, %RawEvidence{} = raw_evidence, fun)
+      when is_function(fun, 0) do
+    client = resolve_client(client_or_server)
 
-    try do
-      fun.()
-    after
-      restore_process_key(@context_key, previous_context)
-    end
+    with_process_value(
+      @context_key,
+      %{
+        profiler_client: client,
+        profiler_route: client.route,
+        mission_id: raw_evidence.mission_id,
+        protocol_family: raw_evidence.protocol_family,
+        source_endpoint_ref: raw_evidence.source_endpoint_ref
+      },
+      fun
+    )
   end
 
   @spec with_stage(:resolve | :runtime | :persistence, (-> result)) :: result when result: var
   def with_stage(stage, fun) when stage in @stages and is_function(fun, 0) do
-    previous_stage = Process.get(@stage_key)
-    Process.put(@stage_key, stage)
-
-    try do
-      fun.()
-    after
-      restore_process_key(@stage_key, previous_stage)
-    end
+    with_process_value(@stage_key, stage, fun)
   end
 
   @spec record_ingress_result(RawEvidence.t(), keyword()) :: :ok
   def record_ingress_result(%RawEvidence{} = raw_evidence, opts \\ []) when is_list(opts) do
-    ref = ensure_counter(raw_evidence.mission_id)
+    record_ingress_result(current_client(), raw_evidence, opts)
+  end
+
+  @spec record_ingress_result(client() | GenServer.server(), RawEvidence.t(), keyword()) :: :ok
+  def record_ingress_result(client_or_server, %RawEvidence{} = raw_evidence, opts)
+      when is_list(opts) do
+    client = resolve_client(client_or_server)
+    ref = ensure_counter(client, raw_evidence.mission_id)
 
     add(ref, :ingress_count, 1)
     add(ref, :raw_bytes_total, byte_size(raw_evidence.raw || <<>>))
@@ -301,7 +336,19 @@ defmodule Cadence.Telemetry.Profiler do
   def record_projected_persistence(mission_id, persisted_count, total_us)
       when is_binary(mission_id) and is_integer(persisted_count) and persisted_count >= 0 and
              is_integer(total_us) and total_us >= 0 do
-    ref = ensure_counter(mission_id)
+    record_projected_persistence(current_client(), mission_id, persisted_count, total_us)
+  end
+
+  @spec record_projected_persistence(
+          client() | GenServer.server(),
+          binary(),
+          non_neg_integer(),
+          non_neg_integer()
+        ) :: :ok
+  def record_projected_persistence(client_or_server, mission_id, persisted_count, total_us)
+      when is_binary(mission_id) and is_integer(persisted_count) and persisted_count >= 0 and
+             is_integer(total_us) and total_us >= 0 do
+    ref = ensure_counter(resolve_client(client_or_server), mission_id)
 
     add(ref, :persistence_count, persisted_count)
     add(ref, :persistence_total_us, total_us)
@@ -312,22 +359,36 @@ defmodule Cadence.Telemetry.Profiler do
   @spec with_runtime_component(binary(), atom(), (-> result)) :: result when result: var
   def with_runtime_component(mission_id, component, fun)
       when is_binary(mission_id) and component in @runtime_components and is_function(fun, 0) do
+    with_runtime_component(current_client(), mission_id, component, fun)
+  end
+
+  @spec with_runtime_component(client() | GenServer.server(), binary(), atom(), (-> result)) ::
+          result
+        when result: var
+  def with_runtime_component(client_or_server, mission_id, component, fun)
+      when is_binary(mission_id) and component in @runtime_components and is_function(fun, 0) do
+    client = resolve_client(client_or_server)
     started_at = System.monotonic_time()
 
     try do
       fun.()
     after
-      record_runtime_component(mission_id, component, elapsed_since_us(started_at))
+      record_runtime_component(client, mission_id, component, elapsed_since_us(started_at))
     end
   end
 
   @spec snapshot(binary()) :: snapshot()
   def snapshot(mission_id) when is_binary(mission_id) do
-    ensure_table()
+    snapshot(client(), mission_id)
+  end
 
-    case :ets.lookup(@table_name, mission_id) do
+  @spec snapshot(client() | GenServer.server(), binary()) :: snapshot()
+  def snapshot(client_or_server, mission_id) when is_binary(mission_id) do
+    client = resolve_client(client_or_server)
+
+    case :ets.lookup(client.table, mission_id) do
       [{^mission_id, ref, started_at_ms}] ->
-        build_snapshot(mission_id, ref, started_at_ms)
+        build_snapshot(client, mission_id, ref, started_at_ms)
 
       [] ->
         empty_snapshot(mission_id)
@@ -336,34 +397,78 @@ defmodule Cadence.Telemetry.Profiler do
 
   @spec reset(binary()) :: :ok
   def reset(mission_id) when is_binary(mission_id) do
-    ensure_table()
-    _ = :ets.delete(@table_name, mission_id)
-    :ok = IngressArchive.reset_stats(mission_id)
-    :ok = RecordArchive.reset_stats(mission_id)
+    reset(client(), mission_id)
+  end
+
+  @spec reset(client() | GenServer.server(), binary()) :: :ok
+  def reset(client_or_server, mission_id) when is_binary(mission_id) do
+    client = resolve_client(client_or_server)
+    _ = :ets.delete(client.table, mission_id)
+    :ok = IngressArchive.reset_stats(client.ingress_archive_policy, mission_id)
+    :ok = RecordArchive.reset_stats(client.record_archive_policy, mission_id)
     :ok
   end
 
   @spec list_missions() :: [binary()]
   def list_missions do
-    ensure_table()
+    list_missions(client())
+  end
 
-    @table_name
+  @spec list_missions(client() | GenServer.server()) :: [binary()]
+  def list_missions(client_or_server) do
+    client_or_server
+    |> resolve_client()
+    |> Map.fetch!(:table)
     |> :ets.tab2list()
     |> Enum.map(fn {mission_id, _ref, _started_at_ms} -> mission_id end)
     |> Enum.sort()
   end
 
   @impl true
-  def init(_opts) do
-    ensure_table()
-    attach_repo_query_handler()
-    {:ok, %{}}
+  def init(opts) do
+    Process.flag(:trap_exit, true)
+
+    table =
+      :ets.new(__MODULE__, [
+        :public,
+        :set,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+
+    client = %{
+      tag: @client_tag,
+      server: self(),
+      table: table,
+      route: make_ref(),
+      ingress_archive_policy:
+        Keyword.get_lazy(opts, :ingress_archive_policy, &IngressArchive.configured_policy/0),
+      record_archive_policy:
+        Keyword.get_lazy(opts, :record_archive_policy, &RecordArchive.configured_policy/0)
+    }
+
+    handler_id = Keyword.get_lazy(opts, :handler_id, fn -> {__MODULE__, self(), make_ref()} end)
+
+    case attach_repo_query_handler(handler_id, client) do
+      :ok -> {:ok, %{client: client, handler_id: handler_id}}
+      {:error, reason} -> {:stop, reason}
+    end
   end
 
-  def handle_event(_event_name, measurements, metadata, _config) do
+  @impl true
+  def handle_call(:client, _from, state), do: {:reply, state.client, state}
+
+  @impl true
+  def terminate(_reason, %{handler_id: handler_id}) do
+    :telemetry.detach(handler_id)
+    :ok
+  end
+
+  def handle_event(_event_name, measurements, metadata, %{client: client}) do
     case Process.get(@context_key) do
-      %{mission_id: mission_id} when is_binary(mission_id) ->
-        ref = ensure_counter(mission_id)
+      %{mission_id: mission_id, profiler_route: route}
+      when is_binary(mission_id) and route == client.route ->
+        ref = ensure_counter(client, mission_id)
         query_total_us = native_to_us(Map.get(measurements, :total_time))
 
         add(ref, :db_query_count, 1)
@@ -382,49 +487,40 @@ defmodule Cadence.Telemetry.Profiler do
     end
   end
 
-  defp attach_repo_query_handler do
-    case :telemetry.attach(@repo_handler_id, @repo_query_event, &__MODULE__.handle_event/4, nil) do
-      :ok -> :ok
-      {:error, :already_exists} -> :ok
+  defp attach_repo_query_handler(handler_id, client) do
+    case :telemetry.attach(
+           handler_id,
+           @repo_query_event,
+           &__MODULE__.handle_event/4,
+           %{client: client}
+         ) do
+      :ok ->
+        :ok
+
+      {:error, :already_exists} ->
+        {:error, {:telemetry_handler_already_exists, handler_id}}
     end
   end
 
-  defp ensure_table do
-    case :ets.info(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :named_table,
-          :public,
-          :set,
-          read_concurrency: true,
-          write_concurrency: true
-        ])
-
-      _info ->
-        @table_name
-    end
-  end
-
-  defp ensure_counter(mission_id) when is_binary(mission_id) do
-    ensure_table()
-
-    case :ets.lookup(@table_name, mission_id) do
+  defp ensure_counter(%{tag: @client_tag, table: table}, mission_id)
+       when is_binary(mission_id) do
+    case :ets.lookup(table, mission_id) do
       [{^mission_id, ref, _started_at_ms}] ->
         ref
 
       [] ->
         ref = :counters.new(@slot_count, [])
         started_at_ms = System.monotonic_time(:millisecond)
-        _ = :ets.insert_new(@table_name, {mission_id, ref, started_at_ms})
+        _ = :ets.insert_new(table, {mission_id, ref, started_at_ms})
 
-        case :ets.lookup(@table_name, mission_id) do
+        case :ets.lookup(table, mission_id) do
           [{^mission_id, resolved_ref, _started_at_ms}] -> resolved_ref
           [] -> ref
         end
     end
   end
 
-  defp build_snapshot(mission_id, ref, started_at_ms) do
+  defp build_snapshot(client, mission_id, ref, started_at_ms) do
     ingress_count = slot_value(ref, :ingress_count)
     resolve_count = slot_value(ref, :resolve_count)
     runtime_count = slot_value(ref, :runtime_count)
@@ -498,7 +594,7 @@ defmodule Cadence.Telemetry.Profiler do
             )
         }
       },
-      archive: archive_snapshot(mission_id)
+      archive: archive_snapshot(client, mission_id)
     }
   end
 
@@ -553,7 +649,7 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp stage_snapshot(ref, stage, count) when stage in @stages do
-    total_key = String.to_atom("#{stage}_total_us")
+    {_count_key, total_key} = Map.fetch!(@stage_slot_pairs, stage)
 
     %{
       count: count,
@@ -597,8 +693,9 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp record_stage_timing(ref, stage, duration_us)
        when stage in @stages and is_integer(duration_us) do
-    add(ref, String.to_atom("#{stage}_count"), 1)
-    add(ref, String.to_atom("#{stage}_total_us"), duration_us)
+    {count_key, total_key} = Map.fetch!(@stage_slot_pairs, stage)
+    add(ref, count_key, 1)
+    add(ref, total_key, duration_us)
   end
 
   defp record_stage_timing(_ref, _stage, _other), do: :ok
@@ -620,10 +717,10 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp record_stage_query(_ref, _stage, _duration_us), do: :ok
 
-  defp record_runtime_component(mission_id, component, duration_us)
+  defp record_runtime_component(client, mission_id, component, duration_us)
        when is_binary(mission_id) and component in @runtime_components and is_integer(duration_us) and
               duration_us >= 0 do
-    ref = ensure_counter(mission_id)
+    ref = ensure_counter(client, mission_id)
     {count_key, total_key} = Map.fetch!(@runtime_component_slot_pairs, component)
     add(ref, count_key, 1)
     add(ref, total_key, duration_us)
@@ -664,9 +761,9 @@ defmodule Cadence.Telemetry.Profiler do
     _error -> ""
   end
 
-  defp archive_snapshot(mission_id) when is_binary(mission_id) do
-    ingress = IngressArchive.stats(mission_id)
-    protocol = RecordArchive.stats(mission_id)
+  defp archive_snapshot(client, mission_id) when is_binary(mission_id) do
+    ingress = IngressArchive.stats(client.ingress_archive_policy, mission_id)
+    protocol = RecordArchive.stats(client.record_archive_policy, mission_id)
 
     %{
       ingress: ingress,
@@ -803,6 +900,29 @@ defmodule Cadence.Telemetry.Profiler do
   defp average(_total, 0), do: 0.0
   defp average(total, count) when is_integer(total) and is_integer(count), do: total / count
 
-  defp restore_process_key(key, nil), do: Process.delete(key)
-  defp restore_process_key(key, value), do: Process.put(key, value)
+  defp current_client do
+    case Process.get(@context_key) do
+      %{profiler_client: %{tag: @client_tag} = client} -> client
+      _other -> client()
+    end
+  end
+
+  defp resolve_client(%{tag: @client_tag} = client), do: client
+  defp resolve_client(server), do: client(server)
+
+  defp with_process_value(key, value, fun) when is_function(fun, 0) do
+    missing = make_ref()
+    previous = Process.get(key, missing)
+    Process.put(key, value)
+
+    try do
+      fun.()
+    after
+      if previous == missing do
+        Process.delete(key)
+      else
+        Process.put(key, previous)
+      end
+    end
+  end
 end
