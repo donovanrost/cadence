@@ -109,7 +109,7 @@ defmodule CadenceWorkspace.MixProject do
 
   defp run_runtime_tests(args) do
     run_child_mix_command(:cadence, ["db.setup.test"])
-    run_child_test_command(:cadence, cadence_test_args(["--only", "runtime" | args]))
+    run_child_test_command(:cadence, ["--only", "runtime" | args])
   end
 
   defp run_all_plane_tests(args) do
@@ -131,7 +131,7 @@ defmodule CadenceWorkspace.MixProject do
   defp run_integration_tests(args) do
     run_child_mix_command(:cadence, ["db.setup.test"])
 
-    run_child_test_command(:cadence, cadence_test_args(["--only", "integration" | args]))
+    run_child_test_command(:cadence, ["--only", "integration" | args])
     run_child_test_command(:cadence_simulator, ["--only", "integration" | args])
     run_child_test_command(:cadence_web, ["--only", "integration" | args])
   end
@@ -145,7 +145,7 @@ defmodule CadenceWorkspace.MixProject do
   defp run_child_tests_by_app(args_by_app) do
     if args = Map.get(args_by_app, :cadence) do
       run_child_mix_command(:cadence, ["db.setup.test"])
-      run_child_test_command(:cadence, cadence_test_args(args))
+      run_child_test_command(:cadence, args)
     end
 
     if args = Map.get(args_by_app, :cadence_catalog) do
@@ -259,16 +259,6 @@ defmodule CadenceWorkspace.MixProject do
   end
 
   defp plane_test_paths(plane), do: ["plane_test/#{plane}"]
-
-  defp cadence_test_args(args) do
-    # The cadence child app owns globally named runtimes and a shared DB sandbox.
-    # Keep the umbrella gate deterministic unless a caller explicitly overrides it.
-    if Enum.any?(args, &String.starts_with?(&1, "--max-cases")) do
-      args
-    else
-      ["--max-cases", "1" | args]
-    end
-  end
 
   defp run_child_mix_command(app, args, extra_env \\ [])
        when is_atom(app) and is_list(args) and is_list(extra_env) do

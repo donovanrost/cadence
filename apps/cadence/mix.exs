@@ -66,14 +66,6 @@ defmodule Cadence.MixProject do
 
   defp run_tests(args) do
     Mix.Task.run("db.setup.test")
-    TestTask.run(cadence_test_args(args))
-  end
-
-  defp cadence_test_args(args) do
-    if Enum.any?(args, &String.starts_with?(&1, "--max-cases")) do
-      args
-    else
-      ["--max-cases", "1" | args]
-    end
+    TestTask.run(args)
   end
 end
