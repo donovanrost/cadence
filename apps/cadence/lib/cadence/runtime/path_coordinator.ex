@@ -57,6 +57,14 @@ defmodule Cadence.Runtime.PathCoordinator do
     GenServer.call(path_runtime, :snapshot)
   end
 
+  @spec quiesce(pid()) :: {:ok, map()} | {:error, term()}
+  def quiesce(path_runtime) do
+    GenServer.call(path_runtime, :quiesce, :infinity)
+  catch
+    :exit, {:noproc, _details} -> {:error, :noproc}
+    :exit, {:normal, _details} -> {:error, :noproc}
+  end
+
   @spec handle_transport_event(pid(), binary(), term(), keyword()) ::
           {:ok, [term()]} | {:error, term()}
   def handle_transport_event(path_runtime, transport_binding_id, event, opts \\ [])
@@ -118,6 +126,20 @@ defmodule Cadence.Runtime.PathCoordinator do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, state) do
+    reply =
+      with {:ok, transport_runtimes} <- quiesce_transport_runtimes(state) do
+        {:ok,
+         %{
+           status: :quiesced,
+           path_id: state.path.path_id,
+           transport_runtimes: transport_runtimes
+         }}
+      end
+
+    {:reply, reply, state}
+  end
+
   def handle_call(:snapshot, _from, state) do
     with {:ok, provider_runtime_snapshots} <- collect_provider_runtime_snapshots(state),
          {:ok, transport_runtime_snapshots} <- collect_transport_runtime_snapshots(state) do
@@ -539,6 +561,19 @@ defmodule Cadence.Runtime.PathCoordinator do
              transport_runtime(state, transport_binding.transport_binding_id),
            {:ok, snapshot} <- TransportRuntime.snapshot(transport_runtime) do
         {:cont, {:ok, acc ++ [snapshot]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp quiesce_transport_runtimes(state) do
+    Enum.reduce_while(state.path.transport_bindings, {:ok, []}, fn transport_binding,
+                                                                   {:ok, acc} ->
+      with {:ok, transport_runtime} <-
+             transport_runtime(state, transport_binding.transport_binding_id),
+           {:ok, settlement} <- TransportRuntime.quiesce(transport_runtime) do
+        {:cont, {:ok, acc ++ [settlement]}}
       else
         {:error, reason} -> {:halt, {:error, reason}}
       end

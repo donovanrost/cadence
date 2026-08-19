@@ -38,6 +38,14 @@ defmodule Cadence.Runtime.ContactCoordinator do
     GenServer.call(contact_runtime, :snapshot)
   end
 
+  @spec quiesce(pid()) :: {:ok, map()} | {:error, term()}
+  def quiesce(contact_runtime) do
+    GenServer.call(contact_runtime, :quiesce, :infinity)
+  catch
+    :exit, {:noproc, _details} -> {:error, :noproc}
+    :exit, {:normal, _details} -> {:error, :noproc}
+  end
+
   @spec path_snapshot(pid(), binary()) :: {:ok, map()} | {:error, term()}
   def path_snapshot(contact_runtime, path_id) when is_binary(path_id) do
     GenServer.call(contact_runtime, {:path_snapshot, path_id})
@@ -93,6 +101,37 @@ defmodule Cadence.Runtime.ContactCoordinator do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, state) do
+    reply =
+      Enum.reduce_while(state.path_ids, {:ok, []}, fn path_id, {:ok, acc} ->
+        with {:ok, path_runtime} <-
+               path_runtime(
+                 state.realized_contact.mission_id,
+                 state.realized_contact.realized_contact_id,
+                 path_id
+               ),
+             {:ok, settlement} <- PathCoordinator.quiesce(path_runtime) do
+          {:cont, {:ok, acc ++ [settlement]}}
+        else
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case reply do
+      {:ok, path_runtimes} ->
+        {:reply,
+         {:ok,
+          %{
+            status: :quiesced,
+            realized_contact_id: state.realized_contact.realized_contact_id,
+            path_runtimes: path_runtimes
+          }}, state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
+  end
+
   def handle_call(:snapshot, _from, state) do
     with {:ok, path_snapshots} <- collect_path_snapshots(state.realized_contact, state.path_ids),
          {:ok, downlink_combiner} <- downlink_combiner_snapshot(state.realized_contact) do

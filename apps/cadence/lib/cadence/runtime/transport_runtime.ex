@@ -43,6 +43,7 @@ defmodule Cadence.Runtime.TransportRuntime do
           timer_service: TimerService.t(),
           extension_state: term(),
           persist_runtime_records?: boolean(),
+          lifecycle_status: :active | :quiesced,
           outputs: [term()]
         }
 
@@ -59,6 +60,14 @@ defmodule Cadence.Runtime.TransportRuntime do
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(transport_runtime) do
     GenServer.call(transport_runtime, :snapshot)
+  end
+
+  @spec quiesce(pid()) :: {:ok, map()} | {:error, :noproc}
+  def quiesce(transport_runtime) when is_pid(transport_runtime) do
+    GenServer.call(transport_runtime, :quiesce, :infinity)
+  catch
+    :exit, {:noproc, _details} -> {:error, :noproc}
+    :exit, {:normal, _details} -> {:error, :noproc}
   end
 
   @spec handle_transport_event(pid(), term(), keyword()) :: {:ok, [term()]} | {:error, term()}
@@ -147,6 +156,7 @@ defmodule Cadence.Runtime.TransportRuntime do
         timer_service: timer_service,
         extension_state: execution_result.state,
         persist_runtime_records?: persist_runtime_records?,
+        lifecycle_status: :active,
         outputs: execution_result.records
       }
 
@@ -173,6 +183,24 @@ defmodule Cadence.Runtime.TransportRuntime do
   end
 
   @impl true
+  def handle_call(:quiesce, _from, state) do
+    canceled_timer_count = TimerService.count(state.timer_service)
+
+    state = %{
+      state
+      | lifecycle_status: :quiesced,
+        timer_service: TimerService.cancel_all(state.timer_service)
+    }
+
+    {:reply,
+     {:ok,
+      %{
+        status: :quiesced,
+        capability_instance_id: state.capability_instance_id,
+        canceled_timer_count: canceled_timer_count
+      }}, state}
+  end
+
   def handle_call(:snapshot, _from, state) do
     reply =
       with {:ok, snapshot_state} <-
@@ -191,6 +219,7 @@ defmodule Cadence.Runtime.TransportRuntime do
            binding_set_version: state.binding_set_version,
            capability_instance_id: state.capability_instance_id,
            family_key: state.family_key,
+           lifecycle_status: state.lifecycle_status,
            scope_ref: state.scope_ref,
            partition_key: PartitionKey.identifier(state.partition_key),
            clock_mode: state.timer_service.clock.mode,
@@ -204,6 +233,14 @@ defmodule Cadence.Runtime.TransportRuntime do
       end
 
     {:reply, reply, state}
+  end
+
+  def handle_call(
+        {:handle_transport_event, _event, _opts},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ) do
+    {:reply, {:error, :transport_runtime_quiesced}, state}
   end
 
   def handle_call({:handle_transport_event, event, opts}, _from, state) do
@@ -232,6 +269,14 @@ defmodule Cadence.Runtime.TransportRuntime do
     end
   end
 
+  def handle_call(
+        {:handle_control_input, _control_input, _opts},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ) do
+    {:reply, {:error, :transport_runtime_quiesced}, state}
+  end
+
   def handle_call({:handle_control_input, control_input, opts}, _from, state) do
     reply =
       with {:ok, state} <- prepare_for_interaction(state, opts),
@@ -258,6 +303,14 @@ defmodule Cadence.Runtime.TransportRuntime do
     end
   end
 
+  def handle_call(
+        {:advance_time, %DateTime{}},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ) do
+    {:reply, {:error, :transport_runtime_quiesced}, state}
+  end
+
   def handle_call({:advance_time, %DateTime{} = target_time}, _from, state) do
     case advance_to(state, target_time) do
       {:ok, next_state} -> {:reply, :ok, next_state}
@@ -266,6 +319,13 @@ defmodule Cadence.Runtime.TransportRuntime do
   end
 
   @impl true
+  def handle_info(
+        {:managed_application_timer, _capability_instance_id, _timer_key, _timer_id},
+        %{lifecycle_status: :quiesced} = state
+      ) do
+    {:noreply, state}
+  end
+
   def handle_info(
         {:managed_application_timer, capability_instance_id, timer_key, timer_id},
         state

@@ -47,6 +47,19 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     GenServer.call(MissionRuntime.reconciler_name(mission_id), :snapshot)
   end
 
+  @doc """
+  Waits until all reconciliation work sent before this call has settled.
+
+  The periodic safety timer may remain scheduled.
+  """
+  @spec await_settled(binary()) :: {:ok, map()} | {:error, :noproc}
+  def await_settled(mission_id) when is_binary(mission_id) do
+    {:ok, GenServer.call(MissionRuntime.reconciler_name(mission_id), :await_settled, :infinity)}
+  catch
+    :exit, {:noproc, _details} -> {:error, :noproc}
+    :exit, {:normal, _details} -> {:error, :noproc}
+  end
+
   @impl true
   def init(opts) do
     state = %{
@@ -85,7 +98,11 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   end
 
   def handle_call(:snapshot, _from, state) do
-    {:reply, Map.drop(state, [:safety_timer]), state}
+    {:reply, snapshot_from_state(state), state}
+  end
+
+  def handle_call(:await_settled, _from, state) do
+    {:reply, snapshot_from_state(state), state}
   end
 
   @impl true
@@ -178,5 +195,12 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
       state
       | safety_timer: Process.send_after(self(), :safety_reconcile, state.safety_poll_interval_ms)
     }
+  end
+
+  defp snapshot_from_state(state) do
+    state
+    |> Map.drop([:safety_timer])
+    |> Map.put(:status, :settled)
+    |> Map.put(:safety_timer_scheduled?, is_reference(state.safety_timer))
   end
 end

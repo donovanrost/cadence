@@ -42,7 +42,9 @@ defmodule Cadence.Runtime do
         :ok
 
       mission_runtime ->
-        stop_mission_runtime(mission_id, mission_runtime)
+        with :ok <- quiesce_realized_contacts(mission_id) do
+          stop_mission_runtime(mission_id, mission_runtime)
+        end
     end
   end
 
@@ -70,21 +72,9 @@ defmodule Cadence.Runtime do
 
   @spec stop_all_missions() :: :ok
   def stop_all_missions do
-    case Process.whereis(Cadence.Runtime.MissionSupervisor) do
-      nil ->
-        :ok
+    Enum.each(running_mission_ids(), &stop_mission/1)
 
-      mission_supervisor ->
-        mission_supervisor
-        |> safe_which_children()
-        |> Enum.each(fn
-          {_child_id, mission_runtime, :supervisor, _modules} when is_pid(mission_runtime) ->
-            safe_terminate_child(mission_supervisor, mission_runtime)
-
-          _other_child ->
-            :ok
-        end)
-    end
+    terminate_unregistered_mission_runtimes()
 
     :ok
   end
@@ -162,16 +152,7 @@ defmodule Cadence.Runtime do
   @spec stop_realized_contact(binary(), binary()) :: :ok | {:error, term()}
   def stop_realized_contact(mission_id, realized_contact_id)
       when is_binary(mission_id) and is_binary(realized_contact_id) do
-    case realized_contact_runtime(mission_id, realized_contact_id) do
-      {:ok, realized_contact_runtime} ->
-        DynamicSupervisor.terminate_child(
-          MissionRuntime.realized_contact_supervisor_name(mission_id),
-          realized_contact_runtime
-        )
-
-      {:error, :realized_contact_runtime_not_running} ->
-        :ok
-    end
+    stop_realized_contact_sync(mission_id, realized_contact_id)
   end
 
   @spec stop_realized_contact_sync(binary(), binary()) :: :ok | {:error, term()}
@@ -307,14 +288,72 @@ defmodule Cadence.Runtime do
   end
 
   defp stop_realized_contact_runtime(mission_id, realized_contact_id, realized_contact_runtime) do
-    stop_registered_child(
-      MissionRuntime.realized_contact_supervisor_name(mission_id),
-      realized_contact_runtime,
-      fn ->
-        match?({:ok, _pid}, realized_contact_runtime(mission_id, realized_contact_id))
-      end,
-      :realized_contact_stop_timeout
-    )
+    with :ok <- quiesce_realized_contact(mission_id, realized_contact_id) do
+      stop_registered_child(
+        MissionRuntime.realized_contact_supervisor_name(mission_id),
+        realized_contact_runtime,
+        fn ->
+          match?({:ok, _pid}, realized_contact_runtime(mission_id, realized_contact_id))
+        end,
+        :realized_contact_stop_timeout
+      )
+    end
+  end
+
+  defp quiesce_realized_contacts(mission_id) do
+    mission_id
+    |> realized_contact_coordinators()
+    |> Enum.reduce_while(:ok, fn {_realized_contact_id, coordinator}, :ok ->
+      case ContactCoordinator.quiesce(coordinator) do
+        {:ok, _settlement} -> {:cont, :ok}
+        {:error, :noproc} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp quiesce_realized_contact(mission_id, realized_contact_id) do
+    case realized_contact_coordinator(mission_id, realized_contact_id) do
+      {:ok, coordinator} ->
+        case ContactCoordinator.quiesce(coordinator) do
+          {:ok, _settlement} -> :ok
+          {:error, :noproc} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :realized_contact_runtime_not_running} ->
+        :ok
+    end
+  end
+
+  defp realized_contact_coordinators(mission_id) do
+    Cadence.Runtime.Registry
+    |> Registry.select([
+      {{{:realized_contact_coordinator, mission_id, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> Enum.filter(fn {_realized_contact_id, coordinator} -> Process.alive?(coordinator) end)
+  rescue
+    ArgumentError -> []
+  catch
+    :exit, _reason -> []
+  end
+
+  defp terminate_unregistered_mission_runtimes do
+    case Process.whereis(Cadence.Runtime.MissionSupervisor) do
+      nil ->
+        :ok
+
+      mission_supervisor ->
+        mission_supervisor
+        |> safe_which_children()
+        |> Enum.each(fn
+          {_child_id, mission_runtime, :supervisor, _modules} when is_pid(mission_runtime) ->
+            safe_terminate_child(mission_supervisor, mission_runtime)
+
+          _other_child ->
+            :ok
+        end)
+    end
   end
 
   defp stop_registered_child(supervisor, runtime, registered?, timeout_reason) do

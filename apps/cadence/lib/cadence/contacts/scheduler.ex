@@ -17,7 +17,11 @@ defmodule Cadence.Contacts.Scheduler do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+
+    case name do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
   @type projection :: %{
@@ -56,6 +60,21 @@ defmodule Cadence.Contacts.Scheduler do
   @spec snapshot(GenServer.server()) :: map()
   def snapshot(server \\ __MODULE__) do
     GenServer.call(server, :snapshot)
+  end
+
+  @doc """
+  Waits until all scheduler work sent before this call has settled.
+
+  A settled scheduler has completed reconciliation, synchronous runtime
+  transitions, projection refresh, and wakeup scheduling. Future wakeups may
+  remain scheduled.
+  """
+  @spec await_settled(GenServer.server()) :: {:ok, map()} | {:error, :noproc}
+  def await_settled(server \\ __MODULE__) do
+    {:ok, GenServer.call(server, :await_settled, :infinity)}
+  catch
+    :exit, {:noproc, _details} -> {:error, :noproc}
+    :exit, {:normal, _details} -> {:error, :noproc}
   end
 
   defp notify_contact_change(mission_id, message, opts) do
@@ -98,12 +117,15 @@ defmodule Cadence.Contacts.Scheduler do
 
   @impl true
   def handle_continue(:bootstrap, state) do
+    {state, boot_reconcile} = maybe_reconcile_on_boot(state)
+
     state =
       state
-      |> maybe_reconcile_on_boot()
       |> rebuild_projection()
       |> schedule_known_mission_wakeups()
       |> schedule_safety_reconcile()
+
+    maybe_emit_reconcile(boot_reconcile, :reconcile, state, %{reason: :boot})
 
     {:noreply, state}
   end
@@ -111,14 +133,19 @@ defmodule Cadence.Contacts.Scheduler do
   @impl true
   def handle_call({:reconcile_now, %DateTime{} = reference_time}, _from, state) do
     {reply, measurements} = timed(fn -> reconcile_scope(state, reference_time) end)
-    emit(:reconcile, state, measurements_for_reconcile(reply, measurements), %{reason: :manual})
 
     state =
       state
       |> rebuild_projection()
       |> schedule_known_mission_wakeups()
 
+    emit(:reconcile, state, measurements_for_reconcile(reply, measurements), %{reason: :manual})
+
     {:reply, reply, state}
+  end
+
+  def handle_call(:await_settled, _from, state) do
+    {:reply, snapshot_from_state(state), state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -180,7 +207,6 @@ defmodule Cadence.Contacts.Scheduler do
           state
           |> clear_mission_timer(mission_id)
           |> reconcile_mission(mission_id)
-          |> schedule_mission_wakeup(mission_id)
 
         {:noreply, state}
 
@@ -193,27 +219,31 @@ defmodule Cadence.Contacts.Scheduler do
   def handle_info(:safety_reconcile, state) do
     {reply, measurements} = timed(fn -> reconcile_scope(state, resolve_reference_time(state)) end)
 
-    emit(:safety_reconcile, state, measurements_for_reconcile(reply, measurements), %{
-      reason: :safety
-    })
-
     state =
       state
       |> rebuild_projection()
       |> schedule_known_mission_wakeups()
       |> schedule_safety_reconcile()
 
+    emit(:safety_reconcile, state, measurements_for_reconcile(reply, measurements), %{
+      reason: :safety
+    })
+
     {:noreply, state}
   end
 
   defp maybe_reconcile_on_boot(%{run_on_boot?: true} = state) do
     {reply, measurements} = timed(fn -> reconcile_scope(state, resolve_reference_time(state)) end)
-
-    emit(:reconcile, state, measurements_for_reconcile(reply, measurements), %{reason: :boot})
-    state
+    {state, {reply, measurements}}
   end
 
-  defp maybe_reconcile_on_boot(state), do: state
+  defp maybe_reconcile_on_boot(state), do: {state, nil}
+
+  defp maybe_emit_reconcile(nil, _event, _state, _metadata), do: :ok
+
+  defp maybe_emit_reconcile({reply, measurements}, event, state, metadata) do
+    emit(event, state, measurements_for_reconcile(reply, measurements), metadata)
+  end
 
   defp reconcile_scope(%{mission_id: nil}, reference_time) do
     Contacts.reconcile(reference_time)
@@ -229,12 +259,17 @@ defmodule Cadence.Contacts.Scheduler do
     {{:ok, summary}, measurements} =
       timed(fn -> Contacts.reconcile(mission_id, reference_time) end)
 
+    state =
+      state
+      |> apply_reconcile_summary(summary)
+      |> schedule_mission_wakeup(mission_id)
+
     emit(:reconcile, state, measurements_for_reconcile({:ok, summary}, measurements), %{
       mission_id: mission_id,
       reason: :timer
     })
 
-    apply_reconcile_summary(state, summary)
+    state
   end
 
   defp schedule_changed_mission(%{auto_schedule?: false} = state, _mission_id), do: state
@@ -250,9 +285,7 @@ defmodule Cadence.Contacts.Scheduler do
         if DateTime.compare(wake_at, reference_time) == :gt do
           schedule_mission_wakeup_at(state, mission_id, wake_at)
         else
-          state
-          |> reconcile_mission(mission_id)
-          |> schedule_mission_wakeup(mission_id)
+          reconcile_mission(state, mission_id)
         end
     end
   end
@@ -500,12 +533,14 @@ defmodule Cadence.Contacts.Scheduler do
 
   defp snapshot_from_state(state) do
     %{
+      status: :settled,
       mission_id: state.mission_id,
       scheduled_contact_ids:
         state.projection.scheduled_contacts
         |> Map.keys()
         |> Enum.sort(),
-      mission_timer_count: map_size(state.mission_timers)
+      mission_timer_count: map_size(state.mission_timers),
+      safety_timer_scheduled?: is_reference(state.safety_timer)
     }
   end
 

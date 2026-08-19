@@ -186,12 +186,7 @@ defmodule Cadence.ContactsSchedulerTest do
 
     Scheduler.notify_contact_changed(scheduler_name, mission_id)
 
-    wait_until(fn ->
-      case Cadence.Contacts.fetch_realized_contact(mission_id, "notified-due-contact_run") do
-        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
-        _other -> :retry
-      end
-    end)
+    assert {:ok, %{status: :settled}} = Scheduler.await_settled(scheduler_name)
 
     assert {:ok, realized_contact} =
              Cadence.Contacts.fetch_realized_contact(mission_id, "notified-due-contact_run")
@@ -236,18 +231,21 @@ defmodule Cadence.ContactsSchedulerTest do
     assert is_pid(GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id)))
     refute GenServer.whereis(Scheduler)
 
-    wait_until(fn ->
-      case Cadence.Contacts.fetch_realized_contact(mission_id, "mission-runtime-due-contact_run") do
-        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
-        _other -> :retry
-      end
-    end)
+    assert {:ok, %{status: :settled}} =
+             Scheduler.await_settled(MissionRuntime.contact_scheduler_name(mission_id))
 
     assert {:ok, _summary} =
              Scheduler.reconcile_now(
                MissionRuntime.contact_scheduler_name(mission_id),
                reference_time
              )
+
+    assert {:ok,
+            %{
+              status: :settled,
+              reconciler: %{status: :settled},
+              contact_scheduler: %{status: :settled}
+            }} = ControlMissions.await_settled(mission_id)
 
     assert :ok = Runtime.stop_mission(mission_id)
     assert is_pid(GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id)))
@@ -391,12 +389,13 @@ defmodule Cadence.ContactsSchedulerTest do
         metadata.mission_id == mission_id and measurements.realized_scheduled_contact_count == 1
     end)
 
-    wait_until(fn ->
-      case Cadence.Contacts.fetch_realized_contact(mission_id, "telemetry-due-contact_run") do
-        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
-        _other -> :retry
-      end
-    end)
+    assert {:ok, %{status: :settled}} = Scheduler.await_settled(scheduler_name)
+
+    assert {:ok, %RealizedContact{lifecycle_state: :active}} =
+             Cadence.Contacts.fetch_realized_contact(
+               mission_id,
+               "telemetry-due-contact_run"
+             )
   end
 
   test "scheduler emits telemetry for manual safety and stale timer paths", %{
@@ -436,6 +435,13 @@ defmodule Cadence.ContactsSchedulerTest do
       metadata.reason == :safety and metadata.mode == :mission and
         metadata.mission_id == mission_id and measurements.error_count == 0
     end)
+
+    assert {:ok,
+            %{
+              status: :settled,
+              mission_timer_count: 0,
+              safety_timer_scheduled?: false
+            }} = Scheduler.await_settled(scheduler_name)
   end
 
   test "mission scheduler rebuilds its projection from durable contacts on boot", %{
@@ -631,21 +637,6 @@ defmodule Cadence.ContactsSchedulerTest do
         ]
       })
     ]
-  end
-
-  defp wait_until(fun, attempts_left \\ 40)
-
-  defp wait_until(_fun, 0), do: flunk("condition not met before timeout")
-
-  defp wait_until(fun, attempts_left) when is_function(fun, 0) and attempts_left > 0 do
-    case fun.() do
-      :ok ->
-        :ok
-
-      :retry ->
-        Process.sleep(25)
-        wait_until(fun, attempts_left - 1)
-    end
   end
 
   defp attach_scheduler_telemetry(test_pid) do

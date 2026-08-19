@@ -9,6 +9,7 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
       path: "lib/cadence/contacts/scheduler.ex",
       required_markers: [
         "@default_safety_poll_interval_ms",
+        "await_settled",
         "notify_contact_changed",
         ":notification",
         "rebuild_projection",
@@ -49,6 +50,16 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
         ":notification",
         "rebuild_projection",
         "{:timeout_wakeup, token}",
+        ":safety_reconcile"
+      ]
+    },
+    %{
+      name: "mission runtime reconciler",
+      path: "lib/cadence/control/mission_runtime_reconciler.ex",
+      required_markers: [
+        "@default_safety_poll_interval_ms",
+        "await_settled",
+        "handle_continue(:reconcile",
         ":safety_reconcile"
       ]
     },

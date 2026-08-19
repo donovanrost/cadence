@@ -43,6 +43,45 @@ defmodule Cadence.Runtime.TransportRuntimeTest do
     assert heartbeat_snapshot.state.last_transport_event_at == nil
   end
 
+  test "quiesce cancels live timers and rejects new interactions" do
+    path_ref = "path-live-quiesce"
+
+    transport_runtime =
+      start_supervised!(
+        {TransportRuntime,
+         mission_id: "mission-live-quiesce",
+         activation_id: "activation-live-quiesce",
+         binding_set_id: "binding-set-live-quiesce",
+         binding_set_version: 1,
+         capability_instance_id: "heartbeat-live-quiesce-instance",
+         family_key: :heartbeat_monitor,
+         configuration: %{"heartbeat_interval_ms" => :timer.minutes(1)},
+         scope_ref: path_ref,
+         partition_key: PartitionKey.new(%{affinity: :path, value: path_ref})}
+      )
+
+    assert {:ok, %{timers: [timer], state: %{heartbeat_count: 0}}} =
+             TransportRuntime.snapshot(transport_runtime)
+
+    assert {:ok, %{status: :quiesced, canceled_timer_count: 1}} =
+             TransportRuntime.quiesce(transport_runtime)
+
+    send(
+      transport_runtime,
+      {:managed_application_timer, timer.capability_instance_id, timer.timer_key, timer.timer_id}
+    )
+
+    assert {:ok,
+            %{
+              lifecycle_status: :quiesced,
+              timer_count: 0,
+              state: %{heartbeat_count: 0}
+            }} = TransportRuntime.snapshot(transport_runtime)
+
+    assert {:error, :transport_runtime_quiesced} =
+             TransportRuntime.handle_transport_event(transport_runtime, %{kind: :frame_received})
+  end
+
   test "replay transport runtime advances logical time deterministically" do
     path_ref = "path-replay-alpha"
     start_time = DateTime.from_unix!(1_700_020_000, :second)

@@ -107,8 +107,9 @@ Earlier attribution found three deterministic PostgreSQL client-exit paths after
 the dashboard lifecycle cleanup. They occurred when a test had observed its
 intended outcome but the responsible process tree had not yet become idle:
 
-- the contact scheduler can reconcile a contact and activate descendants in the
-  global mission runtime after the test-owned scheduler reports reconciliation;
+- the contact scheduler could emit reconciliation telemetry before its durable
+  projection refresh and wakeup scheduling had completed; this path is addressed
+  by the scheduler settlement tranche below;
 - a command lane dispatcher scheduled a zero-delay follow-up database pass after
   reporting a successful release; this path is addressed by the command-lane
   quiescence tranche below;
@@ -282,6 +283,42 @@ not merely test-runner noise.
   outside the clean focused dispatcher slice, with counts varying by seed, so
   exact attribution plus the contact and simulator ownership work in A6 remains
   open.
+
+### Contact-scheduler settlement
+
+- Added `Scheduler.await_settled/1` as the explicit completion barrier for
+  asynchronous contact notifications and timer reconciliation. A successful
+  barrier means prior reconciliation, synchronous contact-runtime transitions,
+  durable projection refresh, and wakeup scheduling have completed; future
+  wakeups may remain scheduled.
+- Reconciliation telemetry now describes a completed scheduler transition. Boot,
+  manual, safety, notification, and timer paths emit only after their projection
+  and wakeup state has settled instead of from the middle of a handler.
+- Timer and notification reconciliation now use one continuation path that
+  applies the summary and schedules the next wakeup before reporting completion.
+- Scheduler integration coverage uses the production barrier instead of polling
+  the repository for eventual state.
+- Mission-control settlement covers both the contact scheduler and its sibling
+  mission-runtime reconciler. `Control.Missions.stop/1` now waits on that owner
+  boundary before terminating the control tree, while the runtime case stops the
+  separate data-plane mission tree before releasing the SQL Sandbox owner.
+- Data-plane mission and realized-contact stops now quiesce contact paths before
+  terminating supervisors. Transport runtimes reject new interactions, cancel
+  their live timers, and turn already-delivered timer messages into stale no-ops
+  only after any in-flight callback has returned.
+- Before the change, 20 repeated scheduler-file runs produced PostgreSQL
+  client-exit logs across many seeds. The final focused stress ran the scheduler,
+  runtime-owner guard, and transport lifecycle contracts 51 consecutive times
+  (918 tests) without a client-exit log. The broader focused contact/runtime slice
+  also passed 28 tests.
+- The affected gate passed. Its full core run still emitted two PostgreSQL
+  client-exit logs outside the clean focused slice, consistent with the remaining
+  simulator/provider ingress ownership work recorded in A6; this tranche does not
+  claim those paths are resolved.
+- The authoritative root `mix precommit` gate passed with 1,802 core, 26 catalog,
+  295 CCSDS, 133 simulator, and 1,727 web tests. The core and web runs each
+  emitted one PostgreSQL client-exit log outside the clean focused slice. Browser
+  tests remained excluded by the agreed audit boundary.
 
 ### Batch persistence ordering
 
