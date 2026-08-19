@@ -37,14 +37,36 @@ defmodule Cadence.IngressArchive do
 
   @callback child_spec(keyword()) :: Supervisor.child_spec() | nil
   @callback persist_raw_evidence_multi(Multi.t(), RawEvidence.t()) :: Multi.t()
+  @callback persist_raw_evidence_multi(Multi.t(), RawEvidence.t(), keyword()) :: Multi.t()
   @callback persist_raw_evidence(RawEvidence.t()) :: :ok | {:error, term()}
+  @callback persist_raw_evidence(RawEvidence.t(), keyword()) :: :ok | {:error, term()}
   @callback persist_batch(Batch.t()) :: {:ok, Receipt.t()} | {:error, term()}
+  @callback persist_batch(Batch.t(), keyword()) :: {:ok, Receipt.t()} | {:error, term()}
+  @callback persist_raw_evidences([RawEvidence.t()]) :: :ok | {:error, term()}
+  @callback persist_raw_evidences([RawEvidence.t()], keyword()) :: :ok | {:error, term()}
   @callback fetch_raw_evidences(binary(), Scope.t()) ::
               {:ok, [RawEvidence.t()]} | {:error, term()}
+  @callback fetch_raw_evidences(binary(), Scope.t(), keyword()) ::
+              {:ok, [RawEvidence.t()]} | {:error, term()}
   @callback flush(binary() | nil) :: :ok | {:error, term()}
+  @callback flush(binary() | nil, keyword()) :: :ok | {:error, term()}
   @callback reset() :: :ok
+  @callback reset(keyword()) :: :ok
   @callback stats(binary()) :: stats()
+  @callback stats(binary(), keyword()) :: stats()
   @callback reset_stats(binary()) :: :ok
+  @callback reset_stats(binary(), keyword()) :: :ok
+
+  @optional_callbacks persist_raw_evidence_multi: 3,
+                      persist_raw_evidence: 2,
+                      persist_batch: 2,
+                      persist_raw_evidences: 1,
+                      persist_raw_evidences: 2,
+                      fetch_raw_evidences: 3,
+                      flush: 2,
+                      reset: 1,
+                      stats: 2,
+                      reset_stats: 2
 
   @doc """
   Builds a child spec from the current application configuration.
@@ -109,11 +131,11 @@ defmodule Cadence.IngressArchive do
       raw_evidences == [] ->
         :ok
 
-      function_exported?(backend, :persist_raw_evidences, 1) ->
+      backend_function_exported?(backend, :persist_raw_evidences, 1) ->
         call_backend(policy, :persist_raw_evidences, [raw_evidences])
 
       true ->
-        persist_raw_evidence_batch(backend, raw_evidences)
+        persist_raw_evidence_batch(policy, raw_evidences)
     end
   end
 
@@ -152,7 +174,7 @@ defmodule Cadence.IngressArchive do
   def flush(%{} = policy, mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :flush, 1) do
+    if backend_function_exported?(backend, :flush, 1) do
       call_backend(policy, :flush, [mission_id])
     else
       :ok
@@ -166,7 +188,7 @@ defmodule Cadence.IngressArchive do
   def reset(%{} = policy) do
     backend = backend(policy)
 
-    if function_exported?(backend, :reset, 0) do
+    if backend_function_exported?(backend, :reset, 0) do
       call_backend(policy, :reset, [])
     else
       :ok
@@ -182,7 +204,7 @@ defmodule Cadence.IngressArchive do
   def stats(%{} = policy, mission_id) when is_binary(mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :stats, 1) do
+    if backend_function_exported?(backend, :stats, 1) do
       call_backend(policy, :stats, [mission_id])
     else
       empty_stats()
@@ -198,7 +220,7 @@ defmodule Cadence.IngressArchive do
   def reset_stats(%{} = policy, mission_id) when is_binary(mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :reset_stats, 1) do
+    if backend_function_exported?(backend, :reset_stats, 1) do
       call_backend(policy, :reset_stats, [mission_id])
     else
       :ok
@@ -236,6 +258,11 @@ defmodule Cadence.IngressArchive do
     end
   end
 
+  defp backend_function_exported?(backend, function, arity) do
+    function_exported?(backend, function, arity + 1) or
+      function_exported?(backend, function, arity)
+  end
+
   defp ensure_backend_loaded!(backend) when is_atom(backend) do
     case Code.ensure_loaded(backend) do
       {:module, ^backend} ->
@@ -262,10 +289,10 @@ defmodule Cadence.IngressArchive do
     }
   end
 
-  defp persist_raw_evidence_batch(backend, raw_evidences) do
+  defp persist_raw_evidence_batch(policy, raw_evidences) do
     Enum.reduce_while(raw_evidences, :ok, fn
       %RawEvidence{} = raw_evidence, :ok ->
-        case backend.persist_raw_evidence(raw_evidence) do
+        case call_backend(policy, :persist_raw_evidence, [raw_evidence]) do
           :ok -> {:cont, :ok}
           {:error, reason} -> {:halt, {:error, reason}}
         end

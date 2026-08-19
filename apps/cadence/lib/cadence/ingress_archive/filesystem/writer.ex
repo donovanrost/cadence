@@ -15,43 +15,68 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
 
   def child_spec(opts) when is_list(opts) do
     %{
-      id: __MODULE__,
+      id: Keyword.get(opts, :child_id, process_name(opts)),
       start: {__MODULE__, :start_link, [opts]}
     }
   end
 
   def start_link(opts) when is_list(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: process_name(opts))
   end
 
   @spec enqueue(RawEvidence.t()) :: :ok | {:error, term()}
-  def enqueue(%RawEvidence{} = raw_evidence) do
-    GenServer.call(__MODULE__, {:enqueue, raw_evidence})
+  def enqueue(%RawEvidence{} = raw_evidence), do: enqueue(__MODULE__, raw_evidence)
+
+  @spec enqueue(GenServer.server(), RawEvidence.t()) :: :ok | {:error, term()}
+  def enqueue(server, %RawEvidence{} = raw_evidence) do
+    GenServer.call(server, {:enqueue, raw_evidence})
   end
 
   @spec enqueue_many([RawEvidence.t()]) :: :ok | {:error, term()}
-  def enqueue_many(raw_evidences) when is_list(raw_evidences) do
-    GenServer.call(__MODULE__, {:enqueue_many, raw_evidences})
+  def enqueue_many(raw_evidences) when is_list(raw_evidences),
+    do: enqueue_many(__MODULE__, raw_evidences)
+
+  @spec enqueue_many(GenServer.server(), [RawEvidence.t()]) :: :ok | {:error, term()}
+  def enqueue_many(server, raw_evidences) when is_list(raw_evidences) do
+    GenServer.call(server, {:enqueue_many, raw_evidences})
   end
 
   @spec flush(binary() | nil) :: :ok | {:error, term()}
-  def flush(mission_id \\ nil) do
-    GenServer.call(__MODULE__, {:flush, mission_id}, :infinity)
+  def flush(mission_id \\ nil), do: flush(__MODULE__, mission_id)
+
+  @spec flush(GenServer.server(), binary() | nil) :: :ok | {:error, term()}
+  def flush(server, mission_id) do
+    GenServer.call(server, {:flush, mission_id}, :infinity)
   end
 
   @spec stats(binary()) :: map()
-  def stats(mission_id) when is_binary(mission_id) do
-    GenServer.call(__MODULE__, {:stats, mission_id})
+  def stats(mission_id) when is_binary(mission_id), do: stats(__MODULE__, mission_id)
+
+  @spec stats(GenServer.server(), binary()) :: map()
+  def stats(server, mission_id) when is_binary(mission_id) do
+    GenServer.call(server, {:stats, mission_id})
   end
 
   @spec reset_stats(binary()) :: :ok
-  def reset_stats(mission_id) when is_binary(mission_id) do
-    GenServer.call(__MODULE__, {:reset_stats, mission_id})
+  def reset_stats(mission_id) when is_binary(mission_id),
+    do: reset_stats(__MODULE__, mission_id)
+
+  @spec reset_stats(GenServer.server(), binary()) :: :ok
+  def reset_stats(server, mission_id) when is_binary(mission_id) do
+    GenServer.call(server, {:reset_stats, mission_id})
   end
 
   @spec reset() :: :ok
-  def reset do
-    GenServer.call(__MODULE__, :reset, :infinity)
+  def reset, do: reset(__MODULE__)
+
+  @spec reset(GenServer.server()) :: :ok
+  def reset(server) do
+    GenServer.call(server, :reset, :infinity)
+  end
+
+  @spec process_name(keyword()) :: GenServer.server()
+  def process_name(opts) when is_list(opts) do
+    Keyword.get(opts, :name, __MODULE__)
   end
 
   @impl true
@@ -63,6 +88,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
     {:ok,
      %{
        base_path: base_path,
+       backend_opts: opts,
        flush_interval_ms: flush_interval_ms,
        flush_count: flush_count,
        buffers: %{},
@@ -130,6 +156,10 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
   def handle_call(:reset, _from, state) do
     state = normalize_state(state)
     _ = File.rm_rf(state.base_path)
+
+    Enum.each(state.timer_refs, fn {_mission_id, {timer_ref, _flush_ref}} ->
+      _ = Process.cancel_timer(timer_ref)
+    end)
 
     {:reply, :ok,
      %{
@@ -211,15 +241,20 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
         segment_id = FileSystem.new_segment_id()
         organization_id = OrganizationScope.organization_id_for_mission(mission_id)
         flush_started_us = System.monotonic_time(:microsecond)
+        backend_opts = state.backend_opts
 
         with {:ok, object_key, segment_size_bytes} <-
                FileSystem.store_segment_object(segment_id, raw_evidences,
                  base_path: state.base_path
                ),
              :ok <-
-               FileSystem.persist_segment(segment_id, raw_evidences,
-                 object_key: object_key,
-                 organization_id: organization_id
+               FileSystem.persist_segment(
+                 segment_id,
+                 raw_evidences,
+                 Keyword.merge(backend_opts,
+                   object_key: object_key,
+                   organization_id: organization_id
+                 )
                ) do
           flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
 
@@ -330,6 +365,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
     state
     |> Map.put(:buffers, buffers)
     |> Map.put(:buffer_sizes, buffer_sizes)
+    |> Map.put_new(:backend_opts, base_path: state.base_path)
   end
 
   defp normalize_buffer(buffer) when is_list(buffer), do: :queue.from_list(buffer)

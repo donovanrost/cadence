@@ -22,6 +22,12 @@ defmodule Cadence.IngressArchive.Postgres do
 
   @impl true
   def persist_raw_evidence_multi(%Multi{} = multi, %RawEvidence{} = raw_evidence) do
+    persist_raw_evidence_multi(multi, raw_evidence, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_raw_evidence_multi(%Multi{} = multi, %RawEvidence{} = raw_evidence, backend_opts)
+      when is_list(backend_opts) do
     Multi.insert(
       multi,
       {:raw_evidence, raw_evidence.evidence_id},
@@ -32,10 +38,20 @@ defmodule Cadence.IngressArchive.Postgres do
   end
 
   @impl true
-  def persist_raw_evidence(_raw_evidence), do: :ok
+  def persist_raw_evidence(raw_evidence),
+    do: persist_raw_evidence(raw_evidence, configured_backend_opts())
+
+  @impl true
+  def persist_raw_evidence(%RawEvidence{}, backend_opts) when is_list(backend_opts), do: :ok
 
   @impl true
   def persist_batch(%Batch{} = batch) do
+    persist_batch(batch, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_batch(%Batch{} = batch, backend_opts) when is_list(backend_opts) do
+    repo = repo(backend_opts)
     inserted_at = DateTime.utc_now() |> DateTime.truncate(:microsecond)
     mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
@@ -45,7 +61,7 @@ defmodule Cadence.IngressArchive.Postgres do
         RawEvidenceRow.insert_attrs(raw_evidence, organization_id, inserted_at)
       end)
 
-    case Repo.insert_all(RawEvidenceRow, rows,
+    case repo.insert_all(RawEvidenceRow, rows,
            on_conflict: :nothing,
            conflict_target: [:evidence_id]
          ) do
@@ -53,7 +69,7 @@ defmodule Cadence.IngressArchive.Postgres do
         {:ok, Receipt.for_batch(batch, :durable)}
 
       {_count, _rows} ->
-        if persisted_evidence_ids?(batch.raw_evidences) do
+        if persisted_evidence_ids?(batch.raw_evidences, repo) do
           {:ok, Receipt.for_batch(batch, :durable)}
         else
           {:error, {:raw_archive_insert_mismatch, batch.batch_id}}
@@ -61,7 +77,14 @@ defmodule Cadence.IngressArchive.Postgres do
     end
   end
 
+  @impl true
   def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
+    persist_raw_evidences(raw_evidences, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_raw_evidences(raw_evidences, backend_opts)
+      when is_list(raw_evidences) and is_list(backend_opts) do
     case Enum.all?(raw_evidences, &match?(%RawEvidence{}, &1)) do
       true -> :ok
       false -> {:error, :invalid_raw_evidence_batch}
@@ -70,13 +93,21 @@ defmodule Cadence.IngressArchive.Postgres do
 
   @impl true
   def fetch_raw_evidences(mission_id, %Scope{} = scope) when is_binary(mission_id) do
+    fetch_raw_evidences(mission_id, scope, configured_backend_opts())
+  end
+
+  @impl true
+  def fetch_raw_evidences(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    repo = repo(backend_opts)
+
     raw_evidences =
       RawEvidenceRow
       |> where([row], row.mission_id == ^mission_id)
       |> maybe_filter_scope(scope)
       |> order_by([row], asc: row.receipt_time, asc: row.evidence_id)
       |> maybe_limit_scope(scope.limit)
-      |> Repo.all()
+      |> repo.all()
       |> Enum.map(&RawEvidenceRow.to_domain/1)
 
     case scope.evidence_ids do
@@ -105,16 +136,28 @@ defmodule Cadence.IngressArchive.Postgres do
   end
 
   @impl true
-  def flush(_mission_id), do: :ok
+  def flush(mission_id), do: flush(mission_id, configured_backend_opts())
+
+  @impl true
+  def flush(_mission_id, backend_opts) when is_list(backend_opts), do: :ok
 
   @impl true
   def reset do
-    _ = Repo.delete_all(RawEvidenceRow)
+    reset(configured_backend_opts())
+  end
+
+  @impl true
+  def reset(backend_opts) when is_list(backend_opts) do
+    repo = repo(backend_opts)
+    _ = repo.delete_all(RawEvidenceRow)
     :ok
   end
 
   @impl true
-  def stats(_mission_id) do
+  def stats(mission_id), do: stats(mission_id, configured_backend_opts())
+
+  @impl true
+  def stats(_mission_id, backend_opts) when is_list(backend_opts) do
     %{
       queue_depth: 0,
       oldest_buffered_age_ms: 0,
@@ -131,7 +174,10 @@ defmodule Cadence.IngressArchive.Postgres do
   end
 
   @impl true
-  def reset_stats(_mission_id), do: :ok
+  def reset_stats(mission_id), do: reset_stats(mission_id, configured_backend_opts())
+
+  @impl true
+  def reset_stats(_mission_id, backend_opts) when is_list(backend_opts), do: :ok
 
   defp maybe_filter_scope(query, %Scope{} = scope) do
     query
@@ -210,7 +256,7 @@ defmodule Cadence.IngressArchive.Postgres do
     end)
   end
 
-  defp persisted_evidence_ids?(raw_evidences) do
+  defp persisted_evidence_ids?(raw_evidences, repo) do
     expected_ids = raw_evidences |> Enum.map(& &1.evidence_id) |> MapSet.new()
     evidence_ids = MapSet.to_list(expected_ids)
 
@@ -218,9 +264,15 @@ defmodule Cadence.IngressArchive.Postgres do
       RawEvidenceRow
       |> where([row], row.evidence_id in ^evidence_ids)
       |> select([row], row.evidence_id)
-      |> Repo.all()
+      |> repo.all()
       |> MapSet.new()
 
     MapSet.equal?(found_ids, expected_ids)
   end
+
+  defp configured_backend_opts do
+    Application.get_env(:cadence, :ingress_archive, [])
+  end
+
+  defp repo(backend_opts), do: Keyword.get(backend_opts, :repo, Repo)
 end

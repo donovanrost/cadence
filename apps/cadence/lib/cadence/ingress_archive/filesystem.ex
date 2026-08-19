@@ -6,6 +6,12 @@ defmodule Cadence.IngressArchive.FileSystem do
   Legacy callers may buffer raw evidence in memory before a flush. Journal
   consumers use the batch-native API, which writes and indexes a deterministic
   segment before returning a durable receipt.
+
+  Independently supervised instances use `:name` for the writer address and
+  `:instance_id` for the durable index namespace. `:base_path` and `:repo`
+  complete the instance state. Omitting those identity options keeps the
+  legacy module-named writer, unqualified index keys, and `Cadence.Repo`;
+  named writers without an explicit instance ID derive one from their root.
   """
 
   import Ecto.Query
@@ -33,8 +39,19 @@ defmodule Cadence.IngressArchive.FileSystem do
   def persist_raw_evidence_multi(%Multi{} = multi, %RawEvidence{}), do: multi
 
   @impl true
+  def persist_raw_evidence_multi(%Multi{} = multi, %RawEvidence{}, backend_opts)
+      when is_list(backend_opts),
+      do: multi
+
+  @impl true
   def persist_raw_evidence(%RawEvidence{} = raw_evidence) do
-    Writer.enqueue(raw_evidence)
+    persist_raw_evidence(raw_evidence, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_raw_evidence(%RawEvidence{} = raw_evidence, backend_opts)
+      when is_list(backend_opts) do
+    Writer.enqueue(writer_name(backend_opts), raw_evidence)
   end
 
   @impl true
@@ -42,11 +59,12 @@ defmodule Cadence.IngressArchive.FileSystem do
     persist_batch(batch, configured_backend_opts())
   end
 
+  @impl true
   def persist_batch(%Batch{} = batch, backend_opts) when is_list(backend_opts) do
     mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
 
-    if archived_evidence_ids?(batch.raw_evidences) do
+    if archived_evidence_ids?(batch.raw_evidences, backend_opts) do
       {:ok, Receipt.for_batch(batch, :durable)}
     else
       with {:ok, object_key, _segment_size_bytes} <-
@@ -54,17 +72,28 @@ defmodule Cadence.IngressArchive.FileSystem do
                base_path: Keyword.fetch!(backend_opts, :base_path)
              ),
            :ok <-
-             persist_segment(batch.batch_id, batch.raw_evidences,
-               object_key: object_key,
-               organization_id: organization_id
+             persist_segment(
+               batch.batch_id,
+               batch.raw_evidences,
+               Keyword.merge(backend_opts,
+                 object_key: object_key,
+                 organization_id: organization_id
+               )
              ) do
         {:ok, Receipt.for_batch(batch, :durable)}
       end
     end
   end
 
+  @impl true
   def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
-    Writer.enqueue_many(raw_evidences)
+    persist_raw_evidences(raw_evidences, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_raw_evidences(raw_evidences, backend_opts)
+      when is_list(raw_evidences) and is_list(backend_opts) do
+    Writer.enqueue_many(writer_name(backend_opts), raw_evidences)
   end
 
   @impl true
@@ -72,10 +101,11 @@ defmodule Cadence.IngressArchive.FileSystem do
     fetch_raw_evidences(mission_id, scope, configured_backend_opts())
   end
 
+  @impl true
   def fetch_raw_evidences(mission_id, %Scope{} = scope, backend_opts)
       when is_binary(mission_id) and is_list(backend_opts) do
-    with :ok <- flush(mission_id),
-         rows <- query_rows(mission_id, scope),
+    with :ok <- flush(mission_id, backend_opts),
+         rows <- query_rows(mission_id, scope, backend_opts),
          {:ok, raw_evidences} <- load_raw_evidences(rows, scope, backend_opts) do
       case scope.evidence_ids do
         evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
@@ -102,30 +132,60 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   @impl true
   def flush(mission_id \\ nil) do
-    Writer.flush(mission_id)
+    flush(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def flush(mission_id, backend_opts) when is_list(backend_opts) do
+    Writer.flush(writer_name(backend_opts), mission_id)
   end
 
   @impl true
   def reset do
-    _ = Repo.delete_all(IngressArchiveEvidenceEntryRow)
-    Writer.reset()
+    reset(configured_backend_opts())
+  end
+
+  @impl true
+  def reset(backend_opts) when is_list(backend_opts) do
+    archive_backend = archive_backend(backend_opts)
+    repo = repo(backend_opts)
+
+    _ =
+      IngressArchiveEvidenceEntryRow
+      |> where([row], row.archive_backend == ^archive_backend)
+      |> repo.delete_all()
+
+    Writer.reset(writer_name(backend_opts))
   end
 
   @impl true
   def stats(mission_id) when is_binary(mission_id) do
-    Writer.stats(mission_id)
+    stats(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def stats(mission_id, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    Writer.stats(writer_name(backend_opts), mission_id)
   end
 
   @impl true
   def reset_stats(mission_id) when is_binary(mission_id) do
-    Writer.reset_stats(mission_id)
+    reset_stats(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def reset_stats(mission_id, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    Writer.reset_stats(writer_name(backend_opts), mission_id)
   end
 
   @spec persist_segment(binary(), [RawEvidence.t()], keyword()) :: :ok | {:error, term()}
   def persist_segment(segment_id, raw_evidences, opts \\ [])
       when is_binary(segment_id) and is_list(raw_evidences) do
     object_key = Keyword.fetch!(opts, :object_key)
-    archive_backend = Keyword.get(opts, :archive_backend, @archive_backend)
+    archive_backend = archive_backend(opts)
+    repo = repo(opts)
     inserted_at = normalize_datetime(DateTime.utc_now())
 
     rows =
@@ -133,7 +193,7 @@ defmodule Cadence.IngressArchive.FileSystem do
         metadata = raw_evidence.metadata || %{}
 
         %{
-          evidence_id: raw_evidence.evidence_id,
+          evidence_id: database_evidence_id(raw_evidence.evidence_id, opts),
           segment_id: segment_id,
           object_key: object_key,
           archive_backend: archive_backend,
@@ -155,7 +215,7 @@ defmodule Cadence.IngressArchive.FileSystem do
         }
       end)
 
-    case Repo.insert_all(
+    case repo.insert_all(
            IngressArchiveEvidenceEntryRow,
            rows,
            on_conflict: :nothing,
@@ -165,7 +225,7 @@ defmodule Cadence.IngressArchive.FileSystem do
         :ok
 
       {_count, _rows} ->
-        if archived_evidence_ids?(rows) do
+        if archived_evidence_ids?(raw_evidences, opts) do
           :ok
         else
           {:error, {:archive_index_insert_mismatch, length(rows)}}
@@ -239,18 +299,22 @@ defmodule Cadence.IngressArchive.FileSystem do
     end
   end
 
-  defp query_rows(mission_id, %Scope{} = scope) do
+  defp query_rows(mission_id, %Scope{} = scope, backend_opts) do
+    archive_backend = archive_backend(backend_opts)
+    repo = repo(backend_opts)
+
     IngressArchiveEvidenceEntryRow
     |> where([row], row.mission_id == ^mission_id)
-    |> maybe_filter_scope(scope)
+    |> where([row], row.archive_backend == ^archive_backend)
+    |> maybe_filter_scope(scope, backend_opts)
     |> order_by([row], asc: row.receipt_time, asc: row.evidence_id)
     |> maybe_limit_scope(scope.limit)
-    |> Repo.all()
+    |> repo.all()
   end
 
-  defp maybe_filter_scope(query, %Scope{} = scope) do
+  defp maybe_filter_scope(query, %Scope{} = scope, backend_opts) do
     query
-    |> maybe_filter_evidence_ids(scope.evidence_ids)
+    |> maybe_filter_evidence_ids(scope.evidence_ids, backend_opts)
     |> maybe_filter_from_receipt_time(scope.from_receipt_time)
     |> maybe_filter_to_receipt_time(scope.to_receipt_time)
     |> maybe_filter_spacecraft(scope.spacecraft_id)
@@ -258,11 +322,15 @@ defmodule Cadence.IngressArchive.FileSystem do
     |> maybe_filter_realized_contact_id(scope.realized_contact_id)
   end
 
-  defp maybe_filter_evidence_ids(query, nil), do: query
+  defp maybe_filter_evidence_ids(query, nil, _backend_opts), do: query
 
-  defp maybe_filter_evidence_ids(query, evidence_ids)
+  defp maybe_filter_evidence_ids(query, evidence_ids, backend_opts)
        when is_list(evidence_ids) and evidence_ids != [] do
-    unique_evidence_ids = Enum.uniq(evidence_ids)
+    unique_evidence_ids =
+      evidence_ids
+      |> Enum.uniq()
+      |> Enum.map(&database_evidence_id(&1, backend_opts))
+
     where(query, [row], row.evidence_id in ^unique_evidence_ids)
   end
 
@@ -310,7 +378,9 @@ defmodule Cadence.IngressArchive.FileSystem do
 
           selected_raw_evidences =
             raw_evidences
-            |> Enum.filter(&selected_raw_evidence?(&1, selected_ids, scope.metadata_match))
+            |> Enum.filter(
+              &selected_raw_evidence?(&1, selected_ids, scope.metadata_match, backend_opts)
+            )
 
           {:cont, {:ok, selected_raw_evidences ++ acc}}
 
@@ -401,8 +471,13 @@ defmodule Cadence.IngressArchive.FileSystem do
     end)
   end
 
-  defp selected_raw_evidence?(%RawEvidence{} = raw_evidence, selected_ids, metadata_match) do
-    MapSet.member?(selected_ids, raw_evidence.evidence_id) and
+  defp selected_raw_evidence?(
+         %RawEvidence{} = raw_evidence,
+         selected_ids,
+         metadata_match,
+         backend_opts
+       ) do
+    MapSet.member?(selected_ids, database_evidence_id(raw_evidence.evidence_id, backend_opts)) and
       matches_metadata_scope?(raw_evidence, metadata_match)
   end
 
@@ -410,20 +485,23 @@ defmodule Cadence.IngressArchive.FileSystem do
     Application.get_env(:cadence, :ingress_archive, [])
   end
 
-  defp archived_evidence_ids?(rows) do
+  defp archived_evidence_ids?(raw_evidences, backend_opts) do
     expected_ids =
-      rows
-      |> Enum.map(fn
-        %RawEvidence{} = raw_evidence -> raw_evidence.evidence_id
-        row -> Map.fetch!(row, :evidence_id)
+      raw_evidences
+      |> Enum.map(fn %RawEvidence{} = raw_evidence ->
+        database_evidence_id(raw_evidence.evidence_id, backend_opts)
       end)
       |> Enum.uniq()
+
+    archive_backend = archive_backend(backend_opts)
+    repo = repo(backend_opts)
 
     found_ids =
       IngressArchiveEvidenceEntryRow
       |> where([row], row.evidence_id in ^expected_ids)
+      |> where([row], row.archive_backend == ^archive_backend)
       |> select([row], row.evidence_id)
-      |> Repo.all()
+      |> repo.all()
       |> MapSet.new()
 
     MapSet.equal?(found_ids, MapSet.new(expected_ids))
@@ -431,6 +509,53 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   @spec new_segment_id() :: binary()
   def new_segment_id, do: Ids.new("ingress_segment")
+
+  defp writer_name(backend_opts), do: Writer.process_name(backend_opts)
+
+  defp repo(backend_opts), do: Keyword.get(backend_opts, :repo, Repo)
+
+  defp instance_id(backend_opts) do
+    case Keyword.fetch(backend_opts, :instance_id) do
+      {:ok, instance_id} when is_binary(instance_id) ->
+        instance_id
+
+      {:ok, nil} ->
+        nil
+
+      :error ->
+        default_instance_id(backend_opts)
+    end
+  end
+
+  defp default_instance_id(backend_opts) do
+    if writer_name(backend_opts) == Writer do
+      nil
+    else
+      backend_opts
+      |> Keyword.fetch!(:base_path)
+      |> Path.expand()
+    end
+  end
+
+  defp archive_backend(backend_opts) do
+    archive_backend = Keyword.get(backend_opts, :archive_backend, @archive_backend)
+
+    case instance_id(backend_opts) do
+      nil -> archive_backend
+      instance_id -> archive_backend <> ":" <> encode_instance_id(instance_id)
+    end
+  end
+
+  defp database_evidence_id(evidence_id, backend_opts) do
+    case instance_id(backend_opts) do
+      nil -> evidence_id
+      instance_id -> "ingress_archive:" <> encode_instance_id(instance_id) <> ":" <> evidence_id
+    end
+  end
+
+  defp encode_instance_id(instance_id) when is_binary(instance_id) do
+    Base.url_encode64(instance_id, padding: false)
+  end
 
   defp write_synced_segment(temp_path, absolute_path, payload) do
     with :ok <- File.write(temp_path, payload, [:binary]),
