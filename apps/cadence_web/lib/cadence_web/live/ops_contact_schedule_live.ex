@@ -12,7 +12,11 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    spacecraft = LiveDeps.list_spacecraft(scope.organization_id, mission.mission_id)
+    live_deps = resolve_live_deps(socket)
+
+    spacecraft =
+      LiveDeps.list_spacecraft(live_deps, scope.organization_id, mission.mission_id)
+
     spacecraft_id = spacecraft |> List.first() |> then(&if(&1, do: &1.spacecraft_id, else: ""))
 
     socket =
@@ -32,6 +36,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       )
       |> assign(:page_title, "Contacts")
       |> assign(:ops_nav_item, :contacts)
+      |> assign(:live_deps, live_deps)
       |> assign(:spacecraft, spacecraft)
       |> assign(:contact_record_count, 0)
       |> assign(:opportunity_count, 0)
@@ -62,7 +67,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     with {:ok, window} <- search_window(params),
          route_key when is_binary(route_key) and route_key != "" <- params["route_key"] do
       search_ref = System.unique_integer([:positive, :monotonic])
-      %{current_scope: scope, current_mission: mission} = socket.assigns
+      %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
 
       socket =
         socket
@@ -71,6 +76,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
         |> assign(:search_error, nil)
         |> start_async({:search_opportunities, search_ref}, fn ->
           LiveDeps.search_opportunities(
+            live_deps,
             scope.organization_id,
             mission.mission_id,
             route_key,
@@ -93,7 +99,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
          :ok <- validate_token_route(route, payload["route"]),
          opportunity_id when is_binary(opportunity_id) <- payload["opportunity"]["id"],
          false <- MapSet.member?(socket.assigns.reservation_busy, opportunity_id) do
-      %{current_scope: scope, current_mission: mission} = socket.assigns
+      %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
       attrs = reservation_attrs(payload, route)
 
       socket =
@@ -104,6 +110,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
         )
         |> start_async({:reserve_opportunity, opportunity_id}, fn ->
           LiveDeps.reserve(
+            live_deps,
             scope.organization_id,
             mission.mission_id,
             route.provider_id,
@@ -131,7 +138,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     if MapSet.member?(socket.assigns.reservation_busy, reservation_id) do
       {:noreply, socket}
     else
-      %{current_scope: scope, current_mission: mission} = socket.assigns
+      %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
 
       socket =
         socket
@@ -140,7 +147,12 @@ defmodule CadenceWeb.OpsContactScheduleLive do
           MapSet.put(socket.assigns.reservation_busy, reservation_id)
         )
         |> start_async({:cancel_reservation, reservation_id}, fn ->
-          LiveDeps.cancel(scope.organization_id, mission.mission_id, reservation_id)
+          LiveDeps.cancel(
+            live_deps,
+            scope.organization_id,
+            mission.mission_id,
+            reservation_id
+          )
         end)
 
       {:noreply, socket}
@@ -468,13 +480,18 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   end
 
   defp assign_route_context(socket, spacecraft_id, params) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
+    %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
 
     readiness =
       if spacecraft_id == "" do
         %{routes: [], findings: []}
       else
-        case LiveDeps.list_ready_routes(scope.organization_id, mission.mission_id, spacecraft_id) do
+        case LiveDeps.list_ready_routes(
+               live_deps,
+               scope.organization_id,
+               mission.mission_id,
+               spacecraft_id
+             ) do
           {:ok, readiness} -> readiness
           {:error, _reason} -> %{routes: [], findings: []}
         end
@@ -574,9 +591,10 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   end
 
   defp resolve_token_route(socket, payload) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
+    %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
 
     LiveDeps.resolve_ready_route(
+      live_deps,
       scope.organization_id,
       mission.mission_id,
       payload["spacecraft_id"],
@@ -660,8 +678,10 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   end
 
   defp refresh_reservations(socket) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
-    rows = LiveDeps.list_reservation_rows(scope.organization_id, mission.mission_id)
+    %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
+
+    rows =
+      LiveDeps.list_reservation_rows(live_deps, scope.organization_id, mission.mission_id)
 
     socket =
       socket
@@ -678,8 +698,9 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   end
 
   defp refresh_contact_records(socket) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
-    rows = LiveDeps.list_contact_records(scope.organization_id, mission.mission_id)
+    %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
+
+    rows = LiveDeps.list_contact_records(live_deps, scope.organization_id, mission.mission_id)
 
     socket
     |> assign(:contact_record_count, length(rows))
@@ -688,7 +709,11 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   defp schedule_reservation_refresh(%{assigns: %{refresh_timer: nil}} = socket) do
     timer =
-      Process.send_after(self(), :refresh_provider_reservations, LiveDeps.refresh_interval_ms())
+      Process.send_after(
+        self(),
+        :refresh_provider_reservations,
+        LiveDeps.refresh_interval_ms(socket.assigns.live_deps)
+      )
 
     assign(socket, :refresh_timer, timer)
   end
@@ -708,6 +733,13 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       {"#{route.provider_display_name} / #{route.delivery_operator_summary} / #{route.route_display_name}",
        route.route_key}
     end)
+  end
+
+  defp resolve_live_deps(socket) do
+    case Phoenix.LiveView.get_connect_params(socket) do
+      %{ops_contact_schedule_live_deps: %LiveDeps{} = live_deps} -> live_deps
+      _default -> LiveDeps.from_config()
+    end
   end
 
   defp datetime_local(datetime), do: Calendar.strftime(datetime, "%Y-%m-%dT%H:%M:%S")

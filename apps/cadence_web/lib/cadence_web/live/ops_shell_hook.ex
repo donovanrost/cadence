@@ -1,8 +1,7 @@
 defmodule CadenceWeb.OpsShellHook do
   alias Cadence.Applications.OpsDock
-  alias Cadence.Reads.{Alarms, Commands}
-  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   alias CadenceWeb.OpsContextSnapshot
+  alias CadenceWeb.OpsShellHook.ContextDeps
 
   @moduledoc """
   on_mount hook for the ops console live_session: loads the assigns the
@@ -15,18 +14,19 @@ defmodule CadenceWeb.OpsShellHook do
   import Phoenix.Component
   import Phoenix.LiveView, only: [attach_hook: 4, connected?: 1]
 
-  @default_context_refresh_ms 15_000
-
   def on_mount(:default, params, _session, socket) do
+    context_deps = ContextDeps.from_config()
+
     {:cont,
      socket
-     |> refresh_context()
+     |> assign(:ops_context_deps, context_deps)
+     |> refresh_context(context_deps)
      |> pin_context_from_params(params)
      |> refresh_dashboard_navigation()
      |> refresh_ops_dock()
      |> assign(:active_dashboard_id, nil)
      |> assign(:ops_nav_item, :dashboards)
-     |> attach_context_refresh()}
+     |> attach_context_refresh(context_deps)}
   end
 
   @doc false
@@ -74,12 +74,28 @@ defmodule CadenceWeb.OpsShellHook do
   end
 
   @doc false
-  def refresh_context(socket, opts \\ []) do
+  def refresh_context(socket, deps_or_opts \\ nil)
+
+  def refresh_context(socket, nil) do
+    deps = Map.get(socket.assigns, :ops_context_deps, ContextDeps.new())
+    refresh_context(socket, deps)
+  end
+
+  def refresh_context(socket, []), do: refresh_context(socket, nil)
+
+  def refresh_context(socket, opts) when is_list(opts) do
+    refresh_context(socket, ContextDeps.new(opts))
+  end
+
+  def refresh_context(socket, %ContextDeps{} = deps) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    fleet_health = mission_health_summary(scope.organization_id, mission.mission_id, opts)
-    alarm_summary = alarm_summary(scope.organization_id, mission.mission_id, opts)
-    command_summary = command_summary(scope.organization_id, mission.mission_id, opts)
-    observed_at = observed_at(opts)
+
+    fleet_health =
+      deps.mission_health_summary.(scope.organization_id, mission.mission_id, [])
+
+    alarm_summary = deps.alarm_summary.(scope.organization_id, mission.mission_id, [])
+    command_summary = deps.command_summary.(scope.organization_id, mission.mission_id, [])
+    observed_at = deps.observed_at.()
 
     pinned_command_id = get_in(socket.assigns, [:ops_context, :pinned_focus, :id])
 
@@ -102,24 +118,22 @@ defmodule CadenceWeb.OpsShellHook do
 
   @doc false
   def context_refresh_ms do
-    case Application.get_env(
-           :cadence_web,
-           :ops_context_refresh_ms,
-           @default_context_refresh_ms
-         ) do
-      refresh_ms when is_integer(refresh_ms) and refresh_ms > 0 -> refresh_ms
-      _invalid -> @default_context_refresh_ms
-    end
+    ContextDeps.from_config().refresh_interval_ms
   end
 
-  defp attach_context_refresh(socket) do
+  @doc false
+  def context_refresh_ms(opts) when is_list(opts) do
+    ContextDeps.new(opts).refresh_interval_ms
+  end
+
+  defp attach_context_refresh(socket, %ContextDeps{} = deps) do
     if connected?(socket) do
-      schedule_context_refresh()
+      schedule_context_refresh(deps)
 
       attach_hook(socket, :ops_context_refresh, :handle_info, fn
         :ops_context_refresh, socket ->
-          schedule_context_refresh()
-          {:halt, refresh_context(socket)}
+          schedule_context_refresh(deps)
+          {:halt, refresh_context(socket, deps)}
 
         _message, socket ->
           {:cont, socket}
@@ -129,29 +143,8 @@ defmodule CadenceWeb.OpsShellHook do
     end
   end
 
-  defp schedule_context_refresh do
-    Process.send_after(self(), :ops_context_refresh, context_refresh_ms())
-  end
-
-  defp mission_health_summary(organization_id, mission_id, opts) do
-    case Keyword.get(opts, :mission_health_summary) do
-      callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> MissionHealthReads.summary(organization_id, mission_id, [])
-    end
-  end
-
-  defp alarm_summary(organization_id, mission_id, opts) do
-    case Keyword.get(opts, :alarm_summary) do
-      callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> Alarms.summary(organization_id, mission_id)
-    end
-  end
-
-  defp command_summary(organization_id, mission_id, opts) do
-    case Keyword.get(opts, :command_summary) do
-      callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> Commands.summary(organization_id, mission_id)
-    end
+  defp schedule_context_refresh(%ContextDeps{} = deps) do
+    Process.send_after(self(), :ops_context_refresh, deps.refresh_interval_ms)
   end
 
   defp dashboard_summaries(organization_id, mission_id, opts) do
@@ -201,12 +194,5 @@ defmodule CadenceWeb.OpsShellHook do
         Map.get(params, "focus_command_id")
       )
     )
-  end
-
-  defp observed_at(opts) do
-    case Keyword.get(opts, :observed_at) do
-      callback when is_function(callback, 0) -> callback.()
-      _missing -> DateTime.utc_now()
-    end
   end
 end

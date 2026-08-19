@@ -4,13 +4,14 @@ defmodule CadenceWeb.OpsShellHookTest do
   @moduletag :config
 
   alias CadenceWeb.OpsShellHook
+  alias CadenceWeb.OpsShellHook.ContextDeps
   alias Phoenix.LiveView.Socket
 
   test "refresh_context updates the shell snapshot through canonical mission health" do
     observed_at = ~U[2026-08-01 12:00:00Z]
 
-    socket =
-      OpsShellHook.refresh_context(socket(),
+    context_deps =
+      ContextDeps.new(
         observed_at: fn -> observed_at end,
         mission_health_summary: fn organization_id, mission_id, [] ->
           assert organization_id == "org-1"
@@ -24,6 +25,11 @@ defmodule CadenceWeb.OpsShellHookTest do
         alarm_summary: fn _organization_id, mission_id, [] -> alarm_summary(mission_id) end,
         command_summary: fn _organization_id, mission_id, [] -> command_summary(mission_id) end
       )
+
+    socket =
+      socket()
+      |> Phoenix.Component.assign(:ops_context_deps, context_deps)
+      |> OpsShellHook.refresh_context([])
 
     assert socket.assigns.ops_context.observed_at == observed_at
     assert socket.assigns.fleet_health.violating_points == 1
@@ -41,14 +47,21 @@ defmodule CadenceWeb.OpsShellHookTest do
     assert fleet_health.freshness == :current
   end
 
-  test "context refresh interval rejects invalid configuration" do
+  test "context refresh interval options reject invalid values without global configuration" do
+    assert OpsShellHook.context_refresh_ms(refresh_interval_ms: 2_500) == 2_500
+    assert OpsShellHook.context_refresh_ms(refresh_interval_ms: 0) == 15_000
+  end
+
+  test "legacy boot configuration is captured once for a hook dependency snapshot" do
     previous = Application.get_env(:cadence_web, :ops_context_refresh_ms)
 
     try do
       Application.put_env(:cadence_web, :ops_context_refresh_ms, 2_500)
-      assert OpsShellHook.context_refresh_ms() == 2_500
+      snapshot = ContextDeps.from_config()
 
       Application.put_env(:cadence_web, :ops_context_refresh_ms, 0)
+
+      assert snapshot.refresh_interval_ms == 2_500
       assert OpsShellHook.context_refresh_ms() == 15_000
     after
       if is_nil(previous) do

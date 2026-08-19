@@ -24,22 +24,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
   alias Cadence.Management.Transports
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.TestSupport.FakeProviderClient
-  alias CadenceWeb.OpsContactScheduleLive.OpportunityToken
+  alias CadenceWeb.OpsContactScheduleLive.{LiveDeps, OpportunityToken}
   alias CadenceWeb.TestFixtures
-
-  setup do
-    previous = Application.get_env(:cadence_web, :ops_contact_schedule_live)
-
-    on_exit(fn ->
-      if previous do
-        Application.put_env(:cadence_web, :ops_contact_schedule_live, previous)
-      else
-        Application.delete_env(:cadence_web, :ops_contact_schedule_live)
-      end
-    end)
-
-    :ok
-  end
 
   test "authenticated mission member mounts the active Contacts ops surface" do
     {conn, _user, org, mission} = signed_in_org_and_mission()
@@ -72,24 +58,26 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     test_pid = self()
     {window, opportunity} = opportunity_window(setup)
 
-    configure_live_deps(
-      search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
-        {:ok, %{route: setup.route, opportunities: [opportunity]}}
-      end,
-      reserve: fn organization_id, mission_id, provider_id, attrs ->
-        ProviderBooking.reserve(
-          organization_id,
-          mission_id,
-          provider_id,
-          attrs,
-          client: FakeProviderClient,
-          on_reserve: fn _request -> send(test_pid, :provider_mutation) end
-        )
-      end,
-      refresh_interval_ms: 60_000
-    )
+    live_deps =
+      LiveDeps.new(
+        search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
+          {:ok, %{route: setup.route, opportunities: [opportunity]}}
+        end,
+        reserve: fn organization_id, mission_id, provider_id, attrs ->
+          ProviderBooking.reserve(
+            organization_id,
+            mission_id,
+            provider_id,
+            attrs,
+            client: FakeProviderClient,
+            on_reserve: fn _request -> send(test_pid, :provider_mutation) end
+          )
+        end,
+        refresh_interval_ms: 60_000
+      )
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
 
     track_async_view(view)
 
@@ -139,24 +127,26 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     setup = persist_ready_comms!(org, mission)
     {window, opportunity} = opportunity_window(setup)
 
-    configure_live_deps(
-      search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
-        {:ok, %{route: setup.route, opportunities: [opportunity]}}
-      end,
-      reserve: fn organization_id, mission_id, provider_id, attrs ->
-        ProviderBooking.reserve(
-          organization_id,
-          mission_id,
-          provider_id,
-          attrs,
-          client: FakeProviderClient,
-          reserve_response: {:ok, provider_response(attrs, "pending")}
-        )
-      end,
-      refresh_interval_ms: 60_000
-    )
+    live_deps =
+      LiveDeps.new(
+        search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
+          {:ok, %{route: setup.route, opportunities: [opportunity]}}
+        end,
+        reserve: fn organization_id, mission_id, provider_id, attrs ->
+          ProviderBooking.reserve(
+            organization_id,
+            mission_id,
+            provider_id,
+            attrs,
+            client: FakeProviderClient,
+            reserve_response: {:ok, provider_response(attrs, "pending")}
+          )
+        end,
+        refresh_interval_ms: 60_000
+      )
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
 
     track_async_view(view)
 
@@ -192,49 +182,51 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     setup = persist_ready_comms!(org, mission)
     {window, opportunity} = opportunity_window(setup)
 
-    configure_live_deps(
-      search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
-        {:ok, %{route: setup.route, opportunities: [opportunity]}}
-      end,
-      reserve: fn organization_id, mission_id, provider_id, attrs ->
-        ProviderBooking.reserve(
-          organization_id,
-          mission_id,
-          provider_id,
-          attrs,
-          client: FakeProviderClient
-        )
-      end,
-      cancel: fn organization_id, mission_id, provider_reservation_id ->
-        {:ok, reservation} =
-          ProviderReservations.fetch(
+    live_deps =
+      LiveDeps.new(
+        search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
+          {:ok, %{route: setup.route, opportunities: [opportunity]}}
+        end,
+        reserve: fn organization_id, mission_id, provider_id, attrs ->
+          ProviderBooking.reserve(
             organization_id,
             mission_id,
-            provider_reservation_id
+            provider_id,
+            attrs,
+            client: FakeProviderClient
           )
+        end,
+        cancel: fn organization_id, mission_id, provider_reservation_id ->
+          {:ok, reservation} =
+            ProviderReservations.fetch(
+              organization_id,
+              mission_id,
+              provider_reservation_id
+            )
 
-        attrs = %{
-          "idempotency_key" => reservation.idempotency_key,
-          "opportunity_ref" => reservation.provider_opportunity_ref,
-          "provider_spacecraft_ref" => reservation.provider_spacecraft_ref,
-          "service_profile_ref" => reservation.service_profile_ref,
-          "delivery_profile_ref" => reservation.delivery_profile_ref,
-          "starts_at" => DateTime.to_iso8601(reservation.starts_at),
-          "ends_at" => DateTime.to_iso8601(reservation.ends_at)
-        }
+          attrs = %{
+            "idempotency_key" => reservation.idempotency_key,
+            "opportunity_ref" => reservation.provider_opportunity_ref,
+            "provider_spacecraft_ref" => reservation.provider_spacecraft_ref,
+            "service_profile_ref" => reservation.service_profile_ref,
+            "delivery_profile_ref" => reservation.delivery_profile_ref,
+            "starts_at" => DateTime.to_iso8601(reservation.starts_at),
+            "ends_at" => DateTime.to_iso8601(reservation.ends_at)
+          }
 
-        ProviderBooking.cancel(
-          organization_id,
-          mission_id,
-          provider_reservation_id,
-          client: FakeProviderClient,
-          cancel_response: {:ok, provider_response(attrs, "canceled")}
-        )
-      end,
-      refresh_interval_ms: 60_000
-    )
+          ProviderBooking.cancel(
+            organization_id,
+            mission_id,
+            provider_reservation_id,
+            client: FakeProviderClient,
+            cancel_response: {:ok, provider_response(attrs, "canceled")}
+          )
+        end,
+        refresh_interval_ms: 60_000
+      )
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
 
     track_async_view(view)
 
@@ -265,18 +257,20 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     assert contact.lifecycle_state == :canceled
   end
 
-  test "invalid window, no results, provider error, and tampered token remain explicit" do
+  test "invalid window, no results, and tampered token remain explicit" do
     {conn, _user, org, mission} = signed_in_org_and_mission()
     setup = persist_ready_comms!(org, mission)
     {window, _opportunity} = opportunity_window(setup)
 
-    configure_live_deps(
-      search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
-        {:ok, %{route: setup.route, opportunities: []}}
-      end
-    )
+    live_deps =
+      LiveDeps.new(
+        search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
+          {:ok, %{route: setup.route, opportunities: []}}
+        end
+      )
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
 
     track_async_view(view)
 
@@ -295,11 +289,26 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     render_async(view, @async_timeout)
     assert has_element?(view, "#contact-opportunity-count", "0")
 
-    configure_live_deps(
-      search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
-        {:error, :provider_unavailable}
-      end
-    )
+    render_click(view, "reserve", %{"token" => "tampered"})
+    assert ProviderReservations.list_for_mission(org.organization_id, mission.mission_id) == []
+  end
+
+  test "provider search errors remain explicit" do
+    {conn, _user, org, mission} = signed_in_org_and_mission()
+    setup = persist_ready_comms!(org, mission)
+    {window, _opportunity} = opportunity_window(setup)
+
+    live_deps =
+      LiveDeps.new(
+        search_opportunities: fn _organization_id, _mission_id, _route_key, _window ->
+          {:error, :provider_unavailable}
+        end
+      )
+
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
+
+    track_async_view(view)
 
     view
     |> form("#contact-opportunity-search-form", contact_search: window)
@@ -307,9 +316,35 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     render_async(view, @async_timeout)
     assert has_element?(view, "#contact-search-error")
+  end
 
-    render_click(view, "reserve", %{"token" => "tampered"})
-    assert ProviderReservations.list_for_mission(org.organization_id, mission.mission_id) == []
+  test "boot configuration is captured as an immutable dependency snapshot" do
+    previous = Application.get_env(:cadence_web, :ops_contact_schedule_live)
+    first_search = fn _organization_id, _mission_id, _route_key, _window -> :first end
+    second_search = fn _organization_id, _mission_id, _route_key, _window -> :second end
+
+    try do
+      Application.put_env(:cadence_web, :ops_contact_schedule_live,
+        search_opportunities: first_search,
+        refresh_interval_ms: 1_234
+      )
+
+      snapshot = LiveDeps.from_config()
+
+      Application.put_env(:cadence_web, :ops_contact_schedule_live,
+        search_opportunities: second_search,
+        refresh_interval_ms: 4_321
+      )
+
+      assert LiveDeps.search_opportunities(snapshot, "org", "mission", "route", %{}) == :first
+      assert LiveDeps.refresh_interval_ms(snapshot) == 1_234
+
+      current = LiveDeps.from_config()
+      assert LiveDeps.search_opportunities(current, "org", "mission", "route", %{}) == :second
+      assert LiveDeps.refresh_interval_ms(current) == 4_321
+    after
+      restore_env(:ops_contact_schedule_live, previous)
+    end
   end
 
   test "opportunity tokens expire and reject tampering" do
@@ -442,14 +477,16 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     }
   end
 
-  defp configure_live_deps(overrides) do
-    current = Application.get_env(:cadence_web, :ops_contact_schedule_live, [])
+  defp live_with_deps(conn, path, %LiveDeps{} = live_deps) do
+    conn
+    |> put_connect_params(%{ops_contact_schedule_live_deps: live_deps})
+    |> live(path)
+  end
 
-    Application.put_env(
-      :cadence_web,
-      :ops_contact_schedule_live,
-      Keyword.merge(current, overrides)
-    )
+  defp restore_env(key, nil), do: Application.delete_env(:cadence_web, key)
+
+  defp restore_env(key, value) do
+    Application.put_env(:cadence_web, key, value)
   end
 
   defp persist_provider!(organization_id, mission_id, suffix) do
