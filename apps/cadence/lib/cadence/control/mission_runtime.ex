@@ -11,6 +11,7 @@ defmodule Cadence.Control.MissionRuntime do
   end
 
   def start_link(runtime_opts, mission_id) when is_list(runtime_opts) and is_binary(mission_id) do
+    runtime_opts = normalize_contact_scheduler_options(runtime_opts)
     process_namespace = process_namespace(runtime_opts)
 
     Supervisor.start_link(__MODULE__, {mission_id, runtime_opts},
@@ -20,6 +21,7 @@ defmodule Cadence.Control.MissionRuntime do
 
   @impl true
   def init({mission_id, runtime_opts}) do
+    runtime_opts = normalize_contact_scheduler_options(runtime_opts)
     process_namespace = process_namespace(runtime_opts)
     runtime_process_namespace = runtime_process_namespace(runtime_opts)
 
@@ -65,16 +67,33 @@ defmodule Cadence.Control.MissionRuntime do
   end
 
   defp contact_scheduler_child(runtime_opts, process_namespace, mission_id) do
-    contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler, [])
-
-    if Keyword.get(runtime_opts, :start_contact_scheduler?, true) and
-         Keyword.get(contact_scheduler_config, :enabled, true) do
+    if Keyword.fetch!(runtime_opts, :start_contact_scheduler?) do
       {Cadence.Contacts.Scheduler,
-       contact_scheduler_config
-       |> Keyword.merge(Keyword.get(runtime_opts, :contact_scheduler_opts, []))
+       runtime_opts
+       |> Keyword.fetch!(:contact_scheduler_opts)
        |> Keyword.put(:mission_id, mission_id)
        |> Keyword.put(:process_namespace, process_namespace)
        |> Keyword.put(:name, contact_scheduler_name(process_namespace, mission_id))}
+    end
+  end
+
+  defp normalize_contact_scheduler_options(runtime_opts) do
+    case {
+      Keyword.fetch(runtime_opts, :start_contact_scheduler?),
+      Keyword.fetch(runtime_opts, :contact_scheduler_opts)
+    } do
+      {{:ok, _enabled?}, {:ok, _scheduler_opts}} ->
+        runtime_opts
+
+      _incomplete ->
+        config = Application.get_env(:cadence, :contact_scheduler, [])
+
+        runtime_opts
+        |> Keyword.put_new(:start_contact_scheduler?, Keyword.get(config, :enabled, true))
+        |> Keyword.put(
+          :contact_scheduler_opts,
+          Keyword.merge(config, Keyword.get(runtime_opts, :contact_scheduler_opts, []))
+        )
     end
   end
 

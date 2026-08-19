@@ -74,6 +74,29 @@ defmodule Cadence.Platform.EventBusTest do
     refute_receive {:cadence_fact, :bus_a, _, ^topic, :fact_b}
   end
 
+  test "complete explicit options do not rediscover mutable application config" do
+    previous_config = Application.fetch_env(:cadence, :event_bus)
+    Application.put_env(:cadence, :event_bus, nil)
+
+    on_exit(fn -> restore_application_env(:event_bus, previous_config) end)
+
+    bus = start_bus(name: nil, delivery: :sync, before_notify: nil)
+
+    assert %{delivery: :sync, before_notify: nil} = :sys.get_state(bus)
+  end
+
+  test "incomplete legacy options retain the application config fallback" do
+    previous_config = Application.fetch_env(:cadence, :event_bus)
+    before_notify = {__MODULE__, :before_notify, [self(), :legacy]}
+    Application.put_env(:cadence, :event_bus, delivery: :sync, before_notify: before_notify)
+
+    on_exit(fn -> restore_application_env(:event_bus, previous_config) end)
+
+    bus = start_bus(name: nil)
+
+    assert %{delivery: :sync, before_notify: ^before_notify} = :sys.get_state(bus)
+  end
+
   test "subscriber death removes its subscriptions and monitor from only that bus" do
     topic = {:event_bus_instances, make_ref()}
     bus = start_bus(name: nil, delivery: :async, before_notify: nil)
@@ -123,7 +146,9 @@ defmodule Cadence.Platform.EventBusTest do
       subscriber = start_subscriber(facade)
       fact = {:fact_from, facade}
 
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
       assert :ok = apply(facade, :subscribe, [bus, subscriber])
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
       assert :ok = apply(facade, :publish, [bus, fact])
       assert_receive {:cadence_fact, ^facade, :sync, ^topic, ^fact}
     end)
@@ -163,6 +188,11 @@ defmodule Cadence.Platform.EventBusTest do
       restart: :temporary
     })
   end
+
+  defp restore_application_env(key, {:ok, value}),
+    do: Application.put_env(:cadence, key, value)
+
+  defp restore_application_env(key, :error), do: Application.delete_env(:cadence, key)
 
   defp eventually(fun, attempts \\ 100)
   defp eventually(fun, 0), do: fun.()

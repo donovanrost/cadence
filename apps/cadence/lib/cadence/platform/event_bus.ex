@@ -63,14 +63,14 @@ defmodule Cadence.Platform.EventBus do
 
   @impl true
   def init(opts) do
-    config = Application.get_env(:cadence, :event_bus, [])
+    {delivery, before_notify} = delivery_options(opts)
 
     {:ok,
      %{
        subscribers: %{},
        monitors: %{},
-       delivery: Keyword.get(opts, :delivery, Keyword.get(config, :delivery, :async)),
-       before_notify: Keyword.get(opts, :before_notify, Keyword.get(config, :before_notify))
+       delivery: delivery,
+       before_notify: before_notify
      }}
   end
 
@@ -117,6 +117,21 @@ defmodule Cadence.Platform.EventBus do
       nil ->
         ref = Process.monitor(pid)
         {Map.put(monitors, ref, pid), ref}
+    end
+  end
+
+  defp delivery_options(opts) do
+    case {Keyword.fetch(opts, :delivery), Keyword.fetch(opts, :before_notify)} do
+      {{:ok, delivery}, {:ok, before_notify}} ->
+        {delivery, before_notify}
+
+      _incomplete ->
+        config = Application.get_env(:cadence, :event_bus, [])
+
+        {
+          Keyword.get(opts, :delivery, Keyword.get(config, :delivery, :async)),
+          Keyword.get(opts, :before_notify, Keyword.get(config, :before_notify))
+        }
     end
   end
 

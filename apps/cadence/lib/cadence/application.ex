@@ -8,26 +8,25 @@ defmodule Cadence.Application do
   alias Cadence.Auth
   alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
-  alias Cadence.IngressArchive
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.DataSources
-  alias Cadence.Protocol.RecordArchive
-  alias Cadence.Runtime.{IngressArchiveConsumer, Persistence}
-  alias Cadence.Telemetry.{CurrentValueStore, DataManagement, HistoryStore, Storage}
+  alias Cadence.Platform.RootComposition
+  alias Cadence.Telemetry.DataManagement
+
   @impl true
   def start(_type, _args) do
     Cadence.Observability.setup_repo_tracing()
-    persistence_policies = capture_persistence_policies()
+    root_composition = RootComposition.from_application()
 
     children =
       [
-        Cadence.Platform.Supervisor,
+        {Cadence.Platform.Supervisor, root_composition: root_composition},
         Cadence.Management.Supervisor,
-        {Cadence.Runtime.Supervisor, runtime_opts(persistence_policies)},
-        Cadence.Control.Supervisor,
-        Cadence.Projections.Supervisor
+        {Cadence.Runtime.Supervisor, root_composition: root_composition},
+        {Cadence.Control.Supervisor, root_composition: root_composition},
+        {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
-        background_job_children(persistence_policies)
+        background_job_children(root_composition)
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
 
@@ -63,13 +62,13 @@ defmodule Cadence.Application do
     :ok
   end
 
-  defp background_job_children(persistence_policies) do
+  defp background_job_children(%RootComposition{} = root_composition) do
     if Application.get_env(:cadence, :start_background_jobs, true) do
       job_runner =
         :cadence
         |> Application.get_env(:job_handlers, %{})
         |> capture_data_source_job_policies()
-        |> capture_telemetry_data_management_policy(persistence_policies.data_management)
+        |> capture_telemetry_data_management_policy(root_composition.data_management_policy)
         |> JobRunner.new()
 
       background_job_opts =
@@ -124,59 +123,5 @@ defmodule Cadence.Application do
       _custom_or_missing_handler ->
         handlers
     end
-  end
-
-  defp capture_persistence_policies do
-    current_value_store =
-      :cadence
-      |> Application.get_env(:telemetry_current_value_store, [])
-      |> CurrentValueStore.policy()
-
-    telemetry_storage =
-      :cadence
-      |> Application.get_env(:telemetry_storage, [])
-      |> Storage.policy(current_value_store_policy: current_value_store)
-
-    history_store =
-      :cadence
-      |> Application.get_env(:telemetry_history_store, [])
-      |> HistoryStore.policy(storage_policy: telemetry_storage)
-
-    ingress_archive =
-      :cadence
-      |> Application.get_env(:ingress_archive, [])
-      |> IngressArchive.policy()
-
-    record_archive =
-      :cadence
-      |> Application.get_env(:protocol_record_archive, [])
-      |> RecordArchive.policy()
-
-    %{
-      current_value_store: current_value_store,
-      telemetry_storage: telemetry_storage,
-      history_store: history_store,
-      ingress_archive: ingress_archive,
-      record_archive: record_archive,
-      runtime_persistence: Persistence.policy(ingress_archive, record_archive, telemetry_storage),
-      ingress_archive_consumer:
-        IngressArchiveConsumer.policy(
-          Application.get_env(:cadence, :ingress_archive_consumer, []),
-          ingress_archive
-        ),
-      data_management: DataManagement.policy(telemetry_storage, history_store)
-    }
-  end
-
-  defp runtime_opts(policies) do
-    [
-      current_value_store_policy: policies.current_value_store,
-      telemetry_storage_policy: policies.telemetry_storage,
-      history_store_policy: policies.history_store,
-      ingress_archive_policy: policies.ingress_archive,
-      record_archive_policy: policies.record_archive,
-      persistence_policy: policies.runtime_persistence,
-      ingress_archive_consumer_policy: policies.ingress_archive_consumer
-    ]
   end
 end
