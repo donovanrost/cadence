@@ -1,7 +1,10 @@
 defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  import Phoenix.LiveViewTest
+  import CadenceWeb.AsyncLiveViewTestSupport,
+    only: [render_async: 1, track_async_view: 1]
+
+  import Phoenix.LiveViewTest, except: [render_async: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -85,6 +88,8 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
         conn,
         ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
       )
+
+    track_async_view(view)
 
     assert has_element?(view, "#ops-contact-requirement-show-page")
     assert has_element?(view, "#plan-contact-requirement")

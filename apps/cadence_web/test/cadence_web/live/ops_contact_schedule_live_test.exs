@@ -5,7 +5,10 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
   @moduletag :config
 
-  import Phoenix.LiveViewTest
+  import CadenceWeb.AsyncLiveViewTestSupport,
+    only: [render_async: 2, track_async_view: 1]
+
+  import Phoenix.LiveViewTest, except: [render_async: 2]
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -88,6 +91,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
 
+    track_async_view(view)
+
     view
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
@@ -152,6 +157,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     )
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+
+    track_async_view(view)
 
     view
     |> form("#contact-opportunity-search-form", contact_search: window)
@@ -229,6 +236,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
 
+    track_async_view(view)
+
     view
     |> form("#contact-opportunity-search-form", contact_search: window)
     |> render_submit()
@@ -268,6 +277,8 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     )
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
+
+    track_async_view(view)
 
     invalid = Map.put(window, "ends_at", window["starts_at"])
 

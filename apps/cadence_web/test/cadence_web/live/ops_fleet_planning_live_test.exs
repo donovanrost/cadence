@@ -1,7 +1,10 @@
 defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  import Phoenix.LiveViewTest
+  import CadenceWeb.AsyncLiveViewTestSupport,
+    only: [render_async: 2, track_async_view: 1]
+
+  import Phoenix.LiveViewTest, except: [render_async: 2]
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -214,6 +217,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
         conn,
         ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}"
       )
+
+    track_async_view(run_view)
 
     assert has_element?(run_view, "#ops-fleet-planning-run-page")
     assert has_element?(run_view, "#fleet-run-phase-strip")

@@ -3,7 +3,10 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
   @moduletag :config
 
-  import Phoenix.LiveViewTest
+  import CadenceWeb.AsyncLiveViewTestSupport,
+    only: [render_async: 1, track_async_view: 1]
+
+  import Phoenix.LiveViewTest, except: [render_async: 1, render_async: 2]
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -118,6 +121,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     {account, _version, credential} = persist_account!(organization)
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
+
+    track_async_view(view)
 
     assert has_element?(view, "#provider-account-show-page")
     assert has_element?(view, "#provider-account-credential-status", "Active · v1")

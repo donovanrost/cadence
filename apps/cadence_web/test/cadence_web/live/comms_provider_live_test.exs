@@ -4,7 +4,10 @@ defmodule CadenceWeb.CommsProviderLiveTest do
   @moduletag :config
   @async_timeout 1_000
 
-  import Phoenix.LiveViewTest
+  import CadenceWeb.AsyncLiveViewTestSupport,
+    only: [render_async: 2, track_async_view: 1]
+
+  import Phoenix.LiveViewTest, except: [render_async: 1, render_async: 2]
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -111,6 +114,8 @@ defmodule CadenceWeb.CommsProviderLiveTest do
         conn,
         ~p"/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"
       )
+
+    track_async_view(view)
 
     assert has_element?(view, "#comms-provider-show-page")
     assert has_element?(view, "#simulated-provider-badge")
