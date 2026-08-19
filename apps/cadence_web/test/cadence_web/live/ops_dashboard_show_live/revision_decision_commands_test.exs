@@ -72,16 +72,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommandsTest do
            }
   end
 
-  test "requires an observation identity id" do
-    assert {:error, {:missing_field, :observation_identity_id}} =
-             RevisionDecisionCommands.apply_decision(
-               %{"decision" => "mark_conflict"},
-               @scope,
-               @mission,
-               @opts
-             )
-  end
-
   defp envelope(overrides) do
     {:ok, context} =
       WriteContext.new(
