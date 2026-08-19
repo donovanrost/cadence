@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -15,7 +16,8 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Viewer Boundary")
 
-    {:ok, viewer, _html} = live(conn, viewer_path(mission, dashboard))
+    {:ok, viewer, _html} =
+      await_live_result(live(conn, viewer_path(mission, dashboard)))
 
     refute has_element?(viewer, "#dashboard-panel")
     render_hook(viewer, "open_add_widget", %{})
@@ -26,7 +28,8 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {conn, _user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Staged Editor")
 
-    {:ok, editor, _html} = live(conn, edit_path(mission, dashboard))
+    {:ok, editor, _html} =
+      await_live_result(live(conn, edit_path(mission, dashboard)))
 
     assert has_element?(
              editor,
@@ -74,7 +77,9 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {conn, _user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Discard Editor")
 
-    {:ok, editor, _html} = live(conn, edit_path(mission, dashboard))
+    {:ok, editor, _html} =
+      await_live_result(live(conn, edit_path(mission, dashboard)))
+
     add_section(editor, "Candidate only")
 
     editor |> element("#dashboard-editor-discard") |> render_click()
@@ -91,7 +96,9 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
       dashboard =
       TestFixtures.persist_dashboard_document!(mission, name: "Conflict Editor")
 
-    {:ok, editor, _html} = live(conn, edit_path(mission, dashboard))
+    {:ok, editor, _html} =
+      await_live_result(live(conn, edit_path(mission, dashboard)))
+
     add_section(editor, "Unsaved Candidate")
 
     assert {:ok, %Document{} = external} =

@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardActivityLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -31,6 +32,8 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity?version=1"
       )
 
+    track_dashboard_view(view)
+
     assert has_element?(view, ~s(#dashboard-version-detail[data-selected-version="1"]))
     assert has_element?(view, "#dashboard-version-2", "Added activity description")
 
@@ -58,7 +61,8 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Viewer Boundaries")
 
-    {:ok, viewer, _html} = live(conn, viewer_path(mission, dashboard))
+    {:ok, viewer, _html} =
+      await_live_result(live(conn, viewer_path(mission, dashboard)))
 
     assert has_element?(viewer, "#dashboard-edit-link")
     assert has_element?(viewer, "#dashboard-settings-button")

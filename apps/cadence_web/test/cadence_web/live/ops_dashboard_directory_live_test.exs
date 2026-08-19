@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -28,6 +29,7 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
+    track_dashboard_view(view)
 
     assert has_element?(view, "#dashboard-directory-filter-form")
     assert has_element?(view, "#dashboard-directory-row-#{thermal.dashboard_id}")
@@ -55,6 +57,8 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     {:ok, directory, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
+    track_dashboard_view(directory)
+
     directory
     |> element("#dashboard-directory-star-#{dashboard.dashboard_id}")
     |> render_click()
@@ -78,6 +82,8 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards"
       )
 
+    track_dashboard_view(second_directory)
+
     assert has_element?(
              second_directory,
              ~s(#dashboard-directory-row-#{dashboard.dashboard_id}[data-dashboard-directory-starred="false"])
@@ -96,9 +102,11 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
              )
 
     {:ok, recent_view, _html} =
-      live(
-        TestFixtures.member_conn(second_user),
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+      await_live_result(
+        live(
+          TestFixtures.member_conn(second_user),
+          ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+        )
       )
 
     assert dashboard_id == dashboard.dashboard_id
@@ -127,6 +135,8 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
         conn,
         ~p"/missions/#{mission.mission_id}/ops/dashboards?#{%{lifecycle: "archived"}}"
       )
+
+    track_dashboard_view(view)
 
     assert has_element?(
              view,

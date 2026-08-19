@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDataSourcesLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -235,11 +236,15 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
       )
 
     {:ok, dashboard_view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}")
-
-    render_async(dashboard_view, 1_000)
+      await_live_result(
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+        )
+      )
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    track_dashboard_view(view)
 
     assert has_element?(view, "#ops-data-sources-page")
 
@@ -337,9 +342,10 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/rehearsal-questdb/settings"
       )
 
+    track_dashboard_view(settings_view)
     change_binding_to_managed!(settings_view, user)
 
-    render_async(dashboard_view, 1_000)
+    await_dashboard_resolved(dashboard_view)
 
     assert has_element?(
              dashboard_view,

@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -54,7 +55,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     dashboard_path =
       ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{spacecraft_id: spacecraft.spacecraft_id, scope_kind: "spacecraft", scope_id: spacecraft.spacecraft_id, time_mode: "archive", time_axis: "receipt_time", from: "2026-08-01T10:00:00Z", to: "2026-08-01T11:00:00Z", realm: "rehearsal", data_view: "all_revisions", data_source_id: "investigation-source", source_binding_id: "investigation-binding", limit_mode: "current"}}"
 
-    {:ok, dashboard_view, _html} = live(conn, dashboard_path)
+    {:ok, dashboard_view, _html} = await_live_result(live(conn, dashboard_path))
 
     assert has_element?(dashboard_view, "#ops-context-rail")
 
@@ -75,6 +76,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
       })
 
     {:ok, explore, _html} = live(conn, explore_path)
+    track_dashboard_view(explore)
 
     assert has_element?(explore, "#ops-context-rail")
     assert has_element?(explore, "#telemetry-explore-question-data-operations")
@@ -93,6 +95,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     assert timeline_path =~ "source_binding_id=investigation-binding"
 
     {:ok, timeline, _html} = live(conn, timeline_path)
+    track_dashboard_view(timeline)
     assert has_element?(timeline, "#ops-context-rail")
 
     assert has_element?(
@@ -103,18 +106,21 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     {:ok, source_view, _html} =
       live(conn, link_href(explore, "#telemetry-explore-open-source"))
 
+    track_dashboard_view(source_view)
     assert has_element?(source_view, "#ops-context-rail")
     assert has_element?(source_view, "#ops-data-sources-page")
 
     {:ok, data_operations, _html} =
       live(conn, link_href(explore, "#telemetry-explore-question-data-operations"))
 
+    track_dashboard_view(data_operations)
     assert has_element?(data_operations, "#ops-context-rail")
     assert has_element?(data_operations, "#ops-data-operations-page")
 
     {:ok, diagnostics, _html} =
       live(conn, link_href(explore, "#telemetry-explore-open-dashboard-diagnostics"))
 
+    track_dashboard_view(diagnostics)
     assert has_element?(diagnostics, "#ops-context-rail")
     assert has_element?(diagnostics, "#dashboard-diagnostics-page")
   end

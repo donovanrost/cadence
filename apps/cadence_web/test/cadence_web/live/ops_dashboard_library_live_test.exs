@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -66,6 +67,8 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
     {:ok, library, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/library")
 
+    track_dashboard_view(library)
+
     assert has_element?(library, "#ops-context-rail")
     assert has_element?(library, "#dashboard-library-item-#{item.dashboard_library_item_id}")
 
@@ -90,7 +93,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
     path =
       ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/edit?#{[candidate_source: "library", candidate_library_item_id: item.dashboard_library_item_id, candidate_library_version: 1]}"
 
-    {:ok, editor, _html} = live(conn, path)
+    {:ok, editor, _html} = await_live_result(live(conn, path))
     assert has_element?(editor, ~s(#ops-dashboard-show-page[data-editor-dirty="true"]))
 
     assert {:ok, %{placements: []}} =
