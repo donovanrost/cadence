@@ -18,12 +18,12 @@ defmodule Cadence.Telemetry.DataManagement.LateDataPolicy do
     end
   end
 
-  def execute(decision, attrs, opts)
+  def execute(decision, attrs, opts, %{} = policy)
       when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
     with {:ok, decision} <- normalize_decision(decision),
          :ok <- require_context(attrs),
-         {:ok, samples, diagnostics} <- HistoricalSourceSamples.fetch(attrs),
-         :ok <- persist_samples(decision, samples, attrs, opts),
+         {:ok, samples, diagnostics} <- HistoricalSourceSamples.fetch(attrs, policy.history_store),
+         :ok <- persist_samples(policy.storage, decision, samples, attrs, opts),
          {:ok, event_attrs} <- event_attrs(decision, attrs, samples, diagnostics),
          {:ok, event} <-
            Storage.record_backfill_lifecycle_event(
@@ -60,11 +60,11 @@ defmodule Cadence.Telemetry.DataManagement.LateDataPolicy do
 
   defp present?(value), do: value not in [nil, ""]
 
-  defp persist_samples(_decision, [], _attrs, _opts), do: :ok
+  defp persist_samples(_storage_policy, _decision, [], _attrs, _opts), do: :ok
 
-  defp persist_samples(decision, samples, attrs, opts) do
+  defp persist_samples(storage_policy, decision, samples, attrs, opts) do
     with {:ok, write_opts} <- sample_write_opts(decision, attrs, opts) do
-      Storage.persist_samples(samples, write_opts)
+      Storage.persist_samples(storage_policy, samples, write_opts)
     end
   end
 

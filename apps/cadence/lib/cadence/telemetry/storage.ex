@@ -26,22 +26,51 @@ defmodule Cadence.Telemetry.Storage do
   @default_realm :flight
   @default_data_source_id "managed_questdb_primary"
   @default_binding_id "default_flight_telemetry"
+  @default_writer Cadence.Telemetry.Storage.Writers.QuestDB
 
+  @type policy :: %{
+          required(:writer) => module(),
+          required(:writer_opts) => keyword(),
+          required(:storage_opts) => keyword(),
+          required(:current_value_store_policy) => CurrentValueStore.policy()
+        }
+
+  @doc """
+  Builds a writer child spec from the current application configuration.
+
+  This compatibility arity reads application configuration when called. The
+  supervised runtime uses `child_spec/1` with a policy captured at startup.
+  """
   @spec child_spec() :: Supervisor.child_spec() | nil
-  def child_spec do
-    writer = ensure_writer_loaded!(writer_module())
+  def child_spec, do: child_spec(configured_policy())
+
+  @spec child_spec(policy()) :: Supervisor.child_spec() | nil
+  def child_spec(%{writer: writer, writer_opts: writer_opts}) do
+    writer = ensure_writer_loaded!(writer)
 
     if function_exported?(writer, :child_spec, 1) do
-      writer.child_spec(writer_opts())
+      writer.child_spec(writer_opts)
     end
   end
 
+  @doc """
+  Persists samples using the current application configuration.
+
+  Prefer `persist_samples/3` for internal workflows that own a captured storage
+  policy.
+  """
   @spec persist_samples([Sample.t()], keyword()) :: :ok | {:error, term()}
   def persist_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
+    persist_samples(configured_policy(), samples, opts)
+  end
+
+  @spec persist_samples(policy(), [Sample.t()], keyword()) :: :ok | {:error, term()}
+  def persist_samples(%{} = policy, samples, opts)
+      when is_list(samples) and is_list(opts) do
     samples
     |> Enum.group_by(& &1.mission_id)
     |> Enum.reduce_while(:ok, fn {_mission_id, mission_samples}, :ok ->
-      case persist_mission_samples(mission_samples, opts) do
+      case persist_mission_samples(policy, mission_samples, opts) do
         :ok -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -50,10 +79,17 @@ defmodule Cadence.Telemetry.Storage do
 
   @spec enrich_samples([Sample.t()], keyword()) :: {:ok, [Sample.t()]} | {:error, term()}
   def enrich_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
+    enrich_samples(configured_policy(), samples, opts)
+  end
+
+  @spec enrich_samples(policy(), [Sample.t()], keyword()) ::
+          {:ok, [Sample.t()]} | {:error, term()}
+  def enrich_samples(%{} = policy, samples, opts)
+      when is_list(samples) and is_list(opts) do
     samples
     |> Enum.group_by(& &1.mission_id)
     |> Enum.reduce_while({:ok, []}, fn {_mission_id, mission_samples}, {:ok, acc} ->
-      case enrich_mission_samples(mission_samples, opts) do
+      case enrich_mission_samples(policy, mission_samples, opts) do
         {:ok, enriched_samples} -> {:cont, {:ok, acc ++ enriched_samples}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -63,6 +99,12 @@ defmodule Cadence.Telemetry.Storage do
   @spec persist_prepared_results([map()], keyword()) :: :ok | {:error, term()}
   def persist_prepared_results(prepared_results, opts \\ [])
       when is_list(prepared_results) and is_list(opts) do
+    persist_prepared_results(configured_policy(), prepared_results, opts)
+  end
+
+  @spec persist_prepared_results(policy(), [map()], keyword()) :: :ok | {:error, term()}
+  def persist_prepared_results(%{} = policy, prepared_results, opts)
+      when is_list(prepared_results) and is_list(opts) do
     Enum.reduce_while(prepared_results, :ok, fn prepared_result, :ok ->
       samples = Map.get(prepared_result, :telemetry_samples, [])
 
@@ -71,7 +113,7 @@ defmodule Cadence.Telemetry.Storage do
         |> Keyword.put_new(:source_endpoint_id, source_endpoint_id(prepared_result))
         |> Keyword.put_new(:recorded_at, recorded_at(prepared_result))
 
-      case persist_samples(samples, write_opts) do
+      case persist_samples(policy, samples, write_opts) do
         :ok -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -173,24 +215,49 @@ defmodule Cadence.Telemetry.Storage do
   end
 
   @spec writer_module() :: module()
-  def writer_module do
-    Application.get_env(:cadence, :telemetry_storage, [])
-    |> Keyword.get(:writer, Cadence.Telemetry.Storage.Writers.QuestDB)
+  def writer_module, do: configured_policy().writer
+
+  @spec writer_module(policy()) :: module()
+  def writer_module(%{writer: writer}), do: writer
+
+  @doc false
+  @spec policy(keyword() | map(), keyword()) :: policy()
+  def policy(config, opts \\ [])
+      when (is_list(config) or is_map(config)) and is_list(opts) do
+    config = if is_map(config), do: Map.to_list(config), else: config
+
+    %{
+      writer: Keyword.get(config, :writer, @default_writer),
+      writer_opts: Keyword.get(config, :writer_opts, []),
+      storage_opts: Keyword.drop(config, [:writer, :writer_opts]),
+      current_value_store_policy:
+        Keyword.get_lazy(opts, :current_value_store_policy, fn ->
+          CurrentValueStore.configured_policy()
+        end)
+    }
   end
 
-  defp persist_mission_samples([], _opts), do: :ok
+  @doc false
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    policy(Application.get_env(:cadence, :telemetry_storage, []),
+      current_value_store_policy: CurrentValueStore.configured_policy()
+    )
+  end
 
-  defp persist_mission_samples([%Sample{} | _rest] = samples, opts) do
-    with {:ok, context} <- write_context(List.first(samples), opts),
+  defp persist_mission_samples(_policy, [], _opts), do: :ok
+
+  defp persist_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do
+    with {:ok, context} <- write_context(policy, List.first(samples), opts),
          {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts),
-         :ok <- persist_mission_envelopes_or_record_failure(envelopes, opts),
+         :ok <- persist_mission_envelopes_or_record_failure(policy, envelopes, opts),
          :ok <- record_backfill_lifecycle_events(envelopes, opts) do
-      publish_observation_facts(envelopes, opts)
+      publish_observation_facts(policy, envelopes, opts)
     end
   end
 
-  defp persist_mission_envelopes_or_record_failure(envelopes, opts) do
-    case persist_mission_envelopes(envelopes, opts) do
+  defp persist_mission_envelopes_or_record_failure(policy, envelopes, opts) do
+    case persist_mission_envelopes(policy, envelopes, opts) do
       :ok ->
         :ok
 
@@ -200,34 +267,35 @@ defmodule Cadence.Telemetry.Storage do
     end
   end
 
-  defp persist_mission_envelopes(envelopes, opts) do
-    case writer_module().persist_envelopes(envelopes, writer_opts()) do
-      :ok -> persist_mission_envelope_projections(envelopes, opts)
+  defp persist_mission_envelopes(policy, envelopes, opts) do
+    case writer_module(policy).persist_envelopes(envelopes, policy.writer_opts) do
+      :ok -> persist_mission_envelope_projections(policy, envelopes, opts)
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp persist_mission_envelope_projections(envelopes, opts) do
+  defp persist_mission_envelope_projections(policy, envelopes, opts) do
     with :ok <- ObservationIdentityStates.record_envelopes(envelopes, opts),
-         :ok <- record_current_values(envelopes, opts) do
+         :ok <- record_current_values(policy, envelopes, opts) do
       record_data_source_watermarks(envelopes, opts)
     end
   end
 
-  defp enrich_mission_samples([], _opts), do: {:ok, []}
+  defp enrich_mission_samples(_policy, [], _opts), do: {:ok, []}
 
-  defp enrich_mission_samples([%Sample{} | _rest] = samples, opts) do
-    with {:ok, context} <- write_context(List.first(samples), opts),
+  defp enrich_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do
+    with {:ok, context} <- write_context(policy, List.first(samples), opts),
          {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts) do
       {:ok, Enum.map(envelopes, &ObservationEnvelope.to_sample/1)}
     end
   end
 
-  defp record_current_values(envelopes, opts) do
+  defp record_current_values(policy, envelopes, opts) do
     if Keyword.get(opts, :record_current_values?, true) do
-      envelopes
-      |> Enum.map(&ObservationEnvelope.to_sample/1)
-      |> CurrentValueStore.record_samples()
+      CurrentValueStore.record_samples(
+        policy.current_value_store_policy,
+        Enum.map(envelopes, &ObservationEnvelope.to_sample/1)
+      )
     else
       :ok
     end
@@ -307,11 +375,11 @@ defmodule Cadence.Telemetry.Storage do
     :ok
   end
 
-  defp write_context(%Sample{mission_id: mission_id}, opts) do
-    storage_config = storage_config()
+  defp write_context(policy, %Sample{mission_id: mission_id}, opts) do
+    storage_config = policy.storage_opts
 
     WriteContext.new(
-      organization_id: organization_id(mission_id, opts),
+      organization_id: organization_id(policy, mission_id, opts),
       mission_id: mission_id,
       realm: Keyword.get(opts, :realm, Keyword.get(storage_config, :realm, @default_realm)),
       data_source_id:
@@ -333,10 +401,10 @@ defmodule Cadence.Telemetry.Storage do
     )
   end
 
-  defp organization_id(mission_id, opts) do
+  defp organization_id(policy, mission_id, opts) do
     Keyword.get(opts, :organization_id) ||
       OrganizationScope.organization_id_for_mission(mission_id) ||
-      Keyword.get(storage_config(), :organization_id)
+      Keyword.get(policy.storage_opts, :organization_id)
   end
 
   defp source_endpoint_id(%{raw_evidence: %RawEvidence{} = raw_evidence}) do
@@ -348,10 +416,10 @@ defmodule Cadence.Telemetry.Storage do
   defp recorded_at(%{raw_evidence: %RawEvidence{} = raw_evidence}), do: raw_evidence.receipt_time
   defp recorded_at(_prepared_result), do: nil
 
-  defp publish_observation_facts([], _opts), do: :ok
+  defp publish_observation_facts(_policy, [], _opts), do: :ok
 
-  defp publish_observation_facts(envelopes, opts) do
-    if publish_observation_facts?(opts) do
+  defp publish_observation_facts(policy, envelopes, opts) do
+    if publish_observation_facts?(policy, opts) do
       envelopes
       |> Enum.group_by(&invalidation_group_key/1)
       |> Enum.each(fn {_group_key, group} ->
@@ -362,14 +430,14 @@ defmodule Cadence.Telemetry.Storage do
     :ok
   end
 
-  defp publish_observation_facts?(opts) do
+  defp publish_observation_facts?(policy, opts) do
     Keyword.get(
       opts,
       :publish_facts?,
       Keyword.get(
         opts,
         :dashboard_runtime_invalidation?,
-        Keyword.get(storage_config(), :dashboard_runtime_invalidation?, true)
+        Keyword.get(policy.storage_opts, :dashboard_runtime_invalidation?, true)
       )
     )
   end
@@ -627,15 +695,6 @@ defmodule Cadence.Telemetry.Storage do
   defp enum_string(nil), do: nil
   defp enum_string(value) when is_atom(value), do: Atom.to_string(value)
   defp enum_string(value), do: value
-
-  defp storage_config do
-    Application.get_env(:cadence, :telemetry_storage, [])
-  end
-
-  defp writer_opts do
-    storage_config()
-    |> Keyword.get(:writer_opts, [])
-  end
 
   defp ensure_writer_loaded!(writer) when is_atom(writer) do
     case Code.ensure_loaded(writer) do

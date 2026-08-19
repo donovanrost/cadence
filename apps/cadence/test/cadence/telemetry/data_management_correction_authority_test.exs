@@ -4,57 +4,33 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
   import Cadence.Telemetry.DataManagementFixtures
 
   alias Cadence.Telemetry.CurrentValueStore
-  alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS
+  alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.Storage
 
   setup do
-    previous_storage_config = Application.get_env(:cadence, :telemetry_storage, [])
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    persistence_policy = data_management_persistence_policy()
 
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
+    start_supervised!(
+      CurrentValueStore.child_spec(persistence_policy.storage.current_value_store_policy)
     )
 
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
+    start_supervised!(HistoryStore.child_spec(persistence_policy.history_store))
+    CurrentValueStore.reset(persistence_policy.storage.current_value_store_policy)
+    HistoryStore.reset(persistence_policy.history_store)
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: HistoryStoreETS,
-      max_samples_per_point: :infinity
-    )
-
-    start_supervised!(HistoryStoreETS)
-    HistoryStoreETS.reset()
-
-    start_supervised!(Cadence.Telemetry.CurrentValueStore.ETS)
-    CurrentValueStore.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_storage_config)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
-
-    :ok
+    %{persistence_policy: persistence_policy}
   end
 
-  test "applies correction-authority decisions with dashboard-readable evidence" do
+  test "applies correction-authority decisions with dashboard-readable evidence", %{
+    persistence_policy: persistence_policy
+  } do
     initial =
       sample("sample-correction-initial", ~U[2026-06-22 11:10:00Z], ~U[2026-06-22 12:10:03Z])
 
     correction = %{initial | sample_id: "sample-correction-candidate", raw_value: 43}
 
     assert :ok =
-             Storage.persist_samples([initial],
+             Storage.persist_samples(persistence_policy.storage, [initial],
                organization_id: "org-product",
                realm: :flight,
                data_source_id: "managed_questdb_primary",
@@ -65,7 +41,7 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     assert_receive {:telemetry_storage_envelopes, [initial_envelope]}
 
     assert :ok =
-             Storage.persist_samples([correction],
+             Storage.persist_samples(persistence_policy.storage, [correction],
                organization_id: "org-product",
                realm: :flight,
                data_source_id: "managed_questdb_primary",
@@ -138,7 +114,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
            }
   end
 
-  test "applies bulk correction-authority decisions with shared workflow evidence" do
+  test "applies bulk correction-authority decisions with shared workflow evidence", %{
+    persistence_policy: persistence_policy
+  } do
     initial_counter =
       sample(
         "sample-bulk-correction-counter-initial",
@@ -169,7 +147,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     }
 
     assert :ok =
-             Storage.persist_samples([initial_counter, initial_voltage],
+             Storage.persist_samples(
+               persistence_policy.storage,
+               [initial_counter, initial_voltage],
                organization_id: "org-product",
                realm: :flight,
                data_source_id: "managed_questdb_primary",
@@ -180,7 +160,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     assert_receive {:telemetry_storage_envelopes, initial_envelopes}
 
     assert :ok =
-             Storage.persist_samples([correction_counter, correction_voltage],
+             Storage.persist_samples(
+               persistence_policy.storage,
+               [correction_counter, correction_voltage],
                organization_id: "org-product",
                realm: :flight,
                data_source_id: "managed_questdb_primary",
@@ -269,7 +251,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     )
   end
 
-  test "applies bulk comparison-review conflict decisions with workflow evidence" do
+  test "applies bulk comparison-review conflict decisions with workflow evidence", %{
+    persistence_policy: persistence_policy
+  } do
     counter =
       sample(
         "sample-bulk-conflict-counter",
@@ -288,7 +272,7 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
       )
 
     assert :ok =
-             Storage.persist_samples([counter, voltage],
+             Storage.persist_samples(persistence_policy.storage, [counter, voltage],
                organization_id: "org-product",
                realm: :flight,
                data_source_id: "managed_questdb_primary",
@@ -356,17 +340,23 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     )
   end
 
-  test "rejects mixed-mission backfill samples before writing" do
+  test "rejects mixed-mission backfill samples before writing", %{
+    persistence_policy: persistence_policy
+  } do
     first = sample("sample-backfill-1", ~U[2026-06-22 11:00:00Z], ~U[2026-06-22 12:00:03Z])
     second = %{first | sample_id: "sample-backfill-2", mission_id: "mission-other"}
 
     assert {:error, {:mixed_mission_samples, ["mission-product", "mission-other"]}} =
-             Cadence.backfill_telemetry_samples([first, second], %{
-               backfill_run_id: "backfill-run-product",
-               organization_id: "org-product",
-               realm: :backfill,
-               data_source_id: "managed_questdb_backfill",
-               binding_id: "backfill_telemetry"
-             })
+             Cadence.backfill_telemetry_samples(
+               [first, second],
+               %{
+                 backfill_run_id: "backfill-run-product",
+                 organization_id: "org-product",
+                 realm: :backfill,
+                 data_source_id: "managed_questdb_backfill",
+                 binding_id: "backfill_telemetry"
+               },
+               persistence_policy: persistence_policy
+             )
   end
 end

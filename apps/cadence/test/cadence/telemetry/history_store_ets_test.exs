@@ -5,19 +5,8 @@ defmodule Cadence.Telemetry.HistoryStoreETSTest do
   alias Cadence.Telemetry.Sample
 
   setup do
-    previous_config = Application.get_env(:cadence, :telemetry_history_store, [])
-
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: ETS,
-      max_samples_per_point: :infinity
-    )
-
-    start_supervised!(ETS)
+    start_supervised!({ETS, max_samples_per_point: :infinity})
     ETS.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_history_store, previous_config)
-    end)
 
     :ok
   end
@@ -186,10 +175,8 @@ defmodule Cadence.Telemetry.HistoryStoreETSTest do
   end
 
   test "bounds retained samples per mission scope and point" do
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: ETS,
-      max_samples_per_point: 2
-    )
+    assert :ok = stop_supervised(ETS)
+    start_supervised!({ETS, max_samples_per_point: 2})
 
     assert :ok =
              ETS.persist_samples([

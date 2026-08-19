@@ -9,15 +9,9 @@ defmodule Cadence.TestSupport.FailingHistoryStore do
 
   def sample_history(_mission_id, _point_id, _opts), do: []
 
-  def sample_history_result(_mission_id, _point_id, _opts) do
-    {:error, failure_reason()}
+  def sample_history_result(_mission_id, _point_id, opts) do
+    {:error, Keyword.get(opts, :failure_reason, :source_unavailable)}
   end
 
   def reset, do: :ok
-
-  defp failure_reason do
-    :cadence
-    |> Application.get_env(:telemetry_history_store, [])
-    |> Keyword.get(:failure_reason, :source_unavailable)
-  end
 end

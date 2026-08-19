@@ -4,6 +4,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
   alias Cadence.ControllableRuntimePersistence
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
 
   test "notify_when_below replies immediately when projector queue is below threshold" do
     name = :"ingress_persistence_projector_test_#{System.unique_integer([:positive])}"
@@ -120,6 +121,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
   end
 
   defp start_projector!(name, opts \\ []) do
+    policies = TelemetryPersistencePolicies.postgres()
+
     start_supervised!(
       {IngressPersistenceProjector,
        Keyword.merge(
@@ -128,7 +131,9 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
            mission_id: "mission-ingress-projector",
            realized_contact_id: "contact-ingress-projector",
            path_id: "path-ingress-projector",
-           provider_binding_id: "provider-ingress-projector"
+           provider_binding_id: "provider-ingress-projector",
+           persistence_policy: policies.persistence,
+           current_value_store_policy: policies.current_value_store
          ],
          opts
        )}

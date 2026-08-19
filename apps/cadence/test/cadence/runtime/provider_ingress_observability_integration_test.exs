@@ -14,6 +14,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
 
   test "processes and persists provider telemetry across both asynchronous boundaries" do
     suffix = Integer.to_string(System.unique_integer([:positive]))
@@ -53,6 +54,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
 
     projector_name = :"provider_ingress_trace_projector_#{suffix}"
     executor_name = :"provider_ingress_trace_executor_#{suffix}"
+    policies = TelemetryPersistencePolicies.postgres()
 
     start_supervised!(
       {IngressPersistenceProjector,
@@ -60,7 +62,9 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
        mission_id: mission_id,
        realized_contact_id: "contact-provider-ingress-trace-" <> suffix,
        path_id: "path-provider-ingress-trace-" <> suffix,
-       provider_binding_id: "provider-binding-ingress-trace-" <> suffix}
+       provider_binding_id: "provider-binding-ingress-trace-" <> suffix,
+       persistence_policy: policies.persistence,
+       current_value_store_policy: policies.current_value_store}
     )
 
     start_supervised!(
@@ -70,7 +74,9 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
        realized_contact_id: "contact-provider-ingress-trace-" <> suffix,
        path_id: "path-provider-ingress-trace-" <> suffix,
        provider_binding_id: "provider-binding-ingress-trace-" <> suffix,
-       persistence_projector_name: projector_name}
+       persistence_projector_name: projector_name,
+       current_value_store_policy: policies.current_value_store,
+       telemetry_storage_policy: policies.telemetry_storage}
     )
 
     raw_evidence =

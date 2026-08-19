@@ -52,6 +52,7 @@ defmodule Cadence.Runtime.PartitionOwner do
           tm_continuity_state: map(),
           tm_frame_remainder: binary(),
           persist_runtime_records?: boolean(),
+          persistence_policy: Persistence.policy(),
           pending_runtime_records: map(),
           async_outputs: [term()],
           semantic_state: State.t()
@@ -69,6 +70,10 @@ defmodule Cadence.Runtime.PartitionOwner do
     else
       GenServer.start_link(__MODULE__, opts)
     end
+  end
+
+  def start_link(runtime_opts, opts) when is_list(runtime_opts) and is_list(opts) do
+    start_link(Keyword.merge(runtime_opts, opts))
   end
 
   @spec lookup(binary(), PartitionKey.t()) :: {:ok, pid()} | {:error, :partition_not_running}
@@ -124,6 +129,10 @@ defmodule Cadence.Runtime.PartitionOwner do
     active_activation = Keyword.fetch!(opts, :active_activation)
     binding_set = Keyword.fetch!(opts, :binding_set)
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
+
+    persistence_policy =
+      Keyword.get_lazy(opts, :persistence_policy, &Persistence.configured_policy/0)
+
     clock_mode = Keyword.get(opts, :clock_mode, :live)
 
     initial_time =
@@ -149,6 +158,7 @@ defmodule Cadence.Runtime.PartitionOwner do
          :ok <-
            reproject_pending_semantic_timers(
              persist_runtime_records?,
+             persistence_policy,
              active_activation,
              partition_key,
              pending_semantic_timers
@@ -167,6 +177,7 @@ defmodule Cadence.Runtime.PartitionOwner do
              managed_application_states: managed_application_states,
              timer_service: timer_service,
              semantic_timers: semantic_timers,
+             persistence_policy: persistence_policy,
              tm_pipeline_state: tm_pipeline_state,
              tm_continuity_state: %{},
              tm_frame_remainder: <<>>,
@@ -267,6 +278,7 @@ defmodule Cadence.Runtime.PartitionOwner do
              :ok <-
                reproject_pending_semantic_timers(
                  state.persist_runtime_records?,
+                 state.persistence_policy,
                  activation,
                  state.partition_key,
                  pending_semantic_timers
@@ -450,10 +462,22 @@ defmodule Cadence.Runtime.PartitionOwner do
     end
   end
 
-  defp reproject_pending_semantic_timers(false, _activation, _partition_key, _pending),
-    do: :ok
+  defp reproject_pending_semantic_timers(
+         false,
+         _persistence_policy,
+         _activation,
+         _partition_key,
+         _pending
+       ),
+       do: :ok
 
-  defp reproject_pending_semantic_timers(true, activation, partition_key, pending) do
+  defp reproject_pending_semantic_timers(
+         true,
+         persistence_policy,
+         activation,
+         partition_key,
+         pending
+       ) do
     Enum.reduce_while(pending, :ok, fn entry, :ok ->
       derived_samples =
         entry.result.parameter_updates
@@ -462,6 +486,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
       with :ok <-
              Persistence.persist_semantic_timer_result(
+               persistence_policy,
                activation,
                entry.result,
                derived_samples,
@@ -715,6 +740,7 @@ defmodule Cadence.Runtime.PartitionOwner do
        ) do
     with :ok <-
            Persistence.persist_semantic_timer_result(
+             state.persistence_policy,
              state.active_activation,
              result,
              derived_samples,

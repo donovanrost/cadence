@@ -11,6 +11,7 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
 
   @mission_scope_key "__mission__"
   @table_name :cadence_telemetry_history
+  @config_table_name :cadence_telemetry_history_config
   @default_max_samples_per_point :infinity
 
   @impl true
@@ -26,7 +27,7 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     _table =
       :ets.new(@table_name, [
         :named_table,
@@ -35,6 +36,21 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
         read_concurrency: true,
         write_concurrency: true
       ])
+
+    _config_table =
+      :ets.new(@config_table_name, [
+        :named_table,
+        :protected,
+        :set,
+        read_concurrency: true
+      ])
+
+    true =
+      :ets.insert(
+        @config_table_name,
+        {:max_samples_per_point,
+         Keyword.get(opts, :max_samples_per_point, @default_max_samples_per_point)}
+      )
 
     {:ok, @table_name}
   end
@@ -189,8 +205,10 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   end
 
   defp max_samples_per_point do
-    Application.get_env(:cadence, :telemetry_history_store, [])
-    |> Keyword.get(:max_samples_per_point, @default_max_samples_per_point)
+    case :ets.lookup(@config_table_name, :max_samples_per_point) do
+      [{:max_samples_per_point, value}] -> value
+      [] -> @default_max_samples_per_point
+    end
   end
 
   defp key(%Sample{} = sample) do

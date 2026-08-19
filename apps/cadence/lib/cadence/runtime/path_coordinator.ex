@@ -36,6 +36,10 @@ defmodule Cadence.Runtime.PathCoordinator do
           binding_set_version: pos_integer(),
           clock_mode: :live | :replay,
           initial_time: DateTime.t(),
+          persistence_policy: map(),
+          current_value_store_policy: map(),
+          telemetry_storage_policy: map(),
+          ingress_archive_consumer_policy: map(),
           lifecycle_status: :active | :quiescing | :quiesced,
           quiescence_settlement: map() | nil,
           provider_bindings: %{required(binary()) => ProviderBindingSpec.t()},
@@ -103,6 +107,30 @@ defmodule Cadence.Runtime.PathCoordinator do
 
     state = %{
       organization_id: Keyword.get(opts, :organization_id),
+      persistence_policy:
+        Keyword.get_lazy(
+          opts,
+          :persistence_policy,
+          &Cadence.Runtime.Persistence.configured_policy/0
+        ),
+      current_value_store_policy:
+        Keyword.get_lazy(
+          opts,
+          :current_value_store_policy,
+          &Cadence.Telemetry.CurrentValueStore.configured_policy/0
+        ),
+      telemetry_storage_policy:
+        Keyword.get_lazy(
+          opts,
+          :telemetry_storage_policy,
+          &Cadence.Telemetry.Storage.configured_policy/0
+        ),
+      ingress_archive_consumer_policy:
+        Keyword.get_lazy(
+          opts,
+          :ingress_archive_consumer_policy,
+          &IngressArchiveConsumer.configured_policy/0
+        ),
       mission_id: mission_id,
       realized_contact_id: realized_contact_id,
       path: path,
@@ -323,6 +351,7 @@ defmodule Cadence.Runtime.PathCoordinator do
          realized_contact_id: state.realized_contact_id,
          path_id: state.path.path_id,
          provider_binding_id: provider_binding.provider_binding_id,
+         policy: state.ingress_archive_consumer_policy,
          journal_name:
            MissionRuntime.provider_ingress_journal_name(
              state.mission_id,
@@ -390,7 +419,9 @@ defmodule Cadence.Runtime.PathCoordinator do
        mission_id: state.mission_id,
        realized_contact_id: state.realized_contact_id,
        path_id: state.path.path_id,
-       provider_binding_id: provider_binding.provider_binding_id}
+       provider_binding_id: provider_binding.provider_binding_id,
+       persistence_policy: state.persistence_policy,
+       current_value_store_policy: state.current_value_store_policy}
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
@@ -421,6 +452,8 @@ defmodule Cadence.Runtime.PathCoordinator do
        realized_contact_id: state.realized_contact_id,
        path_id: state.path.path_id,
        provider_binding_id: provider_binding.provider_binding_id,
+       telemetry_storage_policy: state.telemetry_storage_policy,
+       current_value_store_policy: state.current_value_store_policy,
        persistence_projector_name:
          MissionRuntime.provider_persistence_projector_name(
            state.mission_id,

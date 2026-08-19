@@ -23,6 +23,11 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   @default_retry_max_ms 5_000
   @event_name [:cadence, :runtime, :ingress_archive_consumer, :persist_result]
 
+  @type policy :: %{
+          required(:archive_policy) => IngressArchive.policy(),
+          required(:consumer_opts) => keyword()
+        }
+
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
     case Keyword.get(opts, :name) do
@@ -72,7 +77,8 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
 
   @impl true
   def init(opts) do
-    config = Application.get_env(:cadence, :ingress_archive_consumer, [])
+    policy = Keyword.get_lazy(opts, :policy, &configured_policy/0)
+    config = policy.consumer_opts
 
     state = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
@@ -80,7 +86,11 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
       path_id: Keyword.fetch!(opts, :path_id),
       provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
       journal_name: Keyword.fetch!(opts, :journal_name),
-      archive_module: Keyword.get(opts, :archive_module, IngressArchive),
+      archive:
+        case Keyword.fetch(opts, :archive_module) do
+          {:ok, archive_module} -> {:module, archive_module}
+          :error -> {:policy, policy.archive_policy}
+        end,
       required_completion:
         Keyword.get(
           opts,
@@ -149,6 +159,22 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
       send(self(), :consume)
       {:ok, state}
     end
+  end
+
+  @doc false
+  @spec policy(keyword() | map(), IngressArchive.policy()) :: policy()
+  def policy(config, %{} = archive_policy) when is_list(config) or is_map(config) do
+    config = if is_map(config), do: Map.to_list(config), else: config
+    %{archive_policy: archive_policy, consumer_opts: config}
+  end
+
+  @doc false
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    policy(
+      Application.get_env(:cadence, :ingress_archive_consumer, []),
+      IngressArchive.configured_policy()
+    )
   end
 
   @impl true
@@ -277,7 +303,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
     started_at = System.monotonic_time()
 
     result =
-      with {:ok, %Receipt{} = receipt} <- safe_persist(state.archive_module, batch),
+      with {:ok, %Receipt{} = receipt} <- safe_persist(state.archive, batch),
            true <- Receipt.satisfies?(receipt, state.required_completion),
            :ok <- FileSystem.acknowledge(state.journal_name, :archive, batch.end_offset) do
         {:ok, receipt}
@@ -358,7 +384,15 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
      }}
   end
 
-  defp safe_persist(archive_module, %Batch{} = batch) do
+  defp safe_persist({:policy, policy}, %Batch{} = batch) do
+    IngressArchive.persist_batch(policy, batch)
+  rescue
+    exception -> {:error, {:archive_sink_crash, Exception.message(exception)}}
+  catch
+    kind, reason -> {:error, {:archive_sink_crash, kind, reason}}
+  end
+
+  defp safe_persist({:module, archive_module}, %Batch{} = batch) do
     archive_module.persist_batch(batch)
   rescue
     exception -> {:error, {:archive_sink_crash, Exception.message(exception)}}

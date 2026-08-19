@@ -14,30 +14,23 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   alias Cadence.Repo
 
   setup do
-    previous_config = Application.get_env(:cadence, :protocol_record_archive, [])
-
     base_path =
       Path.join(
         System.tmp_dir!(),
         "cadence_protocol_record_archive_#{System.unique_integer([:positive])}"
       )
 
-    Application.put_env(:cadence, :protocol_record_archive,
-      module: FileSystem,
-      base_path: base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
+    archive_policy =
+      RecordArchive.policy(
+        module: FileSystem,
+        base_path: base_path,
+        flush_interval_ms: 5_000,
+        flush_count: 10
+      )
 
-    start_supervised!(
-      {Cadence.Protocol.RecordArchive.FileSystem.Writer,
-       Application.get_env(:cadence, :protocol_record_archive)}
-    )
+    start_supervised!(RecordArchive.child_spec(archive_policy))
 
-    on_exit(fn ->
-      Application.put_env(:cadence, :protocol_record_archive, previous_config)
-      File.rm_rf!(base_path)
-    end)
+    on_exit(fn -> File.rm_rf!(base_path) end)
 
     organization_id =
       "org-protocol-archive-" <> Integer.to_string(System.unique_integer([:positive]))
@@ -47,11 +40,11 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     persist_mission_scope(organization_id, mission_id)
 
-    %{mission_id: mission_id}
+    %{mission_id: mission_id, archive_policy: archive_policy}
   end
 
   test "archives packet and frame records to segment files and fetches them by evidence, source, contact, and metadata",
-       %{mission_id: mission_id} do
+       %{mission_id: mission_id, archive_policy: archive_policy} do
     receipt_time = DateTime.from_unix!(1_700_600_000, :second)
 
     raw_evidence =
@@ -105,16 +98,21 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     }
 
     assert :ok =
-             RecordArchive.persist_records(raw_evidence, [transfer_frame_record], [packet_record])
+             RecordArchive.persist_records(
+               archive_policy,
+               raw_evidence,
+               [transfer_frame_record],
+               [packet_record]
+             )
 
-    stats_before_flush = RecordArchive.stats(mission_id)
+    stats_before_flush = RecordArchive.stats(archive_policy, mission_id)
     assert stats_before_flush.queue_depth == 2
     assert stats_before_flush.oldest_buffered_age_ms >= 0
     assert stats_before_flush.flush_count == 0
 
-    assert :ok = RecordArchive.flush(mission_id)
+    assert :ok = RecordArchive.flush(archive_policy, mission_id)
 
-    stats_after_flush = RecordArchive.stats(mission_id)
+    stats_after_flush = RecordArchive.stats(archive_policy, mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
     assert stats_after_flush.flush_failure_count == 0
@@ -126,6 +124,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert {:ok, [fetched_packet]} =
              RecordArchive.fetch_packet_records(
+               archive_policy,
                mission_id,
                Scope.new(%{evidence_ids: [raw_evidence.evidence_id]})
              )
@@ -135,6 +134,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert {:ok, [source_filtered_frame]} =
              RecordArchive.fetch_transfer_frame_records(
+               archive_policy,
                mission_id,
                Scope.new(%{source_ref: "antenna-alpha"})
              )
@@ -144,6 +144,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert {:ok, [contact_filtered_packet]} =
              RecordArchive.fetch_packet_records(
+               archive_policy,
                mission_id,
                Scope.new(%{realized_contact_id: "contact-alpha"})
              )
@@ -152,6 +153,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert {:ok, [metadata_filtered_frame]} =
              RecordArchive.fetch_transfer_frame_records(
+               archive_policy,
                mission_id,
                Scope.new(%{metadata_match: %{"antenna_id" => "ant-a"}})
              )
@@ -225,7 +227,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   end
 
   test "stats and flush tolerate legacy writer state without buffer sizes", %{
-    mission_id: mission_id
+    mission_id: mission_id,
+    archive_policy: archive_policy
   } do
     receipt_time = DateTime.from_unix!(1_700_910_000, :second)
 
@@ -281,13 +284,13 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       |> Map.delete(:buffer_sizes)
     end)
 
-    stats_before_flush = RecordArchive.stats(mission_id)
+    stats_before_flush = RecordArchive.stats(archive_policy, mission_id)
     assert stats_before_flush.queue_depth == 2
 
-    assert :ok = RecordArchive.flush(mission_id)
+    assert :ok = RecordArchive.flush(archive_policy, mission_id)
     assert 2 == archive_entry_count(entries)
 
-    stats_after_flush = RecordArchive.stats(mission_id)
+    stats_after_flush = RecordArchive.stats(archive_policy, mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
   end

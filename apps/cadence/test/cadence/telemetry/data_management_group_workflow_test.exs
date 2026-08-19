@@ -7,47 +7,20 @@ defmodule Cadence.Telemetry.DataManagementGroupWorkflowTest do
 
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore
-  alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS
   alias Cadence.Telemetry.Storage
 
   setup do
-    previous_storage_config = Application.get_env(:cadence, :telemetry_storage, [])
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    persistence_policy = data_management_persistence_policy()
 
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
+    start_supervised!(
+      CurrentValueStore.child_spec(persistence_policy.storage.current_value_store_policy)
     )
 
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
+    start_supervised!(HistoryStore.child_spec(persistence_policy.history_store))
+    CurrentValueStore.reset(persistence_policy.storage.current_value_store_policy)
+    HistoryStore.reset(persistence_policy.history_store)
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: HistoryStoreETS,
-      max_samples_per_point: :infinity
-    )
-
-    start_supervised!(HistoryStoreETS)
-    HistoryStoreETS.reset()
-
-    start_supervised!(Cadence.Telemetry.CurrentValueStore.ETS)
-    CurrentValueStore.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_storage_config)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
-
-    :ok
+    %{persistence_policy: persistence_policy}
   end
 
   test "records historical data workflow retry events without writing samples" do
@@ -410,7 +383,9 @@ defmodule Cadence.Telemetry.DataManagementGroupWorkflowTest do
     assert completed.payload["corrects_event_id"] == source_event.backfill_lifecycle_event_id
   end
 
-  test "starts corrected import workflow group transition jobs through the product API" do
+  test "starts corrected import workflow group transition jobs through the product API", %{
+    persistence_policy: persistence_policy
+  } do
     failed_job =
       failed_historical_workflow_job("import-run-correction-group-source", workflow: :import)
 
@@ -540,23 +515,28 @@ defmodule Cadence.Telemetry.DataManagementGroupWorkflowTest do
              "import_failed"
 
     assert :ok =
-             HistoryStore.persist_samples([
-               sample(
-                 "sample-import-corrected-source",
-                 ~U[2026-06-22 10:20:00Z],
-                 ~U[2026-06-22 10:20:03Z],
-                 point_id: "HK.group_failed1",
-                 realm: :backfill,
-                 data_source_id: "customer_archive_import",
-                 binding_id: "import_telemetry",
-                 raw_value: 88
-               )
-             ])
+             HistoryStore.persist_samples(
+               persistence_policy.history_store,
+               [
+                 sample(
+                   "sample-import-corrected-source",
+                   ~U[2026-06-22 10:20:00Z],
+                   ~U[2026-06-22 10:20:03Z],
+                   point_id: "HK.group_failed1",
+                   realm: :backfill,
+                   data_source_id: "customer_archive_import",
+                   binding_id: "import_telemetry",
+                   raw_value: 88
+                 )
+               ]
+             )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == started_job.job_id
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} =
+             JobRunner.run_job(data_management_job_runner(persistence_policy), claimed_job.job_id)
+
     assert completed_job.status == :completed
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}
@@ -687,14 +667,18 @@ defmodule Cadence.Telemetry.DataManagementGroupWorkflowTest do
 
     assert started_job.status == :queued
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: Cadence.TestSupport.FailingHistoryStore,
-      failure_reason: :source_unavailable
-    )
+    failing_policy =
+      data_management_persistence_policy(
+        history_store: Cadence.TestSupport.FailingHistoryStore,
+        failure_reason: :source_unavailable
+      )
 
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == started_job.job_id
-    assert {:ok, failed_run_job} = JobRunner.run_job(claimed_job.job_id)
+
+    assert {:ok, failed_run_job} =
+             JobRunner.run_job(data_management_job_runner(failing_policy), claimed_job.job_id)
+
     assert failed_run_job.status == :failed
 
     assert {:ok, failed_replacement_job} =

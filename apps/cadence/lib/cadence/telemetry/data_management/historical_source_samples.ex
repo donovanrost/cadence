@@ -4,11 +4,20 @@ defmodule Cadence.Telemetry.DataManagement.HistoricalSourceSamples do
   alias Cadence.Telemetry.HistoryStore
 
   def fetch(attrs) when is_map(attrs) do
+    fetch(attrs, HistoryStore.configured_policy())
+  end
+
+  def fetch(attrs, %{} = history_store_policy) when is_map(attrs) do
     with {:ok, mission_id} <- required_attr(attrs, :mission_id),
          {:ok, point_id} <- point_id(attrs),
          {:ok, history_opts} <- history_opts(attrs),
          {:ok, %{samples: samples, diagnostics: diagnostics}} <-
-           HistoryStore.sample_history_result(mission_id, point_id, history_opts) do
+           HistoryStore.sample_history_result(
+             history_store_policy,
+             mission_id,
+             point_id,
+             history_opts
+           ) do
       {:ok, samples, source_diagnostics(attrs, point_id, history_opts, diagnostics)}
     end
   end

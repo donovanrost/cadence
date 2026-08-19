@@ -4,6 +4,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Observability.AsyncContext
   alias Cadence.Runtime.{IngressPersistenceProjector, ProviderIngressExecutor}
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
   alias OpenTelemetry.{Span, Tracer}
 
   test "captures producer context on queued telemetry work" do
@@ -127,6 +128,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
   end
 
   defp start_executor!(name, opts \\ []) do
+    policies = TelemetryPersistencePolicies.postgres()
+
     start_supervised!(
       {ProviderIngressExecutor,
        Keyword.merge(
@@ -136,7 +139,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
            realized_contact_id: "contact-ingress-executor",
            path_id: "path-ingress-executor",
            provider_binding_id: "provider-ingress-executor",
-           persistence_projector_name: :missing_projector
+           persistence_projector_name: :missing_projector,
+           current_value_store_policy: policies.current_value_store,
+           telemetry_storage_policy: policies.telemetry_storage
          ],
          opts
        )}
@@ -144,13 +149,17 @@ defmodule Cadence.Runtime.ProviderIngressExecutorTest do
   end
 
   defp start_projector!(name) do
+    policies = TelemetryPersistencePolicies.postgres()
+
     start_supervised!(
       {IngressPersistenceProjector,
        name: name,
        mission_id: "mission-ingress-projector",
        realized_contact_id: "contact-ingress-projector",
        path_id: "path-ingress-projector",
-       provider_binding_id: "provider-ingress-projector"}
+       provider_binding_id: "provider-ingress-projector",
+       persistence_policy: policies.persistence,
+       current_value_store_policy: policies.current_value_store}
     )
   end
 

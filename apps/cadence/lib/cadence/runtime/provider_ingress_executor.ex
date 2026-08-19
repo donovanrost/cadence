@@ -34,6 +34,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           realized_contact_id: binary(),
           path_id: binary(),
           provider_binding_id: binary(),
+          current_value_store_policy: CurrentValueStore.policy(),
+          telemetry_storage_policy: TelemetryStorage.policy(),
           persistence_projector_name: GenServer.server(),
           persistence_projector_pid: pid() | nil,
           persistence_projector_monitor_ref: reference() | nil,
@@ -161,6 +163,14 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     {:ok,
      %{
        organization_id: Keyword.get(opts, :organization_id),
+       telemetry_storage_policy:
+         Keyword.get_lazy(opts, :telemetry_storage_policy, &TelemetryStorage.configured_policy/0),
+       current_value_store_policy:
+         Keyword.get_lazy(
+           opts,
+           :current_value_store_policy,
+           &CurrentValueStore.configured_policy/0
+         ),
        mission_id: Keyword.fetch!(opts, :mission_id),
        realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
        path_id: Keyword.fetch!(opts, :path_id),
@@ -534,7 +544,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         async_context.parent_context,
         "cadence.telemetry.ingress.process",
         %{kind: :consumer, attributes: attributes},
-        fn -> process_telemetry_in_span(raw_evidence, state.organization_id) end
+        fn -> process_telemetry_in_span(raw_evidence, state) end
       )
 
     case result do
@@ -569,9 +579,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     end
   end
 
-  defp process_telemetry_in_span(%RawEvidence{} = raw_evidence, organization_id) do
+  defp process_telemetry_in_span(%RawEvidence{} = raw_evidence, state) do
     case Instrumentation.run_ingress(fn ->
-           process_telemetry_item(raw_evidence, organization_id)
+           process_telemetry_item(raw_evidence, state)
          end) do
       {:ok, {:ok, processing_result}} ->
         result_attributes = Instrumentation.processing_result_attributes(processing_result)
@@ -634,7 +644,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     }
   end
 
-  defp process_telemetry_item(%RawEvidence{} = raw_evidence, organization_id) do
+  defp process_telemetry_item(%RawEvidence{} = raw_evidence, state) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
       ingress_started_at = System.monotonic_time()
 
@@ -649,7 +659,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         {:ok, %RawEvidence{} = resolved_raw_evidence} ->
           handle_resolved_telemetry_item(
             resolved_raw_evidence,
-            organization_id,
+            state,
             ingress_started_at,
             resolve_us
           )
@@ -821,7 +831,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp handle_resolved_telemetry_item(
          %RawEvidence{} = resolved_raw_evidence,
-         organization_id,
+         state,
          ingress_started_at,
          resolve_us
        ) do
@@ -834,7 +844,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         finalize_processed_telemetry_item(
           resolved_raw_evidence,
           processing_result,
-          organization_id,
+          state,
           ingress_started_at,
           resolve_us,
           runtime_us
@@ -875,7 +885,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp finalize_processed_telemetry_item(
          %RawEvidence{} = resolved_raw_evidence,
          processing_result,
-         organization_id,
+         state,
          ingress_started_at,
          resolve_us,
          runtime_us
@@ -886,7 +896,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
            maybe_record_current_values(
              resolved_raw_evidence,
              telemetry_samples,
-             organization_id
+             state.organization_id,
+             state.current_value_store_policy,
+             state.telemetry_storage_policy
            ) do
       _ =
         Observability.set_attributes(%{
@@ -933,17 +945,31 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     )
   end
 
-  defp maybe_record_current_values(%RawEvidence{}, telemetry_samples, _organization_id)
+  defp maybe_record_current_values(
+         %RawEvidence{},
+         telemetry_samples,
+         _organization_id,
+         _current_value_store_policy,
+         _telemetry_storage_policy
+       )
        when telemetry_samples == [],
        do: :ok
 
   defp maybe_record_current_values(
          %RawEvidence{} = resolved_raw_evidence,
          telemetry_samples,
-         organization_id
+         organization_id,
+         current_value_store_policy,
+         telemetry_storage_policy
        ) do
-    if CurrentValueStore.hot_path_safe?() do
-      record_hot_path_current_values(resolved_raw_evidence, telemetry_samples, organization_id)
+    if CurrentValueStore.hot_path_safe?(current_value_store_policy) do
+      record_hot_path_current_values(
+        resolved_raw_evidence,
+        telemetry_samples,
+        organization_id,
+        current_value_store_policy,
+        telemetry_storage_policy
+      )
     else
       :ok
     end
@@ -952,7 +978,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp record_hot_path_current_values(
          %RawEvidence{} = resolved_raw_evidence,
          telemetry_samples,
-         organization_id
+         organization_id,
+         current_value_store_policy,
+         telemetry_storage_policy
        ) do
     TelemetryProfiler.with_runtime_component(
       resolved_raw_evidence.mission_id,
@@ -960,8 +988,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       fn ->
         Instrumentation.trace_stage("cadence.telemetry.ingress.record_current_values", fn ->
           resolved_raw_evidence
-          |> enriched_current_samples(telemetry_samples, organization_id)
-          |> record_enriched_current_values()
+          |> enriched_current_samples(
+            telemetry_samples,
+            organization_id,
+            telemetry_storage_policy
+          )
+          |> record_enriched_current_values(current_value_store_policy)
         end)
       end
     )
@@ -970,19 +1002,22 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp enriched_current_samples(
          %RawEvidence{} = resolved_raw_evidence,
          telemetry_samples,
-         organization_id
+         organization_id,
+         telemetry_storage_policy
        ) do
     TelemetryStorage.enrich_samples(
+      telemetry_storage_policy,
       telemetry_samples,
       current_value_storage_opts(resolved_raw_evidence, organization_id)
     )
   end
 
-  defp record_enriched_current_values({:ok, enriched_samples}) do
-    CurrentValueStore.record_samples(enriched_samples)
+  defp record_enriched_current_values({:ok, enriched_samples}, current_value_store_policy) do
+    CurrentValueStore.record_samples(current_value_store_policy, enriched_samples)
   end
 
-  defp record_enriched_current_values({:error, reason}), do: {:error, reason}
+  defp record_enriched_current_values({:error, reason}, _current_value_store_policy),
+    do: {:error, reason}
 
   defp current_value_storage_opts(%RawEvidence{} = resolved_raw_evidence, organization_id) do
     [

@@ -55,12 +55,22 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
-    fetch_records(mission_id, scope, @packet_record_kind)
+    fetch_packet_records(mission_id, scope, configured_backend_opts())
+  end
+
+  def fetch_packet_records(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    fetch_records(mission_id, scope, @packet_record_kind, backend_opts)
   end
 
   @impl true
   def fetch_transfer_frame_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
-    fetch_records(mission_id, scope, @transfer_frame_record_kind)
+    fetch_transfer_frame_records(mission_id, scope, configured_backend_opts())
+  end
+
+  def fetch_transfer_frame_records(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    fetch_records(mission_id, scope, @transfer_frame_record_kind, backend_opts)
   end
 
   @impl true
@@ -260,10 +270,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   @spec new_segment_id() :: binary()
   def new_segment_id, do: Ids.new("protocol_segment")
 
-  defp fetch_records(mission_id, %Scope{} = scope, record_kind) do
+  defp fetch_records(mission_id, %Scope{} = scope, record_kind, backend_opts) do
     with :ok <- flush(mission_id),
          rows <- query_rows(mission_id, scope, record_kind),
-         {:ok, records} <- load_records(rows, scope, record_kind) do
+         {:ok, records} <- load_records(rows, scope, record_kind, backend_opts) do
       case scope.evidence_ids do
         evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
           missing_evidence_ids = missing_evidence_ids(records, evidence_ids)
@@ -355,9 +365,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   defp maybe_limit_scope(query, nil), do: query
   defp maybe_limit_scope(query, limit), do: limit(query, ^limit)
 
-  defp load_records(rows, %Scope{} = scope, record_kind) do
-    backend_opts = backend_opts()
-
+  defp load_records(rows, %Scope{} = scope, record_kind, backend_opts) do
     rows
     |> Enum.group_by(& &1.object_key)
     |> Enum.reduce_while({:ok, []}, fn {object_key, grouped_rows}, {:ok, acc} ->
@@ -496,7 +504,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     Enum.reject(Enum.uniq(evidence_ids), &MapSet.member?(found_ids, &1))
   end
 
-  defp backend_opts do
+  defp configured_backend_opts do
     Application.get_env(:cadence, :protocol_record_archive, [])
   end
 

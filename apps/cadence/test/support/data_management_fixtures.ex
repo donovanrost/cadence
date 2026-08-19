@@ -5,8 +5,56 @@ defmodule Cadence.Telemetry.DataManagementFixtures do
 
   alias Cadence.Jobs.BackgroundJobRow
   alias Cadence.Repo
-  alias Cadence.Telemetry.Sample
-  alias Cadence.Telemetry.Storage
+  alias Cadence.Telemetry.{CurrentValueStore, DataManagement, HistoryStore, Sample, Storage}
+
+  def data_management_persistence_policy(opts \\ []) do
+    current_value_store_policy =
+      CurrentValueStore.policy(
+        module: Keyword.get(opts, :current_value_store, Cadence.Telemetry.CurrentValueStore.ETS)
+      )
+
+    storage_policy =
+      Storage.policy(
+        [
+          writer:
+            Keyword.get(
+              opts,
+              :telemetry_writer,
+              Cadence.TestSupport.CapturingTelemetryStorageWriter
+            ),
+          writer_opts: Keyword.get(opts, :writer_opts, test_pid: self()),
+          realm: :flight,
+          data_source_id: "managed_questdb_primary",
+          binding_id: "default_flight_telemetry",
+          dashboard_runtime_invalidation?: false
+        ],
+        current_value_store_policy: current_value_store_policy
+      )
+
+    history_store_policy =
+      HistoryStore.policy(
+        [
+          module: Keyword.get(opts, :history_store, Cadence.Telemetry.HistoryStore.ETS),
+          max_samples_per_point: Keyword.get(opts, :max_samples_per_point, :infinity),
+          failure_reason: Keyword.get(opts, :failure_reason, :source_unavailable)
+        ],
+        storage_policy: storage_policy
+      )
+
+    DataManagement.policy(storage_policy, history_store_policy)
+  end
+
+  def telemetry_read_opts(opts, policy) when is_list(opts) and is_map(policy) do
+    opts
+    |> Keyword.put(:current_value_store_policy, policy.storage.current_value_store_policy)
+    |> Keyword.put(:history_store_policy, policy.history_store)
+  end
+
+  def data_management_job_runner(policy) when is_map(policy) do
+    Cadence.Jobs.Runner.new(%{
+      telemetry_historical_data_workflow: DataManagement.handler(policy)
+    })
+  end
 
   def sample(sample_id, generation_time, receipt_time, opts \\ []) do
     %Sample{

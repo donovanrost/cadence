@@ -21,32 +21,12 @@ defmodule Cadence.Telemetry.StorageTest do
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
 
-  setup do
-    previous_config = Application.get_env(:cadence, :telemetry_storage, [])
+  setup context do
+    current_value_store_policy = current_value_store_policy()
+    start_supervised!(CurrentValueStore.child_spec(current_value_store_policy))
+    CurrentValueStore.reset(current_value_store_policy)
 
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
-    )
-
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
-
-    start_supervised!(Cadence.Telemetry.CurrentValueStore.ETS)
-    CurrentValueStore.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_config)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
+    if context[:dashboard_storage_compatibility], do: configure_dashboard_storage_compatibility!()
 
     :ok
   end
@@ -55,7 +35,7 @@ defmodule Cadence.Telemetry.StorageTest do
     sample = sample("sample-1", "mission-storage", "HK.counter", 42)
 
     assert :ok =
-             Storage.persist_samples([sample],
+             Storage.persist_samples(storage_policy(), [sample],
                organization_id: "org-storage",
                source_endpoint_id: "station-a",
                recorded_at: ~U[2026-06-17 12:00:05Z]
@@ -77,7 +57,7 @@ defmodule Cadence.Telemetry.StorageTest do
     sample = sample("sample-backfill", "mission-storage-backfill", "HK.counter", 42)
 
     assert :ok =
-             Storage.persist_samples([sample],
+             Storage.persist_samples(storage_policy(), [sample],
                organization_id: "org-storage",
                realm: :backfill,
                data_source_id: "managed_questdb_backfill",
@@ -123,7 +103,7 @@ defmodule Cadence.Telemetry.StorageTest do
     sample = sample("sample-live", "mission-storage-live", "HK.counter", 42)
 
     assert :ok =
-             Storage.persist_samples([sample],
+             Storage.persist_samples(storage_policy(), [sample],
                organization_id: "org-storage",
                recorded_at: ~U[2026-06-17 12:00:05Z]
              )
@@ -137,19 +117,12 @@ defmodule Cadence.Telemetry.StorageTest do
   end
 
   test "records failed backfill lifecycle events when identified historical writes fail" do
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self(), fail_with: :questdb_unavailable],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
-    )
-
     sample = sample("sample-backfill-failed", "mission-storage-backfill-failed", "HK.counter", 42)
 
     assert {:error, :questdb_unavailable} =
-             Storage.persist_samples([sample],
+             Storage.persist_samples(
+               storage_policy(writer_opts: [test_pid: self(), fail_with: :questdb_unavailable]),
+               [sample],
                organization_id: "org-storage",
                backfill_run_id: "backfill-run-failed",
                recorded_at: ~U[2026-06-17 12:00:05Z]
@@ -198,7 +171,9 @@ defmodule Cadence.Telemetry.StorageTest do
                  binding_id: "backfill_telemetry",
                  recorded_at: ~U[2026-06-17 12:00:05Z]
                ],
-               fn write_opts -> Storage.persist_samples([sample], write_opts) end,
+               fn write_opts ->
+                 Storage.persist_samples(storage_policy(), [sample], write_opts)
+               end,
                dashboard_runtime_invalidation?: false
              )
 
@@ -224,7 +199,10 @@ defmodule Cadence.Telemetry.StorageTest do
     first = sample("sample-1", "mission-a", "HK.counter", 1)
     second = sample("sample-2", "mission-b", "HK.counter", 2)
 
-    assert :ok = Storage.persist_samples([first, second], organization_id: "org-storage")
+    assert :ok =
+             Storage.persist_samples(storage_policy(), [first, second],
+               organization_id: "org-storage"
+             )
 
     assert_receive {:telemetry_storage_envelopes, [first_envelope]}
     assert_receive {:telemetry_storage_envelopes, [second_envelope]}
@@ -242,7 +220,7 @@ defmodule Cadence.Telemetry.StorageTest do
       sample("sample-current-conflict", "mission-storage-current", "HK.counter", 99)
 
     assert :ok =
-             Storage.persist_samples([canonical],
+             Storage.persist_samples(storage_policy(), [canonical],
                organization_id: "org-storage",
                recorded_at: ~U[2026-06-17 12:00:05Z]
              )
@@ -250,7 +228,10 @@ defmodule Cadence.Telemetry.StorageTest do
     assert_receive {:telemetry_storage_envelopes, [_canonical_envelope]}
 
     latest =
-      TelemetryReads.latest_value("mission-storage-current", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value("mission-storage-current", "HK.counter",
+        spacecraft_id: "sc-1",
+        current_value_store_policy: current_value_store_policy()
+      )
 
     assert latest.sample_id == "sample-current-canonical"
     assert latest.raw_value == 42
@@ -258,7 +239,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert is_binary(latest.provenance["storage"]["observation_identity_id"])
 
     assert :ok =
-             Storage.persist_samples([conflict],
+             Storage.persist_samples(storage_policy(), [conflict],
                organization_id: "org-storage",
                validity_state: :conflict,
                recorded_at: ~U[2026-06-17 12:00:10Z]
@@ -267,23 +248,28 @@ defmodule Cadence.Telemetry.StorageTest do
     assert_receive {:telemetry_storage_envelopes, [_conflict_envelope]}
 
     latest =
-      TelemetryReads.latest_value("mission-storage-current", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value("mission-storage-current", "HK.counter",
+        spacecraft_id: "sc-1",
+        current_value_store_policy: current_value_store_policy()
+      )
 
     assert latest.sample_id == "sample-current-canonical"
     assert latest.raw_value == 42
   end
 
   test "returns writer errors" do
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.Telemetry.Storage.Writers.Noop,
-      writer_opts: [],
-      realm: :replay,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry"
-    )
-
     assert {:error, {:missing_field, :replay_run_id}} =
-             Storage.persist_samples([sample("sample-1", "mission-storage", "HK.counter", 42)],
+             Storage.persist_samples(
+               storage_policy(
+                 writer: Cadence.Telemetry.Storage.Writers.Noop,
+                 writer_opts: [],
+                 storage_opts: [
+                   realm: :replay,
+                   data_source_id: "managed_questdb_primary",
+                   binding_id: "default_flight_telemetry"
+                 ]
+               ),
+               [sample("sample-1", "mission-storage", "HK.counter", 42)],
                organization_id: "org-storage"
              )
   end
@@ -291,6 +277,7 @@ defmodule Cadence.Telemetry.StorageTest do
   test "replay telemetry writes record replay-scoped source watermarks" do
     assert :ok =
              Storage.persist_samples(
+               storage_policy(),
                [sample("sample-replay-watermark", "mission-storage-replay", "HK.counter", 42)],
                organization_id: "org-storage",
                realm: :replay,
@@ -323,6 +310,7 @@ defmodule Cadence.Telemetry.StorageTest do
   test "replay historical writes record replay-scoped backfill lifecycle events" do
     assert :ok =
              Storage.persist_samples(
+               storage_policy(),
                [
                  sample(
                    "sample-replay-backfill",
@@ -367,6 +355,7 @@ defmodule Cadence.Telemetry.StorageTest do
              )
   end
 
+  @tag dashboard_storage_compatibility: true
   test "replay telemetry writes emit replay-scoped runtime invalidations" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -401,6 +390,7 @@ defmodule Cadence.Telemetry.StorageTest do
     end)
   end
 
+  @tag dashboard_storage_compatibility: true
   test "telemetry writes invalidate live and overlapping snapshot dashboard caches" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -449,6 +439,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert RuntimeCache.get_frame(live_frame_key, cache) == :miss
   end
 
+  @tag dashboard_storage_compatibility: true
   test "telemetry writes leave non-overlapping snapshot dashboard caches in place" do
     cache = start_supervised!({RuntimeCache, name: nil})
     use_dashboard_runtime_cache!(cache)
@@ -472,6 +463,59 @@ defmodule Cadence.Telemetry.StorageTest do
 
     assert {:ok, ^snapshot_result} = RuntimeCache.get_source_result(snapshot_key, cache)
     assert {:ok, ^snapshot_frames} = RuntimeCache.get_frame(snapshot_frame_key, cache)
+  end
+
+  defp current_value_store_policy do
+    CurrentValueStore.policy(module: Cadence.Telemetry.CurrentValueStore.ETS)
+  end
+
+  defp storage_policy(opts \\ []) do
+    storage_opts =
+      [
+        realm: :flight,
+        data_source_id: "managed_questdb_primary",
+        binding_id: "default_flight_telemetry",
+        dashboard_runtime_invalidation?: false
+      ]
+      |> Keyword.merge(Keyword.get(opts, :storage_opts, []))
+
+    config =
+      [
+        writer:
+          Keyword.get(
+            opts,
+            :writer,
+            Cadence.TestSupport.CapturingTelemetryStorageWriter
+          ),
+        writer_opts: Keyword.get(opts, :writer_opts, test_pid: self())
+      ] ++ storage_opts
+
+    Storage.policy(config, current_value_store_policy: current_value_store_policy())
+  end
+
+  defp configure_dashboard_storage_compatibility! do
+    previous_storage = Application.get_env(:cadence, :telemetry_storage, [])
+
+    previous_current_value_store =
+      Application.get_env(:cadence, :telemetry_current_value_store, [])
+
+    Application.put_env(:cadence, :telemetry_storage,
+      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
+      writer_opts: [test_pid: self()],
+      realm: :flight,
+      data_source_id: "managed_questdb_primary",
+      binding_id: "default_flight_telemetry",
+      dashboard_runtime_invalidation?: false
+    )
+
+    Application.put_env(:cadence, :telemetry_current_value_store,
+      module: Cadence.Telemetry.CurrentValueStore.ETS
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :telemetry_storage, previous_storage)
+      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
+    end)
   end
 
   defp sample(sample_id, mission_id, point_id, raw_value) do

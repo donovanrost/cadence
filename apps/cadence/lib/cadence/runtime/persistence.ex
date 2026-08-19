@@ -31,6 +31,18 @@ defmodule Cadence.Runtime.Persistence do
 
   alias Cadence.Telemetry.{Sample, Storage}
 
+  @type policy :: %{
+          required(:ingress_archive) => IngressArchive.policy(),
+          required(:record_archive) => RecordArchive.policy(),
+          required(:telemetry_storage) => Storage.policy()
+        }
+
+  @doc """
+  Persists a processing result with current application configuration.
+
+  This compatibility arity reads configuration when called. Supervised runtime
+  workers use `persist_processing_result/3` with a startup-captured policy.
+  """
   @spec persist_processing_result(map(), keyword()) :: {:ok, map()} | {:error, term()}
   def persist_processing_result(
         %{
@@ -42,7 +54,24 @@ defmodule Cadence.Runtime.Persistence do
         } = processing_result,
         opts \\ []
       ) do
-    with :ok <- persist_processing_results([processing_result], opts) do
+    persist_processing_result(configured_policy(), processing_result, opts)
+  end
+
+  @spec persist_processing_result(policy(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def persist_processing_result(
+        %{} = policy,
+        %{
+          raw_evidence: %RawEvidence{},
+          packet_records: _packet_records,
+          transfer_frame_records: _transfer_frame_records,
+          protocol_anomalies: _protocol_anomalies,
+          outputs: _outputs
+        } = processing_result,
+        opts
+      )
+      when is_list(opts) do
+    with :ok <- persist_processing_results(policy, [processing_result], opts) do
       {:ok, processing_result}
     end
   end
@@ -50,8 +79,16 @@ defmodule Cadence.Runtime.Persistence do
   @spec persist_processing_results([map()], keyword()) :: :ok | {:error, term()}
   def persist_processing_results(processing_results, opts \\ [])
       when is_list(processing_results) and is_list(opts) do
+    persist_processing_results(configured_policy(), processing_results, opts)
+  end
+
+  @spec persist_processing_results(policy(), [map()], keyword()) :: :ok | {:error, term()}
+  def persist_processing_results(%{} = policy, processing_results, opts)
+      when is_list(processing_results) and is_list(opts) do
     with {:ok, prepared_results} <- prepare_processing_results(processing_results) do
-      persist_prepared_processing_results(prepared_results, opts, archive_raw_evidence?: true)
+      persist_prepared_processing_results(policy, prepared_results, opts,
+        archive_raw_evidence?: true
+      )
     end
   end
 
@@ -62,8 +99,17 @@ defmodule Cadence.Runtime.Persistence do
   @spec persist_semantic_processing_results([map()], keyword()) :: :ok | {:error, term()}
   def persist_semantic_processing_results(processing_results, opts \\ [])
       when is_list(processing_results) and is_list(opts) do
+    persist_semantic_processing_results(configured_policy(), processing_results, opts)
+  end
+
+  @spec persist_semantic_processing_results(policy(), [map()], keyword()) ::
+          :ok | {:error, term()}
+  def persist_semantic_processing_results(%{} = policy, processing_results, opts)
+      when is_list(processing_results) and is_list(opts) do
     with {:ok, prepared_results} <- prepare_processing_results(processing_results) do
-      persist_prepared_processing_results(prepared_results, opts, archive_raw_evidence?: false)
+      persist_prepared_processing_results(policy, prepared_results, opts,
+        archive_raw_evidence?: false
+      )
     end
   end
 
@@ -79,6 +125,24 @@ defmodule Cadence.Runtime.Persistence do
         %Result{} = result,
         samples,
         opts \\ []
+      )
+      when is_list(samples) and is_list(opts) do
+    persist_semantic_timer_result(configured_policy(), runtime_spec, result, samples, opts)
+  end
+
+  @spec persist_semantic_timer_result(
+          policy(),
+          MissionRuntimeSpec.t(),
+          Result.t(),
+          [Sample.t()],
+          keyword()
+        ) :: :ok | {:error, term()}
+  def persist_semantic_timer_result(
+        %{} = policy,
+        %MissionRuntimeSpec{} = runtime_spec,
+        %Result{} = result,
+        samples,
+        opts
       )
       when is_list(samples) and is_list(opts) do
     at = Keyword.fetch!(opts, :at)
@@ -101,7 +165,7 @@ defmodule Cadence.Runtime.Persistence do
       runtime_spec: runtime_spec
     }
 
-    case Storage.persist_prepared_results([prepared], recorded_at: at) do
+    case Storage.persist_prepared_results(policy.telemetry_storage, [prepared], recorded_at: at) do
       :ok -> SemanticObservations.persist_many([prepared])
       {:error, reason} -> {:error, reason}
     end
@@ -275,12 +339,39 @@ defmodule Cadence.Runtime.Persistence do
     end)
   end
 
-  defp add_prepared_processing_result_inserts(%Multi{} = multi, prepared_results)
+  @doc false
+  @spec policy(IngressArchive.policy(), RecordArchive.policy(), Storage.policy()) :: policy()
+  def policy(%{} = ingress_archive, %{} = record_archive, %{} = telemetry_storage) do
+    %{
+      ingress_archive: ingress_archive,
+      record_archive: record_archive,
+      telemetry_storage: telemetry_storage
+    }
+  end
+
+  @doc false
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    policy(
+      IngressArchive.configured_policy(),
+      RecordArchive.configured_policy(),
+      Storage.configured_policy()
+    )
+  end
+
+  defp add_prepared_processing_result_inserts(policy, %Multi{} = multi, prepared_results)
        when is_list(prepared_results) do
     Enum.reduce(prepared_results, multi, fn prepared_result, acc ->
-      acc
-      |> Cadence.IngressArchive.persist_raw_evidence_multi(prepared_result.raw_evidence)
-      |> RecordArchive.persist_records_multi(
+      multi =
+        IngressArchive.persist_raw_evidence_multi(
+          policy.ingress_archive,
+          acc,
+          prepared_result.raw_evidence
+        )
+
+      RecordArchive.persist_records_multi(
+        policy.record_archive,
+        multi,
         prepared_result.raw_evidence,
         prepared_result.transfer_frame_records,
         prepared_result.packet_records
@@ -288,22 +379,29 @@ defmodule Cadence.Runtime.Persistence do
     end)
   end
 
-  defp persist_prepared_processing_results(prepared_results, opts,
+  defp persist_prepared_processing_results(policy, prepared_results, opts,
          archive_raw_evidence?: archive?
        ) do
-    with :ok <- persist_canonical_processing_results(prepared_results),
-         :ok <- maybe_archive_raw_evidence(prepared_results, archive?),
-         :ok <- RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
-         :ok <- Storage.persist_prepared_results(prepared_results, opts),
+    with :ok <- persist_canonical_processing_results(policy, prepared_results),
+         :ok <- maybe_archive_raw_evidence(policy.ingress_archive, prepared_results, archive?),
+         :ok <-
+           RecordArchive.persist_records_many(
+             policy.record_archive,
+             archive_records_batch(prepared_results)
+           ),
+         :ok <- Storage.persist_prepared_results(policy.telemetry_storage, prepared_results, opts),
          :ok <- SemanticObservations.persist_many(prepared_results) do
       publish_processing_results(prepared_results)
     end
   end
 
-  defp maybe_archive_raw_evidence(_prepared_results, false), do: :ok
+  defp maybe_archive_raw_evidence(_archive_policy, _prepared_results, false), do: :ok
 
-  defp maybe_archive_raw_evidence(prepared_results, true) do
-    IngressArchive.persist_raw_evidences(Enum.map(prepared_results, & &1.raw_evidence))
+  defp maybe_archive_raw_evidence(archive_policy, prepared_results, true) do
+    IngressArchive.persist_raw_evidences(
+      archive_policy,
+      Enum.map(prepared_results, & &1.raw_evidence)
+    )
   end
 
   defp prepare_processing_results(processing_results) do
@@ -348,10 +446,10 @@ defmodule Cadence.Runtime.Persistence do
     end
   end
 
-  defp persist_canonical_processing_results(prepared_results) do
+  defp persist_canonical_processing_results(policy, prepared_results) do
     multi =
       Multi.new()
-      |> add_prepared_processing_result_inserts(prepared_results)
+      |> then(&add_prepared_processing_result_inserts(policy, &1, prepared_results))
       |> RecordArchive.add_anomaly_inserts(protocol_anomalies_from_prepared(prepared_results))
 
     persist_non_empty_multi(multi)

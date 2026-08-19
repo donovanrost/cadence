@@ -6,22 +6,33 @@ defmodule Cadence.Runtime.MissionRuntime do
   alias Cadence.Runtime.PartitionKey
 
   def start_link(mission_id) when is_binary(mission_id) do
-    Supervisor.start_link(__MODULE__, mission_id, name: runtime_name(mission_id))
+    start_link([], mission_id)
+  end
+
+  def start_link(runtime_opts, mission_id) when is_list(runtime_opts) and is_binary(mission_id) do
+    Supervisor.start_link(__MODULE__, {mission_id, runtime_opts}, name: runtime_name(mission_id))
   end
 
   @impl true
-  def init(mission_id) when is_binary(mission_id) do
+  def init({mission_id, runtime_opts}) when is_binary(mission_id) and is_list(runtime_opts) do
     children =
       [
         {DynamicSupervisor,
-         strategy: :one_for_one, name: realized_contact_supervisor_name(mission_id)},
-        {DynamicSupervisor, strategy: :one_for_one, name: partition_supervisor_name(mission_id)},
+         strategy: :one_for_one,
+         name: realized_contact_supervisor_name(mission_id),
+         extra_arguments: [runtime_opts]},
+        {DynamicSupervisor,
+         strategy: :one_for_one,
+         name: partition_supervisor_name(mission_id),
+         extra_arguments: [runtime_opts]},
         {Cadence.Runtime.MissionCoordinator, mission_id: mission_id}
       ]
       |> Enum.reject(&is_nil/1)
 
     Supervisor.init(children, strategy: :one_for_all)
   end
+
+  def init(mission_id) when is_binary(mission_id), do: init({mission_id, []})
 
   @spec runtime_name(binary()) :: {:via, Registry, {module(), term()}}
   def runtime_name(mission_id),

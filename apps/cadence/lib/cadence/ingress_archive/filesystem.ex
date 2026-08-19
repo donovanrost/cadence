@@ -39,6 +39,10 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   @impl true
   def persist_batch(%Batch{} = batch) do
+    persist_batch(batch, configured_backend_opts())
+  end
+
+  def persist_batch(%Batch{} = batch, backend_opts) when is_list(backend_opts) do
     mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
 
@@ -47,7 +51,7 @@ defmodule Cadence.IngressArchive.FileSystem do
     else
       with {:ok, object_key, _segment_size_bytes} <-
              store_segment_object(batch.batch_id, batch.raw_evidences,
-               base_path: Keyword.fetch!(backend_opts(), :base_path)
+               base_path: Keyword.fetch!(backend_opts, :base_path)
              ),
            :ok <-
              persist_segment(batch.batch_id, batch.raw_evidences,
@@ -65,9 +69,14 @@ defmodule Cadence.IngressArchive.FileSystem do
 
   @impl true
   def fetch_raw_evidences(mission_id, %Scope{} = scope) when is_binary(mission_id) do
+    fetch_raw_evidences(mission_id, scope, configured_backend_opts())
+  end
+
+  def fetch_raw_evidences(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
     with :ok <- flush(mission_id),
          rows <- query_rows(mission_id, scope),
-         {:ok, raw_evidences} <- load_raw_evidences(rows, scope) do
+         {:ok, raw_evidences} <- load_raw_evidences(rows, scope, backend_opts) do
       case scope.evidence_ids do
         evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
           unique_evidence_ids = Enum.uniq(evidence_ids)
@@ -291,9 +300,7 @@ defmodule Cadence.IngressArchive.FileSystem do
   defp maybe_limit_scope(query, nil), do: query
   defp maybe_limit_scope(query, limit), do: limit(query, ^limit)
 
-  defp load_raw_evidences(rows, %Scope{} = scope) do
-    backend_opts = backend_opts()
-
+  defp load_raw_evidences(rows, %Scope{} = scope, backend_opts) do
     rows
     |> Enum.group_by(& &1.object_key)
     |> Enum.reduce_while({:ok, []}, fn {object_key, grouped_rows}, {:ok, acc} ->
@@ -399,7 +406,7 @@ defmodule Cadence.IngressArchive.FileSystem do
       matches_metadata_scope?(raw_evidence, metadata_match)
   end
 
-  defp backend_opts do
+  defp configured_backend_opts do
     Application.get_env(:cadence, :ingress_archive, [])
   end
 

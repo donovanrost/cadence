@@ -17,6 +17,7 @@ defmodule Cadence.Telemetry.DataManagement do
   alias Cadence.Telemetry.DataManagement.WorkflowPolicy
   alias Cadence.Telemetry.DataManagement.WorkflowReplacementRecovery
   alias Cadence.Telemetry.DataManagement.WorkflowRetries
+  alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.ObservationIdentityState
@@ -71,6 +72,10 @@ defmodule Cadence.Telemetry.DataManagement do
           diagnostics: map()
         }
   @type late_data_policy_execution_mode :: :sample_execution | :event_only
+  @type persistence_policy :: %{
+          required(:storage) => Storage.policy(),
+          required(:history_store) => HistoryStore.policy()
+        }
   @type observation_identity_decision_batch_summary :: %{
           decision: observation_identity_decision(),
           workflow_id: binary() | nil,
@@ -573,7 +578,42 @@ defmodule Cadence.Telemetry.DataManagement do
           {:ok, Storage.BackfillLifecycleEvent.t()} | {:error, term()}
   def execute_enqueued_historical_data_workflow(workflow_run_id)
       when is_binary(workflow_run_id) do
-    WorkflowJobs.execute(workflow_run_id)
+    WorkflowJobs.execute(workflow_run_id, configured_policy())
+  end
+
+  @doc false
+  @spec execute_enqueued_historical_data_workflow(binary(), persistence_policy()) ::
+          {:ok, Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def execute_enqueued_historical_data_workflow(workflow_run_id, %{} = policy)
+      when is_binary(workflow_run_id) do
+    WorkflowJobs.execute(workflow_run_id, policy)
+  end
+
+  @doc false
+  @spec policy(Storage.policy(), HistoryStore.policy()) :: persistence_policy()
+  def policy(%{} = storage_policy, %{} = history_store_policy) do
+    %{storage: storage_policy, history_store: history_store_policy}
+  end
+
+  @doc false
+  @spec handler(persistence_policy()) :: (binary() ->
+                                            {:ok, Storage.BackfillLifecycleEvent.t()}
+                                            | {:error, term()})
+  def handler(%{} = policy) do
+    fn workflow_run_id -> execute_enqueued_historical_data_workflow(workflow_run_id, policy) end
+  end
+
+  @doc false
+  @spec configured_policy() :: persistence_policy()
+  def configured_policy do
+    storage_policy = Storage.configured_policy()
+
+    policy(
+      storage_policy,
+      HistoryStore.policy(Application.get_env(:cadence, :telemetry_history_store, []),
+        storage_policy: storage_policy
+      )
+    )
   end
 
   @spec apply_observation_identity_decision(
@@ -621,7 +661,7 @@ defmodule Cadence.Telemetry.DataManagement do
           {:ok, late_data_policy_execution_result()} | {:error, term()}
   def execute_late_data_policy(decision, attrs, opts \\ [])
       when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
-    LateDataPolicy.execute(decision, attrs, opts)
+    LateDataPolicy.execute(decision, attrs, opts, persistence_policy(opts))
   end
 
   @spec late_data_policy_execution_mode(workflow_attrs()) :: late_data_policy_execution_mode()
@@ -635,6 +675,8 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp execute_sample_workflow(workflow, samples, attrs, opts) do
+    policy = persistence_policy(opts)
+
     with :ok <- require_samples(samples),
          {:ok, mission_id} <- single_mission_id(samples),
          {:ok, workflow_attrs} <- workflow_attrs(workflow, mission_id, samples, attrs),
@@ -643,7 +685,9 @@ defmodule Cadence.Telemetry.DataManagement do
         workflow,
         workflow_attrs,
         write_opts,
-        fn operation_write_opts -> Storage.persist_samples(samples, operation_write_opts) end,
+        fn operation_write_opts ->
+          Storage.persist_samples(policy.storage, samples, operation_write_opts)
+        end,
         workflow_opts(opts)
       )
     end
@@ -702,6 +746,10 @@ defmodule Cadence.Telemetry.DataManagement do
       :runtime_cache,
       :dashboard_runtime_invalidation?
     ])
+  end
+
+  defp persistence_policy(opts) do
+    Keyword.get_lazy(opts, :persistence_policy, &configured_policy/0)
   end
 
   defp require_samples([]), do: {:error, :no_telemetry_samples}

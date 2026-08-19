@@ -28,6 +28,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           provider_binding_id: binary(),
           organization_id: binary() | nil,
           persistence_module: module(),
+          persistence_policy: Persistence.policy(),
+          current_value_store_policy: CurrentValueStore.policy(),
           queue: :queue.queue(ProcessedIngressBatch.t()),
           queue_depth: non_neg_integer(),
           processing?: boolean(),
@@ -128,6 +130,14 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
        organization_id: Keyword.get(opts, :organization_id),
        persistence_module: Keyword.get(opts, :persistence_module, Persistence),
+       persistence_policy:
+         Keyword.get_lazy(opts, :persistence_policy, &Persistence.configured_policy/0),
+       current_value_store_policy:
+         Keyword.get_lazy(
+           opts,
+           :current_value_store_policy,
+           &CurrentValueStore.configured_policy/0
+         ),
        queue: :queue.new(),
        queue_depth: 0,
        processing?: false,
@@ -253,8 +263,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
          %ProcessedIngressBatch{
            processing_results: processing_results
          } = batch,
-         organization_id,
-         persistence_module
+         state
        )
        when is_list(processing_results) and processing_results != [] do
     links = Observability.links(batch.trace_contexts)
@@ -268,7 +277,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       },
       fn ->
         started_at = System.monotonic_time()
-        result = do_persist_batch(batch, organization_id, persistence_module)
+        result = do_persist_batch(batch, state)
         emit_persist_result(result, batch, elapsed_us(started_at))
         _ = mark_persistence_result(result, batch)
         result
@@ -276,7 +285,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     )
   end
 
-  defp persist_batch(%ProcessedIngressBatch{}, _organization_id, _persistence_module),
+  defp persist_batch(%ProcessedIngressBatch{}, _state),
     do: {:error, :empty_batch}
 
   defp do_persist_batch(
@@ -284,8 +293,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
            mission_id: mission_id,
            processing_results: processing_results
          },
-         organization_id,
-         persistence_module
+         state
        ) do
     persistence_started_at = System.monotonic_time()
 
@@ -296,8 +304,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
         persist_processing_results(
           raw_evidence,
           processing_results,
-          organization_id,
-          persistence_module
+          state
         )
       end)
 
@@ -325,7 +332,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp first_raw_evidence([]), do: raise(ArgumentError, "processed ingress batch is empty")
 
   defp handle_dequeued_persist_batch(state, %ProcessedIngressBatch{} = batch, rest, batch_size) do
-    case persist_batch(batch, state.organization_id, state.persistence_module) do
+    case persist_batch(batch, state) do
       :ok ->
         notify_batch_completed(batch)
 
@@ -440,29 +447,36 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp persist_processing_results(
          %RawEvidence{} = raw_evidence,
          processing_results,
-         organization_id,
-         persistence_module
+         state
        ) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
       persist_processing_results_with_stage(
         processing_results,
-        organization_id,
-        persistence_module
+        state
       )
     end)
   end
 
   defp persist_processing_results_with_stage(
          processing_results,
-         organization_id,
-         persistence_module
+         state
        ) do
     TelemetryProfiler.with_stage(:persistence, fn ->
-      persistence_module.persist_semantic_processing_results(
-        processing_results,
-        record_current_values?: not CurrentValueStore.hot_path_safe?(),
-        organization_id: organization_id
-      )
+      opts = [
+        record_current_values?:
+          not CurrentValueStore.hot_path_safe?(state.current_value_store_policy),
+        organization_id: state.organization_id
+      ]
+
+      if state.persistence_module == Persistence do
+        Persistence.persist_semantic_processing_results(
+          state.persistence_policy,
+          processing_results,
+          opts
+        )
+      else
+        state.persistence_module.persist_semantic_processing_results(processing_results, opts)
+      end
     end)
   end
 

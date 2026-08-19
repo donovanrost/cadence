@@ -7,9 +7,14 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   def start_link(%RealizedContactRuntimeSpec{} = realized_contact) do
+    start_link([], realized_contact)
+  end
+
+  def start_link(runtime_opts, %RealizedContactRuntimeSpec{} = realized_contact)
+      when is_list(runtime_opts) do
     Supervisor.start_link(
       __MODULE__,
-      realized_contact,
+      {realized_contact, runtime_opts},
       name:
         MissionRuntime.realized_contact_runtime_name(
           realized_contact.mission_id,
@@ -19,7 +24,8 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
   end
 
   @impl true
-  def init(%RealizedContactRuntimeSpec{} = realized_contact) do
+  def init({%RealizedContactRuntimeSpec{} = realized_contact, runtime_opts})
+      when is_list(runtime_opts) do
     children = [
       {DynamicSupervisor,
        strategy: :one_for_one,
@@ -27,7 +33,8 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
          MissionRuntime.path_supervisor_name(
            realized_contact.mission_id,
            realized_contact.realized_contact_id
-         )},
+         ),
+       extra_arguments: [runtime_opts]},
       {Task.Supervisor,
        name:
          MissionRuntime.realized_contact_quiescence_supervisor_name(
@@ -40,4 +47,6 @@ defmodule Cadence.Runtime.RealizedContactRuntime do
 
     Supervisor.init(children, strategy: :one_for_all)
   end
+
+  def init(%RealizedContactRuntimeSpec{} = realized_contact), do: init({realized_contact, []})
 end

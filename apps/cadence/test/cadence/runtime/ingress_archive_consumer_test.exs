@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumerTest do
   alias Cadence.IngressArchive.Batch
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.Runtime.IngressArchiveConsumer
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
 
   @context [
     mission_id: "mission-archive-consumer",
@@ -142,6 +143,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumerTest do
 
   defp start_consumer!(ctx, opts \\ []) do
     name = :"archive_consumer_#{System.unique_integer([:positive])}"
+    policies = TelemetryPersistencePolicies.postgres()
 
     start_supervised!(
       {IngressArchiveConsumer,
@@ -150,6 +152,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumerTest do
            name: name,
            provider_binding_id: ctx.provider_binding_id,
            journal_name: ctx.journal_name,
+           policy: IngressArchiveConsumer.policy([], policies.ingress_archive),
            archive_module: ControllableIngressArchive,
            required_completion: Keyword.get(opts, :required_completion, :durable),
            max_batch_entries: 10,

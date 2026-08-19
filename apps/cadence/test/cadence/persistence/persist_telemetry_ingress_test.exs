@@ -12,8 +12,10 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Governance.BindingSetRow
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive
   alias Cadence.IngressArchive.FileSystem, as: IngressArchiveFileSystem
   alias Cadence.OperationalEvents
+  alias Cadence.Protocol.RecordArchive
   alias Cadence.Protocol.RecordArchive.FileSystem, as: ProtocolRecordArchiveFileSystem
 
   alias Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow
@@ -24,6 +26,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
+  alias Cadence.Telemetry.{CurrentValueStore, Storage}
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
@@ -262,9 +265,6 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   end
 
   test "does not persist dispatch decisions when packet and raw evidence rows are archived outside Postgres" do
-    previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
-    previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])
-
     ingress_base_path =
       Path.join(
         System.tmp_dir!(),
@@ -277,35 +277,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         "cadence_protocol_archive_dispatch_#{System.unique_integer([:positive])}"
       )
 
-    Application.put_env(:cadence, :ingress_archive,
-      module: IngressArchiveFileSystem,
-      base_path: ingress_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    Application.put_env(:cadence, :protocol_record_archive,
-      module: ProtocolRecordArchiveFileSystem,
-      base_path: protocol_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    start_supervised!(
-      {Cadence.IngressArchive.FileSystem.Writer, Application.get_env(:cadence, :ingress_archive)}
-    )
-
-    start_supervised!(
-      {Cadence.Protocol.RecordArchive.FileSystem.Writer,
-       Application.get_env(:cadence, :protocol_record_archive)}
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
-      Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
-      File.rm_rf!(ingress_base_path)
-      File.rm_rf!(protocol_base_path)
-    end)
+    persistence_policy =
+      filesystem_persistence_policy(ingress_base_path, protocol_base_path)
 
     persist_mission_scope("org-dispatch-archive", "mission-dispatch-archive")
 
@@ -323,8 +296,10 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         rules: []
       })
 
-    assert {:ok, result} =
-             Cadence.process_and_persist_telemetry_ingress(raw_evidence, binding_set)
+    assert {:ok, result} = Cadence.process_telemetry_ingress(raw_evidence, binding_set)
+
+    assert {:ok, ^result} =
+             RuntimePersistence.persist_processing_result(persistence_policy, result, [])
 
     assert result.outputs == []
     assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-dispatch-archive") == 0
@@ -339,14 +314,6 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   end
 
   test "persists protocol anomalies when raw evidence is archived outside Postgres" do
-    previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
-    previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])
-
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    previous_telemetry_storage = Application.get_env(:cadence, :telemetry_storage, [])
-
     ingress_base_path =
       Path.join(
         System.tmp_dir!(),
@@ -359,46 +326,12 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         "cadence_protocol_archive_anomaly_#{System.unique_integer([:positive])}"
       )
 
-    Application.put_env(:cadence, :ingress_archive,
-      module: IngressArchiveFileSystem,
-      base_path: ingress_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    Application.put_env(:cadence, :protocol_record_archive,
-      module: ProtocolRecordArchiveFileSystem,
-      base_path: protocol_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.TestSupport.LazyCurrentValueStore
-    )
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.Telemetry.Storage.Writers.Noop,
-      organization_id: "org-test"
-    )
-
-    start_supervised!(
-      {Cadence.IngressArchive.FileSystem.Writer, Application.get_env(:cadence, :ingress_archive)}
-    )
-
-    start_supervised!(
-      {Cadence.Protocol.RecordArchive.FileSystem.Writer,
-       Application.get_env(:cadence, :protocol_record_archive)}
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
-      Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-      Application.put_env(:cadence, :telemetry_storage, previous_telemetry_storage)
-      File.rm_rf!(ingress_base_path)
-      File.rm_rf!(protocol_base_path)
-    end)
+    persistence_policy =
+      filesystem_persistence_policy(ingress_base_path, protocol_base_path,
+        current_value_store: Cadence.TestSupport.LazyCurrentValueStore,
+        telemetry_writer: Cadence.Telemetry.Storage.Writers.Noop,
+        telemetry_storage_opts: [organization_id: "org-test"]
+      )
 
     spacecraft =
       Spacecraft.new(%{
@@ -490,6 +423,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
     assert :ok =
              RuntimePersistence.persist_processing_results(
+               persistence_policy,
                [%{first_result | outputs: []}],
                organization_id: "org-test",
                record_current_values?: false
@@ -498,7 +432,14 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     refute_receive {:unexpected_persistence_query, _metadata}, 100
     :ok = :telemetry.detach(handler_id)
 
-    assert {:ok, second_result} = Cadence.process_and_persist_telemetry_ingress(raw_evidence_two)
+    assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two)
+
+    assert {:ok, ^second_result} =
+             RuntimePersistence.persist_processing_result(
+               persistence_policy,
+               second_result,
+               organization_id: "org-test"
+             )
 
     assert Enum.map(second_result.protocol_anomalies, & &1.anomaly_kind) == [
              :master_channel_frame_count_discontinuity,
@@ -530,10 +471,6 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   end
 
   test "batched persistence retries tolerate already-inserted protocol anomalies" do
-    previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
-    previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])
-    previous_telemetry_storage = Application.get_env(:cadence, :telemetry_storage, [])
-
     ingress_base_path =
       Path.join(
         System.tmp_dir!(),
@@ -546,41 +483,11 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         "cadence_protocol_archive_retry_#{System.unique_integer([:positive])}"
       )
 
-    Application.put_env(:cadence, :ingress_archive,
-      module: IngressArchiveFileSystem,
-      base_path: ingress_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    Application.put_env(:cadence, :protocol_record_archive,
-      module: ProtocolRecordArchiveFileSystem,
-      base_path: protocol_base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.Telemetry.Storage.Writers.Noop,
-      organization_id: "org-test"
-    )
-
-    start_supervised!(
-      {Cadence.IngressArchive.FileSystem.Writer, Application.get_env(:cadence, :ingress_archive)}
-    )
-
-    start_supervised!(
-      {Cadence.Protocol.RecordArchive.FileSystem.Writer,
-       Application.get_env(:cadence, :protocol_record_archive)}
-    )
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
-      Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
-      Application.put_env(:cadence, :telemetry_storage, previous_telemetry_storage)
-      File.rm_rf!(ingress_base_path)
-      File.rm_rf!(protocol_base_path)
-    end)
+    persistence_policy =
+      filesystem_persistence_policy(ingress_base_path, protocol_base_path,
+        telemetry_writer: Cadence.Telemetry.Storage.Writers.Noop,
+        telemetry_storage_opts: [organization_id: "org-test"]
+      )
 
     organization_id =
       "org-anomaly-retry-" <> Integer.to_string(System.unique_integer([:positive]))
@@ -673,12 +580,14 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
     assert :ok =
              RuntimePersistence.persist_processing_results(
+               persistence_policy,
                [second_result],
                record_current_values?: false
              )
 
     assert :ok =
              RuntimePersistence.persist_processing_results(
+               persistence_policy,
                [second_result],
                record_current_values?: false
              )
@@ -991,6 +900,62 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     DispatchDecisionRow
     |> where([row], row.evidence_id in ^evidence_ids)
     |> Repo.aggregate(:count, :dispatch_decision_id)
+  end
+
+  defp filesystem_persistence_policy(ingress_base_path, protocol_base_path, opts \\ []) do
+    ingress_archive_policy =
+      IngressArchive.policy(
+        module: IngressArchiveFileSystem,
+        base_path: ingress_base_path,
+        flush_interval_ms: 5_000,
+        flush_count: 10
+      )
+
+    record_archive_policy =
+      RecordArchive.policy(
+        module: ProtocolRecordArchiveFileSystem,
+        base_path: protocol_base_path,
+        flush_interval_ms: 5_000,
+        flush_count: 10
+      )
+
+    current_value_store_policy =
+      CurrentValueStore.policy(
+        module:
+          Keyword.get(
+            opts,
+            :current_value_store,
+            Cadence.Telemetry.CurrentValueStore.Postgres
+          )
+      )
+
+    storage_config =
+      [
+        writer:
+          Keyword.get(
+            opts,
+            :telemetry_writer,
+            Cadence.Telemetry.Storage.Writers.PostgresReadModel
+          ),
+        organization_id: "org-test",
+        realm: :flight,
+        data_source_id: "managed_questdb_primary",
+        binding_id: "default_flight_telemetry"
+      ]
+      |> Keyword.merge(Keyword.get(opts, :telemetry_storage_opts, []))
+
+    storage_policy =
+      Storage.policy(storage_config, current_value_store_policy: current_value_store_policy)
+
+    start_supervised!(IngressArchive.child_spec(ingress_archive_policy))
+    start_supervised!(RecordArchive.child_spec(record_archive_policy))
+
+    on_exit(fn ->
+      File.rm_rf!(ingress_base_path)
+      File.rm_rf!(protocol_base_path)
+    end)
+
+    RuntimePersistence.policy(ingress_archive_policy, record_archive_policy, storage_policy)
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

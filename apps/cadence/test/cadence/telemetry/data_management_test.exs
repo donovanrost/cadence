@@ -6,47 +6,20 @@ defmodule Cadence.Telemetry.DataManagementTest do
 
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore
-  alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS
   alias Cadence.Telemetry.Storage
 
   setup do
-    previous_storage_config = Application.get_env(:cadence, :telemetry_storage, [])
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    persistence_policy = data_management_persistence_policy()
 
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
+    start_supervised!(
+      CurrentValueStore.child_spec(persistence_policy.storage.current_value_store_policy)
     )
 
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
+    start_supervised!(HistoryStore.child_spec(persistence_policy.history_store))
+    CurrentValueStore.reset(persistence_policy.storage.current_value_store_policy)
+    HistoryStore.reset(persistence_policy.history_store)
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: HistoryStoreETS,
-      max_samples_per_point: :infinity
-    )
-
-    start_supervised!(HistoryStoreETS)
-    HistoryStoreETS.reset()
-
-    start_supervised!(Cadence.Telemetry.CurrentValueStore.ETS)
-    CurrentValueStore.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_storage_config)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
-
-    :ok
+    %{persistence_policy: persistence_policy}
   end
 
   test "records historical workflow stage transitions through product action policy" do
@@ -188,7 +161,9 @@ defmodule Cadence.Telemetry.DataManagementTest do
            }
   end
 
-  test "late-data policy write opts drive current projection behavior" do
+  test "late-data policy write opts drive current projection behavior", %{
+    persistence_policy: persistence_policy
+  } do
     baseline =
       sample("sample-late-policy-baseline", ~U[2026-06-22 10:00:00Z], ~U[2026-06-22 10:00:03Z],
         raw_value: 10
@@ -204,7 +179,11 @@ defmodule Cadence.Telemetry.DataManagementTest do
         raw_value: 99
       )
 
-    assert :ok = Storage.persist_samples([baseline], organization_id: "org-product")
+    assert :ok =
+             Storage.persist_samples(persistence_policy.storage, [baseline],
+               organization_id: "org-product"
+             )
+
     assert_receive {:telemetry_storage_envelopes, [_baseline_envelope]}
 
     assert {:ok, accept_opts} =
@@ -215,11 +194,15 @@ defmodule Cadence.Telemetry.DataManagementTest do
                dashboard_runtime_invalidation?: false
              )
 
-    assert :ok = Storage.persist_samples([accepted], accept_opts)
+    assert :ok = Storage.persist_samples(persistence_policy.storage, [accepted], accept_opts)
     assert_receive {:telemetry_storage_envelopes, [_accepted_envelope]}
 
     latest =
-      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value(
+        "mission-product",
+        "HK.counter",
+        telemetry_read_opts([spacecraft_id: "sc-1"], persistence_policy)
+      )
 
     assert latest.sample_id == "sample-late-policy-accepted"
     assert latest.raw_value == 20
@@ -233,38 +216,46 @@ defmodule Cadence.Telemetry.DataManagementTest do
                dashboard_runtime_invalidation?: false
              )
 
-    assert :ok = Storage.persist_samples([rejected], reject_opts)
+    assert :ok = Storage.persist_samples(persistence_policy.storage, [rejected], reject_opts)
     assert_receive {:telemetry_storage_envelopes, [_rejected_envelope]}
 
     latest =
-      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value(
+        "mission-product",
+        "HK.counter",
+        telemetry_read_opts([spacecraft_id: "sc-1"], persistence_policy)
+      )
 
     assert latest.sample_id == "sample-late-policy-accepted"
     assert latest.raw_value == 20
   end
 
-  test "executes accepted late-data policy by selecting source samples and writing canonical history" do
+  test "executes accepted late-data policy by selecting source samples and writing canonical history",
+       %{persistence_policy: persistence_policy} do
     assert :ok =
-             HistoryStore.persist_samples([
-               sample(
-                 "sample-late-source-before",
-                 ~U[2026-06-22 09:59:00Z],
-                 ~U[2026-06-22 11:59:03Z],
-                 realm: :backfill,
-                 data_source_id: "managed_questdb_backfill",
-                 binding_id: "backfill_telemetry",
-                 raw_value: 9
-               ),
-               sample(
-                 "sample-late-source-selected",
-                 ~U[2026-06-22 10:10:00Z],
-                 ~U[2026-06-22 12:10:03Z],
-                 realm: :backfill,
-                 data_source_id: "managed_questdb_backfill",
-                 binding_id: "backfill_telemetry",
-                 raw_value: 42
-               )
-             ])
+             HistoryStore.persist_samples(
+               persistence_policy.history_store,
+               [
+                 sample(
+                   "sample-late-source-before",
+                   ~U[2026-06-22 09:59:00Z],
+                   ~U[2026-06-22 11:59:03Z],
+                   realm: :backfill,
+                   data_source_id: "managed_questdb_backfill",
+                   binding_id: "backfill_telemetry",
+                   raw_value: 9
+                 ),
+                 sample(
+                   "sample-late-source-selected",
+                   ~U[2026-06-22 10:10:00Z],
+                   ~U[2026-06-22 12:10:03Z],
+                   realm: :backfill,
+                   data_source_id: "managed_questdb_backfill",
+                   binding_id: "backfill_telemetry",
+                   raw_value: 42
+                 )
+               ]
+             )
 
     assert {:ok, %{event: event, sample_count: 1, diagnostics: diagnostics}} =
              Cadence.execute_telemetry_late_data_policy(
@@ -286,7 +277,8 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  receipt_to: ~U[2026-06-22 12:30:00Z],
                  reason: "operator_accepts_late_data"
                },
-               dashboard_runtime_invalidation?: false
+               dashboard_runtime_invalidation?: false,
+               persistence_policy: persistence_policy
              )
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}
@@ -304,7 +296,9 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert diagnostics["point_id"] == "HK.counter"
   end
 
-  test "executes rejected late-data policy as advisory history without current projection" do
+  test "executes rejected late-data policy as advisory history without current projection", %{
+    persistence_policy: persistence_policy
+  } do
     baseline =
       sample("sample-late-reject-baseline", ~U[2026-06-22 10:00:00Z], ~U[2026-06-22 10:00:03Z],
         raw_value: 10
@@ -318,9 +312,13 @@ defmodule Cadence.Telemetry.DataManagementTest do
         raw_value: 99
       )
 
-    assert :ok = Storage.persist_samples([baseline], organization_id: "org-product")
+    assert :ok =
+             Storage.persist_samples(persistence_policy.storage, [baseline],
+               organization_id: "org-product"
+             )
+
     assert_receive {:telemetry_storage_envelopes, [_baseline_envelope]}
-    assert :ok = HistoryStore.persist_samples([late])
+    assert :ok = HistoryStore.persist_samples(persistence_policy.history_store, [late])
 
     assert {:ok, %{event: event, sample_count: 1}} =
              Cadence.execute_telemetry_late_data_policy(
@@ -342,7 +340,8 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  receipt_to: ~U[2026-06-22 12:30:00Z],
                  reason: "operator_rejects_late_data"
                },
-               dashboard_runtime_invalidation?: false
+               dashboard_runtime_invalidation?: false,
+               persistence_policy: persistence_policy
              )
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}
@@ -350,7 +349,11 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert envelope.validity_state == :advisory
 
     latest =
-      TelemetryReads.latest_value("mission-product", "HK.counter", spacecraft_id: "sc-1")
+      TelemetryReads.latest_value(
+        "mission-product",
+        "HK.counter",
+        telemetry_read_opts([spacecraft_id: "sc-1"], persistence_policy)
+      )
 
     assert latest.sample_id == "sample-late-reject-baseline"
     assert latest.raw_value == 10
@@ -362,7 +365,9 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert event.payload["refresh_latest_value"] == false
   end
 
-  test "backfills telemetry samples through storage with lifecycle events" do
+  test "backfills telemetry samples through storage with lifecycle events", %{
+    persistence_policy: persistence_policy
+  } do
     samples = [
       sample("sample-backfill-1", ~U[2026-06-22 11:00:00Z], ~U[2026-06-22 12:00:03Z]),
       sample("sample-backfill-2", ~U[2026-06-22 11:05:00Z], ~U[2026-06-22 12:05:03Z])
@@ -382,7 +387,8 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  actor_id: "operator-1",
                  actor_kind: "user"
                },
-               dashboard_runtime_invalidation?: false
+               dashboard_runtime_invalidation?: false,
+               persistence_policy: persistence_policy
              )
 
     assert_receive {:telemetry_storage_envelopes, envelopes}
@@ -415,7 +421,9 @@ defmodule Cadence.Telemetry.DataManagementTest do
     assert Enum.all?(events, &(&1.spacecraft_id == "sc-1"))
   end
 
-  test "imports telemetry samples through storage with lifecycle events" do
+  test "imports telemetry samples through storage with lifecycle events", %{
+    persistence_policy: persistence_policy
+  } do
     samples = [sample("sample-import-1", ~U[2026-06-22 11:00:00Z], ~U[2026-06-22 12:00:03Z])]
 
     assert :ok =
@@ -430,7 +438,8 @@ defmodule Cadence.Telemetry.DataManagementTest do
                  source_endpoint_id: "station-a",
                  recorded_at: ~U[2026-06-22 12:00:05Z]
                },
-               dashboard_runtime_invalidation?: false
+               dashboard_runtime_invalidation?: false,
+               persistence_policy: persistence_policy
              )
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}

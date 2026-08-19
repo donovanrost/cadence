@@ -27,13 +27,13 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowJobs do
     end
   end
 
-  @spec execute(binary()) ::
+  @spec execute(binary(), Cadence.Telemetry.DataManagement.persistence_policy()) ::
           {:ok, Storage.BackfillLifecycleEvent.t()} | {:error, term()}
-  def execute(workflow_run_id) when is_binary(workflow_run_id) do
+  def execute(workflow_run_id, %{} = policy) when is_binary(workflow_run_id) do
     with {:ok, %Jobs.Job{} = job} <-
            Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, workflow_run_id),
          {:ok, workflow, attrs} <- job_attrs(job.payload) do
-      case execute_job(job, workflow, attrs) do
+      case execute_job(policy, job, workflow, attrs) do
         {:ok, event} ->
           {:ok, event}
 
@@ -61,9 +61,10 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowJobs do
   defp job_attrs(payload),
     do: {:error, {:invalid_historical_data_workflow_job_payload, payload}}
 
-  defp execute_job(%Jobs.Job{} = job, workflow, attrs) do
-    with {:ok, samples, diagnostics} <- HistoricalSourceSamples.fetch(attrs),
-         :ok <- persist_samples(workflow, samples, attrs) do
+  defp execute_job(policy, %Jobs.Job{} = job, workflow, attrs) do
+    with {:ok, samples, diagnostics} <-
+           HistoricalSourceSamples.fetch(attrs, policy.history_store),
+         :ok <- persist_samples(policy.storage, workflow, samples, attrs) do
       attrs =
         attrs
         |> put_attr("sample_count", length(samples))
@@ -77,11 +78,11 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowJobs do
     end
   end
 
-  defp persist_samples(_workflow, [], _attrs), do: :ok
+  defp persist_samples(_storage_policy, _workflow, [], _attrs), do: :ok
 
-  defp persist_samples(workflow, samples, attrs) do
+  defp persist_samples(storage_policy, workflow, samples, attrs) do
     with {:ok, write_opts} <- write_opts(workflow, attrs) do
-      Storage.persist_samples(samples, write_opts)
+      Storage.persist_samples(storage_policy, samples, write_opts)
     end
   end
 

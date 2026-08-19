@@ -19,43 +19,27 @@ defmodule Cadence.Telemetry.HistoryStore.QuestDB do
     Storage.persist_samples(samples)
   end
 
+  def persist_samples(samples, opts) when is_list(samples) and is_list(opts) do
+    Storage.persist_samples(Keyword.fetch!(opts, :storage_policy), samples, [])
+  end
+
   @impl true
   def sample_history(mission_id, point_id, opts) do
-    opts =
-      :cadence
-      |> Application.get_env(:telemetry_history_store, [])
-      |> Keyword.merge(opts)
-
     ObservationReader.sample_history(mission_id, point_id, opts)
   end
 
   @impl true
   def sample_history_result(mission_id, point_id, opts) do
-    opts =
-      :cadence
-      |> Application.get_env(:telemetry_history_store, [])
-      |> Keyword.merge(opts)
-
     ObservationReader.sample_history_result(mission_id, point_id, opts)
   end
 
   @impl true
   def decimated_sample_history_result(mission_id, point_id, opts) do
-    opts =
-      :cadence
-      |> Application.get_env(:telemetry_history_store, [])
-      |> Keyword.merge(opts)
-
     ObservationReader.decimated_history_result(mission_id, point_id, opts)
   end
 
   @impl true
   def sample_watermark_result(mission_id, point_id, opts) do
-    opts =
-      :cadence
-      |> Application.get_env(:telemetry_history_store, [])
-      |> Keyword.merge(opts)
-
     ObservationReader.sample_watermark_result(mission_id, point_id, opts)
   end
 

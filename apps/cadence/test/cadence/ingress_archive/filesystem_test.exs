@@ -10,40 +10,35 @@ defmodule Cadence.IngressArchive.FileSystemTest do
   alias Cadence.Repo
 
   setup do
-    previous_config = Application.get_env(:cadence, :ingress_archive, [])
-
     base_path =
       Path.join(
         System.tmp_dir!(),
         "cadence_ingress_archive_#{System.unique_integer([:positive])}"
       )
 
-    Application.put_env(:cadence, :ingress_archive,
-      module: FileSystem,
-      base_path: base_path,
-      flush_interval_ms: 5_000,
-      flush_count: 10
-    )
+    archive_policy =
+      IngressArchive.policy(
+        module: FileSystem,
+        base_path: base_path,
+        flush_interval_ms: 5_000,
+        flush_count: 10
+      )
 
-    start_supervised!(
-      {Cadence.IngressArchive.FileSystem.Writer, Application.get_env(:cadence, :ingress_archive)}
-    )
+    start_supervised!(IngressArchive.child_spec(archive_policy))
 
-    on_exit(fn ->
-      Application.put_env(:cadence, :ingress_archive, previous_config)
-      File.rm_rf!(base_path)
-    end)
+    on_exit(fn -> File.rm_rf!(base_path) end)
 
     organization_id = "org-archive-" <> Integer.to_string(System.unique_integer([:positive]))
     mission_id = "mission-archive-" <> Integer.to_string(System.unique_integer([:positive]))
     persist_mission_scope(organization_id, mission_id)
 
-    %{mission_id: mission_id, base_path: base_path}
+    %{mission_id: mission_id, base_path: base_path, archive_policy: archive_policy}
   end
 
   test "archives raw evidence to segment files and replays by evidence, source, contact, and metadata",
        %{
-         mission_id: mission_id
+         mission_id: mission_id,
+         archive_policy: archive_policy
        } do
     first_receipt_time = DateTime.from_unix!(1_700_500_000, :second)
     second_receipt_time = DateTime.add(first_receipt_time, 10, :second)
@@ -78,17 +73,17 @@ defmodule Cadence.IngressArchive.FileSystemTest do
         }
       })
 
-    assert :ok = IngressArchive.persist_raw_evidence(raw_evidence_alpha)
-    assert :ok = IngressArchive.persist_raw_evidence(raw_evidence_beta)
+    assert :ok = IngressArchive.persist_raw_evidence(archive_policy, raw_evidence_alpha)
+    assert :ok = IngressArchive.persist_raw_evidence(archive_policy, raw_evidence_beta)
 
-    stats_before_flush = IngressArchive.stats(mission_id)
+    stats_before_flush = IngressArchive.stats(archive_policy, mission_id)
     assert stats_before_flush.queue_depth == 2
     assert stats_before_flush.oldest_buffered_age_ms >= 0
     assert stats_before_flush.flush_count == 0
 
-    assert :ok = IngressArchive.flush(mission_id)
+    assert :ok = IngressArchive.flush(archive_policy, mission_id)
 
-    stats_after_flush = IngressArchive.stats(mission_id)
+    stats_after_flush = IngressArchive.stats(archive_policy, mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
     assert stats_after_flush.flush_failure_count == 0
@@ -100,6 +95,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
     assert {:ok, [fetched_alpha]} =
              IngressArchive.fetch_raw_evidences(
+               archive_policy,
                mission_id,
                Scope.new(%{evidence_ids: ["evidence-alpha"]})
              )
@@ -109,6 +105,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
     assert {:ok, [source_filtered]} =
              IngressArchive.fetch_raw_evidences(
+               archive_policy,
                mission_id,
                Scope.new(%{source_ref: "antenna-beta"})
              )
@@ -117,6 +114,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
     assert {:ok, [contact_filtered]} =
              IngressArchive.fetch_raw_evidences(
+               archive_policy,
                mission_id,
                Scope.new(%{realized_contact_id: "contact-alpha"})
              )
@@ -125,6 +123,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
     assert {:ok, [metadata_filtered]} =
              IngressArchive.fetch_raw_evidences(
+               archive_policy,
                mission_id,
                Scope.new(%{metadata_match: %{"antenna_id" => "ant-b"}})
              )
@@ -164,7 +163,8 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
   test "batch archive receipt is durable only after deterministic object and index exist", %{
     mission_id: mission_id,
-    base_path: base_path
+    base_path: base_path,
+    archive_policy: archive_policy
   } do
     raw_evidence =
       RawEvidence.new(%{
@@ -179,13 +179,14 @@ defmodule Cadence.IngressArchive.FileSystemTest do
     batch = Batch.new("journal-stream-alpha", 0, 128, [raw_evidence])
 
     assert {:ok, %Receipt{completion: :durable} = first_receipt} =
-             IngressArchive.persist_batch(batch)
+             IngressArchive.persist_batch(archive_policy, batch)
 
     assert first_receipt.batch_id == batch.batch_id
     assert first_receipt.end_offset == 128
 
     assert {:ok, [fetched]} =
              IngressArchive.fetch_raw_evidences(
+               archive_policy,
                mission_id,
                Scope.new(%{evidence_ids: [raw_evidence.evidence_id]})
              )
@@ -196,7 +197,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
     assert length(object_paths) == 1
 
     assert {:ok, %Receipt{completion: :durable} = replay_receipt} =
-             IngressArchive.persist_batch(batch)
+             IngressArchive.persist_batch(archive_policy, batch)
 
     assert replay_receipt.batch_id == first_receipt.batch_id
     assert Path.wildcard(Path.join(base_path, "**/*.bin")) == object_paths
@@ -205,7 +206,8 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
   test "retries a deterministic batch after its object was written before its index", %{
     mission_id: mission_id,
-    base_path: base_path
+    base_path: base_path,
+    archive_policy: archive_policy
   } do
     raw_evidence =
       RawEvidence.new(%{
@@ -227,13 +229,16 @@ defmodule Cadence.IngressArchive.FileSystemTest do
     assert File.exists?(Path.join(base_path, object_key))
     assert 0 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
 
-    assert {:ok, %Receipt{completion: :durable}} = IngressArchive.persist_batch(batch)
+    assert {:ok, %Receipt{completion: :durable}} =
+             IngressArchive.persist_batch(archive_policy, batch)
+
     assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
     assert length(Path.wildcard(Path.join(base_path, "**/*.bin"))) == 1
   end
 
   test "stats and flush tolerate legacy writer state without buffer sizes", %{
-    mission_id: mission_id
+    mission_id: mission_id,
+    archive_policy: archive_policy
   } do
     receipt_time = DateTime.from_unix!(1_700_900_000, :second)
 
@@ -254,13 +259,13 @@ defmodule Cadence.IngressArchive.FileSystemTest do
       |> Map.delete(:buffer_sizes)
     end)
 
-    stats_before_flush = IngressArchive.stats(mission_id)
+    stats_before_flush = IngressArchive.stats(archive_policy, mission_id)
     assert stats_before_flush.queue_depth == 1
 
-    assert :ok = IngressArchive.flush(mission_id)
+    assert :ok = IngressArchive.flush(archive_policy, mission_id)
     assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
 
-    stats_after_flush = IngressArchive.stats(mission_id)
+    stats_after_flush = IngressArchive.stats(archive_policy, mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
   end

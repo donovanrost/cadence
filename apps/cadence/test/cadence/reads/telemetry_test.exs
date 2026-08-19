@@ -6,6 +6,7 @@ defmodule Cadence.Reads.TelemetryTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.TestSupport.TelemetryPersistencePolicies
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 
@@ -15,13 +16,15 @@ defmodule Cadence.Reads.TelemetryTest do
     mission_id = "mission-telemetry-reads-#{suffix}"
 
     persist_mission_scope(organization_id, mission_id)
+    policies = TelemetryPersistencePolicies.postgres(organization_id: organization_id)
 
-    %{organization_id: organization_id, mission_id: mission_id}
+    %{organization_id: organization_id, mission_id: mission_id, policies: policies}
   end
 
   test "reads telemetry history and keeps the latest-value projection on the newest sample", %{
     organization_id: organization_id,
-    mission_id: mission_id
+    mission_id: mission_id,
+    policies: policies
   } do
     binding_set = persist_binding_set_fixture(organization_id, mission_id)
 
@@ -54,29 +57,39 @@ defmodule Cadence.Reads.TelemetryTest do
              )
 
     latest_sample =
-      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
+      TelemetryReads.latest_value(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies)
+      )
 
     assert latest_sample.raw_value == 20
     assert DateTime.compare(latest_sample.receipt_time, newer_evidence.receipt_time) == :eq
 
     as_of_sample =
-      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
-        to_receipt_time: older_evidence.receipt_time
+      TelemetryReads.latest_value(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies, to_receipt_time: older_evidence.receipt_time)
       )
 
     assert as_of_sample.raw_value == 10
     assert DateTime.compare(as_of_sample.receipt_time, older_evidence.receipt_time) == :eq
 
     history =
-      TelemetryReads.sample_history(organization_id, mission_id, "HK.counter",
-        order: :asc,
-        limit: 10
+      TelemetryReads.sample_history(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies, order: :asc, limit: 10)
       )
 
     assert Enum.map(history, & &1.raw_value) == [10, 20]
 
     latest_values =
-      TelemetryReads.latest_values_for_mission(organization_id, mission_id, [])
+      TelemetryReads.latest_values_for_mission(organization_id, mission_id, read_opts(policies))
 
     assert Enum.map(latest_values, & &1.point_name) == ["HK.counter"]
     assert hd(latest_values).raw_value == 20
@@ -84,7 +97,8 @@ defmodule Cadence.Reads.TelemetryTest do
 
   test "reads replay latest values from replay-scoped history instead of live current values", %{
     organization_id: organization_id,
-    mission_id: mission_id
+    mission_id: mission_id,
+    policies: policies
   } do
     binding_set = persist_binding_set_fixture(organization_id, mission_id)
 
@@ -104,17 +118,27 @@ defmodule Cadence.Reads.TelemetryTest do
     mark_samples_as_replay([other_replay], "replay-run-2")
 
     latest_live =
-      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter", [])
+      TelemetryReads.latest_value(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies)
+      )
 
     assert latest_live.sample_id == live_sample.sample_id
     assert latest_live.raw_value == 20
 
     latest_replay =
-      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
-        realm: :replay,
-        data_source_id: "managed_questdb_replay",
-        source_binding_id: "replay_telemetry",
-        replay_run_id: "replay-run-1"
+      TelemetryReads.latest_value(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies,
+          realm: :replay,
+          data_source_id: "managed_questdb_replay",
+          source_binding_id: "replay_telemetry",
+          replay_run_id: "replay-run-1"
+        )
       )
 
     assert latest_replay.sample_id == replay_newer.sample_id
@@ -122,11 +146,16 @@ defmodule Cadence.Reads.TelemetryTest do
     assert latest_replay.provenance["storage"]["replay_run_id"] == "replay-run-1"
 
     latest_other_replay =
-      TelemetryReads.latest_value(organization_id, mission_id, "HK.counter",
-        realm: :replay,
-        data_source_id: "managed_questdb_replay",
-        source_binding_id: "replay_telemetry",
-        replay_run_id: "replay-run-2"
+      TelemetryReads.latest_value(
+        organization_id,
+        mission_id,
+        "HK.counter",
+        read_opts(policies,
+          realm: :replay,
+          data_source_id: "managed_questdb_replay",
+          source_binding_id: "replay_telemetry",
+          replay_run_id: "replay-run-2"
+        )
       )
 
     assert latest_other_replay.sample_id == other_replay.sample_id
@@ -209,6 +238,12 @@ defmodule Cadence.Reads.TelemetryTest do
       |> Repo.update_all(set: [provenance: replay_provenance(replay_run_id)])
 
     assert count == length(sample_ids)
+  end
+
+  defp read_opts(policies, opts \\ []) do
+    opts
+    |> Keyword.put(:current_value_store_policy, policies.current_value_store)
+    |> Keyword.put(:history_store_policy, policies.history_store)
   end
 
   defp replay_provenance(replay_run_id) do

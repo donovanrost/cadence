@@ -14,15 +14,15 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   @table_name :cadence_telemetry_current_values
 
   @impl true
-  def child_spec(_opts) do
+  def child_spec(opts) do
     %{
       id: __MODULE__,
-      start: {__MODULE__, :start_link, [[]]}
+      start: {__MODULE__, :start_link, [opts]}
     }
   end
 
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @impl true

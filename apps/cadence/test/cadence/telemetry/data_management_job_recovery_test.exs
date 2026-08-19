@@ -7,47 +7,20 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
 
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore
-  alias Cadence.Telemetry.HistoryStore.ETS, as: HistoryStoreETS
   alias Cadence.Telemetry.Storage
 
   setup do
-    previous_storage_config = Application.get_env(:cadence, :telemetry_storage, [])
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    persistence_policy = data_management_persistence_policy()
 
-    previous_current_value_store =
-      Application.get_env(:cadence, :telemetry_current_value_store, [])
-
-    Application.put_env(:cadence, :telemetry_storage,
-      writer: Cadence.TestSupport.CapturingTelemetryStorageWriter,
-      writer_opts: [test_pid: self()],
-      realm: :flight,
-      data_source_id: "managed_questdb_primary",
-      binding_id: "default_flight_telemetry",
-      dashboard_runtime_invalidation?: false
+    start_supervised!(
+      CurrentValueStore.child_spec(persistence_policy.storage.current_value_store_policy)
     )
 
-    Application.put_env(:cadence, :telemetry_current_value_store,
-      module: Cadence.Telemetry.CurrentValueStore.ETS
-    )
+    start_supervised!(HistoryStore.child_spec(persistence_policy.history_store))
+    CurrentValueStore.reset(persistence_policy.storage.current_value_store_policy)
+    HistoryStore.reset(persistence_policy.history_store)
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: HistoryStoreETS,
-      max_samples_per_point: :infinity
-    )
-
-    start_supervised!(HistoryStoreETS)
-    HistoryStoreETS.reset()
-
-    start_supervised!(Cadence.Telemetry.CurrentValueStore.ETS)
-    CurrentValueStore.reset()
-
-    on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, previous_storage_config)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
-      Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-    end)
-
-    :ok
+    %{persistence_policy: persistence_policy}
   end
 
   test "retries historical data workflow group failed jobs through the product API" do
@@ -749,31 +722,42 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
     assert fetched_job.status == :queued
   end
 
-  test "dispatches historical data workflow jobs through the background job runner" do
+  test "dispatches historical data workflow jobs through the background job runner", %{
+    persistence_policy: persistence_policy
+  } do
     assert :ok =
-             HistoryStore.persist_samples([
-               sample("sample-source-before", ~U[2026-06-22 09:59:00Z], ~U[2026-06-22 10:59:03Z],
-                 realm: :backfill,
-                 data_source_id: "managed_questdb_backfill",
-                 binding_id: "backfill_telemetry",
-                 raw_value: 41
-               ),
-               sample("sample-source-copied", ~U[2026-06-22 10:20:00Z], ~U[2026-06-22 10:20:03Z],
-                 realm: :backfill,
-                 data_source_id: "managed_questdb_backfill",
-                 binding_id: "backfill_telemetry",
-                 raw_value: 43
-               ),
-               sample(
-                 "sample-source-other-binding",
-                 ~U[2026-06-22 10:30:00Z],
-                 ~U[2026-06-22 10:30:03Z],
-                 realm: :backfill,
-                 data_source_id: "managed_questdb_backfill",
-                 binding_id: "other_backfill_binding",
-                 raw_value: 99
-               )
-             ])
+             HistoryStore.persist_samples(
+               persistence_policy.history_store,
+               [
+                 sample(
+                   "sample-source-before",
+                   ~U[2026-06-22 09:59:00Z],
+                   ~U[2026-06-22 10:59:03Z],
+                   realm: :backfill,
+                   data_source_id: "managed_questdb_backfill",
+                   binding_id: "backfill_telemetry",
+                   raw_value: 41
+                 ),
+                 sample(
+                   "sample-source-copied",
+                   ~U[2026-06-22 10:20:00Z],
+                   ~U[2026-06-22 10:20:03Z],
+                   realm: :backfill,
+                   data_source_id: "managed_questdb_backfill",
+                   binding_id: "backfill_telemetry",
+                   raw_value: 43
+                 ),
+                 sample(
+                   "sample-source-other-binding",
+                   ~U[2026-06-22 10:30:00Z],
+                   ~U[2026-06-22 10:30:03Z],
+                   realm: :backfill,
+                   data_source_id: "managed_questdb_backfill",
+                   binding_id: "other_backfill_binding",
+                   raw_value: 99
+                 )
+               ]
+             )
 
     attrs = %{
       backfill_run_id: "backfill-run-dispatched",
@@ -839,7 +823,9 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
     assert claimed_job.job_id == job.job_id
     assert claimed_job.status == :running
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, completed_job} =
+             JobRunner.run_job(data_management_job_runner(persistence_policy), claimed_job.job_id)
+
     assert completed_job.status == :completed
 
     assert_receive {:telemetry_storage_envelopes, [envelope]}
@@ -888,7 +874,9 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
              "backfill_telemetry"
   end
 
-  test "records structured failure diagnostics for historical data workflow jobs" do
+  test "records structured failure diagnostics for historical data workflow jobs", %{
+    persistence_policy: persistence_policy
+  } do
     attrs = %{
       backfill_run_id: "backfill-run-dispatch-failed",
       organization_id: "org-product",
@@ -930,7 +918,9 @@ defmodule Cadence.Telemetry.DataManagementJobRecoveryTest do
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == job.job_id
 
-    assert {:ok, failed_job} = JobRunner.run_job(claimed_job.job_id)
+    assert {:ok, failed_job} =
+             JobRunner.run_job(data_management_job_runner(persistence_policy), claimed_job.job_id)
+
     assert failed_job.status == :failed
     assert failed_job.failure_reason == %{"tuple" => ["missing_field", "point_id"]}
 

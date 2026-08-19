@@ -6,6 +6,11 @@ defmodule Cadence.Runtime.PathRuntime do
   alias Cadence.Runtime.{ContactPathSpec, MissionRuntime}
 
   def start_link(opts) when is_list(opts) do
+    start_link([], opts)
+  end
+
+  def start_link(runtime_opts, opts) when is_list(runtime_opts) and is_list(opts) do
+    opts = Keyword.merge(runtime_opts, opts)
     mission_id = Keyword.fetch!(opts, :mission_id)
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
     %ContactPathSpec{} = path = Keyword.fetch!(opts, :path)
