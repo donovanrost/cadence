@@ -39,8 +39,34 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   end
 
   @impl true
+  def persist_records_multi(
+        %Multi{} = multi,
+        %RawEvidence{} = raw_evidence,
+        transfer_frame_records,
+        packet_records,
+        backend_opts
+      )
+      when is_list(transfer_frame_records) and is_list(packet_records) and
+             is_list(backend_opts) do
+    persist_records_multi(multi, raw_evidence, transfer_frame_records, packet_records)
+  end
+
+  @impl true
   def persist_records(%RawEvidence{}, _transfer_frame_records, _packet_records), do: :ok
 
+  @impl true
+  def persist_records(
+        %RawEvidence{} = raw_evidence,
+        transfer_frame_records,
+        packet_records,
+        backend_opts
+      )
+      when is_list(transfer_frame_records) and is_list(packet_records) and
+             is_list(backend_opts) do
+    persist_records(raw_evidence, transfer_frame_records, packet_records)
+  end
+
+  @impl true
   def persist_records_many(records_batch) when is_list(records_batch) do
     case Enum.all?(records_batch, fn
            {%RawEvidence{}, transfer_frame_records, packet_records}
@@ -56,7 +82,21 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   end
 
   @impl true
+  def persist_records_many(records_batch, backend_opts)
+      when is_list(records_batch) and is_list(backend_opts) do
+    persist_records_many(records_batch)
+  end
+
+  @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
+    fetch_packet_records(mission_id, scope, [])
+  end
+
+  @impl true
+  def fetch_packet_records(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    repo = repo(backend_opts)
+
     with {:ok, evidence_ids} <- evidence_ids_for_scope(mission_id, scope) do
       records =
         PacketRecordRow
@@ -66,7 +106,7 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
         )
         |> order_by([packet], asc: packet.receipt_time, asc: packet.packet_id)
         |> maybe_limit_scope(scope.limit)
-        |> Repo.all()
+        |> repo.all()
         |> Enum.map(&packet_record_row_to_domain/1)
 
       replay_scope_result(records, scope)
@@ -75,6 +115,14 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
 
   @impl true
   def fetch_transfer_frame_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
+    fetch_transfer_frame_records(mission_id, scope, [])
+  end
+
+  @impl true
+  def fetch_transfer_frame_records(mission_id, %Scope{} = scope, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    repo = repo(backend_opts)
+
     with {:ok, evidence_ids} <- evidence_ids_for_scope(mission_id, scope) do
       records =
         TransferFrameRecordRow
@@ -84,7 +132,7 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
         )
         |> order_by([frame], asc: frame.receipt_time, asc: frame.frame_record_id)
         |> maybe_limit_scope(scope.limit)
-        |> Repo.all()
+        |> repo.all()
         |> Enum.map(&transfer_frame_record_row_to_domain/1)
 
       replay_scope_result(records, scope)
@@ -95,9 +143,18 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   def flush(_mission_id), do: :ok
 
   @impl true
+  def flush(_mission_id, backend_opts) when is_list(backend_opts), do: :ok
+
+  @impl true
   def reset do
-    _ = Repo.delete_all(PacketRecordRow)
-    _ = Repo.delete_all(TransferFrameRecordRow)
+    reset([])
+  end
+
+  @impl true
+  def reset(backend_opts) when is_list(backend_opts) do
+    repo = repo(backend_opts)
+    _ = repo.delete_all(PacketRecordRow)
+    _ = repo.delete_all(TransferFrameRecordRow)
     :ok
   end
 
@@ -119,7 +176,15 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   end
 
   @impl true
+  def stats(mission_id, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts),
+      do: stats(mission_id)
+
+  @impl true
   def reset_stats(_mission_id), do: :ok
+
+  @impl true
+  def reset_stats(_mission_id, backend_opts) when is_list(backend_opts), do: :ok
 
   defp add_packet_record_inserts(%Multi{} = multi, packet_records) do
     Enum.reduce(packet_records, multi, fn %PacketRecord{} = packet_record, %Multi{} = acc ->
@@ -204,4 +269,6 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
 
   defp decode_quality(nil), do: nil
   defp decode_quality(value) when is_binary(value), do: String.to_existing_atom(value)
+
+  defp repo(backend_opts), do: Keyword.get(backend_opts, :repo, Repo)
 end

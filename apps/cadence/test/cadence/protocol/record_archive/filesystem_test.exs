@@ -277,7 +277,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     entries = FileSystem.build_entries(raw_evidence, [transfer_frame_record], [packet_record])
 
-    :sys.replace_state(Cadence.Protocol.RecordArchive.FileSystem.Writer, fn state ->
+    writer = Keyword.get(archive_policy.backend_opts, :name, FileSystem.Writer)
+
+    :sys.replace_state(writer, fn state ->
       state
       |> Map.put(:buffers, %{mission_id => entries})
       |> Map.put(:buffer_started_at_ms, %{mission_id => System.monotonic_time(:millisecond)})

@@ -25,6 +25,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   @behaviour Cadence.Protocol.RecordArchive
   @archive_backend "filesystem"
+  @instance_record_id_prefix "cadence-instance-record:"
 
   @packet_record_kind "packet_record"
   @transfer_frame_record_kind "transfer_frame_record"
@@ -44,13 +45,48 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
       do: multi
 
   @impl true
+  def persist_records_multi(
+        %Multi{} = multi,
+        %RawEvidence{},
+        _transfer_frame_records,
+        _packet_records,
+        backend_opts
+      )
+      when is_list(backend_opts),
+      do: multi
+
+  @impl true
   def persist_records(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records)
       when is_list(transfer_frame_records) and is_list(packet_records) do
-    Writer.enqueue(raw_evidence, transfer_frame_records, packet_records)
+    persist_records(
+      raw_evidence,
+      transfer_frame_records,
+      packet_records,
+      configured_backend_opts()
+    )
   end
 
+  @impl true
+  def persist_records(
+        %RawEvidence{} = raw_evidence,
+        transfer_frame_records,
+        packet_records,
+        backend_opts
+      )
+      when is_list(transfer_frame_records) and is_list(packet_records) and
+             is_list(backend_opts) do
+    Writer.enqueue(raw_evidence, transfer_frame_records, packet_records, backend_opts)
+  end
+
+  @impl true
   def persist_records_many(records_batch) when is_list(records_batch) do
-    Writer.enqueue_many(records_batch)
+    persist_records_many(records_batch, configured_backend_opts())
+  end
+
+  @impl true
+  def persist_records_many(records_batch, backend_opts)
+      when is_list(records_batch) and is_list(backend_opts) do
+    Writer.enqueue_many(records_batch, backend_opts)
   end
 
   @impl true
@@ -58,6 +94,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     fetch_packet_records(mission_id, scope, configured_backend_opts())
   end
 
+  @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope, backend_opts)
       when is_binary(mission_id) and is_list(backend_opts) do
     fetch_records(mission_id, scope, @packet_record_kind, backend_opts)
@@ -68,6 +105,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     fetch_transfer_frame_records(mission_id, scope, configured_backend_opts())
   end
 
+  @impl true
   def fetch_transfer_frame_records(mission_id, %Scope{} = scope, backend_opts)
       when is_binary(mission_id) and is_list(backend_opts) do
     fetch_records(mission_id, scope, @transfer_frame_record_kind, backend_opts)
@@ -75,38 +113,71 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   @impl true
   def flush(mission_id \\ nil) do
-    Writer.flush(mission_id)
+    flush(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def flush(mission_id, backend_opts)
+      when (is_binary(mission_id) or is_nil(mission_id)) and is_list(backend_opts) do
+    Writer.flush(mission_id, backend_opts)
   end
 
   @impl true
   def reset do
-    _ = Repo.delete_all(ProtocolArchiveRecordEntryRow)
-    Writer.reset()
+    reset(configured_backend_opts())
+  end
+
+  @impl true
+  def reset(backend_opts) when is_list(backend_opts) do
+    archive_backend = archive_backend(backend_opts)
+    repo = repo(backend_opts)
+
+    _ =
+      ProtocolArchiveRecordEntryRow
+      |> where([row], row.archive_backend == ^archive_backend)
+      |> repo.delete_all()
+
+    Writer.reset(backend_opts)
   end
 
   @impl true
   def stats(mission_id) when is_binary(mission_id) do
-    Writer.stats(mission_id)
+    stats(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def stats(mission_id, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    Writer.stats(mission_id, backend_opts)
   end
 
   @impl true
   def reset_stats(mission_id) when is_binary(mission_id) do
-    Writer.reset_stats(mission_id)
+    reset_stats(mission_id, configured_backend_opts())
+  end
+
+  @impl true
+  def reset_stats(mission_id, backend_opts)
+      when is_binary(mission_id) and is_list(backend_opts) do
+    Writer.reset_stats(mission_id, backend_opts)
   end
 
   @spec persist_segment(binary(), [map()], keyword()) :: :ok | {:error, term()}
   def persist_segment(segment_id, entries, opts \\ [])
       when is_binary(segment_id) and is_list(entries) do
     object_key = Keyword.fetch!(opts, :object_key)
-    archive_backend = Keyword.get(opts, :archive_backend, @archive_backend)
+    archive_backend = archive_backend(opts)
+    repo = repo(opts)
     inserted_at = normalize_datetime(DateTime.utc_now())
 
     rows =
       Enum.map(entries, fn entry ->
+        record_id = index_record_id(Map.fetch!(entry, "record_id"), archive_backend)
+
         %{
-          entry_id: entry_id(entry),
+          entry_id: entry_id(entry, record_id),
           record_kind: Map.fetch!(entry, "record_kind"),
-          record_id: Map.fetch!(entry, "record_id"),
+          record_id: record_id,
           segment_id: segment_id,
           object_key: object_key,
           archive_backend: archive_backend,
@@ -134,7 +205,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         }
       end)
 
-    case Repo.insert_all(
+    case repo.insert_all(
            ProtocolArchiveRecordEntryRow,
            rows,
            on_conflict: :nothing,
@@ -144,7 +215,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         :ok
 
       {_count, _rows} ->
-        if archived_record_ids?(rows) do
+        if archived_record_ids?(rows, opts) do
           :ok
         else
           {:error, {:protocol_archive_index_insert_mismatch, length(rows)}}
@@ -270,9 +341,25 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   @spec new_segment_id() :: binary()
   def new_segment_id, do: Ids.new("protocol_segment")
 
+  @doc false
+  @spec archive_backend(keyword()) :: binary()
+  def archive_backend(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :archive_backend) do
+      {:ok, archive_backend} when is_binary(archive_backend) and archive_backend != "" ->
+        archive_backend
+
+      {:ok, archive_backend} ->
+        raise ArgumentError,
+              "expected protocol record archive :archive_backend to be a non-empty string, got: #{inspect(archive_backend)}"
+
+      :error ->
+        instance_archive_backend(Keyword.get(opts, :instance_id))
+    end
+  end
+
   defp fetch_records(mission_id, %Scope{} = scope, record_kind, backend_opts) do
-    with :ok <- flush(mission_id),
-         rows <- query_rows(mission_id, scope, record_kind),
+    with :ok <- flush(mission_id, backend_opts),
+         rows <- query_rows(mission_id, scope, record_kind, backend_opts),
          {:ok, records} <- load_records(rows, scope, record_kind, backend_opts) do
       case scope.evidence_ids do
         evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
@@ -293,13 +380,19 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     end
   end
 
-  defp query_rows(mission_id, %Scope{} = scope, record_kind) do
+  defp query_rows(mission_id, %Scope{} = scope, record_kind, backend_opts) do
+    archive_backend = archive_backend(backend_opts)
+
     ProtocolArchiveRecordEntryRow
-    |> where([row], row.mission_id == ^mission_id and row.record_kind == ^record_kind)
+    |> where(
+      [row],
+      row.archive_backend == ^archive_backend and row.mission_id == ^mission_id and
+        row.record_kind == ^record_kind
+    )
     |> maybe_filter_scope(scope)
     |> order_by([row], asc: row.receipt_time, asc: row.record_id)
     |> maybe_limit_scope(scope.limit)
-    |> Repo.all()
+    |> repo(backend_opts).all()
   end
 
   defp maybe_filter_scope(query, %Scope{} = scope) do
@@ -366,12 +459,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   defp maybe_limit_scope(query, limit), do: limit(query, ^limit)
 
   defp load_records(rows, %Scope{} = scope, record_kind, backend_opts) do
+    archive_backend = archive_backend(backend_opts)
+
     rows
     |> Enum.group_by(& &1.object_key)
     |> Enum.reduce_while({:ok, []}, fn {object_key, grouped_rows}, {:ok, acc} ->
       case load_segment_object(object_key, backend_opts) do
         {:ok, entries} ->
-          selected_ids = MapSet.new(Enum.map(grouped_rows, & &1.record_id))
+          selected_ids =
+            MapSet.new(Enum.map(grouped_rows, &domain_record_id(&1.record_id, archive_backend)))
 
           selected_records =
             entries
@@ -495,8 +591,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   defp decode_atom(nil), do: nil
   defp decode_atom(value) when is_binary(value), do: String.to_existing_atom(value)
 
-  defp entry_id(entry) do
-    "#{Map.fetch!(entry, "record_kind")}:#{Map.fetch!(entry, "record_id")}"
+  defp entry_id(entry, record_id) do
+    "#{Map.fetch!(entry, "record_kind")}:#{record_id}"
   end
 
   defp missing_evidence_ids(records, evidence_ids) do
@@ -505,10 +601,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   end
 
   defp configured_backend_opts do
-    Application.get_env(:cadence, :protocol_record_archive, [])
+    :cadence
+    |> Application.get_env(:protocol_record_archive, [])
+    |> Keyword.delete(:module)
   end
 
-  defp archived_record_ids?(rows) do
+  defp archived_record_ids?(rows, opts) do
+    archive_backend = archive_backend(opts)
+    repo = repo(opts)
+
     expected_pairs =
       rows
       |> Enum.map(&{Map.fetch!(&1, :record_kind), Map.fetch!(&1, :record_id)})
@@ -520,12 +621,59 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
     found_pairs =
       ProtocolArchiveRecordEntryRow
-      |> where([row], row.record_kind in ^record_kinds and row.record_id in ^record_ids)
+      |> where(
+        [row],
+        row.archive_backend == ^archive_backend and row.record_kind in ^record_kinds and
+          row.record_id in ^record_ids
+      )
       |> select([row], {row.record_kind, row.record_id})
-      |> Repo.all()
+      |> repo.all()
       |> Enum.filter(&MapSet.member?(expected_set, &1))
       |> MapSet.new()
 
     MapSet.equal?(found_pairs, expected_set)
   end
+
+  defp instance_archive_backend(nil), do: @archive_backend
+
+  defp instance_archive_backend(instance_id)
+       when is_binary(instance_id) and instance_id != "" do
+    encoded_instance_id = Base.url_encode64(instance_id, padding: false)
+    "#{@archive_backend}:#{encoded_instance_id}"
+  end
+
+  defp instance_archive_backend(instance_id) do
+    raise ArgumentError,
+          "expected protocol record archive :instance_id to be a non-empty string, got: #{inspect(instance_id)}"
+  end
+
+  defp index_record_id(record_id, @archive_backend), do: record_id
+
+  defp index_record_id(record_id, archive_backend) do
+    encoded =
+      {archive_backend, record_id}
+      |> :erlang.term_to_binary()
+      |> Base.url_encode64(padding: false)
+
+    @instance_record_id_prefix <> encoded
+  end
+
+  defp domain_record_id(record_id, @archive_backend), do: record_id
+
+  defp domain_record_id(@instance_record_id_prefix <> encoded, archive_backend) do
+    with {:ok, payload} <- Base.url_decode64(encoded, padding: false),
+         {^archive_backend, record_id} <- :erlang.binary_to_term(payload, [:safe]),
+         true <- is_binary(record_id) do
+      record_id
+    else
+      _other ->
+        raise "invalid protocol archive instance record id #{inspect(encoded)}"
+    end
+  end
+
+  defp domain_record_id(record_id, archive_backend) do
+    raise "protocol archive record id #{inspect(record_id)} does not belong to #{inspect(archive_backend)}"
+  end
+
+  defp repo(opts), do: Keyword.get(opts, :repo, Repo)
 end

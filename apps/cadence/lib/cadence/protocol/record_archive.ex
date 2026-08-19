@@ -18,9 +18,10 @@ defmodule Cadence.Protocol.RecordArchive do
 
   @default_backend Cadence.Protocol.RecordArchive.Postgres
 
+  @type backend_opts :: keyword()
   @type policy :: %{
           required(:backend) => module(),
-          required(:backend_opts) => keyword()
+          required(:backend_opts) => backend_opts()
         }
 
   @type stats :: %{
@@ -62,6 +63,52 @@ defmodule Cadence.Protocol.RecordArchive do
   @callback reset() :: :ok
   @callback stats(binary()) :: stats()
   @callback reset_stats(binary()) :: :ok
+
+  @callback persist_records_multi(
+              Multi.t(),
+              RawEvidence.t(),
+              [TransferFrameRecord.t()],
+              [PacketRecord.t()],
+              backend_opts()
+            ) :: Multi.t()
+
+  @callback persist_records(
+              RawEvidence.t(),
+              [TransferFrameRecord.t()],
+              [PacketRecord.t()],
+              backend_opts()
+            ) :: :ok | {:error, term()}
+
+  @callback fetch_packet_records(binary(), Scope.t(), backend_opts()) ::
+              {:ok, [PacketRecord.t()]} | {:error, term()}
+
+  @callback fetch_transfer_frame_records(binary(), Scope.t(), backend_opts()) ::
+              {:ok, [TransferFrameRecord.t()]} | {:error, term()}
+
+  @callback flush(binary() | nil, backend_opts()) :: :ok | {:error, term()}
+  @callback reset(backend_opts()) :: :ok
+  @callback stats(binary(), backend_opts()) :: stats()
+  @callback reset_stats(binary(), backend_opts()) :: :ok
+
+  @callback persist_records_many([
+              {RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}
+            ]) :: :ok | {:error, term()}
+
+  @callback persist_records_many(
+              [{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}],
+              backend_opts()
+            ) :: :ok | {:error, term()}
+
+  @optional_callbacks persist_records_many: 1,
+                      persist_records_many: 2,
+                      persist_records_multi: 5,
+                      persist_records: 4,
+                      fetch_packet_records: 3,
+                      fetch_transfer_frame_records: 3,
+                      flush: 2,
+                      reset: 1,
+                      stats: 2,
+                      reset_stats: 2
 
   @doc """
   Builds a child spec from the current application configuration.
@@ -205,7 +252,7 @@ defmodule Cadence.Protocol.RecordArchive do
       records_batch == [] ->
         :ok
 
-      function_exported?(backend, :persist_records_many, 1) ->
+      backend_call_exported?(backend, :persist_records_many, 1) ->
         call_backend(policy, :persist_records_many, [records_batch])
 
       true ->
@@ -213,7 +260,7 @@ defmodule Cadence.Protocol.RecordArchive do
           {%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records}, :ok
           when is_list(transfer_frame_records) and is_list(packet_records) ->
             persist_record_batch_entry(
-              backend,
+              policy,
               raw_evidence,
               transfer_frame_records,
               packet_records
@@ -226,12 +273,16 @@ defmodule Cadence.Protocol.RecordArchive do
   end
 
   defp persist_record_batch_entry(
-         backend,
+         policy,
          %RawEvidence{} = raw_evidence,
          transfer_frame_records,
          packet_records
        ) do
-    case backend.persist_records(raw_evidence, transfer_frame_records, packet_records) do
+    case call_backend(policy, :persist_records, [
+           raw_evidence,
+           transfer_frame_records,
+           packet_records
+         ]) do
       :ok -> {:cont, :ok}
       {:error, reason} -> {:halt, {:error, reason}}
     end
@@ -268,7 +319,7 @@ defmodule Cadence.Protocol.RecordArchive do
   def flush(%{} = policy, mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :flush, 1) do
+    if backend_call_exported?(backend, :flush, 1) do
       call_backend(policy, :flush, [mission_id])
     else
       :ok
@@ -282,7 +333,7 @@ defmodule Cadence.Protocol.RecordArchive do
   def reset(%{} = policy) do
     backend = backend(policy)
 
-    if function_exported?(backend, :reset, 0) do
+    if backend_call_exported?(backend, :reset, 0) do
       call_backend(policy, :reset, [])
     else
       :ok
@@ -298,7 +349,7 @@ defmodule Cadence.Protocol.RecordArchive do
   def stats(%{} = policy, mission_id) when is_binary(mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :stats, 1) do
+    if backend_call_exported?(backend, :stats, 1) do
       call_backend(policy, :stats, [mission_id])
     else
       empty_stats()
@@ -314,7 +365,7 @@ defmodule Cadence.Protocol.RecordArchive do
   def reset_stats(%{} = policy, mission_id) when is_binary(mission_id) do
     backend = backend(policy)
 
-    if function_exported?(backend, :reset_stats, 1) do
+    if backend_call_exported?(backend, :reset_stats, 1) do
       call_backend(policy, :reset_stats, [mission_id])
     else
       :ok
@@ -350,6 +401,11 @@ defmodule Cadence.Protocol.RecordArchive do
     else
       apply(backend, function, args)
     end
+  end
+
+  defp backend_call_exported?(backend, function, arity) do
+    function_exported?(backend, function, arity + 1) or
+      function_exported?(backend, function, arity)
   end
 
   defp ensure_backend_loaded!(backend) when is_atom(backend) do

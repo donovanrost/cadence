@@ -10,52 +10,92 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
   alias Cadence.Persistence.OrganizationScope
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Repo
 
   @default_flush_interval_ms 250
   @default_flush_count 250
 
   def child_spec(opts) when is_list(opts) do
     %{
-      id: __MODULE__,
+      id: Keyword.get(opts, :child_id, server(opts)),
       start: {__MODULE__, :start_link, [opts]}
     }
   end
 
   def start_link(opts) when is_list(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: server(opts))
   end
 
   @spec enqueue(RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]) ::
           :ok | {:error, term()}
   def enqueue(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records)
       when is_list(transfer_frame_records) and is_list(packet_records) do
-    GenServer.call(__MODULE__, {:enqueue, raw_evidence, transfer_frame_records, packet_records})
+    enqueue(raw_evidence, transfer_frame_records, packet_records, [])
+  end
+
+  @spec enqueue(RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()], keyword()) ::
+          :ok | {:error, term()}
+  def enqueue(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records, opts)
+      when is_list(transfer_frame_records) and is_list(packet_records) and is_list(opts) do
+    GenServer.call(
+      server(opts),
+      {:enqueue, raw_evidence, transfer_frame_records, packet_records}
+    )
   end
 
   @spec enqueue_many([{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}]) ::
           :ok | {:error, term()}
   def enqueue_many(records_batch) when is_list(records_batch) do
-    GenServer.call(__MODULE__, {:enqueue_many, records_batch})
+    enqueue_many(records_batch, [])
+  end
+
+  @spec enqueue_many(
+          [{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}],
+          keyword()
+        ) :: :ok | {:error, term()}
+  def enqueue_many(records_batch, opts) when is_list(records_batch) and is_list(opts) do
+    GenServer.call(server(opts), {:enqueue_many, records_batch})
   end
 
   @spec flush(binary() | nil) :: :ok | {:error, term()}
   def flush(mission_id \\ nil) do
-    GenServer.call(__MODULE__, {:flush, mission_id}, :infinity)
+    flush(mission_id, [])
+  end
+
+  @spec flush(binary() | nil, keyword()) :: :ok | {:error, term()}
+  def flush(mission_id, opts)
+      when (is_binary(mission_id) or is_nil(mission_id)) and is_list(opts) do
+    GenServer.call(server(opts), {:flush, mission_id}, :infinity)
   end
 
   @spec stats(binary()) :: map()
   def stats(mission_id) when is_binary(mission_id) do
-    GenServer.call(__MODULE__, {:stats, mission_id})
+    stats(mission_id, [])
+  end
+
+  @spec stats(binary(), keyword()) :: map()
+  def stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
+    GenServer.call(server(opts), {:stats, mission_id})
   end
 
   @spec reset_stats(binary()) :: :ok
   def reset_stats(mission_id) when is_binary(mission_id) do
-    GenServer.call(__MODULE__, {:reset_stats, mission_id})
+    reset_stats(mission_id, [])
+  end
+
+  @spec reset_stats(binary(), keyword()) :: :ok
+  def reset_stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
+    GenServer.call(server(opts), {:reset_stats, mission_id})
   end
 
   @spec reset() :: :ok
   def reset do
-    GenServer.call(__MODULE__, :reset, :infinity)
+    reset([])
+  end
+
+  @spec reset(keyword()) :: :ok
+  def reset(opts) when is_list(opts) do
+    GenServer.call(server(opts), :reset, :infinity)
   end
 
   @impl true
@@ -63,6 +103,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     {:ok,
      %{
        base_path: Keyword.fetch!(opts, :base_path),
+       repo: Keyword.get(opts, :repo, Repo),
+       archive_backend: FileSystem.archive_backend(opts),
        flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @default_flush_interval_ms),
        flush_count: Keyword.get(opts, :flush_count, @default_flush_count),
        buffers: %{},
@@ -228,7 +270,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
              :ok <-
                FileSystem.persist_segment(segment_id, entries,
                  object_key: object_key,
-                 organization_id: organization_id
+                 organization_id: organization_id,
+                 archive_backend: state.archive_backend,
+                 repo: state.repo
                ) do
           flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
 
@@ -423,4 +467,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
   defp average(_total, 0), do: 0.0
   defp average(total, count), do: total / count
+
+  defp server(opts), do: Keyword.get(opts, :name, __MODULE__)
 end
