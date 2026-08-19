@@ -3,7 +3,44 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEventsTest do
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.OperationalEvents
+  alias Cadence.Platform.EventBus
+  alias Cadence.Telemetry.BackfillLifecycleChanged
   alias Cadence.Telemetry.Storage
+
+  test "workflow publication preserves the explicitly selected event bus" do
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Telemetry.Facts.subscribe(event_bus, self())
+
+    assert {:ok, event} =
+             Storage.record_backfill_lifecycle_workflow_event(
+               :backfill,
+               :requested,
+               %{
+                 backfill_run_id: "backfill-run-explicit-bus",
+                 organization_id: "org-explicit-bus",
+                 mission_id: "mission-explicit-bus",
+                 realm: :flight,
+                 payload: %{"request" => "operator"}
+               },
+               event_bus: event_bus
+             )
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :telemetry, :facts},
+                     %BackfillLifecycleChanged{} = fact}}
+
+    assert fact.backfill_lifecycle_event_id == event.backfill_lifecycle_event_id
+
+    assert fact.payload == %{
+             "request" => "operator",
+             "workflow" => "backfill",
+             "stage" => "requested",
+             "run_id" => "backfill-run-explicit-bus",
+             "requested_event_type" => "backfill_requested"
+           }
+
+    refute Map.has_key?(fact.payload, "event_bus")
+  end
 
   test "records workflow-level backfill request and approval events" do
     base_attrs = %{
@@ -378,5 +415,13 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEventsTest do
       )
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:backfill_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 end

@@ -21,11 +21,18 @@ defmodule Cadence.Contacts.ContactStore do
   alias Cadence.Contacts.Validation
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
   alias Cadence.Repo
 
   @spec persist_scheduled(ScheduledContact.t()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
   def persist_scheduled(%ScheduledContact{} = scheduled_contact) do
+    persist_scheduled(EventBus, scheduled_contact)
+  end
+
+  @spec persist_scheduled(EventBus.server(), ScheduledContact.t()) ::
+          {:ok, ScheduledContact.t()} | {:error, term()}
+  def persist_scheduled(event_bus, %ScheduledContact{} = scheduled_contact) do
     Multi.new()
     |> Multi.insert(
       :scheduled_contact,
@@ -46,7 +53,7 @@ defmodule Cadence.Contacts.ContactStore do
       {:ok, %{scheduled_contact: %ScheduledContactRow{} = row}} ->
         row
         |> ScheduledContactRow.to_domain()
-        |> notify_contact_changed()
+        |> then(&notify_contact_changed(event_bus, &1))
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
         {:error, changeset}
@@ -146,6 +153,12 @@ defmodule Cadence.Contacts.ContactStore do
   @spec persist_realized(RealizedContact.t()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
   def persist_realized(%RealizedContact{} = realized_contact) do
+    persist_realized(EventBus, realized_contact)
+  end
+
+  @spec persist_realized(EventBus.server(), RealizedContact.t()) ::
+          {:ok, RealizedContact.t()} | {:error, term()}
+  def persist_realized(event_bus, %RealizedContact{} = realized_contact) do
     with :ok <- Validation.realized_contact(realized_contact) do
       Multi.new()
       |> Multi.insert(:realized_contact, RealizedContactRow.changeset(realized_contact),
@@ -162,7 +175,7 @@ defmodule Cadence.Contacts.ContactStore do
         {:ok, %{realized_contact: %RealizedContactRow{} = row}} ->
           row
           |> RealizedContactRow.to_domain()
-          |> notify_contact_changed()
+          |> then(&notify_contact_changed(event_bus, &1))
 
         {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
           {:error, changeset}
@@ -225,6 +238,12 @@ defmodule Cadence.Contacts.ContactStore do
 
   @spec persist_action(ContactAction.t()) :: {:ok, ContactAction.t()} | {:error, term()}
   def persist_action(%ContactAction{} = contact_action) do
+    persist_action(EventBus, contact_action)
+  end
+
+  @spec persist_action(EventBus.server(), ContactAction.t()) ::
+          {:ok, ContactAction.t()} | {:error, term()}
+  def persist_action(event_bus, %ContactAction{} = contact_action) do
     Multi.new()
     |> Multi.insert(
       :contact_action,
@@ -242,7 +261,7 @@ defmodule Cadence.Contacts.ContactStore do
     |> case do
       {:ok, %{contact_action: %ContactActionRow{} = row}} ->
         contact_action = ContactActionRow.to_domain(row)
-        Facts.publish(contact_action)
+        Facts.publish(event_bus, contact_action)
         {:ok, contact_action}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
@@ -530,14 +549,26 @@ defmodule Cadence.Contacts.ContactStore do
   @spec notify_contact_changed(ScheduledContact.t() | RealizedContact.t()) ::
           {:ok, ScheduledContact.t() | RealizedContact.t()}
   def notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
-    Scheduler.notify_contact_changed(scheduled_contact)
-    Facts.publish(scheduled_contact)
-    {:ok, scheduled_contact}
+    notify_contact_changed(EventBus, scheduled_contact)
   end
 
   def notify_contact_changed(%RealizedContact{} = realized_contact) do
+    notify_contact_changed(EventBus, realized_contact)
+  end
+
+  @spec notify_contact_changed(
+          EventBus.server(),
+          ScheduledContact.t() | RealizedContact.t()
+        ) :: {:ok, ScheduledContact.t() | RealizedContact.t()}
+  def notify_contact_changed(event_bus, %ScheduledContact{} = scheduled_contact) do
+    Scheduler.notify_contact_changed(scheduled_contact)
+    Facts.publish(event_bus, scheduled_contact)
+    {:ok, scheduled_contact}
+  end
+
+  def notify_contact_changed(event_bus, %RealizedContact{} = realized_contact) do
     Scheduler.notify_contact_changed(realized_contact)
-    Facts.publish(realized_contact)
+    Facts.publish(event_bus, realized_contact)
     {:ok, realized_contact}
   end
 

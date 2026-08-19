@@ -26,6 +26,7 @@ defmodule Cadence.LimitsTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.Platform.EventBus
   alias Cadence.Telemetry.PacketDefinition
 
   test "owns versioned limit definition persistence and scoped reads" do
@@ -88,6 +89,9 @@ defmodule Cadence.LimitsTest do
   end
 
   test "evaluates governed telemetry limits over derived telemetry in an async job" do
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Limits.Facts.subscribe(event_bus, self())
+
     binding_set = persist_binding_set_fixture()
 
     derived_definition =
@@ -147,7 +151,14 @@ defmodule Cadence.LimitsTest do
     assert claimed_job.job_id == queued_job.job_id
     assert claimed_job.run_id == run.limit_run_id
 
-    assert {:ok, completed_job} = JobRunner.run_job(claimed_job.job_id)
+    runner =
+      JobRunner.new(%{
+        telemetry_limit_evaluation: fn limit_run_id ->
+          Limits.execute_enqueued_run(limit_run_id, event_bus: event_bus)
+        end
+      })
+
+    assert {:ok, completed_job} = JobRunner.run_job(runner, claimed_job.job_id)
     assert completed_job.status == :completed
     assert completed_job.job_type == :telemetry_limit_evaluation
     assert completed_job.attempt_count == 1
@@ -157,6 +168,18 @@ defmodule Cadence.LimitsTest do
     assert completed_run.evaluated_sample_count == 4
     assert completed_run.emitted_event_count == 2
     assert completed_run.definition_count == 1
+
+    published_events =
+      for _index <- 1..2 do
+        assert_receive {:"$gen_cast",
+                        {:cadence_fact, {:cadence, :limits, :facts},
+                         %Cadence.Limits.Event{} = event}}
+
+        event
+      end
+
+    assert Enum.map(published_events, & &1.limit_state) == [:green, :yellow_high]
+    refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :limits, :facts}, _fact}}
 
     event_history =
       LimitReads.event_history("mission-alpha", "DERIVED.counter_double")
@@ -289,6 +312,14 @@ defmodule Cadence.LimitsTest do
       mission_id: "mission-alpha",
       receipt_time: DateTime.from_unix!(receipt_unix, :second),
       raw: build_space_packet(42, sequence_count, <<counter_value::16>>)
+    })
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:limits_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
     })
   end
 

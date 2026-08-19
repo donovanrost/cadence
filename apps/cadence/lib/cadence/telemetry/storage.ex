@@ -8,6 +8,7 @@ defmodule Cadence.Telemetry.Storage do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Platform.EventBus
   alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
 
   alias Cadence.Telemetry.Storage.{
@@ -32,7 +33,8 @@ defmodule Cadence.Telemetry.Storage do
           required(:writer) => module(),
           required(:writer_opts) => keyword(),
           required(:storage_opts) => keyword(),
-          required(:current_value_store_policy) => CurrentValueStore.policy()
+          required(:current_value_store_policy) => CurrentValueStore.policy(),
+          required(:event_bus) => EventBus.server()
         }
 
   @doc """
@@ -61,12 +63,15 @@ defmodule Cadence.Telemetry.Storage do
   """
   @spec persist_samples([Sample.t()], keyword()) :: :ok | {:error, term()}
   def persist_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
-    persist_samples(configured_policy(), samples, opts)
+    policy = %{configured_policy() | event_bus: Keyword.get(opts, :event_bus, EventBus)}
+    persist_samples(policy, samples, opts)
   end
 
   @spec persist_samples(policy(), [Sample.t()], keyword()) :: :ok | {:error, term()}
   def persist_samples(%{} = policy, samples, opts)
       when is_list(samples) and is_list(opts) do
+    opts = with_event_bus(opts, policy.event_bus)
+
     samples
     |> Enum.group_by(& &1.mission_id)
     |> Enum.reduce_while(:ok, fn {_mission_id, mission_samples}, :ok ->
@@ -99,7 +104,8 @@ defmodule Cadence.Telemetry.Storage do
   @spec persist_prepared_results([map()], keyword()) :: :ok | {:error, term()}
   def persist_prepared_results(prepared_results, opts \\ [])
       when is_list(prepared_results) and is_list(opts) do
-    persist_prepared_results(configured_policy(), prepared_results, opts)
+    policy = %{configured_policy() | event_bus: Keyword.get(opts, :event_bus, EventBus)}
+    persist_prepared_results(policy, prepared_results, opts)
   end
 
   @spec persist_prepared_results(policy(), [map()], keyword()) :: :ok | {:error, term()}
@@ -137,7 +143,11 @@ defmodule Cadence.Telemetry.Storage do
           {:ok, ObservationIdentityState.t()} | {:error, term()}
   def apply_observation_identity_decision(observation_identity_id, decision, opts)
       when is_binary(observation_identity_id) and is_atom(decision) and is_list(opts) do
-    ObservationIdentityStates.apply_decision(observation_identity_id, decision, opts)
+    ObservationIdentityStates.apply_decision(
+      observation_identity_id,
+      decision,
+      Keyword.put_new(opts, :event_bus, EventBus)
+    )
   end
 
   @spec list_observation_identity_decision_events(binary(), keyword()) :: [
@@ -173,7 +183,7 @@ defmodule Cadence.Telemetry.Storage do
           {:ok, BackfillLifecycleEvent.t()} | {:error, term()}
   def record_backfill_lifecycle_event(attrs, opts \\ [])
       when is_map(attrs) and is_list(opts) do
-    BackfillLifecycleEvents.record_event(attrs, opts)
+    BackfillLifecycleEvents.record_event(attrs, Keyword.put_new(opts, :event_bus, EventBus))
   end
 
   @spec record_backfill_lifecycle_workflow_event(
@@ -186,7 +196,14 @@ defmodule Cadence.Telemetry.Storage do
   def record_backfill_lifecycle_workflow_event(workflow, stage, attrs, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
              is_map(attrs) and is_list(opts) do
-    BackfillLifecycleWorkflow.record_event(workflow, stage, attrs, opts)
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    BackfillLifecycleWorkflow.record_event(
+      workflow,
+      stage,
+      Map.put(attrs, :event_bus, event_bus),
+      opts
+    )
   end
 
   @spec execute_backfill_lifecycle_workflow(
@@ -199,7 +216,15 @@ defmodule Cadence.Telemetry.Storage do
   def execute_backfill_lifecycle_workflow(workflow, attrs, write_opts, operation_fun, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_list(write_opts) and
              is_function(operation_fun, 1) and is_list(opts) do
-    BackfillLifecycleWorkflow.execute(workflow, attrs, write_opts, operation_fun, opts)
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    BackfillLifecycleWorkflow.execute(
+      workflow,
+      Map.put(attrs, :event_bus, event_bus),
+      Keyword.put(write_opts, :event_bus, event_bus),
+      operation_fun,
+      opts
+    )
   end
 
   @spec list_backfill_lifecycle_events(binary(), keyword()) :: [BackfillLifecycleEvent.t()]
@@ -233,7 +258,8 @@ defmodule Cadence.Telemetry.Storage do
       current_value_store_policy:
         Keyword.get_lazy(opts, :current_value_store_policy, fn ->
           CurrentValueStore.configured_policy()
-        end)
+        end),
+      event_bus: Keyword.get(opts, :event_bus, EventBus)
     }
   end
 
@@ -346,7 +372,7 @@ defmodule Cadence.Telemetry.Storage do
   defp reduce_backfill_lifecycle_event_group(group, opts) do
     case BackfillLifecycleEvents.record_event(
            backfill_lifecycle_event_attrs(group, opts),
-           Keyword.take(opts, [:runtime_cache, :dashboard_runtime_invalidation?])
+           Keyword.take(opts, [:event_bus, :runtime_cache, :dashboard_runtime_invalidation?])
          ) do
       {:ok, _event} -> {:cont, :ok}
       {:error, reason} -> {:halt, {:error, reason}}
@@ -367,7 +393,7 @@ defmodule Cadence.Telemetry.Storage do
               reason: failed_backfill_lifecycle_reason(opts),
               payload: %{"error" => inspect(reason)}
             ),
-            Keyword.take(opts, [:runtime_cache, :dashboard_runtime_invalidation?])
+            Keyword.take(opts, [:event_bus, :runtime_cache, :dashboard_runtime_invalidation?])
           )
       end)
     end
@@ -423,7 +449,7 @@ defmodule Cadence.Telemetry.Storage do
       envelopes
       |> Enum.group_by(&invalidation_group_key/1)
       |> Enum.each(fn {_group_key, group} ->
-        publish_observation_fact(group)
+        publish_observation_fact(policy.event_bus, group)
       end)
     end
 
@@ -468,8 +494,11 @@ defmodule Cadence.Telemetry.Storage do
     }
   end
 
-  defp publish_observation_fact([%ObservationEnvelope{} = first_envelope | _rest] = envelopes) do
-    Facts.publish(%ObservationsCommitted{
+  defp publish_observation_fact(
+         event_bus,
+         [%ObservationEnvelope{} = first_envelope | _rest] = envelopes
+       ) do
+    Facts.publish(event_bus, %ObservationsCommitted{
       organization_id: first_envelope.organization_id,
       mission_id: first_envelope.mission_id,
       data_source_id: first_envelope.data_source_id,
@@ -704,5 +733,9 @@ defmodule Cadence.Telemetry.Storage do
       {:error, reason} ->
         raise "could not load telemetry storage writer #{inspect(writer)}: #{inspect(reason)}"
     end
+  end
+
+  defp with_event_bus(opts, event_bus) when is_list(opts) do
+    Keyword.put(opts, :event_bus, event_bus)
   end
 end

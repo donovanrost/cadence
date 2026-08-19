@@ -15,6 +15,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   alias Cadence.Ids
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
 
@@ -38,6 +39,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
   @spec record_envelopes([ObservationEnvelope.t()], keyword()) :: :ok | {:error, term()}
   def record_envelopes(envelopes, opts \\ []) when is_list(envelopes) and is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+
     envelopes
     |> Enum.reduce(Multi.new(), fn %ObservationEnvelope{} = envelope, multi ->
       Multi.run(multi, {:observation_identity_state, envelope.observation_id}, fn repo,
@@ -71,6 +74,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
           {:ok, ObservationIdentityState.t()} | {:error, term()}
   def apply_decision(observation_identity_id, decision, opts)
       when is_binary(observation_identity_id) and is_atom(decision) and is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+
     with :ok <- require_decision(decision),
          :ok <- require_decision_context(opts),
          {:ok, row} <- fetch_row_for_decision(observation_identity_id, opts),
@@ -622,7 +627,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
   defp publish_latest_value_refresh(%ObservationIdentityState{} = state, opts) do
     if Keyword.get(opts, :refresh_latest_value?, true) do
-      Facts.publish(%ObservationIdentitySelectionChanged{
+      Facts.publish(Keyword.fetch!(opts, :event_bus), %ObservationIdentitySelectionChanged{
         observation_identity_id: state.observation_identity_id,
         organization_id: state.organization_id,
         mission_id: state.mission_id,
@@ -644,7 +649,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
       envelopes
       |> Enum.uniq_by(& &1.observation_identity_id)
       |> Enum.each(fn %ObservationEnvelope{} = envelope ->
-        Facts.publish(%ObservationIdentityStateChanged{
+        Facts.publish(Keyword.fetch!(opts, :event_bus), %ObservationIdentityStateChanged{
           observation_identity_id: envelope.observation_identity_id,
           organization_id: envelope.organization_id,
           mission_id: envelope.mission_id,
@@ -665,7 +670,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
   defp publish_state_changed(%ObservationIdentityState{} = state, opts) do
     if publish_state_facts?(opts) do
-      Facts.publish(%ObservationIdentityStateChanged{
+      Facts.publish(Keyword.fetch!(opts, :event_bus), %ObservationIdentityStateChanged{
         observation_identity_id: state.observation_identity_id,
         organization_id: state.organization_id,
         mission_id: state.mission_id,

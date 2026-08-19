@@ -29,6 +29,7 @@ defmodule Cadence.Catalog do
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
 
@@ -232,7 +233,7 @@ defmodule Cadence.Catalog do
            Registry.fetch_importer(run.importer_key, run.importer_version, opts),
          :ok <- ensure_catalog_family_match(artifact.catalog_family, descriptor.catalog_family),
          :ok <- validate_artifact(importer_module, artifact) do
-      execute_run(run, artifact, importer_module)
+      execute_run(run, artifact, importer_module, Keyword.get(opts, :event_bus, EventBus))
     end
   end
 
@@ -434,9 +435,9 @@ defmodule Cadence.Catalog do
     })
   end
 
-  defp maybe_attach_created_revision(%ImportRun{} = run) do
+  defp maybe_attach_created_revision(%ImportRun{} = run, event_bus) do
     if create_revision_run?(run) do
-      case create_revision_from_completed_run(run) do
+      case create_revision_from_completed_run(run, event_bus) do
         {:ok, %Revision{} = revision} ->
           %ImportRun{
             run
@@ -469,7 +470,7 @@ defmodule Cadence.Catalog do
 
   defp create_revision_run?(%ImportRun{}), do: false
 
-  defp create_revision_from_completed_run(%ImportRun{} = run) do
+  defp create_revision_from_completed_run(%ImportRun{} = run, event_bus) do
     with {:ok, %Artifact{} = artifact} <-
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %Database{} = database} <-
@@ -512,7 +513,7 @@ defmodule Cadence.Catalog do
            revision
            |> OperationalEvent.from_catalog_revision(row.inserted_at)
            |> then(&OperationalEvents.persist_event(Repo, &1)) do
-      Facts.publish(revision)
+      Facts.publish(event_bus, revision)
       {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
@@ -561,7 +562,7 @@ defmodule Cadence.Catalog do
   defp metadata_atom_key("revision_notes"), do: :revision_notes
   defp metadata_atom_key(_key), do: nil
 
-  defp execute_run(%ImportRun{} = run, %Artifact{} = artifact, importer_module) do
+  defp execute_run(%ImportRun{} = run, %Artifact{} = artifact, importer_module, event_bus) do
     context = %{
       organization_id: run.organization_id,
       mission_id: run.mission_id,
@@ -588,7 +589,7 @@ defmodule Cadence.Catalog do
               }
 
             completed_run
-            |> maybe_attach_created_revision()
+            |> maybe_attach_created_revision(event_bus)
             |> update_run()
 
           {:error, reason} ->

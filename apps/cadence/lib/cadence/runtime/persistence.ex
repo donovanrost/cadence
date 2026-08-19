@@ -12,6 +12,7 @@ defmodule Cadence.Runtime.Persistence do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Platform.ContentHash
+  alias Cadence.Platform.EventBus
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Repo
   alias Cadence.SemanticObservations
@@ -34,7 +35,8 @@ defmodule Cadence.Runtime.Persistence do
   @type policy :: %{
           required(:ingress_archive) => IngressArchive.policy(),
           required(:record_archive) => RecordArchive.policy(),
-          required(:telemetry_storage) => Storage.policy()
+          required(:telemetry_storage) => Storage.policy(),
+          required(:event_bus) => EventBus.server()
         }
 
   @doc """
@@ -179,6 +181,22 @@ defmodule Cadence.Runtime.Persistence do
           :ok | {:error, term()}
   def persist_managed_runtime_records(capability_records, action_requests, timer_events)
       when is_list(capability_records) and is_list(action_requests) and is_list(timer_events) do
+    persist_managed_runtime_records(EventBus, capability_records, action_requests, timer_events)
+  end
+
+  @spec persist_managed_runtime_records(
+          EventBus.server(),
+          [ManagedCapabilityRecord.t()],
+          [ManagedActionRequest.t()],
+          [ManagedTimerEvent.t()]
+        ) :: :ok | {:error, term()}
+  def persist_managed_runtime_records(
+        event_bus,
+        capability_records,
+        action_requests,
+        timer_events
+      )
+      when is_list(capability_records) and is_list(action_requests) and is_list(timer_events) do
     Multi.new()
     |> add_managed_capability_record_inserts(capability_records)
     |> add_managed_action_request_inserts(action_requests)
@@ -186,7 +204,7 @@ defmodule Cadence.Runtime.Persistence do
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
-        Facts.publish(%ManagedRecordsPersisted{
+        Facts.publish(event_bus, %ManagedRecordsPersisted{
           capability_records: capability_records,
           action_requests: action_requests,
           timer_events: timer_events,
@@ -208,6 +226,22 @@ defmodule Cadence.Runtime.Persistence do
         ) ::
           :ok | {:error, term()}
   def persist_transport_runtime_records(capability_records, action_requests, timer_events)
+      when is_list(capability_records) and is_list(action_requests) and is_list(timer_events) do
+    persist_transport_runtime_records(EventBus, capability_records, action_requests, timer_events)
+  end
+
+  @spec persist_transport_runtime_records(
+          EventBus.server(),
+          [TransportCapabilityRecord.t()],
+          [TransportActionRequest.t()],
+          [TransportTimerEvent.t()]
+        ) :: :ok | {:error, term()}
+  def persist_transport_runtime_records(
+        event_bus,
+        capability_records,
+        action_requests,
+        timer_events
+      )
       when is_list(capability_records) and is_list(action_requests) and is_list(timer_events) do
     Multi.new()
     |> add_transport_capability_record_inserts(capability_records)
@@ -231,7 +265,7 @@ defmodule Cadence.Runtime.Persistence do
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
-        Facts.publish(%TransportRecordsPersisted{
+        Facts.publish(event_bus, %TransportRecordsPersisted{
           capability_records: capability_records,
           action_requests: action_requests,
           timer_events: timer_events,
@@ -254,6 +288,17 @@ defmodule Cadence.Runtime.Persistence do
           :ok | {:error, term()}
   def persist_downlink_combiner_records(observations, combined_records, diagnostics)
       when is_list(observations) and is_list(combined_records) and is_list(diagnostics) do
+    persist_downlink_combiner_records(EventBus, observations, combined_records, diagnostics)
+  end
+
+  @spec persist_downlink_combiner_records(
+          EventBus.server(),
+          [DownlinkObservation.t()],
+          [CombinedDownlinkRecord.t()],
+          [DownlinkDiagnostic.t()]
+        ) :: :ok | {:error, term()}
+  def persist_downlink_combiner_records(event_bus, observations, combined_records, diagnostics)
+      when is_list(observations) and is_list(combined_records) and is_list(diagnostics) do
     Multi.new()
     |> add_downlink_observation_inserts(observations)
     |> add_combined_downlink_record_inserts(combined_records)
@@ -261,7 +306,7 @@ defmodule Cadence.Runtime.Persistence do
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
-        Facts.publish(%DownlinkRecordsPersisted{
+        Facts.publish(event_bus, %DownlinkRecordsPersisted{
           observations: observations,
           combined_records: combined_records,
           diagnostics: diagnostics,
@@ -340,12 +385,17 @@ defmodule Cadence.Runtime.Persistence do
   end
 
   @doc false
-  @spec policy(IngressArchive.policy(), RecordArchive.policy(), Storage.policy()) :: policy()
-  def policy(%{} = ingress_archive, %{} = record_archive, %{} = telemetry_storage) do
+  @spec policy(IngressArchive.policy(), RecordArchive.policy(), Storage.policy(), keyword()) ::
+          policy()
+  def policy(%{} = ingress_archive, %{} = record_archive, %{} = telemetry_storage, opts \\ [])
+      when is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, Map.get(telemetry_storage, :event_bus, EventBus))
+
     %{
       ingress_archive: ingress_archive,
       record_archive: record_archive,
-      telemetry_storage: telemetry_storage
+      telemetry_storage: Map.put(telemetry_storage, :event_bus, event_bus),
+      event_bus: event_bus
     }
   end
 
@@ -391,7 +441,7 @@ defmodule Cadence.Runtime.Persistence do
            ),
          :ok <- Storage.persist_prepared_results(policy.telemetry_storage, prepared_results, opts),
          :ok <- SemanticObservations.persist_many(prepared_results) do
-      publish_processing_results(prepared_results)
+      publish_processing_results(policy.event_bus, prepared_results)
     end
   end
 
@@ -494,10 +544,10 @@ defmodule Cadence.Runtime.Persistence do
     Enum.flat_map(prepared_results, & &1.telemetry_samples)
   end
 
-  defp publish_processing_results(prepared_results) do
+  defp publish_processing_results(event_bus, prepared_results) do
     evidence_ids = Enum.map(prepared_results, & &1.raw_evidence.evidence_id)
 
-    Facts.publish(%ProcessingResultsPersisted{
+    Facts.publish(event_bus, %ProcessingResultsPersisted{
       batch_id: ContentHash.term_sha256(evidence_ids),
       evidence_ids: evidence_ids,
       telemetry_samples: telemetry_samples_from_prepared(prepared_results),

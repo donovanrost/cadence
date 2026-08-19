@@ -7,6 +7,7 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
   alias Cadence.Telemetry.Facts
@@ -18,11 +19,12 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
   @spec record_event(map(), keyword()) ::
           {:ok, BackfillLifecycleEvent.t()} | {:error, term()}
   def record_event(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, Map.get(attrs, :event_bus, EventBus))
     event = BackfillLifecycleEvent.new(attrs)
 
     case insert_event_with_operational_event(event) do
       {:ok, event} ->
-        maybe_publish_fact(event, opts)
+        maybe_publish_fact(event_bus, event, opts)
         {:ok, event}
 
       {:error, reason} ->
@@ -100,13 +102,13 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
     end)
   end
 
-  defp maybe_publish_fact(%BackfillLifecycleEvent{} = event, opts) do
+  defp maybe_publish_fact(event_bus, %BackfillLifecycleEvent{} = event, opts) do
     if Keyword.get(
          opts,
          :publish_facts?,
          Keyword.get(opts, :dashboard_runtime_invalidation?, true)
        ) do
-      Facts.publish(BackfillLifecycleEvent.to_fact(event))
+      Facts.publish(event_bus, BackfillLifecycleEvent.to_fact(event))
     end
 
     :ok

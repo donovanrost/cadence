@@ -4,21 +4,38 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
   alias Cadence.Limits
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits.DefinitionLifecycle
+  alias Cadence.Limits.DefinitionLifecycleEvent
+  alias Cadence.Platform.EventBus
 
   @organization_id "org-limit-lifecycle"
   @mission_id "mission-limit-lifecycle"
 
   test "persisted limit definitions write lifecycle events and active projection" do
     persist_mission_scope(@organization_id, @mission_id)
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Limits.Facts.subscribe(event_bus, self())
 
     first_definition = limit_definition(version: 1, yellow_high: 10)
     replacement_definition = limit_definition(version: 2, yellow_high: 20)
 
-    assert {:ok, ^first_definition} = Cadence.Limits.persist_limit_definition(first_definition)
-    assert {:ok, ^first_definition} = Cadence.Limits.persist_limit_definition(first_definition)
+    assert {:ok, ^first_definition} =
+             Cadence.Limits.persist_limit_definition(first_definition, event_bus: event_bus)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :limits, :facts},
+                     %DefinitionLifecycleEvent{limit_definition_version: 1}}}
+
+    assert {:ok, ^first_definition} =
+             Cadence.Limits.persist_limit_definition(first_definition, event_bus: event_bus)
+
+    refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :limits, :facts}, _fact}}
 
     assert {:ok, ^replacement_definition} =
-             Cadence.Limits.persist_limit_definition(replacement_definition)
+             Cadence.Limits.persist_limit_definition(replacement_definition, event_bus: event_bus)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :limits, :facts},
+                     %DefinitionLifecycleEvent{limit_definition_version: 2}}}
 
     events =
       DefinitionLifecycle.list_definition_lifecycle_events(@organization_id, @mission_id,
@@ -124,5 +141,13 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
       receipt_time: ~U[2026-06-21 12:00:01Z],
       provenance: %{}
     }
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:limit_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 end

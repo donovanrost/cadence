@@ -19,6 +19,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
 
@@ -31,6 +32,8 @@ defmodule Cadence.Limits.DefinitionLifecycle do
           record_result()
   def record_definition_activation(%Definition{} = definition, persisted_row, opts \\ [])
       when is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+
     attrs =
       definition
       |> DefinitionLifecycleEvent.attrs_from_definition(
@@ -257,7 +260,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
   defp maybe_publish_limit_definition(%DefinitionLifecycleEvent{} = event, opts) do
     if Keyword.get(opts, :publish_facts?, Keyword.get(opts, :invalidate_runtime_cache?, true)) do
-      Facts.publish(event)
+      Facts.publish(Keyword.fetch!(opts, :event_bus), event)
     end
 
     :ok

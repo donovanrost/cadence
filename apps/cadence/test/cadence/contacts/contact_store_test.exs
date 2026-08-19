@@ -6,6 +6,7 @@ defmodule Cadence.Contacts.ContactStoreTest do
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
+  alias Cadence.Platform.EventBus
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -17,6 +18,9 @@ defmodule Cadence.Contacts.ContactStoreTest do
   end
 
   test "owns contact records, lifecycle updates, action filters, and scheduler reads", context do
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Contacts.Facts.subscribe(event_bus, self())
+
     starts_at = DateTime.from_unix!(1_700_500_000)
     ends_at = DateTime.add(starts_at, 600, :second)
 
@@ -39,7 +43,10 @@ defmodule Cadence.Contacts.ContactStoreTest do
       })
 
     assert {:ok, %ScheduledContact{} = persisted_scheduled} =
-             ContactStore.persist_scheduled(scheduled_contact)
+             ContactStore.persist_scheduled(event_bus, scheduled_contact)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :contacts, :facts}, ^persisted_scheduled}}
 
     assert {:ok, %ScheduledContact{}} =
              ContactStore.fetch_scheduled_by_provider_ref(
@@ -66,7 +73,11 @@ defmodule Cadence.Contacts.ContactStoreTest do
         realized_at: starts_at
       })
 
-    assert {:ok, %RealizedContact{}} = ContactStore.persist_realized(realized_contact)
+    assert {:ok, %RealizedContact{} = persisted_realized} =
+             ContactStore.persist_realized(event_bus, realized_contact)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :contacts, :facts}, ^persisted_realized}}
 
     action =
       ContactAction.new(%{
@@ -78,7 +89,11 @@ defmodule Cadence.Contacts.ContactStoreTest do
         occurred_at: starts_at
       })
 
-    assert {:ok, %ContactAction{}} = ContactStore.persist_action(action)
+    assert {:ok, %ContactAction{} = persisted_action} =
+             ContactStore.persist_action(event_bus, action)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :contacts, :facts}, ^persisted_action}}
 
     assert [%ContactAction{contact_action_id: "action-1"}] =
              ContactStore.list_actions(
@@ -100,5 +115,13 @@ defmodule Cadence.Contacts.ContactStoreTest do
                :completed,
                %{"reason" => "window ended"}
              )
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:contact_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 end

@@ -21,6 +21,7 @@ defmodule Cadence.Activations do
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
   alias Cadence.Repo
 
   @doc false
@@ -31,16 +32,19 @@ defmodule Cadence.Activations do
              is_integer(version) and version > 0 and is_list(opts) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
          {:ok, _content_hash} <- Keyword.fetch(opts, :binding_set_content_sha256) do
-      persist_activation(%{
-        organization_id: organization_id,
-        mission_id: mission_id,
-        activation_request_id: Keyword.get(opts, :activation_request_id),
-        binding_set_id: binding_set_id,
-        binding_set_version: version,
-        binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
-        metadata: Keyword.get(opts, :metadata, %{}),
-        activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
-      })
+      persist_activation(
+        %{
+          organization_id: organization_id,
+          mission_id: mission_id,
+          activation_request_id: Keyword.get(opts, :activation_request_id),
+          binding_set_id: binding_set_id,
+          binding_set_version: version,
+          binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
+          metadata: Keyword.get(opts, :metadata, %{}),
+          activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
+        },
+        Keyword.get(opts, :event_bus, EventBus)
+      )
     end
   end
 
@@ -51,15 +55,18 @@ defmodule Cadence.Activations do
       when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) and
              version > 0 and is_list(opts) do
     with {:ok, _content_hash} <- Keyword.fetch(opts, :binding_set_content_sha256) do
-      persist_activation(%{
-        mission_id: mission_id,
-        activation_request_id: Keyword.get(opts, :activation_request_id),
-        binding_set_id: binding_set_id,
-        binding_set_version: version,
-        binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
-        metadata: Keyword.get(opts, :metadata, %{}),
-        activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
-      })
+      persist_activation(
+        %{
+          mission_id: mission_id,
+          activation_request_id: Keyword.get(opts, :activation_request_id),
+          binding_set_id: binding_set_id,
+          binding_set_version: version,
+          binding_set_content_sha256: Keyword.fetch!(opts, :binding_set_content_sha256),
+          metadata: Keyword.get(opts, :metadata, %{}),
+          activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
+        },
+        Keyword.get(opts, :event_bus, EventBus)
+      )
     end
   end
 
@@ -191,7 +198,7 @@ defmodule Cadence.Activations do
     )
   end
 
-  defp persist_activation(attrs) do
+  defp persist_activation(attrs, event_bus) do
     Multi.new()
     |> Multi.run(:generation_lock, fn repo, _changes ->
       acquire_generation_lock(repo, attrs.mission_id)
@@ -212,7 +219,7 @@ defmodule Cadence.Activations do
     |> case do
       {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
         activation = BindingSetActivationRow.to_domain(activation_row)
-        if inserted?, do: Facts.publish(activation)
+        if inserted?, do: Facts.publish(event_bus, activation)
         {:ok, activation}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->

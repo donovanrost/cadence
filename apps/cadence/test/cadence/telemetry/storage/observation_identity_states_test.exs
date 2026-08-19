@@ -4,9 +4,26 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.TelemetryRevisionSummary
   alias Cadence.OperationalEvents
+  alias Cadence.Platform.EventBus
+  alias Cadence.Telemetry.ObservationIdentityStateChanged
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, ObservationIdentityStates, WriteContext}
+
+  test "envelope state publication uses the explicitly selected event bus" do
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Telemetry.Facts.subscribe(event_bus, self())
+    envelope = envelope(sample_id: "sample-explicit-bus", revision: 1)
+
+    assert :ok = ObservationIdentityStates.record_envelopes([envelope], event_bus: event_bus)
+
+    assert_receive {:"$gen_cast",
+                    {:cadence_fact, {:cadence, :telemetry, :facts},
+                     %ObservationIdentityStateChanged{} = fact}}
+
+    assert fact.observation_identity_id == envelope.observation_identity_id
+    refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
+  end
 
   test "records the first canonical observation for an identity" do
     envelope = envelope(sample_id: "sample-1", revision: 1)
@@ -636,5 +653,13 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     |> List.wrap()
     |> TelemetryRevisionSummary.from_identity_states()
     |> Map.fetch!(:dependency)
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:observation_identity_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 end

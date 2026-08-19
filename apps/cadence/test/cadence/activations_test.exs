@@ -2,6 +2,7 @@ defmodule Cadence.ActivationsTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Platform.EventBus
   alias Cadence.Runtime
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -12,6 +13,8 @@ defmodule Cadence.ActivationsTest do
   test "activates a persisted binding set and resolves it as the active mission basis" do
     persist_mission_scope(@organization_id, "mission-activation-alpha")
     binding_set = persisted_binding_set("mission-activation-alpha", 1, "HK")
+    event_bus = start_event_bus()
+    assert :ok = Cadence.Activations.Facts.subscribe(event_bus, self())
 
     on_exit(fn ->
       Runtime.stop_mission(binding_set.mission_id)
@@ -29,8 +32,11 @@ defmodule Cadence.ActivationsTest do
                binding_set.mission_id,
                binding_set.binding_set_id,
                binding_set.version,
-               metadata: %{reason: "initial bootstrap"}
+               metadata: %{reason: "initial bootstrap"},
+               event_bus: event_bus
              )
+
+    assert_receive {:"$gen_cast", {:cadence_fact, {:cadence, :activations, :facts}, ^activation}}
 
     assert activation.mission_id == binding_set.mission_id
     assert activation.binding_set_id == binding_set.binding_set_id
@@ -113,5 +119,13 @@ defmodule Cadence.ActivationsTest do
              Cadence.Governance.persist_binding_set(@organization_id, binding_set)
 
     binding_set
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:activation_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 end

@@ -11,6 +11,7 @@ defmodule Cadence.Projections.DataSources.Watermarks do
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Projections.DataSources.Watermarks.{EventRow, StatusRow}
   alias Cadence.Repo
@@ -22,6 +23,7 @@ defmodule Cadence.Projections.DataSources.Watermarks do
 
   @spec record_source_watermark(map(), keyword()) :: record_result()
   def record_source_watermark(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
     seed = SourceWatermarkEvent.new(attrs)
 
     Repo.transaction(fn ->
@@ -36,7 +38,7 @@ defmodule Cadence.Projections.DataSources.Watermarks do
     end)
     |> case do
       {:ok, {:changed, event, status}} ->
-        maybe_publish_fact(event, opts)
+        maybe_publish_fact(event_bus, event, opts)
         {:ok, event, status}
 
       {:ok, {:unchanged, status}} ->
@@ -276,9 +278,9 @@ defmodule Cadence.Projections.DataSources.Watermarks do
   defp next_transition_count(nil), do: 1
   defp next_transition_count(%SourceWatermarkStatus{transition_count: count}), do: count + 1
 
-  defp maybe_publish_fact(%SourceWatermarkEvent{} = event, opts) do
+  defp maybe_publish_fact(event_bus, %SourceWatermarkEvent{} = event, opts) do
     if Keyword.get(opts, :publish_facts?, Keyword.get(opts, :invalidate_runtime_cache?, true)) do
-      Facts.publish(event)
+      Facts.publish(event_bus, event)
     end
 
     :ok

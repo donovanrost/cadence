@@ -23,6 +23,7 @@ defmodule Cadence.CatalogTest do
   alias Cadence.DataSources.{DataBinding, DataSource}
 
   alias Cadence.Missions.Mission
+  alias Cadence.Platform.EventBus
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -218,6 +219,8 @@ defmodule Cadence.CatalogTest do
       importer_opts: importer_opts
     } do
       persist_mission_scope(organization_id(), mission_id())
+      event_bus = start_event_bus()
+      assert :ok = Cadence.Catalog.Facts.subscribe(event_bus, self())
 
       assert {:ok, %Database{} = database} =
                Catalog.create_database(organization_id(), mission_id(), %{
@@ -256,7 +259,9 @@ defmodule Cadence.CatalogTest do
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
       assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
       assert claimed_job.job_id == job.job_id
-      assert {:ok, _completed_job} = run_catalog_job(job.job_id, importer_opts)
+
+      assert {:ok, _completed_job} =
+               run_catalog_job(job.job_id, Keyword.put(importer_opts, :event_bus, event_bus))
 
       assert {:ok, completed_run} =
                Cadence.Catalog.fetch_import_run(
@@ -273,6 +278,8 @@ defmodule Cadence.CatalogTest do
 
       assert {:ok, revision} =
                Catalog.fetch_revision(organization_id(), mission_id(), revision_id)
+
+      assert_receive {:"$gen_cast", {:cadence_fact, {:cadence, :catalog, :facts}, ^revision}}
 
       assert revision.catalog_database_id == database.catalog_database_id
       assert revision.revision_number == 1
@@ -480,6 +487,14 @@ defmodule Cadence.CatalogTest do
       })
 
     JobRunner.run_job(runner, job_id)
+  end
+
+  defp start_event_bus do
+    start_supervised!(%{
+      id: {:catalog_fact_event_bus, make_ref()},
+      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      restart: :temporary
+    })
   end
 
   defp catalog_opts(importer_opts, opts), do: Keyword.merge(opts, importer_opts)

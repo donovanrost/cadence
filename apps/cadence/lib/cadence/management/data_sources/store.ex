@@ -27,6 +27,7 @@ defmodule Cadence.Management.DataSources.Store do
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.EventBus
   alias Cadence.Repo
   alias Ecto.Changeset
 
@@ -207,10 +208,12 @@ defmodule Cadence.Management.DataSources.Store do
 
   @spec persist_data_source(DataSource.t(), keyword()) :: {:ok, DataSource.t()} | {:error, term()}
   def persist_data_source(%DataSource{} = data_source, opts \\ []) when is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
     with :ok <- validate_data_source_credentials(data_source),
          {:ok, {data_source, event}} <-
            Repo.transaction(fn -> persist_data_source_projection!(data_source, opts) end) do
-      if event, do: Facts.publish(event)
+      if event, do: Facts.publish(event_bus, event)
       {:ok, data_source}
     else
       {:error, %Changeset{} = changeset} ->
@@ -224,6 +227,8 @@ defmodule Cadence.Management.DataSources.Store do
   @spec persist_data_binding(DataBinding.t(), keyword()) ::
           {:ok, DataBinding.t()} | {:error, term()}
   def persist_data_binding(%DataBinding{} = data_binding, opts \\ []) when is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
     Repo.transaction(fn ->
       data_binding
       |> persist_data_binding_projection(opts)
@@ -234,7 +239,7 @@ defmodule Cadence.Management.DataSources.Store do
     end)
     |> case do
       {:ok, {data_binding, event}} ->
-        if event, do: Facts.publish(event)
+        if event, do: Facts.publish(event_bus, event)
         {:ok, data_binding}
 
       {:error, %Changeset{} = changeset} ->

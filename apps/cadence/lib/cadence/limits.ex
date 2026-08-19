@@ -25,6 +25,7 @@ defmodule Cadence.Limits do
 
   alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
   alias Cadence.Limits.Store
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
   alias Cadence.Telemetry.SampleRecords
@@ -33,6 +34,14 @@ defmodule Cadence.Limits do
 
   @spec persist_limit_definition(Definition.t()) :: {:ok, Definition.t()} | {:error, term()}
   def persist_limit_definition(%Definition{} = definition) do
+    persist_limit_definition(definition, event_bus: EventBus)
+  end
+
+  @spec persist_limit_definition(Definition.t(), keyword()) ::
+          {:ok, Definition.t()} | {:error, term()}
+  def persist_limit_definition(%Definition{} = definition, opts) when is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+
     with :ok <- Definition.validate(definition) do
       changeset = GovernedLimitDefinitionRow.changeset(definition)
 
@@ -41,7 +50,7 @@ defmodule Cadence.Limits do
              conflict_target: [:mission_id, :limit_definition_id, :version]
            ) do
         {:ok, %GovernedLimitDefinitionRow{} = row} ->
-          _ = DefinitionLifecycle.record_definition_activation(definition, row)
+          _ = DefinitionLifecycle.record_definition_activation(definition, row, opts)
           {:ok, definition}
 
         {:error, %Changeset{} = changeset} ->
@@ -172,6 +181,7 @@ defmodule Cadence.Limits do
 
   @spec evaluate(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
   def evaluate(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
     run = build_run(mission_id, opts)
 
     with {:ok, persisted_run} <- insert_run(run) do
@@ -220,10 +230,13 @@ defmodule Cadence.Limits do
   end
 
   @doc false
-  @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
-  def execute_enqueued_run(limit_run_id) when is_binary(limit_run_id) do
+  @spec execute_enqueued_run(binary(), keyword()) :: {:ok, Run.t()} | {:error, term()}
+  def execute_enqueued_run(limit_run_id, opts \\ [])
+      when is_binary(limit_run_id) and is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+
     with {:ok, %Run{} = run} <- fetch_run(limit_run_id) do
-      execute_run(run, opts_from_run(run))
+      execute_run(run, Keyword.merge(opts_from_run(run), opts))
     end
   end
 
@@ -250,7 +263,7 @@ defmodule Cadence.Limits do
             completed_at: DateTime.utc_now()
         }
 
-      persist_completed_run(completed_run, limit_events)
+      persist_completed_run(completed_run, limit_events, Keyword.fetch!(opts, :event_bus))
     else
       {:error, reason} ->
         failed_run =
@@ -369,7 +382,7 @@ defmodule Cadence.Limits do
     end)
   end
 
-  defp persist_completed_run(%Run{} = run, limit_events) do
+  defp persist_completed_run(%Run{} = run, limit_events, event_bus) do
     Multi.new()
     |> Multi.run(:limit_run, fn repo, _changes ->
       repo_run_update(repo, run)
@@ -381,7 +394,7 @@ defmodule Cadence.Limits do
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
-        Enum.each(limit_events, &Facts.publish/1)
+        Enum.each(limit_events, &Facts.publish(event_bus, &1))
         {:ok, run}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
