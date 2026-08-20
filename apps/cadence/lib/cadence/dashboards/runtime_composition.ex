@@ -159,47 +159,25 @@ defmodule Cadence.Dashboards.RuntimeComposition do
       |> Application.get_env(:telemetry_history_store, [])
       |> HistoryStore.policy(storage_policy: telemetry_storage_policy)
 
-    runtime_cache_enabled? = Keyword.get(cache_config, :enabled?, true) == true
-    runtime_cache_server = Keyword.get(opts, :runtime_cache_server, RuntimeCache)
-
-    runtime_cache =
-      if runtime_cache_enabled? and not is_nil(runtime_cache_server) do
-        RuntimeCache.client(runtime_cache_server, cache_config)
-      else
-        false
-      end
-
-    runtime_invalidation_cache =
-      case Keyword.get(invalidation_config, :runtime_cache, runtime_cache) do
-        nil -> runtime_cache
-        false -> false
-        %RuntimeCache{} = cache -> cache
-        server -> RuntimeCache.client(server, cache_config)
-      end
-
-    source_circuit_breaker_server =
-      Keyword.get(opts, :source_circuit_breaker_server, SourceCircuitBreaker)
-
-    source_circuit_breaker_enabled? =
-      Keyword.get(circuit_config, :enabled?, false) == true and
-        not is_nil(source_circuit_breaker_server)
+    cache_runtime = compose_runtime_cache(cache_config, invalidation_config, opts)
+    source_circuit_breaker = compose_source_circuit_breaker(circuit_config, opts)
 
     %__MODULE__{
-      runtime_cache_enabled?: runtime_cache_enabled?,
-      runtime_cache: runtime_cache,
+      runtime_cache_enabled?: cache_runtime.enabled?,
+      runtime_cache: cache_runtime.client,
       runtime_cache_child_opts: cache_config,
-      plan_cache?: runtime_cache != false,
+      plan_cache?: cache_runtime.client != false,
       source_result_cache?:
-        runtime_cache != false and Keyword.get(cache_config, :source_result_cache?, true) == true,
+        cache_runtime.client != false and
+          Keyword.get(cache_config, :source_result_cache?, true) == true,
       frame_cache?:
-        runtime_cache != false and Keyword.get(cache_config, :frame_cache?, true) == true,
+        cache_runtime.client != false and Keyword.get(cache_config, :frame_cache?, true) == true,
       runtime_invalidation?: Keyword.get(invalidation_config, :enabled?, true) == true,
-      runtime_invalidation_cache: runtime_invalidation_cache,
+      runtime_invalidation_cache: cache_runtime.invalidation_cache,
       source_execution_defaults: SourceExecutionPolicy.configured_defaults(),
       source_readiness_policy: SourceReadiness.configured_policy(),
-      source_circuit_breaker_enabled?: source_circuit_breaker_enabled?,
-      source_circuit_breaker:
-        if(source_circuit_breaker_enabled?, do: source_circuit_breaker_server),
+      source_circuit_breaker_enabled?: source_circuit_breaker.enabled?,
+      source_circuit_breaker: source_circuit_breaker.server,
       source_circuit_breaker_child_opts: Keyword.put(circuit_config, :runtime_composed?, true),
       source_health_events?: Keyword.get(health_config, :enabled?, true) == true,
       record_source_health_events?: Keyword.get(health_config, :enabled?, true) == true,
@@ -210,6 +188,37 @@ defmodule Cadence.Dashboards.RuntimeComposition do
       telemetry_storage_policy: telemetry_storage_policy,
       telemetry_history_store_policy: telemetry_history_store_policy
     }
+  end
+
+  defp compose_runtime_cache(cache_config, invalidation_config, opts) do
+    enabled? = Keyword.get(cache_config, :enabled?, true) == true
+    server = Keyword.get(opts, :runtime_cache_server, RuntimeCache)
+
+    client =
+      if enabled? and not is_nil(server) do
+        RuntimeCache.client(server, cache_config)
+      else
+        false
+      end
+
+    invalidation_cache =
+      case Keyword.get(invalidation_config, :runtime_cache, client) do
+        nil -> client
+        false -> false
+        %RuntimeCache{} = cache -> cache
+        server -> RuntimeCache.client(server, cache_config)
+      end
+
+    %{enabled?: enabled?, client: client, invalidation_cache: invalidation_cache}
+  end
+
+  defp compose_source_circuit_breaker(circuit_config, opts) do
+    server = Keyword.get(opts, :source_circuit_breaker_server, SourceCircuitBreaker)
+
+    enabled? =
+      Keyword.get(circuit_config, :enabled?, false) == true and not is_nil(server)
+
+    %{enabled?: enabled?, server: if(enabled?, do: server)}
   end
 
   @doc """

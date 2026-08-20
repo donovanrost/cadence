@@ -87,6 +87,13 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
          %DateTime{} = current_time,
          capability_registry
        ) do
+    initialization_context = %{
+      activation: activation,
+      runtime_binding_set: runtime_binding_set,
+      partition_key: partition_key,
+      capability_registry: capability_registry
+    }
+
     runtime_binding_set.capability_instances
     |> Enum.reduce_while(
       {:ok, %{}, TimerService.new(mode: clock_mode, current_time: current_time),
@@ -95,10 +102,7 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
         reduce_managed_application_initialization(
           capability_instance,
           reduce_state,
-          activation,
-          runtime_binding_set,
-          partition_key,
-          capability_registry
+          initialization_context
         )
       end
     )
@@ -106,11 +110,8 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp reduce_managed_application_initialization(
          %CapabilityInstance{} = capability_instance,
-         {:ok, acc, timer_service, runtime_records},
-         %MissionRuntimeSpec{} = activation,
-         %BindingSet{} = runtime_binding_set,
-         %PartitionKey{} = partition_key,
-         capability_registry
+         {:ok, _acc, timer_service, _runtime_records} = reduce_state,
+         %{capability_registry: capability_registry} = initialization_context
        ) do
     case CapabilityRegistry.fetch_descriptor(
            capability_registry,
@@ -119,14 +120,9 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
       {:ok, %Descriptor{} = descriptor} ->
         maybe_initialize_managed_application_instance(
           descriptor,
-          activation,
-          runtime_binding_set,
-          partition_key,
           capability_instance,
-          timer_service,
-          acc,
-          runtime_records,
-          capability_registry
+          reduce_state,
+          initialization_context
         )
 
       {:error, reason} ->
@@ -137,14 +133,14 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp maybe_initialize_managed_application_instance(
          %Descriptor{kind: :managed_application},
-         %MissionRuntimeSpec{} = activation,
-         %BindingSet{} = runtime_binding_set,
-         %PartitionKey{} = partition_key,
          %CapabilityInstance{} = capability_instance,
-         %TimerService{} = timer_service,
-         acc,
-         runtime_records,
-         capability_registry
+         {:ok, acc, %TimerService{} = timer_service, runtime_records},
+         %{
+           activation: %MissionRuntimeSpec{} = activation,
+           runtime_binding_set: %BindingSet{} = runtime_binding_set,
+           partition_key: %PartitionKey{} = partition_key,
+           capability_registry: capability_registry
+         }
        ) do
     initialize_managed_application_instance(
       activation,
@@ -160,14 +156,9 @@ defmodule Cadence.Runtime.PartitionOwner.PartitionBuilder do
 
   defp maybe_initialize_managed_application_instance(
          %Descriptor{},
-         %MissionRuntimeSpec{},
-         %BindingSet{},
-         %PartitionKey{},
          %CapabilityInstance{},
-         %TimerService{} = timer_service,
-         acc,
-         runtime_records,
-         _capability_registry
+         {:ok, acc, %TimerService{} = timer_service, runtime_records},
+         _initialization_context
        ) do
     {:cont, {:ok, acc, timer_service, runtime_records}}
   end

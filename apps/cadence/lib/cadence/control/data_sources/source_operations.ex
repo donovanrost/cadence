@@ -15,6 +15,8 @@ defmodule Cadence.Control.DataSources.SourceOperations do
 
   alias Cadence.Platform.Fingerprint
 
+  alias Cadence.Secrets.ResolverConfiguration
+
   def probe_data_source(data_source_id, attrs, opts, {fetch_fun, persist_fun})
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
     with {:ok, %DataSource{} = data_source} <- fetch_fun.(data_source_id),
@@ -126,7 +128,7 @@ defmodule Cadence.Control.DataSources.SourceOperations do
   end
 
   defp credential_material_resolver_configured?(opts) do
-    Cadence.Secrets.ResolverConfiguration.data_source_configured?(opts)
+    ResolverConfiguration.data_source_configured?(opts)
   end
 
   defp put_probe_connection_profile(opts, _data_source, nil), do: opts

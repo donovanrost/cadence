@@ -11,6 +11,8 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptions do
 
   alias Cadence.DataSources.{DataSource, ResolvedSourceCredential, SourceCredentialMaterial}
 
+  alias Cadence.Secrets.ResolverConfiguration
+
   @spec build(
           PlannedSourceRequest.t(),
           ResolvedSourceBinding.t(),
@@ -128,7 +130,7 @@ defmodule Cadence.Dashboards.SourceRegistry.AdapterOptions do
   end
 
   defp credential_material_resolver_configured?(opts) do
-    Cadence.Secrets.ResolverConfiguration.data_source_configured?(opts)
+    ResolverConfiguration.data_source_configured?(opts)
   end
 
   defp put_public_connection_opts(opts, %{http_endpoint: http_endpoint})

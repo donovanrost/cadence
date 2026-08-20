@@ -19,13 +19,15 @@ defmodule Cadence.Runtime.PathCoordinator do
     IngressPersistenceProjector,
     MissionRuntime,
     PartitionKey,
+    Persistence,
     ProcessNamespace,
     ProviderBindingSpec,
     ProviderIngressExecutor,
-    TransportBindingSpec
+    TransportBindingSpec,
+    TransportRuntime
   }
 
-  alias Cadence.Runtime.TransportRuntime
+  alias Cadence.Telemetry.{CurrentValueStore, Storage}
 
   @type state :: %{
           process_namespace: ProcessNamespace.t(),
@@ -124,19 +126,19 @@ defmodule Cadence.Runtime.PathCoordinator do
         Keyword.get_lazy(
           opts,
           :persistence_policy,
-          &Cadence.Runtime.Persistence.configured_policy/0
+          &Persistence.configured_policy/0
         ),
       current_value_store_policy:
         Keyword.get_lazy(
           opts,
           :current_value_store_policy,
-          &Cadence.Telemetry.CurrentValueStore.configured_policy/0
+          &CurrentValueStore.configured_policy/0
         ),
       telemetry_storage_policy:
         Keyword.get_lazy(
           opts,
           :telemetry_storage_policy,
-          &Cadence.Telemetry.Storage.configured_policy/0
+          &Storage.configured_policy/0
         ),
       ingress_journal_policy:
         Keyword.get_lazy(opts, :ingress_journal_policy, &IngressJournal.configured_policy/0),

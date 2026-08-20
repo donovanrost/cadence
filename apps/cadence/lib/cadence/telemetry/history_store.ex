@@ -3,14 +3,14 @@ defmodule Cadence.Telemetry.HistoryStore do
   Pluggable backend for telemetry sample history.
   """
 
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{Sample, Storage}
 
   @default_backend Cadence.Telemetry.HistoryStore.Noop
 
   @type policy :: %{
           required(:backend) => module(),
           required(:backend_opts) => keyword(),
-          optional(:storage_policy) => Cadence.Telemetry.Storage.policy() | nil
+          optional(:storage_policy) => Storage.policy() | nil
         }
 
   @callback child_spec(keyword()) :: Supervisor.child_spec() | nil
@@ -280,7 +280,7 @@ defmodule Cadence.Telemetry.HistoryStore do
   def configured_policy do
     policy(
       Application.get_env(:cadence, :telemetry_history_store, []),
-      storage_policy: Cadence.Telemetry.Storage.configured_policy()
+      storage_policy: Storage.configured_policy()
     )
   end
 

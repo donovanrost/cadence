@@ -14,8 +14,8 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.MissionRuntime
-  alias Cadence.Runtime.ProcessNamespace
   alias Cadence.Runtime.Persistence
+  alias Cadence.Runtime.ProcessNamespace
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
   @type state :: %{
