@@ -80,16 +80,29 @@ Desired direction:
 - use uniquely named supervised instances when a test needs a different runtime;
 - reserve `Application.put_env/3` in tests for genuine application-boot behavior.
 
-### A4. The core suite is globally serialized
+Current status: the durable-job runtime now resolves its handler map once in
+`Cadence.Application`, passes an immutable runner through its supervised tree,
+and supports per-instance supervisor names. Data-source job, probe, adapter,
+catalog-importer, web contact, Ops-shell, credential, and simulator-provider
+policies now have explicit composition inputs as well. Telemetry persistence and
+archive policies are now captured at application/runtime composition boundaries
+and passed explicitly through supervised consumers, reads, and data-management
+jobs. Dashboard cache, invalidation, source-execution, readiness, circuit,
+health/watermark, telemetry-read, and refresh policies are now captured once at
+projection startup or LiveView mount and reused by ticks, facts, and async work.
 
-The `cadence` test alias defaults to `--max-cases 1` because the application owns
-global runtimes and a shared database sandbox. This is useful containment, but it
-also hides which tests are independently isolated and makes the suite slower
-than its test count alone would require.
+### A4. The core suite was globally serialized
 
-Desired direction is not to remove serialization immediately. First separate
-pure tests, repository tests, and supervised-runtime tests; then enable
-concurrency only for groups with proved isolation.
+The `cadence` test alias previously defaulted to `--max-cases 1` because the
+application owns global runtimes and a shared database sandbox. This containment
+hid which tests were independently isolated and made the suite slower than its
+test count alone required.
+
+Current status: three explicit concurrent 1,803-test runs and three default runs
+proved the existing async cases at `--max-cases 8`, so the artificial cap was
+removed while explicit caller overrides remain supported. DataCase, RuntimeCase,
+and ConfigCase modules still serialize themselves; later layer-split and runtime
+namespace tranches can make additional modules honestly async.
 
 ### A5. SQL-sandbox coordination is visible in production modules
 
@@ -100,6 +113,12 @@ but it also makes test infrastructure part of the production dependency path.
 Desired direction is a narrower test adapter or boundary that preserves the
 production process topology without making authentication and scope loading
 responsible for Ecto sandbox ownership.
+
+Current status: the browser-only runner now switches its existing repository
+owner to SQL Sandbox shared mode before starting the endpoint. Production
+session, scope-loading, LiveView, and dashboard resolve code no longer carries
+owner keys or calls SQL Sandbox. Authentication routes and pipelines were not
+changed.
 
 ### A6. Async workflow completion and process-tree ownership are misaligned
 
@@ -151,18 +170,193 @@ not merely test-runner noise.
 - Therefore, a broad repository abstraction or "database process" rewrite is not
   justified by the test failures seen so far.
 
-## Audit sequence
+## Tranche inventory and execution record
 
-1. Finish replacing duplicated dashboard LiveView teardown helpers with the
-   shared deterministic lifecycle helper.
-2. Attribute any remaining PostgreSQL client-exit or ownership logs to the exact
-   process and test owner before changing domain code.
-3. Identify `ConnCase`/`DataCase` tests whose contracts can be proved below the
-   database layer and move those proofs to unit cases.
-4. Evaluate the dashboard hydration/planning split as a bounded architecture
-   change with contract tests on both sides.
-5. Revisit serialized test groups and global configuration only after their
-   dependencies can be started and stopped per test.
+The audit work was organized as bounded tranches rather than one serial queue.
+Each implementation tranche owned an explicit file set and ran in its own Git
+worktree. Shared test support, Mix aliases, configuration, and this ledger
+remained integration-owned unless a tranche explicitly reserved them.
+
+### Completed wave one
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| W1 | Reproduced web LiveView owner race | `audit/web-owner` | Exposed dashboard LiveView tests; dashboard lifecycle test support only if required | None | Integrated as `c663def8` |
+| W2 | Core ExUnit concurrency pilot | `audit/core-parallelism` | Root and core `mix.exs` test-argument policy only | None | Integrated as `25e4083b` |
+| W3 | Dashboard source-execution layer split | `audit/dashboard-semantics` | `source_execution_semantics_test.exs` and focused sibling tests | None | Integrated as `1968f451` |
+
+W1 starts with the reproduced `OpsDashboardLibraryLiveTest` editor mount. In a
+targeted audit, its second test emitted six PostgreSQL client/owner-exit logs in
+21 otherwise passing runs; the first test emitted none. The tranche must prove
+the fix under repetition before broadening the lifecycle helper.
+
+W2 first runs the existing suite with an explicit concurrent `--max-cases`
+value across multiple seeds. The default cap is removed only if those runs prove
+that already-async cases are actually isolated. Concurrency findings are not
+permission to absorb newly exposed lifecycle defects into the Mix-policy
+tranche.
+
+W3 moves only persistence-independent engine semantics onto the existing
+hydrated request boundary. The BYO credential/circuit contract remains a
+database integration test.
+
+### Completed wave two
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| T1 | Authentication and route-boundary pruning | `audit/auth-boundaries` | Web auth and feature-route test assertions only | W1 integrated | Integrated as `fb9c2237` |
+| T4 | Source credential resolver consolidation | `audit/source-credentials` | Dashboard source-credential tests only | W3 integrated | Integrated as `d2dacce7` |
+| T5 | Durable-job dependencies and names | `audit/jobs-dependencies` | Jobs application service, runtime children, and focused tests | Provider-ingress/durable-job settlement integrated | Integrated as `0eb0c6ab` |
+
+### Completed wave three
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| T2a | Core pure policies | `audit/core-pure-policies` | Core data-management and commanding tests only | Wave two integrated | Integrated as `80a5461f` |
+| T2b | Web early-return commands | `audit/web-early-validation` | Three focused command test groups only | Wave two integrated | Integrated as `0e4aaacd` |
+| T3 | Pure web rendering | `audit/web-pure-rendering` | UI components and user-session tests only | Wave two integrated | Integrated as `7985f794` |
+
+### Completed wave four
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| S1 | Generic async LiveView lifecycle | `audit/liveview-async-ownership` | Web test support and non-dashboard async LiveView tests | W1 integrated | Integrated as `517838d6` |
+| T7 | Data-source operational policies | `audit/data-source-policies` | Provisioning, lifecycle, probe, and adapter policies | T5 integrated | Integrated as `a2ccbb81` |
+| T9 | Catalog importer registry | `audit/catalog-importer-registry` | Catalog registry, consumers, and focused tests | Wave three integrated | Integrated as `8bef144a` |
+
+### Completed wave five
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| S2 | Remove production SQL Sandbox bridge | `audit/remove-prod-sandbox-bridge` | Browser test ownership setup plus production scope/session/dashboard bridge removal | S1 integrated | Integrated as `ceacbb86` |
+| T6 | Web composition dependencies | `audit/web-composition-deps` | Contact schedule LiveView dependencies and Ops shell refresh hook | S1 integrated | Integrated as `d886664d` |
+| T8 | Credential and provider configuration | `audit/credentials-provider-config` | Ground-network, data-source, and simulator provider configuration | T7 integrated | Integrated as `2494648a` |
+
+### Completed wave six
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| S3 | Telemetry persistence dependencies | `audit/telemetry-persistence-deps` | Telemetry storage/current/history and ingress/protocol archive policies | S2 integrated | Integrated as `9747a83b`; Explore follow-up `1de8d3a5` |
+
+### Completed wave seven
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| S4 | Dashboard cache and invalidation composition | `audit/dashboard-composition` | Projection and mounted LiveView runtime policies | S3 integrated | Integrated as `cf3edcd6` |
+
+### Completed wave eight
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| S5a | Runtime process addressability | `audit/runtime-process-addressability` | Runtime/Control namespaces and same-mission two-root proof | S3 integrated | Integrated as `0a5cb3b8` |
+
+### Completed S5b parallel work
+
+| ID | Tranche | Branch | Ownership | Dependency | Status |
+| --- | --- | --- | --- | --- | --- |
+| B1 | EventBus instance API | `audit/event-bus-instances` | EventBus plus fact facade explicit bus clients | S5a integrated | Integrated as `16c4e4d1` |
+| B2 | Explicit fact publication | `audit/explicit-fact-publication` | Post-commit publishers and persistence/storage policies | B1 integrated | Integrated as `475d9ecb` |
+| B3 | Non-dashboard fact consumers | `audit/non-dashboard-fact-consumers` | Control and projection consumer bus clients | B1 integrated | Integrated as `16ad656e` |
+| B4 | Dashboard fact consumer | `audit/dashboard-fact-consumer-instances` | Dashboard EventBus routing and cache-client isolation | B1/S4 integrated | Integrated as `f8a0f69a` |
+| A1 | Ingress archive instances | `audit/ingress-archive-instances` | Ingress archive facade/backends/writer identity | S5a integrated | Integrated as `49f27647` |
+| A2 | Protocol archive instances | `audit/protocol-archive-instances` | Record archive facade/backends/writer identity | S5a integrated | Integrated as `8f954224` |
+| P1 | Profiler and runtime-health instances | `audit/profiler-runtime-health-instances` | Profiler ETS/handlers/archive clients and runtime-health routing | A1/A2 integrated | Integrated as `0c9c2ae7` |
+| E1 | Telemetry ETS store instances | `audit/telemetry-ets-instances` | Current-value/history facades, ETS identities, and focused tests | S3 integrated | Integrated as `57a885b7` |
+| C1 | Command process owners | `audit/command-owner-instances` | Dispatch namespace, lane ownership, verifier scheduler collaborators | S5a integrated | Integrated as `17b68d71` |
+| J1 | Ingress journal and path instances | `audit/ingress-journal-instances` | Journal filesystem identity plus runtime journal/archive/path collaborators | A1/S5a integrated | Integrated as `53c7118f` |
+| I1 | Root resource composition | `audit/root-resource-composition` | Immutable Application/Platform/Runtime/Control/Projections wiring and two-root proof | B1-B4/A1-A2/E1/P1/C1/J1 integrated | Integrated as `287c32d3` |
+| R1 | RuntimeCase non-shared Sandbox pilot | `audit/runtimecase-sandbox-pilot` | Opt-in isolated RuntimeCase setup and parallel verifier-scheduler proof | C1 integrated | Integrated as `267532cc` |
+
+### Original independent tranche plan
+
+- **T1 — authentication and route-boundary pruning:** retain centralized user,
+  organization, and mission authorization contracts plus a representative router
+  smoke; remove repeated feature-local redirects after comparison.
+- **T2 — pure policy and early-return command contracts:** move data-management
+  policies and command-validation branches that return before persistence into
+  async unit cases.
+- **T3 — pure web rendering:** remove SQL Sandbox setup from component rendering
+  that only builds structs and calls `render_component/2`; consolidate static
+  sign-in markup coverage after a no-sandbox proof.
+- **T4 — source credential resolver consolidation:** retain persistence, audit,
+  scope, rotation, and lifecycle coverage while moving adapter behavior already
+  represented by a `ResolvedSourceCredential` below the repository layer.
+- **T5 — durable-job dependencies and names:** replace request-time application
+  environment lookup with explicit runner/worker dependencies and injectable
+  runtime names.
+- **T6 — web composition dependencies:** resolve provider, contact-schedule,
+  Ops-refresh, and dashboard-refresh collaborators once at mount rather than
+  repeatedly consulting global application configuration.
+- **T7 — data-source operational policies:** make managed QuestDB provisioning,
+  TSDB lifecycle, probes, and adapter selection explicit composition inputs.
+- **T8 — credentials and provider configuration:** treat ground-network,
+  data-source, and simulator-provider credential configuration as one tranche
+  because their integration fixtures overlap.
+- **T9 — catalog importer registry:** distinguish genuine boot configuration
+  from request-local importer injection and keep the former in configuration
+  cases.
+
+T1 through T4 are test-value and layer corrections. T5 through T9 are
+application-configuration ownership corrections. They can run concurrently only
+when their file reservations do not overlap.
+
+### Original sequential or high-conflict tranche plan
+
+- **S1 — generic async LiveView lifecycle support:** extract reusable tracked
+  view shutdown beneath dashboard-specific resolved-state assertions, then apply
+  it to the remaining `start_async/3` LiveViews. This follows W1.
+- **S2 — remove production SQL Sandbox coordination:** remove browser-test
+  ownership concerns from `ScopeLoader`, session handling, and dashboard resolve
+  workers only after W1/S1 prove lifecycle cleanup without that guard.
+- **S3 — telemetry persistence dependencies:** keep storage, current-value,
+  history, ingress archive, protocol archive, and affected data-management tests
+  under one owner because their facades and tests overlap heavily.
+- **S4 — dashboard cache and invalidation composition:** follows S3 and owns the
+  resolution context, web composition boundary, cache/invalidation policy,
+  source-execution options, and refresh behavior.
+- **S5a — runtime process addressability:** give Runtime and Control roots,
+  registries, dynamic supervisors, capability processes, and mission-runtime
+  names explicit namespace values while preserving production defaults. Its
+  acceptance is limited to two independent OTP roots; it does not make
+  `RuntimeCase` async-safe.
+- **S5b — runtime resource isolation:** separately address fact-bus routing,
+  named ETS and profiler state, archive writer identities and roots, and command
+  dispatch ownership. Only after those boundaries exist should one
+  low-dependency `RuntimeCase` test attempt an instrumented non-shared SQL
+  Sandbox pilot.
+
+### Parallel worktree protocol
+
+- Every worktree receives a stable, unique `MIX_TEST_PARTITION`. Test PostgreSQL
+  databases, the ingress journal, and simulator DETS storage already incorporate
+  that partition.
+- Worker BEAMs use a bounded scheduler count so parallel compilation and test
+  pools do not exhaust local CPU or PostgreSQL connections.
+- Focused and repeated tests may run concurrently. Broad affected gates are
+  queued, and the authoritative root `mix precommit` runs once, serially, after
+  integration.
+- The integration branch cherry-picks verified tranche commits. A tranche that
+  needs files owned by another active tranche stops and requests a dependency or
+  ownership change rather than editing across the boundary.
+- Schema-changing work is rebased onto the latest integration branch before its
+  final verification, even though each worktree has its own database.
+
+### Later diagnostic backlog
+
+- Classify the remaining explicit sleeps individually. Some manufacture time or
+  poll global state and should become clocks or barriers; others intentionally
+  block injected callbacks and protect concurrency behavior.
+- Audit raw-HTML assertions for outcome value and selector stability. CSS class
+  assertions that intentionally protect the design system should not be removed
+  mechanically.
+- Treat source-size warnings as candidate generators rather than automatic
+  refactors. The current architecture diagnostic reports no oversized test files,
+  one test function over 300 lines, and fourteen production files over 1,000
+  lines.
+- Snapshot environment-admin authentication policy and activation-governance
+  policy in later bounded tranches. Their production reads and tests remain
+  outside T6, T8, S3, S4, and S5 and should not be folded opportunistically into
+  dashboard or runtime namespace work.
 
 ## Tranche log
 
@@ -410,3 +604,328 @@ not merely test-runner noise.
 - This is a useful example of an integration test earning its cost: repeated
   execution exposed a real projection defect, which is now pinned by a cheap unit
   test at the faulty boundary.
+
+### Parallel wave one
+
+- The exposed-dashboard lifecycle tranche reproduced the remaining web owner
+  race before changing the tests: 16 PostgreSQL client exits in 20 executions of
+  the library-to-editor case. After every dashboard mount waited for a resolved
+  runtime and every exposed LiveView was tracked for deterministic shutdown, the
+  same case passed 20 repetitions without an exit. The six-file slice passed 91
+  total test executions without an exit and was integrated as `c663def8`.
+- The core concurrency pilot ran three complete 1,803-test suites with an
+  explicit `--max-cases 8`, then three complete suites after removing the
+  artificial root and child Mix caps. All six passed, an explicit
+  `--max-cases=1` override remained effective, and no partition-owned PostgreSQL
+  or BEAM process leaked. The change was integrated as `25e4083b`.
+- Fourteen dashboard source-execution semantics now use the typed hydrated
+  request boundary in an async `UnitCase`. The one BYO credential/circuit
+  contract remains a `DataCase` integration test. The unit file passed without a
+  sandbox owner, the retained database case passed, and all 876 dashboard-domain
+  tests passed. The tranche was integrated as `1968f451`; its commit hook also
+  passed the full affected core, simulator, and web suites.
+- The post-merge affected task passed formatting, compile, Credo, workspace,
+  extension, and architecture checks but skipped application tests because the
+  cherry-picked files were already committed. Post-merge wave verification must
+  therefore run explicit application suites rather than relying on affected-file
+  discovery alone.
+- The explicit merged suites passed: 1,803 core tests at `max_cases: 16` in 41.0
+  seconds and 1,727 web tests at `max_cases: 16` in 52.0 seconds. Browser tests
+  remained excluded, and neither suite emitted a PostgreSQL owner/client-exit
+  log.
+
+### Parallel wave two
+
+- Authentication behavior is now concentrated at its actual boundaries. Thirty
+  feature-test files dropped repeated sign-in, organization-membership, and
+  mission-membership assertions while retaining their feature contracts. The
+  central user, organization, and mission authorization files plus a new direct
+  plug contract passed 19 tests, and all 29 changed LiveView files passed 140
+  tests. The three plug cases run as plain async ExUnit without starting a SQL
+  Sandbox owner. The tranche was integrated as `fb9c2237`.
+- Dashboard source-credential coverage now separates three async compatibility
+  contracts from twelve database-backed persistence, audit, scope, rotation,
+  and lifecycle contracts. The focused credential/secrets group passed 23 tests;
+  the consolidation removed ten redundant cases and 364 net lines. The tranche
+  was integrated as `d2dacce7`.
+- Durable jobs now receive an immutable handler snapshot at application
+  composition, and the runner is propagated through the supervisor, dispatcher,
+  and worker tree. The jobs supervisor, dispatcher, and worker supervisor can be
+  named per runtime or left anonymous, so integration tests no longer mutate
+  global handler configuration. Two async runner contracts and eight retained
+  database/runtime contracts passed twice; the pre-change full repository gate
+  passed, and the final removal of two unused fallback paths was rechecked by the
+  ten focused tests. The tranche was integrated as `0eb0c6ab`.
+- The explicit post-merge suites passed: 1,795 core tests at `max_cases: 16`
+  with seed 148058 and 1,696 web tests at `max_cases: 16` with seed 558817.
+  Browser tests remained excluded, and neither merged suite emitted a PostgreSQL
+  owner/client-exit log.
+
+### Parallel wave three
+
+- Four data-management policy contracts, one correction-request validation, and
+  the empty command-verifier clauses now run in six async UnitCase tests without
+  a SQL Sandbox owner. The invalid direct-command case remained database-backed
+  because its failure path first reads mission, source-endpoint, activation, and
+  runtime-plan state. The 25 retained core integration cases passed, and the
+  tranche was integrated as `80a5461f`.
+- Ten web command-validation cases now run as plain async ExUnit contracts. They
+  cover missing or blank group, run, job, event, decision, execution-mode, and
+  observation identities plus unsupported recovery and execution modes. Eleven
+  persistence, audit, transition, and no-write outcome cases remain in their
+  original ConnCase files. Both groups passed and were integrated as `0e4aaacd`.
+- All twelve user-menu component contracts now render from in-memory assigns in
+  plain async ExUnit and use LazyHTML selectors instead of raw-markup matching.
+  The five sign-in tests remain in ConnCase because they intentionally cover the
+  routed endpoint, browser pipeline, auth layout, form action, and LiveView
+  change event; their assertions now use element selectors. Both focused files
+  passed and were integrated as `7985f794`.
+- One worker full-gate attempt completed static checks but was interrupted before
+  test results, and its redundant rerun was deliberately stopped. No worker
+  claims an authoritative full gate for this wave; post-merge application suites
+  and the final root precommit own that evidence.
+- The explicit post-merge suites passed: 1,796 core tests with seed 996340 and
+  1,696 web tests with seed 596180, both at `max_cases: 16`. Browser tests
+  remained excluded, and neither suite emitted a PostgreSQL owner/client-exit
+  log.
+
+### Parallel wave four
+
+- A generic `AsyncLiveViewTestSupport` now owns deterministic shutdown for
+  exercised non-dashboard LiveViews that start asynchronous work. The existing
+  dashboard support delegates lifecycle cleanup to it while retaining its
+  dashboard-resolved assertion. Five contact, provider, and fleet-planning
+  files adopted the shared support. Their pre-change slice did not reproduce an
+  owner exit, but the post-change slice passed 21 repetitions (525 tests) with
+  an empty runtime log. The tranche was integrated as `517838d6`.
+- Catalog importer selection now accepts an immutable registry through the
+  catalog application service and queued-run boundary. Core tests use a local
+  fake registration and web tests exercise the built-in YAML importer instead
+  of mutating application configuration. Production boot configuration remains
+  the compatibility default. The focused catalog suite passed 27 tests and the
+  tranche was integrated as `8bef144a`.
+- Managed QuestDB provisioning and TSDB lifecycle workers now execute with
+  policies captured when the application composes the durable-job runner.
+  QuestDB probes and data-source adapter selection accept explicit policies,
+  with documented public compatibility entry points retaining application
+  configuration defaults. Ordinary focused tests no longer rewrite those four
+  configuration families. The affected core slice passed 88 tests and the
+  data-source LiveView slice passed 6 tests. The tranche was integrated as
+  `a2ccbb81`.
+- The explicit post-merge suites passed: 27 catalog tests with seed 389924,
+  1,796 core tests with seed 691966, and 1,696 web tests with seed 512184, all at
+  `max_cases: 16`. Browser tests remained excluded, and neither the core nor web
+  suite emitted a PostgreSQL owner/client-exit log.
+
+### Parallel wave five
+
+- The browser-only rendered-viewport runner now switches its existing Repo
+  owner to SQL Sandbox shared mode before starting the endpoint. Production
+  session, scope-loading, plug, LiveView, and dashboard resolve code no longer
+  carries owner keys or calls SQL Sandbox. The focused slice passed 29 tests,
+  the non-browser web suite passed 1,691 tests, and the browser support module
+  compiled without launching browser execution. The tranche was integrated as
+  `ceacbb86`; no router scope or pipeline changed.
+- Contact scheduling callbacks, asynchronous work, and polling now share one
+  `LiveDeps` snapshot captured at mount. Ops-shell context refreshes share one
+  hook-owned `ContextDeps` snapshot across ticks. Routine tests inject those
+  snapshots directly, while narrow boot-configuration compatibility contracts
+  remain. Focused tests passed 11 contact/hook cases and 4 direct dashboard
+  refresh-consumer cases; the non-browser web suite passed 1,699 tests. The
+  tranche was integrated as `d886664d`.
+- Ground-network and data-source credential resolution now accepts explicit
+  configuration options; provider LiveViews capture their configured options at
+  mount. The simulator captures auth, HTTP, store, and default-path settings at
+  application startup and passes them to its Router and Orchestrator. The
+  five-application warnings-as-errors compile passed along with 42 core, 28
+  simulator, and 12 web focused tests. The tranche was integrated as
+  `2494648a`.
+- The explicit post-merge suites passed: 1,796 core tests with seed 545675, 136
+  simulator tests with seed 746523, and 1,694 web tests with seed 448957, all at
+  `max_cases: 16`. Browser tests remained excluded, and none emitted a
+  PostgreSQL owner/client-exit log.
+
+### Sequential wave six
+
+- Telemetry current-value, history, storage, ingress-archive, and protocol-
+  archive choices are represented by immutable policies. `Cadence.Application`
+  captures the production policies once and passes them through the runtime
+  supervision tree and durable data-management handler. Compatibility arities
+  still read application configuration for callers that deliberately exercise
+  that boundary; ordinary persistence, read, archive, runtime-consumer, and
+  data-management tests now supply policies explicitly. The focused tranche
+  passed 126 tests and its full core suite passed 1,796 tests before integration.
+  It was integrated as `9747a83b`.
+- The first merged web gate found one missed fixture boundary: Telemetry Explore
+  persisted rehearsal samples through a compatibility default while querying a
+  source-specific history view. The fixture now uses one explicit Postgres
+  persistence/read policy and no longer mutates `:telemetry_storage`. Its
+  focused rerun passed and the follow-up was integrated as `1de8d3a5`.
+- The explicit post-merge suites passed: 1,796 core tests with seed 889701, 136
+  simulator tests with seed 29713, and 1,694 non-browser web tests with seed
+  971686, all at `max_cases: 8`. Browser tests remained excluded, and none
+  emitted a PostgreSQL owner/client-exit log.
+
+### Sequential wave seven
+
+- Added one immutable `RuntimeComposition` snapshot for dashboard cache clients
+  and timeouts, invalidation, source execution/readiness/circuit behavior,
+  health and watermark visibility/recording, data-source persistence, and
+  telemetry read policies. Projections capture it at supervisor startup and
+  mounted LiveViews retain it across asynchronous resolves, live ticks, chart
+  appends, and invalidation decisions. Public compatibility constructors remain
+  at configuration boundaries.
+- The named catalog, limits, source-health, telemetry-storage, frame-evidence,
+  replay, cache, and invalidation fixtures now inject policy or use captured
+  runtime state. The only retained mutation in the audited family is the narrow
+  `LiveRefresh.default_refresh_ms/1` compatibility contract. Browser paths were
+  not changed or executed.
+- Focused verification included 868 core dashboard tests, 25 projection/startup
+  cases, and the affected LiveView policy/evidence groups. Final-code
+  authoritative runs on `_dashboard_composition` passed 1,798 core tests with
+  seed 43307 and 1,694 non-browser web tests with seed 97211. The tranche was
+  integrated as `cf3edcd6`.
+
+### Sequential wave eight
+
+- Added immutable `Cadence.Runtime.ProcessNamespace` and
+  `Cadence.Control.ProcessNamespace` values. Runtime/Control roots, registries,
+  mission supervisors, capability registry, mission/contact/path/transport
+  children, and direct lookup/lifecycle APIs now accept explicit addresses;
+  compatibility arities retain the exact production names.
+- A standalone non-Sandbox acceptance test starts two Runtime/Control root
+  pairs with identical mission, contact, path, and transport identities while
+  disabling persistence, recovery, facts, scheduling, and shared resources. It
+  proves every addressed process differs, stops the alpha roots, and verifies
+  bravo remains alive and operational. Twenty-one repeated runs (42 tests)
+  passed, along with 92 affected Runtime/Control/architecture tests, the
+  no-start Control/Data plane gates, and two full core seeds.
+- The authoritative `_runtime_addressability` run passed 1,798 core tests with
+  seed 309771. After integrating S4 and S5a together, `_s4s5root` passed 1,800
+  core tests with seed 446046 and 1,694 non-browser web tests with seed 229657.
+  The tranche was integrated as `0a5cb3b8`. RuntimeCase remains synchronous:
+  fact routing, ETS/profiler state, archives/journal roots, command ownership,
+  SQL ownership, and global teardown are explicitly deferred to S5b.
+
+### S5b parallel resource isolation
+
+- `Cadence.Platform.EventBus` and each fact facade now accept an explicit bus
+  server while preserving the production registered-name arities. Independent
+  buses isolate subscriptions, publication, delivery mode, monitors, and
+  pre-notification behavior. The focused bus test passed 255 executions across
+  51 consecutive repeats, and the full core suite passed 1,805 tests with seed
+  481920. The tranche was integrated as `16c4e4d1`.
+- Ingress archive policies now carry the filesystem writer name, stable instance
+  identity, root, and repository through every facade/backend operation. Two
+  instances accepted identical mission and evidence IDs while independently
+  flushing, fetching, resetting, stopping, and retaining files, rows, and
+  statistics. The isolation proof passed 25 repetitions; the full core suite
+  passed 1,802 tests with seed 926531. The tranche was integrated as
+  `49f27647`.
+- Protocol record archive policies now provide the same explicit writer,
+  identity, root, and repository boundary. Instance-qualified index identities
+  allow identical packet and transfer-frame IDs without changing default legacy
+  rows. The two-instance proof passed across 20 seeds; the full core suite passed
+  1,803 tests with seed 654805. The tranche was integrated as `8f954224`.
+- The merged EventBus and two archive slices passed 1,810 core tests on the
+  `_archives_root` partition with seed 717233.
+- Control contact/runtime and projection domain/runtime/telemetry consumers now
+  capture an explicit EventBus at initialization while retaining their existing
+  module-name and default-bus boundaries. One two-set lifecycle scenario covers
+  all five consumers across independent buses, stop, restart, and survivor
+  continuity; it passed 20 same-VM repetitions at seed 220019. The full core
+  suite passed 1,811 tests with seed 57657, and the tranche was integrated as
+  `16ad656e`.
+- Profiler instances now own anonymous ETS tables, unique query-handler routes,
+  and explicit ingress/protocol archive policies. Runtime-health instances own
+  unique handler identities and metadata routes. The same-mission two-instance
+  proof covers distinct counters, database timings, archive statistics,
+  targeted resets, handler routing, owner shutdown, and survivor operation; it
+  passed seeds 41001 through 41020. The full core suite passed 1,811 tests with
+  seed 180837, and the tranche was integrated as `0c9c2ae7`.
+- Post-commit publishers now accept an explicit EventBus, including nested
+  runtime and telemetry-storage policies, while compatibility arities preserve
+  the production bus. The two-bus proof tags deliveries through independent
+  forwarding processes, so publishing to the wrong bus fails the positive
+  assertion; it passed 20 repetitions at seed 699147. The directly affected
+  slice passed 151 tests with seed 778563, and the full core suite passed 1,810
+  tests with seed 442028. The tranche was integrated as `475d9ecb`.
+- The dashboard runtime fact consumer now captures its EventBus at
+  initialization and routes all five fact subscriptions through that instance.
+  A two-bus/two-cache lifecycle proof covers plan, source-result, and frame
+  invalidation before and after stopping and restarting one consumer while the
+  other remains monitored and operational. It passed 21 executions, the focused
+  cache/fact/invalidation slice passed 85 tests with seed 56381, and the full
+  core suite passed 1,812 tests with seed 603721. The tranche was integrated as
+  `f8a0f69a`.
+- Current-value and history ETS backends now receive explicit child, process,
+  data-table, and configuration-table identities through captured facade
+  policies. Option-aware callbacks keep instance routing separate from semantic
+  operation options while legacy optionless backends retain compatibility. The
+  same-identity two-store proof covers distinct current values, history
+  retention limits, targeted reset, stop, restart, and survivor continuity; it
+  passed 21 executions at seed 27001. The focused store slice passed 23 tests
+  with seed 27002, and the final full core suite passed 1,812 tests with seed
+  27003. The tranche was integrated as `57a885b7`.
+- Command dispatch roots now own explicit supervisor, registry, lane-supervisor,
+  dispatcher, and verifier-scheduler addresses. Dispatchers capture their lane
+  and query collaborators, and verifier schedulers expose a deterministic
+  bootstrap gate plus instance telemetry metadata. The same-identity two-root
+  proof exercises lanes and verifier timers across alpha shutdown and bravo
+  continuity; it passed 21 executions on the final source at seed 379976. The
+  focused command-owner slice passed 11 tests with seed 346607, and the final
+  full core suite passed 1,814 tests with seed 519659. The tranche was integrated
+  as `17b68d71`.
+- Ingress journal configuration is now a captured policy split between
+  filesystem and processing-consumer options. Path coordinators retain that
+  policy and the archive-consumer policy from initialization, so event and
+  quiescence paths no longer re-read application configuration. A same-identity
+  two-runtime proof uses independent journal/archive roots, drains through the
+  production quiescence boundary, and verifies different bytes under identical
+  derived evidence IDs after alpha shutdown. It passed 21 executions at seed 0;
+  the focused four-file slice passed 19 tests with seed 19, and the full core
+  suite passed 1,818 tests with seed 193979. The tranche was integrated as
+  `53c7118f`.
+- One immutable `Cadence.Platform.RootComposition` now captures the identities,
+  policies, and child configuration passed through Platform, Runtime, Control,
+  and Projections. Composed EventBus and mission-runtime starts no longer let a
+  later application-environment mutation override their captured policy. The
+  two-root lifecycle proof exercises archives, journal, ETS stores, facts,
+  commands, scheduling, dashboard cache, alpha shutdown, and bravo continuity.
+  The focused integration matrix passed 61 tests and the five-application suite
+  passed 3,979 tests. The tranche was integrated as `287c32d3`.
+- `Cadence.RuntimeCase` now has an opt-in `isolated: true` mode with a non-shared
+  SQL Sandbox owner and no global runtime teardown. The verifier-scheduler pilot
+  overlaps two owners and two gated schedulers using identical database IDs,
+  rolls the first owner back before the second writes, and terminates its
+  coordination barrier after each pair. The overlap proof passed 202 tests over
+  101 repetitions at seed 424242; the full core suite passed 1,823 tests at seed
+  619233. The tranche was integrated as `267532cc`. This is a bounded pilot, not
+  evidence that every RuntimeCase module is safe to mark async.
+- After both final tranches were merged, their combined focused matrix passed 31
+  tests with seed 860819 on the `_audit_final` partition.
+- The first integrated root gate cleared every functional and architecture
+  check through strict Credo, which then surfaced 26 accumulated style findings.
+  Alias cleanup stayed mechanical in core and web tests, while the three
+  production refactors only grouped managed-application initialization state
+  and extracted dashboard cache/circuit composition helpers. Scoped suites
+  passed 66 core tests, 9 web tests, and 53 production-focused tests. The
+  cleanup was integrated as `88365142`, `f7e228c4`, and `e7c09266`.
+- The next root gate exposed one remaining ownership leak: no-start data-plane
+  runtimes still called the default registered Profiler. Root composition now
+  routes its captured profiler through mission, partition, path, provider, and
+  persistence-projector owners. Bounded replay explicitly selects `:disabled`,
+  whose nested instrumentation is a true no-op; an alternate-profiler contract
+  proves persistence measurements reach only the selected instance. The
+  no-start data-plane gate passed 33 tests, the focused ownership matrix passed
+  21 tests, and the full core suite passed 1,829 tests. The correction was
+  integrated as `64e50f2c`.
+- The final authoritative root `mix precommit` passed on `_audit_final`: all
+  five projects compiled with warnings as errors; strict Credo found no issues
+  across 2,725 files; workspace, extension-host, and architecture checks
+  passed; management, control, data, and projections plane gates passed 5, 2,
+  33, and 2 tests; and the application suites passed 1,829 core, 27 catalog,
+  295 CCSDS, 136 simulator, and 1,694 non-browser web tests. Browser tests were
+  intentionally excluded. No router scope or pipeline changed because the
+  audit affected test ownership and runtime composition, not authentication or
+  route placement.
