@@ -10,16 +10,12 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Projections.DataSources.Health, as: SourceHealth
-
-  alias Cadence.Management.DataSources
-
-  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
-
-  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Control.DataSources, as: DataSourceControl
   alias Cadence.Control.DataSources.Probes.QuestDB
-
+  alias Cadence.DataSources.{DataBinding, DataSource}
+  alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
   alias CadenceWeb.TestFixtures
 

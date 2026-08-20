@@ -8,9 +8,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
     PlacementFrames,
     RenderWidget,
     ResolutionContext,
+    ResolveWarning,
     RuntimeCache,
-    RuntimeComposition,
-    ResolveWarning
+    RuntimeComposition
   }
 
   alias CadenceWeb.OpsDashboardShowLive.DataViewComparison
