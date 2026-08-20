@@ -15,6 +15,8 @@ defmodule Cadence.Platform.RootCompositionTest do
     assert bravo.event_bus == __MODULE__.BravoEventBus
     assert alpha.event_bus_child_opts[:name] == alpha.event_bus
     assert bravo.event_bus_child_opts[:name] == bravo.event_bus
+    assert alpha.profiler == __MODULE__.AlphaProfiler
+    assert bravo.profiler == __MODULE__.BravoProfiler
 
     assert alpha.ingress_archive_policy.backend_opts[:base_path] ==
              "/tmp/cadence-root-composition-alpha/ingress"

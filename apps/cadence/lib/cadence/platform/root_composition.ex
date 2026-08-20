@@ -35,6 +35,7 @@ defmodule Cadence.Platform.RootComposition do
     :runtime_persistence_policy,
     :ingress_archive_consumer_policy,
     :data_management_policy,
+    :profiler,
     :profiler_child_opts,
     :runtime_health_child_opts,
     :dashboard_runtime_composition,
@@ -179,6 +180,8 @@ defmodule Cadence.Platform.RootComposition do
       |> Keyword.put(:ingress_archive_policy, ingress_archive_policy)
       |> Keyword.put(:record_archive_policy, record_archive_policy)
 
+    profiler = Keyword.get(opts, :profiler, Keyword.fetch!(profiler_child_opts, :name))
+
     runtime_health_child_opts =
       opts
       |> Keyword.get(:runtime_health_child_opts, [])
@@ -239,6 +242,7 @@ defmodule Cadence.Platform.RootComposition do
       runtime_persistence_policy: runtime_persistence_policy,
       ingress_archive_consumer_policy: ingress_archive_consumer_policy,
       data_management_policy: data_management_policy,
+      profiler: profiler,
       profiler_child_opts: profiler_child_opts,
       runtime_health_child_opts: runtime_health_child_opts,
       dashboard_runtime_composition: dashboard_runtime_composition,

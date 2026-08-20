@@ -43,6 +43,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @type state :: %{
           process_namespace: ProcessNamespace.t(),
           mission_id: binary(),
+          profiler: TelemetryProfiler.dependency(),
           partition_key: PartitionKey.t(),
           active_activation: MissionRuntimeSpec.t(),
           binding_set: BindingSet.t(),
@@ -186,6 +187,7 @@ defmodule Cadence.Runtime.PartitionOwner do
            %{
              process_namespace: process_namespace,
              mission_id: mission_id,
+             profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
              partition_key: partition_key,
              active_activation: active_activation,
              binding_set: binding_set,
@@ -339,7 +341,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   def handle_call({:process_raw_evidence, %RawEvidence{} = raw_evidence}, _from, state) do
-    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
       TelemetryProfiler.with_stage(:runtime, fn ->
         raw_evidence
         |> process_raw_evidence_reply(state)

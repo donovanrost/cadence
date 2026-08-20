@@ -27,7 +27,7 @@ defmodule Cadence.Runtime.PathCoordinator do
     TransportRuntime
   }
 
-  alias Cadence.Telemetry.{CurrentValueStore, Storage}
+  alias Cadence.Telemetry.{CurrentValueStore, Profiler, Storage}
 
   @type state :: %{
           process_namespace: ProcessNamespace.t(),
@@ -45,6 +45,7 @@ defmodule Cadence.Runtime.PathCoordinator do
           telemetry_storage_policy: map(),
           ingress_journal_policy: IngressJournal.policy(),
           ingress_archive_consumer_policy: map(),
+          profiler: Profiler.dependency(),
           persist_runtime_records?: boolean(),
           lifecycle_status: :active | :quiescing | :quiesced,
           quiescence_settlement: map() | nil,
@@ -148,6 +149,7 @@ defmodule Cadence.Runtime.PathCoordinator do
           :ingress_archive_consumer_policy,
           &IngressArchiveConsumer.configured_policy/0
         ),
+      profiler: Keyword.get(opts, :profiler, Profiler),
       persist_runtime_records?: Keyword.get(opts, :persist_runtime_records?, true),
       mission_id: mission_id,
       realized_contact_id: realized_contact_id,
@@ -448,7 +450,8 @@ defmodule Cadence.Runtime.PathCoordinator do
        path_id: state.path.path_id,
        provider_binding_id: provider_binding.provider_binding_id,
        persistence_policy: state.persistence_policy,
-       current_value_store_policy: state.current_value_store_policy}
+       current_value_store_policy: state.current_value_store_policy,
+       profiler: state.profiler}
 
     case DynamicSupervisor.start_child(
            MissionRuntime.provider_supervisor_name(
@@ -483,6 +486,7 @@ defmodule Cadence.Runtime.PathCoordinator do
        provider_binding_id: provider_binding.provider_binding_id,
        telemetry_storage_policy: state.telemetry_storage_policy,
        current_value_store_policy: state.current_value_store_policy,
+       profiler: state.profiler,
        persistence_projector_name:
          MissionRuntime.provider_persistence_projector_name(
            state.process_namespace,

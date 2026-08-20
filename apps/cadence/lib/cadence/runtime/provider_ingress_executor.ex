@@ -31,6 +31,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   @type state :: %{
           organization_id: binary() | nil,
           mission_id: binary(),
+          profiler: TelemetryProfiler.dependency(),
           realized_contact_id: binary(),
           path_id: binary(),
           provider_binding_id: binary(),
@@ -171,6 +172,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
            :current_value_store_policy,
            &CurrentValueStore.configured_policy/0
          ),
+       profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
        mission_id: Keyword.fetch!(opts, :mission_id),
        realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
        path_id: Keyword.fetch!(opts, :path_id),
@@ -645,7 +647,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp process_telemetry_item(%RawEvidence{} = raw_evidence, state) do
-    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
       ingress_started_at = System.monotonic_time()
 
       resolve_result =

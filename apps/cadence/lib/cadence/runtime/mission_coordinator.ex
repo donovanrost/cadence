@@ -20,6 +20,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
   @type state :: %{
           process_namespace: ProcessNamespace.t(),
           mission_id: binary(),
+          profiler: TelemetryProfiler.dependency(),
           runtime_spec: MissionRuntimeSpec.t() | nil,
           applied_at: DateTime.t() | nil,
           partitions: MapSet.t(PartitionKey.t())
@@ -137,6 +138,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
      %{
        process_namespace: process_namespace(opts),
        mission_id: mission_id,
+       profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
        runtime_spec: nil,
        applied_at: nil,
        partitions: MapSet.new()
@@ -184,7 +186,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
   end
 
   def handle_call({:process_telemetry_ingress, %RawEvidence{} = raw_evidence}, _from, state) do
-    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
       TelemetryProfiler.with_stage(:runtime, fn ->
         partition_key = PartitionKey.from_raw_evidence(raw_evidence)
 
@@ -217,7 +219,8 @@ defmodule Cadence.Runtime.MissionCoordinator do
            state.mission_id,
            partition_key,
            runtime_spec,
-           binding_set
+           binding_set,
+           state.profiler
          ) do
       {:ok, partition_pid} ->
         {:ok, partition_pid, %{state | partitions: MapSet.put(state.partitions, partition_key)}}
@@ -232,7 +235,8 @@ defmodule Cadence.Runtime.MissionCoordinator do
          mission_id,
          %PartitionKey{} = partition_key,
          runtime_spec,
-         binding_set
+         binding_set,
+         profiler
        ) do
     child_spec =
       {PartitionOwner,
@@ -240,7 +244,8 @@ defmodule Cadence.Runtime.MissionCoordinator do
        process_namespace: process_namespace,
        partition_key: partition_key,
        active_activation: runtime_spec,
-       binding_set: binding_set}
+       binding_set: binding_set,
+       profiler: profiler}
 
     case DynamicSupervisor.start_child(
            MissionRuntime.partition_supervisor_name(process_namespace, mission_id),

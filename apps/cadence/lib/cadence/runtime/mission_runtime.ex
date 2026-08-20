@@ -32,7 +32,9 @@ defmodule Cadence.Runtime.MissionRuntime do
          name: partition_supervisor_name(process_namespace, mission_id),
          extra_arguments: [runtime_opts]},
         {Cadence.Runtime.MissionCoordinator,
-         mission_id: mission_id, process_namespace: process_namespace}
+         mission_id: mission_id,
+         process_namespace: process_namespace,
+         profiler: Keyword.get(runtime_opts, :profiler, Cadence.Telemetry.Profiler)}
       ]
       |> Enum.reject(&is_nil/1)
 

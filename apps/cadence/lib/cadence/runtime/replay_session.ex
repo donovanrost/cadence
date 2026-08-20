@@ -97,6 +97,7 @@ defmodule Cadence.Runtime.ReplaySession do
            binding_set: binding_set,
            register?: false,
            persist_runtime_records?: false,
+           profiler: :disabled,
            clock_mode: :replay,
            initial_time: replay_time_for_raw_evidence(raw_evidence)
          ) do

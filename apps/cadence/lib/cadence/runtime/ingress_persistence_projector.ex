@@ -27,6 +27,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           path_id: binary(),
           provider_binding_id: binary(),
           organization_id: binary() | nil,
+          profiler: TelemetryProfiler.dependency(),
           persistence_module: module(),
           persistence_policy: Persistence.policy(),
           current_value_store_policy: CurrentValueStore.policy(),
@@ -129,6 +130,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        path_id: Keyword.fetch!(opts, :path_id),
        provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
        organization_id: Keyword.get(opts, :organization_id),
+       profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
        persistence_module: Keyword.get(opts, :persistence_module, Persistence),
        persistence_policy:
          Keyword.get_lazy(opts, :persistence_policy, &Persistence.configured_policy/0),
@@ -311,6 +313,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     case result do
       {:ok, :ok} ->
         TelemetryProfiler.record_projected_persistence(
+          state.profiler,
           mission_id,
           length(processing_results),
           elapsed_us(persistence_started_at)
@@ -449,7 +452,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
          processing_results,
          state
        ) do
-    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
       persist_processing_results_with_stage(
         processing_results,
         state

@@ -4,6 +4,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
   alias Cadence.ControllableRuntimePersistence
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
+  alias Cadence.Telemetry.Profiler
   alias Cadence.TestSupport.TelemetryPersistencePolicies
 
   test "notify_when_below replies immediately when projector queue is below threshold" do
@@ -120,6 +121,59 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
             }} = IngressPersistenceProjector.snapshot(name)
   end
 
+  test "records persistence measurements in the explicitly selected profiler" do
+    start_supervised!({ControllableRuntimePersistence, owner: self()})
+
+    policies = TelemetryPersistencePolicies.postgres()
+    profiler_name = __MODULE__.SelectedProfiler
+    mission_id = "mission-explicit-projector-profiler"
+
+    start_supervised!(%{
+      id: {Profiler, :selected},
+      start:
+        {Profiler, :start_link,
+         [
+           [
+             name: profiler_name,
+             ingress_archive_policy: policies.ingress_archive,
+             record_archive_policy: policies.record_archive
+           ]
+         ]}
+    })
+
+    projector =
+      start_projector!(nil,
+        mission_id: mission_id,
+        persistence_module: ControllableRuntimePersistence,
+        profiler: profiler_name
+      )
+
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        source_ref: "test/projector-profiler",
+        raw: <<1, 2, 3>>
+      })
+
+    batch =
+      ProcessedIngressBatch.new(%{
+        mission_id: raw_evidence.mission_id,
+        realized_contact_id: "contact-ingress-projector",
+        path_id: "path-ingress-projector",
+        provider_binding_id: "provider-ingress-projector",
+        processing_results: [%{raw_evidence: raw_evidence}]
+      })
+
+    assert :ok = IngressPersistenceProjector.enqueue(projector, batch)
+
+    assert_receive {:runtime_persistence_started, ^projector, release_ref, [_], _}, 500
+    send(projector, {:release_runtime_persistence, release_ref})
+
+    assert {:ok, %{persisted_count: 1}} = IngressPersistenceProjector.quiesce(projector)
+
+    assert Profiler.snapshot(profiler_name, raw_evidence.mission_id).stages.persistence.count == 1
+  end
+
   defp start_projector!(name, opts \\ []) do
     policies = TelemetryPersistencePolicies.postgres()
 
@@ -132,6 +186,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
            realized_contact_id: "contact-ingress-projector",
            path_id: "path-ingress-projector",
            provider_binding_id: "provider-ingress-projector",
+           profiler: :disabled,
            persistence_policy: policies.persistence,
            current_value_store_policy: policies.current_value_store
          ],

@@ -53,11 +53,17 @@ defmodule Cadence.Runtime.Supervisor do
         children
 
       :error ->
-        [{Cadence.Telemetry.Profiler, profiler_child_opts(opts, policies, composition)}] ++
+        profiler_children(opts, policies, composition) ++
           ingress_archive_children(policies) ++
           protocol_record_archive_children(policies) ++
           telemetry_backend_children(policies)
     end
+  end
+
+  defp profiler_children(_opts, _policies, %RootComposition{profiler: :disabled}), do: []
+
+  defp profiler_children(opts, policies, %RootComposition{} = composition) do
+    [{Cadence.Telemetry.Profiler, profiler_child_opts(opts, policies, composition)}]
   end
 
   defp telemetry_backend_children(policies) do
@@ -111,6 +117,7 @@ defmodule Cadence.Runtime.Supervisor do
     |> Keyword.put(:telemetry_storage_policy, policies.telemetry_storage)
     |> Keyword.put(:ingress_journal_policy, composition.ingress_journal_policy)
     |> Keyword.put(:ingress_archive_consumer_policy, policies.ingress_archive_consumer)
+    |> Keyword.put(:profiler, composition.profiler)
   end
 
   defp process_namespace(_opts, %RootComposition{} = composition),
@@ -131,6 +138,7 @@ defmodule Cadence.Runtime.Supervisor do
             Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
           )
           |> copy_ingress_journal_policy(opts, mission_runtime_opts)
+          |> copy_profiler(opts, mission_runtime_opts)
           |> copy_option(opts, :profiler_child_opts)
           |> copy_option(opts, :current_value_store_policy)
           |> copy_option(opts, :telemetry_storage_policy)
@@ -158,6 +166,13 @@ defmodule Cadence.Runtime.Supervisor do
 
       :error ->
         copy_option(target, mission_runtime_opts, :ingress_journal_policy)
+    end
+  end
+
+  defp copy_profiler(target, opts, mission_runtime_opts) do
+    case Keyword.fetch(opts, :profiler) do
+      {:ok, profiler} -> Keyword.put(target, :profiler, profiler)
+      :error -> copy_option(target, mission_runtime_opts, :profiler)
     end
   end
 end

@@ -58,10 +58,10 @@ defmodule Cadence.Runtime.Ingress do
     end
   end
 
-  @spec process_and_persist(RawEvidence.t()) ::
+  @spec process_and_persist(TelemetryProfiler.dependency(), RawEvidence.t()) ::
           {:ok, processing_result()} | {:error, term()}
-  def process_and_persist(%RawEvidence{} = raw_evidence) do
-    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+  def process_and_persist(profiler, %RawEvidence{} = raw_evidence) do
+    TelemetryProfiler.with_ingress_context(profiler, raw_evidence, fn ->
       ingress_started_at = System.monotonic_time()
 
       resolve_result =
@@ -84,6 +84,12 @@ defmodule Cadence.Runtime.Ingress do
           {:error, reason}
       end
     end)
+  end
+
+  @spec process_and_persist(RawEvidence.t()) ::
+          {:ok, processing_result()} | {:error, term()}
+  def process_and_persist(%RawEvidence{} = raw_evidence) do
+    process_and_persist(TelemetryProfiler, raw_evidence)
   end
 
   defp handle_resolved_ingress(resolved_raw_evidence, ingress_started_at, resolve_us) do

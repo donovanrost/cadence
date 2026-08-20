@@ -9,7 +9,9 @@ defmodule Cadence.Telemetry.Profiler do
   - snapshots are aggregated on read from instance- and mission-scoped counter references
 
   This lets `mix cadence.profile` observe actual downlink behavior while the
-  simulator is exercising the runtime.
+  simulator is exercising the runtime. Bounded runtimes may explicitly select
+  `:disabled`; instrumentation then executes wrapped work without recording or
+  emitting profiler measurements, including nested zero-arity calls.
   """
 
   use GenServer
@@ -110,6 +112,8 @@ defmodule Cadence.Telemetry.Profiler do
           required(:ingress_archive_policy) => IngressArchive.policy(),
           required(:record_archive_policy) => RecordArchive.policy()
         }
+
+  @type dependency :: client() | GenServer.server() | :disabled
 
   @type snapshot :: %{
           mission_id: binary(),
@@ -228,8 +232,9 @@ defmodule Cadence.Telemetry.Profiler do
   Operational APIs accept this client as their first argument. The zero-arity
   form preserves the default registered profiler behavior.
   """
-  @spec client(GenServer.server() | client()) :: client()
+  @spec client(dependency()) :: client() | :disabled
   def client(server \\ __MODULE__)
+  def client(:disabled), do: :disabled
   def client(%{tag: @client_tag} = client), do: client
   def client(server), do: GenServer.call(server, :client)
 
@@ -238,9 +243,13 @@ defmodule Cadence.Telemetry.Profiler do
     with_ingress_context(current_client(), raw_evidence, fun)
   end
 
-  @spec with_ingress_context(client() | GenServer.server(), RawEvidence.t(), (-> result)) ::
+  @spec with_ingress_context(dependency(), RawEvidence.t(), (-> result)) ::
           result
         when result: var
+  def with_ingress_context(:disabled, %RawEvidence{}, fun) when is_function(fun, 0) do
+    with_process_value(@context_key, %{profiler_client: :disabled}, fun)
+  end
+
   def with_ingress_context(client_or_server, %RawEvidence{} = raw_evidence, fun)
       when is_function(fun, 0) do
     client = resolve_client(client_or_server)
@@ -268,7 +277,9 @@ defmodule Cadence.Telemetry.Profiler do
     record_ingress_result(current_client(), raw_evidence, opts)
   end
 
-  @spec record_ingress_result(client() | GenServer.server(), RawEvidence.t(), keyword()) :: :ok
+  @spec record_ingress_result(dependency(), RawEvidence.t(), keyword()) :: :ok
+  def record_ingress_result(:disabled, %RawEvidence{}, opts) when is_list(opts), do: :ok
+
   def record_ingress_result(client_or_server, %RawEvidence{} = raw_evidence, opts)
       when is_list(opts) do
     client = resolve_client(client_or_server)
@@ -340,11 +351,16 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   @spec record_projected_persistence(
-          client() | GenServer.server(),
+          dependency(),
           binary(),
           non_neg_integer(),
           non_neg_integer()
         ) :: :ok
+  def record_projected_persistence(:disabled, mission_id, persisted_count, total_us)
+      when is_binary(mission_id) and is_integer(persisted_count) and persisted_count >= 0 and
+             is_integer(total_us) and total_us >= 0,
+      do: :ok
+
   def record_projected_persistence(client_or_server, mission_id, persisted_count, total_us)
       when is_binary(mission_id) and is_integer(persisted_count) and persisted_count >= 0 and
              is_integer(total_us) and total_us >= 0 do
@@ -362,9 +378,13 @@ defmodule Cadence.Telemetry.Profiler do
     with_runtime_component(current_client(), mission_id, component, fun)
   end
 
-  @spec with_runtime_component(client() | GenServer.server(), binary(), atom(), (-> result)) ::
+  @spec with_runtime_component(dependency(), binary(), atom(), (-> result)) ::
           result
         when result: var
+  def with_runtime_component(:disabled, mission_id, component, fun)
+      when is_binary(mission_id) and component in @runtime_components and is_function(fun, 0),
+      do: fun.()
+
   def with_runtime_component(client_or_server, mission_id, component, fun)
       when is_binary(mission_id) and component in @runtime_components and is_function(fun, 0) do
     client = resolve_client(client_or_server)
@@ -902,11 +922,13 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp current_client do
     case Process.get(@context_key) do
+      %{profiler_client: :disabled} -> :disabled
       %{profiler_client: %{tag: @client_tag} = client} -> client
       _other -> client()
     end
   end
 
+  defp resolve_client(:disabled), do: :disabled
   defp resolve_client(%{tag: @client_tag} = client), do: client
   defp resolve_client(server), do: client(server)
 
