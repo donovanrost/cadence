@@ -13,8 +13,8 @@ defmodule Cadence.LimitsTest do
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
-    RuntimeFactConsumer,
     RuntimeCacheKey,
+    RuntimeFactConsumer,
     SourceResult
   }
 
@@ -26,6 +26,7 @@ defmodule Cadence.LimitsTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.Limits.Facts, as: LimitFacts
   alias Cadence.Platform.EventBus
   alias Cadence.Telemetry.PacketDefinition
 
@@ -90,7 +91,7 @@ defmodule Cadence.LimitsTest do
 
   test "evaluates governed telemetry limits over derived telemetry in an async job" do
     event_bus = start_event_bus()
-    assert :ok = Cadence.Limits.Facts.subscribe(event_bus, self())
+    assert :ok = LimitFacts.subscribe(event_bus, self())
 
     binding_set = persist_binding_set_fixture()
 

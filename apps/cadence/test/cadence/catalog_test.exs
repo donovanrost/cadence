@@ -5,6 +5,7 @@ defmodule Cadence.CatalogTest do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Database, Registry}
+  alias Cadence.Catalog.Facts, as: CatalogFacts
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
@@ -13,8 +14,8 @@ defmodule Cadence.CatalogTest do
     Frame,
     PlannedSourceRequest,
     RuntimeCache,
-    RuntimeFactConsumer,
     RuntimeCacheKey,
+    RuntimeFactConsumer,
     SourceResult
   }
 
@@ -220,7 +221,7 @@ defmodule Cadence.CatalogTest do
     } do
       persist_mission_scope(organization_id(), mission_id())
       event_bus = start_event_bus()
-      assert :ok = Cadence.Catalog.Facts.subscribe(event_bus, self())
+      assert :ok = CatalogFacts.subscribe(event_bus, self())
 
       assert {:ok, %Database{} = database} =
                Catalog.create_database(organization_id(), mission_id(), %{

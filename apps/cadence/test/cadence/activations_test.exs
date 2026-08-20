@@ -1,6 +1,7 @@
 defmodule Cadence.ActivationsTest do
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Activations.Facts, as: ActivationFacts
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Platform.EventBus
   alias Cadence.Runtime
@@ -14,7 +15,7 @@ defmodule Cadence.ActivationsTest do
     persist_mission_scope(@organization_id, "mission-activation-alpha")
     binding_set = persisted_binding_set("mission-activation-alpha", 1, "HK")
     event_bus = start_event_bus()
-    assert :ok = Cadence.Activations.Facts.subscribe(event_bus, self())
+    assert :ok = ActivationFacts.subscribe(event_bus, self())
 
     on_exit(fn ->
       Runtime.stop_mission(binding_set.mission_id)

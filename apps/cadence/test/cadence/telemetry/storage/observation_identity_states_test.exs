@@ -5,6 +5,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   alias Cadence.Dashboards.TelemetryRevisionSummary
   alias Cadence.OperationalEvents
   alias Cadence.Platform.EventBus
+  alias Cadence.Telemetry.Facts, as: TelemetryFacts
   alias Cadence.Telemetry.ObservationIdentityStateChanged
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage
@@ -12,7 +13,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
 
   test "envelope state publication uses the explicitly selected event bus" do
     event_bus = start_event_bus()
-    assert :ok = Cadence.Telemetry.Facts.subscribe(event_bus, self())
+    assert :ok = TelemetryFacts.subscribe(event_bus, self())
     envelope = envelope(sample_id: "sample-explicit-bus", revision: 1)
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope], event_bus: event_bus)

@@ -5,8 +5,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Control.ManagedResources
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
+  alias Cadence.Control.ManagedResources
 
   alias Cadence.DataSources.DeploymentStatus
 

@@ -3,6 +3,7 @@ defmodule Cadence.Contacts.ContactStoreTest do
 
   alias Cadence.Contacts.ContactAction
   alias Cadence.Contacts.ContactStore
+  alias Cadence.Contacts.Facts, as: ContactFacts
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
@@ -19,7 +20,7 @@ defmodule Cadence.Contacts.ContactStoreTest do
 
   test "owns contact records, lifecycle updates, action filters, and scheduler reads", context do
     event_bus = start_event_bus()
-    assert :ok = Cadence.Contacts.Facts.subscribe(event_bus, self())
+    assert :ok = ContactFacts.subscribe(event_bus, self())
 
     starts_at = DateTime.from_unix!(1_700_500_000)
     ends_at = DateTime.add(starts_at, 600, :second)

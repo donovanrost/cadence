@@ -5,6 +5,7 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits.DefinitionLifecycle
   alias Cadence.Limits.DefinitionLifecycleEvent
+  alias Cadence.Limits.Facts, as: LimitFacts
   alias Cadence.Platform.EventBus
 
   @organization_id "org-limit-lifecycle"
@@ -13,7 +14,7 @@ defmodule Cadence.Limits.DefinitionLifecycleTest do
   test "persisted limit definitions write lifecycle events and active projection" do
     persist_mission_scope(@organization_id, @mission_id)
     event_bus = start_event_bus()
-    assert :ok = Cadence.Limits.Facts.subscribe(event_bus, self())
+    assert :ok = LimitFacts.subscribe(event_bus, self())
 
     first_definition = limit_definition(version: 1, yellow_high: 10)
     replacement_definition = limit_definition(version: 2, yellow_high: 20)

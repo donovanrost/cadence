@@ -25,8 +25,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.Protocol.RecordArchive.Postgres.{PacketRecordRow, TransferFrameRecordRow}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
-  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
   alias Cadence.Telemetry.{CurrentValueStore, Storage}
+  alias Cadence.Telemetry.CurrentValueStore.Postgres.TelemetryLatestValueRow
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
 

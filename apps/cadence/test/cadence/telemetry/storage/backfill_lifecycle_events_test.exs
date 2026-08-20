@@ -5,11 +5,12 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEventsTest do
   alias Cadence.OperationalEvents
   alias Cadence.Platform.EventBus
   alias Cadence.Telemetry.BackfillLifecycleChanged
+  alias Cadence.Telemetry.Facts, as: TelemetryFacts
   alias Cadence.Telemetry.Storage
 
   test "workflow publication preserves the explicitly selected event bus" do
     event_bus = start_event_bus()
-    assert :ok = Cadence.Telemetry.Facts.subscribe(event_bus, self())
+    assert :ok = TelemetryFacts.subscribe(event_bus, self())
 
     assert {:ok, event} =
              Storage.record_backfill_lifecycle_workflow_event(

@@ -3,7 +3,7 @@ defmodule Cadence.Telemetry.DataManagementFixtures do
 
   import ExUnit.Assertions
 
-  alias Cadence.Jobs.BackgroundJobRow
+  alias Cadence.Jobs.{BackgroundJobRow, Runner}
   alias Cadence.Repo
   alias Cadence.Telemetry.{CurrentValueStore, DataManagement, HistoryStore, Sample, Storage}
 
@@ -51,7 +51,7 @@ defmodule Cadence.Telemetry.DataManagementFixtures do
   end
 
   def data_management_job_runner(policy) when is_map(policy) do
-    Cadence.Jobs.Runner.new(%{
+    Runner.new(%{
       telemetry_historical_data_workflow: DataManagement.handler(policy)
     })
   end
