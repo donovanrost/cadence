@@ -12,7 +12,7 @@ defmodule Cadence.Reads.MissionEventsTest do
     CapabilityInstance
   }
 
-  alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
+  alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, Path, ScheduledContact}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
   alias Cadence.Limits.Definition, as: LimitDefinition
@@ -44,7 +44,6 @@ defmodule Cadence.Reads.MissionEventsTest do
         "managed-runtime-contact"
       )
 
-      Cadence.Contacts.stop_realized_contact(organization_id, mission_id, "transport-contact")
       Runtime.stop_mission(mission_id)
     end)
 
@@ -397,103 +396,68 @@ defmodule Cadence.Reads.MissionEventsTest do
            ]
   end
 
-  test "projects downlink combiner outputs into mission events", %{
+  test "projects committed downlink combiner records into mission events", %{
     organization_id: organization_id,
     mission_id: mission_id
   } do
-    realized_contact =
-      RealizedContact.new(%{
-        realized_contact_id: "transport-contact",
+    realized_contact_id = "transport-contact"
+    beta_observed_at = DateTime.from_unix!(1_700_060_510, :second)
+    alpha_observed_at = DateTime.from_unix!(1_700_060_515, :second)
+
+    records = [
+      CombinedDownlinkRecord.new(%{
+        merged_record_id: "merged-beta",
         mission_id: mission_id,
-        clock_mode: :replay,
-        initial_time: DateTime.from_unix!(1_700_060_500, :second),
-        source_endpoint_refs: ["source-endpoint-alpha"],
-        paths: [
-          Path.new(%{
-            path_id: "uplink-path-alpha",
-            direction: :uplink,
-            selection_role: :selected,
-            source_endpoint_ref: "source-endpoint-alpha",
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "uplink-heartbeat-alpha",
-                family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
-              })
-            ]
-          }),
-          Path.new(%{
-            path_id: "downlink-path-alpha",
-            direction: :downlink,
-            selection_role: :selected,
-            source_endpoint_ref: "source-endpoint-alpha",
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "downlink-heartbeat-alpha",
-                family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
-              })
-            ]
-          }),
-          Path.new(%{
-            path_id: "downlink-path-beta",
-            direction: :downlink,
-            selection_role: :contributing,
-            source_endpoint_ref: "source-endpoint-alpha",
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "downlink-heartbeat-beta",
-                family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
-              })
-            ]
-          })
-        ]
+        realized_contact_id: realized_contact_id,
+        observation_key: "frame-001",
+        source_endpoint_ref: "source-endpoint-alpha",
+        selected_path_id: "downlink-path-beta",
+        selected_observation_id: "observation-beta",
+        payload: %{frame: 1, source: "beta"},
+        selected_reason: :accepted,
+        observed_at: beta_observed_at
+      }),
+      DownlinkDiagnostic.new(%{
+        diagnostic_id: "diagnostic-beta",
+        mission_id: mission_id,
+        realized_contact_id: realized_contact_id,
+        observation_key: "frame-001",
+        path_id: "downlink-path-beta",
+        selected_path_id: "downlink-path-beta",
+        observation_id: "observation-beta",
+        diagnostic_kind: :accepted,
+        recorded_at: beta_observed_at
+      }),
+      CombinedDownlinkRecord.new(%{
+        merged_record_id: "merged-alpha",
+        mission_id: mission_id,
+        realized_contact_id: realized_contact_id,
+        observation_key: "frame-001",
+        source_endpoint_ref: "source-endpoint-alpha",
+        selected_path_id: "downlink-path-alpha",
+        selected_observation_id: "observation-alpha",
+        payload: %{frame: 1, source: "alpha"},
+        selected_reason: :selected_path_preferred,
+        observed_at: alpha_observed_at
+      }),
+      DownlinkDiagnostic.new(%{
+        diagnostic_id: "diagnostic-alpha",
+        mission_id: mission_id,
+        realized_contact_id: realized_contact_id,
+        observation_key: "frame-001",
+        path_id: "downlink-path-alpha",
+        selected_path_id: "downlink-path-alpha",
+        observation_id: "observation-alpha",
+        competing_observation_id: "observation-beta",
+        diagnostic_kind: :selected_path_preferred,
+        recorded_at: alpha_observed_at
       })
+    ]
 
-    assert {:ok, _persisted_realized_contact} =
-             Cadence.Contacts.persist_realized_contact(organization_id, realized_contact)
-
-    assert {:ok, _pid} =
-             Cadence.Contacts.start_realized_contact(
-               organization_id,
-               mission_id,
-               realized_contact.realized_contact_id
-             )
-
-    assert {:ok, _first_outputs} =
-             Cadence.handle_path_transport_event(
-               organization_id,
-               mission_id,
-               realized_contact.realized_contact_id,
-               "downlink-path-beta",
-               "downlink-heartbeat-beta",
-               %{
-                 kind: :downlink_observation,
-                 observation_key: "frame-001",
-                 payload: %{frame: 1, source: "beta"},
-                 quality_score: 10
-               },
-               occurred_at: DateTime.from_unix!(1_700_060_510, :second),
-               call_timeout: :infinity
-             )
-
-    assert {:ok, _second_outputs} =
-             Cadence.handle_path_transport_event(
-               organization_id,
-               mission_id,
-               realized_contact.realized_contact_id,
-               "downlink-path-alpha",
-               "downlink-heartbeat-alpha",
-               %{
-                 kind: :downlink_observation,
-                 observation_key: "frame-001",
-                 payload: %{frame: 1, source: "alpha"},
-                 quality_score: 5
-               },
-               occurred_at: DateTime.from_unix!(1_700_060_515, :second),
-               call_timeout: :infinity
-             )
+    assert {:ok, 4} =
+             records
+             |> MissionEvents.project_many()
+             |> then(&MissionEvents.persist_entries(Repo, &1))
 
     transport_events =
       MissionEventReads.list_for_mission(organization_id, mission_id,
@@ -509,7 +473,7 @@ defmodule Cadence.Reads.MissionEventsTest do
            ]
 
     [selection_event | _rest] = transport_events
-    assert selection_event.realized_contact_id == realized_contact.realized_contact_id
+    assert selection_event.realized_contact_id == realized_contact_id
     assert selection_event.path_id == "downlink-path-alpha"
   end
 

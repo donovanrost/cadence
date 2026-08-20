@@ -9,6 +9,7 @@ defmodule Cadence.Platform.FactConsumerIsolationTest do
   alias Cadence.Projections.DomainFactConsumer
   alias Cadence.Projections.RuntimeFactConsumer, as: ProjectionsRuntimeFactConsumer
   alias Cadence.Projections.TelemetryFactConsumer
+  alias Cadence.Runtime.DownlinkRecordsPersisted
   alias Cadence.Runtime.ManagedRecordsPersisted
   alias Cadence.Runtime.ProcessingResultsPersisted
   alias Cadence.Telemetry.ObservationIdentitySelectionChanged
@@ -252,6 +253,20 @@ defmodule Cadence.Platform.FactConsumerIsolationTest do
              })
 
     assert_received {:consumed, ^set, :projections_runtime, ^action_requests}
+
+    combined_records = [%{merged_record_id: "merged-#{token}"}]
+    diagnostics = [%{diagnostic_id: "diagnostic-#{token}"}]
+    projected_downlink_records = combined_records ++ diagnostics
+
+    assert :ok =
+             Cadence.Runtime.Facts.publish(event_bus, %DownlinkRecordsPersisted{
+               observations: [],
+               combined_records: combined_records,
+               diagnostics: diagnostics,
+               persisted_at: now
+             })
+
+    assert_received {:consumed, ^set, :projections_runtime, ^projected_downlink_records}
 
     activation =
       BindingSetActivation.new(%{

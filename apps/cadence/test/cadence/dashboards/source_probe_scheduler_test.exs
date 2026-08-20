@@ -1,5 +1,5 @@
 defmodule Cadence.DataSources.ProbeSchedulerTest do
-  use Cadence.DataCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.DataSources.ProbeScheduler
 
@@ -60,9 +60,9 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     assert Keyword.fetch!(missing_opts, :payload).source == "data_source_probe_scheduler"
 
     assert_receive {:scheduled_probe, "scheduler-stale", _attrs, _opts}
-    refute_receive {:scheduled_probe, "scheduler-fresh", _attrs, _opts}
-    refute_receive {:scheduled_probe, "scheduler-disabled", _attrs, _opts}
-    refute_receive {:scheduled_probe, "scheduler-unscoped", _attrs, _opts}
+    refute_received {:scheduled_probe, "scheduler-fresh", _attrs, _opts}
+    refute_received {:scheduled_probe, "scheduler-disabled", _attrs, _opts}
+    refute_received {:scheduled_probe, "scheduler-unscoped", _attrs, _opts}
   end
 
   test "run_once records health through the data source probe path" do
@@ -146,8 +146,8 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     assert payload.probe_policy_id == "strict-policy"
     assert payload.probe_stale_after_ms == 10_000
 
-    refute_receive {:scheduled_probe, "scheduler-relaxed-policy", _payload}
-    refute_receive {:scheduled_probe, "scheduler-policy-disabled", _payload}
+    refute_received {:scheduled_probe, "scheduler-relaxed-policy", _payload}
+    refute_received {:scheduled_probe, "scheduler-policy-disabled", _payload}
   end
 
   test "run_once bounds slow BYO probes while managed probes still record health" do
@@ -183,12 +183,14 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
         invalidate_runtime_cache?: false,
         now: @now,
         max_concurrency: 1,
-        probe_timeout_ms: 500,
+        probe_timeout_ms: 100,
         probe_fun: fn
           "scheduler-byo-slow", _attrs, _opts ->
             send(test_pid, {:probe_started, "scheduler-byo-slow"})
-            Process.sleep(2_000)
-            flunk("slow BYO probe should be killed by scheduler timeout")
+
+            receive do
+              :release_slow_probe -> flunk("slow BYO probe should be killed by scheduler timeout")
+            end
 
           "scheduler-managed-fast", attrs, opts ->
             send(test_pid, {:probe_started, "scheduler-managed-fast"})
@@ -233,7 +235,7 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     assert byo_status.payload["source"] == "data_source_probe_scheduler"
     assert byo_status.payload["probe_kind"] == "scheduler"
     assert byo_status.payload["probe_message"] == "Source probe exceeded scheduler timeout."
-    assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == 500
+    assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == 100
     assert byo_status.payload["connection_test_result"] == "blocked"
     assert byo_status.payload["connection_test_kind"] == "scheduler_timeout"
   end

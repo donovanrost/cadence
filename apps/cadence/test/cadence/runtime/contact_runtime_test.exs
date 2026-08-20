@@ -345,6 +345,10 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
   test "combines duplicate downlink observations and persists diagnostics", %{
     mission_id: mission_id
   } do
+    # Timer behavior has its own case; keep this fixture's first heartbeat beyond
+    # the observation window so the combiner test does not replay timer cycles.
+    heartbeat_interval_ms = 60_000
+
     realized_contact =
       RealizedContact.new(%{
         realized_contact_id: "contact-alpha",
@@ -362,7 +366,7 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
               TransportBinding.new(%{
                 transport_binding_id: "uplink-heartbeat",
                 family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
+                configuration: %{"heartbeat_interval_ms" => heartbeat_interval_ms}
               })
             ]
           }),
@@ -375,7 +379,7 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
               TransportBinding.new(%{
                 transport_binding_id: "downlink-heartbeat-alpha",
                 family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
+                configuration: %{"heartbeat_interval_ms" => heartbeat_interval_ms}
               })
             ]
           }),
@@ -388,7 +392,7 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
               TransportBinding.new(%{
                 transport_binding_id: "downlink-heartbeat-beta",
                 family_key: :heartbeat_monitor,
-                configuration: %{"heartbeat_interval_ms" => 25}
+                configuration: %{"heartbeat_interval_ms" => heartbeat_interval_ms}
               })
             ]
           })

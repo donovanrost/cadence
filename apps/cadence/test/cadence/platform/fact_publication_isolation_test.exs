@@ -1,5 +1,6 @@
 defmodule Cadence.Platform.FactPublicationIsolationTest do
-  use Cadence.DataCase, async: false
+  use Cadence.DataCase, async: true
+  use GenServer
 
   alias Cadence.DataSources.{DataSource, DataSourceEvent, SourceHealthEvent, SourceWatermarkEvent}
   alias Cadence.Management.DataSources.Store, as: DataSourceStore
@@ -190,8 +191,8 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
       start_supervised!(%{
         id: {:fact_publication_forwarder, bus_tag, make_ref()},
         start:
-          {Task, :start_link,
-           [fn -> subscribe_and_forward_facts(owner, bus_tag, event_bus, facades) end]},
+          {__MODULE__, :start_link,
+           [[owner: owner, bus_tag: bus_tag, event_bus: event_bus, facades: facades]]},
         restart: :temporary
       })
 
@@ -199,27 +200,43 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
     forwarder
   end
 
-  defp subscribe_and_forward_facts(owner, bus_tag, event_bus, facades) do
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts)
+  end
+
+  @impl true
+  def init(opts) do
+    owner = Keyword.fetch!(opts, :owner)
+    bus_tag = Keyword.fetch!(opts, :bus_tag)
+    event_bus = Keyword.fetch!(opts, :event_bus)
+    facades = Keyword.fetch!(opts, :facades)
+
     Enum.each(facades, fn facade ->
       :ok = facade.subscribe(event_bus, self())
     end)
 
     send(owner, {:fact_forwarder_ready, bus_tag, self()})
-    forward_facts(owner, bus_tag)
+    {:ok, %{owner: owner, bus_tag: bus_tag}}
   end
 
-  defp forward_facts(owner, bus_tag) do
-    receive do
-      {:"$gen_cast", {:cadence_fact, topic, fact}} ->
-        send(owner, {:fact_delivery, bus_tag, topic, fact})
-        forward_facts(owner, bus_tag)
-    end
+  @impl true
+  def handle_call({:cadence_fact, topic, fact}, _from, state) do
+    send(state.owner, {:fact_delivery, state.bus_tag, topic, fact})
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_cast({:cadence_fact, topic, fact}, state) do
+    send(state.owner, {:fact_delivery, state.bus_tag, topic, fact})
+    {:noreply, state}
   end
 
   defp start_bus do
     start_supervised!(%{
       id: {:fact_publication_event_bus, make_ref()},
-      start: {EventBus, :start_link, [[name: nil, delivery: :async, before_notify: nil]]},
+      start: {EventBus, :start_link, [[name: nil, delivery: :sync, before_notify: nil]]},
       restart: :temporary
     })
   end
@@ -234,6 +251,6 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
   end
 
   defp refute_any_fact do
-    refute_receive {:fact_delivery, _bus_tag, _topic, _fact}
+    refute_received {:fact_delivery, _bus_tag, _topic, _fact}
   end
 end

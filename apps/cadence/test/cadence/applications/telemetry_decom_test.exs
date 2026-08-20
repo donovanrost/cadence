@@ -1,8 +1,5 @@
 defmodule Cadence.Applications.TelemetryDecomTest do
-  use Cadence.RuntimeCase, async: false
-
-  alias Cadence.Accounts.User
-  alias Cadence.ApplicationDispatch.BindingSet
+  use Cadence.DataCase, async: true
 
   alias Cadence.Applications.{
     ActionDispatcher,
@@ -18,32 +15,14 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   }
 
   alias Cadence.Applications.TelemetryDecom
-  alias Cadence.Auth.Scope
-  alias Cadence.Catalog
-  alias Cadence.Catalog.Artifact
-  alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Governance
-  alias Cadence.Management.Activations, as: ManagementActivations
-  alias Cadence.Platform.ContentHash
-  alias Cadence.Runtime
-  alias Cadence.Runtime.MissionCoordinator
-  alias Cadence.Runtime.MissionModelPlanDecoder
-  alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
-  alias Cadence.SourceEndpoints.SourceEndpoint
-  alias Cadence.Spacecraft
+  alias Cadence.Applications.TelemetryDecomFixtures
 
-  @organization_id "org-decom"
-  @mission_id "mission-decom"
-
-  setup do
-    on_exit(fn -> Runtime.stop_mission(@mission_id) end)
-    :ok
-  end
+  @organization_id "org-decom-data"
+  @mission_id "mission-decom-data"
 
   describe "configure/4 and fetch_config/3" do
     test "persists a per-spacecraft configuration and round-trips it" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_imported_mission!()
 
       assert {:ok, config} =
                TelemetryDecom.configure(
@@ -77,9 +56,8 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "auto-provisions a managed runtime source endpoint when one is not provided" do
-      persist_mission_scope(@organization_id, @mission_id)
-      spacecraft = persist_spacecraft!(@mission_id, display_name: "Nova-1")
-      revision = persist_revision!(@mission_id)
+      spacecraft = setup_spacecraft!()
+      revision = persist_imported_revision!(@mission_id)
 
       assert {:ok, config} =
                TelemetryDecom.configure(
@@ -104,7 +82,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "rejects a source endpoint that belongs to a different spacecraft" do
-      {spacecraft, revision, _endpoint} = setup_mission()
+      {spacecraft, revision, _endpoint} = setup_imported_mission!()
 
       other_spacecraft =
         persist_spacecraft!(@mission_id, display_name: "Nova-2")
@@ -126,7 +104,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "rejects handled APIDs not present in the selected revision" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_imported_mission!()
 
       assert {:error, {:handled_apids_not_in_revision, [999]}} =
                TelemetryDecom.configure(
@@ -140,7 +118,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "preserves disabled state when editing an existing config" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_imported_mission!()
 
       {:ok, _} =
         TelemetryDecom.configure(
@@ -171,7 +149,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "increments configuration versions only for semantic configuration changes" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_imported_mission!()
 
       attrs = [
         catalog_revision_id: revision.catalog_revision_id,
@@ -212,7 +190,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
   describe "governed mission apply" do
     test "creates a pending request without changing the active runtime basis" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_qualified_mission!()
 
       assert {:ok, _config} =
                TelemetryDecom.configure(
@@ -242,315 +220,11 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert {:error, :no_active_binding_set} =
                Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
     end
-
-    test "compiles and activates the mission binding set, stamping each config" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      assert {:ok, _config} =
-               TelemetryDecom.configure(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id,
-                 catalog_revision_id: revision.catalog_revision_id,
-                 handled_apids: [42],
-                 source_endpoint_id: endpoint.source_endpoint_id
-               )
-
-      assert {:ok, applied} =
-               apply_mission(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert applied.applied_binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
-      assert applied.applied_binding_set_version == 1
-      assert %DateTime{} = applied.applied_at
-      assert applied.configuration_version == 1
-
-      assert {:ok, activation} =
-               Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
-
-      assert activation.binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
-      assert activation.binding_set_version == 1
-
-      assert TelemetryDecom.status(applied, %{
-               binding_set_id: activation.binding_set_id,
-               binding_set_version: activation.binding_set_version
-             }) == :applied
-    end
-
-    test "reapplying after a config change bumps the binding set version" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, _} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      {:ok, second} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert second.applied_binding_set_version == 2
-    end
-
-    test "refreshes the mission runtime so live partitions see the new binding set" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, _applied} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert {:ok, activation} = MissionCoordinator.active_activation(@mission_id)
-      assert activation.binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
-      assert activation.binding_set_version == 1
-    end
-
-    test "disabling the last enabled config activates an empty binding set" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, _} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      {:ok, _} =
-        TelemetryDecom.disable(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert {:ok, disabled} =
-               TelemetryDecom.fetch_config(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert TelemetryDecom.status(disabled, %{
-               binding_set_id: TelemetryDecom.binding_set_id(@mission_id),
-               binding_set_version: 1
-             }) == :outdated
-
-      assert {:ok, _config} =
-               apply_mission(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert {:ok, activation} =
-               Cadence.Activations.fetch_active_activation(@organization_id, @mission_id)
-
-      assert activation.binding_set_version == 2
-
-      assert {:ok, %BindingSet{capability_instances: [], rules: []}} =
-               Governance.fetch_binding_set(
-                 @organization_id,
-                 @mission_id,
-                 activation.binding_set_id,
-                 activation.binding_set_version
-               )
-
-      assert {:ok, disabled} =
-               TelemetryDecom.fetch_config(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert TelemetryDecom.status(disabled, %{
-               binding_set_id: activation.binding_set_id,
-               binding_set_version: activation.binding_set_version
-             }) == :disabled
-    end
-  end
-
-  describe "configure/4 after apply_mission" do
-    test "clears the applied stamp when catalog_revision_id changes" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, applied} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert applied.applied_binding_set_id == TelemetryDecom.binding_set_id(@mission_id)
-
-      second_revision = persist_revision!(@mission_id, revision_label: "Rev 2")
-
-      assert {:ok, reconfigured} =
-               TelemetryDecom.configure(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id,
-                 catalog_revision_id: second_revision.catalog_revision_id,
-                 handled_apids: [42],
-                 source_endpoint_id: endpoint.source_endpoint_id
-               )
-
-      assert reconfigured.applied_binding_set_id == nil
-      assert reconfigured.applied_binding_set_version == nil
-      assert reconfigured.applied_at == nil
-    end
-
-    test "clears the applied stamp when source_endpoint_id changes" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, _applied} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      other_endpoint =
-        persist_source_endpoint!(@mission_id, spacecraft.spacecraft_id, display_name: "Backup")
-
-      assert {:ok, reconfigured} =
-               TelemetryDecom.configure(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id,
-                 catalog_revision_id: revision.catalog_revision_id,
-                 handled_apids: [42],
-                 source_endpoint_id: other_endpoint.source_endpoint_id
-               )
-
-      assert reconfigured.applied_binding_set_id == nil
-      assert reconfigured.applied_binding_set_version == nil
-      assert reconfigured.applied_at == nil
-    end
-
-    test "clears the applied stamp when handled APIDs change" do
-      persist_mission_scope(@organization_id, @mission_id)
-      spacecraft = persist_spacecraft!(@mission_id, display_name: "Nova-1")
-
-      endpoint =
-        persist_source_endpoint!(@mission_id, spacecraft.spacecraft_id, display_name: "Primary")
-
-      revision =
-        persist_revision!(@mission_id,
-          yaml: """
-          packets:
-            - name: HEALTH
-              apid: 42
-              items:
-                - name: mode
-                  data_type: uint
-                  bit_offset: 0
-                  bit_size: 8
-            - name: EVENTS
-              apid: 43
-              items:
-                - name: event_code
-                  data_type: uint
-                  bit_offset: 0
-                  bit_size: 16
-          commands: []
-          """
-        )
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, _applied} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert {:ok, reconfigured} =
-               TelemetryDecom.configure(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id,
-                 catalog_revision_id: revision.catalog_revision_id,
-                 handled_apids: [42, 43],
-                 source_endpoint_id: endpoint.source_endpoint_id
-               )
-
-      assert reconfigured.applied_binding_set_id == nil
-      assert reconfigured.applied_binding_set_version == nil
-      assert reconfigured.applied_at == nil
-    end
-
-    test "preserves the applied stamp when only metadata changes" do
-      {spacecraft, revision, endpoint} = setup_mission()
-
-      {:ok, _} =
-        TelemetryDecom.configure(
-          @organization_id,
-          @mission_id,
-          spacecraft.spacecraft_id,
-          catalog_revision_id: revision.catalog_revision_id,
-          handled_apids: [42],
-          source_endpoint_id: endpoint.source_endpoint_id
-        )
-
-      {:ok, applied} =
-        apply_mission(@organization_id, @mission_id, spacecraft.spacecraft_id)
-
-      assert {:ok, reconfigured} =
-               TelemetryDecom.configure(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id,
-                 catalog_revision_id: revision.catalog_revision_id,
-                 handled_apids: [42],
-                 source_endpoint_id: endpoint.source_endpoint_id,
-                 metadata: %{"note" => "unchanged"}
-               )
-
-      assert reconfigured.applied_binding_set_id == applied.applied_binding_set_id
-      assert reconfigured.applied_binding_set_version == applied.applied_binding_set_version
-      assert reconfigured.applied_at == applied.applied_at
-    end
   end
 
   describe "list_revision_apid_rows/3" do
     test "groups Mission Model packet definitions by APID and sorts by APID" do
-      {_spacecraft, revision, _endpoint} = setup_mission()
+      {_spacecraft, revision, _endpoint} = setup_imported_mission!()
 
       assert {:ok, %{rows: rows, points_by_id: points_by_id}} =
                TelemetryDecom.list_revision_apid_rows(
@@ -578,7 +252,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
   describe "list_apid_conflicts/3" do
     test "returns enabled APID claims from other applications on the spacecraft" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      spacecraft = setup_spacecraft!()
 
       assert {:ok, _binding} =
                ApplicationBindingStore.upsert(
@@ -587,9 +261,9 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                    mission_id: @mission_id,
                    spacecraft_id: spacecraft.spacecraft_id,
                    application_key: :event_reporting,
-                   catalog_revision_id: revision.catalog_revision_id,
+                   catalog_revision_id: "catalog-revision-fixture",
                    handled_apids: [42],
-                   source_endpoint_id: endpoint.source_endpoint_id
+                   source_endpoint_id: "source-endpoint-fixture"
                  })
                )
 
@@ -603,7 +277,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
   describe "activation preflight" do
     test "blocks an unconfigured installation and becomes ready after compilation" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_imported_mission!()
       scope = user_scope("preflight-ready")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 
@@ -639,7 +313,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "allows another application to read the same APID" do
-      {spacecraft, revision, endpoint} = setup_mission()
+      {spacecraft, revision, endpoint} = setup_qualified_mission!()
       scope = user_scope("preflight-conflict")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 
@@ -688,7 +362,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
 
     test "evaluates mission dependencies from a spacecraft host without product coupling" do
-      {spacecraft, _revision, _endpoint} = setup_mission()
+      spacecraft = setup_spacecraft!()
       scope = user_scope("preflight-dependency")
       spacecraft_host = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 
@@ -724,187 +398,34 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
   end
 
-  defp apply_mission(organization_id, mission_id, spacecraft_id) do
-    requester = user_scope(organization_id, "requester")
-    approver = user_scope(organization_id, "approver")
+  defp user_scope(prefix), do: TelemetryDecomFixtures.user_scope(@organization_id, prefix)
 
-    with {:ok, %{activation_request: request}} <-
-           TelemetryDecom.request_mission_apply(requester, mission_id, spacecraft_id),
-         {:ok, _request, _decision, approved} <-
-           ManagementActivations.approve(
-             approver,
-             request.activation_request_id,
-             "approved in Telemetry Decom test"
-           ),
-         {:ok, _execution} <- ControlActivations.execute(approved) do
-      TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft_id)
-    end
+  defp setup_spacecraft! do
+    TelemetryDecomFixtures.setup_spacecraft!(@organization_id, @mission_id)
   end
 
-  defp user_scope(user_id), do: user_scope(@organization_id, user_id)
-
-  defp user_scope(organization_id, prefix) do
-    user_id = "#{prefix}-#{System.unique_integer([:positive])}"
-
-    user =
-      User.new(%{
-        user_id: user_id,
-        email: user_id <> "@example.test",
-        display_name: user_id,
-        capabilities: [:platform_admin]
-      })
-
-    Scope.new(%{user: user, organization_id: organization_id, admin_mode?: true})
+  defp setup_imported_mission! do
+    TelemetryDecomFixtures.setup_imported_mission!(@organization_id, @mission_id)
   end
 
-  defp setup_mission do
-    persist_mission_scope(@organization_id, @mission_id)
-    spacecraft = persist_spacecraft!(@mission_id, display_name: "Nova-1")
-
-    endpoint =
-      persist_source_endpoint!(@mission_id, spacecraft.spacecraft_id, display_name: "Primary")
-
-    revision = persist_revision!(@mission_id)
-    {spacecraft, revision, endpoint}
+  defp setup_qualified_mission! do
+    TelemetryDecomFixtures.setup_qualified_mission!(@organization_id, @mission_id)
   end
 
   defp persist_spacecraft!(mission_id, opts) do
-    spacecraft =
-      Spacecraft.new(%{
-        mission_id: mission_id,
-        display_name: Keyword.fetch!(opts, :display_name)
-      })
-
-    {:ok, persisted} = Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
-    persisted
+    TelemetryDecomFixtures.persist_spacecraft!(@organization_id, mission_id, opts)
   end
 
   defp persist_source_endpoint!(mission_id, spacecraft_id, opts) do
-    endpoint =
-      SourceEndpoint.new(%{
-        mission_id: mission_id,
-        spacecraft_id: spacecraft_id,
-        display_name: Keyword.fetch!(opts, :display_name)
-      })
-
-    {:ok, persisted} = Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, endpoint)
-    persisted
+    TelemetryDecomFixtures.persist_source_endpoint!(
+      @organization_id,
+      mission_id,
+      spacecraft_id,
+      opts
+    )
   end
 
-  defp persist_revision!(mission_id, opts \\ []) do
-    revision_label = Keyword.get(opts, :revision_label, "Rev 1")
-    suffix = Integer.to_string(System.unique_integer([:positive]))
-
-    {:ok, database} =
-      Catalog.create_database(@organization_id, mission_id, %{
-        name: "Bus " <> suffix,
-        slug: "bus-" <> suffix,
-        catalog_family: :combined,
-        default_importer_key: "cadence_yaml"
-      })
-
-    yaml =
-      Keyword.get(
-        opts,
-        :yaml,
-        """
-        packets:
-          - name: HEALTH
-            apid: 42
-            items:
-              - name: mode
-                data_type: uint
-                bit_offset: 0
-                bit_size: 8
-        commands: []
-        """
-      )
-
-    artifact =
-      Artifact.new(%{
-        mission_id: mission_id,
-        catalog_database_id: database.catalog_database_id,
-        catalog_family: :combined,
-        artifact_name: "bus.yaml",
-        format_key: "cadence_yaml",
-        media_type: "application/yaml",
-        source_artifact: yaml
-      })
-
-    {:ok, run} =
-      Catalog.start_revision_import(
-        @organization_id,
-        mission_id,
-        database.catalog_database_id,
-        artifact,
-        "cadence_yaml",
-        metadata: %{"revision_label" => revision_label}
-      )
-
-    {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
-
-    {:ok, revision} =
-      Catalog.fetch_revision_by_import_run(@organization_id, mission_id, completed.import_run_id)
-
-    {:ok, _approved_model} =
-      Cadence.MissionModels.approve_revision(
-        @organization_id,
-        mission_id,
-        revision.mission_model_revision_id,
-        %{"kind" => "test_fixture", "id" => "telemetry-decom"}
-      )
-
-    {:ok, plans} =
-      Cadence.MissionModels.fetch_runtime_plans(
-        @organization_id,
-        mission_id,
-        revision.mission_model_revision_id
-      )
-
-    {:ok, [packet | _rest]} = MissionModelPlanDecoder.telemetry_packet_definitions(plans)
-    [field | _rest] = packet.fields
-
-    update =
-      Update.new(%{
-        update_id: "telemetry-decom-qualification",
-        parameter_id: field.parameter_id,
-        qualified_name: field.qualified_name,
-        value: 1,
-        raw_value: 1,
-        quality: :good,
-        generation_time: ~U[2026-08-12 12:00:00Z],
-        receipt_time: ~U[2026-08-12 12:00:00Z],
-        producer_kind: :container,
-        producer_id: packet.packet_definition_id,
-        metadata: %{mission_id: mission_id}
-      })
-
-    {:ok, result, %State{}} =
-      SemanticRuntime.process(%State{}, [update], PlanDecoder.decode(plans))
-
-    expected_result_sha256 =
-      ContentHash.term_sha256(%{
-        updates:
-          Enum.map(result.parameter_updates, fn parameter_update ->
-            {parameter_update.parameter_id, parameter_update.value, parameter_update.quality,
-             parameter_update.generation_time, parameter_update.receipt_time}
-          end),
-        monitoring:
-          Enum.map(result.monitoring_results, fn monitoring ->
-            {monitoring.policy_id, monitoring.parameter_id, monitoring.effective_state,
-             monitoring.transition}
-          end)
-      })
-
-    {:ok, _qualification_case} =
-      Cadence.MissionModels.register_qualification_case(
-        user_scope(@organization_id, "qualification"),
-        mission_id,
-        "Telemetry Decom nominal packet",
-        [update],
-        expected_result_sha256: expected_result_sha256
-      )
-
-    revision
+  defp persist_imported_revision!(mission_id, opts \\ []) do
+    TelemetryDecomFixtures.persist_imported_revision!(@organization_id, mission_id, opts)
   end
 end

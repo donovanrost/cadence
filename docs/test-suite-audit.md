@@ -929,3 +929,237 @@ when their file reservations do not overlap.
   intentionally excluded. No router scope or pipeline changed because the
   audit affected test ownership and runtime composition, not authentication or
   route placement.
+
+### Post-audit RuntimeCase and DataCase profile
+
+The initial follow-up profile on 2026-08-19 found 32 `RuntimeCase` files with
+184 tests and 85 `DataCase` files with 364 tests. Two scheduler modules used the
+isolated async `RuntimeCase` pilot, one `DataCase` module was async, and the
+other 114 modules were explicitly synchronous. The five web `DataCase` files
+accounted for only nine tests and about 0.1 to 0.2 seconds, so the useful
+optimization surface was in the core application.
+
+Three normal-concurrency runs used seeds 424242, 1001, and 2002 with
+`max_cases: 8`, `ERL_FLAGS='+S 4:4'`, and the dedicated
+`_runtime_data_profile` partition. The selected `RuntimeCase` group was stable
+at 10.6 to 11.0 seconds inside ExUnit, including 8.2 to 8.5 seconds in the
+serialized phase. The core `DataCase` group was stable at 8.9 to 9.4 seconds,
+including 5.7 to 6.0 seconds in the serialized phase.
+
+The normal-concurrency module profile for seed 424242 reported these leading
+`RuntimeCase` modules:
+
+| Module | Tests | Wall time |
+| --- | ---: | ---: |
+| `Cadence.Reads.MissionEventsTest` | 7 | 2,596 ms |
+| `Cadence.Runtime.ContactRuntimeTest` | 6 | 2,481 ms |
+| `Cadence.CommandingVerifierSchedulerTest` | 4 | 802 ms |
+| `Cadence.Applications.TelemetryDecomTest` | 21 | 615 ms |
+| `Cadence.Contacts.ProviderReservationReconcilerTest` | 7 | 402 ms |
+| `Cadence.Runtime.ManagedApplicationRuntimeTest` | 2 | 279 ms |
+| `Cadence.Runtime.TCPSocketProviderTest` | 3 | 234 ms |
+| `Cadence.Dashboards.DataLinkResolverTest` | 10 | 178 ms |
+
+`MissionEventsTest` and `ContactRuntimeTest` alone account for about 62 percent
+of the serialized `RuntimeCase` window. Both exercise the downlink combiner
+through a live realized-contact runtime. The contact-runtime case owns the
+runtime and persistence contract; the mission-events file is a mixed-layer
+module in which one test reaches that full runtime to prove the downstream
+read projection while its other six tests protect database projection and read
+contracts. `TelemetryDecomTest` is another mixed-layer candidate: most of its
+21 cases protect persisted configuration and compilation behavior, while a
+smaller set exercises live runtime refresh.
+
+The same profile reported these leading core `DataCase` modules:
+
+| Module | Tests | Wall time |
+| --- | ---: | ---: |
+| `Cadence.DataSources.ProbeSchedulerTest` | 5 | 1,079 ms |
+| `Cadence.Platform.FactPublicationIsolationTest` | 2 | 857 ms |
+| `Cadence.Contacts.ProviderChangeApprovalsTest` | 9 | 287 ms |
+| `Cadence.ReplayTest` | 5 | 231 ms |
+| `Cadence.Applications.PacketBindingsTest` | 4 | 204 ms |
+| `Cadence.Telemetry.Storage.ObservationIdentityStatesTest` | 15 | 155 ms |
+| `Cadence.GroundNetworks.ProviderEventProcessorTest` | 5 | 147 ms |
+| `Cadence.ContactPlanning.FleetPlannerTest` | 6 | 146 ms |
+
+The first two modules account for about 32 percent of the serialized
+`DataCase` window. Their cost is primarily timing control rather than database
+work. `ProbeSchedulerTest` performs five sequential default-duration negative
+receives and one intentionally injected 500 ms timeout. The fact-publication
+isolation test performs eight sequential default-duration negative receives
+after asynchronous publication. These should become deterministic mailbox or
+delivery barriers before attempting broad SQL concurrency.
+
+`mix test --slowest-modules` was useful only as a secondary check because it
+forces trace mode and `max_cases: 1`. That mode cannot run the two scheduler
+isolation peers, which deliberately rendezvous as concurrent modules, and its
+database timings varied substantially by order. The rankings above instead
+come from a temporary formatter that measured module start-to-finish time while
+preserving normal concurrency; the formatter was removed after profiling.
+
+The recommended follow-up order is:
+
+1. Replace the probe-scheduler and fact-publication quiet-period waits with
+   deterministic completion barriers while preserving the negative-delivery
+   contracts.
+2. Split mixed-layer `RuntimeCase` modules, beginning with mission-event reads
+   and telemetry decom configuration, so only tests that own live runtime
+   behavior pay for and serialize on `RuntimeCase`.
+3. Move the database-only `RuntimeCase` cohort onto non-shared `DataCase`
+   owners, then convert ordinary row/store/read `DataCase` modules to async in
+   bounded domain cohorts with repeated collision and owner-lifecycle checks.
+4. Treat genuinely runtime-owning modules such as contact runtime, TCP ingress,
+   managed applications, and mission coordination as the later isolation
+   tranche. They should use explicit composed roots rather than being marked
+   async against the default global runtime.
+
+### Deterministic wait cleanup and first async DataCase cohort
+
+The first follow-up tranche removed timing cost without deleting coverage:
+
+- Probe scheduling is synchronous at the `run_once/1` boundary, so skipped-source
+  assertions now inspect the completed caller mailbox instead of waiting 100 ms
+  for each of five messages that can no longer be sent. The one real timeout
+  contract remains: its slow probe blocks until the task supervisor kills it,
+  and the injected timeout is 100 ms rather than a two-second sleep behind a
+  500 ms timeout.
+- The fact-publication test now uses the EventBus's supported synchronous test
+  delivery with two independent GenServer forwarders. Expected facts retain
+  their bus-origin tags, wrong-bus delivery is still asserted absent, and the
+  publication call itself is the deterministic completion boundary.
+- Both files now use async `DataCase` owners. They have disjoint database
+  identities, explicitly owned child processes, and no competing async user of
+  the fact test's ETS instance.
+
+The focused module profile fell from 1,936 ms to 272 ms, an 86 percent
+reduction. The two-file synchronous stress passed 707 tests over 101 executions;
+the async cohort plus the pre-existing async mission-timeline `DataCase` passed
+909 tests over 101 executions. Across the same seeds used for the baseline, the
+complete 355-test core `DataCase` group fell from 8.9 to 9.4 seconds to 6.7 to
+7.1 seconds, and its serialized phase fell from 5.7 to 6.0 seconds to 3.5 to
+3.9 seconds. The complete 1,829-test core suite then passed seeds 424242, 1001,
+and 2002 in 44.2, 42.5, and 33.8 seconds. Those broader timings retain enough
+seed-dependent runtime and external-retry variation that this tranche claims
+the isolated DataCase reduction, not a fixed whole-suite reduction.
+
+### RuntimeCase layer correction and replay-timer cleanup
+
+The next RuntimeCase tranche removed two unrelated live-runtime costs while
+preserving the owner-level contracts:
+
+- The mission-events downlink case now begins at the committed-record boundary.
+  It projects explicit `CombinedDownlinkRecord` and `DownlinkDiagnostic` values,
+  persists the four mission-event rows, and asserts their read order and selected
+  path. `ContactRuntimeTest` remains the live proof that duplicate observations
+  are combined and all three record families are persisted. The EventBus
+  consumer-isolation scenario now also publishes `DownlinkRecordsPersisted` and
+  proves that the selected projection consumer receives combined records and
+  diagnostics, preserving the post-commit handoff that the lowered read test no
+  longer owns.
+- The live combiner fixture used a 25 ms heartbeat interval while advancing a
+  replay clock by 10 and 15 seconds. Each observation therefore processed and
+  persisted hundreds of unrelated heartbeat timer cycles before testing the
+  combiner. Its heartbeat interval is now 60 seconds, beyond the fixture's
+  observation window. The separate contact-runtime timer case retains its 25 ms
+  interval and still proves scheduled, fired, canceled, paused, resumed, and
+  persisted timer behavior.
+
+The focused mission-events module fell from 2,596 ms to 372 ms. The combiner
+case fell from about 2,410 ms to 83 ms on the first isolated run and 14 to 22 ms
+on four subsequent executions; before the correction, repeated runs were 2.4
+seconds and one reached 13.0 seconds while processing the replay-timer backlog.
+The three affected runtime/consumer files passed 1,414 tests over 101
+executions at seed 424242.
+
+Across the same three normal-concurrency seeds as the baseline, the complete
+184-test RuntimeCase cohort fell from 10.6 to 11.0 seconds to 5.6 to 6.1 seconds.
+Its serialized phase fell from 8.2 to 8.5 seconds to 3.4 to 3.6 seconds. This is
+a direct cohort measurement; trace-mode module rankings remain unsuitable for
+the scheduler overlap pair and materially inflate database-heavy module times.
+
+### Telemetry Decom layer split
+
+The Telemetry Decom module mixed persisted configuration and compilation
+contracts with governed activation and live mission-runtime refresh. Its 21
+tests are now split without deleting coverage:
+
+- Thirteen configuration, revision-reader, conflict, request-preflight, and
+  apply-preflight tests use an async `DataCase`. They stop at database-backed
+  application boundaries and neither execute an activation nor own a mission
+  runtime.
+- Eight governed-apply and post-apply reconfiguration tests remain in a
+  synchronous `RuntimeCase`. They execute approved activations, refresh the
+  mission coordinator, or assert behavior after a live apply.
+- The catalog, spacecraft, source-endpoint, qualification, and user-scope setup
+  is shared through a test fixture module. The two layers use different
+  organization and mission identities, so their concurrent setup cannot alias.
+
+The combined focused run passed all 21 tests in 1.0 seconds, with 0.7 seconds
+of async work and 0.3 seconds of serialized work. The async database cohort
+passed 2,222 tests over 101 executions, and the runtime half passed 808 tests
+over 101 executions. Both used seed 424242 and dedicated database partitions.
+
+After the split, the 32-file RuntimeCase cohort contains 171 tests. Its three
+normal-concurrency runs passed in 5.7, 6.3, and 6.1 seconds, with 3.4 to 3.6
+seconds serialized. The 81-file core DataCase cohort contains 368 tests and
+passed in 8.5, 8.3, and 9.2 seconds. Moving the database-heavy setup into the
+async phase increases that cohort's standalone work, while the RuntimeCase
+critical path remains defined by other live-runtime modules. This tranche is
+therefore an ownership and future-concurrency correction, not a claimed
+standalone cohort speedup.
+
+The final root `mix precommit` passed on the `_telemetry_decom_final`
+partition: warnings-as-errors compilation, strict Credo, workspace and
+architecture checks, all four plane checks, 1,829 core tests, 27 catalog tests,
+295 CCSDS tests, 136 simulator tests, and 1,694 non-browser web tests. Browser
+tests remained intentionally excluded.
+
+### Telemetry Decom fixture capability split
+
+The first layer split still gave every Telemetry Decom revision the strongest
+possible fixture: catalog import, mission-model approval, semantic execution,
+and qualification-case registration. Production tracing showed three distinct
+capabilities instead:
+
+- Configuration, APID projection, and preflight compilation need an imported
+  revision and its generated runtime plans, but do not inspect approval or
+  qualification state.
+- Mission apply reaches mission-model promotion, which requires an approved
+  revision and a passing qualification comparison.
+- Dependency evaluation, missing-revision behavior, and APID conflict listing
+  need no catalog revision. Conflict rows treat revision and endpoint IDs as
+  opaque values at that storage boundary.
+
+The shared fixture now exposes those capabilities explicitly as
+`setup_spacecraft!/2`, `setup_imported_mission!/2`,
+`setup_qualified_mission!/2`, `persist_imported_revision!/3`, and
+`persist_qualified_revision!/3`. Of the 13 DataCase tests, two use the qualified
+path, eight use the imported path, and three create no revision. All eight
+RuntimeCase tests retain a qualified initial revision; the one secondary
+revision that is only reconfigured uses the imported path.
+
+Qualification cases are mission-scoped, so the qualified fixture intentionally
+assumes one qualified packet schema per test mission. A future test that needs
+multiple incompatible qualified schemas must use separate mission identities
+or explicitly manage the shared qualification corpus.
+
+The focused 21-test slice passed in 0.9 seconds, split between 0.6 seconds of
+async work and 0.3 seconds of serialized work. The DataCase file passed 1,313
+tests over 101 executions, its four-module async overlap cohort passed 2,222
+tests over 101 executions, and the RuntimeCase file passed 808 tests over 101
+executions, all at seed 424242.
+
+The normal-concurrency RuntimeCase cohort passed its three seeds in 5.5, 5.2,
+and 5.5 seconds, with 3.1 to 3.2 seconds serialized, improving on the prior 5.7
+to 6.3 second range. DataCase passed in 11.7, 7.9, and 6.9 seconds; the 11.7
+second result was an unrelated serialized-phase outlier, and an exact seed
+424242 rerun passed in 7.1 seconds. These measurements support the bounded
+fixture reduction, while retaining the audit's existing warning that broader
+DataCase timing remains order- and load-sensitive.
+
+The final root `mix precommit` passed on the `_telemetry_fixture_final`
+partition: warnings-as-errors compilation, strict Credo, workspace and
+architecture checks, all four plane checks, 1,829 core tests, 27 catalog tests,
+295 CCSDS tests, 136 simulator tests, and 1,694 non-browser web tests. Browser
+tests remained intentionally excluded.
