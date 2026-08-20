@@ -1,5 +1,5 @@
 defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: true
 
   import Cadence.DataSourcesFixtures
 
