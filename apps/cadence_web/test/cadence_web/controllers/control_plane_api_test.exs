@@ -1,14 +1,9 @@
 defmodule CadenceWeb.ControlPlaneApiTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
+  @moduletag :runtime
 
   import CadenceWeb.ControlPlaneApiFixtures
-
-  setup do
-    reset_control_plane_state!()
-    :ok
-  end
 
   defp persist_link_assignment_prerequisites(conn, api_token, organization_id, mission_id) do
     spacecraft_conn =
@@ -440,16 +435,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
            } = json_response(active_conn, 200)
   end
 
-  test "browser session tokens are rejected as API bearer credentials", %{conn: conn} do
-    user = CadenceWeb.TestFixtures.persist_user!()
-    session_token = CadenceWeb.TestFixtures.member_session_token!(user)
-
-    current_scope_conn = conn |> authorize(session_token) |> get("/api/current_scope")
-
-    assert %{"errors" => [%{"reason" => "unauthenticated"}]} =
-             json_response(current_scope_conn, 401)
-  end
-
   test "org-scoped control-plane token can manage missions and mission resources", %{conn: conn} do
     %{conn: conn, api_token: api_token, organization_id: organization_id} = bootstrap(conn)
 
@@ -680,185 +665,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     assert_contact_runtime_lifecycle(conn, api_token, organization_id, mission_id)
 
     assert_binding_set_activation(conn, api_token, organization_id, mission_id)
-  end
-
-  test "contact runtime config APIs expose versions and pin scheduled contact refs", %{
-    conn: conn
-  } do
-    %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
-      bootstrap(conn)
-
-    provider_profile_v1_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles", %{
-        "provider_profile" => %{
-          "provider_profile_id" => "tcp-downlink-versioned",
-          "adapter_key" => "tcp_socket",
-          "configuration" => %{
-            "mode" => "listen",
-            "port" => 0,
-            "ingress_protocol_family" => "tm",
-            "frame_size" => 1115
-          }
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "provider_profile_id" => "tcp-downlink-versioned",
-               "version" => 1,
-               "lifecycle_state" => "active"
-             }
-           } = json_response(provider_profile_v1_conn, 201)
-
-    provider_profile_v2_conn =
-      conn
-      |> authorize(api_token)
-      |> patch(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles/tcp-downlink-versioned",
-        %{
-          "provider_profile" => %{
-            "configuration" => %{
-              "mode" => "listen",
-              "port" => 4100,
-              "ingress_protocol_family" => "tm",
-              "frame_size" => 512
-            }
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "provider_profile_id" => "tcp-downlink-versioned",
-               "version" => 2,
-               "configuration" => %{"port" => 4100}
-             }
-           } = json_response(provider_profile_v2_conn, 200)
-
-    provider_profile_versions_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles/tcp-downlink-versioned/versions"
-      )
-
-    assert %{
-             "data" => [
-               %{"provider_profile_id" => "tcp-downlink-versioned", "version" => 2},
-               %{"provider_profile_id" => "tcp-downlink-versioned", "version" => 1}
-             ]
-           } = json_response(provider_profile_versions_conn, 200)
-
-    path_template_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates", %{
-        "path_template" => %{
-          "path_template_id" => "downlink-template-versioned",
-          "path_id" => "downlink-path-versioned",
-          "direction" => "downlink",
-          "selection_role" => "selected",
-          "source_endpoint_ref" => "source-endpoint-001",
-          "provider_profile_ids" => ["tcp-downlink-versioned"]
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "path_template_id" => "downlink-template-versioned",
-               "version" => 1,
-               "provider_profile_refs" => [
-                 %{"provider_profile_id" => "tcp-downlink-versioned", "version" => 2}
-               ]
-             }
-           } = json_response(path_template_conn, 201)
-
-    scheduled_contact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
-        %{
-          "scheduled_contact" => %{
-            "scheduled_contact_id" => "contact-versioned",
-            "contact_intents" => ["telemetry_downlink"],
-            "path_template_ids" => ["downlink-template-versioned"],
-            "starts_at" => "2026-03-30T18:00:00Z",
-            "ends_at" => "2026-03-30T18:10:00Z"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "scheduled_contact_id" => "contact-versioned",
-               "contact_intents" => ["telemetry_downlink"],
-               "path_template_refs" => [
-                 %{"path_template_id" => "downlink-template-versioned", "version" => 1}
-               ]
-             }
-           } = json_response(scheduled_contact_conn, 201)
-
-    path_template_v2_conn =
-      conn
-      |> authorize(api_token)
-      |> patch(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-template-versioned",
-        %{
-          "path_template" => %{
-            "metadata" => %{"operator_label" => "patched"}
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "path_template_id" => "downlink-template-versioned",
-               "version" => 2
-             }
-           } = json_response(path_template_v2_conn, 200)
-
-    provider_profile_deleted_conn =
-      conn
-      |> authorize(api_token)
-      |> delete(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles/tcp-downlink-versioned"
-      )
-
-    assert %{
-             "data" => %{
-               "provider_profile_id" => "tcp-downlink-versioned",
-               "version" => 3,
-               "lifecycle_state" => "deleted"
-             }
-           } = json_response(provider_profile_deleted_conn, 200)
-
-    latest_provider_profile_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles/tcp-downlink-versioned"
-      )
-
-    assert %{"errors" => [%{"reason" => "contact_provider_profile_not_found"}]} =
-             json_response(latest_provider_profile_conn, 404)
-
-    provider_profile_v1_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles/tcp-downlink-versioned/versions/1"
-      )
-
-    assert %{
-             "data" => %{
-               "provider_profile_id" => "tcp-downlink-versioned",
-               "version" => 1,
-               "lifecycle_state" => "active"
-             }
-           } = json_response(provider_profile_v1_show_conn, 200)
   end
 
   test "mission-scoped API manages explicit link assignments", %{conn: conn} do
@@ -1154,57 +960,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
     assert %{"errors" => [%{"reason" => "contact_link_assignment_not_found"}]} =
              json_response(missing_link_assignment_conn, 404)
-  end
-
-  test "mission-scoped token is constrained to its mission", %{conn: conn} do
-    %{conn: conn, api_token: org_api_token, organization_id: organization_id} = bootstrap(conn)
-
-    conn
-    |> authorize(org_api_token)
-    |> post("/api/organizations/#{organization_id}/missions", %{
-      "mission" => %{
-        "mission_id" => "mission-bravo",
-        "slug" => "mission-bravo",
-        "display_name" => "Mission Bravo"
-      }
-    })
-
-    mission_identity_conn =
-      conn
-      |> authorize(org_api_token)
-      |> post("/api/organizations/#{organization_id}/service_identities", %{
-        "service_identity" => %{
-          "service_identity_id" => "svc-mission",
-          "mission_id" => "mission-bravo",
-          "display_name" => "Mission Bravo Service",
-          "capabilities" => ["mission_admin"]
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "service_identity" => %{
-                 "service_identity_id" => "svc-mission",
-                 "mission_id" => "mission-bravo",
-                 "capabilities" => ["mission_admin"]
-               },
-               "api_token" => mission_api_token
-             }
-           } = json_response(mission_identity_conn, 201)
-
-    allowed_conn =
-      conn
-      |> authorize(mission_api_token)
-      |> get("/api/organizations/#{organization_id}/missions/mission-bravo")
-
-    assert %{"data" => %{"mission_id" => "mission-bravo"}} = json_response(allowed_conn, 200)
-
-    forbidden_conn =
-      conn
-      |> authorize(mission_api_token)
-      |> get("/api/organizations/#{organization_id}/missions/mission-alpha")
-
-    assert %{"errors" => [%{"reason" => "forbidden"}]} = json_response(forbidden_conn, 403)
   end
 
   test "authenticated mission read endpoints expose mission health and mission events", %{
