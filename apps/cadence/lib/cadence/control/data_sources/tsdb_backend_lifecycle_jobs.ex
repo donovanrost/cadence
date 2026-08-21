@@ -95,7 +95,8 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
       when is_binary(run_id) and is_function(executor, 2) and is_list(execution_opts) do
     with {:ok, %Job{job_type: @job_type} = job} <- Jobs.fetch_job_for_run(@job_type, run_id),
          {:ok, executor_result} <- executor.(job.payload, execution_opts),
-         {:ok, %DataSource{} = source} <- complete_job_lifecycle(job, executor_result) do
+         {:ok, %DataSource{} = source} <-
+           complete_job_lifecycle(job, executor_result, execution_opts) do
       {:ok,
        %{
          data_source_id: source.data_source_id,
@@ -186,7 +187,18 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
   @spec job_type() :: atom()
   def job_type, do: @job_type
 
-  defp complete_job_lifecycle(%Job{} = job, executor_result) do
+  defp complete_job_lifecycle(%Job{} = job, executor_result, execution_opts) do
+    completion_opts =
+      [
+        actor_id: "tsdb_backend_lifecycle_worker",
+        payload: %{
+          source: "tsdb_backend_lifecycle_worker",
+          job_id: job.job_id,
+          run_id: job.run_id
+        }
+      ]
+      |> Keyword.merge(Keyword.take(execution_opts, [:event_bus]))
+
     case payload_value(job.payload, :operation) do
       "provision" ->
         ManagedResources.complete_tsdb_backend(
@@ -197,13 +209,9 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
             run_id: job.run_id,
             executor_result: normalize_executor_result(executor_result)
           },
-          actor_id: "tsdb_backend_lifecycle_worker",
-          payload: %{
-            source: "tsdb_backend_lifecycle_worker",
-            job_id: job.job_id,
-            run_id: job.run_id,
-            operation: "complete_tsdb_backend_provisioning"
-          }
+          Keyword.update!(completion_opts, :payload, fn payload ->
+            Map.put(payload, :operation, "complete_tsdb_backend_provisioning")
+          end)
         )
 
       "deprovision" ->
@@ -215,13 +223,9 @@ defmodule Cadence.Control.DataSources.TSDBBackendLifecycleJobs do
             run_id: job.run_id,
             executor_result: normalize_executor_result(executor_result)
           },
-          actor_id: "tsdb_backend_lifecycle_worker",
-          payload: %{
-            source: "tsdb_backend_lifecycle_worker",
-            job_id: job.job_id,
-            run_id: job.run_id,
-            operation: "complete_tsdb_backend_deprovisioning"
-          }
+          Keyword.update!(completion_opts, :payload, fn payload ->
+            Map.put(payload, :operation, "complete_tsdb_backend_deprovisioning")
+          end)
         )
 
       operation ->

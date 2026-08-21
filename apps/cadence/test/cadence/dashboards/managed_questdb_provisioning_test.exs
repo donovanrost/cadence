@@ -1,20 +1,32 @@
 defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
-  use Cadence.DataCase, async: false
+  use Cadence.DataCase, async: true
+  use GenServer
 
   alias Cadence.Control.DataSources.ManagedQuestDBProvisioning
 
-  alias Cadence.DataSources.DeploymentStatus
+  alias Cadence.DataSources.{DataSourceEvent, DeploymentStatus, Facts}
 
   alias Cadence.Management.DataSources
 
   alias Cadence.DataSources.DataSource
+  alias Cadence.Platform.EventBus
 
   @organization_id "org-managed-questdb-provisioning"
   @mission_id "mission-managed-questdb-provisioning"
   @data_source_id "mission-managed-questdb-provisioned"
+  @event_bus __MODULE__.EventBus
+
+  setup_all do
+    start_supervised!({EventBus, name: @event_bus, delivery: :sync, before_notify: nil})
+    :ok
+  end
 
   setup do
     persist_mission_scope(@organization_id, @mission_id)
+
+    forwarder = start_fact_forwarder()
+    assert_receive {:managed_questdb_fact_forwarder_ready, ^forwarder}
+
     :ok
   end
 
@@ -62,6 +74,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
                attrs(%{http_endpoint: "http://mission-questdb:9000"}),
                actor_id: "operator-1",
                occurred_at: ~U[2026-06-30 15:00:00Z],
+               event_bus: @event_bus,
                migrator: migrator
              )
 
@@ -69,6 +82,13 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
     assert result.isolation_profile.physical_boundary == :mission
     assert result.provisioning.deployment_status == :ready
     assert result.provisioning.applied_migration_versions == ["20260630010101"]
+
+    assert_receive {:managed_questdb_fact,
+                    %DataSourceEvent{
+                      data_source_id: @data_source_id,
+                      actor_id: "operator-1",
+                      payload: %{"kind" => "managed_questdb_provisioned"}
+                    }}
 
     assert {:ok, persisted} = DataSources.fetch_data_source(@data_source_id)
     assert persisted.data_source_id == @data_source_id
@@ -108,6 +128,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
     assert {:error, :questdb_unavailable} =
              ManagedQuestDBProvisioning.provision(
                attrs(%{data_source_id: "mission-managed-questdb-failed"}),
+               event_bus: @event_bus,
                migrator: migrator
              )
 
@@ -162,5 +183,34 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningTest do
       sql: "SELECT 1",
       checksum: "checksum-#{version}"
     }
+  end
+
+  defp start_fact_forwarder do
+    start_supervised!(%{
+      id: {:managed_questdb_fact_forwarder, make_ref()},
+      start: {__MODULE__, :start_link, [[owner: self(), event_bus: @event_bus]]},
+      restart: :temporary
+    })
+  end
+
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+  @impl true
+  def init(opts) do
+    owner = Keyword.fetch!(opts, :owner)
+    event_bus = Keyword.fetch!(opts, :event_bus)
+
+    :ok = Facts.subscribe(event_bus, self())
+    send(owner, {:managed_questdb_fact_forwarder_ready, self()})
+
+    {:ok, owner}
+  end
+
+  @impl true
+  def handle_call({:cadence_fact, _topic, fact}, _from, owner) do
+    send(owner, {:managed_questdb_fact, fact})
+    {:reply, :ok, owner}
   end
 end

@@ -57,10 +57,9 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioning do
          {:ok, applied_migrations} <- apply_schema_migrations(migration_config(attrs, opts), opts),
          data_source <- put_provisioning_metadata(plan.data_source, applied_migrations),
          {:ok, persisted_data_source} <-
-           DataSources.persist_data_source(data_source,
-             actor_id: actor_id(attrs, opts),
-             occurred_at: occurred_at(attrs, opts),
-             payload: provisioning_event_payload(data_source, applied_migrations)
+           DataSources.persist_data_source(
+             data_source,
+             persistence_opts(data_source, applied_migrations, attrs, opts)
            ) do
       {:ok,
        %{
@@ -211,6 +210,15 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioning do
   defp apply_schema_migrations(migration_config, opts) do
     migrator = Keyword.get(opts, :migrator, &SchemaMigrator.apply_pending/1)
     migrator.(migration_config)
+  end
+
+  defp persistence_opts(data_source, applied_migrations, attrs, opts) do
+    [
+      actor_id: actor_id(attrs, opts),
+      occurred_at: occurred_at(attrs, opts),
+      payload: provisioning_event_payload(data_source, applied_migrations)
+    ]
+    |> Keyword.merge(Keyword.take(opts, [:event_bus]))
   end
 
   defp required_binary(attrs, key) do

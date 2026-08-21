@@ -1,5 +1,6 @@
 defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: true
+  use GenServer
 
   import Cadence.DataSourcesFixtures
 
@@ -8,7 +9,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
   alias Cadence.Control.ManagedResources
 
-  alias Cadence.DataSources.DeploymentStatus
+  alias Cadence.DataSources.{DataSourceEvent, DeploymentStatus, Facts}
 
   alias Cadence.Management.DataSources
 
@@ -17,41 +18,66 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
   alias Cadence.DataSources.DataSource
 
   alias Cadence.Jobs
+  alias Cadence.Platform.EventBus
+
+  @event_bus __MODULE__.EventBus
+  @organization_id "org-dash-source-backend-lifecycle"
+  @mission_id "mission-dash-source-backend-lifecycle"
+
+  setup_all do
+    start_supervised!({EventBus, name: @event_bus, delivery: :sync, before_notify: nil})
+    :ok
+  end
 
   setup do
-    persist_mission_scope("org-dash-source", "mission-dash-source")
+    persist_mission_scope(@organization_id, @mission_id)
+
+    forwarder =
+      start_supervised!(%{
+        id: {:data_source_backend_lifecycle_fact_forwarder, make_ref()},
+        start: {__MODULE__, :start_link, [[owner: self(), event_bus: @event_bus]]},
+        restart: :temporary
+      })
+
+    assert_receive {:data_source_fact_forwarder_ready, ^forwarder}
     :ok
   end
 
   test "persists BYO TSDB data sources with dedicated mission isolation" do
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-dedicated-mission-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "dedicated-mission-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/dedicated-mission"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-dedicated-mission-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "dedicated-mission-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/dedicated-mission"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, persisted} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "dedicated-mission-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               credentials_ref: "cred-dedicated-mission-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{
-                 storage: :questdb,
-                 endpoint_ref: "endpoint://customer/dedicated-mission"
-               }
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "dedicated-mission-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 credentials_ref: "cred-dedicated-mission-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{
+                   storage: :questdb,
+                   endpoint_ref: "endpoint://customer/dedicated-mission"
+                 }
+               },
+               event_bus: @event_bus
+             )
 
     assert persisted.owner == :customer
     assert persisted.kind == :byo_tsdb
@@ -59,8 +85,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
     assert %{
              physical_boundary: :mission,
-             organization_id: "org-dash-source",
-             mission_id: "mission-dash-source",
+             organization_id: @organization_id,
+             mission_id: @mission_id,
              endpoint_ref: "endpoint://customer/dedicated-mission"
            } = DataSource.isolation_profile(persisted)
 
@@ -75,33 +101,39 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "reconciles dedicated BYO TSDB backend lifecycle state" do
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-reconcile-dedicated-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "reconcile-dedicated-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/reconcile-dedicated"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-reconcile-dedicated-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "reconcile-dedicated-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/reconcile-dedicated"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _persisted} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "reconcile-dedicated-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               credentials_ref: "cred-reconcile-dedicated-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{
-                 storage: :questdb,
-                 endpoint_ref: "endpoint://customer/reconcile-dedicated"
-               }
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "reconcile-dedicated-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 credentials_ref: "cred-reconcile-dedicated-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{
+                   storage: :questdb,
+                   endpoint_ref: "endpoint://customer/reconcile-dedicated"
+                 }
+               },
+               event_bus: @event_bus
+             )
 
     occurred_at = ~U[2026-07-07 15:30:00Z]
 
@@ -111,6 +143,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                %{},
                actor_id: "operator-1",
                occurred_at: occurred_at,
+               event_bus: @event_bus,
                payload: %{source: "test"}
              )
 
@@ -130,7 +163,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
            } = DeploymentStatus.from_data_source(reconciled)
 
     events =
-      DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
+      DataSources.list_data_source_events(@organization_id, @mission_id,
         data_source_id: "reconcile-dedicated-byo"
       )
 
@@ -150,33 +183,39 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "requests dedicated BYO TSDB backend deprovisioning" do
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-deprovision-dedicated-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "deprovision-dedicated-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/deprovision-dedicated"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-deprovision-dedicated-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "deprovision-dedicated-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/deprovision-dedicated"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _persisted} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "deprovision-dedicated-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               credentials_ref: "cred-deprovision-dedicated-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{
-                 storage: :questdb,
-                 endpoint_ref: "endpoint://customer/deprovision-dedicated"
-               }
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "deprovision-dedicated-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 credentials_ref: "cred-deprovision-dedicated-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{
+                   storage: :questdb,
+                   endpoint_ref: "endpoint://customer/deprovision-dedicated"
+                 }
+               },
+               event_bus: @event_bus
+             )
 
     occurred_at = ~U[2026-07-07 16:00:00Z]
 
@@ -186,6 +225,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                %{},
                actor_id: "operator-1",
                occurred_at: occurred_at,
+               event_bus: @event_bus,
                payload: %{source: "test"}
              )
 
@@ -208,7 +248,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
            } = DeploymentStatus.from_data_source(deprovisioned)
 
     events =
-      DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
+      DataSources.list_data_source_events(@organization_id, @mission_id,
         data_source_id: "deprovision-dedicated-byo"
       )
 
@@ -238,33 +278,39 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
       end)
 
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-worker-provision-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "worker-provision-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/worker-provision"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-worker-provision-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "worker-provision-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/worker-provision"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _persisted} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "worker-provision-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               credentials_ref: "cred-worker-provision-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{
-                 storage: :questdb,
-                 endpoint_ref: "endpoint://customer/worker-provision"
-               }
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "worker-provision-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 credentials_ref: "cred-worker-provision-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{
+                   storage: :questdb,
+                   endpoint_ref: "endpoint://customer/worker-provision"
+                 }
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, requested_source, queued_job} =
              ManagedResources.request_tsdb_backend(
@@ -272,6 +318,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                :provision,
                %{},
                actor_id: "operator-1",
+               event_bus: @event_bus,
                payload: %{source: "test"},
                run_id: "worker-provision-run"
              )
@@ -292,9 +339,17 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert {:ok, completed_job} = run_lifecycle_job(claimed_job.job_id, policy)
     assert completed_job.status == :completed
 
+    assert_receive {:data_source_fact,
+                    %DataSourceEvent{
+                      data_source_id: "worker-provision-byo",
+                      actor_id: "tsdb_backend_lifecycle_worker",
+                      payload: %{"operation" => "complete_tsdb_backend_provisioning"}
+                    }}
+
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}
     assert executor_payload["operation"] == "provision"
     assert executor_payload["data_source_id"] == "worker-provision-byo"
+    assert executor_opts[:event_bus] == @event_bus
     assert executor_opts[:worker] == "test-lifecycle-worker"
 
     assert {:ok, completed_source} = DataSources.fetch_data_source("worker-provision-byo")
@@ -310,7 +365,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              "physical_provisioned"
 
     events =
-      DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
+      DataSources.list_data_source_events(@organization_id, @mission_id,
         data_source_id: "worker-provision-byo"
       )
 
@@ -336,33 +391,39 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
       end)
 
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-worker-deprovision-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "worker-deprovision-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/worker-deprovision"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-worker-deprovision-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "worker-deprovision-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/worker-deprovision"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _persisted} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "worker-deprovision-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               credentials_ref: "cred-worker-deprovision-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{
-                 storage: :questdb,
-                 endpoint_ref: "endpoint://customer/worker-deprovision"
-               }
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "worker-deprovision-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 credentials_ref: "cred-worker-deprovision-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{
+                   storage: :questdb,
+                   endpoint_ref: "endpoint://customer/worker-deprovision"
+                 }
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, requested_source, queued_job} =
              ManagedResources.request_tsdb_backend(
@@ -370,6 +431,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
                :deprovision,
                %{},
                actor_id: "operator-1",
+               event_bus: @event_bus,
                payload: %{source: "test"},
                run_id: "worker-deprovision-run"
              )
@@ -389,9 +451,17 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     assert {:ok, completed_job} = run_lifecycle_job(claimed_job.job_id, policy)
     assert completed_job.status == :completed
 
+    assert_receive {:data_source_fact,
+                    %DataSourceEvent{
+                      data_source_id: "worker-deprovision-byo",
+                      actor_id: "tsdb_backend_lifecycle_worker",
+                      payload: %{"operation" => "complete_tsdb_backend_deprovisioning"}
+                    }}
+
     assert_receive {:tsdb_backend_lifecycle_executor, executor_payload, executor_opts}
     assert executor_payload["operation"] == "deprovision"
     assert executor_payload["data_source_id"] == "worker-deprovision-byo"
+    assert executor_opts[:event_bus] == @event_bus
     assert executor_opts[:worker] == "test-lifecycle-worker"
 
     assert {:ok, completed_source} = DataSources.fetch_data_source("worker-deprovision-byo")
@@ -406,7 +476,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
              "physical_deprovisioned"
 
     events =
-      DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
+      DataSources.list_data_source_events(@organization_id, @mission_id,
         data_source_id: "worker-deprovision-byo"
       )
 
@@ -424,55 +494,80 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
 
   test "reconcile TSDB backend requires a dedicated BYO source" do
     assert {:ok, _reference, _event} =
-             SourceCredentials.register_reference(%{
-               credentials_ref: "cred-customer-reconcile-byo",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               data_source_id: "customer-reconcile-byo",
-               owner: :customer,
-               kind: :byo_tsdb_connection,
-               provider: "questdb",
-               metadata: %{endpoint_ref: "endpoint://customer/reconcile"}
-             })
+             SourceCredentials.register_reference(
+               %{
+                 credentials_ref: "cred-customer-reconcile-byo",
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 data_source_id: "customer-reconcile-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb_connection,
+                 provider: "questdb",
+                 metadata: %{endpoint_ref: "endpoint://customer/reconcile"}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _source} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "customer-reconcile-byo",
-               owner: :customer,
-               kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :customer_owned,
-               credentials_ref: "cred-customer-reconcile-byo",
-               capabilities: %{range_scan?: true},
-               metadata: %{storage: :questdb}
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "customer-reconcile-byo",
+                 owner: :customer,
+                 kind: :byo_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :customer_owned,
+                 credentials_ref: "cred-customer-reconcile-byo",
+                 capabilities: %{range_scan?: true},
+                 metadata: %{storage: :questdb}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:error, :dedicated_tsdb_backend_required} =
-             DataSources.reconcile_tsdb_backend("customer-reconcile-byo")
+             DataSources.reconcile_tsdb_backend(
+               "customer-reconcile-byo",
+               %{},
+               event_bus: @event_bus
+             )
 
     assert {:error, :dedicated_tsdb_backend_required} =
-             DataSources.request_tsdb_backend_deprovisioning("customer-reconcile-byo")
+             DataSources.request_tsdb_backend_deprovisioning(
+               "customer-reconcile-byo",
+               %{},
+               event_bus: @event_bus
+             )
 
     assert {:ok, _managed} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "managed-reconcile-questdb",
-               owner: :cadence,
-               kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               capabilities: %{range_scan?: true},
-               metadata: %{storage: :questdb}
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "managed-reconcile-questdb",
+                 owner: :cadence,
+                 kind: :managed_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 capabilities: %{range_scan?: true},
+                 metadata: %{storage: :questdb}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:error, :byo_tsdb_backend_required} =
-             DataSources.reconcile_tsdb_backend("managed-reconcile-questdb")
+             DataSources.reconcile_tsdb_backend(
+               "managed-reconcile-questdb",
+               %{},
+               event_bus: @event_bus
+             )
 
     assert {:error, :byo_tsdb_backend_required} =
-             DataSources.request_tsdb_backend_deprovisioning("managed-reconcile-questdb")
+             DataSources.request_tsdb_backend_deprovisioning(
+               "managed-reconcile-questdb",
+               %{},
+               event_bus: @event_bus
+             )
   end
 
   test "rejects unsafe BYO data source configurations before persistence" do
@@ -486,7 +581,8 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
       metadata: %{connection: %{password: "plaintext"}}
     }
 
-    assert {:error, %Ecto.Changeset{} = changeset} = DataSources.persist_data_source(data_source)
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             DataSources.persist_data_source(data_source, event_bus: @event_bus)
 
     assert "must be customer for BYO TSDB data sources" in field_errors(changeset, :owner)
 
@@ -515,7 +611,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
     }
 
     assert {:error, %Ecto.Changeset{} = org_changeset} =
-             DataSources.persist_data_source(org_isolated_source)
+             DataSources.persist_data_source(org_isolated_source, event_bus: @event_bus)
 
     assert "must be set for org-isolated data sources" in field_errors(
              org_changeset,
@@ -527,14 +623,14 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
       owner: :cadence,
       kind: :managed_tsdb,
       adapter: Cadence.Dashboards.Sources.Telemetry,
-      organization_id: "org-dash-source",
+      organization_id: @organization_id,
       isolation_level: :mission_isolated,
       capabilities: %{range_scan?: true},
       metadata: %{storage: :questdb}
     }
 
     assert {:error, %Ecto.Changeset{} = mission_changeset} =
-             DataSources.persist_data_source(mission_isolated_source)
+             DataSources.persist_data_source(mission_isolated_source, event_bus: @event_bus)
 
     assert "must be set for mission-isolated data sources" in field_errors(
              mission_changeset,
@@ -545,7 +641,7 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
   defp lifecycle_policy(executor) do
     TSDBBackendLifecycleJobs.policy(
       executor: executor,
-      execution_opts: [worker: "test-lifecycle-worker"]
+      execution_opts: [worker: "test-lifecycle-worker", event_bus: @event_bus]
     )
   end
 
@@ -556,5 +652,26 @@ defmodule Cadence.Dashboards.DataSourcesBackendLifecycleTest do
       })
 
     JobRunner.run_job(runner, job_id)
+  end
+
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+  @impl true
+  def init(opts) do
+    owner = Keyword.fetch!(opts, :owner)
+    event_bus = Keyword.fetch!(opts, :event_bus)
+
+    :ok = Facts.subscribe(event_bus, self())
+    send(owner, {:data_source_fact_forwarder_ready, self()})
+
+    {:ok, owner}
+  end
+
+  @impl true
+  def handle_call({:cadence_fact, _topic, fact}, _from, owner) do
+    send(owner, {:data_source_fact, fact})
+    {:reply, :ok, owner}
   end
 end

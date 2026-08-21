@@ -1,22 +1,34 @@
 defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: true
+  use GenServer
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
   alias Cadence.Control.ManagedResources
 
-  alias Cadence.DataSources.DeploymentStatus
+  alias Cadence.DataSources.{DataSourceEvent, DeploymentStatus, Facts}
 
   alias Cadence.Management.DataSources
+  alias Cadence.Platform.EventBus
 
   @organization_id "org-managed-questdb-provisioning-jobs"
   @mission_id "mission-managed-questdb-provisioning-jobs"
   @data_source_id "mission-managed-questdb-provisioning-job-source"
   @run_id "managed-questdb-provisioning-run"
+  @event_bus __MODULE__.EventBus
+
+  setup_all do
+    start_supervised!({EventBus, name: @event_bus, delivery: :sync, before_notify: nil})
+    :ok
+  end
 
   setup do
     persist_mission_scope(@organization_id, @mission_id)
+
+    forwarder = start_fact_forwarder()
+    assert_receive {:managed_questdb_job_fact_forwarder_ready, ^forwarder}
+
     :ok
   end
 
@@ -60,6 +72,7 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
     policy =
       ManagedQuestDBProvisioningJobs.policy(
         execution_opts: [
+          event_bus: @event_bus,
           migrator: fn migration_config ->
             assert migration_config[:http_endpoint] == "http://mission-questdb:9000"
             {:ok, [migration]}
@@ -82,6 +95,12 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
     assert completed_job.status == :completed
     assert completed_job.attempt_count == 1
     assert completed_job.failure_reason == nil
+
+    assert_receive {:managed_questdb_job_fact,
+                    %DataSourceEvent{
+                      data_source_id: @data_source_id,
+                      payload: %{"kind" => "managed_questdb_provisioned"}
+                    }}
 
     assert {:ok, persisted} = DataSources.fetch_data_source(@data_source_id)
     assert persisted.metadata["provisioning"]["applied_migration_versions"] == ["20260630020202"]
@@ -309,7 +328,10 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
   end
 
   defp provisioning_policy(provisioner) do
-    ManagedQuestDBProvisioningJobs.policy(provisioner: provisioner)
+    ManagedQuestDBProvisioningJobs.policy(
+      provisioner: provisioner,
+      execution_opts: [event_bus: @event_bus]
+    )
   end
 
   defp run_job(job_id, policy) do
@@ -320,5 +342,34 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioningJobsTest do
       })
 
     JobRunner.run_job(runner, job_id)
+  end
+
+  defp start_fact_forwarder do
+    start_supervised!(%{
+      id: {:managed_questdb_job_fact_forwarder, make_ref()},
+      start: {__MODULE__, :start_link, [[owner: self(), event_bus: @event_bus]]},
+      restart: :temporary
+    })
+  end
+
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+  @impl true
+  def init(opts) do
+    owner = Keyword.fetch!(opts, :owner)
+    event_bus = Keyword.fetch!(opts, :event_bus)
+
+    :ok = Facts.subscribe(event_bus, self())
+    send(owner, {:managed_questdb_job_fact_forwarder_ready, self()})
+
+    {:ok, owner}
+  end
+
+  @impl true
+  def handle_call({:cadence_fact, _topic, fact}, _from, owner) do
+    send(owner, {:managed_questdb_job_fact, fact})
+    {:reply, :ok, owner}
   end
 end
