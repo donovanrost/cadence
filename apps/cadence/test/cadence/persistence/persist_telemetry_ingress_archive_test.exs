@@ -1,5 +1,5 @@
 defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.ProcessDataCase, async: false
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 

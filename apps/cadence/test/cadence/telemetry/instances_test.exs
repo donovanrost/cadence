@@ -1,5 +1,5 @@
 defmodule Cadence.Telemetry.InstancesTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.ProcessDataCase, async: false
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive

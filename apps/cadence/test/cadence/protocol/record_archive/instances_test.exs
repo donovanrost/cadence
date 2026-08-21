@@ -1,5 +1,5 @@
 defmodule Cadence.Protocol.RecordArchive.InstancesTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.ProcessDataCase, async: false
 
   alias Cadence.Ingress.RawEvidence
 
