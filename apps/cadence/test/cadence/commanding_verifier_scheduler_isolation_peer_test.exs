@@ -15,15 +15,14 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
     VerifierScheduler
   }
 
-  alias Cadence.TestSupport.RuntimeCaseOverlapBarrier
-
-  @organization_id "org-verifier-scheduler-isolation"
-  @mission_id "mission-verifier-scheduler-isolation"
-  @command_request_id "command-request-verifier-scheduler-isolation"
-  @command_release_attempt_id "release-attempt-verifier-scheduler-isolation"
-  @command_verifier_instance_id "verifier-instance-scheduler-isolation"
-  @scheduler_domain_id "command-verifier-scheduler-isolation"
+  @organization_id "org-verifier-scheduler-peer-isolation"
+  @mission_id "mission-verifier-scheduler-peer-isolation"
+  @command_request_id "command-request-verifier-scheduler-peer-isolation"
+  @command_release_attempt_id "release-attempt-verifier-scheduler-peer-isolation"
+  @command_verifier_instance_id "verifier-instance-scheduler-peer-isolation"
+  @scheduler_domain_id "command-verifier-scheduler-peer-isolation"
   @scheduler_name __MODULE__.Scheduler
+  @primary_scheduler_name __MODULE__.PrimaryScheduler
 
   @projection_event [:cadence, :commanding, :verifier_scheduler, :projection_rebuild]
 
@@ -35,7 +34,16 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
     reference_time = DateTime.from_unix!(1_700_060_200, :second)
 
     scheduler_pid =
-      start_gated_scheduler!(sandbox_owner_pid,
+      start_gated_scheduler!(sandbox_owner_pid, @scheduler_name,
+        auto_schedule?: false,
+        run_on_boot?: false,
+        reference_time_fun: fn -> reference_time end
+      )
+
+    primary = start_primary_owner!(reference_time)
+
+    primary_scheduler_pid =
+      start_gated_scheduler!(primary.owner_pid, @primary_scheduler_name,
         auto_schedule?: false,
         run_on_boot?: false,
         reference_time_fun: fn -> reference_time end
@@ -43,9 +51,20 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
 
     assert Process.alive?(sandbox_owner_pid)
     assert Process.alive?(scheduler_pid)
-    assert :ok = RuntimeCaseOverlapBarrier.await_ready(:peer)
-    assert :ok = RuntimeCaseOverlapBarrier.await_primary_release()
-    assert is_nil(Process.whereis(Cadence.TestSupport.RuntimeCaseOverlapBarrier))
+    assert Process.alive?(primary.owner_pid)
+    assert Process.alive?(primary_scheduler_pid)
+    refute primary.owner_pid == sandbox_owner_pid
+    refute primary_scheduler_pid == scheduler_pid
+
+    release_scheduler_bootstrap(primary_scheduler_pid)
+
+    assert %{projected_verifier_count: 1} =
+             VerifierScheduler.snapshot(@primary_scheduler_name)
+
+    assert :ok = stop_supervised(@primary_scheduler_name)
+    send(primary.task.pid, :release_primary_owner)
+    assert :ok = Task.await(primary.task)
+    refute Process.alive?(primary.owner_pid)
 
     persist_mission_scope(@organization_id, @mission_id)
 
@@ -53,6 +72,13 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
       persist_verifier_fixture!(timeout_at: DateTime.add(reference_time, 600, :second))
 
     release_scheduler_bootstrap(scheduler_pid)
+    verifier_instance_id = verifier_instance.command_verifier_instance_id
+
+    assert %{
+             projected_verifier_instance_ids: [^verifier_instance_id],
+             projected_verifier_count: 1,
+             timeout_timer_count: 0
+           } = VerifierScheduler.snapshot(@scheduler_name)
 
     assert_receive {
       :verifier_scheduler_projection,
@@ -62,14 +88,6 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
         scheduler_instance: @scheduler_name
       }
     }
-
-    verifier_instance_id = verifier_instance.command_verifier_instance_id
-
-    assert %{
-             projected_verifier_instance_ids: [^verifier_instance_id],
-             projected_verifier_count: 1,
-             timeout_timer_count: 0
-           } = VerifierScheduler.snapshot(@scheduler_name)
 
     assert {:ok, command_request} =
              Commanding.fetch_command_request(
@@ -97,6 +115,56 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
     assert persisted_verifier_instance.lifecycle_state == :pending
   end
 
+  defp start_primary_owner!(reference_time) do
+    test_pid = self()
+
+    task =
+      Task.async(fn ->
+        owner_pid = Cadence.DataCase.start_sandbox_owner!(%{async: true}, shared?: false)
+        send(test_pid, {:primary_owner_started, self(), owner_pid})
+
+        try do
+          persist_mission_scope(@organization_id, @mission_id)
+
+          persist_verifier_fixture!(timeout_at: DateTime.add(reference_time, 600, :second))
+
+          send(test_pid, {:primary_owner_ready, self(), owner_pid})
+
+          receive do
+            :release_primary_owner -> :ok
+          end
+        after
+          stop_primary_sandbox_owner(owner_pid)
+        end
+      end)
+
+    assert_receive {:primary_owner_started, task_pid, owner_pid}, 5_000
+    assert task.pid == task_pid
+
+    on_exit(fn ->
+      if Process.alive?(task.pid) do
+        send(task.pid, :release_primary_owner)
+        Process.exit(task.pid, :shutdown)
+      end
+
+      stop_primary_sandbox_owner(owner_pid)
+    end)
+
+    assert_receive {:primary_owner_ready, ^task_pid, ^owner_pid}, 5_000
+
+    %{owner_pid: owner_pid, task: task}
+  end
+
+  defp stop_primary_sandbox_owner(owner_pid) do
+    if Process.alive?(owner_pid) do
+      Cadence.DataCase.stop_sandbox_owner(owner_pid)
+    end
+
+    :ok
+  catch
+    :exit, _reason -> :ok
+  end
+
   defp persist_verifier_fixture!(opts) do
     now = DateTime.from_unix!(1_700_059_000, :second)
 
@@ -120,7 +188,7 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
         organization_id: @organization_id,
         mission_id: @mission_id,
         command_release_attempt_id: @command_release_attempt_id,
-        command_queue_entry_id: "queue-entry-verifier-scheduler-isolation",
+        command_queue_entry_id: "queue-entry-verifier-scheduler-peer-isolation",
         command_request_id: @command_request_id,
         source_endpoint_ref: command_request.source_endpoint_ref,
         realized_contact_id: "realized-contact-alpha",
@@ -159,14 +227,14 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
     verifier_instance
   end
 
-  defp start_gated_scheduler!(sandbox_owner_pid, opts) do
+  defp start_gated_scheduler!(sandbox_owner_pid, scheduler_name, opts) do
     test_pid = self()
 
     child_spec =
       Supervisor.child_spec(
         {VerifierScheduler,
          Keyword.merge(opts,
-           name: @scheduler_name,
+           name: scheduler_name,
            bootstrap_gate_fun: fn ->
              send(test_pid, {:scheduler_bootstrap_waiting, self()})
 
@@ -176,10 +244,10 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
            end,
            telemetry_metadata: %{
              scheduler_domain_id: @scheduler_domain_id,
-             scheduler_instance: @scheduler_name
+             scheduler_instance: scheduler_name
            }
          )},
-        id: @scheduler_name
+        id: scheduler_name
       )
 
     scheduler_pid = start_supervised!(child_spec)

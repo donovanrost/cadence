@@ -15,8 +15,6 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
     VerifierScheduler
   }
 
-  alias Cadence.TestSupport.RuntimeCaseOverlapBarrier
-
   @organization_id "org-verifier-scheduler-isolation"
   @mission_id "mission-verifier-scheduler-isolation"
   @command_request_id "command-request-verifier-scheduler-isolation"
@@ -117,7 +115,6 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
            } = VerifierScheduler.snapshot(@scheduler_name)
   end
 
-  @tag :runtimecase_overlap
   test "timer reconciles due verifier timeouts and rolls up verification state", %{
     sandbox_owner_pid: sandbox_owner_pid
   } do
@@ -134,69 +131,59 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
 
     assert Process.alive?(sandbox_owner_pid)
     assert Process.alive?(scheduler_pid)
-    assert :ok = RuntimeCaseOverlapBarrier.await_ready(:primary)
 
-    try do
-      persist_mission_scope(@organization_id, @mission_id)
+    persist_mission_scope(@organization_id, @mission_id)
 
-      verifier_instance =
-        persist_verifier_fixture!(timeout_at: DateTime.add(reference_time, -5, :second))
+    verifier_instance =
+      persist_verifier_fixture!(timeout_at: DateTime.add(reference_time, -5, :second))
 
-      release_scheduler_bootstrap(scheduler_pid)
+    release_scheduler_bootstrap(scheduler_pid)
 
-      {_, metadata} =
-        assert_scheduler_event(:timer_scheduled, fn measurements, event_metadata ->
-          measurements.delay_ms == 0 and
-            event_metadata.command_verifier_instance_id ==
-              verifier_instance.command_verifier_instance_id
-        end)
-
-      assert metadata.scheduler_instance == @scheduler_name
-      assert metadata.scheduler_domain_id == @scheduler_domain_id
-
-      assert_scheduler_event(:timer_fired, fn measurements, _metadata ->
-        measurements.count == 1
+    {_, metadata} =
+      assert_scheduler_event(:timer_scheduled, fn measurements, event_metadata ->
+        measurements.delay_ms == 0 and
+          event_metadata.command_verifier_instance_id ==
+            verifier_instance.command_verifier_instance_id
       end)
 
-      assert_scheduler_event(:reconcile, fn measurements, event_metadata ->
-        event_metadata.reason == :timer and measurements.timed_out_verifier_count == 1 and
-          measurements.error_count == 0
-      end)
+    assert metadata.scheduler_instance == @scheduler_name
+    assert metadata.scheduler_domain_id == @scheduler_domain_id
 
-      assert {:ok, timed_out_verifier_instance} =
-               Commanding.fetch_command_verifier_instance(
-                 @organization_id,
-                 @mission_id,
-                 @command_verifier_instance_id
-               )
+    assert_scheduler_event(:timer_fired, fn measurements, _metadata ->
+      measurements.count == 1
+    end)
 
-      assert timed_out_verifier_instance.lifecycle_state == :timed_out
-      assert timed_out_verifier_instance.failure_reason == "timed_out"
+    assert_scheduler_event(:reconcile, fn measurements, event_metadata ->
+      event_metadata.reason == :timer and measurements.timed_out_verifier_count == 1 and
+        measurements.error_count == 0
+    end)
 
-      assert {:ok, command_request} =
-               Commanding.fetch_command_request(
-                 @organization_id,
-                 @mission_id,
-                 @command_request_id
-               )
+    assert {:ok, timed_out_verifier_instance} =
+             Commanding.fetch_command_verifier_instance(
+               @organization_id,
+               @mission_id,
+               @command_verifier_instance_id
+             )
 
-      assert {:ok, command_release_attempt} =
-               Commanding.fetch_command_release_attempt(
-                 @organization_id,
-                 @mission_id,
-                 @command_release_attempt_id
-               )
+    assert timed_out_verifier_instance.lifecycle_state == :timed_out
+    assert timed_out_verifier_instance.failure_reason == "timed_out"
 
-      assert command_request.verification_state == :timed_out
-      assert command_release_attempt.verification_state == :timed_out
-    after
-      try do
-        :ok = stop_supervised(@scheduler_name)
-        Cadence.DataCase.stop_sandbox_owner(sandbox_owner_pid)
-      after
-        :ok = RuntimeCaseOverlapBarrier.release_peer()
-      end
-    end
+    assert {:ok, command_request} =
+             Commanding.fetch_command_request(
+               @organization_id,
+               @mission_id,
+               @command_request_id
+             )
+
+    assert {:ok, command_release_attempt} =
+             Commanding.fetch_command_release_attempt(
+               @organization_id,
+               @mission_id,
+               @command_release_attempt_id
+             )
+
+    assert command_request.verification_state == :timed_out
+    assert command_release_attempt.verification_state == :timed_out
   end
 
   test "emits telemetry for manual safety and stale timer paths", %{
