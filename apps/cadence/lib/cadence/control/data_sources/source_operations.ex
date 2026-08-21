@@ -255,11 +255,14 @@ defmodule Cadence.Control.DataSources.SourceOperations do
         |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}, []] end)
         |> Map.new()
 
-      case persist_fun.(materialized,
-             actor_id: Keyword.get(opts, :actor_id),
-             occurred_at: get_attr(attrs, :observed_at, DateTime.utc_now()),
-             payload: payload
-           ) do
+      persist_opts =
+        Keyword.merge(Keyword.take(opts, [:event_bus]),
+          actor_id: Keyword.get(opts, :actor_id),
+          occurred_at: get_attr(attrs, :observed_at, DateTime.utc_now()),
+          payload: payload
+        )
+
+      case persist_fun.(materialized, persist_opts) do
         {:ok, _source} -> :ok
         {:error, reason} -> {:error, {:adapter_capability_materialization_failed, reason}}
       end
