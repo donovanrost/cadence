@@ -1,5 +1,5 @@
 defmodule Cadence.OperationalEvents.ObservableFamiliesTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.DataCase, async: true
 
   import Cadence.OperationalEventsFixtures
 

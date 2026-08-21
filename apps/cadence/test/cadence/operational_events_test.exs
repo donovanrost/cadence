@@ -1,5 +1,5 @@
 defmodule Cadence.OperationalEventsTest do
-  use Cadence.RuntimeCase, async: false
+  use Cadence.DataCase, async: true
 
   import Cadence.OperationalEventsFixtures
 
@@ -11,6 +11,9 @@ defmodule Cadence.OperationalEventsTest do
 
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event
+  alias Cadence.Runtime.MissionRuntimeSpec
+
+  @event_bus __MODULE__.EventBus
 
   setup do
     organization_id =
@@ -636,7 +639,7 @@ defmodule Cadence.OperationalEventsTest do
              Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
-             Cadence.ActivationFixtures.activate_binding_set(
+             record_binding_set_activation(
                organization_id,
                mission_id,
                first_binding_set.binding_set_id,
@@ -645,7 +648,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert {:ok, _activation} =
-             Cadence.ActivationFixtures.activate_binding_set(
+             record_binding_set_activation(
                organization_id,
                mission_id,
                second_binding_set.binding_set_id,
@@ -725,7 +728,7 @@ defmodule Cadence.OperationalEventsTest do
              Cadence.Governance.persist_binding_set(organization_id, second_binding_set)
 
     assert {:ok, _activation} =
-             Cadence.ActivationFixtures.activate_binding_set(
+             record_binding_set_activation(
                organization_id,
                mission_id,
                first_binding_set.binding_set_id,
@@ -734,7 +737,7 @@ defmodule Cadence.OperationalEventsTest do
              )
 
     assert {:ok, _activation} =
-             Cadence.ActivationFixtures.activate_binding_set(
+             record_binding_set_activation(
                organization_id,
                mission_id,
                second_binding_set.binding_set_id,
@@ -882,30 +885,36 @@ defmodule Cadence.OperationalEventsTest do
     second_event_at = ~U[2026-06-21 21:00:00Z]
 
     assert {:ok, _source} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "interval-questdb-v1",
-               owner: :cadence,
-               kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: organization_id,
-               mission_id: mission_id,
-               isolation_level: :mission_isolated,
-               capabilities: %{range_scan?: true},
-               metadata: %{storage: :questdb}
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "interval-questdb-v1",
+                 owner: :cadence,
+                 kind: :managed_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 isolation_level: :mission_isolated,
+                 capabilities: %{range_scan?: true},
+                 metadata: %{storage: :questdb}
+               },
+               event_bus: @event_bus
+             )
 
     assert {:ok, _source} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "interval-questdb-v2",
-               owner: :cadence,
-               kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: organization_id,
-               mission_id: mission_id,
-               isolation_level: :mission_isolated,
-               capabilities: %{range_scan?: true},
-               metadata: %{storage: :questdb}
-             })
+             DataSources.persist_data_source(
+               %DataSource{
+                 data_source_id: "interval-questdb-v2",
+                 owner: :cadence,
+                 kind: :managed_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 isolation_level: :mission_isolated,
+                 capabilities: %{range_scan?: true},
+                 metadata: %{storage: :questdb}
+               },
+               event_bus: @event_bus
+             )
 
     binding = %DataBinding{
       binding_id: "interval-flight-telemetry",
@@ -922,6 +931,7 @@ defmodule Cadence.OperationalEventsTest do
              DataSources.persist_data_binding(binding,
                actor_id: "operator-1",
                occurred_at: first_event_at,
+               event_bus: @event_bus,
                payload: %{reason: :initial_binding}
              )
 
@@ -935,6 +945,7 @@ defmodule Cadence.OperationalEventsTest do
                },
                actor_id: "operator-2",
                occurred_at: second_event_at,
+               event_bus: @event_bus,
                payload: %{change_request_id: "CR-42"}
              )
 
@@ -1195,5 +1206,34 @@ defmodule Cadence.OperationalEventsTest do
 
     assert other_replay_interval.source_event_id ==
              "operational_event:transport_capability_record:replay-run-2:transport-other-replay-record"
+  end
+
+  defp record_binding_set_activation(
+         organization_id,
+         mission_id,
+         binding_set_id,
+         version,
+         opts
+       ) do
+    with {:ok, binding_set} <-
+           Cadence.Governance.fetch_binding_set(
+             organization_id,
+             mission_id,
+             binding_set_id,
+             version
+           ) do
+      Cadence.Activations.record_binding_set_activation(
+        organization_id,
+        mission_id,
+        binding_set_id,
+        version,
+        opts
+        |> Keyword.put(
+          :binding_set_content_sha256,
+          MissionRuntimeSpec.content_sha256(binding_set)
+        )
+        |> Keyword.put_new(:event_bus, @event_bus)
+      )
+    end
   end
 end
