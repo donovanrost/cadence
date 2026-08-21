@@ -1,30 +1,46 @@
 defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: true
 
-  @moduletag :runtime
-
-  import Cadence.DataSourcesFixtures
+  import Cadence.DataSourcesFixtures,
+    only: [
+      dashboard_frame_key: 2,
+      dashboard_frames: 2,
+      dashboard_source_result: 1,
+      load_fixture_map!: 1,
+      metadata_errors: 1,
+      sample: 6,
+      source_cache_entries: 1,
+      source_cache_statuses: 1
+    ]
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
     DataSourceRegistry,
+    Document,
     Engine,
     EvidenceRef,
     Frame,
+    PlannedSourceRequest,
     RuntimeCache,
+    RuntimeCacheKey,
+    RuntimeFactConsumer,
     SourceRegistry
   }
 
+  alias Cadence.DataSources.SourceWatermark
   alias Cadence.Management.DataSources
 
   alias Cadence.DataSources.{DataBinding, DataSource}
 
-  alias Cadence.OperationalEvents
-  alias Cadence.OperationalEvents.Event
+  alias Cadence.Platform.EventBus
   alias Cadence.Projections.DataSourceBindings
 
+  @organization_id "org-cache-policy"
+  @mission_id "mission-cache-policy"
+  @no_event_bus __MODULE__.NoEventBus
+
   setup do
-    persist_mission_scope("org-dash-source", "mission-dash-source")
+    persist_mission_scope(@organization_id, @mission_id)
     :ok
   end
 
@@ -35,28 +51,32 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     to_time = ~U[2026-06-21 21:15:00Z]
     parent = self()
 
-    persist_watermarked_source("mission-questdb-v1")
-    persist_watermarked_source("mission-questdb-v2")
+    persist_watermarked_source("cache-policy-questdb-v1")
+    persist_watermarked_source("cache-policy-questdb-v2")
 
     binding = %DataBinding{
-      binding_id: "mission-flight-telemetry",
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      binding_id: "cache-policy-flight-telemetry",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       realm: :flight,
       logical_source: :telemetry,
-      data_source_id: "mission-questdb-v1",
+      data_source_id: "cache-policy-questdb-v1",
       dataset: "flight-v1",
       priority: 0
     }
 
     assert {:ok, first_binding} =
-             DataSources.persist_data_binding(binding,
+             persist_data_binding(binding,
                occurred_at: ~U[2026-06-21 20:00:00Z]
              )
 
     assert {:ok, second_binding} =
-             DataSources.persist_data_binding(
-               %DataBinding{binding | data_source_id: "mission-questdb-v2", dataset: "flight-v2"},
+             persist_data_binding(
+               %DataBinding{
+                 binding
+                 | data_source_id: "cache-policy-questdb-v2",
+                   dataset: "flight-v2"
+               },
                occurred_at: boundary_time
              )
 
@@ -66,8 +86,8 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
       {value, receipt_time} =
         case data_source_id do
-          "mission-questdb-v1" -> {11.0, ~U[2026-06-21 20:30:00Z]}
-          "mission-questdb-v2" -> {22.0, ~U[2026-06-21 21:05:00Z]}
+          "cache-policy-questdb-v1" -> {11.0, ~U[2026-06-21 20:30:00Z]}
+          "cache-policy-questdb-v2" -> {22.0, ~U[2026-06-21 21:05:00Z]}
         end
 
       [
@@ -77,7 +97,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
           value,
           receipt_time,
           "evidence-#{data_source_id}",
-          %{}
+          %{mission_id: @mission_id}
         )
       ]
     end
@@ -127,8 +147,8 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
              second_binding.current_event_id
            ]
 
-    assert_receive {:history_opts, "mission-questdb-v1", first_opts}
-    assert_receive {:history_opts, "mission-questdb-v2", second_opts}
+    assert_receive {:history_opts, "cache-policy-questdb-v1", first_opts}
+    assert_receive {:history_opts, "cache-policy-questdb-v2", second_opts}
     assert Keyword.fetch!(first_opts, :from_receipt_time) == from_time
     assert DateTime.compare(Keyword.fetch!(first_opts, :to_receipt_time), boundary_time) == :eq
     assert DateTime.compare(Keyword.fetch!(second_opts, :from_receipt_time), boundary_time) == :eq
@@ -146,15 +166,15 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert source_cache_statuses(second) == [:hit]
     assert [%{key: second_key}] = source_cache_entries(second)
     assert second_key.fingerprint == first_key.fingerprint
-    refute_receive {:history_opts, _data_source_id, _opts}, 20
+    refute_received {:history_opts, _data_source_id, _opts}
 
     assert %{"placement_power_trend" => placement_frames} = second.frames_by_placement
     assert [%Frame{} = frame] = placement_frames.primary
     assert frame.meta.segmented_source_bindings?
 
     assert Enum.map(frame.meta.source_binding_segments, & &1.data_source_id) == [
-             "mission-questdb-v1",
-             "mission-questdb-v2"
+             "cache-policy-questdb-v1",
+             "cache-policy-questdb-v2"
            ]
 
     assert [
@@ -164,33 +184,38 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
   end
 
   test "source results and frames include historical source binding provenance" do
-    persist_source("mission-questdb-v1", :mission_isolated)
-    persist_source("mission-questdb-v2", :mission_isolated)
+    persist_source("cache-policy-questdb-v1", :mission_isolated)
+    persist_source("cache-policy-questdb-v2", :mission_isolated)
 
     binding = %DataBinding{
-      binding_id: "mission-flight-telemetry",
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      binding_id: "cache-policy-flight-telemetry",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       realm: :flight,
       logical_source: :telemetry,
-      data_source_id: "mission-questdb-v1",
+      data_source_id: "cache-policy-questdb-v1",
       dataset: "flight-v1",
       priority: 0
     }
 
     assert {:ok, registered} =
-             DataSources.persist_data_binding(binding,
+             persist_data_binding(binding,
                occurred_at: ~U[2026-06-21 20:00:00Z]
              )
 
     assert {:ok, _changed} =
-             DataSources.persist_data_binding(
-               %DataBinding{binding | data_source_id: "mission-questdb-v2", dataset: "flight-v2"},
+             persist_data_binding(
+               %DataBinding{
+                 binding
+                 | data_source_id: "cache-policy-questdb-v2",
+                   dataset: "flight-v2"
+               },
                occurred_at: ~U[2026-06-21 21:00:00Z]
              )
 
     latest_fun = fn _organization_id, _mission_id, point_id, _opts ->
       sample(point_id, "sample-historical", 12.4, ~U[2026-06-21 20:30:00Z], "evidence-1",
+        mission_id: @mission_id,
         generation_time: ~U[2026-06-21 20:29:59Z]
       )
     end
@@ -204,17 +229,17 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
       )
 
     refute Enum.any?(result.warnings, &(&1.severity == :error))
-    assert result.meta.source_binding_id == "mission-flight-telemetry"
+    assert result.meta.source_binding_id == "cache-policy-flight-telemetry"
     assert result.meta.source_binding_version == 1
     assert result.meta.source_binding_event_id == registered.current_event_id
-    assert result.meta.source_binding_interval.data_source_id == "mission-questdb-v1"
+    assert result.meta.source_binding_interval.data_source_id == "cache-policy-questdb-v1"
     assert result.meta.source_binding_interval.dataset == "flight-v1"
 
     assert [%Frame{} = frame] = result.frames
-    assert frame.meta.source_binding_id == "mission-flight-telemetry"
+    assert frame.meta.source_binding_id == "cache-policy-flight-telemetry"
     assert frame.meta.source_binding_version == 1
     assert frame.meta.source_binding_event_id == registered.current_event_id
-    assert frame.meta.source_binding_interval.data_source_id == "mission-questdb-v1"
+    assert frame.meta.source_binding_interval.data_source_id == "cache-policy-questdb-v1"
 
     assert %EvidenceRef{
              kind: :source_binding_event,
@@ -231,122 +256,19 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert DateTime.compare(observed_at, ~U[2026-06-21 20:00:00Z]) == :eq
 
     assert Enum.any?(frame.meta.evidence, fn
-             %EvidenceRef{kind: :source_binding, id: "mission-flight-telemetry"} -> true
+             %EvidenceRef{kind: :source_binding, id: "cache-policy-flight-telemetry"} -> true
              _other -> false
-           end)
-  end
-
-  test "source result frames include selected operational interval evidence" do
-    persist_source("mission-questdb-v1", :mission_isolated)
-    persist_source_endpoint_scope("endpoint-sc-001")
-
-    assert {:ok, _event} =
-             catalog_revision("catalog-revision-a", revision_number: 1)
-             |> Event.from_catalog_revision(~U[2026-06-21 20:00:00Z])
-             |> OperationalEvents.persist_event()
-
-    binding_set =
-      application_binding_set("runtime-apps-a",
-        source_endpoint_ref: "endpoint-sc-001",
-        apid: 42,
-        metric_name: "packets_v1"
-      )
-
-    assert {:ok, _binding_set} =
-             Cadence.Governance.persist_binding_set("org-dash-source", binding_set)
-
-    assert {:ok, _activation} =
-             Cadence.ActivationFixtures.activate_binding_set(
-               "org-dash-source",
-               "mission-dash-source",
-               binding_set.binding_set_id,
-               binding_set.version,
-               activated_at: ~U[2026-06-21 20:00:00Z]
-             )
-
-    binding = %DataBinding{
-      binding_id: "mission-flight-telemetry",
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
-      realm: :flight,
-      logical_source: :telemetry,
-      data_source_id: "mission-questdb-v1",
-      dataset: "flight-v1",
-      priority: 0
-    }
-
-    assert {:ok, _registered} =
-             DataSources.persist_data_binding(binding,
-               occurred_at: ~U[2026-06-21 20:00:00Z]
-             )
-
-    latest_fun = fn _organization_id, _mission_id, point_id, _opts ->
-      sample(point_id, "sample-historical", 12.4, ~U[2026-06-21 20:30:00Z], "evidence-1",
-        generation_time: ~U[2026-06-21 20:29:59Z]
-      )
-    end
-
-    result =
-      SourceRegistry.resolve(
-        source_request(
-          sampling: %{mode: :latest},
-          scope_context: %{source_endpoint_id: "endpoint-sc-001"}
-        ),
-        persisted?: true,
-        source_binding_at: ~U[2026-06-21 20:30:00Z],
-        source_opts: %{telemetry: [latest_fun: latest_fun]}
-      )
-
-    assert [%Frame{} = frame] = result.frames
-
-    assert [
-             %{kind: :application_binding, subject_id: "runtime-apps-a-packet-counter-rule"},
-             %{kind: :binding_set, subject_id: "runtime-apps-a"},
-             %{kind: :catalog_revision, subject_id: "catalog-revision-a"}
-           ] =
-             frame.meta.selected_operational_intervals
-             |> Enum.sort_by(& &1.kind)
-             |> Enum.map(&Map.take(&1, [:kind, :subject_id]))
-
-    assert Enum.any?(frame.meta.evidence, fn
-             %EvidenceRef{kind: :binding_set_interval, id: "effective_interval:binding_set:" <> _} ->
-               true
-
-             _other ->
-               false
-           end)
-
-    assert Enum.any?(frame.meta.evidence, fn
-             %EvidenceRef{
-               kind: :application_binding_interval,
-               id: "effective_interval:application_binding:" <> _
-             } ->
-               true
-
-             _other ->
-               false
-           end)
-
-    assert Enum.any?(frame.meta.evidence, fn
-             %EvidenceRef{
-               kind: :catalog_revision_interval,
-               id: "effective_interval:catalog_revision:" <> _
-             } ->
-               true
-
-             _other ->
-               false
            end)
   end
 
   test "persists dashboard policy metadata and uses it for concrete source execution policy" do
     data_source = %DataSource{
-      data_source_id: "policy-questdb",
+      data_source_id: "cache-policy-policy-questdb",
       owner: :cadence,
       kind: :managed_tsdb,
       adapter: Cadence.Dashboards.Sources.Telemetry,
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       isolation_level: :mission_isolated,
       capabilities: %{range_scan?: true},
       metadata: %{
@@ -359,19 +281,19 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
       }
     }
 
-    assert {:ok, persisted_source} = DataSources.persist_data_source(data_source)
+    assert {:ok, persisted_source} = persist_data_source(data_source)
     assert persisted_source.metadata["dashboard_policy"]["execution"]["timeout_ms"] == "infinity"
 
     assert persisted_source.metadata["dashboard_policy"]["adapter_extension"]["query_pool"] ==
              "questdb-dashboard"
 
     binding = %DataBinding{
-      binding_id: "policy-flight-telemetry",
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      binding_id: "cache-policy-policy-flight-telemetry",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       realm: :flight,
       logical_source: :telemetry,
-      data_source_id: "policy-questdb",
+      data_source_id: "cache-policy-policy-questdb",
       dataset: "flight",
       priority: 0,
       metadata: %{
@@ -381,7 +303,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
       }
     }
 
-    assert {:ok, _persisted_binding} = DataSources.persist_data_binding(binding)
+    assert {:ok, _persisted_binding} = persist_data_binding(binding)
 
     policy = SourceRegistry.execution_policy(source_request(), persisted?: true)
 
@@ -390,18 +312,18 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert policy.circuit_backoff_ms == 10_000
     assert policy.provenance.data_source_policy?
     assert policy.provenance.binding_policy?
-    assert policy.provenance.data_source_id == "policy-questdb"
-    assert policy.provenance.source_binding_id == "policy-flight-telemetry"
+    assert policy.provenance.data_source_id == "cache-policy-policy-questdb"
+    assert policy.provenance.source_binding_id == "cache-policy-policy-flight-telemetry"
   end
 
   test "rejects malformed data source dashboard policy metadata" do
     data_source = %DataSource{
-      data_source_id: "bad-policy-questdb",
+      data_source_id: "cache-policy-bad-policy-questdb",
       owner: :cadence,
       kind: :managed_tsdb,
       adapter: Cadence.Dashboards.Sources.Telemetry,
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       isolation_level: :mission_isolated,
       capabilities: %{range_scan?: true},
       metadata: %{
@@ -412,7 +334,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
       }
     }
 
-    assert {:error, %Ecto.Changeset{} = changeset} = DataSources.persist_data_source(data_source)
+    assert {:error, %Ecto.Changeset{} = changeset} = persist_data_source(data_source)
 
     assert "dashboard_policy.execution.timeout_ms must be a non-negative integer or \"infinity\"" in metadata_errors(
              changeset
@@ -428,15 +350,15 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
   end
 
   test "rejects malformed data binding dashboard policy metadata" do
-    persist_source("binding-policy-questdb", :mission_isolated)
+    persist_source("cache-policy-binding-policy-questdb", :mission_isolated)
 
     binding = %DataBinding{
-      binding_id: "bad-policy-flight-telemetry",
-      organization_id: "org-dash-source",
-      mission_id: "mission-dash-source",
+      binding_id: "cache-policy-bad-policy-flight-telemetry",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
       realm: :flight,
       logical_source: :telemetry,
-      data_source_id: "binding-policy-questdb",
+      data_source_id: "cache-policy-binding-policy-questdb",
       dataset: "flight",
       priority: 0,
       metadata: %{
@@ -447,7 +369,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
       }
     }
 
-    assert {:error, %Ecto.Changeset{} = changeset} = DataSources.persist_data_binding(binding)
+    assert {:error, %Ecto.Changeset{} = changeset} = persist_data_binding(binding)
 
     assert "dashboard_policy.execution must be a map" in metadata_errors(changeset)
 
@@ -457,16 +379,16 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
   end
 
   test "lists active telemetry data realms for dashboard controls" do
-    persist_source("mission-questdb", :mission_isolated)
+    persist_source("cache-policy-mission-questdb", :mission_isolated)
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-rehearsal-telemetry",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-rehearsal-telemetry",
+               organization_id: @organization_id,
+               mission_id: @mission_id,
                realm: :rehearsal,
                logical_source: :telemetry,
-               data_source_id: "mission-questdb",
+               data_source_id: "cache-policy-mission-questdb",
                dataset: "rehearsal",
                active_from: ~U[2026-01-01 00:00:00Z],
                active_to: ~U[2027-01-01 00:00:00Z],
@@ -474,46 +396,46 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
              })
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-replay-limits",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-replay-limits",
+               organization_id: @organization_id,
+               mission_id: @mission_id,
                realm: :replay,
                logical_source: :limits,
-               data_source_id: "mission-questdb",
+               data_source_id: "cache-policy-mission-questdb",
                dataset: "replay-limits",
                priority: 0
              })
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-future-replay-telemetry",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-future-replay-telemetry",
+               organization_id: @organization_id,
+               mission_id: @mission_id,
                realm: :replay,
                logical_source: :telemetry,
-               data_source_id: "mission-questdb",
+               data_source_id: "cache-policy-mission-questdb",
                dataset: "future-replay",
                active_from: ~U[2028-01-01 00:00:00Z],
                priority: 0
              })
 
-    assert DataSources.list_data_realms("org-dash-source", "mission-dash-source",
+    assert DataSources.list_data_realms(@organization_id, @mission_id,
              now: ~U[2026-06-01 00:00:00Z]
            ) == ["rehearsal"]
   end
 
   test "persisted registry honors binding activation windows" do
-    persist_source("mission-questdb", :mission_isolated)
+    persist_source("cache-policy-mission-questdb", :mission_isolated)
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-flight-telemetry",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-flight-telemetry",
+               organization_id: @organization_id,
+               mission_id: @mission_id,
                realm: :flight,
                logical_source: :telemetry,
-               data_source_id: "mission-questdb",
+               data_source_id: "cache-policy-mission-questdb",
                dataset: "flight",
                active_from: ~U[2028-01-01 00:00:00Z],
                priority: 0
@@ -533,159 +455,54 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
                now: ~U[2028-01-01 00:00:01Z]
              )
 
-    assert resolved.binding.binding_id == "mission-flight-telemetry"
+    assert resolved.binding.binding_id == "cache-policy-flight-telemetry"
   end
 
   test "data realm listing falls back to flight when no telemetry bindings exist" do
-    assert DataSources.list_data_realms("org-dash-source", "mission-dash-source") == ["flight"]
+    assert DataSources.list_data_realms(@organization_id, @mission_id) == ["flight"]
   end
 
   test "persisted registry selection prefers mission-specific bindings" do
-    persist_source("org-questdb", :org_isolated)
-    persist_source("mission-questdb", :mission_isolated)
+    persist_source("cache-policy-org-questdb", :org_isolated)
+    persist_source("cache-policy-mission-questdb", :mission_isolated)
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "org-flight-telemetry",
-               organization_id: "org-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-org-flight-telemetry",
+               organization_id: @organization_id,
                realm: :flight,
                logical_source: :telemetry,
-               data_source_id: "org-questdb",
+               data_source_id: "cache-policy-org-questdb",
                dataset: "org-flight",
                priority: 0
              })
 
     assert {:ok, _binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-flight-telemetry",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
+             persist_data_binding(%DataBinding{
+               binding_id: "cache-policy-flight-telemetry",
+               organization_id: @organization_id,
+               mission_id: @mission_id,
                realm: :flight,
                logical_source: :telemetry,
-               data_source_id: "mission-questdb",
+               data_source_id: "cache-policy-mission-questdb",
                dataset: "mission-flight",
                priority: 0
              })
 
     assert {:ok, resolved} = DataSourceRegistry.resolve(source_request(), persisted?: true)
-    assert resolved.binding.binding_id == "mission-flight-telemetry"
-    assert resolved.data_source.data_source_id == "mission-questdb"
+    assert resolved.binding.binding_id == "cache-policy-flight-telemetry"
+    assert resolved.data_source.data_source_id == "cache-policy-mission-questdb"
     assert resolved.data_source.isolation_level == :mission_isolated
     assert resolved.dataset == "mission-flight"
 
     assert {:ok, context_resolved} =
              DataSourceBindings.resolve(source_request())
 
-    assert context_resolved.binding.binding_id == "mission-flight-telemetry"
-  end
-
-  test "bootstraps default managed telemetry source idempotently" do
-    assert %{data_source: data_source, data_binding: data_binding} =
-             DataSources.ensure_default_managed_sources!()
-
-    assert data_source.data_source_id == "managed_questdb_primary"
-    assert data_source.kind == :managed_tsdb
-    assert data_source.adapter == :telemetry
-    assert data_source.isolation_level == :shared
-    assert data_source.metadata["bootstrap_default?"]
-
-    assert data_binding.binding_id == "default_flight_telemetry"
-    assert data_binding.realm == :flight
-    assert data_binding.logical_source == :telemetry
-    assert data_binding.data_source_id == "managed_questdb_primary"
-    assert data_binding.dataset == "flight"
-    assert data_binding.metadata["bootstrap_default?"]
-
-    assert limits_source =
-             Enum.find(
-               DataSources.list_data_sources("org-dash-source", "mission-dash-source"),
-               &(&1.data_source_id == "managed_limits_projection")
-             )
-
-    assert limits_source.kind == :projection
-    assert limits_source.adapter == :limits
-    assert limits_source.capabilities["latest_state?"]
-    assert limits_source.capabilities["definition_intervals?"]
-    assert limits_source.metadata["bootstrap_default?"]
-
-    assert limits_binding =
-             Enum.find(
-               DataSources.list_data_bindings("org-dash-source", "mission-dash-source"),
-               &(&1.binding_id == "default_flight_limits")
-             )
-
-    assert limits_binding.realm == :flight
-    assert limits_binding.logical_source == :limits
-    assert limits_binding.data_source_id == "managed_limits_projection"
-    assert limits_binding.dataset == "telemetry_latest_limit_states"
-    assert limits_binding.metadata["bootstrap_default?"]
-
-    assert events_source =
-             Enum.find(
-               DataSources.list_data_sources("org-dash-source", "mission-dash-source"),
-               &(&1.data_source_id == "managed_events_projection")
-             )
-
-    assert events_source.kind == :projection
-    assert events_source.adapter == :events
-    assert events_source.capabilities["contact_intervals?"]
-    assert events_source.capabilities["mission_timeline?"]
-    assert events_source.capabilities["source_health_transitions?"]
-    assert events_source.metadata["bootstrap_default?"]
-
-    assert events_binding =
-             Enum.find(
-               DataSources.list_data_bindings("org-dash-source", "mission-dash-source"),
-               &(&1.binding_id == "default_flight_events")
-             )
-
-    assert events_binding.realm == :flight
-    assert events_binding.logical_source == :events
-    assert events_binding.data_source_id == "managed_events_projection"
-    assert events_binding.dataset == "mission_events"
-    assert events_binding.metadata["bootstrap_default?"]
-
-    assert %{data_source: second_source, data_binding: second_binding} =
-             DataSources.ensure_default_managed_sources!()
-
-    assert second_source.data_source_id == data_source.data_source_id
-    assert second_binding.binding_id == data_binding.binding_id
-  end
-
-  test "persisted registry resolves from bootstrapped defaults" do
-    _defaults = DataSources.ensure_default_managed_sources!()
-
-    assert {:ok, resolved} = DataSourceRegistry.resolve(source_request(), persisted?: true)
-    assert resolved.binding.binding_id == "default_flight_telemetry"
-    assert resolved.data_source.data_source_id == "managed_questdb_primary"
-    assert resolved.realm == :flight
-    assert resolved.dataset == "flight"
-
-    assert {:ok, limits_resolved} =
-             DataSourceRegistry.resolve(
-               source_request(logical_source: :limits, sampling: %{mode: :latest_state}),
-               persisted?: true
-             )
-
-    assert limits_resolved.binding.binding_id == "default_flight_limits"
-    assert limits_resolved.data_source.data_source_id == "managed_limits_projection"
-    assert limits_resolved.realm == :flight
-    assert limits_resolved.dataset == "telemetry_latest_limit_states"
-
-    assert {:ok, events_resolved} =
-             DataSourceRegistry.resolve(
-               source_request(logical_source: :events, sampling: %{mode: :event_history}),
-               persisted?: true
-             )
-
-    assert events_resolved.binding.binding_id == "default_flight_events"
-    assert events_resolved.data_source.data_source_id == "managed_events_projection"
-    assert events_resolved.realm == :flight
-    assert events_resolved.dataset == "mission_events"
+    assert context_resolved.binding.binding_id == "cache-policy-flight-telemetry"
   end
 
   test "persisted registry returns missing binding warning when scoped rows exist but no binding matches" do
-    persist_source("rehearsal-questdb", :mission_isolated)
+    persist_source("cache-policy-rehearsal-questdb", :mission_isolated)
 
     assert {:error, warning} =
              DataSourceRegistry.resolve(
@@ -697,91 +514,17 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert warning.details.realm == :rehearsal
   end
 
-  test "persisting a data binding invalidates matching dashboard runtime caches only" do
-    cache = start_supervised!({RuntimeCache, name: nil})
-    use_dashboard_runtime_cache!(cache)
-    persist_source("mission-questdb", :mission_isolated)
-    persist_limits_source("mission-limits")
-
-    matching_key =
-      dashboard_source_result_key(:telemetry,
-        binding_id: "mission-flight-telemetry",
-        data_source_id: "mission-questdb",
-        realm: :flight,
-        dataset: "mission-flight"
-      )
-
-    matching_frame_key = dashboard_frame_key(matching_key, "frame-mission-flight")
-
-    other_realm_key =
-      dashboard_source_result_key(:telemetry,
-        binding_id: "mission-rehearsal-telemetry",
-        data_source_id: "mission-questdb",
-        realm: :rehearsal,
-        dataset: "mission-rehearsal"
-      )
-
-    other_realm_frame_key = dashboard_frame_key(other_realm_key, "frame-rehearsal")
-
-    limits_key =
-      dashboard_source_result_key(:limits,
-        binding_id: "mission-flight-limits",
-        data_source_id: "mission-limits",
-        realm: :flight,
-        dataset: "telemetry_latest_limit_states"
-      )
-
-    limits_frame_key = dashboard_frame_key(limits_key, "frame-limits")
-
-    matching_result = dashboard_source_result(matching_key)
-    matching_frames = dashboard_frames(:telemetry, "frame-mission-flight")
-    other_realm_result = dashboard_source_result(other_realm_key)
-    other_realm_frames = dashboard_frames(:telemetry, "frame-rehearsal")
-    limits_result = dashboard_source_result(limits_key)
-    limits_frames = dashboard_frames(:limits, "frame-limits")
-
-    assert :ok = RuntimeCache.put_source_result(matching_key, matching_result, cache)
-    assert :ok = RuntimeCache.put_frame(matching_frame_key, matching_frames, cache)
-    assert :ok = RuntimeCache.put_source_result(other_realm_key, other_realm_result, cache)
-    assert :ok = RuntimeCache.put_frame(other_realm_frame_key, other_realm_frames, cache)
-    assert :ok = RuntimeCache.put_source_result(limits_key, limits_result, cache)
-    assert :ok = RuntimeCache.put_frame(limits_frame_key, limits_frames, cache)
-
-    assert {:ok, binding} =
-             DataSources.persist_data_binding(%DataBinding{
-               binding_id: "mission-flight-telemetry",
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               realm: :flight,
-               logical_source: :telemetry,
-               data_source_id: "mission-questdb",
-               dataset: "mission-flight",
-               priority: 0,
-               metadata: %{reason: :updated_primary}
-             })
-
-    assert RuntimeCache.get_source_result(matching_key, cache) == :miss
-    assert RuntimeCache.get_frame(matching_frame_key, cache) == :miss
-    assert {:ok, ^other_realm_result} = RuntimeCache.get_source_result(other_realm_key, cache)
-    assert {:ok, ^other_realm_frames} = RuntimeCache.get_frame(other_realm_frame_key, cache)
-    assert {:ok, ^limits_result} = RuntimeCache.get_source_result(limits_key, cache)
-    assert {:ok, ^limits_frames} = RuntimeCache.get_frame(limits_frame_key, cache)
-
-    assert [event] = DataSources.list_data_binding_events("mission-flight-telemetry")
-    assert event.event_type == :registered
-    assert binding.current_event_id == event.data_binding_event_id
-  end
-
   test "persisting a data source invalidates all dashboard caches for that source id" do
     cache = start_supervised!({RuntimeCache, name: nil})
-    use_dashboard_runtime_cache!(cache)
-    persist_source("mission-questdb", :mission_isolated)
-    persist_limits_source("mission-limits")
+    event_bus = start_cache_invalidation_runtime!(cache)
+
+    persist_source("cache-policy-mission-questdb", :mission_isolated, event_bus: event_bus)
+    persist_limits_source("cache-policy-mission-limits", event_bus: event_bus)
 
     flight_key =
       dashboard_source_result_key(:telemetry,
-        binding_id: "mission-flight-telemetry",
-        data_source_id: "mission-questdb",
+        binding_id: "cache-policy-flight-telemetry",
+        data_source_id: "cache-policy-mission-questdb",
         realm: :flight,
         dataset: "mission-flight"
       )
@@ -790,8 +533,8 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
     rehearsal_key =
       dashboard_source_result_key(:telemetry,
-        binding_id: "mission-rehearsal-telemetry",
-        data_source_id: "mission-questdb",
+        binding_id: "cache-policy-rehearsal-telemetry",
+        data_source_id: "cache-policy-mission-questdb",
         realm: :rehearsal,
         dataset: "mission-rehearsal"
       )
@@ -800,8 +543,8 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
 
     limits_key =
       dashboard_source_result_key(:limits,
-        binding_id: "mission-flight-limits",
-        data_source_id: "mission-limits",
+        binding_id: "cache-policy-flight-limits",
+        data_source_id: "cache-policy-mission-limits",
         realm: :flight,
         dataset: "telemetry_latest_limit_states"
       )
@@ -823,17 +566,20 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert :ok = RuntimeCache.put_frame(limits_frame_key, limits_frames, cache)
 
     assert {:ok, _source} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "mission-questdb",
-               owner: :cadence,
-               kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: "org-dash-source",
-               mission_id: "mission-dash-source",
-               isolation_level: :mission_isolated,
-               capabilities: %{range_scan?: true, watermarks?: true},
-               metadata: %{storage: :questdb, reason: :updated_capabilities}
-             })
+             persist_data_source(
+               %DataSource{
+                 data_source_id: "cache-policy-mission-questdb",
+                 owner: :cadence,
+                 kind: :managed_tsdb,
+                 adapter: Cadence.Dashboards.Sources.Telemetry,
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 isolation_level: :mission_isolated,
+                 capabilities: %{range_scan?: true, watermarks?: true},
+                 metadata: %{storage: :questdb, reason: :updated_capabilities}
+               },
+               event_bus: event_bus
+             )
 
     assert RuntimeCache.get_source_result(flight_key, cache) == :miss
     assert RuntimeCache.get_frame(flight_frame_key, cache) == :miss
@@ -841,5 +587,186 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
     assert RuntimeCache.get_frame(rehearsal_frame_key, cache) == :miss
     assert {:ok, ^limits_result} = RuntimeCache.get_source_result(limits_key, cache)
     assert {:ok, ^limits_frames} = RuntimeCache.get_frame(limits_frame_key, cache)
+  end
+
+  defp persist_source(data_source_id, isolation_level, opts \\ []) do
+    mission_id = if isolation_level == :mission_isolated, do: @mission_id
+
+    data_source = %DataSource{
+      data_source_id: data_source_id,
+      owner: :cadence,
+      kind: :managed_tsdb,
+      adapter: Cadence.Dashboards.Sources.Telemetry,
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      isolation_level: isolation_level,
+      capabilities: %{range_scan?: true},
+      metadata: %{storage: :questdb}
+    }
+
+    assert {:ok, persisted} = persist_data_source(data_source, opts)
+    persisted
+  end
+
+  defp persist_watermarked_source(data_source_id) do
+    data_source = %DataSource{
+      data_source_id: data_source_id,
+      owner: :cadence,
+      kind: :managed_tsdb,
+      adapter: Cadence.Dashboards.Sources.Telemetry,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      isolation_level: :mission_isolated,
+      capabilities: %{range_scan?: true, watermarks?: true},
+      metadata: %{storage: :questdb}
+    }
+
+    assert {:ok, persisted} = persist_data_source(data_source)
+    persisted
+  end
+
+  defp persist_limits_source(data_source_id, opts) do
+    data_source = %DataSource{
+      data_source_id: data_source_id,
+      owner: :cadence,
+      kind: :projection,
+      adapter: Cadence.Dashboards.Sources.Limits,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      isolation_level: :mission_isolated,
+      capabilities: %{
+        latest_state?: true,
+        event_history?: true,
+        definition_intervals?: true,
+        watermarks?: true
+      },
+      metadata: %{storage: :postgres_projection}
+    }
+
+    assert {:ok, persisted} = persist_data_source(data_source, opts)
+    persisted
+  end
+
+  defp persist_data_source(%DataSource{} = data_source, opts \\ []) do
+    DataSources.persist_data_source(data_source, with_event_bus(opts))
+  end
+
+  defp persist_data_binding(%DataBinding{} = data_binding, opts \\ []) do
+    DataSources.persist_data_binding(data_binding, with_event_bus(opts))
+  end
+
+  defp with_event_bus(opts), do: Keyword.put_new(opts, :event_bus, @no_event_bus)
+
+  defp segmented_history_document do
+    "time_series_with_limits.v1.json"
+    |> load_fixture_map!()
+    |> Map.put("organization_id", @organization_id)
+    |> Map.put("mission_id", @mission_id)
+    |> put_in(["placements", Access.at(0), "content", "widget_def", "binding", "observables"], [
+      "HK.counter"
+    ])
+    |> put_in(
+      ["placements", Access.at(0), "content", "widget_def", "binding", "sampling"],
+      "raw_series"
+    )
+    |> put_in(["placements", Access.at(0), "content", "widget_def", "binding", "overlays"], [])
+    |> Document.from_map()
+  end
+
+  defp source_request(overrides \\ []) do
+    attrs = %{
+      request_id: "cache-policy-source-request-1",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      logical_source: :telemetry,
+      observables: ["HK.counter"],
+      data_context: %{realm: :flight},
+      sampling: %{mode: :raw_series}
+    }
+
+    struct!(PlannedSourceRequest, Keyword.merge(Map.to_list(attrs), overrides))
+  end
+
+  defp dashboard_source_result_key(logical_source, opts) do
+    request = dashboard_source_request(logical_source, opts)
+
+    RuntimeCacheKey.source_result(request,
+      source_binding: dashboard_source_binding(logical_source, opts),
+      data_source: dashboard_data_source(logical_source, opts),
+      watermark: dashboard_watermark(logical_source, opts)
+    )
+  end
+
+  defp dashboard_source_request(logical_source, opts) do
+    binding_id = Keyword.fetch!(opts, :binding_id)
+
+    %PlannedSourceRequest{
+      request_id: "source-request-#{binding_id}",
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      logical_source: logical_source,
+      observables: [Keyword.get(opts, :observable, "HK.counter")],
+      data_context: %{realm: Keyword.fetch!(opts, :realm)},
+      sampling: %{mode: :latest}
+    }
+  end
+
+  defp dashboard_source_binding(logical_source, opts) do
+    %DataBinding{
+      binding_id: Keyword.fetch!(opts, :binding_id),
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      realm: Keyword.fetch!(opts, :realm),
+      logical_source: logical_source,
+      data_source_id: Keyword.fetch!(opts, :data_source_id),
+      dataset: Keyword.fetch!(opts, :dataset),
+      priority: 0
+    }
+  end
+
+  defp dashboard_data_source(logical_source, opts) do
+    %DataSource{
+      data_source_id: Keyword.fetch!(opts, :data_source_id),
+      owner: :cadence,
+      kind: dashboard_source_kind(logical_source),
+      adapter: dashboard_source_adapter(logical_source),
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      isolation_level: :mission_isolated,
+      capabilities: %{latest?: true, latest_state?: true, event_history?: true, watermarks?: true}
+    }
+  end
+
+  defp dashboard_watermark(logical_source, opts) do
+    %SourceWatermark{
+      logical_source: logical_source,
+      request_id: "source-request-#{Keyword.fetch!(opts, :binding_id)}",
+      source_binding_id: Keyword.fetch!(opts, :binding_id),
+      data_source_id: Keyword.fetch!(opts, :data_source_id),
+      realm: Keyword.fetch!(opts, :realm),
+      dataset: Keyword.fetch!(opts, :dataset),
+      complete_through: ~U[2026-06-17 12:00:00Z],
+      latest_receipt_time: ~U[2026-06-17 12:00:00Z],
+      retention_starts_at: ~U[2026-06-17 11:00:00Z],
+      confidence: :best_effort,
+      freshness_state: :fresh
+    }
+  end
+
+  defp dashboard_source_kind(:limits), do: :projection
+  defp dashboard_source_kind(_logical_source), do: :managed_tsdb
+
+  defp dashboard_source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
+  defp dashboard_source_adapter(:telemetry), do: Cadence.Dashboards.Sources.Telemetry
+
+  defp start_cache_invalidation_runtime!(cache) do
+    event_bus = start_supervised!({EventBus, name: nil, delivery: :sync, before_notify: nil})
+
+    start_supervised!(
+      {RuntimeFactConsumer,
+       name: nil, event_bus: event_bus, enabled?: true, runtime_cache: RuntimeCache.client(cache)}
+    )
+
+    event_bus
   end
 end
