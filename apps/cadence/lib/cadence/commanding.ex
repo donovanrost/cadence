@@ -22,6 +22,7 @@ defmodule Cadence.Commanding do
     Dispatcher,
     DispatchSupervisor,
     LifecyclePolicy,
+    ProcessNamespace,
     ReleaseArtifacts,
     ReleaseStore,
     ReleaseTargetSelection,
@@ -200,6 +201,7 @@ defmodule Cadence.Commanding do
          ) do
       {:ok, %{queue_entry: queue_entry} = result} ->
         maybe_schedule_queue_lane_dispatch(
+          process_namespace(opts),
           queue_entry.organization_id,
           queue_entry.mission_id,
           queue_entry.queue_lane_key
@@ -234,7 +236,15 @@ defmodule Cadence.Commanding do
   end
 
   @spec notify_release_target_available(RealizedContact.t()) :: :ok
-  def notify_release_target_available(%RealizedContact{} = realized_contact)
+  def notify_release_target_available(%RealizedContact{} = realized_contact) do
+    notify_release_target_available(realized_contact, ProcessNamespace.default())
+  end
+
+  @spec notify_release_target_available(RealizedContact.t(), ProcessNamespace.t()) :: :ok
+  def notify_release_target_available(
+        %RealizedContact{} = realized_contact,
+        %ProcessNamespace{} = process_namespace
+      )
       when realized_contact.lifecycle_state in [:defined, :active] do
     lane_keys = release_target_lane_keys(realized_contact)
 
@@ -245,6 +255,7 @@ defmodule Cadence.Commanding do
       |> RequestQueueStore.pending_target_lanes(realized_contact.mission_id, lane_keys)
       |> Enum.each(fn lane ->
         maybe_schedule_queue_lane_dispatch(
+          process_namespace,
           lane.organization_id,
           lane.mission_id,
           lane.queue_lane_key
@@ -255,7 +266,7 @@ defmodule Cadence.Commanding do
     :ok
   end
 
-  def notify_release_target_available(%RealizedContact{}), do: :ok
+  def notify_release_target_available(%RealizedContact{}, %ProcessNamespace{}), do: :ok
 
   defp release_target_lane_keys(%RealizedContact{} = realized_contact) do
     realized_contact.paths
@@ -332,7 +343,8 @@ defmodule Cadence.Commanding do
         released_by,
         attempted_at: attempted_at,
         path_id: path.path_id,
-        transport_binding_id: transport_binding.transport_binding_id
+        transport_binding_id: transport_binding.transport_binding_id,
+        process_namespace: process_namespace(opts)
       )
     end
   end
@@ -371,12 +383,24 @@ defmodule Cadence.Commanding do
 
   @spec evaluate_command_verifiers([Sample.t()]) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
-  def evaluate_command_verifiers([]), do: {:ok, []}
-
   def evaluate_command_verifiers(telemetry_samples) when is_list(telemetry_samples) do
+    evaluate_command_verifiers(telemetry_samples, ProcessNamespace.default())
+  end
+
+  @spec evaluate_command_verifiers([Sample.t()], ProcessNamespace.t()) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  @spec evaluate_command_verifiers(module(), [Sample.t()]) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_command_verifiers([], %ProcessNamespace{}), do: {:ok, []}
+
+  def evaluate_command_verifiers(
+        telemetry_samples,
+        %ProcessNamespace{} = process_namespace
+      )
+      when is_list(telemetry_samples) do
     case Repo.transaction(fn -> evaluate_command_verifiers(Repo, telemetry_samples) end) do
       {:ok, {:ok, verifier_instances}} ->
-        VerifierScheduler.notify_verifier_instances_changed(verifier_instances)
+        VerifierScheduler.notify_verifier_instances_changed(verifier_instances, process_namespace)
         {:ok, verifier_instances}
 
       {:ok, result} ->
@@ -387,8 +411,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  @spec evaluate_command_verifiers(module(), [Sample.t()]) ::
-          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def evaluate_command_verifiers(repo, telemetry_samples)
       when is_list(telemetry_samples) do
     VerifierWorkflow.evaluate_telemetry(
@@ -405,11 +427,36 @@ defmodule Cadence.Commanding do
           [TransportActionRequest.t()]
         ) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
-  def evaluate_transport_command_verifiers([], []), do: {:ok, []}
-
   def evaluate_transport_command_verifiers(
         transport_capability_records,
         transport_action_requests
+      )
+      when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    evaluate_transport_command_verifiers(
+      transport_capability_records,
+      transport_action_requests,
+      ProcessNamespace.default()
+    )
+  end
+
+  @spec evaluate_transport_command_verifiers(
+          [TransportCapabilityRecord.t()],
+          [TransportActionRequest.t()],
+          ProcessNamespace.t()
+        ) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  @spec evaluate_transport_command_verifiers(
+          module(),
+          [TransportCapabilityRecord.t()],
+          [TransportActionRequest.t()]
+        ) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_transport_command_verifiers([], [], %ProcessNamespace{}), do: {:ok, []}
+
+  def evaluate_transport_command_verifiers(
+        transport_capability_records,
+        transport_action_requests,
+        %ProcessNamespace{} = process_namespace
       )
       when is_list(transport_capability_records) and is_list(transport_action_requests) do
     case Repo.transaction(fn ->
@@ -420,7 +467,7 @@ defmodule Cadence.Commanding do
            )
          end) do
       {:ok, {:ok, verifier_instances}} ->
-        VerifierScheduler.notify_verifier_instances_changed(verifier_instances)
+        VerifierScheduler.notify_verifier_instances_changed(verifier_instances, process_namespace)
         {:ok, verifier_instances}
 
       {:ok, result} ->
@@ -431,12 +478,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  @spec evaluate_transport_command_verifiers(
-          module(),
-          [TransportCapabilityRecord.t()],
-          [TransportActionRequest.t()]
-        ) ::
-          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def evaluate_transport_command_verifiers(
         repo,
         transport_capability_records,
@@ -569,7 +610,8 @@ defmodule Cadence.Commanding do
         encoded_command: encoded_command,
         released_by: released_by,
         attempted_at: attempted_at,
-        metadata: Keyword.get(opts, :metadata, %{})
+        metadata: Keyword.get(opts, :metadata, %{}),
+        process_namespace: process_namespace(opts)
       })
     else
       {:error, reason} ->
@@ -601,7 +643,8 @@ defmodule Cadence.Commanding do
            persist_or_restore_release_attempt(
              claimed_release_context.organization_id,
              pending_attempt,
-             claimed_queue_entry_row
+             claimed_queue_entry_row,
+             claimed_release_context.process_namespace
            ) do
       dispatch_release_attempt(claimed_release_context, persisted_attempt)
     end
@@ -622,7 +665,8 @@ defmodule Cadence.Commanding do
   defp persist_or_restore_release_attempt(
          organization_id,
          %CommandReleaseAttempt{} = pending_attempt,
-         %CommandQueueEntryRow{} = claimed_queue_entry_row
+         %CommandQueueEntryRow{} = claimed_queue_entry_row,
+         %ProcessNamespace{} = process_namespace
        ) do
     case ReleaseStore.persist(organization_id, pending_attempt) do
       {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
@@ -632,6 +676,7 @@ defmodule Cadence.Commanding do
         RequestQueueStore.restore_pending(claimed_queue_entry_row)
 
         maybe_schedule_queue_lane_dispatch(
+          process_namespace,
           claimed_queue_entry_row.organization_id,
           claimed_queue_entry_row.mission_id,
           claimed_queue_entry_row.queue_lane_key
@@ -650,11 +695,18 @@ defmodule Cadence.Commanding do
           release_context.request_row,
           persisted_attempt,
           release_context.request_basis.verifier_plans,
-          release_context.attempted_at
+          release_context.attempted_at,
+          release_context.process_namespace
         )
 
       {:error, reason} ->
-        complete_release_failure(release_context.queue_entry_row, persisted_attempt, reason)
+        complete_release_failure(
+          release_context.queue_entry_row,
+          persisted_attempt,
+          reason,
+          release_context.process_namespace
+        )
+
         {:error, reason}
     end
   end
@@ -684,7 +736,8 @@ defmodule Cadence.Commanding do
          %CommandRequestRow{} = request_row,
          %CommandReleaseAttempt{} = command_release_attempt,
          verifier_plans,
-         %DateTime{} = attempted_at
+         %DateTime{} = attempted_at,
+         %ProcessNamespace{} = process_namespace
        )
        when is_list(verifier_plans) do
     with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
@@ -722,7 +775,7 @@ defmodule Cadence.Commanding do
         initial_verification_state
       )
       |> Repo.transaction()
-      |> handle_complete_release_success_result()
+      |> handle_complete_release_success_result(process_namespace)
     end
   end
 
@@ -808,11 +861,16 @@ defmodule Cadence.Commanding do
             command_queue_entry: queue_entry_row,
             final_command_request: request_row,
             pending_command_verifier_timeouts: pending_command_verifier_timeouts
-          }}
+          }},
+         %ProcessNamespace{} = process_namespace
        ) do
-    VerifierScheduler.notify_verifier_instances_changed(pending_command_verifier_timeouts)
+    VerifierScheduler.notify_verifier_instances_changed(
+      pending_command_verifier_timeouts,
+      process_namespace
+    )
 
     maybe_schedule_queue_lane_dispatch(
+      process_namespace,
       queue_entry_row.organization_id,
       queue_entry_row.mission_id,
       queue_entry_row.queue_lane_key
@@ -827,19 +885,24 @@ defmodule Cadence.Commanding do
   end
 
   defp handle_complete_release_success_result(
-         {:error, _operation, %Changeset{} = changeset, _changes_so_far}
+         {:error, _operation, %Changeset{} = changeset, _changes_so_far},
+         %ProcessNamespace{}
        ) do
     {:error, changeset}
   end
 
-  defp handle_complete_release_success_result({:error, _operation, reason, _changes_so_far}) do
+  defp handle_complete_release_success_result(
+         {:error, _operation, reason, _changes_so_far},
+         %ProcessNamespace{}
+       ) do
     {:error, reason}
   end
 
   defp complete_release_failure(
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandReleaseAttempt{} = command_release_attempt,
-         reason
+         reason,
+         %ProcessNamespace{} = process_namespace
        ) do
     case ReleaseStore.fetch_row(
            command_release_attempt.organization_id,
@@ -868,6 +931,7 @@ defmodule Cadence.Commanding do
           |> Repo.transaction()
 
         maybe_schedule_queue_lane_dispatch(
+          process_namespace,
           queue_entry_row.organization_id,
           queue_entry_row.mission_id,
           queue_entry_row.queue_lane_key
@@ -903,17 +967,31 @@ defmodule Cadence.Commanding do
     )
   end
 
-  defp maybe_schedule_queue_lane_dispatch(organization_id, mission_id, queue_lane_key)
+  defp maybe_schedule_queue_lane_dispatch(
+         %ProcessNamespace{} = process_namespace,
+         organization_id,
+         mission_id,
+         queue_lane_key
+       )
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
-    case DispatchSupervisor.lane_dispatcher(organization_id, mission_id, queue_lane_key) do
+    case DispatchSupervisor.lane_dispatcher(
+           process_namespace,
+           organization_id,
+           mission_id,
+           queue_lane_key
+         ) do
       {:ok, lane_dispatcher} when lane_dispatcher == self() ->
         :ok
 
       _other ->
-        _ = Dispatcher.kick_lane(organization_id, mission_id, queue_lane_key)
+        _ = Dispatcher.kick_lane(process_namespace, organization_id, mission_id, queue_lane_key)
         :ok
     end
 
     :ok
+  end
+
+  defp process_namespace(opts) when is_list(opts) do
+    Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 end

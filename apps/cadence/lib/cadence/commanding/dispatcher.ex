@@ -99,17 +99,31 @@ defmodule Cadence.Commanding.Dispatcher do
       )
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_list(opts) do
+    call_dispatcher(
+      process_namespace,
+      {:drain_lane, organization_id, mission_id, queue_lane_key, opts}
+    )
+  end
+
+  defp drain_owned_lane(state, organization_id, mission_id, queue_lane_key, opts) do
+    lane_opts =
+      opts
+      |> Keyword.delete(:process_namespace)
+      |> Keyword.merge(state.lane_dispatcher_opts)
+      |> Keyword.put(:safety_poll_interval_ms, state.lane_safety_poll_interval_ms)
+      |> Keyword.put(:run_on_boot?, false)
+
     with :ok <-
            DispatchSupervisor.ensure_lane_dispatcher_started(
-             process_namespace,
+             state.process_namespace,
              organization_id,
              mission_id,
              queue_lane_key,
-             Keyword.put_new(opts, :run_on_boot?, false)
+             lane_opts
            ),
          {:ok, lane_dispatcher} <-
            DispatchSupervisor.lane_dispatcher(
-             process_namespace,
+             state.process_namespace,
              organization_id,
              mission_id,
              queue_lane_key
@@ -161,6 +175,15 @@ defmodule Cadence.Commanding.Dispatcher do
   def handle_call(:reconcile_now, _from, state) do
     summary = reconcile_dispatch_lanes(state, :manual)
     {:reply, {:ok, summary}, state}
+  end
+
+  def handle_call(
+        {:drain_lane, organization_id, mission_id, queue_lane_key, opts},
+        _from,
+        state
+      ) do
+    result = drain_owned_lane(state, organization_id, mission_id, queue_lane_key, opts)
+    {:reply, result, state}
   end
 
   @impl true
@@ -218,20 +241,52 @@ defmodule Cadence.Commanding.Dispatcher do
 
   defp dispatcher_server(server), do: server
 
+  defp call_dispatcher(process_namespace, request) do
+    case GenServer.whereis(process_namespace.dispatcher) do
+      pid when is_pid(pid) -> GenServer.call(pid, request, :infinity)
+      nil -> {:error, :dispatcher_not_running}
+    end
+  catch
+    :exit, {:noproc, _details} -> {:error, :dispatcher_not_running}
+    :exit, {:normal, _details} -> {:error, :dispatcher_not_running}
+  end
+
   defp process_namespace(opts) do
     Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
   end
 
   defp lane_dispatcher_opts(opts) do
-    opts
-    |> Keyword.get(:lane_dispatcher_opts, [])
-    |> Keyword.put_new(
-      :reference_time_fun,
-      Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0)
-    )
-    |> Keyword.put_new(
-      :dispatch_fun,
-      Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5)
-    )
+    process_namespace = process_namespace(opts)
+
+    lane_opts =
+      opts
+      |> Keyword.get(:lane_dispatcher_opts, [])
+      |> Keyword.put_new(
+        :reference_time_fun,
+        Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0)
+      )
+
+    dispatch_fun =
+      Keyword.get(
+        lane_opts,
+        :dispatch_fun,
+        Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5)
+      )
+
+    owned_dispatch_fun = fn organization_id,
+                            mission_id,
+                            queue_lane_key,
+                            released_by,
+                            dispatch_opts ->
+      dispatch_fun.(
+        organization_id,
+        mission_id,
+        queue_lane_key,
+        released_by,
+        Keyword.put(dispatch_opts, :process_namespace, process_namespace)
+      )
+    end
+
+    Keyword.put(lane_opts, :dispatch_fun, owned_dispatch_fun)
   end
 end

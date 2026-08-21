@@ -5,6 +5,7 @@ defmodule Cadence.Control.Commanding do
 
   alias Cadence.Commanding, as: LegacyCommanding
   alias Cadence.Commanding.CommandReleaseAttempt
+  alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
@@ -81,11 +82,23 @@ defmodule Cadence.Control.Commanding do
   defdelegate requeue_release_pending_queue_entries(), to: LegacyCommanding
   defdelegate list_pending_queue_lanes(opts \\ []), to: LegacyCommanding
   defdelegate notify_release_target_available(realized_contact), to: LegacyCommanding
+
+  defdelegate notify_release_target_available(realized_contact, process_namespace),
+    to: LegacyCommanding
+
   defdelegate timeout_command_verifier_instances(current_time), to: LegacyCommanding
   defdelegate command_verifier_timeout_projection(), to: LegacyCommanding
 
   defdelegate evaluate_command_verifiers(telemetry_samples), to: LegacyCommanding
-  defdelegate evaluate_command_verifiers(repo, telemetry_samples), to: LegacyCommanding
+
+  def evaluate_command_verifiers(telemetry_samples, %ProcessNamespace{} = process_namespace)
+      when is_list(telemetry_samples) do
+    LegacyCommanding.evaluate_command_verifiers(telemetry_samples, process_namespace)
+  end
+
+  def evaluate_command_verifiers(repo, telemetry_samples) when is_list(telemetry_samples) do
+    LegacyCommanding.evaluate_command_verifiers(repo, telemetry_samples)
+  end
 
   defdelegate evaluate_transport_command_verifiers(
                 transport_capability_records,
@@ -93,12 +106,31 @@ defmodule Cadence.Control.Commanding do
               ),
               to: LegacyCommanding
 
-  defdelegate evaluate_transport_command_verifiers(
-                repo,
-                transport_capability_records,
-                transport_action_requests
-              ),
-              to: LegacyCommanding
+  def evaluate_transport_command_verifiers(
+        transport_capability_records,
+        transport_action_requests,
+        %ProcessNamespace{} = process_namespace
+      )
+      when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    LegacyCommanding.evaluate_transport_command_verifiers(
+      transport_capability_records,
+      transport_action_requests,
+      process_namespace
+    )
+  end
+
+  def evaluate_transport_command_verifiers(
+        repo,
+        transport_capability_records,
+        transport_action_requests
+      )
+      when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    LegacyCommanding.evaluate_transport_command_verifiers(
+      repo,
+      transport_capability_records,
+      transport_action_requests
+    )
+  end
 
   @spec encode_command(term(), map()) :: {:ok, map()} | {:error, term()}
   def encode_command(immutable_runtime_definition, resolved_argument_values) do

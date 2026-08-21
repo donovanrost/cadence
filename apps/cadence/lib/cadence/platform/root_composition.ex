@@ -260,7 +260,8 @@ defmodule Cadence.Platform.RootComposition do
           control_process_namespace.contact_fact_consumer,
           event_bus
         )
-        |> Keyword.put(:name, control_process_namespace.contact_fact_consumer),
+        |> Keyword.put(:name, control_process_namespace.contact_fact_consumer)
+        |> Keyword.put(:process_namespace, command_process_namespace),
       control_runtime_fact_consumer_opts:
         consumer_opts(
           opts,
@@ -268,7 +269,8 @@ defmodule Cadence.Platform.RootComposition do
           control_process_namespace.runtime_fact_consumer,
           event_bus
         )
-        |> Keyword.put(:name, control_process_namespace.runtime_fact_consumer),
+        |> Keyword.put(:name, control_process_namespace.runtime_fact_consumer)
+        |> Keyword.put(:process_namespace, command_process_namespace),
       projections_runtime_fact_consumer_opts:
         consumer_opts(
           opts,

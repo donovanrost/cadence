@@ -37,6 +37,56 @@ defmodule Cadence.Commanding.ProcessOwnersTest do
                  end
   end
 
+  test "external drains use the dispatcher owner's captured lane policy" do
+    test_pid = self()
+    process_namespace = namespace(:alpha)
+    owner_safety_poll_interval_ms = 12_345
+    attach_lane_timer_telemetry(test_pid)
+
+    owner_dispatch_fun = fn organization_id, mission_id, lane_key, _released_by, opts ->
+      send(
+        test_pid,
+        {:owner_lane_dispatch, self(), organization_id, mission_id, lane_key,
+         opts[:process_namespace]}
+      )
+
+      {:error, {:command_queue_lane_no_release_target, lane_key, mission_id}}
+    end
+
+    caller_dispatch_fun = fn _organization_id, _mission_id, _lane_key, _released_by, _opts ->
+      send(test_pid, :caller_lane_dispatch)
+      {:error, :caller_lane_dispatch}
+    end
+
+    start_supervised!(
+      {DispatchSupervisor,
+       process_namespace: process_namespace,
+       auto_schedule?: false,
+       run_on_boot?: false,
+       lane_safety_poll_interval_ms: owner_safety_poll_interval_ms,
+       dispatch_fun: owner_dispatch_fun,
+       lane_dispatcher_opts: [run_on_boot?: false],
+       requeue_release_pending_fun: fn -> 0 end,
+       list_pending_queue_lanes_fun: fn -> [] end}
+    )
+
+    assert {:ok, %{released_count: 0, status: :waiting_for_release_target}} =
+             Dispatcher.drain_lane(
+               process_namespace,
+               @organization_id,
+               @mission_id,
+               @lane_key,
+               safety_poll_interval_ms: 1,
+               dispatch_fun: caller_dispatch_fun
+             )
+
+    assert_receive {:owner_lane_dispatch, lane, @organization_id, @mission_id, @lane_key,
+                    ^process_namespace}
+
+    assert_received {:owner_lane_timer, ^lane, ^owner_safety_poll_interval_ms, :safety}
+    refute_received :caller_lane_dispatch
+  end
+
   test "two dispatch roots and verifier schedulers isolate identical owner keys" do
     test_pid = self()
     namespace_alpha = namespace(:alpha)
@@ -305,6 +355,28 @@ defmodule Cadence.Commanding.ProcessOwnersTest do
 
             _other ->
               :ok
+          end
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  defp attach_lane_timer_telemetry(test_pid) do
+    handler_id = {__MODULE__, :lane_timer, self(), make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :commanding, :lane_dispatcher, :timer_scheduled],
+        fn _event, measurements, metadata, _config ->
+          if metadata.organization_id == @organization_id and metadata.mission_id == @mission_id and
+               metadata.queue_lane_key == @lane_key do
+            send(
+              test_pid,
+              {:owner_lane_timer, self(), measurements.delay_ms, metadata.reason}
+            )
           end
         end,
         nil

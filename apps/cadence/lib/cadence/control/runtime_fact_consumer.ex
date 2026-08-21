@@ -9,6 +9,7 @@ defmodule Cadence.Control.RuntimeFactConsumer do
 
   use GenServer
 
+  alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Control.Commanding
   alias Cadence.Platform.EventBus
   alias Cadence.Runtime.{Facts, ProcessingResultsPersisted, TransportRecordsPersisted}
@@ -21,18 +22,22 @@ defmodule Cadence.Control.RuntimeFactConsumer do
   @impl true
   def init(opts) do
     event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    process_namespace =
+      Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+
     :ok = Facts.subscribe(event_bus, self())
 
     {:ok,
      %{
        evaluate_telemetry:
-         Keyword.get(opts, :evaluate_telemetry, &Commanding.evaluate_command_verifiers/1),
+         Keyword.get_lazy(opts, :evaluate_telemetry, fn ->
+           &Commanding.evaluate_command_verifiers(&1, process_namespace)
+         end),
        evaluate_transport:
-         Keyword.get(
-           opts,
-           :evaluate_transport,
-           &Commanding.evaluate_transport_command_verifiers/2
-         )
+         Keyword.get_lazy(opts, :evaluate_transport, fn ->
+           &Commanding.evaluate_transport_command_verifiers(&1, &2, process_namespace)
+         end)
      }}
   end
 

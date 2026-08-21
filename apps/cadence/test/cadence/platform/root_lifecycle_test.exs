@@ -1,7 +1,10 @@
 defmodule Cadence.Platform.RootLifecycleTest do
   use Cadence.UnitCase, async: false
 
-  alias Cadence.Commanding.{Dispatcher, DispatchSupervisor, ProcessNamespace, VerifierScheduler}
+  alias Cadence.Commanding.{CommandQueueEntry, CommandQueueEntryRow, CommandRequest}
+  alias Cadence.Commanding.{CommandRequestRow, Dispatcher, DispatchSupervisor}
+  alias Cadence.Commanding.{ProcessNamespace, VerifierScheduler}
+  alias Cadence.Contacts.Path, as: ContactPath
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Control.MissionRuntimeReconciler
@@ -13,9 +16,10 @@ defmodule Cadence.Platform.RootLifecycleTest do
   alias Cadence.IngressJournal.{FileSystem, Identity}
   alias Cadence.Platform.RootComposition
   alias Cadence.Protocol.RecordArchive
-  alias Cadence.Runtime.{IngressArchiveConsumer, ManagedRecordsPersisted}
+  alias Cadence.Runtime.{IngressArchiveConsumer, ManagedRecordsPersisted, TransportActionRequest}
   alias Cadence.Runtime.{MissionRuntime, ProcessingResultsPersisted, RealizedContactRuntimeSpec}
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
+  alias Cadence.Runtime.TransportRecordsPersisted
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Profiler, RuntimeHealth, Sample}
 
   setup tags do
@@ -39,11 +43,15 @@ defmodule Cadence.Platform.RootLifecycleTest do
 
     alpha_roots = start_roots(alpha.composition, organization_id)
     bravo_roots = start_roots(bravo.composition, organization_id)
+    attach_verifier_notification_telemetry()
+    persist_pending_command_lane(organization_id, mission_id)
 
     assert_root_behavior(alpha, mission_id, organization_id, 10)
     assert_root_behavior(bravo, mission_id, organization_id, 20)
+    assert_contact_command_routing(alpha, organization_id, mission_id)
+    refute_received {:root_lane_dispatch, :bravo, _lane, _opts}
+    assert_contact_command_routing(bravo, organization_id, mission_id)
     assert_fact_routing(alpha, mission_id)
-    refute_received {:root_contact, :bravo, _contact_id}
     assert_fact_routing(bravo, mission_id)
 
     {alpha_runtime, alpha_control, alpha_scheduler} =
@@ -212,25 +220,41 @@ defmodule Cadence.Platform.RootLifecycleTest do
   end
 
   defp assert_fact_routing(instance, mission_id) do
-    contact_id = "shared-fact-contact"
-    contact = RealizedContact.new(%{realized_contact_id: contact_id, mission_id: mission_id})
-    assert :ok = Cadence.Contacts.Facts.publish(instance.composition.event_bus, contact)
-    assert_receive {:root_contact, owner, ^contact_id} when owner == instance.owner
-
-    samples = [%{sample_id: "shared-fact-sample"}]
+    owner = instance.owner
+    other_owner = if owner == :alpha, do: :bravo, else: :alpha
+    telemetry_samples = [sample(mission_id, if(owner == :alpha, do: 40, else: 50))]
 
     assert :ok =
              Cadence.Runtime.Facts.publish(
                instance.composition.event_bus,
                %ProcessingResultsPersisted{
-                 batch_id: "shared-batch",
+                 batch_id: "shared-batch-#{owner}",
                  evidence_ids: [],
-                 telemetry_samples: samples,
+                 telemetry_samples: telemetry_samples,
                  persisted_at: DateTime.utc_now()
                }
              )
 
-    assert_receive {:root_control_runtime, owner, ^samples} when owner == instance.owner
+    assert_receive {:root_verifier_notification, ^owner, 0}, 5_000
+    refute_received {:root_verifier_notification, ^other_owner, _count}
+    refute_received {:root_verifier_notification, :default, _count}
+
+    transport_action_request = transport_action_request(mission_id, owner)
+
+    assert :ok =
+             Cadence.Runtime.Facts.publish(
+               instance.composition.event_bus,
+               %TransportRecordsPersisted{
+                 capability_records: [],
+                 action_requests: [transport_action_request],
+                 timer_events: [],
+                 persisted_at: DateTime.utc_now()
+               }
+             )
+
+    assert_receive {:root_verifier_notification, ^owner, 0}, 5_000
+    refute_received {:root_verifier_notification, ^other_owner, _count}
+    refute_received {:root_verifier_notification, :default, _count}
 
     records = [%{request_id: "shared-action"}]
 
@@ -245,7 +269,7 @@ defmodule Cadence.Platform.RootLifecycleTest do
                }
              )
 
-    assert_receive {:root_projection_runtime, owner, ^records} when owner == instance.owner
+    assert_receive {:root_projection_runtime, ^owner, ^records}
   end
 
   defp start_same_identity_missions(instance, mission_id) do
@@ -501,17 +525,8 @@ defmodule Cadence.Platform.RootLifecycleTest do
         ],
         dashboard_runtime_composition: dashboard_runtime,
         dashboard_runtime_fact_consumer_opts: [name: addresses.dashboard_fact_consumer],
-        control_contact_fact_consumer_opts: [
-          notify_release_target: fn contact ->
-            send(test_pid, {:root_contact, owner, contact.realized_contact_id})
-          end
-        ],
-        control_runtime_fact_consumer_opts: [
-          evaluate_telemetry: fn samples ->
-            send(test_pid, {:root_control_runtime, owner, samples})
-          end,
-          evaluate_transport: fn _records, _requests -> :ok end
-        ],
+        control_contact_fact_consumer_opts: [],
+        control_runtime_fact_consumer_opts: [],
         projections_runtime_fact_consumer_opts: [
           name: addresses.projections_runtime_consumer,
           project_records: fn records ->
@@ -539,6 +554,15 @@ defmodule Cadence.Platform.RootLifecycleTest do
           auto_schedule?: false,
           run_on_boot?: false,
           requeue_release_pending_fun: fn -> 0 end,
+          dispatch_fun: fn _organization_id,
+                           mission_id,
+                           queue_lane_key,
+                           _released_by,
+                           dispatch_opts ->
+            send(test_pid, {:root_lane_dispatch, owner, self(), dispatch_opts})
+
+            {:error, {:command_queue_lane_no_release_target, queue_lane_key, mission_id}}
+          end,
           list_pending_queue_lanes_fun: fn ->
             send(test_pid, {:root_pending_lanes, owner})
 
@@ -556,7 +580,8 @@ defmodule Cadence.Platform.RootLifecycleTest do
           auto_schedule?: false,
           run_on_boot?: false,
           projection_query_fun: fn -> [] end,
-          timeout_reconcile_fun: fn _reference_time -> {:ok, []} end
+          timeout_reconcile_fun: fn _reference_time -> {:ok, []} end,
+          telemetry_metadata: %{test_owner: owner}
         ],
         data_source_probe_scheduler_config: [enabled?: false],
         mission_health_observability_children: []
@@ -600,6 +625,134 @@ defmodule Cadence.Platform.RootLifecycleTest do
         }
       ]
     })
+  end
+
+  defp persist_pending_command_lane(organization_id, mission_id) do
+    now = DateTime.utc_now()
+    command_request_id = "root-lifecycle-command-request-#{mission_id}"
+
+    command_request =
+      CommandRequest.new(%{
+        command_request_id: command_request_id,
+        organization_id: organization_id,
+        mission_id: mission_id,
+        source_endpoint_ref: "contact-command-lane",
+        mission_model_revision_id: "root-lifecycle-mission-model",
+        command_id: "root-lifecycle-command",
+        command_name: "ROOT_LIFECYCLE_COMMAND",
+        lifecycle_state: :queued,
+        requested_by: %{"service" => "root_lifecycle_test"},
+        requested_at: now
+      })
+
+    queue_entry =
+      CommandQueueEntry.new(%{
+        command_queue_entry_id: "root-lifecycle-queue-entry-#{mission_id}",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        command_request_id: command_request_id,
+        source_endpoint_ref: "contact-command-lane",
+        queue_lane_key: "contact-command-lane",
+        priority: 1,
+        queue_sequence: System.unique_integer([:positive, :monotonic]),
+        lifecycle_state: :pending,
+        enqueued_by: %{"service" => "root_lifecycle_test"},
+        enqueued_at: now
+      })
+
+    assert %CommandRequestRow{} =
+             Cadence.Repo.insert!(CommandRequestRow.changeset(command_request))
+
+    assert %CommandQueueEntryRow{} =
+             Cadence.Repo.insert!(CommandQueueEntryRow.changeset(queue_entry))
+  end
+
+  defp assert_contact_command_routing(instance, organization_id, mission_id) do
+    owner = instance.owner
+    namespace = instance.composition.command_process_namespace
+
+    contact =
+      RealizedContact.new(%{
+        realized_contact_id: "root-lifecycle-contact-#{owner}",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        source_endpoint_refs: ["contact-command-lane"],
+        paths: [
+          ContactPath.new(%{
+            path_id: "root-lifecycle-uplink-#{owner}",
+            direction: :uplink,
+            selection_role: :selected,
+            source_endpoint_ref: "contact-command-lane"
+          })
+        ]
+      })
+
+    assert :ok = Cadence.Contacts.Facts.publish(instance.composition.event_bus, contact)
+
+    assert_received {:root_lane_dispatch, ^owner, lane, dispatch_opts}
+    assert dispatch_opts[:process_namespace] == namespace
+
+    assert {:ok, ^lane} =
+             DispatchSupervisor.lane_dispatcher(
+               namespace,
+               organization_id,
+               mission_id,
+               "contact-command-lane"
+             )
+
+    assert :error =
+             DispatchSupervisor.lane_dispatcher(
+               ProcessNamespace.default(),
+               organization_id,
+               mission_id,
+               "contact-command-lane"
+             )
+  end
+
+  defp transport_action_request(mission_id, owner) do
+    %TransportActionRequest{
+      action_request_id: "root-lifecycle-action-#{owner}",
+      mission_id: mission_id,
+      realized_contact_id: "root-lifecycle-contact-#{owner}",
+      path_id: "root-lifecycle-uplink-#{owner}",
+      capability_instance_id: "root-lifecycle-uplink-gateway-#{owner}",
+      family_key: :uplink_gateway,
+      activation_id: "root-lifecycle-activation-#{owner}",
+      binding_set_id: "root-lifecycle-binding-set-#{owner}",
+      binding_set_version: 1,
+      partition_affinity: :source_endpoint,
+      partition_value: "contact-command-lane",
+      command_release_attempt_id: "root-lifecycle-release-attempt-#{owner}",
+      command_request_id: "root-lifecycle-command-request-#{mission_id}",
+      source_endpoint_ref: "contact-command-lane",
+      command_name: "ROOT_LIFECYCLE_COMMAND",
+      signal_phase: :acceptance,
+      action_kind: :uplink_request,
+      request_document: %{},
+      requested_at: DateTime.utc_now(),
+      metadata: %{}
+    }
+  end
+
+  defp attach_verifier_notification_telemetry do
+    test_pid = self()
+    handler_id = {__MODULE__, :verifier_notification, make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :commanding, :verifier_scheduler, :notification],
+        fn _event, measurements, metadata, _config ->
+          send(
+            test_pid,
+            {:root_verifier_notification, Map.get(metadata, :test_owner, :default),
+             measurements.count}
+          )
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
   end
 
   defp stop_root_set(composition) do

@@ -71,6 +71,18 @@ defmodule Cadence.Platform.RootCompositionTest do
     assert alpha.control_contact_fact_consumer_opts[:name] ==
              alpha.control_process_namespace.contact_fact_consumer
 
+    assert alpha.control_contact_fact_consumer_opts[:process_namespace] ==
+             alpha.command_process_namespace
+
+    assert bravo.control_contact_fact_consumer_opts[:process_namespace] ==
+             bravo.command_process_namespace
+
+    assert alpha.control_runtime_fact_consumer_opts[:process_namespace] ==
+             alpha.command_process_namespace
+
+    assert bravo.control_runtime_fact_consumer_opts[:process_namespace] ==
+             bravo.command_process_namespace
+
     assert bravo.control_runtime_fact_consumer_opts[:name] ==
              bravo.control_process_namespace.runtime_fact_consumer
 
@@ -182,11 +194,13 @@ defmodule Cadence.Platform.RootCompositionTest do
       dashboard_runtime_fact_consumer_opts: [name: addresses.dashboard_fact_consumer],
       control_contact_fact_consumer_opts: [
         name: addresses.control_contact_consumer,
-        event_bus: addresses.wrong_event_bus
+        event_bus: addresses.wrong_event_bus,
+        process_namespace: CommandProcessNamespace.default()
       ],
       control_runtime_fact_consumer_opts: [
         name: addresses.control_runtime_consumer,
-        event_bus: addresses.wrong_event_bus
+        event_bus: addresses.wrong_event_bus,
+        process_namespace: CommandProcessNamespace.default()
       ],
       projections_runtime_fact_consumer_opts: [
         name: addresses.projections_runtime_consumer,

@@ -3,6 +3,7 @@ defmodule Cadence.Control.ContactFactConsumer do
 
   use GenServer
 
+  alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Contacts.Facts
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Control.Commanding
@@ -16,16 +17,18 @@ defmodule Cadence.Control.ContactFactConsumer do
   @impl true
   def init(opts) do
     event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    process_namespace =
+      Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
+
     :ok = Facts.subscribe(event_bus, self())
 
     {:ok,
      %{
        notify_release_target:
-         Keyword.get(
-           opts,
-           :notify_release_target,
-           &Commanding.notify_release_target_available/1
-         )
+         Keyword.get_lazy(opts, :notify_release_target, fn ->
+           &Commanding.notify_release_target_available(&1, process_namespace)
+         end)
      }}
   end
 
