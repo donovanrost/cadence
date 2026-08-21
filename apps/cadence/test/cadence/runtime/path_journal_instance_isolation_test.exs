@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
-  use Cadence.UnitCase, async: false
+  use Cadence.ProcessDataCase, async: false
 
   alias Cadence.IngressArchive
   alias Cadence.IngressArchive.FileSystem, as: ArchiveFileSystem
@@ -18,12 +18,6 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
 
   @alpha_archive_writer __MODULE__.AlphaArchiveWriter
   @bravo_archive_writer __MODULE__.BravoArchiveWriter
-
-  setup tags do
-    owner = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
-    on_exit(fn -> Cadence.DataCase.stop_sandbox_owner(owner) end)
-    :ok
-  end
 
   test "same-identity path journals and archives remain isolated after one runtime stops" do
     unique = System.unique_integer([:positive])

@@ -1,5 +1,5 @@
 defmodule Cadence.Platform.RootLifecycleTest do
-  use Cadence.UnitCase, async: false
+  use Cadence.ProcessDataCase, async: false
 
   alias Cadence.Commanding.{CommandQueueEntry, CommandQueueEntryRow, CommandRequest}
   alias Cadence.Commanding.{CommandRequestRow, Dispatcher, DispatchSupervisor}
@@ -21,12 +21,6 @@ defmodule Cadence.Platform.RootLifecycleTest do
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
   alias Cadence.Runtime.TransportRecordsPersisted
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Profiler, RuntimeHealth, Sample}
-
-  setup tags do
-    owner = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
-    on_exit(fn -> Cadence.DataCase.stop_sandbox_owner(owner) end)
-    :ok
-  end
 
   test "two composed roots isolate same-identity behavior and survivor lifecycle" do
     unique = System.unique_integer([:positive])
