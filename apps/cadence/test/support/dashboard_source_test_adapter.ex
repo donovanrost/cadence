@@ -27,8 +27,9 @@ defmodule Cadence.Support.DashboardSourceTestAdapter do
 
   def probe(data_source, opts) do
     notify(opts, {:dashboard_source_test_adapter_probe, data_source.data_source_id})
+    maybe_notify_probe_owner(data_source, opts)
 
-    case Keyword.get(opts, :probe_mode, :ok) do
+    case probe_mode(data_source, opts) do
       :ok ->
         SourceProbe.healthy(:source_probe_succeeded, probe_metadata(opts), probe_kind: :adapter)
 
@@ -42,6 +43,35 @@ defmodule Cadence.Support.DashboardSourceTestAdapter do
 
       {:error, reason} ->
         {:error, reason}
+
+      :block ->
+        receive do
+          :release_source_probe ->
+            SourceProbe.healthy(:source_probe_succeeded, probe_metadata(opts),
+              probe_kind: :adapter
+            )
+        end
+
+      :exit ->
+        exit(:test_source_probe_exit)
+
+      :exit_with_probe_options ->
+        exit({:test_source_probe_exit, opts})
+    end
+  end
+
+  defp probe_mode(data_source, opts) do
+    opts
+    |> Keyword.get(:probe_modes_by_data_source, %{})
+    |> Map.get(data_source.data_source_id, Keyword.get(opts, :probe_mode, :ok))
+  end
+
+  defp maybe_notify_probe_owner(data_source, opts) do
+    if Keyword.get(opts, :probe_owner_notifications?, false) do
+      notify(
+        opts,
+        {:dashboard_source_test_adapter_probe_owner, data_source.data_source_id, self()}
+      )
     end
   end
 

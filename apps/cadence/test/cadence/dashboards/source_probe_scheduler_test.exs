@@ -1,9 +1,18 @@
 defmodule Cadence.DataSources.ProbeSchedulerTest do
   use Cadence.DataCase, async: true
+  use GenServer
 
-  alias Cadence.DataSources.ProbeScheduler
+  import ExUnit.CaptureLog
+
+  alias Ecto.Adapters.SQL.Sandbox
+
+  alias Cadence.Control.DataSources, as: DataSourceControl
+  alias Cadence.DataSources.{Facts, ProbeScheduler, SourceHealthEvent}
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
+
+  alias Cadence.Repo
 
   alias Cadence.Management.DataSources
 
@@ -150,7 +159,7 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     refute_received {:scheduled_probe, "scheduler-policy-disabled", _payload}
   end
 
-  test "run_once bounds slow BYO probes while managed probes still record health" do
+  test "run_once times only external observation while slow owner persistence commits" do
     assert {:ok, _reference, _event} =
              SourceCredentials.register_reference(%{
                credentials_ref:
@@ -174,47 +183,98 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
 
     managed_source = persist_source!("scheduler-managed-fast")
     test_pid = self()
+    event_bus = start_probe_event_bus()
+    timeout_ms = 40
 
-    summary =
-      ProbeScheduler.run_once(
-        list_sources_fun: fn _, _ -> [byo_source, managed_source] end,
-        source_health_events?: true,
-        source_health_freshness: [default_max_age_ms: 60_000],
-        invalidate_runtime_cache?: false,
-        now: @now,
-        max_concurrency: 1,
-        probe_timeout_ms: 100,
-        probe_fun: fn
-          "scheduler-byo-slow", _attrs, _opts ->
-            send(test_pid, {:probe_started, "scheduler-byo-slow"})
-
-            receive do
-              :release_slow_probe -> flunk("slow BYO probe should be killed by scheduler timeout")
-            end
-
-          "scheduler-managed-fast", attrs, opts ->
-            send(test_pid, {:probe_started, "scheduler-managed-fast"})
-
-            %{
-              organization_id: managed_source.organization_id,
-              mission_id: attrs.mission_id,
-              logical_source: :unknown,
-              data_source_id: managed_source.data_source_id,
-              source_health: :healthy,
-              reason: :source_probe_succeeded,
-              observed_at: attrs.observed_at,
-              payload: Keyword.fetch!(opts, :payload)
-            }
-            |> SourceHealth.record_source_health(opts)
+    runner =
+      Task.async(fn ->
+        receive do
+          :run_probe -> :ok
         end
-      )
+
+        with_log(fn ->
+          ProbeScheduler.run_once(
+            list_sources_fun: fn _, _ -> [byo_source, managed_source] end,
+            source_health_events?: true,
+            source_health_freshness: [default_max_age_ms: 60_000],
+            invalidate_runtime_cache?: false,
+            publish_facts?: true,
+            event_bus: event_bus,
+            now: @now,
+            max_concurrency: 1,
+            probe_timeout_ms: timeout_ms,
+            probe_modes_by_data_source: %{
+              "scheduler-byo-slow" => :block,
+              "scheduler-managed-fast" => :ok
+            },
+            probe_owner_notifications?: true,
+            test_pid: test_pid,
+            prepare_probe_fun: fn data_source_id, attrs, opts ->
+              send(test_pid, {:probe_prepared, data_source_id, self()})
+              DataSourceControl.prepare_probe(data_source_id, attrs, opts)
+            end,
+            persist_probe_fun: fn source, prepared_probe, observation ->
+              send(test_pid, {:persistence_started, source.data_source_id, self()})
+
+              receive do
+                :release_persistence ->
+                  DataSourceControl.persist_probe(prepared_probe, observation)
+              end
+            end
+          )
+        end)
+      end)
+
+    assert :ok = Sandbox.allow(Repo, self(), runner.pid)
+    send(runner.pid, :run_probe)
+    runner_pid = runner.pid
+
+    assert_receive {:probe_prepared, "scheduler-byo-slow", ^runner_pid}, 1_000
+    assert_receive {:probe_prepared, "scheduler-managed-fast", ^runner_pid}, 1_000
+
+    assert_receive {:dashboard_source_test_adapter_probe_owner, "scheduler-byo-slow",
+                    slow_observer},
+                   1_000
+
+    assert_receive {:dashboard_source_test_adapter_probe_owner, "scheduler-managed-fast",
+                    managed_observer},
+                   1_000
+
+    refute slow_observer == runner_pid
+    refute managed_observer == runner_pid
+
+    assert_receive {:source_health_publish_started, ^runner_pid}, 1_000
+
+    assert_receive {:scheduled_probe_fact,
+                    %SourceHealthEvent{
+                      data_source_id: "scheduler-byo-slow",
+                      reason: :source_probe_timeout
+                    }},
+                   1_000
+
+    assert_receive {:persistence_started, "scheduler-managed-fast", ^runner_pid}, 1_000
+
+    Process.sleep(timeout_ms * 2)
+    assert Process.alive?(runner_pid)
+    send(runner_pid, :release_persistence)
+
+    {summary, log} = Task.await(runner, 5_000)
 
     assert summary.checked == 2
     assert summary.probed == 1
     assert summary.errors == [exit: :timeout]
+    refute log =~ "Postgrex"
+    refute log =~ "client exited"
+    refute log =~ "owner exited"
 
-    assert_receive {:probe_started, "scheduler-byo-slow"}
-    assert_receive {:probe_started, "scheduler-managed-fast"}
+    assert_receive {:source_health_publish_started, ^runner_pid}, 1_000
+
+    assert_receive {:scheduled_probe_fact,
+                    %SourceHealthEvent{
+                      data_source_id: "scheduler-managed-fast",
+                      reason: :source_probe_succeeded
+                    }},
+                   1_000
 
     assert [managed_status] =
              SourceHealth.list_source_health_statuses(@organization_id, @mission_id,
@@ -235,9 +295,96 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     assert byo_status.payload["source"] == "data_source_probe_scheduler"
     assert byo_status.payload["probe_kind"] == "scheduler"
     assert byo_status.payload["probe_message"] == "Source probe exceeded scheduler timeout."
-    assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == 100
+    assert byo_status.payload["probe_metadata"]["probe_timeout_ms"] == timeout_ms
     assert byo_status.payload["connection_test_result"] == "blocked"
     assert byo_status.payload["connection_test_kind"] == "scheduler_timeout"
+  end
+
+  test "legacy probe callbacks stay in the caller and preserve isolated exit summaries" do
+    source = persist_source!("scheduler-legacy-callback")
+    owner = self()
+
+    summary =
+      ProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [source] end,
+        source_health_events?: true,
+        now: @now,
+        probe_timeout_ms: 1,
+        probe_fun: fn _data_source_id, _attrs, _opts ->
+          send(owner, {:legacy_probe_owner, self()})
+          exit(:legacy_probe_failed)
+        end
+      )
+
+    assert_receive {:legacy_probe_owner, ^owner}
+    assert summary.checked == 1
+    assert summary.probed == 0
+    assert summary.errors == [exit: :legacy_probe_failed]
+  end
+
+  test "staged observation failures sanitize prepared credential material from logs" do
+    source = persist_source!("scheduler-observation-failed")
+    secret_marker = "scheduler-secret-marker-#{System.unique_integer([:positive])}"
+
+    {summary, log} =
+      with_log(fn ->
+        ProbeScheduler.run_once(
+          list_sources_fun: fn _, _ -> [source] end,
+          source_health_events?: true,
+          now: @now,
+          probe_secret_marker: secret_marker,
+          probe_modes_by_data_source: %{
+            "scheduler-observation-failed" => :exit_with_probe_options
+          }
+        )
+      end)
+
+    assert summary.checked == 1
+    assert summary.probed == 0
+    assert summary.errors == [exit: :external_observation_failed]
+    refute log =~ secret_marker
+    refute log =~ "test_source_probe_exit"
+  end
+
+  test "staged observation failures preserve simple atom exit reasons" do
+    source = persist_source!("scheduler-observation-atom-exit")
+
+    summary =
+      ProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [source] end,
+        source_health_events?: true,
+        now: @now,
+        probe_modes_by_data_source: %{"scheduler-observation-atom-exit" => :exit}
+      )
+
+    assert summary.checked == 1
+    assert summary.probed == 0
+    assert summary.errors == [exit: :test_source_probe_exit]
+  end
+
+  test "run_once discards the obsolete observe_probe_fun option" do
+    source = persist_source!("scheduler-observe-callback-discarded")
+    owner = self()
+
+    summary =
+      ProbeScheduler.run_once(
+        list_sources_fun: fn _, _ -> [source] end,
+        source_health_events?: true,
+        invalidate_runtime_cache?: false,
+        now: @now,
+        test_pid: owner,
+        observe_probe_fun: fn _source, _prepared_probe ->
+          send(owner, :obsolete_observe_probe_fun_called)
+          exit(:obsolete_observe_probe_fun_called)
+        end
+      )
+
+    assert summary.checked == 1
+    assert summary.probed == 1
+    assert summary.errors == []
+    assert_receive {:dashboard_source_test_adapter_probe, "scheduler-observe-callback-discarded"}
+
+    refute_received :obsolete_observe_probe_fun_called
   end
 
   test "run_once does nothing when source health events are disabled" do
@@ -287,5 +434,58 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
                observed_at: observed_at
              }
              |> SourceHealth.record_source_health(invalidate_runtime_cache?: false)
+  end
+
+  defp start_probe_event_bus do
+    owner = self()
+
+    event_bus =
+      start_supervised!(%{
+        id: {:source_probe_scheduler_event_bus, make_ref()},
+        start:
+          {EventBus, :start_link,
+           [
+             [
+               name: nil,
+               delivery: :sync,
+               before_notify: {__MODULE__, :capture_publisher, [owner]}
+             ]
+           ]},
+        restart: :temporary
+      })
+
+    forwarder =
+      start_supervised!(%{
+        id: {:source_probe_scheduler_fact_forwarder, make_ref()},
+        start: {__MODULE__, :start_link, [[owner: owner, event_bus: event_bus]]},
+        restart: :temporary
+      })
+
+    assert_receive {:scheduled_probe_fact_forwarder_ready, ^forwarder}
+    event_bus
+  end
+
+  @doc false
+  def capture_publisher(owner, publisher, _subscriber) do
+    send(owner, {:source_health_publish_started, publisher})
+  end
+
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+  @impl true
+  def init(opts) do
+    owner = Keyword.fetch!(opts, :owner)
+    event_bus = Keyword.fetch!(opts, :event_bus)
+    :ok = Facts.subscribe(event_bus, self())
+    send(owner, {:scheduled_probe_fact_forwarder_ready, self()})
+    {:ok, owner}
+  end
+
+  @impl true
+  def handle_call({:cadence_fact, _topic, fact}, _from, owner) do
+    send(owner, {:scheduled_probe_fact, fact})
+    {:reply, :ok, owner}
   end
 end

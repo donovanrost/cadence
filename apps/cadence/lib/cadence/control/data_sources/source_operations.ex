@@ -17,17 +17,84 @@ defmodule Cadence.Control.DataSources.SourceOperations do
 
   alias Cadence.Secrets.ResolverConfiguration
 
+  @opaque prepared_probe :: %{
+            source: DataSource.t(),
+            observation_source: DataSource.t(),
+            mission_id: binary(),
+            attrs: map(),
+            opts: keyword(),
+            probe_adapter: module() | nil,
+            prepared_observation: SourceProbe.t() | nil,
+            enrich_observation?: boolean()
+          }
+
   def probe_data_source(data_source_id, attrs, opts, {fetch_fun, persist_fun})
       when is_binary(data_source_id) and is_map(attrs) and is_list(opts) do
+    with {:ok, prepared_probe} <-
+           prepare_data_source_probe(data_source_id, attrs, opts, fetch_fun) do
+      prepared_probe
+      |> observe_data_source_probe()
+      |> then(&persist_data_source_probe(prepared_probe, &1, persist_fun))
+    end
+  end
+
+  @spec prepare_data_source_probe(binary(), map(), keyword(), (binary() -> term())) ::
+          {:ok, prepared_probe()} | {:error, term()}
+  def prepare_data_source_probe(data_source_id, attrs, opts, fetch_fun)
+      when is_binary(data_source_id) and is_map(attrs) and is_list(opts) and
+             is_function(fetch_fun, 1) do
     with {:ok, %DataSource{} = data_source} <- fetch_fun.(data_source_id),
          {:ok, mission_id} <- probe_mission_id(data_source, attrs) do
-      probe = probe_data_source_health(data_source, opts)
-
-      data_source
-      |> source_probe_attrs(mission_id, probe, attrs, opts)
-      |> annotate_capability_probe_drift()
-      |> record_probe_health_and_maybe_materialize_capabilities(data_source, opts, persist_fun)
+      {:ok, prepare_probe(data_source, mission_id, attrs, opts)}
     end
+  end
+
+  @spec observe_data_source_probe(prepared_probe()) :: SourceProbe.t()
+  def observe_data_source_probe(%{
+        prepared_observation: %SourceProbe{} = probe
+      }) do
+    probe
+  end
+
+  def observe_data_source_probe(%{
+        observation_source: %DataSource{} = data_source,
+        probe_adapter: probe_adapter,
+        opts: opts
+      })
+      when is_atom(probe_adapter) and is_list(opts) do
+    run_adapter_probe(data_source, probe_adapter, opts)
+  end
+
+  @spec persist_data_source_probe(prepared_probe(), SourceProbe.t(), (DataSource.t(), keyword() ->
+                                                                        term())) :: term()
+  def persist_data_source_probe(
+        %{
+          source: %DataSource{} = data_source,
+          observation_source: %DataSource{} = observation_source,
+          mission_id: mission_id,
+          attrs: attrs,
+          opts: opts,
+          enrich_observation?: enrich_observation?
+        },
+        %SourceProbe{} = probe,
+        persist_fun
+      )
+      when is_function(persist_fun, 2) do
+    probe =
+      if enrich_observation? do
+        probe
+        |> SourceProbe.merge_metadata(connection_probe_metadata(opts))
+        |> SourceProbe.merge_metadata(
+          capability_probe_metadata(observation_source, observation_source.adapter, probe)
+        )
+      else
+        probe
+      end
+
+    data_source
+    |> source_probe_attrs(mission_id, probe, attrs, opts)
+    |> annotate_capability_probe_drift()
+    |> record_probe_health_and_maybe_materialize_capabilities(data_source, opts, persist_fun)
   end
 
   defp probe_mission_id(%DataSource{mission_id: mission_id}, _attrs) when is_binary(mission_id),
@@ -43,45 +110,94 @@ defmodule Cadence.Control.DataSources.SourceOperations do
     end
   end
 
-  defp probe_data_source_health(%DataSource{status: :disabled}, _opts) do
-    SourceProbe.unavailable(:source_disabled, %{}, probe_kind: :descriptor)
+  defp prepare_probe(%DataSource{status: :disabled} = data_source, mission_id, attrs, opts) do
+    prepared_probe(
+      data_source,
+      data_source,
+      mission_id,
+      attrs,
+      opts,
+      nil,
+      SourceProbe.unavailable(:source_disabled, %{}, probe_kind: :descriptor),
+      false
+    )
   end
 
-  defp probe_data_source_health(%DataSource{} = data_source, opts) do
+  defp prepare_probe(%DataSource{} = data_source, mission_id, attrs, opts) do
     with :ok <- validate_probe_configuration(data_source),
          {:ok, credential} <- resolve_probe_credentials(data_source, opts),
          {:ok, adapter} <- resolve_adapter(data_source, opts),
          {:ok, probe_adapter} <- resolve_probe_adapter(data_source, opts) do
-      materialized_source = %DataSource{data_source | adapter: adapter}
+      observation_source = %DataSource{data_source | adapter: adapter}
 
-      run_adapter_probe(
-        materialized_source,
+      prepared_probe(
+        data_source,
+        observation_source,
+        mission_id,
+        attrs,
+        put_probe_connection_profile(opts, observation_source, credential),
         probe_adapter,
-        put_probe_connection_profile(opts, materialized_source, credential)
+        nil,
+        true
       )
     else
       {:degraded, reason} ->
-        SourceProbe.degraded(reason, %{}, probe_kind: :descriptor)
+        prepared_probe(
+          data_source,
+          data_source,
+          mission_id,
+          attrs,
+          opts,
+          nil,
+          SourceProbe.degraded(reason, %{}, probe_kind: :descriptor),
+          false
+        )
 
       {:unavailable, reason} ->
-        SourceProbe.unavailable(reason, %{}, probe_kind: :descriptor)
+        prepared_probe(
+          data_source,
+          data_source,
+          mission_id,
+          attrs,
+          opts,
+          nil,
+          SourceProbe.unavailable(reason, %{}, probe_kind: :descriptor),
+          false
+        )
     end
+  end
+
+  defp prepared_probe(
+         source,
+         observation_source,
+         mission_id,
+         attrs,
+         opts,
+         probe_adapter,
+         prepared_observation,
+         enrich_observation?
+       ) do
+    %{
+      source: source,
+      observation_source: observation_source,
+      mission_id: mission_id,
+      attrs: attrs,
+      opts: opts,
+      probe_adapter: probe_adapter,
+      prepared_observation: prepared_observation,
+      enrich_observation?: enrich_observation?
+    }
   end
 
   defp run_adapter_probe(%DataSource{adapter: adapter} = data_source, probe_adapter, opts)
        when is_atom(adapter) and is_atom(probe_adapter) do
-    probe =
-      if function_exported?(probe_adapter, :probe, 2) do
-        data_source
-        |> probe_adapter.probe(opts)
-        |> SourceProbe.normalize()
-      else
-        SourceProbe.unsupported(%{adapter: module_text(probe_adapter)})
-      end
-
-    probe
-    |> SourceProbe.merge_metadata(connection_probe_metadata(opts))
-    |> SourceProbe.merge_metadata(capability_probe_metadata(data_source, adapter, probe))
+    if function_exported?(probe_adapter, :probe, 2) do
+      data_source
+      |> probe_adapter.probe(opts)
+      |> SourceProbe.normalize()
+    else
+      SourceProbe.unsupported(%{adapter: module_text(probe_adapter)})
+    end
   end
 
   defp validate_probe_configuration(%DataSource{} = data_source) do

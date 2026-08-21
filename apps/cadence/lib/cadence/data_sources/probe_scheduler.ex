@@ -1,11 +1,17 @@
 defmodule Cadence.DataSources.ProbeScheduler do
   @moduledoc """
   Periodically probes data sources whose physical source health is not fresh.
+
+  Scheduled probes prepare durable inputs and persist observations in the
+  scheduler owner. Only adapter observation runs inside the bounded task. The
+  legacy `:probe_fun` callback remains supported, but runs synchronously because
+  it may own database work that must not be killed on timeout.
   """
 
   use GenServer
 
   alias Cadence.DataSources.ProbePolicy
+  alias Cadence.DataSources.SourceProbe
 
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
@@ -147,12 +153,58 @@ defmodule Cadence.DataSources.ProbeScheduler do
 
   defp probe_due_sources(summary, opts) do
     due_sources = Map.fetch!(summary, :due_sources)
-
     due_sources = Enum.reverse(due_sources)
 
-    results =
+    summary = Map.delete(summary, :due_sources)
+
+    if Keyword.has_key?(opts, :probe_fun) do
+      probe_due_sources_with_legacy_callback(due_sources, summary, opts)
+    else
+      probe_due_sources_in_stages(due_sources, summary, opts)
+    end
+  end
+
+  defp probe_due_sources_with_legacy_callback(due_sources, summary, opts) do
+    Enum.reduce(due_sources, summary, fn source, summary ->
+      merge_probe_result(source, legacy_probe_result(source, opts), summary, opts)
+    end)
+  end
+
+  defp legacy_probe_result(source, opts) do
+    safely_run_probe_stage(fn -> probe_source(source, opts) end)
+  end
+
+  defp probe_due_sources_in_stages(due_sources, summary, opts) do
+    prepared_sources =
       due_sources
-      |> Task.async_stream(&probe_source(&1, opts),
+      |> Enum.with_index()
+      |> Enum.map(fn {%DataSource{} = source, index} ->
+        {attrs, probe_opts} = probe_request(source, opts)
+
+        prepare_probe_fun =
+          Keyword.get(opts, :prepare_probe_fun, &DataSourceControl.prepare_probe/3)
+
+        result =
+          safely_run_probe_stage(fn ->
+            prepare_probe_fun.(source.data_source_id, attrs, probe_opts)
+          end)
+
+        {index, source, result}
+      end)
+
+    observable_sources =
+      for {index, source, {:ok, {:ok, prepared_probe}}} <- prepared_sources do
+        {index, source, prepared_probe}
+      end
+
+    observation_tasks =
+      Enum.map(observable_sources, fn {_index, _source, prepared_probe} ->
+        fn -> observe_probe(prepared_probe) end
+      end)
+
+    results =
+      observation_tasks
+      |> Task.async_stream(& &1.(),
         max_concurrency:
           positive_integer(Keyword.get(opts, :max_concurrency), @default_max_concurrency),
         timeout:
@@ -161,15 +213,42 @@ defmodule Cadence.DataSources.ProbeScheduler do
       )
       |> Enum.to_list()
 
-    due_sources
-    |> Enum.zip(results)
-    |> Enum.reduce(Map.delete(summary, :due_sources), fn {source, result}, summary ->
-      merge_probe_result(source, result, summary, opts)
+    observed_by_index =
+      observable_sources
+      |> Enum.zip(results)
+      |> Map.new(fn {{index, source, prepared_probe}, result} ->
+        {index, {source, prepared_probe, result}}
+      end)
+
+    Enum.reduce(prepared_sources, summary, fn
+      {index, _source, {:ok, {:ok, _prepared_probe}}}, summary ->
+        {source, prepared_probe, result} = Map.fetch!(observed_by_index, index)
+        persist_observation(source, prepared_probe, result, summary, opts)
+
+      {_index, source, {:ok, {:error, reason}}}, summary ->
+        merge_probe_result(source, {:ok, {:error, reason}}, summary, opts)
+
+      {_index, source, {:exit, reason}}, summary ->
+        merge_probe_result(source, {:exit, reason}, summary, opts)
+
+      {_index, source, {:ok, _invalid_result}}, summary ->
+        merge_probe_result(
+          source,
+          {:ok, {:error, :invalid_probe_preparation_result}},
+          summary,
+          opts
+        )
     end)
   end
 
   defp probe_source(%DataSource{} = source, opts) do
-    probe_fun = Keyword.get(opts, :probe_fun, &DataSourceControl.probe/3)
+    probe_fun = Keyword.fetch!(opts, :probe_fun)
+    {attrs, probe_opts} = probe_request(source, opts)
+
+    probe_fun.(source.data_source_id, attrs, probe_opts)
+  end
+
+  defp probe_request(%DataSource{} = source, opts) do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     probe_policy = ProbePolicy.from_data_source(source)
 
@@ -180,13 +259,77 @@ defmodule Cadence.DataSources.ProbeScheduler do
 
     probe_opts =
       opts
+      |> Keyword.delete(:observe_probe_fun)
       |> Keyword.put_new(:actor_id, "data_source_probe_scheduler")
       |> Keyword.update(:payload, probe_payload(probe_policy), fn payload ->
         Map.merge(probe_payload(probe_policy), payload_map(payload))
       end)
 
-    probe_fun.(source.data_source_id, attrs, probe_opts)
+    {attrs, probe_opts}
   end
+
+  defp observe_probe(prepared_probe) do
+    safely_observe_source(fn ->
+      prepared_probe
+      |> DataSourceControl.observe_probe()
+      |> SourceProbe.normalize()
+    end)
+  end
+
+  defp persist_observation(
+         source,
+         prepared_probe,
+         {:ok, {:ok, %SourceProbe{} = observation}},
+         summary,
+         opts
+       ) do
+    persist_probe_fun =
+      Keyword.get(opts, :persist_probe_fun, fn _source, prepared_probe, observation ->
+        DataSourceControl.persist_probe(prepared_probe, observation)
+      end)
+
+    result =
+      safely_run_probe_stage(fn ->
+        persist_probe_fun.(source, prepared_probe, observation)
+      end)
+
+    merge_probe_result(source, result, summary, opts)
+  end
+
+  defp persist_observation(source, _prepared_probe, {:ok, {:exit, reason}}, summary, opts) do
+    merge_probe_result(source, {:exit, reason}, summary, opts)
+  end
+
+  defp persist_observation(source, _prepared_probe, result, summary, opts) do
+    merge_probe_result(source, sanitize_probe_result(result), summary, opts)
+  end
+
+  defp safely_run_probe_stage(fun) when is_function(fun, 0) do
+    {:ok, fun.()}
+  rescue
+    exception -> {:exit, {:probe_stage_exception, exception.__struct__}}
+  catch
+    :exit, reason -> {:exit, sanitize_exit_reason(reason)}
+    :throw, _reason -> {:exit, :probe_stage_failed}
+  end
+
+  defp safely_observe_source(fun) when is_function(fun, 0) do
+    {:ok, fun.()}
+  rescue
+    exception -> {:exit, {:external_observation_exception, exception.__struct__}}
+  catch
+    :exit, reason when is_atom(reason) -> {:exit, reason}
+    :exit, _reason -> {:exit, :external_observation_failed}
+    :throw, _reason -> {:exit, :external_observation_failed}
+  end
+
+  defp sanitize_probe_result({:exit, reason}), do: {:exit, sanitize_exit_reason(reason)}
+  defp sanitize_probe_result(result), do: result
+
+  defp sanitize_exit_reason(reason) when is_atom(reason), do: reason
+
+  defp sanitize_exit_reason({:shutdown, reason}) when is_atom(reason), do: {:shutdown, reason}
+  defp sanitize_exit_reason(_reason), do: :probe_stage_failed
 
   defp merge_probe_result(_source, {:ok, {:ok, _result, _status}}, summary, _opts),
     do: increment(summary, :probed)
