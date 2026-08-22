@@ -11,6 +11,8 @@ defmodule Cadence.Observability.LogExporter do
   @default_flush_interval_ms 1_000
   @default_handler_id :cadence_otel_logs
   @default_max_queue 5_000
+  @default_max_retries 2
+  @default_retry_initial_ms 1_000
   @default_timeout_ms 5_000
 
   @type status :: %{
@@ -56,7 +58,9 @@ defmodule Cadence.Observability.LogExporter do
       level: Keyword.get(opts, :level, :info),
       logs: [],
       max_queue: Keyword.get(opts, :max_queue, @default_max_queue),
+      max_retries: Keyword.get(opts, :max_retries, @default_max_retries),
       queued_count: 0,
+      retry_initial_ms: Keyword.get(opts, :retry_initial_ms, @default_retry_initial_ms),
       sent_count: 0,
       timeout_ms: Keyword.get(opts, :timeout_ms, @default_timeout_ms)
     }
@@ -135,12 +139,15 @@ defmodule Cadence.Observability.LogExporter do
 
     valid? =
       is_binary(state.endpoint) and state.endpoint != "" and
-        Enum.all?(positive_integers, &positive_integer?/1)
+        Enum.all?(positive_integers, &positive_integer?/1) and
+        non_negative_integer?(state.max_retries) and
+        non_negative_integer?(state.retry_initial_ms)
 
     if valid?, do: :ok, else: {:error, :invalid_config}
   end
 
   defp positive_integer?(value), do: is_integer(value) and value > 0
+  defp non_negative_integer?(value), do: is_integer(value) and value >= 0
 
   defp maybe_install_handler(state, opts) do
     if Keyword.get(opts, :install_handler?, true) do
@@ -223,7 +230,9 @@ defmodule Cadence.Observability.LogExporter do
            headers: headers,
            receive_timeout: state.timeout_ms,
            retry: :transient,
-           max_retries: 2
+           max_retries: state.max_retries,
+           retry_delay: retry_delay(state.retry_initial_ms),
+           retry_log_level: false
          ) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
         OtlpLogs.decode_response(body)
@@ -247,5 +256,9 @@ defmodule Cadence.Observability.LogExporter do
     else
       state
     end
+  end
+
+  defp retry_delay(initial_ms) do
+    fn retry_count -> initial_ms * Integer.pow(2, retry_count) end
   end
 end

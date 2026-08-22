@@ -11,6 +11,8 @@ defmodule Cadence.Observability.Metrics.Reporter do
   @default_export_interval_ms 10_000
   @default_max_queue 10_000
   @default_max_series 5_000
+  @default_max_retries 2
+  @default_retry_initial_ms 1_000
   @default_timeout_ms 5_000
 
   @type status :: %{
@@ -63,7 +65,9 @@ defmodule Cadence.Observability.Metrics.Reporter do
       last_error: nil,
       last_export_at: nil,
       max_queue: Keyword.get(opts, :max_queue, @default_max_queue),
+      max_retries: Keyword.get(opts, :max_retries, @default_max_retries),
       max_series: Keyword.get(opts, :max_series, @default_max_series),
+      retry_initial_ms: Keyword.get(opts, :retry_initial_ms, @default_retry_initial_ms),
       series: %{},
       timeout_ms: Keyword.get(opts, :timeout_ms, @default_timeout_ms)
     }
@@ -142,18 +146,26 @@ defmodule Cadence.Observability.Metrics.Reporter do
       |> Map.values()
       |> Enum.all?(&Catalog.valid_definition?/1)
 
+    positive_integers = [
+      state.export_interval_ms,
+      state.max_queue,
+      state.max_series,
+      state.timeout_ms
+    ]
+
+    non_negative_integers = [state.max_retries, state.retry_initial_ms]
+
     valid? =
       is_binary(state.endpoint) and state.endpoint != "" and
-        positive_integer?(state.export_interval_ms) and
-        positive_integer?(state.max_queue) and
-        positive_integer?(state.max_series) and
-        positive_integer?(state.timeout_ms) and
+        Enum.all?(positive_integers, &positive_integer?/1) and
+        Enum.all?(non_negative_integers, &non_negative_integer?/1) and
         valid_definitions?
 
     if valid?, do: :ok, else: {:error, :invalid_config}
   end
 
   defp positive_integer?(value), do: is_integer(value) and value > 0
+  defp non_negative_integer?(value), do: is_integer(value) and value >= 0
 
   defp attach_handler(state, worker) do
     _ = :telemetry.detach(state.handler_id)
@@ -388,7 +400,9 @@ defmodule Cadence.Observability.Metrics.Reporter do
            headers: headers,
            receive_timeout: state.timeout_ms,
            retry: :transient,
-           max_retries: 2
+           max_retries: state.max_retries,
+           retry_delay: retry_delay(state.retry_initial_ms),
+           retry_log_level: false
          ) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
         OtlpMetrics.decode_response(body)
@@ -403,5 +417,9 @@ defmodule Cadence.Observability.Metrics.Reporter do
 
   defp schedule_export(interval_ms) do
     Process.send_after(self(), :export, interval_ms)
+  end
+
+  defp retry_delay(initial_ms) do
+    fn retry_count -> initial_ms * Integer.pow(2, retry_count) end
   end
 end

@@ -364,6 +364,12 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
              1
 
     assert is_list(more_snapshots)
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(
+               setup.mission_id,
+               realized_contact.realized_contact_id
+             )
   end
 
   @tag timeout: 60_000

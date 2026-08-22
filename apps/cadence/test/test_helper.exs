@@ -1,4 +1,5 @@
 ExUnit.start()
+Logger.configure(level: Application.get_env(:logger, :level, :warning))
 
 case System.get_env("CADENCE_TEST_PLANE") do
   plane when plane in [nil, ""] ->

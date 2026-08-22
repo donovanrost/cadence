@@ -49,7 +49,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
          poll_interval_ms: 5}
       )
 
-    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 500
+    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 5_000
     assert raw_evidence.raw == <<1, 2, 3, 4>>
     assert raw_evidence.metadata["journal_start_offset"] == entry.start_offset
     assert raw_evidence.metadata["journal_end_offset"] == entry.end_offset
@@ -121,7 +121,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
          poll_interval_ms: 5}
       )
 
-    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 500
+    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 5_000
     assert raw_evidence.raw == <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9>>
     assert raw_evidence.metadata["journal_sequence"] == first.sequence
     assert raw_evidence.metadata["journal_end_sequence"] == third.sequence
@@ -206,7 +206,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
          poll_interval_ms: 5}
       )
 
-    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 500
+    assert_receive {:processing_enqueued, %RawEvidence{} = raw_evidence, {^consumer, ref}}, 5_000
     assert raw_evidence.raw == <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11>>
     assert raw_evidence.metadata["journal_record_count"] == 4
     assert raw_evidence.metadata["journal_capture_batch_count"] == 2

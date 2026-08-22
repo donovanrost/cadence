@@ -2,6 +2,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   use Cadence.RuntimeCase, async: false
 
   import Ecto.Query
+  import ExUnit.CaptureLog
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
@@ -460,22 +461,29 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     receiver_pid = provider_name |> :sys.get_state() |> Map.fetch!(:socket_receiver_pid)
     assert is_pid(receiver_pid)
 
-    Process.exit(receiver_pid, :kill)
+    log =
+      capture_log(fn ->
+        Process.exit(receiver_pid, :kill)
 
-    assert_eventually(fn ->
-      {:ok, snapshot} =
-        Cadence.path_runtime_snapshot(
-          organization_id,
-          mission_id,
-          realized_contact.realized_contact_id,
-          path_id
-        )
+        assert_eventually(fn ->
+          {:ok, snapshot} =
+            Cadence.path_runtime_snapshot(
+              organization_id,
+              mission_id,
+              realized_contact.realized_contact_id,
+              path_id
+            )
 
-      [provider_snapshot] = snapshot.provider_runtimes
-      provider_snapshot.connected? == false and is_binary(provider_snapshot.last_ingress_error)
-    end)
+          [provider_snapshot] = snapshot.provider_runtimes
 
-    :gen_tcp.close(socket)
+          provider_snapshot.connected? == false and
+            is_binary(provider_snapshot.last_ingress_error)
+        end)
+
+        :gen_tcp.close(socket)
+      end)
+
+    assert log =~ "TCP provider receiver exited for #{provider_binding_id}: :killed"
 
     {:ok, replacement_socket} =
       :gen_tcp.connect(~c"127.0.0.1", port, [:binary, packet: 0, active: false])
@@ -523,6 +531,12 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       provider_snapshot.ingress_journal.cursors.processing == byte_size(frame_one <> frame_two) and
         provider_snapshot.ingress_journal.cursors.archive == byte_size(frame_one <> frame_two)
     end)
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(
+               mission_id,
+               realized_contact.realized_contact_id
+             )
   end
 
   test "tcp capture uses journal admission while legacy paths retain capacity notifications" do

@@ -263,7 +263,12 @@ defmodule CadenceSimulator.SendBuffer do
 
         state
         |> reconnect_output()
-        |> Map.merge(%{buffer: [], buffer_bytes: 0, packets_buffered: 0})
+        |> Map.merge(%{
+          buffer: [],
+          buffer_bytes: 0,
+          packets_buffered: 0,
+          packets_dropped: state.packets_dropped + state.packets_buffered
+        })
     end
   end
 

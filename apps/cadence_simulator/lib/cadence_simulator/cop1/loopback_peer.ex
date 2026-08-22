@@ -136,7 +136,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   end
 
   def handle_info({:tcp_closed, socket}, %{socket: socket} = state) do
-    Logger.warning("COP-1 loopback socket closed")
+    Logger.info("COP-1 loopback socket closed")
 
     {:noreply,
      state

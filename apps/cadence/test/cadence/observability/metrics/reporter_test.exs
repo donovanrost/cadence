@@ -1,6 +1,8 @@
 defmodule Cadence.Observability.Metrics.ReporterTest do
   use Cadence.UnitCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.Observability.Metrics.{Definition, Reporter}
 
   @protobuf_module :opentelemetry_exporter_metrics_service_pb
@@ -166,13 +168,17 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
          definitions: definitions(),
          export_interval_ms: 60_000,
          handler_id: handler_id,
+         max_retries: 2,
          name: nil,
+         retry_initial_ms: 0,
          timeout_ms: 100}
       )
 
     :telemetry.execute(@event, %{count: 1, duration: 0.2}, %{outcome: :ok})
 
-    assert :ok = Reporter.flush(reporter)
+    assert capture_log(fn ->
+             assert :ok = Reporter.flush(reporter)
+           end) == ""
 
     assert %{
              series_count: 2,

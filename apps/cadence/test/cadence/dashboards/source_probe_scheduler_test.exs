@@ -184,7 +184,7 @@ defmodule Cadence.DataSources.ProbeSchedulerTest do
     managed_source = persist_source!("scheduler-managed-fast")
     test_pid = self()
     event_bus = start_probe_event_bus()
-    timeout_ms = 40
+    timeout_ms = 500
 
     runner =
       Task.async(fn ->

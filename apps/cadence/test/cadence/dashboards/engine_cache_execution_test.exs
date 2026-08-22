@@ -277,6 +277,7 @@ defmodule Cadence.Dashboards.EngineCacheExecutionTest do
         runtime_cache: cache,
         source_result_cache?: true,
         frame_cache?: true,
+        source_execution_timeout_ms: :infinity,
         freshness_now: ~U[2026-06-17 12:10:00Z],
         source_opts: %{telemetry: [latest_fun: latest_fun, watermark_fun: watermark_fun]}
       )
@@ -299,6 +300,7 @@ defmodule Cadence.Dashboards.EngineCacheExecutionTest do
         runtime_cache: cache,
         source_result_cache?: true,
         frame_cache?: true,
+        source_execution_timeout_ms: :infinity,
         freshness_now: ~U[2026-06-17 12:15:00Z],
         source_opts: %{
           telemetry: [

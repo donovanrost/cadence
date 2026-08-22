@@ -170,6 +170,12 @@ defmodule CadenceSimulator.CoordinatorTest do
              )
 
     on_exit(fn ->
+      :ok =
+        Cadence.Runtime.stop_realized_contact_sync(
+          mission_id,
+          realized_contact.realized_contact_id
+        )
+
       stop_coordinator(simulator)
     end)
 
@@ -185,6 +191,14 @@ defmodule CadenceSimulator.CoordinatorTest do
              )
              |> first()
              |> Repo.one()
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(
+               mission_id,
+               realized_contact.realized_contact_id
+             )
+
+    stop_coordinator(simulator)
   end
 
   defp assert_eventually(fun, attempts \\ 20)

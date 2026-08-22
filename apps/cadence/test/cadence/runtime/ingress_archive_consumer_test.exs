@@ -1,6 +1,8 @@
 defmodule Cadence.Runtime.IngressArchiveConsumerTest do
   use Cadence.UnitCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.ControllableIngressArchive
   alias Cadence.IngressArchive.Batch
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
@@ -96,49 +98,63 @@ defmodule Cadence.Runtime.IngressArchiveConsumerTest do
 
   @tag :tmp_dir
   test "retries the same deterministic batch after an archive effect failure", ctx do
-    :ok = ControllableIngressArchive.reset(failures_remaining: 1)
-    entry = append!(ctx.journal_name, :binary.copy(<<3>>, 128))
-    consumer = start_consumer!(ctx)
+    log =
+      capture_log(fn ->
+        :ok = ControllableIngressArchive.reset(failures_remaining: 1)
+        entry = append!(ctx.journal_name, :binary.copy(<<3>>, 128))
+        consumer = start_consumer!(ctx)
 
-    assert_eventually(fn ->
-      assert {:ok, journal} = IngressJournal.snapshot(ctx.journal_name)
-      assert journal.cursors.archive == entry.end_offset
-    end)
+        assert_eventually(fn ->
+          assert {:ok, journal} = IngressJournal.snapshot(ctx.journal_name)
+          assert journal.cursors.archive == entry.end_offset
+        end)
 
-    assert {:ok, snapshot} = IngressArchiveConsumer.snapshot(consumer)
-    assert snapshot.failed_count == 1
-    assert snapshot.retry_count == 1
-    assert snapshot.batch_count == 1
-    assert snapshot.last_recovered_at != nil
+        assert {:ok, snapshot} = IngressArchiveConsumer.snapshot(consumer)
+        assert snapshot.failed_count == 1
+        assert snapshot.retry_count == 1
+        assert snapshot.batch_count == 1
+        assert snapshot.last_recovered_at != nil
 
-    assert [%Batch{} = first_attempt, %Batch{} = retry] = ControllableIngressArchive.calls()
-    assert first_attempt.batch_id == retry.batch_id
-    assert first_attempt.start_offset == retry.start_offset
-    assert first_attempt.end_offset == retry.end_offset
+        assert [%Batch{} = first_attempt, %Batch{} = retry] =
+                 ControllableIngressArchive.calls()
+
+        assert first_attempt.batch_id == retry.batch_id
+        assert first_attempt.start_offset == retry.start_offset
+        assert first_attempt.end_offset == retry.end_offset
+      end)
+
+    assert log =~ "Ingress archive batch failed for #{ctx.provider_binding_id}"
+    assert log =~ ":injected_archive_failure"
   end
 
   @tag :tmp_dir
   test "does not advance a durable cursor for an accepted-only receipt", ctx do
-    :ok = ControllableIngressArchive.reset(completion: :accepted)
-    entry = append!(ctx.journal_name, :binary.copy(<<4>>, 80))
-    consumer = start_consumer!(ctx, required_completion: :durable, retry_initial_ms: 50)
+    log =
+      capture_log(fn ->
+        :ok = ControllableIngressArchive.reset(completion: :accepted)
+        entry = append!(ctx.journal_name, :binary.copy(<<4>>, 80))
+        consumer = start_consumer!(ctx, required_completion: :durable, retry_initial_ms: 50)
 
-    assert_eventually(fn ->
-      assert {:ok, snapshot} = IngressArchiveConsumer.snapshot(consumer)
-      assert snapshot.failed_count >= 1
-      assert snapshot.pending_batch != nil
-    end)
+        assert_eventually(fn ->
+          assert {:ok, snapshot} = IngressArchiveConsumer.snapshot(consumer)
+          assert snapshot.failed_count >= 1
+          assert snapshot.pending_batch != nil
+        end)
 
-    assert {:ok, waiting} = IngressJournal.snapshot(ctx.journal_name)
-    assert waiting.cursors.archive == 0
-    assert waiting.lag_bytes.archive == entry.end_offset
+        assert {:ok, waiting} = IngressJournal.snapshot(ctx.journal_name)
+        assert waiting.cursors.archive == 0
+        assert waiting.lag_bytes.archive == entry.end_offset
 
-    :ok = ControllableIngressArchive.set_completion(:durable)
+        :ok = ControllableIngressArchive.set_completion(:durable)
 
-    assert_eventually(fn ->
-      assert {:ok, archived} = IngressJournal.snapshot(ctx.journal_name)
-      assert archived.cursors.archive == entry.end_offset
-    end)
+        assert_eventually(fn ->
+          assert {:ok, archived} = IngressJournal.snapshot(ctx.journal_name)
+          assert archived.cursors.archive == entry.end_offset
+        end)
+      end)
+
+    assert log =~ "Ingress archive batch failed for #{ctx.provider_binding_id}"
+    assert log =~ "{:archive_completion_below_required, :durable}"
   end
 
   defp start_consumer!(ctx, opts \\ []) do

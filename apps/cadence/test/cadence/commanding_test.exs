@@ -584,6 +584,12 @@ defmodule Cadence.CommandingTest do
     {:ok, provider_socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      :ok =
+        Cadence.Runtime.stop_realized_contact_sync(
+          realized_contact.mission_id,
+          realized_contact.realized_contact_id
+        )
+
       :gen_tcp.close(provider_socket)
     end)
 
@@ -626,6 +632,12 @@ defmodule Cadence.CommandingTest do
              release_attempt.command_release_attempt_id
 
     assert provider_request_row.request_document["payload_count"] == 1
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(
+               realized_contact.mission_id,
+               realized_contact.realized_contact_id
+             )
   end
 
   test "enforces queue-lane priority order at release time", %{

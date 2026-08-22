@@ -1,6 +1,8 @@
 defmodule Cadence.Observability.LogExporterTest do
   use Cadence.UnitCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.Observability
   alias Cadence.Observability.LogExporter
 
@@ -67,6 +69,36 @@ defmodule Cadence.Observability.LogExporterTest do
     assert Process.alive?(exporter)
   end
 
+  test "collector retries cannot feed Logger events back into the exporter" do
+    exporter =
+      start_supervised!({
+        LogExporter,
+        name: nil,
+        endpoint: "http://127.0.0.1:1/v1/logs",
+        handler_id: @handler_id,
+        level: :warning,
+        flush_interval_ms: 60_000,
+        max_retries: 2,
+        retry_initial_ms: 0,
+        timeout_ms: 100
+      })
+
+    LogExporter.ingest(exporter, log_event("not delivered"))
+
+    assert capture_log(fn ->
+             assert :ok = LogExporter.flush(exporter)
+           end) == ""
+
+    assert LogExporter.status(exporter) == %{
+             queued_count: 0,
+             sent_count: 0,
+             failed_count: 1,
+             dropped_count: 0
+           }
+
+    assert Process.alive?(exporter)
+  end
+
   test "Logger handler exports active trace context over OTLP" do
     test_pid = self()
 
@@ -90,12 +122,18 @@ defmodule Cadence.Observability.LogExporterTest do
           Observability.current_span_context()
           |> OpenTelemetry.Span.hex_trace_id()
 
-        Observability.log(
-          :warning,
-          "cadence.test.network_log",
-          "Network log bridge verification",
-          mission_id: "mission-network-test"
-        )
+        log =
+          capture_log(fn ->
+            Observability.log(
+              :warning,
+              "cadence.test.network_log",
+              "Network log bridge verification",
+              mission_id: "mission-network-test"
+            )
+          end)
+
+        assert log =~ "Network log bridge verification"
+        assert log =~ "cadence_event=cadence.test.network_log"
 
         trace_id
       end)

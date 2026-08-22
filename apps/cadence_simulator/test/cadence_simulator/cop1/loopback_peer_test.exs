@@ -59,6 +59,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     {:ok, socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 
@@ -123,6 +124,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     {:ok, socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 
@@ -173,6 +175,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     {:ok, socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 
@@ -250,6 +253,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     assert {:ok, socket} = :gen_tcp.accept(live_listener, 1_000)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 
@@ -295,6 +299,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     {:ok, socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 
@@ -345,6 +350,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     {:ok, socket} = :gen_tcp.accept(listener)
 
     on_exit(fn ->
+      if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
       :gen_tcp.close(socket)
     end)
 

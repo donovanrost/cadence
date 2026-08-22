@@ -410,7 +410,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   def handle_info({:tcp_receiver_closed, receiver_pid, reason}, state) do
     next_state =
       if receiver_matches?(state, receiver_pid) do
-        Logger.warning(
+        Logger.log(
+          socket_close_log_level(reason),
           "TCP provider socket closed for #{state.provider_binding_id}: #{inspect(reason)}"
         )
 
@@ -975,6 +976,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp maybe_put_receiver_down_error(state, reason),
     do: %{state | last_ingress_error: inspect(reason)}
+
+  defp socket_close_log_level(:closed), do: :info
+  defp socket_close_log_level(_reason), do: :warning
 
   defp maybe_schedule_accept_after_disconnect(
          %{lifecycle_status: :active, mode: :listen} = state
