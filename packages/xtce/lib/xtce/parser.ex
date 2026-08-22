@@ -1,12 +1,23 @@
-defmodule Cadence.Catalog.Importers.Xtce13.Parser do
-  @moduledoc "Bounded, external-entity-free XML parser for XTCE 1.3 source models."
+defmodule XTCE.Parser do
+  @moduledoc """
+  Bounded, external-entity-free XML parsing for XTCE source documents.
 
-  alias Cadence.Catalog.Importers.Xtce13.Element
+  This is the low-level parser used by `XTCE.parse/2`. Most callers should use
+  the top-level API, which additionally verifies the document root and XTCE
+  namespace.
+  """
+
+  alias XTCE.Element
 
   @default_max_bytes 10 * 1024 * 1024
   @default_max_depth 128
   @default_max_nodes 250_000
 
+  @doc """
+  Parses XML into an `XTCE.Element` tree.
+
+  Supported limits are `:max_bytes`, `:max_depth`, and `:max_nodes`.
+  """
   @spec parse(binary(), keyword()) :: {:ok, Element.t()} | {:error, term()}
   def parse(xml, opts \\ []) when is_binary(xml) and is_list(opts) do
     with :ok <- bounded_size(xml, Keyword.get(opts, :max_bytes, @default_max_bytes)),

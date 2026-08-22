@@ -4,7 +4,7 @@ defmodule Cadence.Catalog.MissionModel.Xtce13Exporter do
   alias Cadence.Catalog.Diagnostic
   alias Cadence.Catalog.MissionModel.{Declaration, Reference, Revision}
 
-  @namespace "http://www.omg.org/spec/XTCE/20250214"
+  @namespace XTCE.namespace()
 
   @spec export(Revision.t(), keyword()) :: {:ok, binary(), [Diagnostic.t()]} | {:error, term()}
   def export(%Revision{} = revision, opts \\ []) do
@@ -333,7 +333,7 @@ defmodule Cadence.Catalog.MissionModel.Xtce13Exporter do
         severity: :warning,
         code: "XTCE_EXPORT_SEMANTIC_EXTENSION_OMITTED",
         message:
-          "#{declaration.kind} #{declaration.qualified_name} is retained in Cadence but omitted from core XTCE export",
+          "#{declaration.kind} #{declaration.qualified_name} is retained in the Mission Model but omitted from core XTCE export",
         path: String.split(declaration.qualified_name, "/", trim: true),
         metadata: %{"semantic_id" => declaration.semantic_id}
       })

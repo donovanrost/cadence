@@ -11,6 +11,7 @@ configuration boundary.
 - `apps/cadence_simulator` - independently runnable external provider simulator
 - `packages/cadence_catalog` - catalog and Mission Model compiler package
 - `packages/ccsds` - standalone-ready CCSDS protocol package
+- `packages/xtce` - standalone XTCE 1.3 parsing and schema-validation package
 - `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
 ## Documentation

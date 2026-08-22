@@ -5,9 +5,9 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
 
   alias Cadence.Catalog.Diagnostic
 
-  alias Cadence.Catalog.Importers.Xtce13.Element
   alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Layer, Path, Reference}
   alias Cadence.Catalog.Source
+  alias XTCE.Element
 
   @command_verifier_names [
     "TransferredToRangeVerifier",

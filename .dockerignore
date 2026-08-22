@@ -27,6 +27,13 @@
 !packages/ccsds/mix.lock
 !packages/ccsds/lib/
 !packages/ccsds/lib/**
+!packages/xtce/
+!packages/xtce/mix.exs
+!packages/xtce/mix.lock
+!packages/xtce/lib/
+!packages/xtce/lib/**
+!packages/xtce/priv/
+!packages/xtce/priv/**
 !dev/
 !dev/ingress-benchmark/
 !dev/ingress-benchmark/**

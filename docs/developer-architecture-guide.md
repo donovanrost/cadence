@@ -46,9 +46,12 @@ At the Workspace project level:
 - `apps/cadence_web` contains the Phoenix API and UI boundary.
 - `apps/cadence_simulator` contains the independently runnable external ground
   network simulator.
-- `packages/cadence_catalog` contains the catalog and Mission Model compiler.
+- `packages/cadence_catalog` contains source-format adapters plus the catalog
+  and Mission Model compiler.
 - `packages/ccsds` contains protocol primitives shared by Cadence and
   external peers.
+- `packages/xtce` contains reusable XTCE 1.3 document parsing and offline
+  schema validation.
 - `legacy/cadence_legacy` is a preserved reference snapshot of the previous
   system and is useful for migration and performance comparisons.
 

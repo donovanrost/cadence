@@ -1,7 +1,7 @@
 defmodule CadenceWorkspace.MixProject do
   use Mix.Project
 
-  @child_apps [:cadence, :cadence_catalog, :ccsds, :cadence_simulator, :cadence_web]
+  @child_apps [:cadence, :cadence_catalog, :ccsds, :xtce, :cadence_simulator, :cadence_web]
 
   def project do
     [
@@ -243,6 +243,7 @@ defmodule CadenceWorkspace.MixProject do
   defp child_path(:cadence), do: "apps/cadence"
   defp child_path(:cadence_catalog), do: "packages/cadence_catalog"
   defp child_path(:ccsds), do: "packages/ccsds"
+  defp child_path(:xtce), do: "packages/xtce"
   defp child_path(:cadence_simulator), do: "apps/cadence_simulator"
   defp child_path(:cadence_web), do: "apps/cadence_web"
 

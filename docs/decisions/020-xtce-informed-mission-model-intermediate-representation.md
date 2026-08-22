@@ -6,7 +6,7 @@ tags:
   [adr, architecture, xtce, catalog, telemetry, commanding, algorithms, monitoring]
 status: accepted
 created: 2026-08-11
-updated: 2026-08-12
+updated: 2026-08-21
 ---
 
 # ADR-020: XTCE-Informed Mission Model Intermediate Representation
@@ -46,8 +46,10 @@ The initial implementation is complete as of 2026-08-12. Cadence now has:
 - immutable declaration layers, resolved Mission Model revisions, typed
   references, provenance, defaults, inheritance checks, semantic validation,
   target capability diagnostics, and deterministic target plans;
-- native XTCE and Cadence YAML frontends that emit declaration layers directly,
-  without constructing telemetry or command snapshots;
+- a standalone `xtce` package for bounded XTCE 1.3 document parsing and pinned
+  offline schema validation, plus Cadence XTCE and YAML adapters that emit
+  declaration layers directly without constructing telemetry or command
+  snapshots;
 - an XTCE 1.3 frontend with a pinned, offline copy of the normative schema,
   source-location diagnostics, semantic preservation of unsupported executable
   constructs, and deterministic export of the representable core subset;
@@ -62,9 +64,10 @@ The initial implementation is complete as of 2026-08-12. Cadence now has:
 - native telemetry and command target lowerers plus runtime consumers that
   require exact Mission Model plans and revision identities.
 
-XTCE schema validation invokes `xmllint --nonet`; installations that import
-XTCE must provide that executable. The checked-in schemas are content-addressed
-and schema URLs supplied by imported documents are never fetched.
+XTCE schema validation in the standalone package invokes `xmllint --nonet`;
+installations that import XTCE must provide that executable. The checked-in
+schemas are content-addressed and schema URLs supplied by imported documents
+are never fetched.
 
 This implementation does not claim executable support for every XTCE feature.
 Unsupported required constructs remain preserved with provenance and produce
@@ -176,6 +179,11 @@ Each importer parses into a typed model that retains source-specific structure,
 locations, extensions, explicit values, and diagnostics. An XTCE source model
 may closely follow the XTCE schema. A Cadence YAML source model does not need to
 pretend to be XML or synthesize an XTCE document.
+
+Format-specific parsing may live in a reusable dependency leaf. The standalone
+`xtce` package owns the XTCE document representation and schema validation;
+`cadence_catalog` owns the adapter from that representation into Mission Model
+declarations.
 
 #### Canonical Declaration Layer
 
@@ -713,6 +721,7 @@ The architecture is demonstrated when tests prove that:
 - [ADR-008: Multi-Format Catalog Import Architecture](008-multi-format-catalog-import-architecture.md)
 - [ADR-009: Canonical Telemetry Catalog Model](009-canonical-telemetry-catalog-model.md)
 - [ADR-010: Canonical Command Catalog Model](010-canonical-command-catalog-model.md)
+- [ADR-022: Standalone XTCE Library Boundary](022-standalone-xtce-library-boundary.md)
 - [ADR-015: Management Plane, Control Plane, and Data Plane Architecture](015-management-control-data-plane-architecture.md)
 - [ADR-016: Typed Extension Packages and Product Applications](016-typed-extension-packages-and-product-applications.md)
 - [ADR-019: Telemetry Data-Plane Persistence and Projection Topology](019-telemetry-data-plane-persistence-and-projection-topology.md)

@@ -14,7 +14,7 @@ defmodule CadenceCatalog.MixProject do
 
   def application do
     [
-      extra_applications: [:crypto, :logger, :xmerl]
+      extra_applications: [:crypto, :logger]
     ]
   end
 
@@ -27,6 +27,7 @@ defmodule CadenceCatalog.MixProject do
 
   defp deps do
     [
+      {:xtce, path: "../xtce"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.12"}
     ]

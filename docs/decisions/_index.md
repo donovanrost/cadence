@@ -39,6 +39,7 @@ Legacy ADRs remain under
 | [ADR-019](019-telemetry-data-plane-persistence-and-projection-topology.md) | Telemetry Data-Plane Persistence and Projection Topology | Accepted |
 | [ADR-020](020-xtce-informed-mission-model-intermediate-representation.md) | XTCE-Informed Mission Model Intermediate Representation | Accepted |
 | [ADR-021](021-monorepo-poncho-project-and-package-layout.md) | Monorepo Poncho Project and Package Layout | Accepted |
+| [ADR-022](022-standalone-xtce-library-boundary.md) | Standalone XTCE Library Boundary | Accepted |
 
 ## Proposed Decisions
 

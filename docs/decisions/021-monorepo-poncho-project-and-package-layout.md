@@ -14,7 +14,7 @@ updated: 2026-08-21
 
 Accepted
 
-Implemented on 2026-08-21. The five child projects now own independent build,
+Implemented on 2026-08-21. The child projects now own independent build,
 dependency, lock, formatting, and configuration state; the root retains only
 Workspace tooling and aggregate orchestration. Standalone child suites, the
 simulator production escript, the web production release, Workspace and
@@ -51,7 +51,7 @@ The existing projects also have two different architectural roles:
 
 - `cadence`, `cadence_web`, and `cadence_simulator` own runtime behavior,
   supervision, persistence, endpoints, or an independently running process;
-- `cadence_catalog` and `ccsds` are reusable dependency leaves with no
+- `cadence_catalog`, `ccsds`, and `xtce` are reusable packages with no
   application callback or supervision tree.
 
 Keeping both roles under one `apps/` directory obscures the distinction between
@@ -80,7 +80,8 @@ cadence/
 │   └── cadence_simulator/
 ├── packages/
 │   ├── cadence_catalog/
-│   └── ccsds/
+│   ├── ccsds/
+│   └── xtce/
 ├── .workspace.exs
 └── mix.exs
 ```
@@ -182,10 +183,18 @@ The initial package set is:
 `ccsds` owns protocol codecs, validation, segmentation, reassembly,
 state machines, and caller-owned CCSDS effects as established by ADR-014.
 
+#### `packages/xtce`
+
+`xtce` owns format-specific XTCE document parsing, bounded XML handling, and
+offline validation against pinned normative schemas. It exposes a neutral API
+for non-Cadence consumers and has no dependency on `cadence_catalog`.
+
 #### `packages/cadence_catalog`
 
-`cadence_catalog` owns source-format parsing, Mission Model declarations and
-compilation, deterministic target plans, and catalog validation. Cadence
+`cadence_catalog` owns source-format adapters, Mission Model declarations and
+compilation, deterministic target plans, and catalog validation. Its XTCE
+adapter depends on `xtce` and translates neutral documents into Cadence's
+Mission Model. Cadence
 activation, persistence, authorization, deployment bindings, and runtime
 execution remain application concerns.
 
@@ -257,6 +266,9 @@ apps/cadence
 apps/cadence_simulator
     ├──> packages/cadence_catalog
     └──> packages/ccsds
+
+packages/cadence_catalog
+    └──> packages/xtce
 ```
 
 `cadence_simulator` may retain an explicit test-only dependency on `cadence`
