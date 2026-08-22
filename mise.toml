@@ -14,6 +14,6 @@ run = "iex --sname cadence --cookie cadence -S mix phx.server"
 
 [tools]
 erlang = "latest"
-hk = "latest"
+hk = "1.56.0"
 pkl = "latest"
 elixir = "latest"
