@@ -23,7 +23,7 @@ defmodule CadenceSimulator.SendBufferTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: SendBuffer.stop(pid)
+      stop_buffer(pid)
       :gen_tcp.close(client)
       :gen_tcp.close(server)
     end)
@@ -52,7 +52,7 @@ defmodule CadenceSimulator.SendBufferTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: SendBuffer.stop(pid)
+      stop_buffer(pid)
       :gen_tcp.close(client)
       :gen_tcp.close(server)
     end)
@@ -89,7 +89,7 @@ defmodule CadenceSimulator.SendBufferTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: SendBuffer.stop(pid)
+      stop_buffer(pid)
       :gen_tcp.close(client)
       :gen_tcp.close(server)
     end)
@@ -148,7 +148,7 @@ defmodule CadenceSimulator.SendBufferTest do
           )
 
         on_exit(fn ->
-          if Process.alive?(pid), do: SendBuffer.stop(pid)
+          stop_buffer(pid)
           if Process.alive?(resolver), do: Agent.stop(resolver)
           :gen_tcp.close(first_live_listener)
           :gen_tcp.close(second_live_listener)
@@ -189,5 +189,11 @@ defmodule CadenceSimulator.SendBufferTest do
 
     assert log =~ "SendBuffer failed to connect to TCP"
     assert log =~ "SendBuffer flush failed: :closed, dropping 1 packets"
+  end
+
+  defp stop_buffer(pid) do
+    SendBuffer.stop(pid)
+  catch
+    :exit, {:noproc, _call} -> :ok
   end
 end

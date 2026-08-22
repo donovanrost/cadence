@@ -41,7 +41,12 @@ defmodule CadenceWeb.Components.ListControls do
       id={@id}
       class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-2"
     >
-      <form phx-change={@on_search} class="w-64 max-w-full" onsubmit="return false">
+      <form
+        id={"#{@id}-search-form"}
+        phx-change={@on_search}
+        class="w-64 max-w-full"
+        onsubmit="return false"
+      >
         <.input
           id={"#{@id}-search"}
           name="q"

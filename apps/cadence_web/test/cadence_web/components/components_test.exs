@@ -153,10 +153,14 @@ defmodule CadenceWeb.ComponentsTest do
           on_search: "search"
         )
 
-      assert html =~ ~s(phx-change="search")
-      assert html =~ ~s(phx-debounce="300")
-      assert html =~ ~s(name="q")
-      assert html =~ ~s(value="alpha")
+      document = LazyHTML.from_fragment(html)
+      search_form = LazyHTML.query(document, "#roster-toolbar-search-form")
+      search_input = LazyHTML.query(document, "#roster-toolbar-search")
+
+      assert ["search"] = LazyHTML.attribute(search_form, "phx-change")
+      assert ["300"] = LazyHTML.attribute(search_input, "phx-debounce")
+      assert ["q"] = LazyHTML.attribute(search_input, "name")
+      assert ["alpha"] = LazyHTML.attribute(search_input, "value")
     end
 
     test "pagination renders the range and disables prev on page one" do

@@ -40,13 +40,15 @@ defmodule Cadence.MixProject do
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
       {:ccsds, path: "../../packages/ccsds"},
       {:ecto_sql, "~> 3.13"},
+      # grpcbox currently constrains gproc to 1.2.x, which does not compile cleanly on OTP 29.
+      {:gproc, "~> 1.3", override: true},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
       {:opentelemetry, "~> 1.7"},
       {:opentelemetry_api, "~> 1.5"},
       {:opentelemetry_ecto, "~> 1.2"},
       {:opentelemetry_exporter, "~> 1.10"},
-      {:phoenix_pubsub, "~> 2.1"},
+      {:phoenix_pubsub, "~> 2.2"},
       {:postgrex, ">= 0.0.0"},
       {:req, "~> 0.5"},
       {:yaml_elixir, "~> 2.12"}

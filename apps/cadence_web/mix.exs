@@ -61,9 +61,9 @@ defmodule CadenceWeb.MixProject do
       {:live_toast, "~> 0.9.0"},
       {:opentelemetry_bandit, "~> 0.3.0"},
       {:opentelemetry_phoenix, "~> 2.0"},
-      {:phoenix, "~> 1.8.1"},
+      {:phoenix, "~> 1.8.12"},
       {:phoenix_html, "~> 4.3"},
-      {:phoenix_live_view, "~> 1.1"},
+      {:phoenix_live_view, "~> 1.2"},
       {:swoosh, "~> 1.17"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       {:tidewave, "~> 0.5", only: [:dev]}
