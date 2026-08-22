@@ -1,0 +1,2281 @@
+---
+title: Cadence Architecture and Test Performance Review
+tags: [developer, architecture, refactoring, testing, performance]
+status: active
+created: 2026-07-18
+updated: 2026-07-21
+---
+
+# Cadence Architecture and Test Performance Review
+
+## Purpose
+
+Cadence has reached the point where local refactoring alone will not keep the
+system understandable or the development loop fast. This review records the
+current structural and test-performance baseline, identifies the boundaries
+that are already working, and proposes a staged path toward a more modular
+system.
+
+The recommendation is not to split the umbrella into many applications
+immediately. The highest-leverage sequence is:
+
+1. Remove the two largest test compilation bottlenecks.
+2. Make test process and configuration ownership explicit.
+3. Establish and enforce bounded-context dependencies inside `:cadence`.
+4. Break the root `Cadence` facade and cross-context persistence coupling.
+5. Modularize dashboard source resolution and the largest domain contexts.
+6. Extract standalone libraries only after their APIs are dependency leaves.
+
+This keeps the work incremental and measurable. Each phase should reduce
+coupling or elapsed time before Cadence takes on the operational cost of more
+OTP applications or repositories.
+
+## Scope and method
+
+This review covers the four umbrella applications, their production and test
+code, Mix task configuration, xref dependency graphs, ExUnit support cases,
+and representative large modules and test files.
+
+Measurements were taken from the live `arch/review` checkout on 2026-07-18.
+Counts include generated-looking fixture and test code when it is checked into
+the application tree because the compiler and maintainers still pay its cost.
+Warm compilation and test timings are local measurements, so they are useful
+as a baseline and relative signal rather than as universal CI targets.
+
+One test-timing caveat matters: `mix test --slowest` enables `--trace`, which
+forces `max_cases` to one. Slow-test profiling is therefore not evidence of
+normal parallel-suite performance unless the concurrency mode is recorded
+alongside it.
+
+## Executive findings
+
+The umbrella-level dependency direction is healthy:
+
+```text
+cadence_web ──> cadence ──> ccsds
+cadence_simulator ─────────> ccsds
+```
+
+`cadence_simulator` depends on `:cadence` only in tests. There are no compile
+cycles in the core `:cadence` application. `ccsds` is already a good
+example of a small dependency-leaf application.
+
+The main problems are inside the applications:
+
+- `:cadence` has recognizable domains, but the root `Cadence` module,
+  horizontal persistence schemas, and several bidirectional context
+  relationships bypass those boundaries.
+- Dashboards have become a large product subsystem inside the core and web
+  applications. A few modules combine registry, query, revision, evidence,
+  transformation, and presentation responsibilities.
+- `:cadence_web` has one large compile-connected component caused by broad
+  imports and route verification injected through the global `CadenceWeb`
+  macro.
+- Default web test startup is dominated by compiling two very large test files,
+  including one browser matrix whose tests are excluded only after compilation.
+- The core data test case pays global runtime cleanup, shared sandbox ownership,
+  and a fixed sleep for every database test. These patterns limit safe
+  concurrency and obscure ownership.
+
+The codebase does not need a broad rewrite. It needs dependency direction,
+smaller compilation units, explicit runtime ownership, and automated
+architecture constraints.
+
+The target ownership and allowed dependency directions are now published in the
+[context dependency policy](architecture/context-dependency-policy.md). The
+policy keeps the ten domain contexts inside `:cadence`, treats the root facade
+and horizontal persistence namespaces as transitional, and defines the
+platform services that may remain shared leaves.
+
+The authority and runtime direction is now published separately in the
+[management, control, and data plane target architecture](architecture/management-control-data-plane-target.md).
+The context map and plane model are complementary: contexts identify business
+ownership, while planes identify who may govern, operationalize, or execute a
+state transition.
+
+## Implementation progress
+
+The first Phase 1 performance slices landed on 2026-07-18:
+
+- The 93-case rendered viewport browser matrix now lives under
+  `apps/cadence_web/browser_test`, outside default `mix test` discovery. The
+  root and child `test.browser` and `test.browser.full` aliases explicitly
+  select it from that location.
+- The 6,573-line replay transport evidence test body and its shared fixtures
+  now compile as `test/support` modules. The discovered LiveView test retains a
+  compact ExUnit wrapper, so repeated test discovery does not rebuild that
+  scenario.
+
+On the same checkout, warm `cadence_web` require-time profiling fell from
+139.16 seconds to 11.43 seconds, and the complete default web suite fell from
+166.54 seconds to 49.7 seconds with 1,632 passing tests. These results satisfy
+the Phase 1 timing exit conditions. Structural decomposition remains active:
+the compiled replay scenario and several other source-family test bodies still
+need to be split into smaller scenario and assertion units.
+
+The Phase 2 ownership work now classifies every core test file by its strongest
+resource owner: 91 files use `Cadence.UnitCase`, 57 use `Cadence.DataCase`, 24
+use `Cadence.RuntimeCase`, and 22 use `Cadence.ConfigCase`. `UnitCase` adds no
+per-test application or database setup. `DataCase` owns only a private SQL
+sandbox transaction; it no longer stops missions, resets runtime stores, shares
+its sandbox globally, or sleeps during teardown. Sandbox startup re-establishes
+manual mode and verifies both the connection and Ecto query cache, retrying
+only when a restarted Repo has not finished its ownership handoff.
+
+Two complete core-suite runs with different seeds passed all 1,522 tests in
+27.2 and 29.2 seconds, below the Phase 2 timing target. `RuntimeCase` now
+snapshots the runtime registry and stops only mission runtimes that appeared
+during the current test; it no longer stops every mission before and after
+each test. Mission shutdown now waits for both the runtime process and its
+registry entry to disappear, and runtime enumeration filters dead registry
+PIDs. The core test helper still boots `:cadence` before ExUnit selects cases.
+`ConfigCase` owns only the serial shared sandbox needed by configuration tests
+and their supervised child processes. Of its 22 callers, only the
+contact-scheduler suite also carries the `:runtime` tag and opts into owned
+mission-runtime cleanup.
+
+Global configuration ownership is now visible outside the core cases as well.
+The 45 web test files that mutate application configuration carry the
+`:config` tag while retaining their required `CadenceWeb.ConnCase` setup. Six
+complete-workflow files across core, simulator, and web carry the
+`:integration` tag.
+
+The root aliases now expose the intended ownership lanes. On this checkout,
+`mix test.fast` passed 1,129 core, 11 CCSDS, 80 simulator, and 1,492 web tests
+in 62.85 seconds of wall time; `mix test.runtime` passed 183 runtime-tagged
+core tests in 20.74 seconds of wall time; and `mix test.integration` passed 7
+core, 15 simulator, and 3 web tests in 33.75 seconds of wall time. The
+authoritative `mix precommit` gate continues to run every default test rather
+than composing the selective lanes.
+
+## Measured baseline
+
+### Repository size
+
+| Scope | Files or modules | Lines |
+| --- | ---: | ---: |
+| `apps/**.ex` | — | 274,932 |
+| `apps/**.exs` | — | 256,643 |
+| `apps/**.heex` | — | 571 |
+| Production code under `apps/*/lib` | — | 272,626 |
+| Test code under `apps/*/test` | — | 249,928 |
+| Production files over 1,000 lines | 31 | 72,140 |
+| Test files over 1,000 lines | 26 | 90,074 |
+
+The current checkout is approximately 532,000 lines of Elixir and test Elixir,
+not 460,000. Nearly half of that is test code. The issue is therefore both
+production structure and the shape of the verification system.
+
+| Application | Production files | Production lines | Test files | Test lines |
+| --- | ---: | ---: | ---: | ---: |
+| `cadence` | 659 | 171,226 | 208 | 93,711 |
+| `ccsds` | 14 | 1,864 | 8 | 434 |
+| `cadence_simulator` | 45 | 10,728 | 35 | 6,350 |
+| `cadence_web` | 386 | 89,379 | 469 | 149,433 |
+
+The dashboard core domain contains 55,667 lines across 111 files, about 32.5%
+of `:cadence` production code. The web `live` tree contains 78,769 lines across
+297 files, about 88% of `:cadence_web` production code. The
+`ops_dashboard_show_live` subtree alone contains 52,950 production lines and
+114,619 test lines.
+
+### Dependency graph
+
+The `:cadence` xref graph contains 673 tracked files, 25 compile dependencies,
+1,007 export dependencies, 1,646 runtime dependencies, and no compile cycles.
+This is a useful foundation: core boundaries can be improved without first
+untangling a compile-time knot.
+
+With sibling applications included, `:cadence_web` has:
+
+- 1,049 nodes;
+- 202 compile dependencies;
+- 2,718 export dependencies;
+- 3,072 runtime dependencies; and
+- one 190-file compile-connected component.
+
+That component contains only two direct compile edges but 117 export edges.
+The main fan-in point is `CadenceWeb`, with 168 incoming compile dependencies.
+Its shared HTML helper macro imports twelve component modules and injects
+`Phoenix.VerifiedRoutes`, which depends on `CadenceWeb.Endpoint` and
+`CadenceWeb.Router`. The router then references the LiveViews and controllers.
+
+Splitting the router file would make it easier to read but would not remove
+this compile dependency. The fix is to narrow compile-time imports and verified
+route dependencies.
+
+### Current boundary pressure
+
+The strongest bidirectional context relationships include:
+
+| Context pair | Dependencies A to B | Dependencies B to A |
+| --- | ---: | ---: |
+| Contact Planning / Persistence | 48 | 20 |
+| Dashboards / Persistence | 34 | 26 |
+| Root `Cadence` / Dashboards | 33 | 49 |
+| Root `Cadence` / Contacts | 31 | 34 |
+| Contacts / Ground Networks | 30 | 6 |
+| Ground Networks / Persistence | 23 | 9 |
+| Root `Cadence` / Runtime | 19 | 17 |
+| Root `Cadence` / Telemetry | 18 | 17 |
+| Dashboards / Telemetry | 18 | 8 |
+
+Seventy-four non-persistence modules directly reference
+`Cadence.Persistence.Schemas.*`. This makes the schema tree a shared internal
+API and allows one context to couple to another context's storage model.
+
+The web boundary is notably better: production web code does not use
+persistence schemas directly. The only web production module that references
+the Repo is the scope loader used to permit test sandbox access.
+
+### Large responsibility clusters
+
+File size is not itself a defect, but the largest files reveal responsibilities
+that change for different reasons.
+
+| Module | Lines | Public/private functions | Responsibility pressure |
+| --- | ---: | ---: | --- |
+| `Dashboards.Sources.OperationalObservables` | 7,890 | 7 / 530 | Contract registry, product selection, revisions, reads, frame construction, evidence, and data-link creation across multiple operational families |
+| `Dashboards.DataLinkResolver` | 4,532 | 3 / 362 | Target-specific data-link resolution behind one module |
+| `Cadence` | 4,353 | 429 / — | Facade over nearly every context |
+| `Contacts` | 3,670 | — | Configuration, scheduled and realized contacts, and runtime coordination |
+| `Telemetry.DataManagement` | 3,572 | 34 / 303 | State transitions, jobs, recovery, correction authority, and late data |
+| `Commanding` | 3,435 | — | Staging, approval, release, dispatch, and verification |
+| `Dashboards.SourceRegistry` | 3,038 | — | Multiple registry and source concerns |
+| `OpsDataSourcesLive` | 3,747 | 18 / 391 | LiveView orchestration, parsing, page modeling, and rendering helpers |
+| `ControlPlaneParams` | 1,971 | 56 / — | Parameters for many API resources |
+| `ControlPlaneJSON` | 1,297 | — | Serialization for many API resources |
+
+`Cadence.Application` also starts management workflows, control-plane services,
+data-plane services, projections, integrations, dashboard caches, runtime
+supervision, mission health, command dispatch and verification, contact
+scheduling, provider ingestion, and jobs under one application supervisor. This
+works today, but it does not expose restart domains or future extraction seams.
+
+## Proposed bounded contexts
+
+The following context map should become the default ownership model inside
+`:cadence`:
+
+1. **Identity and tenancy** — organizations, users, mission scope, and policy
+   identity.
+2. **Catalog and activation** — canonical telemetry and command definitions,
+   revisions, imports, validation, governance, and activation.
+3. **Comms configuration** — spacecraft profiles, configured transports,
+   routing rules, and ground-station configuration.
+4. **Ground-network provider integration** — provider accounts,
+   capabilities, opportunities, provider contacts, and wire translation.
+5. **Contact planning** — requirements, candidate generation, constraints,
+   scoring, optimization, and proposed plans.
+6. **Contact lifecycle** — committed scheduled contacts, realized contacts,
+   state transitions, and runtime handoff.
+7. **Commanding** — command stages, approval requests, release queues,
+   dispatch, and verification.
+8. **Mission runtime and capabilities** — runtime partitions, capability
+   descriptors, execution, mission processes, and workload ownership.
+9. **Telemetry, history, and projections** — ingress, decom, current values,
+   history, archives, materialized views, and data-management workflows.
+10. **Dashboards** — documents, lifecycle, planning, execution, source
+    contracts, data links, and visualization-facing read models.
+
+This map clarifies several current overlaps:
+
+- Comms owns configured transports, routes, and ground stations.
+- Ground Networks owns external provider accounts, capability discovery,
+  opportunities, provider contacts, and API translation.
+- Contact Planning owns proposals and optimization.
+- Contacts owns the committed and realized lifecycle and runtime handoff.
+
+Contexts should communicate through explicit public value types and application
+services. They should not query one another's schemas or call the root facade.
+Events are appropriate when the downstream work is asynchronous or a
+projection; direct application-service calls are appropriate when one
+transactional outcome is required immediately.
+
+## Proposed production refactors
+
+### 1. Retire the root `Cadence` facade
+
+The root module has 429 public functions and is called by 102 web production
+files. It makes the application convenient to call but hides which domain a
+consumer depends upon and allows core modules to loop back through a global
+entry point.
+
+Proposed solution:
+
+- Have web modules call bounded application services such as
+  `Cadence.Contacts`, `Cadence.Commanding`, or a narrower service within those
+  namespaces.
+- Forbid internal `:cadence` modules from calling the root `Cadence` module.
+- Move cross-context workflows to explicitly named orchestration modules.
+- Gradually remove root delegates. Because Cadence is still in early
+  development, do not preserve a large compatibility facade by default.
+- If an external convenience API is eventually useful, keep it deliberately
+  small and make it depend one-way on stable context APIs.
+
+Acceptance criteria:
+
+- No production module under `apps/cadence/lib` calls `Cadence.*` as a facade.
+- New web code imports or aliases its owning context explicitly.
+- An architecture guard prevents new root-facade dependencies.
+
+### 2. Move persistence ownership into contexts
+
+`Cadence.Persistence` is currently a horizontal layer shared by nearly every
+domain. A standalone persistence application would formalize the wrong
+boundary: storage is an implementation detail of each context, not a business
+capability.
+
+Proposed solution:
+
+- Each context owns its schemas, queries, repositories, mappers, and
+  transactions.
+- Keep only genuinely shared infrastructure under `Cadence.Persistence`, such
+  as the Repo, tenant-scoping helpers, migration support, JSON normalization,
+  and low-level database utilities.
+- Expose domain structs and result types at context boundaries, not Ecto
+  schemas.
+- Use an explicit context API or projection for cross-context reads.
+- Add an xref rule forbidding references to another context's schema namespace.
+
+Do not extract `cadence_persistence` as a standalone application.
+
+### 3. Modularize dashboards within `:cadence`
+
+Dashboards are large enough to need internal sub-boundaries but are not yet a
+dependency leaf. Extracting them into another OTP application now would carry
+their dependencies on telemetry, contacts, runtime, and persistence across the
+new boundary without making those dependencies cleaner.
+
+Organize the subsystem around these responsibilities:
+
+```text
+Cadence.Dashboards.Model
+Cadence.Dashboards.Lifecycle
+Cadence.Dashboards.Planning
+Cadence.Dashboards.Execution
+Cadence.Dashboards.Runtime
+Cadence.Dashboards.DataSources
+```
+
+Split `OperationalObservables` by product family:
+
+```text
+DataSources.OperationalObservables.Contacts
+DataSources.OperationalObservables.Connection
+DataSources.OperationalObservables.LinkRF
+DataSources.OperationalObservables.Transport
+DataSources.OperationalObservables.ManagedRuntime
+DataSources.OperationalObservables.Commanding
+DataSources.OperationalObservables.IngressLatency
+```
+
+Keep a small declarative registry for contracts and dispatch. A family module
+should own selection, reads, revisions, evidence, and frame production only for
+its family. Shared primitives should be pure transformations with focused
+tests.
+
+Split `DataLinkResolver` into target-specific resolver modules behind one
+dispatch protocol or function. The central module should select a resolver,
+not implement every target.
+
+Acceptance criteria:
+
+- Product-family source behavior is testable without booting a LiveView.
+- Adding a source family does not require editing a multi-thousand-line
+  conditional module.
+- The registry describes and dispatches contracts but does not execute every
+  source.
+- Exceptions to a 1,000-line production-file guideline are explicit and rare.
+
+### 4. Split the large domain contexts by workflow
+
+Recommended seams:
+
+- `Contacts`: configuration, scheduled contacts, realized contacts, scheduler
+  coordination.
+- `Commanding`: stages, requests and approval, release queue, dispatch,
+  verification.
+- `Telemetry.DataManagement`: transitions, jobs and recovery, correction
+  authority, late-data handling.
+- `OpsDataSourcesLive`: LiveView orchestration, form parameter parsing, page
+  model, and function components.
+- `ControlPlaneParams` and `ControlPlaneJSON`: one parameter/serialization
+  module per API resource family.
+
+The goal is not to replace one large public module with dozens of public
+modules. Keep a narrow context entry point where it represents a cohesive
+business capability, while moving implementation workflows into owner modules.
+
+### 5. Expose supervision and restart domains
+
+Before creating more umbrella applications, group children under internal
+supervisors:
+
+```text
+Cadence.Management.Supervisor
+Cadence.Control.Supervisor
+Cadence.Runtime.Supervisor
+Cadence.Projections.Supervisor
+Cadence.Integrations.Supervisor
+```
+
+This makes ownership, startup order, and restart behavior visible while keeping
+deployment simple. Mission control ownership should be a separate restart domain
+from mission data-plane execution. A future `cadence_runtime` application
+becomes justified only when runtime modules form a one-way dependency leaf with
+a clear lifecycle and independent operational reason to start or deploy.
+
+### 6. Reduce `CadenceWeb` compile coupling
+
+Proposed solution:
+
+- Make `CadenceWeb` use macros minimal. Avoid globally importing component
+  modules that only a subset of views use.
+- Import context-specific component modules in their owning LiveViews.
+- Keep common primitives global only when nearly every page uses them and they
+  have a small dependency surface.
+- Introduce small context-specific verified path modules. These modules can
+  use `Phoenix.VerifiedRoutes`; most LiveViews can call the path functions at
+  runtime instead of compiling directly against the router.
+- Re-measure the compile-connected graph after each change.
+
+The router should remain the source of route truth. This proposal does not
+change route authentication scopes or pipelines, and a mechanical router split
+alone is not considered an architectural fix.
+
+Acceptance criteria:
+
+- The web compile-connected component is materially smaller than 190 files.
+- Editing an unrelated route does not recompile most LiveViews.
+- `CadenceWeb` no longer has broad component fan-in.
+
+## Test-performance findings
+
+### Current suite timings
+
+| Command/scope | Result | Local elapsed time |
+| --- | --- | ---: |
+| Warm root compile with warnings as errors | Passed | 1.86s |
+| Root Credo strict | Passed, 1,825 files | 27.41s |
+| `cadence` normal test run | 1,522 passed | 71.61s |
+| `cadence` serial/profile-style run | One transient failure; failed test passed alone | about 60s |
+| `ccsds` | 11 passed | 0.50s |
+| `cadence_simulator` second full run | 106 passed | 10.19s |
+| `cadence_web` normal test run | 1,632 passed, 93 excluded | 166.54s |
+
+The measured commands imply a warm local root precommit cost of roughly 4.4
+minutes. This is an estimate assembled from the component commands, not a
+claim that one single precommit invocation produced that exact number.
+
+Normal parallelism did not make the core suite faster in this sample. The
+suite contains enough synchronous database/runtime work and global state that
+simply removing a root `--max-cases 1` constraint is unlikely to produce a
+reliable win. Isolation must improve first.
+
+### Test compilation dominates the web suite
+
+Web require-time profiling took 139.16 seconds for 463 test modules, with a
+summed compile time of 229,187 milliseconds. Two files dominate:
+
+| Test file | Lines | Tests | Helpers | Compile time |
+| --- | ---: | ---: | ---: | ---: |
+| `runtime_replay_source_family_live_test.exs` | 15,016 | 23 | 48 | 129.79s |
+| `dashboard_rendered_viewport_smoke_test.exs` | 21,033 | 93 | 101 | 34.82s |
+
+One test in the replay file spans 6,575 lines. The resulting giant BEAM
+function is expensive to compile even though its test body is not proportionally
+slow.
+
+The viewport browser matrix is excluded in `test_helper.exs`, but ExUnit tags
+are evaluated after the file is compiled. The default web suite therefore pays
+about 35 seconds to compile tests it will not execute.
+
+### Core database tests have global cleanup costs
+
+`Cadence.DataCase` is used by 98 files containing 689 tests. Those tests are
+synchronous. The shared setup:
+
+- ensures the application is running;
+- stops all missions before and after non-async tests;
+- checks out shared sandbox ownership;
+- resets runtime state;
+- stops sandboxed processes; and
+- sleeps for 25 milliseconds during cleanup.
+
+The fixed sleep alone creates a theoretical floor of 17.225 seconds across
+689 tests. Stopping all missions twice per test can execute 1,378 global cleanup
+operations. More importantly, this setup makes each data test responsible for
+global runtime state even when it only needs a database transaction.
+
+Twenty-two core test files and 47 web test files mutate application
+configuration with `Application.put_env/3` or `Application.delete_env/2`.
+Global configuration mutation prevents safe concurrency and makes cleanup
+correctness part of every affected test.
+
+### Slow execution is secondary but still actionable
+
+After compilation, most individual tests are reasonable. Representative slow
+test bodies include:
+
+- replay transport runtime action evidence: 4.49s;
+- viewport browser smoke: 2.52s;
+- provider account cursor health: 1.79s; and
+- control-plane API coverage: about 1.9s.
+
+These deserve focused optimization, especially where real retries or backoffs
+are involved, but test compilation and ownership offer the larger first wins.
+
+## Proposed test architecture
+
+### 1. Remove opt-in browser tests from default discovery
+
+Move the full viewport matrix to a directory or filename that the default
+`mix test` discovery pattern does not load. Keep aliases that explicitly run:
+
+- a small browser smoke lane; and
+- the full browser matrix.
+
+The existing semantic distinction between smoke and full browser verification
+should remain. The important change is that excluded tests are not parsed and
+compiled by the default web suite.
+
+Acceptance criteria:
+
+- Default `cadence_web` tests do not compile the full viewport matrix.
+- `mix test.browser` still runs the supported smoke checks.
+- `mix test.browser.full` still runs the full matrix.
+- Default-suite coverage is unchanged apart from the intentionally opt-in
+  browser cases.
+
+### 2. Decompose the replay source-family test
+
+Replace the 6,575-line test function and repeated inline documents with:
+
+- scenario and fixture builders in compiled `test/support` modules;
+- compact JSON or term fixtures when literal payload fidelity matters;
+- data-driven lower-layer tests for source, evidence, and product-family
+  combinations; and
+- a small number of representative LiveView tests proving the route and
+  rendering seam.
+
+The test pyramid for each source family should be:
+
+```text
+many pure contract/transformation cases
+        ↓
+some context integration cases
+        ↓
+few complete LiveView route cases
+```
+
+Acceptance criteria:
+
+- No individual test function is hundreds or thousands of lines.
+- Require-time profiling for the web application is below 30 seconds.
+- The source-family behavior matrix remains represented and reviewable.
+- The full web suite is below 60 seconds on the same local baseline.
+
+### 3. Separate test cases by resource ownership
+
+Introduce explicit cases with progressively stronger setup:
+
+- `UnitCase`: no application boot and no database.
+- `DataCase`: SQL sandbox only, with per-test database ownership.
+- `RuntimeCase`: explicitly starts and owns mission/runtime processes required
+  by the test.
+- `ConfigCase`: serial case for the small number of unavoidable global
+  configuration tests.
+
+`DataCase` should not stop all missions, reset unrelated ETS tables, or sleep.
+`RuntimeCase` should track the processes it starts and use monitors or
+supervisor termination acknowledgements instead of fixed sleeps.
+
+Acceptance criteria:
+
+- Plain database tests are eligible for `async: true` where their schemas and
+  process ownership permit it.
+- No unconditional `Process.sleep/1` remains in common test teardown.
+- Runtime tests clean up processes they own rather than all mission processes.
+- Repeated runs across multiple seeds do not produce sandbox, ETS, or process
+  leakage failures.
+- The core suite is below 45 seconds on the same local baseline.
+
+### 4. Replace global configuration mutation with explicit dependencies
+
+Pass testable dependencies through options, execution contexts, or child specs:
+
+- clocks and current-time functions;
+- retry and backoff strategies;
+- provider/client modules;
+- feature and behavior policies; and
+- process or registry names.
+
+Keep true application-configuration tests in `ConfigCase` and run them
+synchronously. This both improves concurrency and makes production dependency
+ownership visible.
+
+### 5. Eliminate real waiting from deterministic tests
+
+Inject clocks, retry policies, and backoff functions. Tests should advance a
+fake clock or return a zero-delay policy instead of waiting for production
+timeouts. Where OTP timing itself is the behavior under test, use monitors and
+bounded assertions and keep those tests in the runtime or integration lane.
+
+### 6. Add intentional local and CI lanes
+
+Recommended aliases:
+
+```text
+mix test.fast          # unit and isolated data tests
+mix test.runtime       # owned OTP/runtime integration
+mix test.integration   # external boundaries and complete workflows
+mix test.browser       # representative browser smoke
+mix test.browser.full  # complete browser matrix
+mix precommit          # authoritative aggregate gate
+```
+
+Only after isolation is improved should Cadence increase in-VM ExUnit
+concurrency. CI can then use OS-process partitions with `MIX_TEST_PARTITION`
+and separate test databases. Process-level partitioning is safer than forcing
+more concurrency through shared application state.
+
+Target outcome:
+
+- `cadence_web` default suite: 45–60 seconds;
+- `cadence` default suite: 35–45 seconds;
+- warm local `mix precommit`: near two minutes; and
+- CI wall time lower through safe application or file partitions.
+
+## Standalone library candidates
+
+Extraction should follow dependency direction. A library is ready when it can
+be a small leaf with a stable public model, no Repo or Phoenix dependency, no
+application boot requirement, and a fast focused test suite.
+
+### Ready or close
+
+#### `ccsds`
+
+This is already the strongest library boundary. It is small, shared by core and
+simulator, and dependency-light. It can remain an umbrella application now and
+later move to its own repository or Hex package if release cadence or external
+consumers justify that cost.
+
+#### `cadence_capability_api`
+
+Extract the first-party capability ABI into a dependency leaf containing:
+
+- capability behaviors;
+- descriptors;
+- execution context and result types; and
+- action-request value types.
+
+Implementation modules remain in core. Before extraction, remove ABI type
+dependencies on runtime implementation details such as
+`Cadence.Runtime.PartitionKey`.
+
+#### `cadence_provider_contract`
+
+Create a pure, versioned provider contract shared by Cadence and the simulator:
+
+- wire schemas and codecs;
+- validation and sanitization;
+- fixtures; and
+- conformance tests.
+
+Do not put Plug routers, Req clients, Repo code, provider-account persistence,
+or simulator behavior in this package. The current simulator contract is
+Plug-bound, while several useful pure value types live in Ground Networks; the
+new package should contain only the common wire contract.
+
+### Likely after internal cleanup
+
+#### `cadence_catalog_model`
+
+A pure catalog model could own canonical telemetry and command definitions,
+diagnostics, normalization, and compilers. It is not ready while catalog
+parsing also performs persistence and governance activation. First separate
+parse/normalize/compile from storing and activating revisions.
+
+#### `cadence_contact_planner`
+
+The optimizer, constraints, scoring, evaluator, schedule, and narrowing logic
+are plausible dependency-leaf code. Define a small stable set of planner input
+and output structs instead of depending on the full Cadence contact and
+delivery policy models.
+
+### Not current library candidates
+
+Do not extract these yet:
+
+- Dashboards;
+- Commanding;
+- Contacts;
+- Telemetry Data Management; or
+- Persistence.
+
+Their current value comes from application workflows and state ownership, and
+their dependency graphs are not leaf-shaped. Internal boundaries should come
+first.
+
+## Enforcement
+
+Architecture intentions should be executable. Add a custom Mix task or
+architecture test that consumes `mix xref graph --format json` and checks:
+
+- the allowed dependency matrix between bounded contexts;
+- no internal calls through the root `Cadence` facade;
+- no references to another context's schema namespace;
+- approved dependency direction for extracted libraries; and
+- documented exceptions with owners and expiry conditions.
+
+Add source-size diagnostics as a change-pressure signal:
+
+- warn or fail when an individual test function exceeds 200–300 lines;
+- warn when a test file exceeds 1,500 lines;
+- warn when a production module exceeds 1,000 lines; and
+- permit explicit exceptions for generated or opt-in assets.
+
+Size thresholds are not a substitute for design review. They create an early
+conversation before another 6,000-line function or 8,000-line multi-family
+module becomes normal.
+
+`mix cadence.architecture.check` now implements these source-size diagnostics
+in warning mode. It scans production, default-test, test-support, and opt-in
+browser source; reports files and individual `test` blocks over the thresholds;
+and emits a compact summary from `mix precommit`. `--strict` is available once
+the current pressure has been reduced or explicitly baselined. The initial
+diagnostic reports 31 production files, 21 test files, and 35 test functions
+over their respective limits. Extracting uplink-gateway configuration
+normalization and validation from the 1,016-line transport extension reduced
+the current production-file pressure to 30 without changing the test-file or
+test-function counts. Extracting evidence-panel metadata parsing from the
+1,052-line dashboard data-link selection module reduced the production-file
+pressure again to 29. Extracting provider-ingress tracing, telemetry emission,
+and error logging from the 1,165-line executor reduced that count to 28 while
+keeping queue ownership and processing order in the GenServer. Extracting
+provider, frame, scheduling, and parallel-mode configuration from the
+1,165-line simulator coordinator reduced the count to 27 while leaving
+generation and ordered emission coordinator-owned. Moving the governed packet
+definition, binding-set, capability-instance, and binding-rule write steps out
+of the 1,164-line Governance context reduced the count to 26 while preserving
+the context-owned transaction, validation, and hydration boundaries. Extracting
+correction-task and replacement-job parsing plus derived summaries from the
+1,203-line historical-workflow recovery module reduced the count to 25 while
+leaving action selection and closure-readiness policy in the parent. Moving
+spacecraft, contact, mission-event, and mission-health response shaping out of
+the 1,297-line control-plane JSON module reduced the count to 24 while
+preserving its public serializer functions as delegates. Extracting credential
+verification, bootstrap administration, durable-user lookup, and browser-session
+persistence from the 1,334-line Accounts context reduced the count to 23 while
+keeping its public authentication API on the context facade and leaving
+membership and invitation workflows context-owned. Extracting corrected
+replacement work, job diagnostics, and closure-readiness rendering from the
+1,340-line historical workflow group-status component reduced the count to 22
+while preserving the existing LiveView events, form IDs, and evidence
+attributes. Moving the telemetry explorer page, provenance formatting, and
+filter-option rendering out of the 1,345-line LiveView reduced the count to 21
+while leaving parameter canonicalization, sample loading, and socket-event
+ownership in the LiveView. Separating event-store queries and operational
+observable state, connection, link-RF, and metric projections from the
+1,419-line OperationalEvents context reduced the count to 20 while preserving
+the context's public read API and keeping event persistence in the facade.
+Separating command, telemetry, limits, source, contact, and interval evidence
+reference builders from the 1,478-line dashboard DataLinks module reduced the
+count to 19 while leaving navigation-link construction and request-context
+ownership in the parent. Extracting runtime partition construction,
+managed-application initialization and snapshotting, and managed-runtime record
+shaping from the 1,547-line partition owner reduced the count to 18 while
+keeping GenServer callbacks, decoding, dispatch, timers, and reconciliation in
+the owner. Moving lifecycle-event persistence, comparison-review workflows,
+health snapshots, and publish-readiness history out of the 1,556-line dashboard
+document store reduced the count to 17 while leaving document/version
+transactions and runtime invalidation in the parent. Extracting effective-time
+historical binding resolution, range segmentation, interval diagnostics, and
+source-adapter facts execution from the 1,573-line data-source registry reduced
+the count to 16 while leaving current health-aware binding selection and
+registry loading in the parent. Extracting artifact validation and parsing,
+compiled snapshot and runtime-artifact persistence, and result-document
+summarization from the 1,626-line Cadence YAML database importer reduced the
+count to 15 while keeping telemetry and command model conversion in the parent.
+Extracting dedicated TSDB lifecycle transitions, active source probing,
+credential resolution, health recording, and capability materialization from
+the 1,683-line dashboard data-source context reduced the count to 14 while
+keeping the public persistence API and durable writes on the context facade.
+Extracting command-workflow parameter assembly and shared typed-value parsing
+from the 1,971-line control-plane parameter module reduced the count to 13
+while preserving `ControlPlaneParams` as the controller-facing facade for all
+parameter families.
+Separating runtime and operational-observable conversion, dashboard and source
+lifecycle conversion, and enum-independent normalization from the 2,289-line
+operational-event model reduced the count to 12 while leaving the canonical
+event struct, types, `new/1`, and public converter entry points on `Event`.
+Extracting product selection, time and scope normalization, request limits,
+source-binding metadata, and request warnings from the 2,456-line events
+source reduced the adapter to 2,146 lines; its new request-planning boundary is
+352 lines. Extracting read-option filters, replay/live reader selection,
+canonical-event filtering, cursors, and source-capability matching then reduced
+the adapter to 1,569 lines. Finally, isolating contact interval projection and
+event presentation reduced the adapter to 989 lines and production-file
+pressure to 11. The resulting request-planning, read, contact, and presentation
+boundaries are 385, 653, 397, and 180 lines.
+Moving telemetry-backfill lifecycle source cases and their local fixtures out
+of the 1,580-line events-source test reduced test-file pressure from 21 to 20;
+the original source-family test is now 1,339 lines and the focused backfill
+test is 319 lines, with the test-function count unchanged.
+Moving replay request, event, and frame builders out of the 1,511-line
+operational-observables replay integration test reduced test-file pressure to
+19. Replacing its inline metric seed matrix with one fixture call also reduced
+the overlong-test count from 35 to 34; the test file is now 913 lines and its
+shared support module is 617 lines.
+Moving compare-mode and observed analysis-bucket cases out of the 1,601-line
+limits-source test reduced test-file pressure to 18; the source-family file is
+now 1,408 lines and the focused analysis-buckets file is 325 lines.
+Moving operational-observable, transport, and managed-runtime envelope cases
+out of the 1,676-line operational-event test reduced test-file pressure to 17
+and mirrored the production runtime-family boundary; the canonical envelope
+test is now 954 lines and the runtime-family test is 727 lines.
+Moving selected-interval evidence enrichment cases out of the 2,054-line
+source-registry test and sharing its request/binding/evidence fixtures reduced
+test-file pressure to 16; the registry files are now 813 and 865 lines, backed
+by a 399-line support module.
+Moving provider, mission, routing, reconciliation, and event-processing helpers
+out of the 1,644-line simulator contact-scheduling integration test reduced
+test-file pressure to 15; the scenario file is now 912 lines and its shared
+scheduling fixture module is 759 lines.
+Moving comparison-review, health-snapshot, and publish-readiness lifecycle
+audit cases out of the 1,871-line document-store test reduced test-file
+pressure to 14; the document and lifecycle files are now 1,159 and 574 lines,
+with 164 lines of shared fixtures.
+Moving latest-value and archive-bound cases out of the 1,890-line telemetry
+source test reduced test-file pressure to 13; the source-family and focused
+latest-value files are now 1,461 and 268 lines, backed by 188 lines of shared
+request, sample, and binding fixtures.
+Moving operational-observable state, RF-state, connection-state, and metric
+projection cases out of the 2,323-line operational-events context test reduced
+test-file pressure to 12; the context and observable-family files are now
+1,161 and 782 lines, backed by 407 lines of shared event and scope builders.
+Moving catalog, telemetry-ingress, and commanding workflows out of the
+2,857-line control-plane API test reduced test-file pressure to 11; the
+resource-management and mission-data API files are now 1,358 and 1,226 lines,
+backed by 325 lines of shared authenticated API fixtures. Running the split
+files alone also exposed and removed an atom-loading order dependency:
+provider adapter keys now resolve through the provider-adapter registry instead
+of succeeding only when another test happened to load the atom first.
+Replacing four duplicated RF metric copied-route LiveView cases with a shared
+table-driven scenario contract reduced the link-scope test from 1,701 to 909
+lines and reduced test-file pressure to 10 while preserving four independently
+named metric cases.
+Separating group transitions, job recovery, and correction-authority workflows
+from the 3,837-line telemetry data-management test reduced test-file pressure
+to 9. The policy/base, group, recovery, and correction files are now 1,298,
+1,052, 970, and 372 lines, backed by 303 lines of shared workflow fixtures.
+Separating dedicated TSDB lifecycle, binding history, and cache/policy cases
+from the 3,625-line dashboard data-sources test reduced test-file pressure to
+8. The source/probe, backend, binding-history, and cache/policy files are now
+1,051, 557, 849, and 838 lines, backed by 403 lines of shared source fixtures.
+Separating runtime planning, frame resolution, cache/execution policy, and live
+resolution from the 3,642-line dashboard engine test reduced test-file pressure
+to 7. Those five engine test files are now 1,001, 673, 355, 657, and 758 lines,
+backed by 277 lines of shared engine fixtures.
+Separating projected operational intervals, mission and runtime operational
+events, telemetry and source lifecycle, and recovery diagnostics from the
+4,489-line dashboard data-link resolver test reduced test-file pressure to 6.
+Those five resolver test files are now 939, 755, 1,015, 959, and 499 lines,
+backed by 375 lines of shared resolver fixtures.
+Separating connection and interval state, replay runtime activity, RF latest
+and history, transport and queue metrics, and ingress latency from the
+6,541-line operational-observables source test reduced test-file pressure to
+5. The seven source-family files are now 1,164, 980, 596, 724, 944, 798, and
+1,024 lines, backed by 367 lines of shared operational-observable fixtures.
+Separating replay source-family LiveView proofs by metric, ingress/transport,
+managed runtime, transport runtime, connection, and interval evidence reduced
+test-file pressure to 3. The original 6,323-line test is now seven files of
+634, 1,051, 769, 1,137, 1,019, 951, and 858 lines; its 2,150-line support
+module is now two fixture modules of 1,075 and 1,078 lines. All 23 copied-route
+and rendered-evidence proofs remain in the focused app-local run.
+Decomposing the 6,587-line replay transport-evidence scenario into setup,
+release, failed-verifier cycles, verifier evidence, and transport-record phases
+reduced test-file pressure to 2. Its public scenario is now a 25-line
+orchestrator over eight phase modules of 388, 1,222, 889, 653, 654, 685,
+1,093, and 1,238 lines; all five transport-evidence LiveView tests remain
+green in the focused app-local run.
+Decomposing the 2,190-line source-endpoint command-queue test into queue,
+release-resource, verifier, transport-action, and back-link phases reduced the
+2,939-line LiveView test to 426 lines, test-file pressure to 1, and overlong
+test pressure from 34 to 33. The 19-line scenario orchestrates phase modules of
+517, 603, 467, 499, and 292 lines, backed by 344 lines of shared fixtures; all
+three source-endpoint scope proofs remain green.
+Splitting the 21,037-line opt-in rendered-viewport matrix into 20 focused test
+files reduced test-file pressure to zero; the largest browser test file is now
+1,359 lines. Decomposing its 2,359-line authenticated smoke workflow into a
+28-line scenario over setup, recovery, worker-evidence, replacement-evidence,
+and mixed-evidence phases reduced overlong-test pressure from 33 to 32; the
+largest shared browser support file is 932 lines. The child and root
+`test.browser` aliases still select the compact three-test smoke file, while
+`test.browser.full` selects the complete browser-test directory. Compile-only
+full-matrix discovery finds all 93 cases with none entering the default suite,
+and the real smoke lane passes all three cases in 58.5 seconds. That run also
+refreshed the browser contract for the current telemetry-first toolbar and
+shared overlays, and fixed repeated warning popover IDs plus narrow dashboard
+title wrapping.
+Extracting runtime invalidation event and durable decision setup from the
+operator-diagnostics LiveView case reduced that test from 305 to 191 lines and
+overlong-test pressure from 32 to 31 while preserving the rendered diagnostic
+and no-refresh blocker assertions.
+Extracting the data-source binding change interaction and persisted audit
+assertions reduced the mission data-sources listing test from 307 to 280 lines
+and overlong-test pressure from 31 to 30.
+Extracting antenna-pointing copied-route assertions reduced that operational
+observable rendering test from 310 to 299 lines and overlong-test pressure from
+30 to 29.
+Extracting failed historical-workflow lifecycle and job setup reduced the
+non-retryable correction LiveView test from 315 to 264 lines and overlong-test
+pressure from 29 to 28.
+Extracting the degraded workflow-dispatch outcome metadata contract reduced
+that data-link panel component test from 317 to 264 lines and overlong-test
+pressure from 28 to 27.
+Extracting replay ground-station connection, interval, and source-health setup
+reduced that interval-evidence LiveView test from 322 to 292 lines and
+overlong-test pressure from 27 to 26.
+Extracting replay transport-execution interval setup and table-driven
+reopened-inspector detail assertions reduced its sibling test from 344 to 244
+lines and overlong-test pressure from 26 to 25.
+Moving the resolvable evidence-inspector fixture out of its component test body
+reduced that handoff test from 345 to 196 lines while preserving every rendered
+detail and data-link attribute assertion, reducing overlong-test pressure from
+25 to 24.
+Extracting the repeated bulk-request and request-group stage submissions from
+the grouped historical backfill proof reduced that test from 333 to 282 lines
+while retaining its storage-event, rendered-state, no-op, and queued-job
+assertions, reducing overlong-test pressure from 24 to 23.
+Moving live transport-execution endpoint, transport, capability-record,
+interval, and dashboard setup into a fixture helper reduced that copied-route
+proof from 328 to 242 lines while retaining its evidence navigation, route
+reopen, and inspector-detail assertions, reducing overlong-test pressure from
+23 to 22.
+Centralizing the managed-runtime inspector field selector reduced the live
+capability-record copied-route proof from 336 to 264 lines while keeping its
+explicit field-value, route, and reopen assertions, reducing overlong-test
+pressure from 22 to 21.
+Moving connection-state endpoint, transport, snapshot, interval, and dashboard
+setup into a fixture helper reduced that rendering proof from 346 to 271 lines
+while retaining its row presentation, evidence, copied-route, reopened-event,
+and transport-link assertions, reducing overlong-test pressure from 21 to 20.
+Reusing the managed-runtime inspector field selector and extracting the live
+action/timer dashboard fixture reduced that copied-route proof from 351 to 296
+lines while retaining both event-navigation and reopened-inspector contracts,
+reducing overlong-test pressure from 20 to 19.
+Extracting the comparison-review request document and repeated request-group
+stage submissions reduced that historical workflow proof from 356 to 290 lines
+while retaining its prefilled form, lifecycle navigation, review-origin,
+orchestration, and queued-job assertions, reducing overlong-test pressure from
+19 to 18.
+Extracting BYO probe configuration, managed seed source/binding setup, and the
+customer-source registration submission reduced that lifecycle proof from 358
+to 294 lines while retaining credential rotation, probe/drift, health,
+disable/enable, and binding-option assertions, reducing overlong-test pressure
+from 18 to 17.
+Moving the original requests, failure events, corrected replacements, and
+preapproval into a group-recovery fixture reduced that proof from 365 to 144
+lines while retaining its recovery-state, closure-readiness, and three staged
+transition assertions, reducing overlong-test pressure from 17 to 16.
+Centralizing the replay managed-capability inspector field selector reduced
+that lifecycle copied-route proof from 376 to 284 lines while keeping every
+field-value, replay-run, route, and reopen assertion explicit, reducing
+overlong-test pressure from 16 to 15.
+Moving spacecraft, endpoint, provider-profile, and versioned path-template API
+prerequisites into a response-asserting helper reduced the mission link
+assignment proof from 398 to 295 lines while retaining assignment validation,
+template application, contact realization, and deletion outcomes, reducing
+overlong-test pressure from 15 to 14.
+Extracting QuestDB connection and schema probing, diagnostic classification,
+credential headers, and endpoint selection from the 2,882-line telemetry
+source reduced the adapter to 2,578 lines. The new 317-line probe module keeps
+backend health checks separate from telemetry fact and frame resolution;
+production-file pressure remains 11 while the remaining telemetry
+responsibilities are split.
+Moving active and terminal backfill/import lifecycle selection, frame matching,
+badge metadata, and evidence merging out of the telemetry source reduced the
+adapter again to 2,376 lines. The 204-line historical-workflow module consumes
+the scoped lookup options assembled by the source and owns only
+visualization-facing workflow annotation.
+Extracting observation-identity loading, revision summaries, evidence,
+warnings, and cache dependency aggregation reduced the telemetry adapter to
+2,215 lines. The 230-line revision-state module receives tenant- and
+binding-scoped lookup options from the adapter and owns the full
+visualization-facing revision policy.
+Moving latest, history, and decimated frame shapes, field metadata, evidence,
+links, actions, and request-facing presentation context out of the telemetry
+source reduced the adapter to 1,758 lines. The 447-line frame builder and
+149-line frame-context module are both below the production threshold; source
+pressure remains 11 until another adapter responsibility is separated.
+Consolidating selection policy, live and archive time windows, backend
+connection material, contact-derived source-endpoint scope, and all
+latest/history/decimated/watermark query options reduced the telemetry adapter
+again to 1,342 lines. The 486-line query-options module keeps those backend
+scope rules consistent; production pressure remains 11 while the adapter is
+above the 1,000-line limit.
+Extracting coverage detection, frame warning annotation, watermark and source
+failure detail, data-view notices, linked actions, and degraded-state policy
+reduced the telemetry adapter to 936 lines. The 447-line warnings module keeps
+that presentation policy together, and production source-size pressure drops
+from 11 to 10 with the telemetry adapter now below the 1,000-line limit.
+Moving planned-request scope checks, source-capability matching, capability
+provenance, and placement warning construction out of the dashboard engine
+reduced the engine from 2,662 to 2,340 lines. The new 387-line validation module
+owns that policy while the engine retains request assembly and orchestration;
+production source-size pressure remains 10 until another engine responsibility
+is separated.
+Extracting runtime-context resolution, overlay and primary sampling, live versus
+snapshot time policy, source-binding windows, and placement sizing reduced the
+engine again to 1,808 lines. The 614-line source-request planner owns those
+request derivations without executing providers; production source-size
+pressure remains 10 while the engine is still above the 1,000-line limit.
+Moving freshness-policy composition, watermark annotation, capability
+provenance, and source-dependency metadata out of the runtime path reduced the
+engine to 1,634 lines. The new 249-line source-result annotation module owns the
+consumer-facing evidence added before caching and materialization; production
+source-size pressure remains 10.
+Extracting provider execution policy, timeout and failure conversion,
+source-result caching, cache-key identity, and source-selection metadata reduced
+the dashboard engine to 965 lines. The 745-line source-request execution service
+returns resolved results and cache provenance to the engine for frame
+materialization, reducing production source-size pressure from 10 to 9.
+Moving target-definition selection, synthetic event evaluation,
+observed-versus-recomputed comparison, bucket aggregation, and divergence
+warnings out of the limits source reduced that adapter from 2,682 to 2,272
+lines. The new 541-line recomputed-analysis module owns that policy; production
+source-size pressure remains 9 while the adapter is above the 1,000-line limit.
+Extracting scalar, event, analysis-bucket, and definition-interval frame shapes
+and field columns reduced the limits adapter again to 1,953 lines. The 375-line
+frame builder receives already-assembled evidence metadata, so source-binding
+policy remains in the adapter; production source-size pressure remains 9.
+Moving frame evidence, links, source counts, divergence metadata, and selected
+limit-definition activation details out of the limits adapter reduced it to
+1,685 lines. The 400-line metadata module receives the adapter's resolved source
+identity rather than selecting providers itself; production source-size
+pressure remains 9.
+Extracting provider query options, telemetry-source context resolution,
+time-range warnings, selected definition intervals, and watermark aggregation
+reduced the limits adapter to 1,234 lines. The new 561-line query-context module
+owns the translation from planned dashboard requests to bounded provider
+queries; production source-size pressure remains 9 while the adapter is still
+above the 1,000-line limit.
+Moving request validation, product and capability selection, and adapter warning
+policy into a 362-line request-policy module reduced the limits adapter to 945
+lines. This preserves the existing validation order and warning payloads while
+leaving provider orchestration in the adapter, reducing production source-size
+pressure from 9 to 8.
+Extracting product-to-family data-revision routing, provider callback selection,
+and multi-family cache fingerprints reduced the operational-observables source
+from 7,892 to 7,167 lines. The new 279-line revision-policy module preserves
+the existing product-specific fingerprint keys while the adapter retains its
+provider readers and row normalization; production source-size pressure remains
+8.
+Moving source-backed observable catalogs, sampling-to-product selection,
+capability contracts, and unsupported-request warnings into a 559-line product
+policy reduced the operational-observables source again to 6,640 lines. Its
+existing public backing-contract API remains as delegates and resolution now
+receives an already-selected product; production source-size pressure remains
+8.
+Extracting latest and historical connection-state frame fields, freshness
+metadata, operational links, and interval evidence reduced the
+operational-observables source from 6,640 to 6,492 lines. The new 160-line
+connection frame module receives resolved rows and source identity while
+provider reads and row normalization remain in the adapter; production
+source-size pressure remains 8.
+Moving connection snapshot normalization, transport and ground-station row
+joins, request-scope filtering, time windows, ordering, and limits into a
+391-line connection-row module reduced the operational-observables source from
+6,492 to 6,235 lines. Shared transport helpers still used by RF and metric
+products remain in the adapter; production source-size pressure remains 8.
+Extracting ground-station antenna-pointing snapshot joins, state normalization,
+scope and time filtering, plus latest and historical frame presentation reduced
+the operational-observables source from 6,235 to 5,915 lines. The new 255-line
+row module and 160-line frame module own that product family while the adapter
+retains provider selection; production source-size pressure remains 8.
+Consolidating latest and historical RF lock and frame-synchronization fields,
+freshness metadata, operational links, and interval evidence into a 206-line
+frame module reduced the operational-observables source from 5,915 to 5,593
+lines. The adapter still owns provider selection and row normalization;
+production source-size pressure remains 8.
+Moving RF lock/frame-sync snapshot normalization, transport matching, state
+classification, request-scope filtering, time windows, ordering, and limits
+into a 304-line row module reduced the adapter from 5,593 to 5,339 lines.
+Provider callbacks and freshness annotation remain adapter-owned; production
+source-size pressure remains 8.
+Extracting RF metric observable inference, value/unit normalization,
+transport/link joins, request filtering, ordering, limits, and empty-series
+materialization into a 382-line row module reduced the adapter from 5,339 to
+5,100 lines. Revision fingerprints reuse the same normalization API while
+provider callbacks and frame construction remain adapter-owned; production
+source-size pressure remains 8.
+Moving transport bitrate snapshot expansion, latest/history row joins,
+scope/time filtering, ordering, limits, and empty-series materialization into
+a 329-line row module reduced the adapter from 5,100 to 4,903 lines. Revision
+fingerprints reuse its bitrate normalizer; provider callbacks, freshness
+annotation, and frame construction remain adapter-owned, so production
+source-size pressure remains 8.
+Extracting ingress processing latency normalization, replay/scope filtering,
+latest/history row materialization, time windows, ordering, limits, and
+source-endpoint empty series into a 314-line row module reduced the adapter from
+4,903 to 4,701 lines. Revision fingerprints and durable/runtime overlay reuse
+the same normalization API while provider callbacks, overlay selection,
+freshness annotation, and frame construction remain adapter-owned; production
+source-size pressure remains 8.
+Consolidating latest RF metric, transport bitrate, and ingress latency fields
+with their shared grouped-history frames, freshness metadata, partial-data
+warnings, resource links, and event evidence into a 323-line presentation
+module reduced the adapter from 4,701 to 4,312 lines. The adapter supplies
+resolved rows and source identity while the frame module owns only numeric
+operational-metric presentation; production source-size pressure remains 8.
+Moving command-queue pending filtering, request-scope aggregation, row and frame
+presentation, queue-entry evidence, and revision fingerprint projection into a
+261-line family module reduced the adapter from 4,312 to 4,126 lines. Provider
+callbacks and shared freshness annotation remain adapter-owned; production
+source-size pressure remains 8.
+Extracting transport execution interval normalization, state classification,
+scope/time filtering, ordering, limits, event-frame fields and evidence, and
+revision projection into a 246-line family module reduced the adapter from
+4,126 to 3,958 lines. Provider callbacks and source identity remain
+adapter-owned; production source-size pressure remains 8.
+Consolidating managed and transport runtime event normalization, scope/time
+filtering, command-verifier enrichment, event-frame presentation and evidence,
+and both revision projections into a 648-line runtime-activity module reduced
+the adapter from 3,958 to 3,349 lines. Event and verifier provider queries plus
+source identity remain adapter-owned; production source-size pressure remains
+8.
+Extracting scheduled and realized contact normalization, multi-axis contact
+scope resolution, time-window filtering, latest and historical frame
+presentation, contact links, freshness metadata, and revision projection into a
+399-line contact-phase module reduced the adapter from 3,349 to 2,972 lines.
+Contact and source-endpoint provider queries, shared freshness annotation, and
+source identity remain adapter-owned; production source-size pressure remains
+8.
+Moving constellation-health provider selection, default limit-state and
+spacecraft reads, worst-state rollup, counts, and matrix-frame presentation into
+a 115-line family module reduced the adapter from 2,972 to 2,891 lines. The
+adapter now supplies tenant and source identity and retains only product
+dispatch for this family; production source-size pressure remains 8.
+Completing contact-phase ownership moved callback selection, default Contacts
+and SourceEndpoints reads, endpoint-scope hydration, latest/history
+materialization, and the default revision read behind the now 510-line family
+module. A 71-line shared latest-freshness primitive preserves one annotation
+policy for contact and the remaining latest families. Together these changes
+reduced the adapter from 2,891 to 2,760 lines; it now retains only contact-family
+dispatch, source identity, and the shared result envelope, while production
+source-size pressure remains 8.
+Completing command-queue ownership moved callback selection, the default
+pending-entry read, freshness annotation, frame resolution, and the default
+revision read behind the now 307-line family module. This reduced the adapter
+from 2,760 to 2,731 lines; it retains only command-queue dispatch and source
+identity for this family, while production source-size pressure remains 8.
+Completing transport-execution ownership moved interval callback selection,
+the default OperationalEvents interval read and option projection, frame
+resolution, and the default revision read behind the now 301-line family
+module. This reduced the adapter from 2,731 to 2,675 lines; it retains only
+transport-execution dispatch and source identity for this family, while
+production source-size pressure remains 8.
+Completing managed and transport runtime ownership moved event and verifier
+callback selection, default OperationalEvents and Commanding reads, verifier
+enrichment orchestration, frame resolution, and both default revision reads
+behind the now 811-line runtime-activity module. This reduced the adapter from
+2,675 to 2,474 lines; it retains only runtime-family dispatch and source
+identity, while production source-size pressure remains 8.
+Extracting OperationalEvents interval/sample option projection and snapshot
+normalization for connection, antenna pointing, RF state and metrics, transport
+bitrate, and ingress latency into a 246-line shared provider reduced the adapter
+from 2,474 to 2,284 lines. The remaining family modules can now own their
+default projected reads without copying OperationalEvents translation logic;
+production source-size pressure remains 8.
+Completing connection-state ownership added a 186-line family resolver over the
+existing row and frame modules. It owns callback selection, default transport,
+source-endpoint, and projected snapshot reads, freshness annotation, and
+revision projection. This reduced the adapter from 2,284 to 2,191 lines; it
+retains only connection-family dispatch and source identity, while production
+source-size pressure remains 8.
+Completing antenna-pointing ownership added a 150-line family resolver over the
+existing row and frame modules. It owns callback selection, default
+source-endpoint and projected snapshot reads, freshness annotation, and
+revision projection. This reduced the adapter from 2,191 to 2,096 lines and
+removed its direct SourceEndpoints dependency; it retains only pointing-family
+dispatch and source identity, while production source-size pressure remains 8.
+Completing Link RF ownership added a 362-line family resolver over the existing
+state-row, metric-row, state-frame, and shared metric-frame modules. It owns
+transport and projected snapshot callback selection, default reads, freshness,
+latest/history frame resolution, and revisions for lock, frame synchronization,
+and numeric RF metrics. This reduced the adapter from 2,096 to 1,876 lines; it
+retains only Link RF dispatch and source identity, while production source-size
+pressure remains 8.
+Completing transport-bitrate ownership added a 142-line family resolver over
+the existing row and shared metric-frame modules. It owns transport and
+projected metric callback selection, default reads, freshness, latest/history
+frame resolution, and revision projection. This reduced the adapter from 1,876
+to 1,799 lines and removed its direct TransportStore dependency; it retains
+only bitrate dispatch and source identity, while production source-size
+pressure remains 8.
+Completing ingress processing-latency ownership added a 275-line family
+resolver over the existing row and shared metric-frame modules. It owns callback
+precedence, durable and runtime source reads, live overlay selection, replay
+isolation, freshness, latest/history frame resolution, and revision projection.
+This reduced the adapter from 1,799 to 1,521 lines and removed its direct
+RuntimeHealth dependency; it retains only ingress-latency dispatch and source
+identity, while production source-size pressure remains 8.
+Extracting observable selection and stable frame ordering for the three
+aggregate operational products into a 196-line composer reduced the adapter
+from 1,521 to 891 lines. Direct product dispatch, source identity, facts, and
+the shared warning/result envelope remain in the adapter, while family reads
+and presentation remain in their focused modules. The adapter is now below the
+1,000-line guideline, reducing production source-size pressure from 8 to 7.
+Extracting inspector construction, related-link normalization, dashboard
+context and navigation projection, and shared row/value formatting into a
+284-line data-link resolver support module reduced `DataLinkResolver` from
+4,471 to 4,237 lines. This establishes a common contract for the planned
+target-specific resolver modules without duplicating inspector behavior;
+production source-size pressure remains 7.
+Extracting command request, queue-entry, release-attempt, and verifier-instance
+resolution into a 406-line target module moved their context-owned reads, row
+projection, and lifecycle related-link graph out of `DataLinkResolver`. A
+request filter on `Commanding.list_command_queue_entries/3` keeps those related
+reads behind the owning context. The facade now delegates the four targets and
+fell from 4,237 to 3,818 lines, while direct persistence-schema edges fell from
+122 to 118; production source-size pressure remains 7.
+Extracting contact, transport, link-assignment, source-endpoint, and
+ground-station resolution into a 598-line operational-resource target module
+moved context-owned reads, row projection, cross-resource links, and navigation
+actions out of `DataLinkResolver`. Contact reads now use the `Contacts` context,
+reducing direct persistence-schema edges from 118 to 116, while the facade fell
+from 3,818 to 3,214 lines; production source-size pressure remains 7.
+Extracting effective operational intervals plus source health, watermark, and
+binding-event inspection into a 427-line source-state target module reduced
+`DataLinkResolver` from 3,214 to 2,813 lines. Interval target routing, replay
+scoping, rows, and evidence links now live with those source-state reads;
+production source-size pressure remains 7 and dependency ratchets are unchanged.
+Extracting transport capability-record and action-request inspection into a
+116-line transport-runtime target module reduced `DataLinkResolver` from 2,813
+to 2,682 lines. The module owns the scoped operational-event reads and shares
+its row projections with generic operational-event inspection, keeping the two
+views aligned; production source-size pressure remains 7 and dependency
+ratchets are unchanged.
+Extracting limit events, definitions, lifecycle events, and effective intervals
+into a 264-line limits target module reduced `DataLinkResolver` from 2,682 to
+2,417 lines. Scoped event fetches and sample-history reads now run through the
+owning `Limits` context, reducing direct persistence-schema edges from 116 to
+115; production source-size pressure remains 7.
+Extracting persisted and projected mission events plus operational-event
+semantic inspection into a 531-line event target module reduced
+`DataLinkResolver` from 2,417 to 1,889 lines. Mission-event lookup now runs
+through the scoped `Reads.MissionEvents` boundary, reducing direct
+persistence-schema edges from 115 to 114; production source-size pressure
+remains 7.
+Extracting backfill lifecycle row projection, group progress, job state, and
+recovery presentation into a 656-line row module reduced `DataLinkResolver`
+from 1,889 to 1,142 lines. Target resolution and related-link traversal remain
+in the facade for the next bounded extraction; production source-size pressure
+remains 7 and dependency ratchets are unchanged.
+Completing backfill lifecycle ownership moved scoped resolution and workflow
+related-link traversal into a 257-line target module, reducing
+`DataLinkResolver` from 1,142 to 855 lines. The facade is now below the
+1,000-line guideline, reducing production source-size pressure from 7 to 6;
+dependency ratchets are unchanged.
+Extracting historical-data workflow action eligibility, reason codes, group
+stage policy, and operator-facing explanation summaries into a 376-line
+`DataManagement.WorkflowPolicy` module reduced `DataManagement` from 3,572 to
+3,203 lines. The typed `DataManagement` public APIs remain unchanged, and
+mutation guards now consume the same extracted decisions directly; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting observation-identity decision normalization, context validation,
+evidence construction, single and bulk persistence, per-item errors, and batch
+summaries into a 283-line `DataManagement.ObservationIdentityDecisions` module
+reduced `DataManagement` from 3,203 to 2,930 lines. Its typed public APIs and
+result contracts remain unchanged; production source-size pressure remains 6
+and dependency ratchets are unchanged.
+Extracting historical source-window parsing, source identity and query options,
+sample-history lookup, and diagnostics into a 135-line
+`DataManagement.HistoricalSourceSamples` module reduced `DataManagement` from
+2,930 to 2,844 lines. Background historical jobs and late-data policy execution
+now share that boundary; production source-size pressure remains 6 and
+dependency ratchets are unchanged.
+Extracting late-data decision normalization, execution-mode selection, locked
+sample-write options, projection semantics, and audit-event payloads into a
+341-line `DataManagement.LateDataPolicy` module reduced `DataManagement` from
+2,844 to 2,550 lines. The typed record, execute, mode, and write-option APIs
+remain unchanged and consume the shared historical source reader; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting historical workflow and stage normalization, required event context,
+single-event recording, and grouped request-item construction into a 245-line
+`DataManagement.WorkflowEvents` module reduced `DataManagement` from 2,550 to
+2,341 lines. Its typed event and request APIs remain unchanged, while
+correction, transition, group, and job paths consume the shared normalization
+and validation boundary directly; production source-size pressure remains 6
+and dependency ratchets are unchanged.
+Extracting historical workflow job enqueueing, payload decoding, source reads,
+sample persistence, lifecycle outcomes, and structured failure diagnostics into
+a 264-line `DataManagement.WorkflowJobs` module reduced `DataManagement` from
+2,341 to 2,105 lines. The typed start and background-execution APIs remain
+unchanged, and group transitions now start jobs through the same execution
+boundary directly; production source-size pressure remains 6 and dependency
+ratchets are unchanged.
+Extracting persisted lifecycle-event lookup plus workflow, job, retryability,
+recovery-action, and correction-lineage interpretation into a 125-line
+`DataManagement.WorkflowEventEvidence` module reduced `DataManagement` from
+2,105 to 2,010 lines. Correction, transition, and recovery paths now consume
+one compatibility reader for current and older payload shapes; production
+source-size pressure remains 6 and dependency ratchets are unchanged.
+Extracting correction-source validation, supersession checks, action-policy
+gates, request construction, and correction-stage transitions into a 427-line
+`DataManagement.WorkflowCorrections` module reduced `DataManagement` from
+2,010 to 1,628 lines. The typed correction request and transition APIs remain
+unchanged, while generic stage and group transitions route correction events
+through the same lineage-preserving boundary; production source-size pressure
+remains 6 and dependency ratchets are unchanged.
+Extracting missing-replacement detection, stale-running-job validation,
+advisory inspection events, stale-job requeueing, and authoritative requeue
+evidence into a 396-line `DataManagement.WorkflowReplacementRecovery` module
+reduced `DataManagement` from 1,628 to 1,212 lines. The typed missing/stale
+inspection and requeue APIs remain unchanged; production source-size pressure
+remains 6 and dependency ratchets are unchanged.
+Extracting single-job retry eligibility, failed-group filtering and policy
+gates, retry execution, lifecycle audit events, and structured summaries into a
+412-line `DataManagement.WorkflowRetries` module reduced `DataManagement` from
+1,212 to 808 lines. The typed single and group retry APIs remain unchanged.
+Crossing the 1,000-line guideline reduces production source-size pressure from
+6 to 5; dependency ratchets are unchanged.
+Extracting telemetry and transport verifier evaluation, input ordering,
+delay/timeout handling, subject normalization, and comparison, range, and
+compound criteria matching into a 327-line `Commanding.VerifierEvaluation`
+module reduced `Commanding` from 3,436 to 3,071 lines. Existing Commanding
+evaluation APIs and persistence orchestration remain unchanged; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting transport action-request and capability-record verifier signal
+normalization, phase inference, command identity, and JSON document unwrapping
+into a 147-line `Commanding.VerifierTransportSignals` module reduced
+`Commanding` from 3,071 to 2,922 lines. Existing transport-verifier APIs,
+evidence shapes, and persistence orchestration remain unchanged; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting mission grouping, pending-instance evaluation, transport-signal
+ordering, and injected persistence coordination into a 180-line
+`Commanding.VerifierWorkflow` module reduced `Commanding` from 2,922 to 2,804
+lines. The facade retains schema-backed reads, writes, transactions, and
+notifications, so its public verifier APIs remain unchanged without adding
+direct persistence-schema callers; production source-size pressure remains 5
+and dependency ratchets are unchanged.
+Extracting catalog command-basis resolution, request enrichment, argument
+normalization and validation, and approval-state derivation into a 264-line
+`Commanding.RequestValidation` module reduced `Commanding` from 2,804 to 2,558
+lines. Request persistence, staged submission, and release paths consume the
+same boundary without changing their public contracts; production source-size
+pressure remains 5 and dependency ratchets are unchanged.
+Extracting realized-contact eligibility, dispatch ordering, selected uplink
+path resolution, transport-binding selection, and preferred-service matching
+into a 299-line `Commanding.ReleaseTargetSelection` module reduced `Commanding`
+from 2,558 to 2,295 lines. Queue and release persistence now pass the existing
+`CommandRequest` domain value into this boundary, avoiding a new schema caller;
+production source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting pending release-attempt construction, uplink control-input payloads,
+initial verification state, verifier-instance construction, and delay/timeout
+timestamps into a 142-line `Commanding.ReleaseArtifacts` module reduced
+`Commanding` from 2,295 to 2,190 lines. The facade converts claimed queue and
+request rows to their existing domain values before construction, while
+persistence and runtime dispatch remain unchanged; production source-size
+pressure remains 5 and dependency ratchets are unchanged.
+Extracting stage and staged-item editability, approval actor and self-approval
+rules, request queue/release eligibility, and queue-entry timing/expiry guards
+into a 193-line `Commanding.LifecyclePolicy` module reduced `Commanding` from
+2,190 to 2,032 lines. Generic map contracts preserve the persisted rows'
+string-valued lifecycle errors without making the policy a schema caller;
+production source-size pressure remains 5 and dependency ratchets are unchanged.
+Moving command approval, queue-entry, release-attempt, request, stage,
+verifier-instance, and staged-item rows from the horizontal persistence
+namespace into `Cadence.Commanding` gives the seven tables an explicit context
+owner without changing their schemas or migrations. `Commanding` remains 2,032
+lines and production source-size pressure remains 5, while direct
+persistence-schema edges fall from 114 to 107 and the other dependency
+ratchets remain unchanged.
+Extracting verifier fetch/list persistence, timeout projection and mutation,
+pending-instance reads, release-transaction inserts, instance updates, and
+request/release verification rollups into a 325-line
+`Commanding.VerifierStore` module reduced `Commanding` from 2,032 to 1,765
+lines. The context-owned command rows make this a same-context persistence
+boundary, while transport evidence lookup remains in the facade; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting command-stage and staged-item CRUD, assignment validation, submission
+selection, request construction, and the batch submission transaction into a
+457-line `Commanding.StageStore` module reduced `Commanding` from 1,765 to
+1,426 lines. The public stage, item, and submission APIs remain unchanged, and
+the context-owned command rows keep the store within the existing dependency
+baseline; production source-size pressure remains 5 and dependency ratchets are
+unchanged.
+Extracting request persistence and validation, approval decisions, queue
+creation and listing, pending-lane reads, and release candidate claim and
+restore operations into a 530-line `Commanding.RequestQueueStore` module reduced
+`Commanding` from 1,426 to 1,037 lines. The facade retains queue-lane scheduling,
+contact selection, release dispatch, and verifier coordination, while its
+public request, approval, and queue APIs remain unchanged; production
+source-size pressure remains 5 and dependency ratchets are unchanged.
+Extracting release-attempt persistence, fetch/list queries, and transaction-aware
+row lookup into a 110-line `Commanding.ReleaseStore` module reduced `Commanding`
+from 1,037 to 940 lines. Release dispatch, completion/failure transactions, and
+verifier coordination remain in the facade with unchanged public APIs. Crossing
+the 1,000-line guideline reduces production source-size pressure from 5 to 4;
+dependency ratchets are unchanged.
+Retiring the 24 commanding delegates from the root `Cadence` facade and moving
+seven authenticated command controllers directly to `Cadence.Commanding`
+reduced the facade from 4,353 to 4,089 lines and reduced production web callers
+of the root facade from 102 to 95 files. Commanding tests, simulator integration
+coverage, and shared web test support now call the owning context directly as
+well. Existing routes and authentication pipelines are unchanged; production
+source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the five notification delegates from the root facade and moving the
+notification LiveView, no-organization controller, and focused tests directly
+to `Cadence.Notifications` reduced `Cadence` from 4,089 to 4,066 lines and
+reduced production web callers of the root facade from 95 to 94 files.
+Notification routes and authentication scopes are unchanged; production
+source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the three mission delegates from the root facade and moving mission
+controllers, LiveViews, access helpers, shared fixtures, and the SRE demo
+directly to `Cadence.Missions` reduced `Cadence` from 4,066 to 4,050 lines and
+reduced production web callers of the root facade from 94 to 90 files. Existing
+mission routes and authentication pipelines are unchanged; production
+source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the four organization persistence delegates from the root facade and
+moving admin organization pages, invitation/access helpers, shared fixtures,
+and the SRE demo directly to `Cadence.Organizations` reduced `Cadence` from
+4,050 to 4,029 lines and reduced production web callers of the root facade from
+90 to 87 files. The narrower context result type also exposed and removed one
+unreachable generic-error branch in the organization creation LiveView.
+Existing admin and invitation routes and authentication pipelines are
+unchanged; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
+Retiring 17 authentication, session, invitation, and membership delegates from
+the root facade and moving controllers, auth plugs, LiveView auth helpers, and
+focused tests directly to `Cadence.Auth` and `Cadence.Accounts` reduced
+`Cadence` from 4,029 to 3,913 lines and reduced production web callers of the
+root facade from 87 to 75 files. Browser/API scope loading, bootstrap and
+session routes, and their existing authentication and redirect pipelines are
+unchanged; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
+Retiring 15 spacecraft and spacecraft-type delegates from the root facade and
+moving production, test-support, simulator, dev-demo, and opt-in browser callers
+directly to `Cadence.SpacecraftStore` and `Cadence.SpacecraftTypeStore` reduced
+`Cadence` from 3,913 to 3,804 lines and reduced production web callers of the
+root facade from 75 to 65 files. Existing spacecraft routes and authentication
+pipelines are unchanged; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
+Retiring 22 transport, ground-station, and routing-rule delegates from the root
+facade and moving production, test-support, simulator, and opt-in browser
+callers directly to their owning `Cadence.Comms` stores reduced `Cadence` from
+3,804 to 3,610 lines and reduced production web callers of the root facade from
+65 to 55 files. Existing Comms routes and authentication pipelines are
+unchanged; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
+Retiring the three remaining service-identity delegates from the root facade
+and moving the control-plane controller and fleet-planning policy LiveView
+directly to `Cadence.Auth` reduced `Cadence` from 3,610 to 3,589 lines and
+reduced production web callers of the root facade from 55 to 54 files. The
+service-identity API remains in the authenticated API pipeline, and the
+fleet-planning policy route remains in the authenticated `:ops` LiveView
+session; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
+Retiring 21 catalog database, artifact, import-run, snapshot, runtime-artifact,
+and compiler delegates from the root facade moved control-plane controllers,
+core tests, and simulator integration directly to `Cadence.Catalog` and its
+owning compiler. This reduced `Cadence` from 3,589 to 3,415 lines and reduced
+production web callers of the root facade from 54 to 49 files. Catalog API
+routes remain in the authenticated API pipeline, and browser catalog routes
+remain in the authenticated `:catalog` LiveView session; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
+Retiring the eight source-endpoint persistence and read clauses from the root
+facade moved 162 production, test-support, simulator, opt-in browser, and demo
+call sites directly to `Cadence.SourceEndpoints`. This reduced `Cadence` from
+3,415 to 3,365 lines and reduced production web callers of the root facade from
+49 to 47 files. Source-endpoint API routes remain in the authenticated API
+pipeline, while operations and spacecraft pages remain in their existing
+authenticated LiveView sessions. The narrower context return type also exposed
+and removed two unreachable generic-error branches; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
+Retiring the ten governed packet-definition and binding-set persistence/read
+clauses from the root facade moved 97 production, test-support, simulator,
+opt-in browser, and demo call sites directly to `Cadence.Governance`. This
+reduced `Cadence` from 3,365 to 3,302 lines and reduced production web callers
+of the root facade from 47 to 45 files. Binding-set and packet-definition API
+routes remain in the authenticated API pipeline, and spacecraft telemetry pages
+remain in their existing authenticated LiveView session; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
+Retiring the six binding-set activation and active-basis clauses from the root
+facade moved 55 production, test-support, simulator, opt-in browser, and demo
+call sites directly to durable `Cadence.Activations` or the mission-only
+`Cadence.Runtime` boundary, preserving the overload semantics. This reduced
+`Cadence` from 3,302 to 3,259 lines and reduced production web callers of the
+root facade from 45 to 40 files. Activation API routes remain in the
+authenticated API pipeline, while operations and spacecraft pages remain in
+their existing authenticated LiveView sessions; production source-size pressure
+remains 4 and dependency ratchets are unchanged.
+Retiring the six provider reservation, booking, and opportunity-search delegates
+from the root facade moved 19 operations and simulator call sites directly to
+`Cadence.Contacts.ProviderReservations`, `ProviderBooking`, and
+`ProviderScheduling`. This reduced `Cadence` from 3,259 to 3,209 lines;
+production web callers of the root facade remain at 40 files because the
+scheduling dependency module still uses root scheduled-contact APIs. The
+operations scheduling route remains in its existing authenticated LiveView
+session; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
+Retiring the ten scheduled-contact persistence, read, realization, and
+cancellation clauses from the root facade moved 115 production, test-support,
+simulator, opt-in browser, and demo call sites directly to `Cadence.Contacts`.
+This reduced `Cadence` from 3,209 to 3,129 lines and reduced production web
+callers of the root facade from 40 to 38 files. Scheduled-contact API routes
+remain in the authenticated API pipeline, and contact operations pages remain
+in their existing authenticated LiveView sessions; production source-size
+pressure remains 4 and dependency ratchets are unchanged.
+Retiring the fourteen realized-contact reconciliation, persistence, read,
+start, early-end, and stop clauses from the root facade moved 61 production,
+test-support, simulator, opt-in browser, and demo call sites directly to
+`Cadence.Contacts`, and corrected the remaining configuration reference. This
+reduced `Cadence` from 3,129 to 3,033 lines and reduced production web callers
+of the root facade from 38 to 37 files. Realized-contact API routes remain in
+the authenticated API pipeline, and contact operations pages remain in their
+existing authenticated LiveView sessions; production source-size pressure
+remains 4 and dependency ratchets are unchanged.
+Retiring the 42 provider-profile, transport-profile, path-template, shared-link,
+and link-assignment clauses from the root facade moved 75 production,
+test-support, simulator, opt-in browser, and test call sites directly to
+`Cadence.Contacts`. This reduced `Cadence` from 3,033 to 2,655 lines and
+reduced production web callers of the root facade from 37 to 28 files. Contact
+configuration API routes remain in the authenticated API pipeline, while Comms,
+mission, and operations pages remain in their existing authenticated LiveView
+sessions; production source-size pressure remains 4 and dependency ratchets
+are unchanged.
+Retiring the 23 operational-event query and effective-interval projection
+clauses from the root facade moved 82 test and browser-fixture call sites
+directly to `Cadence.OperationalEvents` and updated the remaining dashboard
+maturity handoff reference. This reduced `Cadence` from 2,655 to 2,480 lines;
+production web callers of the root facade remain at 28 files because production
+already used the owning context. The mission-events API remains in the
+authenticated API pipeline, and dashboard evidence remains in the authenticated
+`:ops` LiveView session; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
+Retiring the 13 contact-requirement and requirement-template workflow clauses
+from the root facade moved 12 production and test call sites directly to
+`Cadence.ContactPlanning.ContactRequirements` and
+`ContactRequirementTemplates`. This reduced `Cadence` from 2,480 to 2,264
+lines and reduced production web callers of the root facade from 28 to 26
+files. Requirement and template pages remain in the authenticated `:ops`
+LiveView session, and direct owner calls continue passing `current_scope` as
+their first argument; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
+Retiring the eight fleet-planning policy lifecycle clauses from the root facade
+moved eight production and test call sites directly to
+`Cadence.ContactPlanning.FleetPlanningPolicies` and reduced `Cadence` from
+2,264 to 2,115 lines. Production web callers of the root facade remain at 26
+files because those planning LiveViews still use separate run and automation
+facade APIs. Policy pages remain in the authenticated `:ops` LiveView session,
+and direct create, version, and decision calls continue passing `current_scope`;
+production source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the nine fleet-planning run, execution, and repair clauses from the
+root facade moved eight production and test call sites directly to
+`Cadence.ContactPlanning.FleetPlanningRuns`, `FleetPlanner`, and `FleetRepairs`.
+This reduced `Cadence` from 2,115 to 2,038 lines and reduced production web
+callers of the root facade from 26 to 25 files. Fleet-planning routes remain in
+the authenticated `:ops` LiveView session, and direct execution and repair calls
+continue passing `current_scope`; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
+Retiring the seven automation-grant, automated-planning, and automation-action
+clauses from the root facade moved five production call sites directly to
+`Cadence.ContactPlanning.AutomationGrants`, `FleetAutomation`, and
+`FleetAutomationActions`. This reduced `Cadence` from 2,038 to 1,944 lines and
+reduced production web callers of the root facade from 25 to 23 files.
+Automation controls remain in the authenticated `:ops` LiveView session, and
+direct grant and automation mutations continue passing `current_scope`;
+production source-size pressure remains 4 and dependency ratchets are unchanged.
+Retiring the eleven requirement-planning, contact-plan lifecycle, approval, and
+execution clauses from the root facade moved 12 production call sites directly
+to `Cadence.ContactPlanning.Planner`, `ContactPlans`, `ContactPlanApprovals`,
+and `ContactPlanExecutions`. This reduced `Cadence` from 1,944 to 1,766 lines
+and reduced production web callers of the root facade from 23 to 19 files.
+Contact-plan routes remain in the authenticated `:ops` LiveView session, and
+direct planning, submission, decision, and execution calls continue passing
+`current_scope`; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
+Retiring the four contact-action and mission-event listing clauses from the
+root facade moved 18 production and test call sites directly to
+`Cadence.Contacts` and `Cadence.Reads.MissionEvents`. This reduced `Cadence`
+from 1,766 to 1,738 lines and reduced production web callers of the root facade
+from 19 to 17 files. Contact-action and mission-event controller routes remain
+in the authenticated API pipeline, and controller mission authorization still
+runs before the owner reads; production source-size pressure remains 4 and
+dependency ratchets are unchanged.
+Retiring the four derived-telemetry and limit-definition persistence/read
+clauses from the root facade moved 37 test and support call sites directly to
+`Cadence.Governance` and `Cadence.Limits`. This reduced `Cadence` from 1,738
+to 1,714 lines; production web callers of the root facade remain at 17 files
+because production already used the owning contexts. No route or authentication
+placement is involved; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
+Retiring the 26 telemetry, derived-telemetry, limit-state, and mission-health
+read clauses from the root facade moved 91 production, test, browser, and demo
+call sites directly to `Cadence.Reads.Telemetry`,
+`Cadence.Reads.DerivedTelemetry`, `Cadence.Reads.Limits`, and
+`Cadence.Reads.MissionHealth`. This reduced `Cadence` from 1,714 to 1,526 lines
+and reduced production web callers of the root facade from 17 to 13 files.
+Telemetry and mission-health API routes remain in the authenticated API
+pipeline, while telemetry exploration and dashboard routes remain in the
+authenticated `:ops` LiveView session; organization-scoped owner arities are
+preserved. Production source-size pressure remains 4 and dependency ratchets
+are unchanged.
+Retiring the six limit-event history, definition-interval, and watermark read
+clauses from the root facade moved seven test call sites directly to
+`Cadence.Reads.Limits`. This reduced `Cadence` from 1,526 to 1,480 lines;
+production web callers of the root facade remain at 13 files because production
+already used the owning read module. No route or authentication placement is
+involved; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
+Retiring the 12 derived-telemetry evaluation and latest-value rebuild clauses
+from the root facade moved nine test call sites directly to
+`Cadence.DerivedTelemetry`, `Cadence.Projections.DerivedTelemetryLatestValues`,
+and `Cadence.Jobs`. This reduced `Cadence` from 1,480 to 1,386 lines;
+production web callers of the root facade remain at 13 files because production
+already used the owning services. No route or authentication placement is
+involved; production source-size pressure remains 4 and dependency ratchets are
+unchanged.
+Retiring the 18 telemetry-limit evaluation and latest-limit-state projection
+clauses from the root facade moved 23 test, test-support, and opt-in browser
+call sites directly to `Cadence.Limits`,
+`Cadence.Projections.TelemetryLatestLimitStates`, and `Cadence.Jobs`. The two
+organization-form fixture paths retain explicit mission ownership checks before
+evaluation. This reduced `Cadence` from 1,386 to 1,250 lines; production web
+callers of the root facade remain at 13 files because production already used
+the owning services. No route or authentication placement is involved;
+production source-size pressure remains 4 and dependency ratchets are
+unchanged.
+Retiring the six latest-telemetry-value projection rebuild clauses from the
+root facade moved seven test call sites directly to
+`Cadence.Projections.TelemetryLatestValues` and `Cadence.Jobs`. This reduced
+`Cadence` from 1,250 to 1,203 lines; production web callers of the root facade
+remain at 13 files because production already used the owning services. No
+route or authentication placement is involved; production source-size pressure
+remains 4 and dependency ratchets are unchanged.
+Retiring the 16 replay execution, read, job, and diff clauses from the root
+facade moved 17 production and test call sites directly to `Cadence.Replay`,
+`Cadence.Reads.Replay`, `Cadence.Replay.Diff`, and `Cadence.Jobs`, and made one
+private scope helper removable. This reduced `Cadence` from 1,203 to 1,036
+lines; production web callers of the root facade remain at 13 files because the
+dashboard loader still uses a separate root API. Its replay path remains in the
+authenticated `:ops` LiveView session and continues using organization- and
+mission-scoped reads; production source-size pressure remains 4 and dependency
+ratchets are unchanged.
+Retiring the six mission-event projection rebuild clauses from the root facade
+moved five test call sites directly to `Cadence.Projections.MissionEvents` and
+`Cadence.Jobs`, with explicit mission ownership checks retained before rebuild
+execution. This reduced `Cadence` from 1,036 to 995 lines and reduced
+production source-size pressure from 4 oversized files to 3; production web
+callers of the root facade remain at 13 files. No route or authentication
+placement is involved, and dependency ratchets are unchanged.
+Extracting the replay connection-state viewport execution and assertion phase
+into a named helper reduced its opt-in browser test from 303 to 252 lines and
+reduced overlong test-function pressure from 2 to 1. The authenticated `:ops`
+dashboard route, replay and scope query, viewport-script arguments, evidence
+expectations, and final browser success assertion remain covered; production
+source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting the antenna-pointing operational-event copied-route reopening proof
+into a named helper reduced its LiveView test from 308 to 240 lines and reduced
+overlong test-function pressure from 1 to 0. The authenticated `:ops` route,
+frame-evidence selectors, operational-event navigation and patch assertions,
+copied path, reopened inspector fields, and LiveView cleanup remain covered;
+production source-size pressure remains 3 and dependency ratchets are
+unchanged.
+Extracting scheduler wakeup calculation and per-mission projection shaping into
+the persistence-free `Cadence.Contacts.SchedulerReadModel` reduced
+`Cadence.Contacts` from 3,670 to 3,599 lines. Storage-backed queries remain in
+the Contacts boundary, so the scheduler process keeps using its three narrow
+context entry points without introducing new persistence-schema callers. No
+route or authentication placement is involved; production source-size pressure
+remains 3 and dependency ratchets are unchanged.
+Extracting pure contact configuration and lifecycle rules into
+`Cadence.Contacts.Validation` reduced `Cadence.Contacts` from 3,599 to 3,508
+lines. Mission IDs, reusable references, scheduled-contact path and intent
+rules, unique paths, realized-contact scope, and realization-state guards now
+live behind that persistence-free boundary, while resolution and database-backed
+checks remain in the context. No route or authentication placement is involved;
+production source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting URL focus parsing, source and binding inventory matching, and focus
+presentation labels into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocus` reduced `OpsDataSourcesLive` from
+3,757 to 3,468 lines. The LiveView retains parameter orchestration and
+storage-backed operational-resource resolution, and direct model tests cover
+normalization, explicit and context-only matches, and stale identifiers. The
+data-sources page remains in its authenticated `:ops` LiveView session because
+it is mission-operations UI; no route or access-control placement changed.
+Production source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting adapter compatibility, effective physical-source capabilities, and
+requested dashboard-contract evaluation into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceContract` reduced `OpsDataSourcesLive`
+from 3,468 to 3,275 lines. Remediation candidates, binding changes, and source
+row capability labels now share that contract boundary, with direct tests for
+adapter filtering, physical capability overlays, and operational backing
+products. The data-sources page remains in its authenticated `:ops` LiveView
+session because it is mission-operations UI; persistence, events, forms, and
+route placement are unchanged. Production source-size pressure remains 3 and
+dependency ratchets are unchanged.
+Extracting source evidence and remediation presentation models into the
+persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocusPresentation` reduced
+`OpsDataSourcesLive` from 3,275 to 2,968 lines. Evidence labels and identity,
+publish-blocker actions, capability mismatch rows, and compatible-source
+candidates now compose the extracted source-contract model behind direct
+tests. The HEEx components, stable DOM contracts, dashboard-return navigation,
+and authenticated `:ops` route remain in the LiveView. Production source-size
+pressure remains 3 and dependency ratchets are unchanged.
+Extracting operational-resource fallback inference, resolved labels, statuses,
+and row shaping into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceFocusResources` reduced
+`OpsDataSourcesLive` from 2,968 to 2,712 lines. The LiveView retains
+organization- and mission-scoped store fetches, routing-rule lookup, and
+verified route construction, which it injects into the presentation model.
+Direct tests cover resolved endpoint labels, inferred and unverified ground
+stations, fetched-station precedence, and navigation values. The authenticated
+`:ops` route remains unchanged; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
+Extracting source-registration defaults, parameter parsing, ownership and
+isolation validation, capability presets, persistence payload construction,
+and form option lists into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceRegistration` reduced
+`OpsDataSourcesLive` from 2,712 to 2,477 lines. The LiveView still derives
+organization and mission ownership from `current_scope` and the current
+mission, then performs credential and source persistence with the current
+actor. Direct tests cover BYO and managed payloads, validation failures, and
+form options. The authenticated `:ops` route remains unchanged; production
+source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting deployment, binding, source, and source-health activity rows plus
+probe diagnostic normalization into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceActivityPresentation` reduced
+`OpsDataSourcesLive` from 2,477 to 2,375 lines. Source-health rollups reuse the
+same probe payload and connection-profile readers, and direct tests lock down
+atom- and string-keyed secret redaction alongside event and deployment
+formatting. The LiveView retains scoped reads and event orchestration in its
+authenticated `:ops` route; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
+Extracting binding grouping, source and credential labels, source-health
+classification, and binding-level readiness presentation into the
+persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceBindingPresentation` reduced
+`OpsDataSourcesLive` from 2,375 to 2,241 lines. Direct tests cover stable group
+identity, active-first ordering, missing-source state, credential labels, and
+readiness-policy metadata. Source-level inventory rollups and all scoped reads
+remain in the LiveView on its authenticated `:ops` route; production
+source-size pressure remains 3 and dependency ratchets are unchanged.
+Extracting source-row capability labels, health and readiness classification,
+watermark selection, credential posture, deployment state, and action
+visibility into the persistence-free
+`CadenceWeb.OpsDataSourcesLive.SourceInventoryPresentation` reduced
+`OpsDataSourcesLive` from 2,241 to 1,877 lines. Direct tests cover stable source
+ordering, credential and endpoint labels, capability text, lifecycle actions,
+latest watermark selection, and disabled-source enablement. The LiveView still
+owns organization- and mission-scoped inventory reads on its authenticated
+`:ops` route; production source-size pressure remains 3 and dependency
+ratchets are unchanged.
+Extracting focused-source resource, remediation, and evidence function
+components plus their verified mission navigation into
+`CadenceWeb.OpsDataSourcesLive.SourceFocusComponents` reduced
+`OpsDataSourcesLive` from 1,877 to 1,562 lines. Dashboard-return defaults now
+live in the persistence-free `SourceFocus` model so rendered links and emitted
+source-action events share one normalization contract. Direct component tests
+cover operational-resource routes, remediation return queries, and evidence
+return state, while the LiveView retains its main render root, events, and
+scoped resource reads. The app-wide LiveView layout and authenticated `:ops`
+route remain unchanged; production source-size pressure remains 3 and
+dependency ratchets are unchanged.
+Moving the main data-sources template and its key-value, status, event-list,
+and open-binding presentation helpers into the 769-line
+`CadenceWeb.OpsDataSourcesLive.Page` reduced `OpsDataSourcesLive` from 1,562 to
+808 lines. The LiveView now delegates rendering while retaining mount,
+parameter and event orchestration, forms, mission-scoped reads, persistence,
+and telemetry payload construction. Its existing page-level LiveView suites
+cover the delegated full render, focus and remediation flows, deployment
+actions, and BYO lifecycle behavior. The app-wide LiveView layout and
+authenticated `:ops` route remain unchanged. Production source-size pressure
+falls from 3 to 2, with zero oversized test files or functions and unchanged
+dependency ratchets.
+Extracting request-local sampling, source-product, and time-axis compatibility
+policy into the 292-line
+`Cadence.Dashboards.SourceRegistry.CapabilityPosture` reduced
+`SourceRegistry` from 3,038 to 2,767 lines. The registry still owns its public
+capability API, adapter and binding resolution, provenance construction,
+contract validation, persisted health and watermark evidence, and source
+execution. Direct policy tests cover telemetry time-axis fallback, independent
+sampling and product mismatches, and operational-observable source-backing
+products, while the existing registry and evidence suites preserve facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 2 and dependency ratchets are unchanged.
+Extracting effective-binding segment fact aggregation into the 202-line
+`Cadence.Dashboards.SourceRegistry.FactsAggregation` reduced
+`SourceRegistry` from 2,767 to 2,579 lines. The registry continues to collect
+facts through resolved adapters and passes its existing binding-segment
+metadata builder into the pure aggregation boundary. Direct tests cover
+watermark interval and confidence precedence, health severity, per-segment
+health and capability posture, and common revision/cursor behavior; existing
+registry and evidence suites preserve the facade contract. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
+Extracting compatible effective-binding segment result and frame merging into
+the 196-line `Cadence.Dashboards.SourceRegistry.SegmentResultMerge` reduced
+`SourceRegistry` from 2,579 to 2,414 lines. The registry still decides when a
+request is segmentable, resolves binding ranges, and executes each adapter; it
+passes the existing binding-segment metadata builder into the pure merger.
+Direct tests cover field and metadata concatenation, warning and watermark
+preservation, segment summaries, and structured incompatible-frame warnings,
+while existing registry and evidence tests preserve facade behavior. No route
+or authentication placement is involved; production source-size pressure
+remains 2 and dependency ratchets are unchanged.
+Extracting classified source-health application into the 126-line
+`Cadence.Dashboards.SourceRegistry.HealthMerge` reduced `SourceRegistry` from
+2,414 to 2,308 lines. The registry retains persisted status and effective-
+interval lookup plus health-policy classification; facts and results now share
+one transformation for durable diagnostics, interval metadata, and watermark
+decoration. Direct tests cover probe and connection-test evidence, interval
+provenance, watermark propagation, and missing-status fallback, while existing
+registry and evidence tests preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
+Extracting durable source-watermark application into the 122-line
+`Cadence.Dashboards.SourceRegistry.WatermarkMerge` reduced `SourceRegistry`
+from 2,308 to 2,227 lines. The registry retains watermark enablement and
+persisted-status lookup, while facts and results share status conversion,
+durable metadata, and authoritative or best-effort unknown-warning cleanup.
+Direct tests cover facts replacement, metadata preservation, atom- and
+string-keyed warning cleanup, frame warning codes, and unknown-confidence
+preservation; existing registry and evidence tests preserve facade behavior.
+No route or authentication placement is involved; production source-size
+pressure remains 2 and dependency ratchets are unchanged.
+Extracting binding-set, application-binding, catalog-revision, and source-
+health effective-interval selection into the 315-line
+`Cadence.Dashboards.SourceRegistry.OperationalIntervalProvenance` reduced
+`SourceRegistry` from 2,227 to 1,958 lines. The registry delegates result
+provenance and reuses the extracted reader for health-interval lookup, while
+adapter execution and persisted health/status ownership remain unchanged.
+Direct tests cover frame-derived and binding-segment selection times, injected
+readers and query options, endpoint and catalog context, and non-persisted
+omission; existing registry and evidence tests preserve facade behavior. No
+route or authentication placement is involved; production source-size
+pressure remains 2 and dependency ratchets are unchanged.
+Extracting source-binding identity, result and fact provenance, warning and
+frame link context, and evidence de-duplication into the 388-line
+`Cadence.Dashboards.SourceRegistry.Provenance` reduced `SourceRegistry` from
+1,958 to 1,606 lines. The registry retains capability policy, adapter
+resolution and execution, persistence, and source-health orchestration while
+delegating the shared provenance contract used by both segmented and
+single-binding paths. Direct tests cover interval and segment metadata, source
+selection, fact enrichment, nested warning/frame/field link context, and
+evidence de-duplication; existing registry and evidence suites preserve facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 2 and dependency ratchets are unchanged.
+Extracting injected and persisted source-health status selection, source-level
+fallback identity, and replay-aware effective-interval matching into the
+190-line `Cadence.Dashboards.SourceRegistry.SourceHealthLookup` reduced
+`SourceRegistry` from 1,606 to 1,448 lines. The registry continues to decide
+when health is enabled and how classified status decorates facts and results;
+the extracted boundary owns only status and interval retrieval. Direct tests
+cover exact-over-source-level status precedence, fallback selection, replay
+operational-event identity, and interval query context, while existing registry
+and evidence suites preserve facade behavior. No route or authentication
+placement is involved; production source-size pressure remains 2 and dependency
+ratchets are unchanged.
+Extracting circuit admission, physical-source-keyed success and failure
+recording, and source-health event shaping into the 252-line
+`Cadence.Dashboards.SourceRegistry.ExecutionMonitoring` reduced
+`SourceRegistry` from 1,448 to 1,237 lines. The registry keeps adapter
+selection, option construction, execution, result validation, and degraded
+result presentation while delegating the operational monitoring around those
+steps. Direct tests cover disabled admission, configured failure and backoff,
+success reset, physical-source isolation, and health identity attributes;
+existing registry and evidence suites preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+2 and dependency ratchets are unchanged.
+Extracting source-local option composition, request capability injection,
+binding context, credential resolution, and redacted-versus-ephemeral
+connection shaping into the 186-line
+`Cadence.Dashboards.SourceRegistry.AdapterOptions` reduced `SourceRegistry`
+from 1,237 to 1,087 lines. The registry retains adapter selection and
+request-aware capability lookup, then passes the selected capability contract
+into the extracted option boundary. Direct tests cover source options,
+freshness and persistence context, bearer material and normalized headers,
+redacted connection profiles, and descriptor-only public endpoints; existing
+registry, evidence, and BYO data-source suites preserve facade behavior. No
+route or authentication placement is involved; production source-size pressure
+remains 2 and dependency ratchets are unchanged.
+Extracting optional strict contract enforcement and violation formatting for
+planned requests, capabilities, facts, and results into the 96-line
+`Cadence.Dashboards.SourceRegistry.ContractValidation` reduced
+`SourceRegistry` from 1,087 to 1,007 lines. The registry retains each public
+boundary and decides where validation runs, while the extracted module owns
+normalization and the shared error contract. Direct tests cover non-strict
+normalization, strict request field paths, non-struct capability errors, facts
+normalization, and result identity enforcement; existing registry and evidence
+suites preserve facade behavior. No route or authentication placement is
+involved; production source-size pressure remains 2 and dependency ratchets
+are unchanged.
+Extracting default adapter ownership, explicit override precedence, and
+binding-owned adapter fallback into the 51-line
+`Cadence.Dashboards.SourceRegistry.AdapterSelection` reduced `SourceRegistry`
+from 1,007 to 973 lines. The registry continues to decide when logical-source
+or resolved-binding selection occurs and keeps its public dispatch API, while
+capability fingerprinting now reads the extracted default logical-source set.
+Direct tests cover every production default, unknown sources, explicit
+overrides, binding fallback, and missing adapters; existing registry and
+evidence suites preserve facade behavior. No route or authentication placement
+is involved. Production source-size pressure falls from 2 to 1, with zero
+oversized test files or functions and unchanged dependency ratchets.
+Extracting provider- and transport-profile persistence, version history,
+listing, and tombstones into the 543-line `Cadence.Contacts.ProfileStore`
+reduced `Cadence.Contacts` from 3,508 to 3,235 lines. The public Contacts
+facade preserves its existing scoped API while the extracted store owns the
+full profile lifecycle. The two profile rows now live under that Contacts-owned
+store, removing both legacy shared-schema edges and reducing the persistence
+schema baseline from 107 to 105; the ownership guard rejects direct callers
+from outside Contacts. Direct data tests cover both profile types across
+initial persistence, versioning, current/history listing, and deletion, while
+the existing Contacts tests preserve facade behavior. No route or
+authentication placement is involved; production source-size pressure remains
+1 with zero oversized test files or functions.
+Extracting reusable-path persistence, version history, reference pinning,
+validation, and runtime binding resolution into the 681-line
+`Cadence.Contacts.PathTemplateStore` reduced `Cadence.Contacts` from 3,235 to
+2,806 lines. The Contacts facade preserves its scoped and legacy APIs while
+scheduled-contact assembly delegates path-template lookup and resolution to
+the extracted owner. The path-template row now lives under that store,
+reducing the persistence-schema baseline from 105 to 104, and the Contacts
+ownership guard covers it. A focused data test covers profile-version pinning,
+path resolution, versioning, current/history listing, and tombstones; the
+existing Contacts tests preserve scheduled-contact realization and facade
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 1 with zero oversized test files or functions.
+Extracting shared-link creation and reusable-template application into the
+552-line `Cadence.Contacts.LinkSetup`, together with assignment persistence and
+scoped reference validation in the 296-line
+`Cadence.Contacts.LinkAssignmentStore`, reduced `Cadence.Contacts` from 2,806
+to 2,016 lines. The facade preserves its existing builder and assignment APIs;
+the setup workflow now composes the profile, path-template, assignment,
+spacecraft, and endpoint owners directly instead of cycling back through the
+facade. The assignment row now lives under its store, reducing the
+persistence-schema baseline from 104 to 103, with the Contacts ownership guard
+extended to cover it. A focused data test covers transactional shared-link
+creation, template application, idempotent skipping, assignment listing, and
+tombstones; existing Contacts and web tests preserve facade behavior. No route
+or authentication placement is involved; production source-size pressure
+remains 1 with zero oversized test files or functions.
+Extracting scheduled-contact, realized-contact, lifecycle-action, scheduler
+read-model, and reconciliation-candidate persistence into the 612-line
+`Cadence.Contacts.ContactStore` reduced `Cadence.Contacts` from 2,016 to 1,585
+lines. The facade retains preparation and lifecycle orchestration while all
+durable contact rows and transactional event writes now have one owner.
+Scheduled-contact, realized-contact, and contact-action rows moved under that
+store; `ProviderReservationChanges` remains an internal Contacts caller, while
+the mission-event rebuild now reads contact actions through the store API.
+Those ownership moves remove five shared-schema edges and reduce the
+persistence baseline from 103 to 98 with no cross-context exception. A focused
+data test covers persistence, provider-reference lookup, scheduler reads,
+reconciliation candidates, lifecycle updates, and filtered actions; existing
+Contacts, provider-change, projection, and web tests preserve integration
+behavior. No route or authentication placement is involved; production
+source-size pressure remains 1 with zero oversized test files or functions.
+Extracting scheduled-contact preparation, validation, reference resolution,
+and version pinning into the 254-line
+`Cadence.Contacts.ContactRuntimeConfig`, together with reconciliation,
+realization, cancellation, runtime transitions, and operator-action
+orchestration in the 653-line `Cadence.Contacts.ContactLifecycle`, reduced
+`Cadence.Contacts` from 1,585 to 665 lines. The public facade preserves its
+existing scoped APIs and keeps only organization-scoped persistence wrappers;
+the two extracted workflow owners compose the contact store and supporting
+Contacts stores directly. Existing Contacts, scheduler, runtime, and
+architecture-guard tests preserve the facade and lifecycle behavior. No route
+or authentication placement is involved. Production source-size pressure
+falls from 1 to 0, with zero oversized test files or functions and unchanged
+dependency ratchets.
+Moving the 156-line persisted ground-station, endpoint, transport, event, and
+dashboard fixture phase out of its LiveView interaction test reduced overlong
+test-function pressure from 14 to 13. The authenticated route, rendered
+selectors, evidence navigation, copied-link replay, and filtering assertions
+remain in the test body.
+Moving the 181-line persisted endpoint, transport, operational-event,
+dashboard, and LiveView mount fixture phase out of the adjacent link-scope test,
+with its initial scoped-render contract in a focused assertion helper, reduced
+that test from 469 to 295 lines and overlong test-function pressure from 13 to
+12. The existing authenticated route and LiveView session are unchanged, and
+the row selectors, evidence navigation, copied-link replay, DataLink
+inspection, and filtering outcomes remain covered.
+Extracting the 181-line replay managed-action evidence and copied-route proof
+into a named assertion helper reduced its LiveView test from 432 to 258 lines
+and overlong test-function pressure from 12 to 11. The existing authenticated
+route and LiveView session are unchanged, while action target metadata,
+DataLink navigation, copied-link replay, runtime context fields, and the
+companion timer proof remain covered.
+Extracting the replay connection-event and source-health-event copied-route
+proofs into 166-line and 173-line assertion helpers reduced their shared
+LiveView scenario from 522 to 219 lines and overlong test-function pressure
+from 11 to 10. The existing authenticated route and LiveView session are
+unchanged; interval evidence, target metadata, DataLink navigation, copied-link
+replay, and source-health context fields remain covered.
+Extracting the 194-line replay command-request round-trip proof reduced its
+command-queue LiveView scenario from 441 to 265 lines and overlong
+test-function pressure from 10 to 9. The existing authenticated route and
+LiveView session are unchanged; frame evidence, queue-entry inspection,
+queue-to-request navigation, copied routes, navigation trails, and the return
+to the queue entry remain covered.
+Extracting the 199-line dev space-packet, TM-frame, latest-value, and history
+HTTP proof reduced its mission-data controller test from 440 to 256 lines and
+overlong test-function pressure from 9 to 8. The control-plane API routes and
+authentication plugs are unchanged; raw evidence, protocol records, dispatch,
+telemetry outputs, and read-back response contracts remain covered.
+Extracting the 286-line command-stage, submission, approval, and queue-ordering
+HTTP workflow reduced its controller test from 551 to 297 lines and overlong
+test-function pressure from 8 to 7. The control-plane API routes and
+authentication plugs are unchanged; stage/item updates, approval records,
+queue priority, release attempts, and verifier outcomes remain covered.
+Extracting the 188-line contact-runtime lifecycle and 84-line binding-set
+activation HTTP proofs reduced the org-scoped controller test from 497 to 231
+lines and overlong test-function pressure from 7 to 6. The control-plane API
+routes and authentication plugs are unchanged; mission-resource setup, runtime
+materialization, early termination, audit actions, and active binding lookup
+remain covered. All remaining overlong tests are in the opt-in browser matrix.
+Running the opt-in transport-execution browser file exposed 15 stale
+state-timeline menu waits left behind by the shared overlay migration. The smoke
+runner now waits for the canonical `data-overlay-open` state and preserves
+toggle-safe behavior when an overlay survives a LiveView patch; both live and
+replay transport-execution browser scenarios pass again.
+Moving the 217-line replay transport topology, operational-event, dashboard,
+and endpoint-startup fixture out of its opt-in browser scenario reduced that
+test from 327 to 140 lines and overlong test-function pressure from 6 to 5. The
+authenticated dashboard route and sign-in flow are unchanged; live replay,
+copied operational-event DataLinks, and degraded source-health browser proofs
+remain covered.
+Moving the 215-line live transport topology, source-binding, dashboard, and
+endpoint-startup fixture out of the adjacent browser scenario reduced that
+test from 403 to 215 lines and overlong test-function pressure from 5 to 4. The
+authenticated dashboard route and sign-in flow are unchanged; multi-link,
+no-data, unavailable-source, and degraded-source browser outcomes remain
+covered.
+Moving the 298-line multi-source-endpoint topology, observable-history,
+dashboard, and endpoint-startup fixture out of its browser scenario reduced
+that test from 331 to 68 lines and overlong test-function pressure from 4 to 3.
+The file-level browser run also corrected its multi-transport data-table menu
+wait to use the canonical `data-data-table-row-links` and `data-overlay-open`
+contract. The authenticated dashboard route and sign-in flow are unchanged;
+multi-endpoint inclusion, exclusion, and connection-evidence outcomes remain
+covered, and all four connection-aggregation browser scenarios pass.
+Moving the 260-line multi-transport topology and observable-history fixture out
+of the adjacent browser scenario reduced that test from 344 to 115 lines and
+overlong test-function pressure from 3 to 2. The dashboard, endpoint startup,
+and browser assertions remain visible in the test; the authenticated dashboard
+route and sign-in flow are unchanged, and multi-transport inclusion, exclusion,
+timeline, data-table, and copied-evidence outcomes remain covered.
+Splitting the replay operational-metric setup into 241-line topology and
+162-line metric-history/dashboard helpers reduced its browser test from 537 to
+199 lines and overlong test-function pressure from 2 to 1. The authenticated
+dashboard route and sign-in flow are unchanged; complete, partial RF, partial
+bitrate, empty-replay, frame-evidence, and DataLink outcomes remain covered.
+The browser proof now waits for chart/data readiness before making precise
+semantic assertions and follows the current compact partial-lifecycle indicator
+contract instead of expecting the intentionally removed body notice.
+Moving the 221-line mixed-revision identity, operator-decision, dashboard, and
+endpoint fixture out of its browser scenario reduced that test from 344 to 150
+lines and overlong test-function pressure from 1 to 0. The authenticated
+dashboard route and sign-in flow are unchanged; corrected-range,
+advisory-backfill, mixed-marker, counter-only exclusion, frame-evidence, and
+copied-link outcomes remain covered.
+
+The same task now consumes a fresh core `mix xref graph --format json` result
+and ratchets three dependency boundaries. The initial graph contained 8 internal
+callers of the root `Cadence` facade and 205 direct dependencies from
+non-persistence code to `Cadence.Persistence.Schemas.*`. The first production
+cleanup routed all eight internal callers through their owning contexts, so the
+current baseline contains zero root-facade edges. `OrganizationRow` and
+`MissionRow` then moved from the horizontal persistence namespace into their
+owning `Organizations` and `Missions` contexts. The comms ground-station,
+transport, routing-rule, and routing-rule-event rows likewise moved under
+`Cadence.Comms`. The user, local-credential, session-token, organization
+membership, and organization-invitation rows now live under `Cadence.Accounts`,
+and the artifact, database, import-run, revision, command-snapshot, and
+telemetry-snapshot rows now live under `Cadence.Catalog`, reducing schema edges
+from 205 to 187. The active-binding-set and binding-set-activation rows now
+live under `Cadence.Activations`, and the service-identity row now lives under
+`Cadence.Auth`. Six Governance-exclusive binding and definition rows also now
+live under `Cadence.Governance`, reducing that baseline again to 178. The
+governed limit-definition row and persistence entrypoint now live under
+`Cadence.Limits`; Reads and Dashboards use its public domain APIs instead of
+the row. The background-job row now lives under `Cadence.Jobs`, reducing the
+baseline to 173. The notification row likewise now lives under
+`Cadence.Notifications`, reducing the baseline to 172. Spacecraft and
+spacecraft-type rows now live under their identity stores,
+reducing the baseline to 170. Limits evaluation-run and active-definition rows
+now live under `Cadence.Limits`, reducing the baseline to 168. The
+limit-definition lifecycle-event row now also lives under `Cadence.Limits`;
+Dashboards resolves it through scoped domain APIs, reducing the baseline to 166.
+Four projection rebuild-run rows now live beside their owning projection
+modules, reducing the baseline to 162.
+Four dashboard data-source and binding rows now live under
+`Cadence.Dashboards.DataSources`, reducing the baseline to 157.
+Canonical dashboard, version, lifecycle-event, and investigation-preset rows
+now live under their owning dashboard stores, reducing the baseline to 152.
+Dashboard source-health and source-watermark event/status rows now live under
+their owning stores, reducing the baseline to 146.
+Source-credential reference/event and runtime-invalidation decision-event rows
+now live under their owning dashboard stores, reducing the baseline to 143.
+The application-binding row now lives under its owning Applications store,
+reducing the baseline to 141.
+Provider-account, account-version, and account-grant rows now live under their
+owning Ground Networks stores, reducing the baseline to 138.
+Provider-credential, event-cursor, event-inbox, and evidence rows now also live
+under their owning Ground Networks stores, reducing the baseline to 134.
+Contacts now resolves exact mission-provider versions through the existing
+Ground Networks API, and the provider row lives under `MissionProviders`,
+reducing the baseline to 132.
+Contacts now appends provider audit entries through `ProviderAudit`, preserving
+its outer transaction, and the audit row lives under that context, reducing
+the baseline to 130.
+Dashboards now uses scoped Operational Events fetch/list APIs, and the mission
+event projection uses an explicit rebuild feed. The operational-event row now
+lives under its owning context, reducing the baseline to 127.
+The derived-telemetry evaluation-run row now lives under its owning context,
+reducing the baseline to 126.
+Telemetry backfill lifecycle and observation-identity decision-event rows now
+live under their owning storage boundaries, reducing the baseline to 124.
+Filesystem ingress-evidence and protocol-record manifest rows now live under
+their owning archive backends, reducing the baseline to 122.
+New edges fail, removed edges must be deleted from the baseline in the
+same change, and the baseline has an explicit owner and review-by date.
+Context-owned row modules are also protected from new callers outside their
+bounded context. The initial
+`Persistence.OrganizationScope -> Missions.MissionRow` exception was removed
+by exposing mission ownership through the `Missions` context, leaving the
+cross-context row baseline at zero. The public root facade still exists for
+external callers and remains a later decomposition target.
+
+When a dependency exception is introduced, update the context map or decision
+record in the same change. The current runtime architecture guard demonstrates
+the pattern but should be broadened beyond polling-related rules.
+
+## Phased implementation plan
+
+### Phase 0: Baseline and guardrails — 1–2 days
+
+- Adopt this review as the working architecture record.
+- Save repeatable line-count, xref, and require-time profiling commands.
+- Define the context dependency matrix.
+- Add size diagnostics in warning mode.
+
+Exit condition: the team can reproduce the baseline and see new boundary or
+size regressions in review.
+
+### Phase 1: Test compiler bottlenecks — week 1
+
+- Move the browser matrix outside default test discovery.
+- Decompose the replay source-family test.
+- Preserve the browser smoke/full aliases and source-family behavior coverage.
+
+Exit conditions:
+
+- web require-time profiling is below 30 seconds; and
+- the default web suite is below 60 seconds on the same machine.
+
+### Phase 2: Test ownership and isolation — weeks 1–2
+
+- Introduce Unit, Data, Runtime, and Config cases.
+- Remove global runtime cleanup and sleeps from DataCase.
+- Inject configuration, clocks, retry, and process names where practical.
+- Mark only truly isolated tests async.
+
+Exit conditions:
+
+- the core suite is below 45 seconds;
+- repeated seeded runs are stable; and
+- no common teardown sleeps or global mission stops remain.
+
+### Phase 3: Context boundaries — weeks 2–4
+
+- Publish the allowed context dependency matrix.
+- Remove internal root-facade calls.
+- Move schema ownership into contexts.
+- Add xref-based boundary enforcement.
+- Introduce the internal supervisor groups.
+
+Exit conditions:
+
+- context dependencies are one-way or explicitly orchestrated;
+- cross-context schema access is rejected automatically; and
+- the root `Cadence` module is removed or intentionally small.
+
+### Phase 4: Dashboard and large-context modularization — weeks 4–8
+
+- Split operational observables by product family.
+- Split data-link resolution by target.
+- Move behavior matrices to lower-layer tests.
+- Thin LiveViews into orchestration plus components/page models.
+- Split Contacts, Commanding, and Data Management by workflow.
+
+Exit conditions:
+
+- no central module implements every dashboard source family;
+- full LiveView tests are representative rather than combinatorial; and
+- production files over 1,000 lines are rare, justified exceptions.
+
+### Phase 5: Library extraction — after APIs stabilize
+
+Extract in this likely order:
+
+1. capability API;
+2. provider contract;
+3. catalog model; and
+4. contact planner.
+
+Each candidate must pass these checks before extraction:
+
+- one-way dependency leaf;
+- no Repo, Phoenix, or application boot requirement;
+- explicit versioned public types;
+- no dependence on another Cadence implementation namespace; and
+- focused test suite that runs in seconds.
+
+## Decision summary
+
+| Question | Recommendation |
+| --- | --- |
+| Where should Cadence refactor first? | Test compilation, test ownership, root facade, persistence ownership, then dashboard/source and domain workflow modules |
+| How should test time improve? | Stop compiling opt-in matrices, break giant test functions, separate test cases by resources, inject global dependencies, then partition safely |
+| What deserves a standalone library? | CCSDS now; capability API and provider contract next; catalog model and planner after cleanup |
+| What should not be extracted yet? | Persistence, Dashboards, Contacts, Commanding, and Telemetry Data Management |
+| Where are the cleaner boundaries? | The ten bounded contexts above, with context-owned schemas and explicit application services/events |
+| Should the umbrella split immediately? | No. Establish one-way internal dependencies and restart domains first |
+
+## Reproduction commands
+
+Run from the umbrella root unless an application path is shown:
+
+```bash
+# Production and test line counts
+find apps -type f \( -name '*.ex' -o -name '*.exs' -o -name '*.heex' \) \
+  -print0 | xargs -0 wc -l
+
+# Compile dependency shape
+mix xref graph --format stats --label compile-connected --include-siblings
+mix xref graph --format cycles --label compile-connected --include-siblings
+
+# Architecture source-size pressure
+mix cadence.architecture.check
+
+# Test-module compile and require cost
+cd apps/cadence_web
+mix test --profile-require time
+
+# Normal application suite
+mix test
+
+# Authoritative repository gate
+cd ../..
+mix precommit
+```
+
+When profiling slow test bodies, record that `--slowest` turns on trace mode
+and serial execution. Use normal `mix test` separately for actual default-suite
+elapsed time.

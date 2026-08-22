@@ -1,0 +1,146 @@
+defmodule Cadence.SpacecraftTypeStoreTest do
+  use Cadence.DataCase, async: false
+
+  alias Cadence.SpacecraftType
+
+  setup do
+    suffix = System.unique_integer([:positive])
+    organization_id = "org-st-#{suffix}"
+    mission_id = "mission-st-#{suffix}"
+
+    persist_mission_scope(organization_id, mission_id)
+
+    {:ok, organization_id: organization_id, mission_id: mission_id}
+  end
+
+  describe "persist_spacecraft_type/2 and queries" do
+    test "persists, fetches, lists, and tracks versions", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
+      type_v1 =
+        SpacecraftType.new(%{
+          mission_id: mission_id,
+          display_name: "Sentinel-X",
+          downlink_protocol: :aos,
+          uplink_protocol: :tc,
+          packet_protocol: :space_packet,
+          frame_parameters: %{"frame_size" => 1024, "insert_zone_length" => 0, "ocf_length" => 0},
+          applications: %{"telemetry_decom" => %{}}
+        })
+
+      assert {:ok, persisted_v1} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type_v1)
+
+      assert persisted_v1.organization_id == organization_id
+      assert persisted_v1.version == 1
+      assert persisted_v1.downlink_protocol == :aos
+      assert persisted_v1.applications == %{"telemetry_decom" => %{}}
+
+      type_v2 =
+        SpacecraftType.new(%{
+          spacecraft_type_id: persisted_v1.spacecraft_type_id,
+          mission_id: mission_id,
+          version: 2,
+          display_name: "Sentinel-X",
+          downlink_protocol: :uslp,
+          uplink_protocol: :uslp,
+          packet_protocol: :space_packet,
+          frame_parameters: %{
+            "frame_size" => 2048,
+            "truncated_primary_header" => false,
+            "ocf_length" => 0
+          },
+          applications: %{"telemetry_decom" => %{}}
+        })
+
+      assert {:ok, persisted_v2} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type_v2)
+
+      assert persisted_v2.version == 2
+      assert persisted_v2.downlink_protocol == :uslp
+
+      assert {:ok, latest} =
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
+                 organization_id,
+                 mission_id,
+                 persisted_v1.spacecraft_type_id
+               )
+
+      assert latest.version == 2
+
+      assert {:ok, v1_fetch} =
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type_version(
+                 organization_id,
+                 mission_id,
+                 persisted_v1.spacecraft_type_id,
+                 1
+               )
+
+      assert v1_fetch.downlink_protocol == :aos
+
+      assert [listed] =
+               Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+
+      assert listed.spacecraft_type_id == persisted_v1.spacecraft_type_id
+      assert listed.version == 2
+
+      versions =
+        Cadence.SpacecraftTypeStore.list_spacecraft_type_versions(
+          organization_id,
+          mission_id,
+          persisted_v1.spacecraft_type_id
+        )
+
+      assert Enum.map(versions, & &1.version) == [2, 1]
+    end
+
+    test "keeps custom application keys as strings", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
+      type =
+        SpacecraftType.new(%{
+          mission_id: mission_id,
+          display_name: "Custom Apps",
+          downlink_protocol: :tm,
+          uplink_protocol: :tc,
+          packet_protocol: :space_packet,
+          frame_parameters: %{
+            "frame_size" => 1024,
+            "secondary_header_length" => 0,
+            "ocf_length" => 0
+          },
+          applications: %{"custom:thermal-alerting" => %{"revision" => 1}}
+        })
+
+      assert type.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
+
+      assert {:ok, persisted} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(organization_id, type)
+
+      assert persisted.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
+
+      assert {:ok, fetched} =
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
+                 organization_id,
+                 mission_id,
+                 persisted.spacecraft_type_id
+               )
+
+      assert fetched.applications == %{"custom:thermal-alerting" => %{"revision" => 1}}
+    end
+
+    test "returns not_found for missing types", %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    } do
+      assert {:error, :spacecraft_type_not_found} =
+               Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
+                 organization_id,
+                 mission_id,
+                 "missing"
+               )
+    end
+  end
+end

@@ -1,0 +1,16 @@
+{
+  "data": [{
+    "id": "opportunity-123",
+    "spacecraft_ref": "SC-001",
+    "ground_station_ref": "station-svalbard",
+    "antenna_or_service_pool_ref": "station-svalbard-antenna-1",
+    "service_profile_ref": "service-realtime-ttc-downlink",
+    "starts_at": "2026-07-13T12:10:00Z",
+    "ends_at": "2026-07-13T12:20:00Z",
+    "expires_at": "2026-07-13T12:10:00Z",
+    "availability": "available",
+    "synthetic": true,
+    "extensions": {"model": "deterministic_pass_v1"}
+  }],
+  "meta": {"contract_version": "1.0", "request_id": "request-123", "next_cursor": null, "truncated": false}
+}

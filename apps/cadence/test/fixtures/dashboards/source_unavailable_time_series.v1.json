@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_source_unavailable_time_series",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Source Unavailable Time Series",
+  "description": "Golden fixture for a telemetry range source query failure",
+  "defaults": {
+    "time": {
+      "mode": "archive",
+      "axis": "receipt_time",
+      "from": "2026-06-16T00:00:00Z",
+      "to": "2026-06-16T00:30:00Z"
+    },
+    "scope": {
+      "primary": {
+        "kind": "spacecraft",
+        "mode": "one",
+        "ids": ["sc_001"]
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    },
+    "limits": {
+      "semantics_mode": "observed"
+    },
+    "overlays": {
+      "limits": false,
+      "events": false,
+      "quality": false
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_power_trend_unavailable",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.time_series",
+          "widget_type_version": 1,
+          "title": "Power Trend",
+          "binding": {
+            "observables": ["tlm.hk.battery_voltage", "tlm.hk.bus_current"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "decimated_envelope",
+            "overlays": []
+          },
+          "options": {
+            "show_min_max_band": true,
+            "legend": true
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "source-failure", "telemetry", "time-series"]
+  }
+}

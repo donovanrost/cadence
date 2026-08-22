@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_repeated_spacecraft_status",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Repeated Spacecraft Status",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time",
+      "range": {
+        "kind": "relative",
+        "duration_ms": 300000
+      }
+    },
+    "scope": {
+      "primary": {
+        "kind": "spacecraft",
+        "mode": "many",
+        "ids": ["sc_001", "sc_002", "sc_003"]
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_status_repeat",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
+      "repeat": {
+        "axis": "scope",
+        "over": "spacecraft",
+        "layout": "wrap_grid",
+        "max_instances": 12
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.status_matrix",
+          "widget_type_version": 1,
+          "title": "Spacecraft Status",
+          "binding": {
+            "observables": ["tlm.hk.battery_voltage", "tlm.hk.bus_current"],
+            "scope_mode": "repeat",
+            "data_mode": "context",
+            "sampling": "latest",
+            "overlays": ["limits", "quality"]
+          },
+          "options": {}
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "repeat"]
+  }
+}

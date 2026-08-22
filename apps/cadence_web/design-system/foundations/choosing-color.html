@@ -1,0 +1,132 @@
+<!-- @dsCard group="Foundations" name="Choosing color" subtitle="Selection rules + the cyan double-duty resolution" width="1040" height="1820" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Choosing color</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 80ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .4rem 0 0; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.dec { border-color: oklch(72% 0.15 50 / 0.6); }
+
+  .rules { display: grid; gap: .7rem; max-width: 82ch; padding: 0; margin: 0; }
+  .rules li { list-style: none; display: grid; grid-template-columns: 1.3rem 1fr; gap: .6rem; font-size: .86rem; line-height: 1.45; color: oklch(80% 0.02 250); }
+  .rules .n { font-family: ui-monospace, monospace; font-weight: 700; color: var(--glow-cyan); }
+  .rules b { color: oklch(88% 0.02 250); }
+
+  .decision { border: 1px solid oklch(80% 0.12 210 / 0.3); border-radius: 2px; background: oklch(80% 0.12 210 / 0.04); padding: 1.1rem 1.3rem; max-width: 60rem; margin-bottom: 1rem; }
+  .decision h3 { margin: 0 0 .5rem; font-size: 1rem; color: var(--glow-cyan); }
+  .decision p { margin: 0; font-size: .88rem; line-height: 1.5; color: oklch(84% 0.02 250 / 0.9); }
+  .decision .big { font-size: .92rem; color: oklch(85% 0.05 340); font-weight: 500; }
+
+  /* before/after demo */
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 56rem; margin: .5rem 0; }
+  .ba h4 { font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin: 0 0 .6rem; }
+  .ba .before h4 { color: oklch(72% 0.20 25); } .ba .after h4 { color: var(--st-green); }
+  .panel { position: relative; border-radius: 2px; padding: 1rem 1.1rem; background: oklch(17% 0.02 260); }
+  /* BEFORE: everything cyan */
+  .b-panel { border: 1px solid oklch(80% 0.12 210 / 0.5); }
+  .b-panel::before, .b-panel::after { content:''; position:absolute; width:11px; height:11px; border-color: oklch(80% 0.12 210 / 0.7); border-style: solid; }
+  .b-panel::before { top:0; left:0; border-width: 2px 0 0 2px; } .b-panel::after { top:0; right:0; border-width: 2px 2px 0 0; }
+  .b-panel .lbl { font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.12 210); }
+  .b-panel .val { font-family: ui-monospace, monospace; font-size: 1.5rem; color: oklch(80% 0.12 210); margin: .3rem 0; }
+  .b-panel .div { height: 1px; background: oklch(80% 0.12 210 / 0.4); margin: .6rem 0; }
+  .b-panel .btn { display: inline-block; padding: .25rem .7rem; border-radius: 2px; background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  /* AFTER: cyan = signal only */
+  .a-panel { border: 1px solid oklch(35% 0.02 265); }
+  .a-panel .lbl { font-size: .6rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: oklch(62% 0.02 250); }
+  .a-panel .val { font-family: ui-monospace, monospace; font-size: 1.5rem; color: oklch(88% 0.02 250); margin: .3rem 0; }
+  .a-panel .div { height: 1px; background: oklch(35% 0.02 265); margin: .6rem 0; }
+  .a-panel .btn { display: inline-block; padding: .25rem .7rem; border-radius: 2px; background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; box-shadow: 0 0 8px oklch(80% 0.12 210 / 0.4); }
+  .a-panel .live { display: inline-flex; align-items: center; gap: .35rem; font-size: .6rem; color: var(--st-green); margin-left: .6rem; }
+  .a-panel .live .dot { width: 6px; height: 6px; border-radius: 1px; background: var(--st-green); box-shadow: 0 0 6px oklch(from var(--st-green) l c h / 0.8); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .81rem; max-width: 64rem; }
+  th { text-align: left; font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .45rem .5rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .45rem .5rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.keep { color: var(--st-green); } td.move { color: oklch(80% 0.15 50); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Choosing color</h1>
+  <p class="lede">You don't <em>pick</em> colors for a console — you <strong>allocate</strong> them to jobs, and most
+    choices are constrained, not free. These are the selection rules, and the resolution of the system's biggest open
+    color question: <strong>cyan's double duty.</strong></p>
+
+  <p class="section-label">The selection rules</p>
+  <ul class="rules">
+    <li><span class="n">1</span><span><b>Allocate by job, then count.</b> Decide the roles (brand · status · neutral · data-viz); the roles tell you how many colors — not the other way around.</span></li>
+    <li><span class="n">2</span><span><b>Color is a scarce signal — spend it like one.</b> A dense console is ~90% neutral so color <em>means</em> something. If everything's colored, nothing reads as urgent. <em>(This is the rule cyan broke.)</em></span></li>
+    <li><span class="n">3</span><span><b>Status hues are dictated, not chosen.</b> red=danger · yellow=caution · green=nominal · blue=info are learned control-system conventions. Only the shade is yours.</span></li>
+    <li><span class="n">4</span><span><b>Never rely on hue alone.</b> ~8% of men have red-green CVD — and that's your status pair. Separate red &amp; green by <em>lightness</em> (you do: red 62% / green 76%), and always pair color with shape or label.</span></li>
+    <li><span class="n">5</span><span><b>Cool = ambient, warm = exception.</b> The screen stays calm cyan/ink until something's wrong, then warm red/yellow grabs the eye. Don't break this.</span></li>
+    <li><span class="n">6</span><span><b>Brand is the only free zone — and still constrained.</b> A brand color must never collide with status meaning, and must stay distinct from status hues. (Watch: action-cyan 210 vs info-blue 250 are close — keep them apart.)</span></li>
+  </ul>
+
+  <p class="section-label">Decision — resolving cyan's double duty</p>
+  <div class="decision">
+    <h3>Saturation carries the interactive signal.</h3>
+    <p>Cyan was doing two jobs — brand <em>atmosphere</em> (borders, labels, grid, values) <em>and</em> the
+      <em>interactive</em> signal (links, buttons, focus). When cyan is everywhere, "is it cyan?" can't mean "can I act?"
+      The fix isn't to remove cyan — it's to make <span class="big">saturated cyan = act / live</span>, and demote
+      structural chrome to <strong>low-chroma</strong> (a cyan-tinted neutral). The signal moves from hue → saturation.</p>
+  </div>
+  <p class="note dec">&#9651; <strong>Rule:</strong> interactive chroma <code>≥ 0.10</code>; structural chrome chroma
+    <code>≤ 0.03</code>. The test: <em>could a user mistake this for something clickable? If yes, it's too saturated.</em></p>
+
+  <p class="section-label">Before → after</p>
+  <div class="ba">
+    <div class="before"><h4>Before — everything competes</h4>
+      <div class="panel b-panel">
+        <div class="lbl">Battery</div>
+        <div class="val">98.2 V</div>
+        <div class="div"></div>
+        <span class="btn">Deploy</span>
+      </div>
+    </div>
+    <div class="after"><h4>After — cyan = the signal</h4>
+      <div class="panel a-panel">
+        <div class="lbl">Battery</div>
+        <div class="val">98.2 V</div>
+        <div class="div"></div>
+        <span class="btn">Deploy</span><span class="live"><span class="dot"></span>LIVE</span>
+      </div>
+    </div>
+  </div>
+  <p class="note">Same panel. On the left, the label, value, border, corners, divider, and button are all cyan — your eye
+    has nowhere to land. On the right, chrome is neutral and only the <em>action</em> (and the live signal) is cyan —
+    the eye goes straight to what you can do.</p>
+
+  <p class="section-label">Reallocation — what moves off cyan</p>
+  <table>
+    <thead><tr><th>Element</th><th>Today</th><th>Target</th></tr></thead>
+    <tbody>
+      <tr><td>Links · buttons · focus ring · active nav</td><td>saturated cyan</td><td class="keep">✓ keep — this is the signal</td></tr>
+      <tr><td>Live / updating indicators</td><td>mixed</td><td class="keep">saturated cyan (+ glow) — "alive"</td></tr>
+      <tr><td>Section labels (<code>hud-label</code>)</td><td>bright cyan 65% / .10</td><td class="move">low-chroma neutral (~65% / .02)</td></tr>
+      <tr><td>Card titles · table headers</td><td>cyan</td><td class="move">neutral</td></tr>
+      <tr><td>Static data values</td><td>cyan</td><td class="move">bright neutral; cyan only if live</td></tr>
+      <tr><td>Borders · dividers</td><td>faint cyan / .15–.25</td><td class="move">neutral (already low-chroma)</td></tr>
+      <tr><td><code>hud-corners</code> brackets</td><td>cyan on every card</td><td class="move">cyan, but sparingly — frame hero/nav panels only</td></tr>
+      <tr><td>Glows</td><td>various</td><td class="keep">live / nav only — already the rule</td></tr>
+    </tbody>
+  </table>
+
+  <p class="section-label">The honest tradeoff</p>
+  <p class="note">This is an aesthetic shift: the "cyan glow everywhere" maximalism becomes <strong>restrained</strong>,
+    with cyan as punctuation. You're trading some sci-fi density for a working signal — which is the right trade under
+    your own principles (<em>density over decoration</em>, <em>legible under stress</em>). The identity survives in the
+    Tokyo-night base, the sharp 2px, the monospace data, the pink accent, and cyan marking exactly what's alive. It's a
+    <strong>🎯 target</strong> — the reallocation lands when the code is reconciled to this.</p>
+</body>
+</html>

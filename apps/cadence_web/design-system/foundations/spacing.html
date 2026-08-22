@@ -1,0 +1,34 @@
+<!-- @dsCard group="Foundations" name="Spacing" subtitle="The --space-* scale" width="960" height="560" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Spacing</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 60ch; font-size: .9rem; line-height: 1.5; }
+  .row { display: grid; grid-template-columns: 9rem 1fr; align-items: center; gap: 1.5rem; padding: .7rem 0;
+    border-bottom: 1px solid oklch(80% 0.12 210 / 0.1); }
+  .label { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .78rem; }
+  .label .px { color: oklch(55% 0.02 250); font-size: .7rem; }
+  .bar { height: 1.1rem; background: oklch(80% 0.12 210 / 0.35); border-left: 2px solid var(--glow-cyan, oklch(80% 0.12 210)); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Spacing</h1>
+  <p class="lede">A five-step scale on a 4px base. Compose layout gaps and padding from these tokens
+    (and their Tailwind equivalents) rather than arbitrary values.</p>
+
+  <div class="row"><div class="label">--space-xs <span class="px">· 4px</span></div><div class="bar" style="width:4px"></div></div>
+  <div class="row"><div class="label">--space-sm <span class="px">· 8px</span></div><div class="bar" style="width:8px"></div></div>
+  <div class="row"><div class="label">--space-md <span class="px">· 12px</span></div><div class="bar" style="width:12px"></div></div>
+  <div class="row"><div class="label">--space-lg <span class="px">· 16px</span></div><div class="bar" style="width:16px"></div></div>
+  <div class="row"><div class="label">--space-xl <span class="px">· 24px</span></div><div class="bar" style="width:24px"></div></div>
+</body>
+</html>

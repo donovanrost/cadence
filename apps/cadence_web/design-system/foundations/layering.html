@@ -1,0 +1,148 @@
+<!-- @dsCard group="Foundations" name="Layering" subtitle="Elevation & stacking — depth as attention and permission" width="1060" height="1760" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Layering</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.2rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 62rem; }
+  .two .b { border: 1px solid oklch(23% 0.025 258); border-radius: 2px; padding: .9rem 1rem; background: oklch(17% 0.02 260); }
+  .two .b h3 { margin: 0 0 .3rem; font-family: ui-monospace, monospace; font-size: .85rem; color: var(--glow-cyan); }
+  .two .b p { margin: 0; font-size: .82rem; color: oklch(82% 0.02 250 / 0.78); line-height: 1.45; }
+
+  /* elevation ladder visual */
+  .elev { display: grid; gap: .4rem; max-width: 34rem; margin-bottom: 1rem; }
+  .lvl { display: flex; align-items: center; justify-content: space-between; border-radius: 2px; padding: .7rem .9rem;
+    border: 1px solid oklch(80% 0.12 210 / 0.15); font-size: .8rem; }
+  .lvl .nm { font-family: ui-monospace, monospace; font-weight: 600; }
+  .lvl .meta { font-family: ui-monospace, monospace; font-size: .68rem; color: oklch(82% 0.02 250 / 0.6); }
+  .hl { border-top: 1px solid oklch(100% 0 0 / 0.14); }
+  .blurtag { font-size: .6rem; color: var(--glow-cyan); border: 1px solid oklch(80% 0.12 210 / 0.4); border-radius: 2px; padding: 0 .3rem; margin-left: .4rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 64rem; }
+  th { text-align: left; font-size: .64rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.lv { font-family: ui-monospace, monospace; white-space: nowrap; color: oklch(85% 0.02 250 / 0.9); }
+  td.now { font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(82% 0.02 250 / 0.65); }
+  td.d { color: oklch(80% 0.15 50); }
+  td.ok { color: var(--st-green); }
+
+  /* z ladder */
+  .zl { display: grid; gap: .35rem; max-width: 40rem; }
+  .z { display: grid; grid-template-columns: 3.4rem 1fr; gap: .8rem; align-items: baseline; font-size: .82rem; padding: .35rem 0; border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); }
+  .z .v { font-family: ui-monospace, monospace; color: var(--glow-cyan); text-align: right; }
+  .z .n { font-family: ui-monospace, monospace; }
+  .z .d { color: oklch(82% 0.02 250 / 0.65); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .76rem; }
+  .z.hot .n { color: var(--st-yellow); }
+
+  .pri { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .pri li { display: grid; grid-template-columns: 1.4rem 1fr; gap: .7rem; font-size: .85rem; line-height: 1.45; color: oklch(80% 0.02 250); }
+  .pri .n { font-family: ui-monospace, monospace; font-weight: 700; color: var(--glow-cyan); }
+  .good { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .good span { font-size: .78rem; color: var(--st-green); border: 1px solid oklch(78% 0.12 175 / 0.3); border-radius: 2px; padding: .25rem .55rem; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Layering</h1>
+  <div class="status">&#10003; The depth vocabulary (z-tiers, elevation, state films, highlights) is live in tokens.css; &#9678; the visible elevation refactor (hover-as-film everywhere, blur reserve) is Phase 5.</div>
+  <p class="lede">Depth is not decoration — it is a <strong>model of attention and permission</strong>. Higher means
+    “attend to me more”; modal means “you may not touch what is behind me.” The cue that makes it readable:
+    <strong>light comes from above</strong>, so lifted things are lit on their top edge. Every depth trick exploits that.</p>
+
+  <p class="section-label">Two systems — keep them separate</p>
+  <div class="two">
+    <div class="b"><h3>Elevation</h3><p>How <em>lifted</em> something <em>looks</em> — a visual property. A small, behavior-named scale.</p></div>
+    <div class="b"><h3>Stacking</h3><p>Which element <em>wins</em> when two overlap — a structural property (z-order / DOM). A named tier scale.</p></div>
+  </div>
+  <p class="note">They correlate but are not the same (a sticky header looks flat yet stacks high). The rule: never let
+    them contradict — if A looks higher than B, A must also stack above B.</p>
+
+  <p class="section-label">Elevation — the ideal scale (dark theme)</p>
+  <div class="elev">
+    <div class="lvl" style="background:oklch(23% 0.025 258)"><span class="nm hl">Modal <span class="blurtag">blur 12</span></span><span class="meta">+ scrim</span></div>
+    <div class="lvl" style="background:oklch(21% 0.02 260)"><span class="nm hl">Floating <span class="blurtag">blur 8</span></span><span class="meta">popovers, menus</span></div>
+    <div class="lvl" style="background:oklch(17% 0.02 260)"><span class="nm hl">Raised</span><span class="meta">cards, panels</span></div>
+    <div class="lvl" style="background:oklch(12% 0.02 265)"><span class="nm">Base</span><span class="meta">the page plane</span></div>
+    <div class="lvl" style="background:oklch(9% 0.02 265)"><span class="nm">Sunken</span><span class="meta">wells, insets</span></div>
+  </div>
+  <p class="note">Cue stack, applied <strong>monotonically</strong> (more height → more cue): <strong>1.</strong> surface tint
+    (lighter = higher) — primary on dark. <strong>2.</strong> a <strong>top-edge highlight</strong> (the lit edge) — the
+    half Cadence is missing on surfaces, though it already exists on <code>btn-primary</code>. <strong>3.</strong>
+    <code>backdrop-blur</code> — floating &amp; modal only. <strong>4.</strong> occlusion — free. No drop-shadow: on near-black
+    it barely reads.</p>
+
+  <p class="section-label">Elevation — where Cadence stands</p>
+  <table>
+    <thead><tr><th>Ideal level</th><th>Cadence today</th><th>Delta</th></tr></thead>
+    <tbody>
+      <tr><td class="lv">Sunken</td><td class="now">overlay 8% / inset 10%</td><td class="ok">two sunken shades — ok</td></tr>
+      <tr><td class="lv">Base</td><td class="now">base 12%</td><td class="ok">✓</td></tr>
+      <tr><td class="lv">Raised</td><td class="now">raised 17% (cards)</td><td class="d">add the top-highlight cue</td></tr>
+      <tr><td class="lv">Floating</td><td class="now">elevated 23% + blur 8</td><td class="d">blur also leaks onto in-flow hud-panel — reserve it</td></tr>
+      <tr><td class="lv">Modal</td><td class="now">elevated 23% + blur 12</td><td class="d">formalize the scrim as a layer</td></tr>
+      <tr><td class="lv">role: input</td><td class="now">15% token / 18% actual</td><td class="d">a role on the ladder; values disagree — commit to a recessed well</td></tr>
+      <tr><td class="lv">state: hover</td><td class="now">27% (lighter than floating!)</td><td class="d">make relative (+1 nudge), cap below floating</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Structural fix: <strong>three concepts are fused into one lightness ramp.</strong> Only ~4 rungs are
+    <em>elevation</em>; <code>input</code> is a <em>role</em> (should reference a level) and <code>hover</code> is a
+    <em>state</em> (a transient modifier). Splitting them is the same move as the token architecture.</p>
+
+  <p class="section-label">Stacking — the ideal z-tier scale</p>
+  <div class="zl">
+    <div class="z"><span class="v">600</span><span><span class="n">tooltip</span> <span class="d">— always on top</span></span></div>
+    <div class="z hot"><span class="v">500</span><span><span class="n">toast</span> <span class="d">— transient info, above modals</span></span></div>
+    <div class="z hot"><span class="v">400</span><span><span class="n">scrim + modal</span> <span class="d">— dialog + its suppressing backdrop</span></span></div>
+    <div class="z"><span class="v">300</span><span><span class="n">popover</span> <span class="d">— dropdowns, menus (transient)</span></span></div>
+    <div class="z"><span class="v">200</span><span><span class="n">chrome</span> <span class="d">— persistent frame: sidebar, status bar</span></span></div>
+    <div class="z"><span class="v">100</span><span><span class="n">sticky</span> <span class="d">— pinned headers / toolbars</span></span></div>
+    <div class="z"><span class="v">0</span><span><span class="n">content</span> <span class="d">— normal flow</span></span></div>
+  </div>
+  <p class="note">Values spaced 100 apart so you can insert without renumbering. <strong>Toast &amp; tooltip sit above
+    modal</strong> — transient info must stay visible over a dialog. The best implementation minimizes z-index
+    entirely via <em>portals</em> (teleport overlays to the root; DOM order does the work); the named enum is the
+    fallback for what can’t be portaled.</p>
+
+  <p class="section-label">Stacking — where Cadence stands</p>
+  <table>
+    <thead><tr><th>Issue</th><th>Today</th><th>Delta</th></tr></thead>
+    <tbody>
+      <tr><td class="lv">No scale</td><td class="now">z-[5] ×12, z-[100], z-50, z-[1/2/3]</td><td class="d">replace with the named enum above</td></tr>
+      <tr><td class="lv">Top collides</td><td class="now">z-[100] = flash + tooltip + sidebar-tooltip</td><td class="d">three layers at one value — order by luck</td></tr>
+      <tr><td class="lv">Likely inversion</td><td class="now">native &lt;dialog&gt; = browser top-layer</td><td class="d">a toast fired over an open modal renders BEHIND it — verify</td></tr>
+      <tr><td class="lv">Widget band</td><td class="now">z-[5] across 7 dashboard widget files</td><td class="d">a flat band that can’t self-order — portal them</td></tr>
+      <tr><td class="lv">No scrim</td><td class="now">daisyUI modal-backdrop (dim only)</td><td class="d">make the scrim a real, reusable layer (dim + blur)</td></tr>
+    </tbody>
+  </table>
+
+  <p class="section-label">Already right — keep these</p>
+  <div class="good">
+    <span>tint-as-primary (correct for dark)</span>
+    <span>blur 12 modal &gt; blur 8 dropdown</span>
+    <span>tooltip-high instinct</span>
+    <span>btn-primary top-highlight = the right seed</span>
+  </div>
+
+  <p class="section-label">Deltas, by usability payoff</p>
+  <ul class="pri">
+    <li><span class="n">1</span><span><strong>z-enum + fix the top inversion</strong> — prevents real “my toast/tooltip is hidden” bugs you likely have today.</span></li>
+    <li><span class="n">2</span><span><strong>Make hover relative</strong> — kills the hover-out-elevates-overlay contradiction. Cheap.</span></li>
+    <li><span class="n">3</span><span><strong>Reserve blur for floating + add the top-highlight</strong> — makes elevation actually read.</span></li>
+    <li><span class="n">4</span><span><strong>Separate elevation / role / state &amp; consolidate levels</strong> — structural; pairs with the token roles work.</span></li>
+  </ul>
+</body>
+</html>

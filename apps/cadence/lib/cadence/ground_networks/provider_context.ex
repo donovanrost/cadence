@@ -1,0 +1,184 @@
+defmodule Cadence.GroundNetworks.ProviderContext do
+  @moduledoc "Provider-neutral control-plane context for one mission provider binding."
+
+  alias Cadence.Contacts.ProviderProfile
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountVersion, ProviderCapabilities}
+
+  @type t :: %__MODULE__{
+          provider_ref: binary(),
+          organization_id: binary() | nil,
+          mission_id: binary() | nil,
+          client_key: binary() | nil,
+          base_url: binary() | nil,
+          credential_ref: binary() | nil,
+          environment_ref: binary() | nil,
+          capabilities: ProviderCapabilities.t() | nil,
+          metadata: map()
+        }
+
+  defstruct [
+    :provider_ref,
+    :organization_id,
+    :mission_id,
+    :client_key,
+    :base_url,
+    :credential_ref,
+    :environment_ref,
+    :capabilities,
+    metadata: %{}
+  ]
+
+  @spec new(map()) :: {:ok, t()} | {:error, term()}
+  def new(attrs) when is_map(attrs) do
+    with {:ok, provider_ref} <- required(attrs, :provider_ref),
+         {:ok, mission_id} <- required(attrs, :mission_id),
+         {:ok, capabilities} <- normalize_capabilities(value(attrs, :capabilities)) do
+      {:ok,
+       %__MODULE__{
+         provider_ref: provider_ref,
+         organization_id: value(attrs, :organization_id),
+         mission_id: mission_id,
+         client_key: optional_binary(value(attrs, :client_key)),
+         base_url: optional_binary(value(attrs, :base_url)),
+         credential_ref: optional_binary(value(attrs, :credential_ref)),
+         environment_ref: optional_binary(value(attrs, :environment_ref)),
+         capabilities: capabilities,
+         metadata: value(attrs, :metadata, %{})
+       }}
+    end
+  end
+
+  @doc "Temporary bridge until Stage 2 mission Provider persistence replaces ProviderProfile setup."
+  @spec from_provider_profile(ProviderProfile.t()) :: {:ok, t()} | {:error, term()}
+  def from_provider_profile(%ProviderProfile{} = profile) do
+    scheduling = scheduling_config(profile)
+
+    new(%{
+      provider_ref: profile.provider_profile_id,
+      organization_id: profile.organization_id,
+      mission_id: profile.mission_id,
+      client_key: scheduling["client"],
+      base_url: scheduling["base_url"],
+      credential_ref: credential_ref(profile, scheduling),
+      environment_ref: scheduling["environment_ref"] || scheduling["run_id"],
+      capabilities: scheduling["capabilities"],
+      metadata: profile.metadata
+    })
+  end
+
+  @doc "Builds the exact provider control-plane context for a Mission Provider version."
+  @spec from_mission_provider(MissionProvider.t()) :: {:ok, t()} | {:error, term()}
+  def from_mission_provider(%MissionProvider{} = provider) do
+    new(%{
+      provider_ref: provider.provider_id,
+      organization_id: provider.organization_id,
+      mission_id: provider.mission_id,
+      client_key: Atom.to_string(provider.client_key),
+      base_url: provider.base_url,
+      credential_ref: provider.credential_ref,
+      environment_ref: provider.environment_ref,
+      capabilities: empty_to_nil(provider.capabilities_document),
+      metadata: provider.metadata
+    })
+  end
+
+  @spec from_account_binding(MissionProvider.t(), ProviderAccountVersion.t()) ::
+          {:ok, t()} | {:error, term()}
+  def from_account_binding(
+        %MissionProvider{} = provider,
+        %ProviderAccountVersion{} = account_version
+      ) do
+    new(%{
+      provider_ref: provider.provider_id,
+      organization_id: provider.organization_id,
+      mission_id: provider.mission_id,
+      client_key: Atom.to_string(account_version.client_key),
+      base_url: account_version.base_url,
+      credential_ref: account_version.credential_ref,
+      environment_ref: account_version.environment_ref,
+      capabilities: empty_to_nil(provider.capabilities_document),
+      metadata:
+        Map.merge(provider.metadata, %{
+          "provider_account_id" => account_version.provider_account_id,
+          "provider_account_version" => account_version.version,
+          "region_ref" => account_version.region_ref
+        })
+    })
+  end
+
+  @doc "Builds an organization-scoped context for an exact Provider Account version."
+  @spec from_account_version(ProviderAccountVersion.t()) :: {:ok, t()} | {:error, term()}
+  def from_account_version(%ProviderAccountVersion{} = account_version) do
+    with {:ok, capabilities} <-
+           normalize_capabilities(Map.get(account_version.provider_configuration, "capabilities")) do
+      {:ok,
+       %__MODULE__{
+         provider_ref: account_version.provider_account_id,
+         organization_id: account_version.organization_id,
+         mission_id: nil,
+         client_key: Atom.to_string(account_version.client_key),
+         base_url: account_version.base_url,
+         credential_ref: account_version.credential_ref,
+         environment_ref: account_version.environment_ref,
+         capabilities: capabilities,
+         metadata: %{
+           "provider_account_id" => account_version.provider_account_id,
+           "provider_account_version" => account_version.version,
+           "region_ref" => account_version.region_ref
+         }
+       }}
+    end
+  end
+
+  @doc "Adds a request-local resolver for pre-MissionProvider profiles that still contain a token."
+  @spec with_legacy_credential(ProviderProfile.t(), t(), keyword()) :: keyword()
+  def with_legacy_credential(%ProviderProfile{} = profile, %__MODULE__{} = context, opts) do
+    token = scheduling_config(profile)["api_token"]
+
+    if is_binary(token) and token != "" and is_binary(context.credential_ref) do
+      resolver = fn reference ->
+        resolve_legacy_credential(reference, context.credential_ref, token)
+      end
+
+      Keyword.put_new(opts, :credential_resolver, resolver)
+    else
+      opts
+    end
+  end
+
+  defp resolve_legacy_credential(reference, reference, token), do: {:ok, token}
+
+  defp resolve_legacy_credential(_reference, _expected_reference, _token),
+    do: {:error, :credential_reference_not_found}
+
+  defp scheduling_config(%ProviderProfile{configuration: configuration}) do
+    Map.get(configuration, "scheduling", Map.get(configuration, :scheduling, %{}))
+  end
+
+  defp credential_ref(profile, scheduling) do
+    scheduling["credential_ref"] ||
+      if is_binary(scheduling["api_token"]) and scheduling["api_token"] != "" do
+        "legacy-provider-profile:#{profile.provider_profile_id}:#{profile.version}"
+      end
+  end
+
+  defp normalize_capabilities(nil), do: {:ok, nil}
+  defp normalize_capabilities(%ProviderCapabilities{} = capabilities), do: {:ok, capabilities}
+  defp normalize_capabilities(capabilities), do: ProviderCapabilities.from_external(capabilities)
+
+  defp empty_to_nil(document) when document == %{}, do: nil
+  defp empty_to_nil(document), do: document
+
+  defp required(attrs, key) do
+    case value(attrs, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _other -> {:error, {:invalid_provider_context, key}}
+    end
+  end
+
+  defp optional_binary(value) when is_binary(value) and value != "", do: value
+  defp optional_binary(_value), do: nil
+
+  defp value(attrs, key, default \\ nil),
+    do: Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
+end

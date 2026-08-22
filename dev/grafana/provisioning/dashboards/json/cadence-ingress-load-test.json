@@ -1,0 +1,645 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 184, 0, 1)",
+        "name": "Load-test phases and notes",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Live capture journal, receive, processing, persistence, BEAM, and exporter signals for bounded Cadence telemetry-ingress load tests.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "SRE overview",
+      "type": "link",
+      "url": "/d/cadence-sre-overview/cadence-sre-overview"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Logs drilldown",
+      "type": "link",
+      "url": "/a/grafana-lokiexplore-app/explore"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Traces drilldown",
+      "type": "link",
+      "url": "/a/grafana-exploretraces-app/explore"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [],
+      "title": "Traffic and processing",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Latest successful TCP receive throughput at Cadence's transport boundary.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1},
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])) * 8",
+          "legendFormat": "receive",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Current wire receive rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Processed-byte rate divided by receive-byte rate. Brief deviation is expected while queues fill or drain.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.9},
+              {"color": "green", "value": 0.99}
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 1},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(cadence_telemetry_ingress_processed_bytes_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[1m])) / clamp_min(sum(rate(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[1m])), 1)",
+          "legendFormat": "processed / received",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Processing coverage (1m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Raw bytes currently represented by all provider ingress executor queues.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}]},
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 1},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "cadence_telemetry_ingress_queue_size_bytes{service_name=~\"$service\"}",
+          "legendFormat": "queued bytes",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Ingress byte backlog",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "One means an ingress executor or persistence projector is actively applying backpressure.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [{"options": {"0": {"color": "green", "text": "Clear"}, "1": {"color": "red", "text": "Active"}}, "type": "value"}],
+          "max": 1,
+          "min": 0,
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 1},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(cadence_telemetry_ingress_backpressure{service_name=~\"$service\"})",
+          "legendFormat": "backpressure",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Backpressure",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Transport-boundary receive throughput versus successfully processed raw bytes. Target is the editable dashboard variable.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}},
+          "unit": "bps"
+        },
+        "overrides": [{"matcher": {"id": "byName", "options": "target"}, "properties": [{"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}}, {"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]}]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "id": 5,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])) * 8", "legendFormat": "received", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_processed_bytes_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])) * 8", "legendFormat": "processed", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "vector($target_mbps * 1000000)", "legendFormat": "target", "range": true, "refId": "C"}
+      ],
+      "title": "Receive and processing throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "TCP receive sizes may vary with kernel buffering. Capture records remain small durability units while semantic batches amortize processing overhead within a separate bound.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 6},
+      "id": 6,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (rate(cadence_telemetry_ingress_receive_size_bytes_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p50", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(cadence_telemetry_ingress_receive_size_bytes_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_receive_size_bytes_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "TCP p99", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_record_size_bytes_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "capture record p99", "range": true, "refId": "D"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_processing_batch_size_bytes_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "semantic batch p99", "range": true, "refId": "E"}
+      ],
+      "title": "TCP, capture-record, and semantic-batch size",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Blocking receive duration for operations that returned bytes. Under sustained load this should stay low.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 6},
+      "id": 18,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (rate(cadence_telemetry_ingress_receive_operation_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p50", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(cadence_telemetry_ingress_receive_operation_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_receive_operation_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p99", "range": true, "refId": "C"}
+      ],
+      "title": "TCP receive duration",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+      "id": 101,
+      "panels": [],
+      "title": "Queueing and downstream latency",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 15},
+      "id": 7,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "cadence_telemetry_ingress_queue_size_bytes{service_name=~\"$service\"}", "legendFormat": "queued bytes", "range": true, "refId": "A"}],
+      "title": "Executor byte backlog",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 15},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "cadence_telemetry_ingress_queue_oldest_age_seconds{service_name=~\"$service\"}", "legendFormat": "oldest queued byte", "range": true, "refId": "A"}],
+      "title": "Oldest queued telemetry age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 15},
+      "id": 9,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_queue_depth{service_name=~\"$service\"}", "legendFormat": "executor {{downstream}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "cadence_telemetry_persistence_queue_depth{service_name=~\"$service\"}", "legendFormat": "persistence", "range": true, "refId": "B"}
+      ],
+      "title": "Queue depth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 23},
+      "id": 10,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (rate(cadence_telemetry_ingress_processing_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p50", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(cadence_telemetry_ingress_processing_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_processing_duration_seconds_bucket{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval])))", "legendFormat": "p99", "range": true, "refId": "C"}
+      ],
+      "title": "Ingress processing latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Time spent in successful or failed persistence batches, split by bounded outcome and error class.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 23},
+      "id": 11,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, outcome, error_type) (rate(cadence_telemetry_persistence_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "p95 {{outcome}} {{error_type}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le, outcome, error_type) (rate(cadence_telemetry_persistence_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "p99 {{outcome}} {{error_type}}", "range": true, "refId": "B"}
+      ],
+      "title": "Persistence batch latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Semantic products emitted by ingress. Divergence helps separate framing/decommutation cost from raw-byte intake.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 23},
+      "id": 12,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_evidence_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval]))", "legendFormat": "evidence", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_transfer_frame_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval]))", "legendFormat": "frames", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_packet_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval]))", "legendFormat": "packets", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_sample_total{service_name=~\"$service\",cadence_telemetry_direction=~\"$direction\",cadence_telemetry_protocol_family=~\"$protocol\"}[$__rate_interval]))", "legendFormat": "samples", "range": true, "refId": "D"}
+      ],
+      "title": "Semantic output rate",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 31},
+      "id": 102,
+      "panels": [],
+      "title": "BEAM and measurement headroom",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "max": 1, "min": 0, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 32},
+      "id": 13,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "beam_scheduler_utilization_ratio{service_name=~\"$service\"}", "legendFormat": "scheduler utilization", "range": true, "refId": "A"}],
+      "title": "BEAM scheduler utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 32},
+      "id": 14,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "beam_scheduler_run_queue{service_name=~\"$service\"}", "legendFormat": "run queue", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(beam_reductions_total{service_name=~\"$service\"}[$__rate_interval]))", "legendFormat": "reductions/s", "range": true, "refId": "B"}
+      ],
+      "title": "Scheduler pressure and reductions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 32},
+      "id": 15,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "beam_memory_usage_bytes{service_name=~\"$service\"}", "legendFormat": "{{memory_type}}", "range": true, "refId": "A"}],
+      "title": "BEAM memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Collection and reclaimed-word rates make GC pressure visible during high ingress.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+      "id": 16,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(beam_gc_collection_total{service_name=~\"$service\"}[$__rate_interval]))", "legendFormat": "collections/s", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(beam_gc_reclaimed_total{service_name=~\"$service\"}[$__rate_interval]))", "legendFormat": "reclaimed words/s", "range": true, "refId": "B"}
+      ],
+      "title": "Garbage collection pressure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "A rising exporter queue or failed export rate means the measurement system may be distorting or hiding the load test.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+      "id": 17,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "otel_sdk_exporter_metric_data_point_inflight{service_name=~\"$service\"}", "legendFormat": "metric series", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(otel_sdk_exporter_metric_data_point_exported_total{service_name=~\"$service\",error_type!=\"\"}[$__rate_interval]))", "legendFormat": "failed points/s", "range": true, "refId": "B"}
+      ],
+      "title": "Metrics exporter health",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 48},
+      "id": 103,
+      "panels": [],
+      "title": "Capture journal",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Retained journal bytes versus the configured bounded capacity. Retention can grow while either required consumer lags.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 49},
+      "id": 19,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_retained_bytes{service_name=~\"$service\"}", "legendFormat": "retained", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_capacity_bytes{service_name=~\"$service\"}", "legendFormat": "capacity", "range": true, "refId": "B"}
+      ],
+      "title": "Journal retention and capacity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Captured bytes not yet acknowledged by each required consumer. Reclamation follows the slower cursor.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 49},
+      "id": 20,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_lag_bytes{service_name=~\"$service\"}", "legendFormat": "{{consumer}}", "range": true, "refId": "A"}
+      ],
+      "title": "Journal consumer lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Largest retained-to-capacity ratio across active path journals. Sustained growth means processing or archival throughput is below capture throughput.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "max": 1, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.7}, {"color": "red", "value": 0.9}]}, "unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 49},
+      "id": 21,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_utilization_ratio{service_name=~\"$service\"}", "legendFormat": "utilization", "range": true, "refId": "A"}
+      ],
+      "title": "Journal utilization",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Rate admitted through the journal durability boundary. Compare this directly with socket receive rate to detect capture-side loss or stalls.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "Mbits"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 57},
+      "id": 22,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_journal_appended_bytes_total{service_name=~\"$service\"}[$__rate_interval])) * 8 / 1000000", "legendFormat": "captured Mb/s", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "vector($target_mbps)", "legendFormat": "target Mb/s", "range": true, "refId": "B"}
+      ],
+      "title": "Journal admission rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Append latency through page cache or fdatasync. Rising tail latency is the earliest signal that capture storage cannot sustain the source.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 57},
+      "id": 23,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le, durability) (rate(cadence_telemetry_ingress_journal_append_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "p99 {{durability}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le, durability) (rate(cadence_telemetry_ingress_journal_append_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "p50 {{durability}}", "range": true, "refId": "B"}
+      ],
+      "title": "Journal append latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Separates time waiting for the journal process from append service time and periodic cursor/index maintenance. A rising queue-wait tail identifies journal-process serialization rather than storage latency.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 65},
+      "id": 27,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_append_queue_wait_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "append queue p99", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_maintenance_duration_seconds_bucket{service_name=~\"$service\",outcome=\"ok\"}[$__rate_interval])))", "legendFormat": "maintenance p99", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_checkpoint_duration_seconds_bucket{service_name=~\"$service\",outcome=\"ok\"}[$__rate_interval])))", "legendFormat": "checkpoint p99", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_reclaim_duration_seconds_bucket{service_name=~\"$service\",outcome=\"ok\"}[$__rate_interval])))", "legendFormat": "reclaim p99", "range": true, "refId": "D"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_journal_maintenance_queue_wait_duration_seconds_bucket{service_name=~\"$service\",outcome=\"ok\"}[$__rate_interval])))", "legendFormat": "maintenance queue p99", "range": true, "refId": "E"}
+      ],
+      "title": "Journal serialization and maintenance latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Indexed record and segment counts show retained journal working-set size; mailbox depth shows operations waiting for the single journal process.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 65},
+      "id": 28,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_entry_count{service_name=~\"$service\"}", "legendFormat": "indexed entries", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_segment_count{service_name=~\"$service\"}", "legendFormat": "segments", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_mailbox_depth{service_name=~\"$service\"}", "legendFormat": "mailbox", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_journal_checkpoint_inflight{service_name=~\"$service\"}", "legendFormat": "checkpoint in flight", "range": true, "refId": "D"}
+      ],
+      "title": "Journal index and mailbox pressure",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 73},
+      "id": 104,
+      "panels": [],
+      "title": "Independent raw archive",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Raw bytes acknowledged by the archive consumer after the configured completion policy. Compare with journal admission to see whether archive export is keeping up.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "Mbits"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 74},
+      "id": 24,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum by (completion) (rate(cadence_telemetry_ingress_archive_archived_bytes_total{service_name=~\"$service\"}[$__rate_interval])) * 8 / 1000000", "legendFormat": "{{completion}} Mb/s", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "vector($target_mbps)", "legendFormat": "target Mb/s", "range": true, "refId": "B"}
+      ],
+      "title": "Raw archive acknowledgement rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Archive batch cardinality and persistence latency. Small batches at sustained load or rising latency identify archive write-shape pressure.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 74},
+      "id": 25,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (rate(cadence_telemetry_ingress_archive_batch_size_bucket{service_name=~\"$service\",outcome=\"ok\"}[$__rate_interval])))", "legendFormat": "batch p50 evidence", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(cadence_telemetry_ingress_archive_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))", "legendFormat": "duration p99 seconds", "range": true, "refId": "B"}
+      ],
+      "title": "Raw archive batch shape",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "description": "Retry-held bytes and failed archive attempts. Journal archive lag remains the authoritative total backlog; this panel isolates the batch currently blocking cursor advancement.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 12, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 74},
+      "id": 26,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_archive_queue_size_bytes{service_name=~\"$service\"}", "legendFormat": "retry-held bytes", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(cadence_telemetry_ingress_archive_attempt_total{service_name=~\"$service\",outcome=\"error\"}[$__rate_interval]))", "legendFormat": "failed attempts/s", "range": true, "refId": "B"}
+      ],
+      "title": "Raw archive retries",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["cadence", "sre", "telemetry-ingress", "load-test"],
+  "templating": {
+    "list": [
+      {
+        "current": {"text": "cadence-ingress-benchmark", "value": "cadence-ingress-benchmark"},
+        "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+        "definition": "label_values(cadence_telemetry_ingress_received_bytes_total, service_name)",
+        "includeAll": false,
+        "label": "Service",
+        "name": "service",
+        "options": [],
+        "query": {"query": "label_values(cadence_telemetry_ingress_received_bytes_total, service_name)", "refId": "PrometheusVariableQueryEditor-Service"},
+        "refresh": 1,
+        "regex": "/cadence.*/",
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+        "definition": "label_values(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\"}, cadence_telemetry_direction)",
+        "includeAll": true,
+        "label": "Direction",
+        "name": "direction",
+        "options": [],
+        "query": {"query": "label_values(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\"}, cadence_telemetry_direction)", "refId": "PrometheusVariableQueryEditor-Direction"},
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+        "definition": "label_values(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\"}, cadence_telemetry_protocol_family)",
+        "includeAll": true,
+        "label": "Protocol",
+        "name": "protocol",
+        "options": [],
+        "query": {"query": "label_values(cadence_telemetry_ingress_received_bytes_total{service_name=~\"$service\"}, cadence_telemetry_protocol_family)", "refId": "PrometheusVariableQueryEditor-Protocol"},
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {"text": "1000", "value": "1000"},
+        "description": "Expected source rate in decimal megabits per second; used only for the target line.",
+        "label": "Target Mb/s",
+        "name": "target_mbps",
+        "options": [],
+        "query": "1000",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Cadence / Ingress Load Test",
+  "uid": "cadence-ingress-load-test",
+  "version": 1,
+  "weekStart": ""
+}

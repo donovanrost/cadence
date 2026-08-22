@@ -1,0 +1,118 @@
+<!-- @dsCard group="Foundations" name="Semantic tokens (Outfit)" subtitle="Semantic role layer · step 1 — seeded" width="1000" height="1320" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Semantic tokens (Outfit)</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 72ch; font-size: .9rem; line-height: 1.5; }
+  .lede code, td code, .note code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px;
+    padding: .4rem .7rem; margin-bottom: 1.8rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .82rem; color: oklch(82% 0.02 250 / 0.75); line-height: 1.5; max-width: 74ch; margin: 0 0 1rem;
+    border-left: 2px solid oklch(78% 0.12 175 / 0.5); padding-left: .9rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 60rem; }
+  th { text-align: left; font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .6rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .6rem; color: oklch(82% 0.02 250 / 0.85);
+    vertical-align: top; }
+  td.role { font-family: ui-monospace, monospace; color: oklch(80% 0.12 210); white-space: nowrap; }
+  td.points { font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(76% 0.15 285); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem;
+    line-height: 1.55; color: oklch(85% 0.02 250 / 0.85); max-width: 60rem; }
+  pre .c { color: oklch(60% 0.02 250); }
+  pre .k { color: oklch(80% 0.12 210); }
+  pre .v { color: oklch(76% 0.15 285); }
+  pre .bad { color: oklch(72% 0.20 10); }
+  pre .good { color: oklch(78% 0.12 175); }
+  .ba { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; max-width: 60rem; }
+  .ba h3 { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 .5rem; }
+  .ba .before h3 { color: oklch(72% 0.20 10); }
+  .ba .after h3 { color: oklch(78% 0.12 175); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Semantic tokens &middot; the Outfit layer</h1>
+  <div class="status">&#10003; Implemented (step 1) &mdash; the role layer is seeded in <code style="color:inherit">tokens.css</code>; &#9678; component migration off <code style="color:inherit">--glow-*</code> continues (Phase 5).</div>
+  <p class="lede">The role layer from <strong>Token architecture</strong>, made concrete. Most of Cadence is already
+    here — <code>--surface-*</code>, <code>--status-*</code>, <code>--text-*</code> are already semantic roles.
+    What's still <em>fused</em> to the skin is the interactive <strong>action</strong> color (it borrows the
+    skin name <code>--glow-cyan</code>) and the cyan <strong>border</strong> family. This card defines those roles.</p>
+
+  <p class="note">Non-breaking by design: each role is an <em>alias</em> onto a token that already exists, so nothing
+    changes until components migrate to the role names one at a time. Old names keep working throughout.</p>
+
+  <p class="section-label">The roles (as shipped in tokens.css)</p>
+  <table>
+    <thead><tr><th>Role token</th><th>Points at (today)</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="role">--color-action</td><td class="points">var(--glow-cyan)</td><td>Primary interactive — links, primary buttons, active nav, focus.</td></tr>
+      <tr><td class="role">--color-action-strong</td><td class="points">var(--cyan-600)</td><td>Hover / active emphasis. A skin may brighten this.</td></tr>
+      <tr><td class="role">--color-action-secondary</td><td class="points">var(--glow-purple)</td><td>Secondary actions and accents.</td></tr>
+      <tr><td class="role">--color-action-accent</td><td class="points">var(--glow-pink)</td><td>Sparing highlight — the hot-pink accent.</td></tr>
+      <tr><td class="role">--on-action</td><td class="points">var(--cyan-on)</td><td>Text / icon on an action-filled surface.</td></tr>
+      <tr><td class="role">--border-subtle</td><td class="points">action / 0.15</td><td>Card &amp; panel rest borders.</td></tr>
+      <tr><td class="role">--border-default</td><td class="points">action / 0.25</td><td>Input and control borders.</td></tr>
+      <tr><td class="role">--border-strong</td><td class="points">action / 0.40</td><td>Emphasized dividers and rules.</td></tr>
+      <tr><td class="role">--border-focus</td><td class="points">action / 0.60</td><td>Focus ring.</td></tr>
+    </tbody>
+  </table>
+  <p class="note" style="border-color:oklch(80% 0.12 210 / 0.4)">Already semantic — <strong>keep using these</strong>:
+    <code>--surface-base/raised/elevated/…</code>, <code>--status-critical/warning/success/info</code>,
+    <code>--text-bright/subtle/muted</code>. Step 1 only adds what was missing.</p>
+
+  <p class="section-label">The fusion fix</p>
+  <div class="ba">
+    <div class="before">
+      <h3>Before &mdash; skin name doing a role's job</h3>
+<pre><span class="c">/* a SKIN name carries the meaning */</span>
+<span class="k">--glow-cyan</span>: <span class="v">var(--brand-primary)</span>;
+
+<span class="c">/* component borrows the skin name */</span>
+.text-primary { color: <span class="bad">var(--glow-cyan)</span>; }</pre>
+    </div>
+    <div class="after">
+      <h3>After &mdash; role aliases the skin</h3>
+<pre><span class="c">/* OUTFIT role points at the skin */</span>
+<span class="k">--color-action</span>: <span class="v">var(--glow-cyan)</span>;
+
+<span class="c">/* component consumes the ROLE */</span>
+.text-primary { color: <span class="good">var(--color-action)</span>; }
+<span class="c">/* swap the skin → the role holds */</span></pre>
+    </div>
+  </div>
+
+  <p class="section-label">The tokens.css block (step 1, shipped)</p>
+<pre><span class="c">/* ── OUTFIT · semantic role tokens — added to the existing :root.
+   Named by MEANING, aliased onto the skin. New component code consumes
+   these; re-theming swaps what they point at. Non-breaking. ── */</span>
+<span class="k">--color-action</span>:            <span class="v">var(--glow-cyan)</span>;
+<span class="k">--color-action-strong</span>:   <span class="v">var(--cyan-600)</span>;
+<span class="k">--color-action-secondary</span>:  <span class="v">var(--glow-purple)</span>;
+<span class="k">--color-action-accent</span>:     <span class="v">var(--glow-pink)</span>;
+<span class="k">--on-action</span>:               <span class="v">oklch(15% 0.02 210)</span>;
+
+<span class="k">--border-subtle</span>:  <span class="v">oklch(from var(--color-action) l c h / 0.15)</span>;
+<span class="k">--border-default</span>: <span class="v">oklch(from var(--color-action) l c h / 0.25)</span>;
+<span class="k">--border-strong</span>:  <span class="v">oklch(from var(--color-action) l c h / 0.40)</span>;
+<span class="k">--border-focus</span>:   <span class="v">oklch(from var(--color-action) l c h / 0.60)</span>;</pre>
+  <p class="note">Fits the frozen-CSS rule: this only <em>adds custom-property tokens</em> to the existing
+    <code>:root</code> (rule 1 permits that) — no new selectors. Step 2 then parameterizes the flourishes
+    (<code>--fx-glow</code>, <code>--label-case</code>, <code>--pulse-*</code>) so a legibility skin and
+    reduced-motion become a few token reassignments.</p>
+</body>
+</html>

@@ -1,0 +1,75 @@
+defmodule Cadence.Accounts.User do
+  @moduledoc """
+  Platform user account.
+  """
+
+  alias Cadence.Ids
+
+  @type capability :: :platform_admin
+  @type lifecycle_state :: :active | :disabled
+
+  @type t :: %__MODULE__{
+          user_id: binary(),
+          email: binary(),
+          display_name: binary(),
+          capabilities: [capability()],
+          confirmed_at: DateTime.t() | nil,
+          lifecycle_state: lifecycle_state(),
+          metadata: map()
+        }
+
+  defstruct [
+    :user_id,
+    :email,
+    :display_name,
+    capabilities: [],
+    confirmed_at: nil,
+    lifecycle_state: :active,
+    metadata: %{}
+  ]
+
+  @spec new(map()) :: t()
+  def new(attrs) when is_map(attrs) do
+    %__MODULE__{
+      user_id: Map.get(attrs, :user_id, Map.get(attrs, "user_id", Ids.new("user"))),
+      email:
+        attrs
+        |> Map.get(:email, Map.get(attrs, "email"))
+        |> normalize_email(),
+      display_name: Map.fetch!(attrs, :display_name),
+      capabilities:
+        attrs
+        |> Map.get(:capabilities, Map.get(attrs, "capabilities", []))
+        |> Enum.map(&normalize_capability/1),
+      confirmed_at: Map.get(attrs, :confirmed_at, Map.get(attrs, "confirmed_at")),
+      lifecycle_state:
+        attrs
+        |> Map.get(:lifecycle_state, Map.get(attrs, "lifecycle_state", :active))
+        |> normalize_lifecycle_state(),
+      metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
+    }
+  end
+
+  @spec normalize_capability(capability() | binary()) :: capability()
+  def normalize_capability(:platform_admin), do: :platform_admin
+  def normalize_capability("platform_admin"), do: :platform_admin
+
+  @spec normalize_lifecycle_state(lifecycle_state() | binary()) :: lifecycle_state()
+  def normalize_lifecycle_state(:active), do: :active
+  def normalize_lifecycle_state("active"), do: :active
+  def normalize_lifecycle_state(:disabled), do: :disabled
+  def normalize_lifecycle_state("disabled"), do: :disabled
+
+  @spec normalize_email(binary() | nil) :: binary() | nil
+  def normalize_email(nil), do: nil
+
+  def normalize_email(email) when is_binary(email) do
+    email
+    |> String.trim()
+    |> String.downcase()
+  end
+
+  @spec confirmed?(t()) :: boolean()
+  def confirmed?(%__MODULE__{confirmed_at: %DateTime{}}), do: true
+  def confirmed?(%__MODULE__{}), do: false
+end

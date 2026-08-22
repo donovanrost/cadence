@@ -1,0 +1,322 @@
+defmodule CadenceWeb.CoreComponents do
+  @moduledoc false
+
+  use Phoenix.Component
+
+  import CadenceWeb.Components.Button, only: [button: 1]
+  import CadenceWeb.Components.Overlay, only: [menu: 1]
+
+  attr :name, :string, required: true
+  attr :class, :string, default: nil
+  attr :rest, :global
+
+  def icon(assigns) do
+    ~H"""
+    <span class={[@name, @class]} {@rest}></span>
+    """
+  end
+
+  @doc """
+  Renders a vertical ellipsis action menu for table rows and card actions.
+
+  Uses daisyUI's dropdown styling with the `DropdownMenu` hook for
+  accessible behavior: real button trigger with `aria-expanded`, arrow-key
+  navigation, Escape-to-close with focus return, and click-outside close.
+  Each action is a slot that renders as a menu item.
+
+  ## Examples
+
+      <.action_menu id={"\#{thing.id}-actions"}>
+        <:action>
+          <.link navigate={~p"/things/\#{thing.id}"}>View</.link>
+        </:action>
+        <:action>
+          <button phx-click="delete" phx-value-id={thing.id}
+            data-confirm="Are you sure?">Delete</button>
+        </:action>
+      </.action_menu>
+  """
+  attr :id, :string, required: true
+  attr :class, :string, default: nil
+  slot :action, required: true
+
+  def action_menu(assigns) do
+    ~H"""
+    <.menu id={@id} label="Actions" class={@class} trigger_class="btn btn-ghost btn-xs">
+      <:item :for={action <- @action}>{render_slot(action)}</:item>
+    </.menu>
+    """
+  end
+
+  @doc """
+  Renders a colored status indicator dot. Same vocabulary as `status_badge/1`
+  in `CadenceWeb.Components.Badges` — denser visual for tight layouts.
+
+  ## Examples
+
+      <.status_dot status={:ready} />
+      <.status_dot status={:attention} size={:sm} />
+  """
+  attr :status, :atom,
+    required: true,
+    values: [:ready, :attention, :blocked, :info]
+
+  attr :size, :atom, values: [:sm, :md], default: :md
+  attr :class, :string, default: nil
+
+  def status_dot(assigns) do
+    ~H"""
+    <span class={[
+      "rounded-full flex-shrink-0",
+      size_class(@size),
+      status_color(@status),
+      @class
+    ]}>
+    </span>
+    """
+  end
+
+  defp size_class(:sm), do: "w-1.5 h-1.5"
+  defp size_class(:md), do: "w-2 h-2"
+
+  defp status_color(:ready), do: "bg-success"
+  defp status_color(:attention), do: "bg-warning"
+  defp status_color(:blocked), do: "bg-error"
+  defp status_color(:info), do: "bg-info"
+
+  @doc """
+  Renders a key-value detail row. Wrap multiple rows in a `divide-y divide-base-300`
+  container for dividers between them.
+
+  ## Examples
+
+      <div class="divide-y divide-base-300">
+        <.detail_row label="Slug" value={@org.slug} mono />
+        <.detail_row label="Status" value="Active" />
+      </div>
+  """
+  attr :label, :string, required: true
+  attr :value, :string, default: nil
+  attr :mono, :boolean, default: false
+  slot :inner_block
+
+  def detail_row(assigns) do
+    ~H"""
+    <div class="hud-data-row">
+      <span class="hud-data-label">{@label}</span>
+      <span class={[
+        "hud-data-value",
+        @mono && "font-mono text-sm"
+      ]}>
+        <%= if @inner_block != [] do %>
+          {render_slot(@inner_block)}
+        <% else %>
+          {@value || "—"}
+        <% end %>
+      </span>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders an empty state placeholder for lists and tables with no data.
+
+  ## Examples
+
+      <.empty_state
+        icon="hero-building-office"
+        title="No organizations"
+        description="Create your first organization to get started."
+        action_label="Create Organization"
+        action_navigate={~p"/admin/organizations/new"}
+      />
+  """
+  attr :icon, :string, default: nil
+  attr :title, :string, required: true
+  attr :description, :string, default: nil
+  attr :action_label, :string, default: nil
+  attr :action_navigate, :string, default: nil
+  attr :action_patch, :string, default: nil
+
+  attr :compact, :boolean,
+    default: false,
+    doc: "muted one-line message for inside a card/sub-panel"
+
+  attr :class, :string, default: nil
+
+  def empty_state(%{compact: true} = assigns) do
+    ~H"""
+    <p class={["text-sm text-base-content/60", @class]}>{@title}</p>
+    """
+  end
+
+  def empty_state(assigns) do
+    ~H"""
+    <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
+      <span :if={@icon} class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
+      <p class={["hud-label", @icon && "mt-3"]}>{@title}</p>
+      <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
+        {@description}
+      </p>
+      <div :if={@action_label} class="mt-5">
+        <.button navigate={@action_navigate} patch={@action_patch}>
+          <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
+          {@action_label}
+        </.button>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders an inline callout — a contextual in-page message that belongs where
+  it appears (a failed import's reason, a warning about dropped selections).
+  Not a toast: transient action feedback goes through flash.
+
+  ## Examples
+
+      <.callout variant={:error}>Import failed: unsupported schema version.</.callout>
+      <.callout variant={:warning} id="dropped-apids">3 APIDs are not in this revision.</.callout>
+  """
+  attr :variant, :atom, values: [:info, :warning, :error, :success], default: :info
+  attr :id, :string, default: nil
+  attr :class, :string, default: nil
+  slot :inner_block, required: true
+
+  def callout(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      role="alert"
+      class={["border px-4 py-3 text-sm text-base-content", callout_class(@variant), @class]}
+    >
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
+  defp callout_class(:info), do: "border-info/40 bg-info/10"
+  defp callout_class(:warning), do: "border-warning/40 bg-warning/10"
+  defp callout_class(:error), do: "border-error/40 bg-error/10"
+  defp callout_class(:success), do: "border-success/40 bg-success/10"
+
+  @doc """
+  Renders a panel/section header bar with an uppercase label and optional right-side controls.
+
+  ## Examples
+
+      <.panel_header label="Active Alarms" count={5}>
+        <:controls>
+          <.button variant={:ghost} size={:xs}>Filter</.button>
+        </:controls>
+      </.panel_header>
+  """
+  attr :label, :string, required: true
+  attr :count, :integer, default: nil
+  attr :class, :string, default: nil
+  slot :controls
+
+  def panel_header(assigns) do
+    ~H"""
+    <div class={["flex items-center justify-between px-2 py-1.5 border-b border-base-300", @class]}>
+      <div class="flex items-center gap-2">
+        <span class="hud-label">{@label}</span>
+        <span :if={@count} class="text-xs text-base-content/60">({@count})</span>
+      </div>
+      <div :if={@controls != []} class="flex items-center gap-1">
+        {render_slot(@controls)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a list item row with a status dot, name, detail text, and optional right-side info.
+
+  ## Examples
+
+      <.list_item
+        name={target.name}
+        detail={target.identifier}
+        status={:online}
+        badge={target.type}
+      />
+  """
+  attr :name, :string, required: true
+  attr :detail, :string, default: nil
+  attr :status, :atom, default: nil
+  attr :badge, :string, default: nil
+  attr :class, :string, default: nil
+
+  def list_item(assigns) do
+    ~H"""
+    <div class={["flex items-center justify-between py-2", @class]}>
+      <div class="flex items-center gap-3">
+        <.status_dot :if={@status} status={@status} />
+        <div>
+          <p class="font-medium text-sm">{@name}</p>
+          <p :if={@detail} class="text-xs text-base-content/60">{@detail}</p>
+        </div>
+      </div>
+      <span :if={@badge} class="text-xs text-base-content/60">{@badge}</span>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a resizable two-panel split layout with a drag handle between them.
+
+  Uses the `ResizablePanel` LiveView JS hook for drag-to-resize with localStorage
+  persistence. The left panel width is controlled; the right panel fills remaining space.
+
+  ## Examples
+
+      <.resizable_split id="cmd-panels" default_width="40%">
+        <:left>
+          <.panel_header label="Targets" />
+          <!-- target list -->
+        </:left>
+        <:right>
+          <.panel_header label="Commands" />
+          <!-- command browser -->
+        </:right>
+      </.resizable_split>
+  """
+  attr :id, :string, required: true
+  attr :default_width, :string, default: "40%"
+  attr :min_width, :integer, default: 150
+  attr :max_width_percent, :integer, default: 60
+  attr :class, :string, default: nil
+  slot :left, required: true
+  slot :right, required: true
+
+  def resizable_split(assigns) do
+    ~H"""
+    <div id={@id} class={["flex h-full overflow-hidden", @class]}>
+      <div
+        id={"#{@id}-left"}
+        class="flex flex-col overflow-hidden flex-shrink-0"
+        style={"flex: 0 0 #{@default_width}"}
+      >
+        {render_slot(@left)}
+      </div>
+      <div
+        id={"#{@id}-handle"}
+        phx-hook="ResizablePanel"
+        phx-update="ignore"
+        data-panel-id={"#{@id}-left"}
+        data-storage-key={"cadence:panel:#{@id}"}
+        data-min-width={@min_width}
+        data-max-width-pct={@max_width_percent}
+        class="w-2 flex-shrink-0 cursor-col-resize flex items-center justify-center relative z-10 group"
+      >
+        <div class="w-0.5 h-10 rounded-full transition-all bg-base-content/20 group-hover:bg-primary/60 group-hover:h-16 group-hover:shadow-[0_0_8px_rgba(125,207,255,0.3)]">
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col overflow-hidden">
+        {render_slot(@right)}
+      </div>
+    </div>
+    """
+  end
+end

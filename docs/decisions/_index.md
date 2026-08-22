@@ -1,55 +1,59 @@
 ---
 title: Architecture Decision Records
 tags: [decisions, adr, index]
-created: 2025-01-27
-updated: 2025-01-27
+created: 2026-03-28
+updated: 2026-08-21
 status: active
 ---
 
 # Architecture Decision Records
 
-ADRs capture significant architectural decisions and their rationale. Check here before modifying architecture to avoid undoing intentional choices.
+This directory holds ADRs for the redesigned Cadence system across its
+applications and packages.
+
+For the current implementation shape and developer workflow, start with the
+[Developer Architecture Guide](../developer-architecture-guide.md).
+
+Legacy ADRs remain under
+[`legacy/cadence_legacy/docs/decisions`](../../legacy/cadence_legacy/docs/decisions/_index.md).
 
 ## Accepted Decisions
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [ADR-001](001-no-db-in-data-plane.md) | No Database Calls in Data Plane | Accepted |
-| [ADR-002](002-luerl-for-procedures.md) | Luerl for Procedure Execution | Accepted |
+| [ADR-001](001-mission-scoped-runtime-and-selector-model.md) | Mission-Scoped Runtime and Selector Model | Accepted |
+| [ADR-002](002-organization-mission-scope-and-identity-model.md) | Organization, Mission, and Identity Scope Model | Accepted |
+| [ADR-003](003-authorization-context-and-policy-evaluation-model.md) | Authorization Context and Policy Evaluation Model | Accepted |
+| [ADR-004](004-activation-authorization-and-approval-policy.md) | Activation Authorization and Approval Policy | Accepted |
+| [ADR-005](005-runtime-partitioning-and-workload-isolation.md) | Runtime Partitioning and Workload Isolation | Accepted |
+| [ADR-006](006-contact-link-and-transport-runtime-model.md) | Contact, Link, and Transport Runtime Model | Accepted |
+| [ADR-007](007-first-party-capability-abi.md) | First-Party Capability ABI | Accepted |
+| [ADR-008](008-multi-format-catalog-import-architecture.md) | Multi-Format Catalog Import Architecture | Accepted |
+| [ADR-009](009-canonical-telemetry-catalog-model.md) | Canonical Telemetry Catalog Model | Accepted |
+| [ADR-010](010-canonical-command-catalog-model.md) | Canonical Command Catalog Model | Accepted |
+| [ADR-011](011-command-staging-queueing-and-release-lifecycle.md) | Command Staging, Queueing, and Release Lifecycle | Accepted |
+| [ADR-012](012-provider-adapter-and-ground-station-simulator-model.md) | Provider Adapter and Ground Station Simulator Model | Accepted |
+| [ADR-014](014-shared-ccsds-library-boundary.md) | Shared CCSDS Library Boundary | Accepted |
+| [ADR-015](015-management-control-data-plane-architecture.md) | Management Plane, Control Plane, and Data Plane Architecture | Accepted |
+| [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
+| [ADR-019](019-telemetry-data-plane-persistence-and-projection-topology.md) | Telemetry Data-Plane Persistence and Projection Topology | Accepted |
+| [ADR-020](020-xtce-informed-mission-model-intermediate-representation.md) | XTCE-Informed Mission Model Intermediate Representation | Accepted |
+| [ADR-021](021-monorepo-poncho-project-and-package-layout.md) | Monorepo Poncho Project and Package Layout | Accepted |
+| [ADR-022](022-standalone-xtce-library-boundary.md) | Standalone XTCE Library Boundary | Accepted |
 
-## Planned ADRs
+## Proposed Decisions
 
-Decisions embedded in existing docs that should be extracted:
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-017](017-multi-tenant-identity-federation-and-credential-model.md) | Multi-Tenant Identity Federation and Credential Model | Proposed |
+| [ADR-018](018-capture-first-telemetry-ingress-journal.md) | Capture-First Telemetry Ingress Journal | Proposed |
 
-- **Recordables Pattern for Event Sourcing** - From [Adding a Recordable](../patterns/adding-recordable.md)
-- **Hexagonal Architecture** - From [Data Plane / Control Plane](../architecture/data-plane-control-plane.md)
+## Superseded Decisions
 
-## ADR Template
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-013](013-control-plane-data-plane-and-reconciliation-patterns.md) | Control Plane, Data Plane, and Reconciliation Patterns | Superseded by ADR-015 |
 
-```markdown
----
-title: "ADR-NNN: Title"
-tags: [adr, topic]
-status: proposed | accepted | deprecated | superseded
-created: YYYY-MM-DD
----
+## Planned Decisions
 
-# ADR-NNN: Title
-
-## Status
-Accepted
-
-## Context
-What's the situation? What forces are at play?
-
-## Decision
-What did we decide?
-
-## Consequences
-What are the trade-offs? What does this enable/prevent?
-```
-
-## See Also
-
-- [Architecture](../architecture/_index.md) - Technical details
-- [Glossary](../glossary/_index.md) - Terminology
+- Future mission-supplied package ABI, signing, and sandboxing

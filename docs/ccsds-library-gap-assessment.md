@@ -1,0 +1,303 @@
+---
+title: "CCSDS Library Gap Assessment"
+tags: [architecture, ccsds, simulator, telemetry, commanding]
+status: active
+created: 2026-07-19
+updated: 2026-07-21
+---
+
+# CCSDS Library Gap Assessment
+
+## Purpose
+
+`ccsds` is the shared, dependency-leaf protocol library used by Cadence
+and the simulator. It is deliberately separate from catalog interpretation,
+persistence, tenancy, jobs, activation, and runtime orchestration.
+
+The library implements a useful CCSDS subset. It must not yet be described as a
+complete CCSDS protocol stack or as flight-qualified.
+
+The standards baseline for this assessment is the
+[CCSDS active publications catalog](https://ccsds.org/publications/allpubs/),
+including:
+
+- CCSDS 132.0-B-3, TM Space Data Link Protocol;
+- CCSDS 133.0-B-2, Space Packet Protocol;
+- CCSDS 133.1-B-3, Encapsulation Packet Protocol;
+- CCSDS 231.0-B-4 with corrigendum 1, TC Synchronization and Channel Coding;
+- CCSDS 232.0-B-4 with corrigendum 1, TC Space Data Link Protocol;
+- CCSDS 232.1-B-2 with corrigendum 1, Communications Operation Procedure-1;
+- CCSDS 301.0-B-4 with Editorial Change 1, Time Code Formats;
+- CCSDS 355.0-B-2, Space Data Link Security Protocol;
+- CCSDS 727.0-B-5 with errata 1, CCSDS File Delivery Protocol;
+- CCSDS 732.0-B-5, AOS Space Data Link Protocol; and
+- CCSDS 732.1-B-3, Unified Space Data Link Protocol.
+
+## Implemented subset
+
+The shared library currently owns:
+
+- a first-class Space Packet model and strict CCSDS 133.0-B-2 primary-header
+  codec;
+- bounded streaming Space Packet decoding, independent per-APID sequence
+  helpers, and mission-pattern Idle Packet construction;
+- strict CCSDS 133.1-B-3 Encapsulation Packet encoding, decoding, and streaming
+  extraction across the one-, two-, four-, and eight-octet headers, including
+  adaptive generation, managed EPI registries, extended protocol IDs, exact-size
+  Idle Packet construction, and request/indication primitives;
+- strict CCSDS 727.0-B-5 CFDP encoding, decoding, and streaming extraction for
+  all eight standard PDU payload forms and all six standard TLV forms,
+  including one- through eight-octet entity and transaction identifiers,
+  small- and large-file offsets, segment metadata, record-continuation state,
+  optional PDU CRCs, and managed checksum-type acceptance;
+- the mandatory modular and null file-checksum procedures, offset-aware
+  out-of-order modular accumulation, and an explicit provider boundary for
+  registered mission checksum algorithms;
+- pure Class 1 sender and receiver procedures with an in-memory convenience
+  path and caller-owned read, write, checksum, finalize, and discard effects
+  for external file sources and sinks; optional closure; out-of-order and
+  duplicate segment handling; Check timer effects; checksum and size
+  verification; and portable indications;
+- pure Class 2 sender and receiver procedures with external source/sink effects,
+  EOF and Finished positive acknowledgements, deferred and immediate NAK
+  repair, caller-triggered asynchronous NAK issuance, Metadata and data
+  retransmission, Prompt and Keep Alive handling, NAK and positive-ACK limits,
+  caller-owned timer effects, and portable indications;
+- MIB-shaped default fault policies with per-transaction Fault Handler Override
+  precedence, all four standard actions (cancel, suspend, ignore, and abandon),
+  and local suspend/resume procedures that pause applicable transmission and
+  timer activity without discarding received file state;
+- strict typed codecs for all chapter-6 Proxy Operation messages, the shared
+  Originating Transaction ID message, and Directory Listing request/response
+  messages, returned as ordinary Message-to-User TLVs without executing or
+  authorizing the requested operation;
+- dynamic PVN-7 Packet length resolution in the managed Packet Service format,
+  allowing mixed Space and Encapsulation Packet blocks to pass through the TC
+  and USLP Packet services without treating EPP as a fixed-header format;
+- semantic `LinkFrame` and `SDUOctets` value types;
+- fixed-length TM transfer-frame encoding and decoding for Packet, Idle Data,
+  and VCA_SDU Virtual Channels, with managed channel configuration;
+- shared CCSDS Frame Error Control Field generation and validation for TM and
+  TC, with managed presence and explicit corruption evidence;
+- TM Packet segmentation and continuity-aware reassembly keyed by GVCID,
+  including independent MCFC/VCFC tracking, partial-packet disposition, and
+  source-frame provenance;
+- the complete TM Transfer Frame Secondary Header value codec, managed
+  Master/Virtual Channel association, and fixed-length validation;
+- standards-shaped Idle Packet filling across frame boundaries and the
+  continuous annex-D Only Idle Data PN generator and validator;
+- TM Virtual Channel Packet and Virtual Channel Access request/indication
+  primitives, including VCA status fields and VCFC-derived loss flags;
+- variable-length TC transfer-frame encoding and streaming decoding;
+- the standard TC primary header and one-octet Segment Header;
+- TC MAP segmentation and stateful receive reassembly;
+- standard CLCW wire encoding and decoding; and
+- strict Type-BC Unlock and Set V(R) control-command codecs;
+- a pure, per-VC FARM-1 receiver implementing the E1-E11 acceptance,
+  positive/negative-window, wait, lockout, FARM-B, and reporting behavior; and
+- a pure, per-VC FOP-1B sender implementing all six states, standard
+  directives, AD/BD/BC lower-layer responses, configurable K and T1 behavior,
+  CLCW classification, retransmission, suspend/resume, and standard alerts;
+- the TC pseudo-randomizer, systematic BCH(63,56) codeblocks with detection or
+  single-error correction, and systematic LDPC(128,64) and LDPC(512,256)
+  codeblocks with binary hard-decision validation and single-error correction;
+  and
+- complete BCH and LDPC CLTU construction and decoding, including managed
+  randomization, standard start and tail sequences, fill validation, inverted
+  polarity and start-error handling, and per-codeword channel-quality evidence;
+- distinct request and indication primitives for the MAPP, VCP, MAPA, VCA,
+  VCF, and MCF services, with managed SAP addresses, Type-A/Type-B selection,
+  coding repetitions, service-exclusivity validation, and the VCA single-frame
+  rule; and
+- managed Packet Service formats keyed by Packet Version Number, stable packet
+  blocking, MAP packet segmentation, receive extraction, maximum-length
+  enforcement, and configurable complete/partial packet delivery evidence; and
+- maintained conformance evidence comprising 51 source-hashed, section-located
+  CCSDS vectors, explicit provenance classes for published versus derived
+  octets, seeded generative and malformed-input properties, and a pinned
+  bidirectional NASA Hermes v4.0.11 interoperability run over 260 Space Packets,
+  128 TC transfer frames, and 128 TM transfer frames, plus a pinned
+  bidirectional `spacepackets` 0.32.0 CFDP run over 128 Cadence-generated and 11
+  independently generated PDUs; and
+- CCSDS 732.0-B-5 issue-5 AOS fixed-length transfer frames with 10-bit SCIDs,
+  optional shortened Reed-Solomon FHEC, Insert Zone, M_PDU, B_PDU, VCA_SDU,
+  OID, OCF, and FECF processing, including managed mixed-VC stream routing;
+- AOS Packet segmentation/reassembly, arbitrary-bit Bitstream processing,
+  fixed-length VCA delivery, continuous per-physical-channel OID generation and
+  validation, and independent realtime/replay 24- or 28-bit VC continuity; and
+- all seven AOS service primitives (VCP, Bitstream, VCA, VC_OCF, VCF, MCF, and
+  Insert), with synchronous OCF/Insert queues, loss flags, external-frame
+  validation, and the standard VCF/MCF exclusivity and Insert restrictions;
+- CCSDS 732.1-B-3 USLP Version-4 fixed- and variable-length Transfer Frames,
+  including 16-bit SCIDs, source/destination addressing, MAP IDs, zero- through
+  seven-octet QoS-specific VC counters, all eight TFDZ construction rules,
+  Insert Zone, OCF, FECF, managed mixed-MAP routing, and normative truncated
+  Transfer Frames;
+- USLP managed Physical, Master, Virtual, MAP, Packet, COP, coding-repetition,
+  release-delay, and service-access parameters with hierarchy and exclusivity
+  validation;
+- USLP fixed-frame FHP/LVO processing, variable-frame Packet/MAPA/VCA
+  segmentation and reassembly, MAP Octet Stream delivery, independent
+  Sequence-Controlled and Expedited continuity, and the continuous annex-H
+  32-cell OID generator and validator; and
+- all ten USLP service boundaries (MAPP, VCP, MAPA, VCA, MAP Octet Stream,
+  USLP_MC_OCF, VCF, MCF, Insert, and COPs Management), including synchronous
+  OCF/Insert queues, frame-service isolation, portable loss evidence, managed
+  wire ingestion, and algorithm-neutral COP directive handoff; and
+- CCSDS 355.0-B-2 algorithm-neutral SDLS Security Associations, exact
+  Security Header and Trailer processing, ApplySecurity and ProcessSecurity
+  boundaries, all three security service types, sequence-number- and IV-based
+  anti-replay state, managed padding, protocol service restrictions, OID and
+  channel-scope constraints, standard-required authentication masks, and
+  portable verification status codes; and
+- CCSDS 301.0-B-4 CUC and CDS time-code values and strict codecs, including
+  explicit and implicit P-fields, both epoch classes, all standardized counter
+  lengths and resolutions, normal and leap-adjusted CDS bounds, exact rational
+  fractional time, and explicit counter/`DateTime` correlation with reported
+  rounding error.
+
+Cadence now wraps catalog-compiled `:space_packet` command application data in
+telecommand Space Packets before TC segmentation. The uplink gateway maintains
+the packet sequence count independently per APID. The simulator removes that
+shared packet envelope before invoking the portable catalog command decoder,
+and its generated telemetry packets and TM idle padding use the same shared
+codec. Packet secondary-header contents remain opaque because their format is
+mission-managed by the Space Packet Protocol.
+
+TC Segment Header presence remains a managed per-VC setting, as required by the
+protocol. The frame does not carry a Segment Header presence bit. Type-AD
+reassembly checks frame sequence continuity; Type-BD reassembly uses arrival
+order because Type-B frame sequence numbers are not available for that purpose.
+
+FECF presence is supplied as the managed `fecf: true | false` channel setting;
+there is no presence bit in either transfer-frame header. Encoding reserves the
+final two octets and includes them in the TC Frame Length count. TM detailed
+decoding drops a corrupt fixed-length frame with `:invalid_fecf` evidence, while
+TC decoding rejects a corrupt variable-length frame before MAP reassembly. The
+Cadence uplink gateway, Cadence TM ingress metadata, simulator TM framing, and
+simulator COP-1 loopback all propagate the same managed setting.
+
+The simulator COP-1 loopback now keeps independent FARM-1 state per TC virtual
+channel. Only accepted Type-AD and Type-BD data reaches command reassembly.
+Valid Type-BC Unlock and Set V(R) commands update FARM-1 directly, and emitted
+CLCWs report persistent V(R), Wait, Lockout, Retransmit, and FARM-B state.
+Cadence bootstrap seeds the receiver's initial V(R) from the uplink gateway's
+current `next_frame_seq`; standalone runs can manage V(R) and the positive and
+negative window widths explicitly.
+
+The Cadence uplink gateway composes FOP-1 in synchronous lower-layer mode. It
+initializes AD service without a CLCW check, maps the existing maximum-retry
+setting to the standard Transmission_Limit, supports K values from 1 through
+255, exposes Timeout_Type 0 and 1, and manages one replaceable T1 timer per TC
+virtual channel. The library's explicit lower-layer mode and management
+directives remain independently usable by other applications and simulators.
+
+The pure TC service provider composes the existing frame, segmentation, and
+reassembly primitives without owning scheduling or runtime state. Its receive
+boundary expects data frames to have already passed FARM-1 and optional SDLS
+processing. MAP, Virtual Channel, and Master Channel multiplexing order remains
+mission-managed, as the standard does not prescribe those ordering algorithms.
+
+TM channel configuration now makes the otherwise off-wire physical, Master
+Channel, Virtual Channel, and Packet-transfer facts explicit: fixed frame and
+FECF sizes, valid SCIDs/VCIDs, Packet versus VCA content, FSH/OCF association,
+valid Packet Version Numbers, maximum Packet length, and incomplete-Packet
+delivery policy. Configuration-plan validation keeps Master Channel FSH/OCF
+settings static across its configured Virtual Channels. The frame decoder
+reports malformed headers and managed-setting mismatches, while reassembly
+reports MCFC/VCFC discontinuities, orphan continuations, FHP resynchronization,
+partial-Packet disposition, invalid Packets, and OID validation failures as
+portable anomaly evidence.
+
+## Remaining gaps
+
+The targeted CFDP baseline now covers the complete issue-5 wire surface, the
+interoperable Class 1 and Class 2 core procedures, scalable caller-owned file
+effects, configurable fault/suspension policy, and typed proxy/directory
+messages. The remaining CFDP library extensions are separable from Cadence
+product design:
+
+- add inactivity monitoring, optional Keep Alive limit detection, local
+  cancel/report primitives, and transaction-history/status-report responses;
+- add typed Remote Status Report and Remote Suspend/Resume chapter-6 messages;
+- model ordered Filestore Request execution and Filestore Response production
+  as caller-owned effects after successful delivery;
+- add record-aware sender segmentation policies above the already-supported
+  File Data segment-metadata wire fields; and
+- perform a cross-implementation Class 1/Class 2 transaction run. The current
+  independent evidence is intentionally limited to PDU parsing and generation.
+
+These are honest extension points rather than requirements for composing the
+current PDU codec and mandatory transfer core. This is not a claim that
+`ccsds` implements every CCSDS publication or is flight-qualified;
+additional protocol families should still be driven by concrete mission or
+product requirements.
+
+## Application-specific follow-through
+
+The library should own wire structures, protocol validation, segmentation,
+reassembly, and pure protocol state machines. The applications still need to
+compose those pieces:
+
+- `cadence_catalog` supplies compiled application layouts and APID metadata but
+  remains independent of protocol framing and persistence;
+- Cadence should map activated mission configuration to TC service, SCID, VCID,
+  MAP, FECF, COP-1, coding profiles, SDLS association/provider configuration,
+  and the shared managed TM channel model;
+- the simulator and Cadence should continue to compose catalog application data
+  with the shared protocol codecs rather than duplicating wire headers; and
+- Cadence should continue to own persistence, tenancy, revisions, import runs,
+  governance, activation, jobs, PubSub, and dashboard invalidation.
+
+## Conformance evidence boundary
+
+The maintained corpus lives under `packages/ccsds/conformance` and records
+the exact CCSDS publication URL, SHA-256, locator, and evidence class for every
+vector. The normal test suite consumes all entries and runs reproducible seeded
+properties; `CCSDS_GENERATIVE_CASES` and `CCSDS_GENERATIVE_SEED` scale and
+reproduce that sweep without adding a runtime dependency.
+
+The opt-in external harness pins NASA Hermes v4.0.11 by release and commit,
+checks Cadence-generated values with Hermes, and decodes Hermes-generated values
+with Cadence. Its maintained run covers Space Packets, Type-BD TC frames with
+FECF, and TM frames with and without secondary headers. Hermes does not expose
+the full Cadence subset, so TM OCF/FECF and COP-1 state-machine interoperability
+still require a second capable implementation or mission testbed before making
+broad interoperability claims. None of this evidence constitutes flight
+qualification.
+
+The corpus now includes 51 vectors across ten source-hashed standards and
+seeded AOS, USLP, Encapsulation Packet, CFDP, and SDLS round trips over their managed
+framing and state options, plus seeded CUC/CDS P-field and counter round trips.
+AOS FHEC encode/correction behavior is independently cross-checked against a
+pinned Yamcs commit. That narrow cross-check is not evidence of full issue-5
+AOS interoperability because Yamcs uses an older AOS addressing layout.
+USLP evidence currently consists of source-hashed normative frame derivations,
+the published annex-H OID sequence, and seeded properties; no independent
+implementation covering the full Issue-3 service set has been identified.
+Encapsulation Packet evidence covers all four normative header sizes with
+source-hashed derivations and seeded streaming/malformed-input properties; no
+independent CCSDS 133.1-B-3 implementation is yet in the differential harness.
+SDLS evidence covers normative TC and TM Security Header layouts plus seeded
+ApplySecurity/ProcessSecurity state transitions. Its deterministic test
+provider proves algorithm-neutral orchestration only; no cryptographic
+algorithm conformance or independent SDLS differential claim is made.
+CFDP evidence covers audited Metadata, File Data, EOF, annex-F checksum, Proxy
+Put, Originating Transaction ID, and Directory Listing Response derivations;
+all PDU and TLV forms in focused tests; seeded round trips over all standard
+identifier widths; malformed-input safety; in-memory and external-file Class 1
+and Class 2 loss, NAK, fault-policy, suspension, and timer scenarios; and the
+pinned bidirectional `spacepackets` PDU run. The external run does not yet claim
+transaction-procedure interoperability.
+CUC/CDS evidence covers source-hashed P-field/T-field derivations, all binary
+resolutions, incomplete-input behavior, and exact correlation/rounding
+properties. Leap-second tables and mission clock correlation remain external,
+and no independent time-code implementation is yet in the differential harness.
+
+## Recommended next slice
+
+Keep Cadence CFDP integration deferred until its storage, operator, activation,
+and transport product design is settled. If the library is extended first, the
+highest-value next slice is effect-driven Filestore Request execution plus
+inactivity/Keep Alive monitoring, followed by an independent Class 1/Class 2
+transaction harness. None requires Cadence persistence or UI decisions.

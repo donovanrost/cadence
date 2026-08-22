@@ -1,0 +1,66 @@
+<!-- @dsCard group="Foundations" name="Status signals" subtitle="Status colors · dots · pulse" width="960" height="600" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Status signals</title>
+<style>
+  :root { --status-critical: oklch(62% 0.25 25); --status-warning: oklch(70% 0.20 50);
+    --status-success: oklch(78% 0.12 175); --status-info: oklch(70% 0.14 250); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+  .swatch { border: 1px solid oklch(80% 0.12 210 / 0.18); border-radius: 2px; overflow: hidden; }
+  .chip { height: 56px; }
+  .meta { padding: .5rem .6rem; }
+  .meta .name { font-size: .78rem; font-weight: 500; }
+  .meta .val { font-family: ui-monospace, monospace; font-size: .67rem; color: oklch(55% 0.02 250); margin-top: .15rem; }
+  /* Status rows with live dots */
+  .statuses { display: flex; gap: 2.5rem; align-items: center; flex-wrap: wrap; }
+  .hud-status { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 500;
+    letter-spacing: .05em; text-transform: uppercase; }
+  .dot { width: 8px; height: 8px; border-radius: 1px; }
+  .nominal .dot { background: var(--status-success); box-shadow: 0 0 6px oklch(from var(--status-success) l c h / 0.8);
+    animation: pulse 2s ease-in-out infinite; }
+  .warning .dot { background: var(--status-warning); box-shadow: 0 0 6px oklch(from var(--status-warning) l c h / 0.8);
+    animation: pulse-w 1s ease-in-out infinite; }
+  .critical .dot { background: var(--status-critical); box-shadow: 0 0 6px oklch(from var(--status-critical) l c h / 0.8);
+    animation: pulse-c .5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+  @keyframes pulse-w { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes pulse-c { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Status signals</h1>
+  <p class="lede">Four status colors carry meaning everywhere — badges, borders, dots, charts.
+    Live dots pulse at speeds that map to urgency: nominal breathes, warning blinks, critical strobes.</p>
+
+  <p class="section-label">Status colors</p>
+  <div class="grid">
+    <div class="swatch"><div class="chip" style="background:oklch(62% 0.25 25)"></div>
+      <div class="meta"><div class="name">critical</div><div class="val">oklch(62% .25 25)</div></div></div>
+    <div class="swatch"><div class="chip" style="background:oklch(70% 0.20 50)"></div>
+      <div class="meta"><div class="name">warning</div><div class="val">oklch(70% .20 50)</div></div></div>
+    <div class="swatch"><div class="chip" style="background:oklch(78% 0.12 175)"></div>
+      <div class="meta"><div class="name">success / nominal</div><div class="val">oklch(78% 0.12 175)</div></div></div>
+    <div class="swatch"><div class="chip" style="background:oklch(70% 0.14 250)"></div>
+      <div class="meta"><div class="name">info</div><div class="val">oklch(70% .14 250)</div></div></div>
+  </div>
+
+  <p class="section-label">Live status dots</p>
+  <div class="statuses">
+    <span class="hud-status nominal"><span class="dot"></span>Nominal</span>
+    <span class="hud-status warning" style="color:oklch(70% 0.20 50)"><span class="dot"></span>Warning</span>
+    <span class="hud-status critical" style="color:oklch(62% 0.25 25)"><span class="dot"></span>Critical</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,173 @@
+@import "tailwindcss" source(none);
+@source "../../lib/cadence_web";
+@source "../js";
+@source "../css";
+@source "../../deps/live_toast/lib";
+
+@plugin "../vendor/heroicons";
+
+/* daisyUI component library — provides btn, input, card, alert, toast,
+   divider, fieldset, dropdown, modal, tabs, badge, and more. The theme
+   is registered separately below; `themes: false` disables daisyUI's
+   built-in themes so only ours applies. */
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* Tokyo Night / Vaporwave Dark Theme — ported from
+   legacy/cadence_legacy/assets/css/app.css. Every visual token is overridden
+   so daisyUI's default look is invisible; what renders is the Cadence HUD
+   aesthetic with hot-pink accent, sharp 2px corners, and Tokyo Night bases. */
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: true;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(12% 0.02 265);
+  --color-base-200: oklch(17% 0.02 260);
+  --color-base-300: oklch(23% 0.025 258);
+  --color-base-content: oklch(85% 0.02 250);
+  --color-primary: oklch(80% 0.12 210);
+  --color-primary-content: oklch(15% 0.02 210);
+  --color-secondary: oklch(72% 0.15 285);
+  --color-secondary-content: oklch(15% 0.02 285);
+  --color-accent: oklch(60% 0.25 340);
+  --color-accent-content: oklch(98% 0.01 340);
+  --color-neutral: oklch(30% 0.03 260);
+  --color-neutral-content: oklch(85% 0.02 250);
+  --color-info: oklch(70% 0.14 250);
+  --color-info-content: oklch(15% 0.02 250);
+  --color-success: oklch(78% 0.12 175);
+  --color-success-content: oklch(15% 0.04 175);
+  --color-warning: oklch(72% 0.15 50);
+  --color-warning-content: oklch(15% 0.02 50);
+  --color-error: oklch(68% 0.20 10);
+  --color-error-content: oklch(15% 0.02 10);
+  --radius-selector: 2px;
+  --radius-field: 2px;
+  --radius-box: 2px;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* LiveView custom variants */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* LiveView wrapper transparency */
+[data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* Extension tokens — tokens our current primitives and compat shim reference
+   that aren't in daisyUI's standard vocabulary. These bridge the gap until
+   the primitives are migrated to use daisyUI's class vocabulary directly. */
+@theme {
+  --color-muted: oklch(60% 0.02 250);
+  --color-line: oklch(80% 0.12 210 / 0.18);
+  --color-line-strong: oklch(80% 0.12 210 / 0.32);
+  --color-panel: oklch(17% 0.02 260 / 0.88);
+  --color-panel-strong: oklch(17% 0.02 260 / 0.96);
+}
+
+/* Cadence design tokens — the single source of truth (primitives → semantics →
+   systems). Extracted into its own file so the app and the design-system
+   reference share one origin. */
+@import "./tokens.css";
+
+/* Page-level base */
+html, body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* In @layer base so daisyUI's component styles (e.g. .btn-primary text color
+   on link-mode <.button>s) can override it — unlayered, this reset beat every
+   layered rule and washed out filled link-buttons to base-content. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* HUD Design System — core utilities */
+@import "./components/hud-system.css";
+
+/* daisyUI Component Overrides — restyles daisyUI primitives for HUD aesthetic */
+@import "./components/component-overrides.css";
+
+/* Cadence-owned overlay, menu, popover, and sheet primitives. */
+@import "./components/overlay.css";
+
+/* Compact Grafana-inspired dashboard query controls. */
+@import "./components/dashboard-query-controls.css";
+
+/* Collapsible Sidebar */
+@import "./components/sidebar.css";
+
+/* uPlot vendor stylesheet (unmodified) — canvas chart scaffolding for the
+   TelemetryChart hook. Vendor file, not an authored selector. */
+@import "../vendor/uplot/uPlot.min.css";
+
+/* GridStack vendor stylesheet (unmodified) — dashboard grid positioning for
+   the DashboardGrid hook. Vendor file, not an authored selector. */
+@import "../vendor/gridstack/gridstack.min.css";
+
+/* Grafana-inspired dashboard panel presentation. This import must follow the
+   GridStack vendor stylesheet so Cadence owns the panel overflow boundary. */
+@import "./components/dashboard-widgets.css";
+
+.dashboard-review-placement-focus > .grid-stack-item-content {
+  border-color: oklch(from var(--status-warning) l c h / 0.85);
+  box-shadow: 0 0 0 1px oklch(from var(--status-warning) l c h / 0.42),
+              0 0 18px oklch(from var(--status-warning) l c h / 0.18);
+}
+
+.dashboard-review-placement-selected > .grid-stack-item-content {
+  border-color: var(--status-warning);
+  box-shadow: 0 0 0 2px oklch(from var(--status-warning) l c h / 0.65),
+              0 0 24px oklch(from var(--status-warning) l c h / 0.28);
+}
+
+/* Reduced motion — honor the OS setting. Decorative loops (status pulses)
+   stop; functional transitions go instant (state still changes, it just
+   doesn't tween). 0.01ms, not 0, so JS transitionend/animationend listeners
+   still fire. See the "Reduced motion" design-system card. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The critical strobe carried salience, not just meaning — without motion a
+     static red dot is easy to miss during an anomaly. Substitute a static
+     ring so "critical" stays prominent. */
+  .hud-status-critical .hud-status-dot {
+    box-shadow:
+      0 0 0 3px oklch(68% 0.20 10 / 0.45),
+      0 0 6px oklch(68% 0.20 10 / 0.8);
+  }
+}
+
+/* Legibility skin — opt-in second axis (composes with data-theme). Dials the
+   flourishes down via the effect knobs: no uppercase labels, no status pulses,
+   no glow, no scanlines, and a stronger rest border. All knobs are now wired:
+   --label-case, --pulse-*, --fx-glow-strength (multiplies every decorative glow
+   halo) and --fx-scanline-opacity (scanline intensity). See "Effect tokens". */
+[data-skin="legible"] {
+  --label-case: none;
+  --label-tracking: 0.02em;
+  --pulse-nominal: none;
+  --pulse-warning: none;
+  --pulse-critical: none;
+  --fx-glow-strength: 0;
+  --fx-scanline-opacity: 0;
+  --border-subtle: oklch(from var(--color-action) l c h / 0.30);
+}

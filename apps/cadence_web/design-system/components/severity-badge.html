@@ -1,0 +1,62 @@
+<!-- @dsCard group="Components" name="Severity badge" subtitle="<.severity_badge> — dot · count · label" width="960" height="520" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Severity badge</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .rows { display: grid; grid-template-columns: max-content 1fr; gap: 1rem 1.6rem; align-items: center; }
+  .key { font-family: ui-monospace, monospace; font-size: .78rem; color: oklch(60% 0.02 250); }
+  /* Faithful: rounded 2px, dot bg-current, mono count, .65rem uppercase label */
+  .sev { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; border-radius: 2px;
+    font-size: .75rem; font-weight: 500; }
+  .dot { width: .375rem; height: .375rem; border-radius: 9999px; background: currentColor; }
+  .count { font-family: ui-monospace, monospace; }
+  .lbl { text-transform: uppercase; font-size: .65rem; }
+  .critical { background: oklch(68% 0.20 10 / 0.2); color: oklch(68% 0.20 10); }
+  .warning { background: oklch(72% 0.15 50 / 0.2); color: oklch(72% 0.15 50); }
+  .info { background: oklch(70% 0.14 250 / 0.2); color: oklch(70% 0.14 250); }
+  .nominal { background: oklch(78% 0.12 175 / 0.2); color: oklch(78% 0.12 175); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 78ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(68% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Severity badge</h1>
+  <p class="lede">Diagnostic counts — <code>&lt;.severity_badge severity={:critical} count={3} /&gt;</code>.
+    A status dot, an optional monospace count, and an abbreviated uppercase label (CRIT / WARN / INFO / NOM).</p>
+
+  <div class="rows">
+    <span class="key">:critical</span><span><span class="sev critical"><span class="dot"></span><span class="count">3</span><span class="lbl">Crit</span></span></span>
+    <span class="key">:warning</span><span><span class="sev warning"><span class="dot"></span><span class="count">12</span><span class="lbl">Warn</span></span></span>
+    <span class="key">:info</span><span><span class="sev info"><span class="dot"></span><span class="lbl">Info</span></span></span>
+    <span class="key">:nominal</span><span><span class="sev nominal"><span class="dot"></span><span class="lbl">Nom</span></span></span>
+  </div>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Use for <strong>diagnostic counts / alarm severity</strong> — <code>:critical / :warning / :info / :nominal</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Include <code>count</code> when showing how many (3 critical alarms); omit it for a bare state.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't use it for setup/readiness — that's <code>&lt;.status_badge&gt;</code>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't animate the pill itself; pulse lives on status dots, used sparingly.</li>
+    </ul>
+  </div>
+</body>
+</html>

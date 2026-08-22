@@ -1,0 +1,741 @@
+defmodule Cadence.Telemetry.Storage do
+  @moduledoc """
+  Canonical telemetry observation history write path.
+
+  This module converts telemetry samples into storage observation envelopes and
+  dispatches them to the configured physical writer.
+  """
+
+  alias Cadence.Ingress.RawEvidence
+  alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Platform.EventBus
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+
+  alias Cadence.Telemetry.Storage.{
+    BackfillLifecycleEvent,
+    BackfillLifecycleEvents,
+    BackfillLifecycleWorkflow,
+    ObservationEnvelope,
+    ObservationIdentityDecisionEvent,
+    ObservationIdentityState,
+    ObservationIdentityStates,
+    WriteContext
+  }
+
+  alias Cadence.Telemetry.{CurrentValueStore, Facts, ObservationsCommitted, Sample}
+
+  @default_realm :flight
+  @default_data_source_id "managed_questdb_primary"
+  @default_binding_id "default_flight_telemetry"
+  @default_writer Cadence.Telemetry.Storage.Writers.QuestDB
+
+  @type policy :: %{
+          required(:writer) => module(),
+          required(:writer_opts) => keyword(),
+          required(:storage_opts) => keyword(),
+          required(:current_value_store_policy) => CurrentValueStore.policy(),
+          required(:event_bus) => EventBus.server()
+        }
+
+  @doc """
+  Builds a writer child spec from the current application configuration.
+
+  This compatibility arity reads application configuration when called. The
+  supervised runtime uses `child_spec/1` with a policy captured at startup.
+  """
+  @spec child_spec() :: Supervisor.child_spec() | nil
+  def child_spec, do: child_spec(configured_policy())
+
+  @spec child_spec(policy()) :: Supervisor.child_spec() | nil
+  def child_spec(%{writer: writer, writer_opts: writer_opts}) do
+    writer = ensure_writer_loaded!(writer)
+
+    if function_exported?(writer, :child_spec, 1) do
+      writer.child_spec(writer_opts)
+    end
+  end
+
+  @doc """
+  Persists samples using the current application configuration.
+
+  Prefer `persist_samples/3` for internal workflows that own a captured storage
+  policy.
+  """
+  @spec persist_samples([Sample.t()], keyword()) :: :ok | {:error, term()}
+  def persist_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
+    policy = %{configured_policy() | event_bus: Keyword.get(opts, :event_bus, EventBus)}
+    persist_samples(policy, samples, opts)
+  end
+
+  @spec persist_samples(policy(), [Sample.t()], keyword()) :: :ok | {:error, term()}
+  def persist_samples(%{} = policy, samples, opts)
+      when is_list(samples) and is_list(opts) do
+    opts = with_event_bus(opts, policy.event_bus)
+
+    samples
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while(:ok, fn {_mission_id, mission_samples}, :ok ->
+      case persist_mission_samples(policy, mission_samples, opts) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @spec enrich_samples([Sample.t()], keyword()) :: {:ok, [Sample.t()]} | {:error, term()}
+  def enrich_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
+    enrich_samples(configured_policy(), samples, opts)
+  end
+
+  @spec enrich_samples(policy(), [Sample.t()], keyword()) ::
+          {:ok, [Sample.t()]} | {:error, term()}
+  def enrich_samples(%{} = policy, samples, opts)
+      when is_list(samples) and is_list(opts) do
+    samples
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while({:ok, []}, fn {_mission_id, mission_samples}, {:ok, acc} ->
+      case enrich_mission_samples(policy, mission_samples, opts) do
+        {:ok, enriched_samples} -> {:cont, {:ok, acc ++ enriched_samples}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @spec persist_prepared_results([map()], keyword()) :: :ok | {:error, term()}
+  def persist_prepared_results(prepared_results, opts \\ [])
+      when is_list(prepared_results) and is_list(opts) do
+    policy = %{configured_policy() | event_bus: Keyword.get(opts, :event_bus, EventBus)}
+    persist_prepared_results(policy, prepared_results, opts)
+  end
+
+  @spec persist_prepared_results(policy(), [map()], keyword()) :: :ok | {:error, term()}
+  def persist_prepared_results(%{} = policy, prepared_results, opts)
+      when is_list(prepared_results) and is_list(opts) do
+    Enum.reduce_while(prepared_results, :ok, fn prepared_result, :ok ->
+      samples = Map.get(prepared_result, :telemetry_samples, [])
+
+      write_opts =
+        opts
+        |> Keyword.put_new(:source_endpoint_id, source_endpoint_id(prepared_result))
+        |> Keyword.put_new(:recorded_at, recorded_at(prepared_result))
+
+      case persist_samples(policy, samples, write_opts) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @spec fetch_observation_identity_state(binary()) ::
+          {:ok, ObservationIdentityState.t()} | {:error, term()}
+  def fetch_observation_identity_state(observation_identity_id)
+      when is_binary(observation_identity_id) do
+    ObservationIdentityStates.fetch(observation_identity_id)
+  end
+
+  @spec fetch_observation_identity_states([binary()], keyword()) :: [ObservationIdentityState.t()]
+  def fetch_observation_identity_states(observation_identity_ids, opts)
+      when is_list(observation_identity_ids) and is_list(opts) do
+    ObservationIdentityStates.fetch_many(observation_identity_ids, opts)
+  end
+
+  @spec apply_observation_identity_decision(binary(), atom(), keyword()) ::
+          {:ok, ObservationIdentityState.t()} | {:error, term()}
+  def apply_observation_identity_decision(observation_identity_id, decision, opts)
+      when is_binary(observation_identity_id) and is_atom(decision) and is_list(opts) do
+    ObservationIdentityStates.apply_decision(
+      observation_identity_id,
+      decision,
+      Keyword.put_new(opts, :event_bus, EventBus)
+    )
+  end
+
+  @spec list_observation_identity_decision_events(binary(), keyword()) :: [
+          ObservationIdentityDecisionEvent.t()
+        ]
+  def list_observation_identity_decision_events(observation_identity_id, opts)
+      when is_binary(observation_identity_id) and is_list(opts) do
+    ObservationIdentityStates.list_decision_events(observation_identity_id, opts)
+  end
+
+  @spec list_observation_identity_decision_events_for_mission(binary(), keyword()) :: [
+          ObservationIdentityDecisionEvent.t()
+        ]
+  def list_observation_identity_decision_events_for_mission(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    ObservationIdentityStates.list_scoped_decision_events(mission_id, opts)
+  end
+
+  @spec fetch_observation_identity_decision_event(binary(), keyword()) ::
+          ObservationIdentityDecisionEvent.t() | nil
+  def fetch_observation_identity_decision_event(decision_event_id, opts \\ [])
+      when is_binary(decision_event_id) and is_list(opts) do
+    ObservationIdentityStates.fetch_decision_event(decision_event_id, opts)
+  end
+
+  @spec list_observation_identity_states(binary(), keyword()) :: [ObservationIdentityState.t()]
+  def list_observation_identity_states(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    ObservationIdentityStates.list(mission_id, opts)
+  end
+
+  @spec record_backfill_lifecycle_event(map(), keyword()) ::
+          {:ok, BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_backfill_lifecycle_event(attrs, opts \\ [])
+      when is_map(attrs) and is_list(opts) do
+    BackfillLifecycleEvents.record_event(attrs, Keyword.put_new(opts, :event_bus, EventBus))
+  end
+
+  @spec record_backfill_lifecycle_workflow_event(
+          atom() | binary(),
+          atom() | binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_backfill_lifecycle_workflow_event(workflow, stage, attrs, opts \\ [])
+      when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
+             is_map(attrs) and is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    BackfillLifecycleWorkflow.record_event(
+      workflow,
+      stage,
+      Map.put(attrs, :event_bus, event_bus),
+      opts
+    )
+  end
+
+  @spec execute_backfill_lifecycle_workflow(
+          atom() | binary(),
+          map(),
+          keyword(),
+          (keyword() -> term()),
+          keyword()
+        ) :: term() | {:error, term()}
+  def execute_backfill_lifecycle_workflow(workflow, attrs, write_opts, operation_fun, opts \\ [])
+      when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_list(write_opts) and
+             is_function(operation_fun, 1) and is_list(opts) do
+    event_bus = Keyword.get(opts, :event_bus, EventBus)
+
+    BackfillLifecycleWorkflow.execute(
+      workflow,
+      Map.put(attrs, :event_bus, event_bus),
+      Keyword.put(write_opts, :event_bus, event_bus),
+      operation_fun,
+      opts
+    )
+  end
+
+  @spec list_backfill_lifecycle_events(binary(), keyword()) :: [BackfillLifecycleEvent.t()]
+  def list_backfill_lifecycle_events(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    BackfillLifecycleEvents.list_events(mission_id, opts)
+  end
+
+  @spec fetch_backfill_lifecycle_event(binary(), keyword()) :: BackfillLifecycleEvent.t() | nil
+  def fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts \\ [])
+      when is_binary(backfill_lifecycle_event_id) and is_list(opts) do
+    BackfillLifecycleEvents.fetch_event(backfill_lifecycle_event_id, opts)
+  end
+
+  @spec writer_module() :: module()
+  def writer_module, do: configured_policy().writer
+
+  @spec writer_module(policy()) :: module()
+  def writer_module(%{writer: writer}), do: writer
+
+  @doc false
+  @spec policy(keyword() | map(), keyword()) :: policy()
+  def policy(config, opts \\ [])
+      when (is_list(config) or is_map(config)) and is_list(opts) do
+    config = if is_map(config), do: Map.to_list(config), else: config
+
+    %{
+      writer: Keyword.get(config, :writer, @default_writer),
+      writer_opts: Keyword.get(config, :writer_opts, []),
+      storage_opts: Keyword.drop(config, [:writer, :writer_opts]),
+      current_value_store_policy:
+        Keyword.get_lazy(opts, :current_value_store_policy, fn ->
+          CurrentValueStore.configured_policy()
+        end),
+      event_bus: Keyword.get(opts, :event_bus, EventBus)
+    }
+  end
+
+  @doc false
+  @spec configured_policy() :: policy()
+  def configured_policy do
+    policy(Application.get_env(:cadence, :telemetry_storage, []),
+      current_value_store_policy: CurrentValueStore.configured_policy()
+    )
+  end
+
+  defp persist_mission_samples(_policy, [], _opts), do: :ok
+
+  defp persist_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do
+    with {:ok, context} <- write_context(policy, List.first(samples), opts),
+         {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts),
+         :ok <- persist_mission_envelopes_or_record_failure(policy, envelopes, opts),
+         :ok <- record_backfill_lifecycle_events(envelopes, opts) do
+      publish_observation_facts(policy, envelopes, opts)
+    end
+  end
+
+  defp persist_mission_envelopes_or_record_failure(policy, envelopes, opts) do
+    case persist_mission_envelopes(policy, envelopes, opts) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        _result = record_failed_backfill_lifecycle_events(envelopes, opts, reason)
+        {:error, reason}
+    end
+  end
+
+  defp persist_mission_envelopes(policy, envelopes, opts) do
+    case writer_module(policy).persist_envelopes(envelopes, policy.writer_opts) do
+      :ok -> persist_mission_envelope_projections(policy, envelopes, opts)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp persist_mission_envelope_projections(policy, envelopes, opts) do
+    with :ok <- ObservationIdentityStates.record_envelopes(envelopes, opts),
+         :ok <- record_current_values(policy, envelopes, opts) do
+      record_data_source_watermarks(envelopes, opts)
+    end
+  end
+
+  defp enrich_mission_samples(_policy, [], _opts), do: {:ok, []}
+
+  defp enrich_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do
+    with {:ok, context} <- write_context(policy, List.first(samples), opts),
+         {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts) do
+      {:ok, Enum.map(envelopes, &ObservationEnvelope.to_sample/1)}
+    end
+  end
+
+  defp record_current_values(policy, envelopes, opts) do
+    if Keyword.get(opts, :record_current_values?, true) do
+      CurrentValueStore.record_samples(
+        policy.current_value_store_policy,
+        Enum.map(envelopes, &ObservationEnvelope.to_sample/1)
+      )
+    else
+      :ok
+    end
+  end
+
+  defp record_data_source_watermarks([], _opts), do: :ok
+
+  defp record_data_source_watermarks(envelopes, opts) do
+    if SourceWatermarks.enabled?(opts) do
+      record_data_source_watermark_groups(envelopes, opts)
+    else
+      :ok
+    end
+  end
+
+  defp record_data_source_watermark_groups(envelopes, opts) do
+    envelopes
+    |> Enum.group_by(&invalidation_group_key/1)
+    |> Enum.reduce_while(:ok, fn {_group_key, group}, :ok ->
+      case SourceWatermarks.maybe_record_source_watermark(
+             source_watermark_attrs(group),
+             Keyword.put(opts, :invalidate_runtime_cache?, false)
+           ) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp record_backfill_lifecycle_events([], _opts), do: :ok
+
+  defp record_backfill_lifecycle_events(envelopes, opts) do
+    if backfill_lifecycle_event_enabled?(opts) do
+      do_record_backfill_lifecycle_events(envelopes, opts)
+    else
+      :ok
+    end
+  end
+
+  defp do_record_backfill_lifecycle_events(envelopes, opts) do
+    envelopes
+    |> Enum.group_by(&backfill_lifecycle_group_key/1)
+    |> Enum.reduce_while(:ok, fn {_group_key, group}, :ok ->
+      reduce_backfill_lifecycle_event_group(group, opts)
+    end)
+  end
+
+  defp reduce_backfill_lifecycle_event_group(group, opts) do
+    case BackfillLifecycleEvents.record_event(
+           backfill_lifecycle_event_attrs(group, opts),
+           Keyword.take(opts, [:event_bus, :runtime_cache, :dashboard_runtime_invalidation?])
+         ) do
+      {:ok, _event} -> {:cont, :ok}
+      {:error, reason} -> {:halt, {:error, reason}}
+    end
+  end
+
+  defp record_failed_backfill_lifecycle_events([], _opts, _reason), do: :ok
+
+  defp record_failed_backfill_lifecycle_events(envelopes, opts, reason) do
+    if backfill_lifecycle_event_enabled?(opts) do
+      envelopes
+      |> Enum.group_by(&backfill_lifecycle_group_key/1)
+      |> Enum.each(fn {_group_key, group} ->
+        _result =
+          BackfillLifecycleEvents.record_event(
+            backfill_lifecycle_event_attrs(group, opts,
+              event_type: failed_backfill_lifecycle_event_type(opts),
+              reason: failed_backfill_lifecycle_reason(opts),
+              payload: %{"error" => inspect(reason)}
+            ),
+            Keyword.take(opts, [:event_bus, :runtime_cache, :dashboard_runtime_invalidation?])
+          )
+      end)
+    end
+
+    :ok
+  end
+
+  defp write_context(policy, %Sample{mission_id: mission_id}, opts) do
+    storage_config = policy.storage_opts
+
+    WriteContext.new(
+      organization_id: organization_id(policy, mission_id, opts),
+      mission_id: mission_id,
+      realm: Keyword.get(opts, :realm, Keyword.get(storage_config, :realm, @default_realm)),
+      data_source_id:
+        Keyword.get(
+          opts,
+          :data_source_id,
+          Keyword.get(storage_config, :data_source_id, @default_data_source_id)
+        ),
+      binding_id:
+        Keyword.get(
+          opts,
+          :binding_id,
+          Keyword.get(storage_config, :binding_id, @default_binding_id)
+        ),
+      source_endpoint_id: Keyword.get(opts, :source_endpoint_id),
+      replay_run_id: Keyword.get(opts, :replay_run_id),
+      recorded_at: Keyword.get(opts, :recorded_at),
+      metadata: Keyword.get(opts, :metadata, %{})
+    )
+  end
+
+  defp organization_id(policy, mission_id, opts) do
+    Keyword.get(opts, :organization_id) ||
+      OrganizationScope.organization_id_for_mission(mission_id) ||
+      Keyword.get(policy.storage_opts, :organization_id)
+  end
+
+  defp source_endpoint_id(%{raw_evidence: %RawEvidence{} = raw_evidence}) do
+    raw_evidence.source_endpoint_ref || raw_evidence.source_ref
+  end
+
+  defp source_endpoint_id(_prepared_result), do: nil
+
+  defp recorded_at(%{raw_evidence: %RawEvidence{} = raw_evidence}), do: raw_evidence.receipt_time
+  defp recorded_at(_prepared_result), do: nil
+
+  defp publish_observation_facts(_policy, [], _opts), do: :ok
+
+  defp publish_observation_facts(policy, envelopes, opts) do
+    if publish_observation_facts?(policy, opts) do
+      envelopes
+      |> Enum.group_by(&invalidation_group_key/1)
+      |> Enum.each(fn {_group_key, group} ->
+        publish_observation_fact(policy.event_bus, group)
+      end)
+    end
+
+    :ok
+  end
+
+  defp publish_observation_facts?(policy, opts) do
+    Keyword.get(
+      opts,
+      :publish_facts?,
+      Keyword.get(
+        opts,
+        :dashboard_runtime_invalidation?,
+        Keyword.get(policy.storage_opts, :dashboard_runtime_invalidation?, true)
+      )
+    )
+  end
+
+  defp invalidation_group_key(%ObservationEnvelope{} = envelope) do
+    {
+      envelope.organization_id,
+      envelope.mission_id,
+      envelope.data_source_id,
+      envelope.binding_id,
+      envelope.realm,
+      envelope.replay_run_id,
+      envelope.observable_id
+    }
+  end
+
+  defp backfill_lifecycle_group_key(%ObservationEnvelope{} = envelope) do
+    {
+      envelope.organization_id,
+      envelope.mission_id,
+      envelope.data_source_id,
+      envelope.binding_id,
+      envelope.realm,
+      envelope.replay_run_id,
+      envelope.observable_id,
+      envelope.point_id,
+      envelope.spacecraft_id
+    }
+  end
+
+  defp publish_observation_fact(
+         event_bus,
+         [%ObservationEnvelope{} = first_envelope | _rest] = envelopes
+       ) do
+    Facts.publish(event_bus, %ObservationsCommitted{
+      organization_id: first_envelope.organization_id,
+      mission_id: first_envelope.mission_id,
+      data_source_id: first_envelope.data_source_id,
+      binding_id: first_envelope.binding_id,
+      realm: first_envelope.realm,
+      replay_run_id: first_envelope.replay_run_id,
+      observable_id: first_envelope.observable_id,
+      time_ranges: changed_time_ranges(envelopes),
+      evidence_ref: telemetry_write_evidence_ref(envelopes),
+      committed_at: latest_datetime(Enum.map(envelopes, & &1.ingested_at))
+    })
+  end
+
+  defp source_watermark_attrs([%ObservationEnvelope{} = first_envelope | _rest] = envelopes) do
+    receipt_times = Enum.map(envelopes, & &1.receipt_time)
+
+    {retention_starts_at, latest_receipt_time} =
+      Enum.min_max_by(receipt_times, &DateTime.to_unix(&1, :microsecond))
+
+    observed_at = latest_datetime(Enum.map(envelopes, & &1.ingested_at))
+
+    %{
+      organization_id: first_envelope.organization_id,
+      mission_id: first_envelope.mission_id,
+      logical_source: :telemetry,
+      data_source_id: first_envelope.data_source_id,
+      source_binding_id: first_envelope.binding_id,
+      realm: first_envelope.realm,
+      replay_run_id: first_envelope.replay_run_id,
+      dataset: dataset_for_realm(first_envelope.realm),
+      complete_through: latest_receipt_time,
+      latest_receipt_time: latest_receipt_time,
+      retention_starts_at: retention_starts_at,
+      sample_count: length(envelopes),
+      confidence: :best_effort,
+      reason: :telemetry_storage_write,
+      observed_at: observed_at,
+      payload: telemetry_write_evidence_ref(envelopes)
+    }
+  end
+
+  defp changed_time_ranges(envelopes) do
+    [
+      changed_time_range(envelopes, :receipt_time),
+      changed_time_range(envelopes, :generation_time)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp changed_time_range(envelopes, axis) do
+    envelopes
+    |> Enum.map(&Map.get(&1, axis))
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] ->
+        nil
+
+      times ->
+        {from, to} = Enum.min_max_by(times, &DateTime.to_unix(&1, :microsecond))
+        %{axis: axis, from: from, to: to}
+    end
+  end
+
+  defp telemetry_write_evidence_ref(envelopes) do
+    first_envelope = List.first(envelopes)
+
+    %{
+      kind: "telemetry_storage_write",
+      observation_count: length(envelopes),
+      sample_ids: Enum.map(envelopes, & &1.sample_id),
+      replay_run_id: first_envelope && first_envelope.replay_run_id
+    }
+  end
+
+  defp backfill_lifecycle_event_enabled?(opts) do
+    case Keyword.fetch(opts, :record_backfill_lifecycle_event?) do
+      {:ok, enabled?} ->
+        enabled?
+
+      :error ->
+        present?(Keyword.get(opts, :backfill_run_id)) or
+          present?(Keyword.get(opts, :import_run_id))
+    end
+  end
+
+  defp backfill_lifecycle_event_attrs(
+         [%ObservationEnvelope{} = first_envelope | _rest] = envelopes,
+         opts,
+         overrides \\ []
+       ) do
+    {source_from, source_to} = source_time_range(envelopes)
+    {receipt_from, receipt_to} = receipt_time_range(envelopes)
+
+    %{
+      backfill_run_id: backfill_run_id(opts),
+      organization_id: first_envelope.organization_id,
+      mission_id: first_envelope.mission_id,
+      realm: first_envelope.realm,
+      replay_run_id: first_envelope.replay_run_id,
+      data_source_id: first_envelope.data_source_id,
+      binding_id: first_envelope.binding_id,
+      observable_id: first_envelope.observable_id,
+      point_id: first_envelope.point_id,
+      spacecraft_id: first_envelope.spacecraft_id,
+      event_type:
+        Keyword.get(overrides, :event_type) || backfill_lifecycle_event_type(first_envelope, opts),
+      source_from: source_from,
+      source_to: source_to,
+      receipt_from: receipt_from,
+      receipt_to: receipt_to,
+      sample_count: length(envelopes),
+      authority: backfill_lifecycle_authority(first_envelope, opts),
+      reason: Keyword.get(overrides, :reason) || backfill_lifecycle_reason(first_envelope, opts),
+      actor_id: Keyword.get(opts, :actor_id) || Keyword.get(opts, :operator_id),
+      actor_kind: Keyword.get(opts, :actor_kind),
+      occurred_at: latest_datetime(Enum.map(envelopes, & &1.ingested_at)),
+      payload: backfill_lifecycle_payload(envelopes, opts, Keyword.get(overrides, :payload, %{}))
+    }
+  end
+
+  defp backfill_run_id(opts) do
+    Keyword.get(opts, :backfill_run_id) || Keyword.get(opts, :import_run_id)
+  end
+
+  defp backfill_lifecycle_event_type(_first_envelope, opts) do
+    Keyword.get(opts, :backfill_lifecycle_event_type) ||
+      Keyword.get(opts, :telemetry_backfill_event_type) ||
+      Keyword.get(opts, :event_type) ||
+      default_backfill_lifecycle_event_type(opts)
+  end
+
+  defp default_backfill_lifecycle_event_type(opts) do
+    cond do
+      Keyword.get(opts, :late_data?, false) -> :late_data_accepted
+      present?(Keyword.get(opts, :import_run_id)) -> :import_completed
+      true -> :backfill_completed
+    end
+  end
+
+  defp failed_backfill_lifecycle_event_type(opts) do
+    cond do
+      Keyword.get(opts, :late_data?, false) -> :late_data_rejected
+      present?(Keyword.get(opts, :import_run_id)) -> :import_failed
+      true -> :backfill_failed
+    end
+  end
+
+  defp backfill_lifecycle_authority(%ObservationEnvelope{validity_state: :advisory}, opts) do
+    Keyword.get(opts, :authority, :advisory)
+  end
+
+  defp backfill_lifecycle_authority(_first_envelope, opts) do
+    Keyword.get(opts, :authority, :authoritative)
+  end
+
+  defp backfill_lifecycle_reason(first_envelope, opts) do
+    Keyword.get(opts, :reason) || default_backfill_lifecycle_reason(first_envelope, opts)
+  end
+
+  defp default_backfill_lifecycle_reason(_first_envelope, opts) do
+    cond do
+      Keyword.get(opts, :late_data?, false) -> :late_data_write
+      present?(Keyword.get(opts, :import_run_id)) -> :telemetry_import_write
+      true -> :telemetry_backfill_write
+    end
+  end
+
+  defp failed_backfill_lifecycle_reason(opts) do
+    cond do
+      Keyword.get(opts, :late_data?, false) -> :late_data_write_failed
+      present?(Keyword.get(opts, :import_run_id)) -> :telemetry_import_write_failed
+      true -> :telemetry_backfill_write_failed
+    end
+  end
+
+  defp backfill_lifecycle_payload(envelopes, opts, extra_payload) do
+    %{
+      "kind" => "telemetry_storage_write",
+      "sample_ids" => Enum.map(envelopes, & &1.sample_id),
+      "observation_ids" => Enum.map(envelopes, & &1.observation_id),
+      "observation_identity_ids" => Enum.map(envelopes, & &1.observation_identity_id),
+      "validity_state" => envelopes |> List.first() |> Map.get(:validity_state) |> enum_string(),
+      "revision" => Keyword.get(opts, :revision, 1),
+      "source_endpoint_id" => envelopes |> List.first() |> Map.get(:source_endpoint_id),
+      "replay_run_id" => envelopes |> List.first() |> Map.get(:replay_run_id),
+      "supersedes_observation_id" => Keyword.get(opts, :supersedes_observation_id)
+    }
+    |> Map.merge(extra_payload)
+  end
+
+  defp source_time_range(envelopes) do
+    time_range(envelopes, :generation_time) || time_range(envelopes, :receipt_time) || {nil, nil}
+  end
+
+  defp receipt_time_range(envelopes) do
+    time_range(envelopes, :receipt_time) || {nil, nil}
+  end
+
+  defp time_range(envelopes, field) do
+    envelopes
+    |> Enum.map(&Map.get(&1, field))
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] ->
+        nil
+
+      times ->
+        Enum.min_max_by(times, &DateTime.to_unix(&1, :microsecond))
+    end
+  end
+
+  defp latest_datetime(datetimes) do
+    datetimes
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max_by(&DateTime.to_unix(&1, :microsecond), fn -> DateTime.utc_now() end)
+  end
+
+  defp dataset_for_realm(realm) when is_atom(realm), do: Atom.to_string(realm)
+  defp dataset_for_realm(realm), do: realm
+
+  defp present?(value), do: is_binary(value) and value != ""
+
+  defp enum_string(nil), do: nil
+  defp enum_string(value) when is_atom(value), do: Atom.to_string(value)
+  defp enum_string(value), do: value
+
+  defp ensure_writer_loaded!(writer) when is_atom(writer) do
+    case Code.ensure_loaded(writer) do
+      {:module, ^writer} ->
+        writer
+
+      {:error, reason} ->
+        raise "could not load telemetry storage writer #{inspect(writer)}: #{inspect(reason)}"
+    end
+  end
+
+  defp with_event_bus(opts, event_bus) when is_list(opts) do
+    Keyword.put(opts, :event_bus, event_bus)
+  end
+end

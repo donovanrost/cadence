@@ -1,0 +1,227 @@
+/* GridStack defaults panel contents to overflow-y:auto. Keep this rule
+   unlayered, like the vendor rule it overrides: the panel is the fixed
+   viewport; individual table/timeline bodies own any scrolling they need. */
+.grid-stack > .grid-stack-item > .grid-stack-item-content.cadence-dashboard-panel {
+  overflow: hidden;
+  border-color: oklch(from var(--color-base-content) l c h / 0.14);
+  border-radius: 0.2rem;
+  background: oklch(from var(--color-base-200) calc(l - 0.012) c h);
+  box-shadow: 0 1px 1px oklch(0% 0 0 / 0.2);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.grid-stack-static > .grid-stack-item > .grid-stack-item-content.cadence-dashboard-panel:is(:hover, :focus-within) {
+  border-color: oklch(from var(--color-base-content) l c h / 0.25);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.28);
+}
+
+.cadence-dashboard-widget-header {
+  min-height: 1.8rem;
+  background: transparent;
+}
+
+.cadence-dashboard-widget-actions {
+  opacity: 1;
+  transition: opacity 120ms ease;
+}
+
+.grid-stack[data-edit-mode="false"] .cadence-dashboard-widget-actions {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.grid-stack[data-edit-mode="false"]
+  .cadence-dashboard-panel:is(:hover, :focus-within)
+  .cadence-dashboard-widget-actions {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .grid-stack[data-edit-mode="false"] .cadence-dashboard-widget-actions {
+    pointer-events: auto;
+    opacity: 0.72;
+  }
+}
+
+.cadence-time-series-panel-body {
+  padding: 0 0.35rem 0.35rem;
+}
+
+.cadence-time-series-stage,
+.cadence-time-series-chart {
+  overflow: hidden;
+}
+
+.cadence-time-series-chart {
+  color: var(--color-primary);
+}
+
+.cadence-time-series-chart .uplot {
+  overflow: hidden;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+.cadence-time-series-chart .u-select {
+  background: oklch(from var(--color-primary) l c h / 0.12);
+  border: 1px solid oklch(from var(--color-primary) l c h / 0.45);
+}
+
+.cadence-time-series-stage [data-chart-data-management-strip] {
+  position: absolute;
+  z-index: 5;
+  top: 0.35rem;
+  left: 0.5rem;
+  max-width: calc(100% - 1rem);
+}
+
+.cadence-time-series-chart .telemetry-chart-legend {
+  border-top: 1px solid oklch(from var(--color-base-content) l c h / 0.11);
+  background: oklch(from var(--color-base-200) calc(l - 0.012) c h / 0.97);
+}
+
+.telemetry-chart-live-edge {
+  position: absolute;
+  z-index: 5;
+  overflow: visible;
+  color: var(--color-success);
+  opacity: 0.82;
+  pointer-events: none;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.telemetry-chart-live-edge[hidden] {
+  display: none;
+}
+
+.telemetry-chart-live-edge-wash,
+.telemetry-chart-live-edge-line,
+.telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge-label {
+  position: absolute;
+  pointer-events: none;
+}
+
+.telemetry-chart-live-edge-wash {
+  inset: 0 0 0 auto;
+  width: 1.75rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(from currentColor l c h / 0.035) 45%,
+    oklch(from currentColor l c h / 0.13)
+  );
+  transform-origin: right center;
+}
+
+.telemetry-chart-live-edge-line {
+  inset: 0 0 0 auto;
+  width: 1px;
+  background: currentColor;
+  box-shadow: 0 0 7px oklch(from currentColor l c h / 0.58);
+}
+
+.telemetry-chart-live-edge-beacon {
+  top: 0.3rem;
+  right: -0.16rem;
+  width: 0.36rem;
+  height: 0.36rem;
+  border: 1px solid oklch(from currentColor l c h / 0.92);
+  border-radius: 999px;
+  background: var(--color-base-200);
+  box-shadow:
+    0 0 0 2px oklch(from currentColor l c h / 0.12),
+    0 0 8px oklch(from currentColor l c h / 0.62);
+  animation: cadence-live-edge-breathe 2.4s ease-in-out infinite;
+}
+
+.telemetry-chart-live-edge-label {
+  top: 0.18rem;
+  right: 0.55rem;
+  color: currentColor;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-shadow: 0 1px 3px var(--color-base-200);
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="connecting"] {
+  color: oklch(from var(--color-base-content) l c h / 0.46);
+  opacity: 0.58;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"],
+.telemetry-chart-live-edge[data-live-stream-state="delayed"] {
+  color: var(--color-warning);
+  opacity: 0.95;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="degraded"] {
+  color: var(--color-error);
+  opacity: 1;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"]
+  .telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge[data-live-stream-state="degraded"]
+  .telemetry-chart-live-edge-beacon {
+  animation: none;
+  background: currentColor;
+}
+
+.telemetry-chart-live-edge.is-receiving .telemetry-chart-live-edge-wash {
+  animation: cadence-live-edge-arrival 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.telemetry-chart-live-edge.is-receiving .telemetry-chart-live-edge-line {
+  animation: cadence-live-edge-line-arrival 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cadence-live-edge-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes cadence-live-edge-arrival {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.05);
+  }
+
+  24% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.38;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cadence-live-edge-line-arrival {
+  0% {
+    filter: brightness(1);
+  }
+
+  32% {
+    filter: brightness(2.1);
+  }
+
+  100% {
+    filter: brightness(1);
+  }
+}

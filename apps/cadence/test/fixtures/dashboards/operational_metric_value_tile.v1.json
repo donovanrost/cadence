@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_operational_metric_value_tile",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Operational Metric Value Tile",
+  "description": "Operational metric value tile source override fixture",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time",
+      "range": {
+        "kind": "relative",
+        "duration_ms": 300000
+      },
+      "refresh_ms": 1000
+    },
+    "scope": {
+      "primary": {
+        "kind": "transport",
+        "mode": "one",
+        "ids": ["transport-golden-alpha"]
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    },
+    "overlays": {
+      "limits": false,
+      "quality": false,
+      "events": false
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_downlink_bitrate",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 2
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.value_tile",
+          "widget_type_version": 1,
+          "title": "Downlink Bitrate",
+          "binding": {
+            "source": "operational_observables",
+            "observables": ["comms.transport.downlink_bitrate"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "latest",
+            "overlays": []
+          },
+          "options": {
+            "precision": 1,
+            "show_unit": true
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "operational", "value-tile"]
+  }
+}

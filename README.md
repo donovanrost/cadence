@@ -1,18 +1,30 @@
 # Cadence
 
-To start your Phoenix server:
+Cadence is a monorepo poncho coordinated by a code-free Elixir Workspace root.
+Each application and package owns its Mix build, dependencies, lockfile, and
+configuration boundary.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+## Layout
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+- `apps/cadence` - core domain, persistence, and runtime application
+- `apps/cadence_web` - Phoenix boundary and Cadence server composition root
+- `apps/cadence_simulator` - independently runnable external provider simulator
+- `packages/cadence_catalog` - catalog and Mission Model compiler package
+- `packages/ccsds` - standalone-ready CCSDS protocol package
+- `packages/xtce` - standalone XTCE 1.3 parsing and schema-validation package
+- `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+## Documentation
 
-## Learn more
+- [Developer Architecture Guide](docs/developer-architecture-guide.md) - current implementation shape, storage tiers, runtime boundaries, and local development workflow
+- [CCSDS Library Gap Assessment](docs/ccsds-library-gap-assessment.md) - implemented protocol subset, remaining standards gaps, and recommended sequencing
+- [How-To Guides](docs/how-to/_index.md) - practical workflows for local development, profiling, and benchmarking
+- [Architecture Decision Records](docs/decisions/_index.md) - accepted architectural decisions for the redesigned system
+- [Contact Scheduling and Ground Network Simulation Design](docs/superpowers/specs/2026-07-12-contact-scheduling-and-ground-network-simulation-design.md) - idealized provider-neutral scheduling and simulator end state
+- [Simulator Provider Integration Flow](docs/simulator_provider_integration_flow.md) - configure the simulator through Cadence's ordinary provider boundary
 
-* Official website: https://www.phoenixframework.org/
-* Guides: https://hexdocs.pm/phoenix/overview.html
-* Docs: https://hexdocs.pm/phoenix
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+## Legacy Code
+
+The legacy application is intentionally kept outside the active Workspace
+project paths so its `Cadence` and `CadenceWeb` modules do not conflict with the
+new system.

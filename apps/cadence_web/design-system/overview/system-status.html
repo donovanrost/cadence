@@ -1,0 +1,87 @@
+<!-- @dsCard group="Overview" name="System status & direction" subtitle="Read first — where the design is now, and where it's going" width="1040" height="1280" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — System status &amp; direction</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.6rem; max-width: 76ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  .lede code, td code, .seq code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2rem 0 1rem; }
+
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.4rem; }
+  .leg { display: flex; gap: .55rem; align-items: baseline; font-size: .82rem; color: oklch(82% 0.02 250 / 0.85); }
+  .leg .k { font-family: ui-monospace, monospace; font-weight: 700; }
+  .k.impl { color: var(--st-green); } .k.dec { color: var(--glow-cyan); } .k.exp { color: var(--st-yellow); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .83rem; max-width: 62rem; }
+  th { text-align: left; font-size: .66rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .55rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.s { white-space: nowrap; font-family: ui-monospace, monospace; font-weight: 700; }
+  td.s.impl { color: var(--st-green); } td.s.dec { color: var(--glow-cyan); } td.s.exp { color: var(--st-yellow); }
+
+  .seq { list-style: none; padding: 0; margin: 0; display: grid; gap: .7rem; max-width: 80ch; counter-reset: n; }
+  .seq li { display: grid; grid-template-columns: 1.6rem 1fr; gap: .8rem; font-size: .86rem; line-height: 1.45; color: oklch(80% 0.02 250); }
+  .seq .b { font-family: ui-monospace, monospace; font-weight: 700; }
+  .b.impl { color: var(--st-green); } .b.dec { color: var(--glow-cyan); } .b.exp { color: var(--st-yellow); }
+  .seq .t strong { color: oklch(88% 0.02 250); }
+  .note { font-size: .82rem; color: oklch(82% 0.02 250 / 0.75); line-height: 1.5; max-width: 78ch; margin: 1.4rem 0 0;
+    border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Overview &middot; read first</p>
+  <h1>System status &amp; direction</h1>
+  <p class="lede">This design system is a <strong>distillation of two things, held together</strong>: where the
+    implementation <em>is</em> today, and where the design is <em>going</em>. Use the markers to tell real-now from
+    agreed-target. Untagged cards are Implemented; cards that mix states carry per-section tags.</p>
+
+  <div class="legend">
+    <span class="leg"><span class="k impl">&#10003; IMPLEMENTED</span> in the code today</span>
+    <span class="leg"><span class="k dec">&#9678; DECIDED</span> agreed target, not yet in code</span>
+    <span class="leg"><span class="k exp">&#9651; EXPLORING</span> proposed, not finalized</span>
+  </div>
+
+  <p class="section-label">Where each area stands</p>
+  <table>
+    <thead><tr><th>Area</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Principles</td><td class="s impl">&#10003;</td><td>The six north-star rules.</td></tr>
+      <tr><td>Foundations — color, type, spacing, radii, glows, status</td><td class="s impl">&#10003;</td><td>Distillation of <code>app.css</code> + frozen CSS.</td></tr>
+      <tr><td>Components — button, input, badges, card, stat-tile, table, page-header, list-controls, form-helpers, empty-state, action-menu</td><td class="s impl">&#10003;</td><td>Distillation of the component layer; states + usage.</td></tr>
+      <tr><td>Patterns — list, detail, form</td><td class="s impl">&#10003;</td><td>Distillation of the real LiveViews (detail marks which show page each band mirrors).</td></tr>
+      <tr><td>Accessibility / contrast</td><td class="s impl">&#10003;</td><td>Fixes applied; <code>contrast-check.mjs</code> parses the shipped CSS.</td></tr>
+      <tr><td>Token architecture (skin / outfit / body)</td><td class="s impl">&#10003;</td><td>Model shipped as the tiers in <code>tokens.css</code>; the framework all token work follows.</td></tr>
+      <tr><td>Semantic tokens (Outfit) — step 1</td><td class="s impl">&#10003;</td><td>Seeded in <code>tokens.css</code>; <code>--color-action</code> widely consumed. &#9678; <code>--status-*-fill</code> / <code>--border-*</code> / <code>--on-*</code> / <code>--duration-*</code> await Phase 5.</td></tr>
+      <tr><td>Effect tokens &amp; skins — step 2</td><td class="s impl">&#10003;</td><td>Knobs wired; <code>[data-skin="legible"]</code> + reduced-motion shipped. &#9678; Template <code>uppercase</code> utilities still bypass <code>--label-case</code>.</td></tr>
+      <tr><td>Layering — elevation &amp; stacking</td><td class="s impl">&#10003;</td><td>Z-tiers migrated (popover bug fixed); elevation / state / highlight tokens seeded. &#9678; Hover-as-film + blur reserve are Phase 5; scrim waits for a modal.</td></tr>
+      <tr><td>Coherence — corners as nav/hero signal, chip owns card status, callout, radius unify, cyan-on-data sweep</td><td class="s impl">&#10003;</td><td>The <code>AUDIT-coherence.md</code> decisions, applied 2026-07-04. Card <code>accent</code> retired; <code>&lt;.callout&gt;</code> added.</td></tr>
+      <tr><td>Enforcement — lint, contrast, card drift</td><td class="s impl">&#10003;</td><td>Three warn-only checks; <code>check-design-system.sh</code> runs them. &#9678; Phase 6 flips to error, retires <code>check-css-frozen.sh</code>.</td></tr>
+      <tr><td>Data viz — chart anatomy &amp; value-state model</td><td class="s impl">&#10003;</td><td>Grounded in real <code>telemetry_chart.js</code> / <code>limits</code>.</td></tr>
+      <tr><td>Data viz — series palette fix, band shading, freshness</td><td class="s exp">&#9651;</td><td>Today's palette collides identity with alarm hues.</td></tr>
+    </tbody>
+  </table>
+
+  <p class="section-label">Direction — the sequenced backlog</p>
+  <ul class="seq">
+    <li><span class="b impl">&#10003;</span><span class="t"><strong>Contrast fixes · token steps 1 &amp; 2 · z-tiers · legibility skin · card-drift audit</strong> — done and verified in code.</span></li>
+    <li><span class="b dec">2</span><span class="t"><strong>Phase 5 — visible migrations</strong> — components off <code>--glow-*</code> → <code>--color-action</code>; hover-as-film (<code>--state-*</code>); elevation polish (top-highlight, blur reserve); sweep template <code>uppercase</code> → <code>--label-case</code>; changeset-backed forms for inline errors; <strong>cyan reallocation last</strong> (biggest aesthetic change, review alone).</span></li>
+    <li><span class="b dec">3</span><span class="t"><strong>Phase 6 — lock</strong> — flip the three checks warn → error, retire <code>check-css-frozen.sh</code>, tag a version + start a changelog.</span></li>
+    <li><span class="b exp">4</span><span class="t"><strong>Data-viz implementation</strong> — fix the series palette in the chart hook; add band shading and stale / no-data rendering.</span></li>
+    <li><span class="b exp">5</span><span class="t"><strong>Breadth</strong> — modal, sidebar nav, tabs, toast; sparklines; the ops-console pattern.</span></li>
+  </ul>
+
+  <p class="note"><strong>This card is the single status source.</strong> The README and IMPLEMENTATION notes point
+    here — don't duplicate this table elsewhere. The contract for keeping it honest: when code and a card diverge,
+    update the card in the same PR, move the area's marker as work lands, and let the checks catch what discipline
+    misses — <code>node scripts/check-card-drift.mjs</code> flags card values that no longer exist in the authored CSS.</p>
+</body>
+</html>

@@ -1,0 +1,54 @@
+# OpenTelemetry Collector configuration for local development.
+#
+# Receives OTLP from the Cadence apps (gRPC :4317, HTTP :4318) and routes each
+# signal to its own backend — one backend per signal:
+#
+#   metrics -> GreptimeDB (queried via its PromQL endpoint)
+#   logs    -> Loki  (native OTLP ingest; backs the Logs Drilldown app)
+#   traces  -> Tempo (backs the Traces Drilldown app)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+
+exporters:
+  otlp_http/metrics:
+    endpoint: http://greptimedb:4000/v1/otlp
+    headers:
+      x-greptime-db-name: public
+    tls:
+      insecure: true
+
+  # Loki's native OTLP ingest; the exporter appends /v1/logs.
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  otlp_grpc/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/loki]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_grpc/tempo]

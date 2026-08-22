@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_replay_context",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Replay Context",
+  "defaults": {
+    "time": {
+      "mode": "replay_run",
+      "axis": "generation_time",
+      "replay_run_id": "replay_run_001",
+      "from": "2026-06-16T00:00:00Z",
+      "to": "2026-06-16T00:10:00Z"
+    },
+    "scope": {
+      "primary": {
+        "kind": "spacecraft",
+        "mode": "one",
+        "ids": ["sc_001"]
+      }
+    },
+    "data": {
+      "realm": "replay",
+      "source_mode": "primary",
+      "replay_run_id": "replay_run_001",
+      "allowed_realms": ["flight", "replay"]
+    },
+    "limits": {
+      "semantics_mode": "observed"
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_replay_counter",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.time_series",
+          "widget_type_version": 1,
+          "title": "Replay Counter",
+          "binding": {
+            "observables": ["tlm.hk.counter"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "raw_series",
+            "overlays": ["limits"]
+          },
+          "options": {
+            "show_min_max_band": false,
+            "legend": false
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "replay"]
+  }
+}

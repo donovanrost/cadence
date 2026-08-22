@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_unknown_widget_retained",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Legacy Unknown Widget",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time"
+    },
+    "scope": {
+      "primary": {
+        "kind": "spacecraft",
+        "mode": "context",
+        "ids": []
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_legacy",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "partner.spectrum_waterfall",
+          "widget_type_version": 1,
+          "title": "Legacy Waterfall",
+          "binding": {
+            "observables": ["tlm.rf.spectrum"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "sampling": "latest"
+          },
+          "options": {
+            "palette": "viridis"
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "unknown-widget"]
+  }
+}

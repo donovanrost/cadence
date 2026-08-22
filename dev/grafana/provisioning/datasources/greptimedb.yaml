@@ -1,0 +1,52 @@
+# Grafana datasources for the local observability stack — one backend per
+# signal, one datasource per drilldown app:
+#
+#   - Prometheus (GreptimeDB) — GreptimeDB's PromQL endpoint; what the
+#     Metrics Drilldown app queries
+#   - Loki — logs; what the Logs Drilldown app queries
+#   - Tempo — traces; what the Traces Drilldown app queries
+
+apiVersion: 1
+
+# Previously provisioned datasources from the era when GreptimeDB stored all
+# three signals. Provisioning never auto-removes datasources dropped from this
+# file, so they are deleted explicitly.
+deleteDatasources:
+  - name: GreptimeDB
+    orgId: 1
+  - name: GreptimeDB Traces (Jaeger)
+    orgId: 1
+  - name: GreptimeDB Metrics (PromQL)
+    orgId: 1
+
+datasources:
+  - name: Prometheus (GreptimeDB)
+    uid: greptimedb-prometheus
+    type: prometheus
+    access: proxy
+    url: http://greptimedb:4000/v1/prometheus
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      httpHeaderName1: x-greptime-db-name
+    secureJsonData:
+      httpHeaderValue1: public
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      streamingEnabled:
+        search: true
+        metrics: true

@@ -1,0 +1,875 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
+defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
+  @moduledoc """
+  Transport extension that frames command payloads into CCSDS TC transfer frames.
+
+  It supports two runtime modes:
+  - direct framed uplink with optional simulated later phases
+  - COP-1 FOP-1B with a sliding window, CLCW processing, and one T1 timer per VC
+  """
+
+  @behaviour Cadence.Capabilities.Family
+  @behaviour Cadence.Capabilities.TransportExtension
+
+  alias Cadence.ActionRequests.{CancelTimer, ProviderRequest, ScheduleTimer, UplinkRequest}
+  alias Cadence.Capabilities.Definitions.UplinkGateway, as: Definition
+  alias Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.{Codec, Sequence}
+  alias CCSDS.TC.{FrameCodec, Segmentation}
+  alias CCSDS.Transport.COP1.{CLCW, FOP}
+
+  alias Cadence.Capabilities.{
+    ExecutionContext,
+    ExecutionResult
+  }
+
+  @cop1_timeout_timer_prefix "cop1:timeout:"
+  @cop1_t1_timer_prefix "cop1:t1:"
+  @start_timer_prefix "uplink:start:"
+  @completion_timer_prefix "uplink:completion:"
+
+  @impl true
+  defdelegate descriptor(), to: Definition
+
+  @impl true
+  defdelegate validate_config(configuration, validation_context), to: Definition
+
+  @impl true
+  def build_instance(configuration, _activation_context) do
+    with {:ok, normalized_configuration} <- Configuration.normalize(configuration),
+         :ok <- Configuration.validate(normalized_configuration) do
+      {:ok, normalized_configuration}
+    end
+  end
+
+  @impl true
+  def init_transport(configuration, %ExecutionContext{}) do
+    with {:ok, normalized_configuration} <- Configuration.normalize(configuration),
+         :ok <- Configuration.validate(normalized_configuration) do
+      {:ok,
+       ExecutionResult.new(%{
+         state: %{
+           service_name: normalized_configuration.service_name,
+           transport_profile: normalized_configuration.transport_profile,
+           frame_size: normalized_configuration.frame_size,
+           scid: normalized_configuration.scid,
+           vcid: normalized_configuration.vcid,
+           bypass_flag: normalized_configuration.bypass_flag,
+           control_command_flag: normalized_configuration.control_command_flag,
+           segment_header_flag: normalized_configuration.segment_header_flag,
+           fecf: normalized_configuration.fecf,
+           next_frame_seq: normalized_configuration.initial_frame_seq,
+           packet_sequence_counts: %{},
+           cop1_mode: normalized_configuration.cop1_mode,
+           cop1_timeout_ms: normalized_configuration.cop1_timeout_ms,
+           cop1_max_retransmit: normalized_configuration.cop1_max_retransmit,
+           cop1_window_size: normalized_configuration.cop1_window_size,
+           cop1_timeout_type: normalized_configuration.cop1_timeout_type,
+           cop1: build_cop1_state(normalized_configuration),
+           simulated_start_delay_ms: normalized_configuration.simulated_start_delay_ms,
+           simulated_completion_delay_ms: normalized_configuration.simulated_completion_delay_ms,
+           provider_binding_id: normalized_configuration.provider_binding_id,
+           provider_adapter_key: normalized_configuration.provider_adapter_key,
+           accepted_uplink_count: 0,
+           started_uplink_count: 0,
+           completed_uplink_count: 0,
+           last_release_attempt_id: nil,
+           last_command_request_id: nil,
+           last_command_name: nil,
+           last_signal_phase: nil,
+           last_signal_at: nil,
+           last_control_at: nil,
+           active_releases: %{}
+         }
+       })}
+    end
+  end
+
+  @impl true
+  def handle_transport_event(event, app_state, %ExecutionContext{} = ctx)
+      when is_map(app_state) do
+    with {:ok, %CLCW{} = clcw} <- normalize_cop1_clcw_event(event),
+         true <- cop1_enabled?(app_state),
+         {:ok, transition} <- FOP.apply_clcw(app_state.cop1, clcw) do
+      {:ok, build_cop1_execution_result(app_state, transition, ctx.current_time)}
+    else
+      false ->
+        {:ok, ExecutionResult.new(%{state: app_state})}
+
+      {:error, :not_cop1_clcw_event} ->
+        {:ok, ExecutionResult.new(%{state: app_state})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def handle_transport_event(_event, app_state, %ExecutionContext{}) do
+    {:error, {:invalid_uplink_gateway_state, app_state}}
+  end
+
+  @impl true
+  def handle_control_input(
+        %UplinkRequest{} = uplink_request,
+        app_state,
+        %ExecutionContext{} = ctx
+      )
+      when is_map(app_state) do
+    case accepts_service?(app_state.service_name, uplink_request.preferred_uplink_service) do
+      true ->
+        with {:ok, framed_uplink_request, framing_state} <-
+               frame_uplink_request(uplink_request, app_state, ctx.current_time) do
+          case cop1_strategy(app_state, framed_uplink_request) do
+            :fop ->
+              handle_cop1_release(framed_uplink_request, app_state, framing_state, ctx)
+
+            :direct ->
+              {:ok,
+               build_direct_execution_result(
+                 framed_uplink_request,
+                 app_state,
+                 framing_state,
+                 ctx.current_time
+               )}
+          end
+        end
+
+      false ->
+        {:error,
+         {:uplink_gateway_service_mismatch, app_state.service_name,
+          uplink_request.preferred_uplink_service}}
+    end
+  end
+
+  def handle_control_input(control_input, app_state, %ExecutionContext{})
+      when is_map(app_state) do
+    {:error, {:unsupported_uplink_gateway_control_input, control_input}}
+  end
+
+  def handle_control_input(_control_input, app_state, %ExecutionContext{}) do
+    {:error, {:invalid_uplink_gateway_state, app_state}}
+  end
+
+  @impl true
+  def handle_timer(timer_key, app_state, %ExecutionContext{} = ctx) when is_map(app_state) do
+    case parse_timer_key(timer_key) do
+      {:cop1_t1, vcid} ->
+        handle_cop1_t1(vcid, app_state, ctx)
+
+      {:cop1_timeout, command_release_attempt_id, seq} ->
+        handle_cop1_timeout(command_release_attempt_id, seq, app_state, ctx)
+
+      {:start, command_release_attempt_id} ->
+        handle_start_timer(command_release_attempt_id, app_state, ctx)
+
+      {:completion, command_release_attempt_id} ->
+        handle_completion_timer(command_release_attempt_id, app_state, ctx)
+
+      :unknown ->
+        {:error, {:unknown_transport_timer, timer_key}}
+    end
+  end
+
+  def handle_timer(timer_key, _app_state, %ExecutionContext{}) do
+    {:error, {:unknown_transport_timer, timer_key}}
+  end
+
+  @impl true
+  def snapshot_state(app_state, %ExecutionContext{}) when is_map(app_state) do
+    {:ok, app_state}
+  end
+
+  def snapshot_state(app_state, %ExecutionContext{}) do
+    {:error, {:invalid_uplink_gateway_state, app_state}}
+  end
+
+  defp build_cop1_state(%{cop1_mode: :fop} = configuration) do
+    state =
+      FOP.new(%{
+        enabled: true,
+        vcid: configuration.vcid,
+        state: :initial,
+        vs: configuration.initial_frame_seq,
+        nnr: configuration.initial_frame_seq,
+        t1_initial_ms: configuration.cop1_timeout_ms,
+        transmission_limit: configuration.cop1_max_retransmit + 1,
+        sliding_window_width: configuration.cop1_window_size,
+        timeout_type: configuration.cop1_timeout_type,
+        lower_layer_mode: :synchronous
+      })
+
+    {:ok, transition} = FOP.directive(state, :initiate_ad_without_clcw_check)
+    transition.state
+  end
+
+  defp build_cop1_state(_configuration), do: nil
+
+  defp cop1_enabled?(app_state) when is_map(app_state), do: app_state.cop1_mode == :fop
+
+  defp accepts_service?(nil, _preferred_uplink_service), do: true
+  defp accepts_service?(service_name, nil) when is_binary(service_name), do: true
+  defp accepts_service?(service_name, service_name) when is_binary(service_name), do: true
+  defp accepts_service?(_service_name, _preferred_uplink_service), do: false
+
+  defp cop1_strategy(app_state, %UplinkRequest{} = framed_uplink_request) do
+    if cop1_enabled?(app_state) and not bypass_mode?(framed_uplink_request) do
+      :fop
+    else
+      :direct
+    end
+  end
+
+  defp bypass_mode?(%UplinkRequest{} = uplink_request) do
+    uplink_request.bypass_flag == 1 or uplink_request.control_command_flag == 1
+  end
+
+  defp frame_uplink_request(%UplinkRequest{} = uplink_request, app_state, current_time) do
+    with {:ok, encoded_command} <- Base.decode64(uplink_request.encoded_binary_base64),
+         {:ok, command_sdu, packet_sequence_counts, packet_metadata} <-
+           packetize_command(encoded_command, uplink_request, app_state.packet_sequence_counts),
+         {:ok, segmentation_state} <- Segmentation.init(frame_seq: app_state.next_frame_seq),
+         packetized_request <- put_packet_metadata(uplink_request, packet_metadata),
+         sdu <- build_sdu(command_sdu, packetized_request, app_state, current_time),
+         {:ok, frames, next_segmentation_state} <-
+           Segmentation.segment(
+             sdu,
+             %{
+               frame_size: app_state.frame_size,
+               scid: app_state.scid,
+               vcid: app_state.vcid,
+               bypass_flag: app_state.bypass_flag,
+               control_command_flag: app_state.control_command_flag,
+               segment_header_flag: app_state.segment_header_flag,
+               fecf: app_state.fecf
+             },
+             segmentation_state
+           ),
+         {:ok, transfer_frames} <-
+           encode_transfer_frames(frames, app_state.frame_size, app_state.fecf) do
+      {:ok, enrich_uplink_request(packetized_request, transfer_frames, frames, app_state),
+       %{
+         next_frame_seq: next_segmentation_state.frame_seq,
+         packet_sequence_counts: packet_sequence_counts
+       }}
+    else
+      :error ->
+        {:error, {:invalid_uplink_request_payload, :base64}}
+
+      {:error, reason, _state} ->
+        {:error, reason}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp packetize_command(
+         encoded_command,
+         %UplinkRequest{layout_kind: :space_packet, apid: apid},
+         sequence_counts
+       )
+       when is_integer(apid) and apid in 0..0x7FF do
+    {sequence_count, next_sequence_counts} = Sequence.take(sequence_counts, apid)
+
+    packet =
+      SpacePacket.new(%{
+        packet_type: :command,
+        secondary_header?: false,
+        apid: apid,
+        sequence_flag: :unsegmented,
+        sequence_count: sequence_count,
+        data: encoded_command
+      })
+
+    with {:ok, encoded_packet} <- Codec.encode(packet) do
+      {:ok, encoded_packet, next_sequence_counts,
+       %{
+         "space_packet_apid" => apid,
+         "space_packet_sequence_count" => sequence_count,
+         "space_packet_size_bytes" => byte_size(encoded_packet)
+       }}
+    end
+  end
+
+  defp packetize_command(
+         _encoded_command,
+         %UplinkRequest{layout_kind: :space_packet, apid: apid},
+         _sequence_counts
+       )
+       when not is_nil(apid) do
+    {:error, {:invalid_space_packet_apid, apid}}
+  end
+
+  defp packetize_command(
+         _encoded_command,
+         %UplinkRequest{layout_kind: :space_packet},
+         _sequence_counts
+       ) do
+    {:error, :missing_space_packet_apid}
+  end
+
+  defp packetize_command(encoded_command, %UplinkRequest{}, sequence_counts) do
+    {:ok, encoded_command, sequence_counts, %{}}
+  end
+
+  defp put_packet_metadata(%UplinkRequest{} = uplink_request, packet_metadata)
+       when map_size(packet_metadata) == 0,
+       do: uplink_request
+
+  defp put_packet_metadata(%UplinkRequest{} = uplink_request, packet_metadata) do
+    %{uplink_request | metadata: Map.merge(uplink_request.metadata, packet_metadata)}
+  end
+
+  defp build_sdu(encoded_command, uplink_request, app_state, current_time) do
+    %SDUOctets{
+      profile: app_state.transport_profile,
+      scid: app_state.scid,
+      vcid: app_state.vcid,
+      map_id: nil,
+      direction: :uplink,
+      sdu_kind_hint: uplink_request.layout_kind || :command,
+      octets: encoded_command,
+      quality: :good,
+      source_frames: [],
+      timestamp: current_time,
+      meta: %{
+        command_release_attempt_id: uplink_request.command_release_attempt_id,
+        command_request_id: uplink_request.command_request_id,
+        command_name: uplink_request.command_name
+      }
+    }
+  end
+
+  defp encode_transfer_frames(frames, frame_size, fecf?) when is_list(frames) do
+    Enum.reduce_while(frames, {:ok, []}, fn frame, {:ok, acc} ->
+      case FrameCodec.encode(frame, frame_size: frame_size, fecf: fecf?) do
+        {:ok, transfer_frame} -> {:cont, {:ok, [transfer_frame | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, transfer_frames} -> {:ok, Enum.reverse(transfer_frames)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp enrich_uplink_request(
+         %UplinkRequest{} = uplink_request,
+         transfer_frames,
+         frames,
+         app_state
+       ) do
+    frame_sequences =
+      frames
+      |> Enum.map(& &1.frame_seq)
+      |> Enum.filter(&is_integer/1)
+
+    %UplinkRequest{
+      uplink_request
+      | transport_profile: app_state.transport_profile,
+        transfer_frames_base64: Enum.map(transfer_frames, &Base.encode64/1),
+        transfer_frame_count: length(transfer_frames),
+        transfer_frame_size_bytes: app_state.frame_size,
+        first_frame_seq: List.first(frame_sequences),
+        last_frame_seq: List.last(frame_sequences),
+        scid: app_state.scid,
+        vcid: app_state.vcid,
+        bypass_flag: app_state.bypass_flag,
+        control_command_flag: app_state.control_command_flag,
+        segment_header_flag: app_state.segment_header_flag
+    }
+  end
+
+  defp handle_cop1_release(
+         framed_uplink_request,
+         app_state,
+         framing_state,
+         %ExecutionContext{} = ctx
+       ) do
+    with {:ok, frame_entries} <- frame_entries_from_request(framed_uplink_request),
+         {:ok, transition} <-
+           FOP.accept_release(
+             app_state.cop1,
+             Map.from_struct(framed_uplink_request),
+             frame_entries
+           ) do
+      {:ok,
+       build_cop1_execution_result(
+         %{
+           app_state
+           | next_frame_seq: framing_state.next_frame_seq,
+             packet_sequence_counts: framing_state.packet_sequence_counts
+         },
+         transition,
+         ctx.current_time,
+         framing_state.next_frame_seq
+       )}
+    end
+  end
+
+  defp handle_cop1_timeout(
+         command_release_attempt_id,
+         seq,
+         %{cop1: %FOP{in_flight_release: %{metadata: metadata}}} = app_state,
+         %ExecutionContext{} = ctx
+       ) do
+    if metadata.command_release_attempt_id != command_release_attempt_id do
+      {:ok, ExecutionResult.new(%{state: app_state})}
+    else
+      with {:ok, transition} <- FOP.handle_timeout(app_state.cop1, seq) do
+        {:ok, build_cop1_execution_result(app_state, transition, ctx.current_time)}
+      end
+    end
+  end
+
+  defp handle_cop1_timeout(_command_release_attempt_id, _seq, app_state, %ExecutionContext{}) do
+    {:ok, ExecutionResult.new(%{state: app_state})}
+  end
+
+  defp handle_cop1_t1(
+         vcid,
+         %{cop1: %FOP{vcid: vcid, timer_running: true}} = app_state,
+         %ExecutionContext{} = ctx
+       ) do
+    with {:ok, transition} <- FOP.timer_expired(app_state.cop1) do
+      {:ok, build_cop1_execution_result(app_state, transition, ctx.current_time)}
+    end
+  end
+
+  defp handle_cop1_t1(_vcid, app_state, %ExecutionContext{}) do
+    {:ok, ExecutionResult.new(%{state: app_state})}
+  end
+
+  defp build_cop1_execution_result(app_state, transition, current_time, next_frame_seq \\ nil) do
+    state = transition.state
+    transition_metadata = transition_signal_metadata(transition.signal)
+    metadata = cop1_transition_metadata(app_state, state, transition.signal, transition_metadata)
+    started_increment = cop1_signal_increment(transition.signal, :start)
+    completed_increment = cop1_signal_increment(transition.signal, :completion)
+
+    %ExecutionResult{
+      state: %{
+        app_state
+        | cop1: state,
+          next_frame_seq: next_frame_seq || app_state.next_frame_seq,
+          accepted_uplink_count:
+            app_state.accepted_uplink_count + length(transition.transmit_frames),
+          started_uplink_count: app_state.started_uplink_count + started_increment,
+          completed_uplink_count: app_state.completed_uplink_count + completed_increment,
+          last_release_attempt_id:
+            metadata[:command_release_attempt_id] || app_state.last_release_attempt_id,
+          last_command_request_id:
+            metadata[:command_request_id] || app_state.last_command_request_id,
+          last_command_name: metadata[:command_name] || app_state.last_command_name,
+          last_signal_phase: metadata[:signal_phase] || app_state.last_signal_phase,
+          last_signal_at:
+            if(metadata[:signal_phase], do: current_time, else: app_state.last_signal_at),
+          last_control_at: current_time
+      },
+      action_requests:
+        build_cop1_action_requests(app_state, state, transition.transmit_frames) ++
+          build_cop1_timer_actions(transition, metadata),
+      metadata: metadata
+    }
+  end
+
+  defp cop1_transition_metadata(app_state, state, signal, transition_metadata) do
+    release_metadata =
+      current_cop1_release_metadata(state) || current_cop1_release_metadata(app_state.cop1)
+
+    signal
+    |> case do
+      nil -> release_metadata || %{}
+      _other -> Map.merge(release_metadata || %{}, transition_metadata)
+    end
+  end
+
+  defp cop1_signal_increment({signal_phase, _metadata}, signal_phase), do: 1
+  defp cop1_signal_increment(_signal, _signal_phase), do: 0
+
+  defp build_direct_execution_result(
+         %UplinkRequest{} = framed_uplink_request,
+         app_state,
+         framing_state,
+         current_time
+       ) do
+    release_metadata = release_metadata(framed_uplink_request)
+    track_release? = track_release?(app_state)
+
+    ExecutionResult.new(%{
+      state: %{
+        app_state
+        | active_releases:
+            maybe_track_release(
+              app_state.active_releases,
+              track_release?,
+              %{
+                command_release_attempt_id: framed_uplink_request.command_release_attempt_id,
+                command_request_id: framed_uplink_request.command_request_id,
+                command_name: framed_uplink_request.command_name,
+                source_endpoint_ref: framed_uplink_request.source_endpoint_ref,
+                completion_delay_ms: app_state.simulated_completion_delay_ms
+              }
+            ),
+          next_frame_seq: framing_state.next_frame_seq,
+          packet_sequence_counts: framing_state.packet_sequence_counts,
+          accepted_uplink_count: app_state.accepted_uplink_count + 1,
+          last_release_attempt_id: framed_uplink_request.command_release_attempt_id,
+          last_command_request_id: framed_uplink_request.command_request_id,
+          last_command_name: framed_uplink_request.command_name,
+          last_signal_phase: :acceptance,
+          last_signal_at: current_time,
+          last_control_at: current_time
+      },
+      action_requests:
+        [framed_uplink_request] ++
+          provider_action_requests(app_state, framed_uplink_request) ++
+          scheduled_follow_up_actions(
+            framed_uplink_request.command_release_attempt_id,
+            app_state.simulated_start_delay_ms,
+            app_state.simulated_completion_delay_ms,
+            release_metadata
+          )
+    })
+  end
+
+  defp frame_entries_from_request(%UplinkRequest{} = framed_uplink_request) do
+    transfer_frames = framed_uplink_request.transfer_frames_base64
+    transfer_frame_count = framed_uplink_request.transfer_frame_count || length(transfer_frames)
+    first_frame_seq = framed_uplink_request.first_frame_seq
+
+    cond do
+      transfer_frames == [] ->
+        {:error, :missing_framed_uplink_transfer_frames}
+
+      not is_integer(first_frame_seq) ->
+        {:error, :missing_framed_uplink_first_frame_seq}
+
+      transfer_frame_count != length(transfer_frames) ->
+        {:error, :invalid_framed_uplink_transfer_frame_count}
+
+      true ->
+        frame_entries =
+          transfer_frames
+          |> Enum.with_index()
+          |> Enum.map(fn {frame_base64, index} ->
+            %{
+              seq: rem(first_frame_seq + index, 256),
+              frame_base64: frame_base64
+            }
+          end)
+
+        {:ok, frame_entries}
+    end
+  end
+
+  defp build_cop1_action_requests(app_state, cop1_state, frame_entries) do
+    case cop1_state.in_flight_release do
+      %{base_request: base_request} ->
+        Enum.flat_map(frame_entries, fn frame_entry ->
+          framed_uplink_request =
+            frame_uplink_request_from_entry(base_request, app_state, frame_entry)
+
+          [framed_uplink_request] ++ provider_action_requests(app_state, framed_uplink_request)
+        end)
+
+      nil ->
+        []
+    end
+  end
+
+  defp provider_action_requests(
+         %{provider_binding_id: provider_binding_id, provider_adapter_key: provider_adapter_key},
+         %UplinkRequest{} = framed_uplink_request
+       )
+       when is_binary(provider_binding_id) and is_atom(provider_adapter_key) do
+    [
+      ProviderRequest.new(%{
+        provider_binding_id: provider_binding_id,
+        provider_adapter_key: provider_adapter_key,
+        command_release_attempt_id: framed_uplink_request.command_release_attempt_id,
+        command_queue_entry_id: framed_uplink_request.command_queue_entry_id,
+        command_request_id: framed_uplink_request.command_request_id,
+        source_endpoint_ref: framed_uplink_request.source_endpoint_ref,
+        mission_model_revision_id: framed_uplink_request.mission_model_revision_id,
+        command_id: framed_uplink_request.command_id,
+        command_name: framed_uplink_request.command_name,
+        transport_profile: framed_uplink_request.transport_profile,
+        payloads_base64: framed_uplink_request.transfer_frames_base64,
+        payload_count:
+          framed_uplink_request.transfer_frame_count ||
+            length(framed_uplink_request.transfer_frames_base64),
+        payload_size_bytes: framed_uplink_request.transfer_frame_size_bytes,
+        metadata: framed_uplink_request.metadata
+      })
+    ]
+  end
+
+  defp provider_action_requests(_app_state, %UplinkRequest{}), do: []
+
+  defp frame_uplink_request_from_entry(base_request, app_state, frame_entry) do
+    release_kind =
+      if frame_entry.retries == 0 do
+        :initial
+      else
+        :retransmit
+      end
+
+    UplinkRequest.new(%{
+      command_release_attempt_id: base_request.command_release_attempt_id,
+      command_queue_entry_id: base_request.command_queue_entry_id,
+      command_request_id: base_request.command_request_id,
+      source_endpoint_ref: base_request.source_endpoint_ref,
+      mission_model_revision_id: base_request.mission_model_revision_id,
+      command_id: base_request.command_id,
+      command_name: base_request.command_name,
+      layout_kind: base_request.layout_kind,
+      preferred_uplink_service: base_request.preferred_uplink_service,
+      apid: base_request.apid,
+      service_type: base_request.service_type,
+      service_subtype: base_request.service_subtype,
+      opcode: base_request.opcode,
+      encoded_binary_base64: base_request.encoded_binary_base64,
+      encoded_size_bytes: base_request.encoded_size_bytes,
+      transport_profile: app_state.transport_profile,
+      transfer_frames_base64: [frame_entry.frame_base64],
+      transfer_frame_count: 1,
+      transfer_frame_size_bytes: app_state.frame_size,
+      first_frame_seq: frame_entry.seq,
+      last_frame_seq: frame_entry.seq,
+      scid: app_state.scid,
+      vcid: app_state.vcid,
+      bypass_flag: app_state.bypass_flag,
+      control_command_flag: app_state.control_command_flag,
+      segment_header_flag: app_state.segment_header_flag,
+      metadata:
+        Map.merge(Map.get(base_request, :metadata, %{}), %{
+          "cop1_release_kind" => Atom.to_string(release_kind),
+          "cop1_retry_count" => frame_entry.retries
+        })
+    })
+  end
+
+  defp build_cop1_timer_actions(transition, release_metadata) do
+    timer_key = cop1_t1_timer_key(transition.state.vcid)
+
+    case transition.timer_action do
+      :start ->
+        [
+          ScheduleTimer.new(%{
+            timer_key: timer_key,
+            delay_ms: transition.state.t1_initial_ms,
+            metadata: Map.put(release_metadata, :vcid, transition.state.vcid)
+          })
+        ]
+
+      :cancel ->
+        [CancelTimer.new(%{timer_key: timer_key})]
+
+      :none ->
+        []
+    end
+  end
+
+  defp current_cop1_release_metadata(%FOP{in_flight_release: %{metadata: metadata}})
+       when is_map(metadata),
+       do: metadata
+
+  defp current_cop1_release_metadata(_cop1_state), do: nil
+
+  defp cop1_t1_timer_key(vcid) when is_integer(vcid) do
+    @cop1_t1_timer_prefix <> Integer.to_string(vcid)
+  end
+
+  defp transition_signal_metadata(nil), do: %{}
+
+  defp transition_signal_metadata({signal_phase, metadata})
+       when signal_phase in [:start, :completion] and is_map(metadata) do
+    metadata
+    |> Map.new()
+    |> Map.put(:signal_phase, signal_phase)
+  end
+
+  defp normalize_cop1_clcw_event(%CLCW{} = clcw), do: {:ok, clcw}
+  defp normalize_cop1_clcw_event({:cop1_clcw, %CLCW{} = clcw}), do: {:ok, clcw}
+
+  defp normalize_cop1_clcw_event(%{kind: :cop1_clcw, clcw: %CLCW{} = clcw}),
+    do: {:ok, clcw}
+
+  defp normalize_cop1_clcw_event(%{"kind" => "cop1_clcw", "clcw_base64" => clcw_base64})
+       when is_binary(clcw_base64) do
+    with {:ok, clcw_binary} <- Base.decode64(clcw_base64),
+         {:ok, %CLCW{} = clcw} <- CLCW.decode(clcw_binary) do
+      {:ok, clcw}
+    else
+      :error -> {:error, {:invalid_cop1_clcw_event, :base64}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp normalize_cop1_clcw_event(%{kind: :cop1_clcw, clcw_binary: clcw_binary})
+       when is_binary(clcw_binary) do
+    CLCW.decode(clcw_binary)
+  end
+
+  defp normalize_cop1_clcw_event(_event), do: {:error, :not_cop1_clcw_event}
+
+  defp maybe_schedule_start_timer(command_release_attempt_id, delay_ms, release_metadata)
+       when is_binary(command_release_attempt_id) and is_integer(delay_ms) and delay_ms > 0 do
+    [
+      ScheduleTimer.new(%{
+        timer_key: @start_timer_prefix <> command_release_attempt_id,
+        delay_ms: delay_ms,
+        metadata: Map.put(release_metadata, :signal_phase, :start)
+      })
+    ]
+  end
+
+  defp maybe_schedule_completion_timer(delay_ms, release_metadata)
+       when is_integer(delay_ms) and delay_ms > 0 do
+    [
+      ScheduleTimer.new(%{
+        timer_key: @completion_timer_prefix <> release_metadata.command_release_attempt_id,
+        delay_ms: delay_ms,
+        metadata: Map.put(release_metadata, :signal_phase, :completion)
+      })
+    ]
+  end
+
+  defp handle_start_timer(command_release_attempt_id, app_state, %ExecutionContext{} = ctx) do
+    case Map.get(app_state.active_releases, command_release_attempt_id) do
+      nil ->
+        {:error, {:unknown_uplink_release_attempt, command_release_attempt_id}}
+
+      release_state ->
+        {active_releases, completion_action_requests} =
+          case release_state.completion_delay_ms do
+            delay_ms when is_integer(delay_ms) and delay_ms > 0 ->
+              {app_state.active_releases,
+               maybe_schedule_completion_timer(
+                 delay_ms,
+                 %{
+                   command_release_attempt_id: release_state.command_release_attempt_id,
+                   command_request_id: release_state.command_request_id,
+                   command_name: release_state.command_name,
+                   source_endpoint_ref: release_state.source_endpoint_ref
+                 }
+               )}
+
+            _other ->
+              {Map.delete(app_state.active_releases, command_release_attempt_id), []}
+          end
+
+        {:ok,
+         ExecutionResult.new(%{
+           state: %{
+             app_state
+             | active_releases: active_releases,
+               started_uplink_count: app_state.started_uplink_count + 1,
+               last_release_attempt_id: release_state.command_release_attempt_id,
+               last_command_request_id: release_state.command_request_id,
+               last_command_name: release_state.command_name,
+               last_signal_phase: :start,
+               last_signal_at: ctx.current_time
+           },
+           action_requests: completion_action_requests
+         })}
+    end
+  end
+
+  defp handle_completion_timer(command_release_attempt_id, app_state, %ExecutionContext{} = ctx) do
+    case Map.pop(app_state.active_releases, command_release_attempt_id) do
+      {nil, _active_releases} ->
+        {:error, {:unknown_uplink_release_attempt, command_release_attempt_id}}
+
+      {release_state, active_releases} ->
+        {:ok,
+         ExecutionResult.new(%{
+           state: %{
+             app_state
+             | active_releases: active_releases,
+               completed_uplink_count: app_state.completed_uplink_count + 1,
+               last_release_attempt_id: release_state.command_release_attempt_id,
+               last_command_request_id: release_state.command_request_id,
+               last_command_name: release_state.command_name,
+               last_signal_phase: :completion,
+               last_signal_at: ctx.current_time
+           }
+         })}
+    end
+  end
+
+  defp parse_timer_key(@start_timer_prefix <> command_release_attempt_id),
+    do: {:start, command_release_attempt_id}
+
+  defp parse_timer_key(@completion_timer_prefix <> command_release_attempt_id),
+    do: {:completion, command_release_attempt_id}
+
+  defp parse_timer_key(@cop1_t1_timer_prefix <> vcid_string) do
+    case Integer.parse(vcid_string) do
+      {vcid, ""} when vcid in 0..63 -> {:cop1_t1, vcid}
+      _other -> :unknown
+    end
+  end
+
+  defp parse_timer_key(@cop1_timeout_timer_prefix <> tail) do
+    case String.split(tail, ":", parts: 2) do
+      [command_release_attempt_id, seq_string] ->
+        case Integer.parse(seq_string) do
+          {seq, ""} -> {:cop1_timeout, command_release_attempt_id, seq}
+          _other -> :unknown
+        end
+
+      _other ->
+        :unknown
+    end
+  end
+
+  defp parse_timer_key(_timer_key), do: :unknown
+
+  defp release_metadata(%UplinkRequest{} = uplink_request) do
+    %{
+      command_release_attempt_id: uplink_request.command_release_attempt_id,
+      command_request_id: uplink_request.command_request_id,
+      command_name: uplink_request.command_name,
+      source_endpoint_ref: uplink_request.source_endpoint_ref
+    }
+  end
+
+  defp track_release?(app_state) when is_map(app_state) do
+    not cop1_enabled?(app_state) and
+      (is_integer(app_state.simulated_start_delay_ms) or
+         is_integer(app_state.simulated_completion_delay_ms))
+  end
+
+  defp maybe_track_release(active_releases, false, _release_state) when is_map(active_releases),
+    do: active_releases
+
+  defp maybe_track_release(active_releases, true, release_state) when is_map(active_releases) do
+    Map.put(active_releases, release_state.command_release_attempt_id, release_state)
+  end
+
+  defp scheduled_follow_up_actions(
+         command_release_attempt_id,
+         simulated_start_delay_ms,
+         simulated_completion_delay_ms,
+         release_metadata
+       ) do
+    cond do
+      is_integer(simulated_start_delay_ms) and simulated_start_delay_ms > 0 ->
+        maybe_schedule_start_timer(
+          command_release_attempt_id,
+          simulated_start_delay_ms,
+          release_metadata
+        )
+
+      is_integer(simulated_completion_delay_ms) and simulated_completion_delay_ms > 0 ->
+        maybe_schedule_completion_timer(simulated_completion_delay_ms, release_metadata)
+
+      true ->
+        []
+    end
+  end
+end

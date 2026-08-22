@@ -1,0 +1,192 @@
+<div class="drawer lg:drawer-open">
+  <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
+
+  <div class="drawer-content flex flex-col">
+    <div class="lg:hidden flex items-center justify-between p-4 border-b border-base-300">
+      <label for="sidebar-drawer" class="btn btn-ghost btn-sm">
+        <span class="hero-bars-3 h-5 w-5"></span>
+      </label>
+      <div class="flex-1 text-center font-semibold text-sm tracking-wider uppercase">Cadence</div>
+      <div class="flex items-center gap-2">
+        <%= if @current_scope && @current_scope.user do %>
+          <.notifications_bell
+            id="notifications-bell-mobile"
+            count={assigns[:unread_notifications_count] || 0}
+            notifications={assigns[:recent_notifications] || []}
+          />
+          <.user_menu
+            id="user-menu-mobile"
+            scope={@current_scope}
+            memberships={assigns[:user_menu_memberships] || []}
+            platform_admin?={assigns[:user_menu_platform_admin?] || false}
+          />
+        <% end %>
+      </div>
+    </div>
+
+    <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
+      <%= if @current_scope && @current_scope.user do %>
+        <.notifications_bell
+          id="notifications-bell-desktop"
+          count={assigns[:unread_notifications_count] || 0}
+          notifications={assigns[:recent_notifications] || []}
+        />
+        <.user_menu
+          id="user-menu-desktop"
+          scope={@current_scope}
+          memberships={assigns[:user_menu_memberships] || []}
+          platform_admin?={assigns[:user_menu_platform_admin?] || false}
+        />
+      <% end %>
+    </div>
+
+    <main class="flex-1 overflow-y-auto bg-base-100">
+      <div class="p-6">
+        {@inner_content}
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-side">
+    <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+    <div
+      data-sidebar-collapsible
+      class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 flex flex-col border-r border-primary/20 hud-grid relative"
+    >
+      <div class="px-3 h-10 flex items-center border-b border-primary/20">
+        <.link navigate={~p"/"} class="flex items-center gap-2 text-xs text-base-content/60 hover:text-base-content">
+          <span class="hero-chevron-left h-3 w-3"></span>
+          <span class="sidebar-label tracking-wide uppercase">
+            <%= if @current_scope && @current_scope.organization do %>
+              {@current_scope.organization.display_name}
+            <% else %>
+              Organization
+            <% end %>
+          </span>
+        </.link>
+      </div>
+
+      <div class="px-3 pt-4 pb-2 sidebar-expanded-only">
+        <p class="text-sm font-bold text-base-content truncate">
+          <%= if assigns[:current_mission] do %>
+            {@current_mission.display_name}
+          <% else %>
+            Mission
+          <% end %>
+        </p>
+        <p :if={assigns[:current_mission]} class="text-xs text-base-content/50 font-mono truncate">
+          {@current_mission.slug}
+        </p>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto py-2">
+        <ul class="menu menu-sm space-y-0.5">
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}"}
+            icon="hero-chart-bar-square"
+            label="Overview"
+            active={assigns[:nav_item] == :mission_overview}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+            icon="hero-rocket-launch"
+            label="Spacecraft"
+            active={assigns[:nav_item] == :spacecraft}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/applications"}
+            icon="hero-squares-2x2"
+            label="Applications"
+            active={assigns[:nav_item] == :mission_applications}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
+            icon="hero-circle-stack"
+            label="Catalog"
+            active={assigns[:nav_item] == :catalog}
+          />
+          <.nav_section
+            :if={assigns[:current_mission]}
+            icon="hero-presentation-chart-line"
+            label="Ops"
+            active={section_active?(assigns[:nav_item], :ops)}
+            expanded={section_active?(assigns[:nav_item], :ops)}
+          >
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards"}
+              active={assigns[:nav_item] == :ops_dashboards}
+            >
+              Dashboards
+            </:item>
+          </.nav_section>
+          <.nav_section
+            :if={assigns[:current_mission]}
+            icon="hero-signal"
+            label="Comms"
+            active={section_active?(assigns[:nav_item], :comms)}
+            expanded={section_active?(assigns[:nav_item], :comms)}
+          >
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+              active={assigns[:nav_item] == :comms_overview}
+            >
+              Overview
+            </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports"}
+              active={assigns[:nav_item] == :comms_transports}
+            >
+              Transports
+            </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/ground-stations"}
+              active={assigns[:nav_item] == :comms_ground_stations}
+            >
+              Ground Stations
+            </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+              active={assigns[:nav_item] == :comms_routing}
+            >
+              Routing
+            </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/validation"}
+              active={assigns[:nav_item] == :comms_validation}
+            >
+              Validation
+            </:item>
+          </.nav_section>
+        </ul>
+      </nav>
+
+      <div class="px-2 py-2 border-t border-primary/20">
+        <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
+          <button type="submit" class="btn btn-ghost btn-sm w-full justify-start gap-2 text-xs uppercase tracking-wide text-base-content/60">
+            <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+            <span class="sidebar-label">Sign out</span>
+          </button>
+        </.form>
+      </div>
+
+      <button
+        type="button"
+        class="sidebar-toggle-btn hidden lg:flex"
+        onclick="document.querySelectorAll('[data-sidebar-collapsible]').forEach(function(el){el.classList.toggle('sidebar-expanded');el.classList.toggle('sidebar-collapsed')})"
+        title="Toggle sidebar"
+      >
+        <span class="hero-chevron-left h-3 w-3 toggle-chevron transition-transform"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<LiveToast.toast_group
+  flash={@flash}
+  connected={assigns[:socket] != nil}
+  toasts_sync={assigns[:toasts_sync]}
+/>

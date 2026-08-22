@@ -1,0 +1,118 @@
+name: cadence
+
+services:
+  questdb:
+    image: questdb/questdb:9.4.3
+    ports:
+      # REST API and Web Console
+      - "9000:9000"
+      # InfluxDB Line Protocol ingestion
+      - "9009:9009"
+      # Postgres wire protocol
+      - "8812:8812"
+      # Minimal health server
+      - "9003:9003"
+    volumes:
+      - ./var/questdb:/var/lib/questdb
+  questdb_customer:
+    image: questdb/questdb:9.4.3
+    ports:
+      # REST API and Web Console
+      - "9100:9000"
+      # InfluxDB Line Protocol ingestion
+      - "9109:9009"
+      # Postgres wire protocol
+      - "9812:8812"
+      # Minimal health server
+      - "9103:9003"
+    volumes:
+      - ./var/questdb_customer:/var/lib/questdb
+
+  # Observability stack: apps emit OTLP to the collector, which routes each
+  # signal to its own backend — metrics to GreptimeDB (PromQL), logs to Loki,
+  # traces to Tempo. Grafana's drilldown apps query the three backends.
+  greptimedb:
+    image: greptime/greptimedb:v1.1.2
+    command:
+      - standalone
+      - start
+      - --http-addr=0.0.0.0:4000
+      - --rpc-bind-addr=0.0.0.0:4001
+      - --mysql-addr=0.0.0.0:4002
+      - --postgres-addr=0.0.0.0:4003
+    ports:
+      # HTTP API: OTLP ingest, PromQL, web dashboard
+      - "4000:4000"
+      # gRPC (:4001) is not published — it would collide with the Phoenix dev
+      # server, and only in-network services need it.
+      # MySQL wire protocol
+      - "4002:4002"
+      # Postgres wire protocol
+      - "4003:4003"
+    volumes:
+      - ./var/greptimedb:/greptimedb_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:4000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Tempo is the traces backend; Grafana's Traces Drilldown app only speaks
+  # Tempo/TraceQL.
+  tempo:
+    # 2.x, not 3.x: Tempo 3 moved TraceQL metrics (which Traces Drilldown
+    # needs) behind its Kafka-based live-store — too heavy for local dev.
+    image: grafana/tempo:2.10.7
+    command: ["-target=all", "-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      # Query API (OTLP receivers stay internal; the collector fronts them)
+      - "3200:3200"
+    volumes:
+      - ./dev/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./var/tempo:/var/tempo
+
+  # Loki is the logs backend; Grafana's Logs Drilldown app only speaks
+  # Loki/LogQL.
+  loki:
+    image: grafana/loki:3.7.3
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    ports:
+      # Query API (log ingest arrives via the collector's OTLP export)
+      - "3100:3100"
+    volumes:
+      - ./dev/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - ./var/loki:/loki
+
+  otel_collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    command: ["--config=/etc/otel-collector/config.yaml"]
+    ports:
+      # OTLP gRPC
+      - "4317:4317"
+      # OTLP HTTP
+      - "4318:4318"
+    volumes:
+      - ./dev/otel-collector/config.yaml:/etc/otel-collector/config.yaml:ro
+    depends_on:
+      greptimedb:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:12.2.10
+    ports:
+      - "3000:3000"
+    environment:
+      # Local dev only: skip the login screen entirely.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./dev/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./var/grafana:/var/lib/grafana
+    depends_on:
+      greptimedb:
+        condition: service_healthy

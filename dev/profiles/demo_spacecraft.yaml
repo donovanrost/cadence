@@ -1,0 +1,40 @@
+profile_name: demo_spacecraft
+
+bootstrap:
+  cadence_url: http://127.0.0.1:4001
+  organization_id: org-alpha
+  organization_slug: org-alpha
+  organization_display_name: Org Alpha
+  mission_id: mission-alpha
+  mission_slug: mission-alpha
+  mission_display_name: Mission Alpha
+  spacecraft_id: spacecraft-001
+  spacecraft_display_name: SC-001
+  source_endpoint_id: source-endpoint-001
+  source_ref: sc-001
+  source_endpoint_display_name: SC-001 Primary Endpoint
+  definitions_path: ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml
+  downlink_provider_port: 4100
+  contact_start_delay_seconds: 1
+  contact_duration_seconds: 28800
+  issue_mission_token: false
+
+simulator:
+  runtime_mode: telemetry
+  definitions: ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml
+  target: SIM-1
+  rate: 1.0
+  provider: database
+  parallel: true
+  output:
+    protocol: tcp
+    host: 127.0.0.1
+    port: 4100
+  frame:
+    tm_frame_size: 1115
+    scid: 0
+    vcid: 0
+
+profiler:
+  node: cadence
+  mission_id: mission-alpha

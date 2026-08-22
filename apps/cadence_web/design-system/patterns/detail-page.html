@@ -1,0 +1,180 @@
+<!-- @dsCard group="Patterns" name="Detail page" subtitle="page_header + workflow row + overview grid + sidebar" width="1180" height="1340" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Detail page pattern</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1.page { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2.2rem; max-width: 72ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.4rem 0 1.1rem; }
+
+  .specimen { display: grid; gap: 1.5rem; }
+
+  /* page_header */
+  .ph { border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding-bottom: 1rem;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); }
+  .crumbs { font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); display: flex; gap: .5rem; }
+  .crumbs a { color: oklch(from var(--glow-cyan) 65% 0.02 h); }
+  .crumbs .sep { color: oklch(55% 0.02 250); }
+  .crumbs .cur { color: oklch(85% 0.02 250 / 0.6); }
+  .ph h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; margin: .5rem 0 0; }
+  .scid { margin-left: .75rem; font-family: ui-monospace, monospace; font-size: .875rem;
+    color: oklch(85% 0.02 250); font-weight: 500; }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; gap: .4rem; height: 2rem; padding: 0 .85rem; border-radius: 2px;
+    border: 1px solid transparent; cursor: pointer; font-weight: 500; letter-spacing: .05em; text-transform: uppercase;
+    font-size: .75rem; }
+  .btn-primary { background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(80% 0.12 210 / 0.2); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: oklch(80% 0.12 210 / 0.2); }
+  .ph-actions { display: flex; gap: .5rem; }
+
+  /* card chrome — no corner brackets (corners mark navigation/hero cards only)
+     and no status border (the chip inside owns status) */
+  .card { position: relative; background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258);
+    border-radius: 2px; padding: 1.5rem; }
+
+  /* workflow status row */
+  .wf-row { display: grid; gap: 1rem; grid-template-columns: repeat(3, 1fr); }
+  .wf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+  .wf-value { font-size: 1rem; font-weight: 600; margin: .75rem 0 0; }
+  .wf-desc { font-size: .8rem; color: oklch(85% 0.02 250 / 0.7); margin: .5rem 0 0; line-height: 1.45; }
+  .wf-cta { display: inline-flex; margin-top: 1rem; font-size: .8rem; color: oklch(80% 0.12 210); }
+  /* status_badge pill */
+  .badge { display: inline-flex; border-radius: 9999px; padding: .2rem .5rem; font-size: .65rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .025em; white-space: nowrap; }
+  .b-ready { background: oklch(78% 0.12 175 / 0.2); color: oklch(78% 0.12 175); }
+  .b-attention { background: oklch(72% 0.15 50 / 0.2); color: oklch(72% 0.15 50); }
+
+  /* main + sidebar */
+  .split { display: grid; gap: 1rem; grid-template-columns: 1fr 22rem; }
+  .card-title { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); margin: 0 0 1rem; }
+
+  /* hud-data-row definition pairs */
+  .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2rem; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; padding: .35rem 0;
+    border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.1); gap: 1rem; }
+  .row .k { font-size: .7rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: oklch(70% 0.05 250); }
+  .row .v { font-family: ui-monospace, monospace; font-size: .875rem; color: oklch(from var(--glow-cyan) 85% 0.02 h); text-align: right; }
+  .row .v.link { color: oklch(80% 0.12 210); }
+  .row .v.xs { font-size: .72rem; }
+  .row.full { grid-column: 1 / -1; }
+
+  /* sidebar activity rows */
+  .side .row .v { color: oklch(85% 0.02 250 / 0.85); font-family: ui-sans-serif, system-ui, sans-serif; }
+
+  /* anatomy + usage */
+  .anatomy { display: grid; gap: .55rem; max-width: 84ch; margin: .4rem 0 0; padding: 0; }
+  .anatomy li { display: grid; grid-template-columns: 13rem 1fr; gap: 1rem; font-size: .85rem; line-height: 1.45;
+    color: oklch(78% 0.02 250); list-style: none; }
+  .anatomy .k { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 84ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(68% 0.20 10); }
+  .rules code, .anatomy code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Patterns</p>
+  <h1 class="page">Detail page</h1>
+  <p class="lede">The show screen. A <code>space-y-6</code> stack: a <code>&lt;.page_header&gt;</code>
+    carrying the record's identity, then <strong>bands chosen per record</strong> — an optional
+    <strong>workflow row</strong> of status cards surfacing setup state (spacecraft show), a main / sidebar
+    <code>xl:grid-cols-[1fr_22rem]</code> split (transport show), or full-width cards ending in the
+    Overview definition grid (spacecraft show). The specimen below composes the shared parts;
+    no single page uses all of them at once — pick the bands the record needs.</p>
+
+  <p class="section-label">Composition</p>
+  <div class="specimen">
+    <!-- page_header with breadcrumbs + suffix + actions -->
+    <header class="ph">
+      <div>
+        <div class="crumbs">
+          <a>Aurora Constellation</a><span class="sep">/</span>
+          <a>Spacecraft</a><span class="sep">/</span>
+          <span class="cur">SAT-04 Aurora</span>
+        </div>
+        <h2>SAT-04 Aurora <span class="scid">SCID 0x2A</span></h2>
+      </div>
+    </header>
+
+    <!-- workflow status row -->
+    <section class="wf-row">
+      <div class="card">
+        <div class="wf-head"><p class="hud-label">Identity</p><span class="badge b-ready">Ready</span></div>
+        <h3 class="wf-value">Frame-recognizable</h3>
+        <p class="wf-desc">Values Cadence uses to recognize incoming bytes.</p>
+        <a class="wf-cta">Edit identity &rarr;</a>
+      </div>
+      <div class="card">
+        <div class="wf-head"><p class="hud-label">Profile</p><span class="badge b-attention">Needs Work</span></div>
+        <h3 class="wf-value">Aurora Bus v3</h3>
+        <p class="wf-desc">Byte-interpretation contract pinned for this spacecraft.</p>
+        <a class="wf-cta">Change profile &rarr;</a>
+      </div>
+      <div class="card">
+        <div class="wf-head"><p class="hud-label">Telemetry</p><span class="badge b-ready">Ready</span></div>
+        <h3 class="wf-value">14 packets decommutated</h3>
+        <p class="wf-desc">Live decom against the pinned profile.</p>
+        <a class="wf-cta">View telemetry &rarr;</a>
+      </div>
+    </section>
+
+    <!-- main + sidebar -->
+    <section class="split">
+      <div class="card">
+        <p class="card-title">Overview</p>
+        <div class="dl">
+          <div class="row"><span class="k">SCID</span><span class="v">0x2A (42)</span></div>
+          <div class="row"><span class="k">Display name</span><span class="v">SAT-04 Aurora</span></div>
+          <div class="row"><span class="k">Spacecraft ID</span><span class="v xs">sc_01HQ8M4Z…</span></div>
+          <div class="row"><span class="k">Mission</span><span class="v link">Aurora Constellation</span></div>
+          <div class="row full"><span class="k">Organization ID</span><span class="v xs">org_01Hct5P2RA9F…</span></div>
+        </div>
+      </div>
+      <div class="card side">
+        <p class="card-title">Recent activity</p>
+        <div class="row"><span class="k">14:22Z</span><span class="v">Identity updated</span></div>
+        <div class="row"><span class="k">09:10Z</span><span class="v">Profile pinned · v3</span></div>
+        <div class="row"><span class="k">Jun 24</span><span class="v">Spacecraft created</span></div>
+      </div>
+    </section>
+  </div>
+
+  <p class="section-label">Anatomy</p>
+  <ul class="anatomy">
+    <li><span class="k">&lt;.page_header&gt;</span><span>Identity of the record: breadcrumbs, the title, a key identifier in <code>:title_suffix</code> (or the raw ID in <code>subtitle</code>, as transport show does). Record-level actions go in <code>:actions</code> when a page has them — the shipped shows keep actions in their bands' CTAs instead.</span></li>
+    <li><span class="k">workflow row</span><span><em>(spacecraft show)</em> <code>xl:grid-cols-3</code> of plain <code>&lt;.card&gt;</code>s — each pairs a <code>&lt;.status_badge&gt;</code> (the sole status signal) with a value and a "go fix it" CTA. Surfaces setup state before the details.</span></li>
+    <li><span class="k">main / sidebar split</span><span><em>(transport show)</em> <code>xl:grid-cols-[1fr_22rem]</code> — the main card (a <code>&lt;.section_header&gt;</code> with a badge in its actions) beside a narrow companion for related collections or activity.</span></li>
+    <li><span class="k">&lt;.card title="Overview"&gt;</span><span>The definition block — <code>hud-data-row</code> pairs in a <code>md:grid-cols-2</code> grid; full-width rows use <code>col-span-2</code>. Spacecraft show renders it full-width as the closing band.</span></li>
+  </ul>
+
+  <div class="usage">
+    <p class="hud-label" style="margin:0 0 1rem">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Put the record's key identifier in <code>:title_suffix</code> (SCID, version); long opaque IDs go in <code>subtitle</code>. Never bury identity in the body.</li>
+      <li class="do"><span class="mark">&#10003;</span> Lead with the workflow row when a record has setup state; the <code>&lt;.status_badge&gt;</code> inside the card is the one status signal &mdash; no colored card border, no corner brackets.</li>
+      <li class="do"><span class="mark">&#10003;</span> Build definition data from <code>&lt;.detail_row&gt;</code> / <code>hud-data-row</code> so labels and monospace values stay consistent.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't hand-roll key/value markup per page — that's how label styling and mono alignment drift.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't duplicate "up" navigation in the body; breadcrumbs/back own going up, CTA links own going deeper.</li>
+    </ul>
+  </div>
+</body>
+</html>

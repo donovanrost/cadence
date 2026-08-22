@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "no_capacity",
+    "detail": "The selected antenna is no longer available.",
+    "retryable": false,
+    "retry_after_seconds": null,
+    "provider_request_ref": "provider-request-123"
+  },
+  "meta": {
+    "contract_version": "1.0",
+    "request_id": "request-123"
+  }
+}

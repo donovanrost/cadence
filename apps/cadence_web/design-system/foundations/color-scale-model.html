@@ -1,0 +1,140 @@
+<!-- @dsCard group="Foundations" name="Color scale model" subtitle="Two tiers — hue-literal primitives → functional semantics" width="1060" height="1860" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Color scale model</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 80ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 82ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.dec { border-color: oklch(72% 0.15 50 / 0.6); } .note.win { border-color: var(--st-green); }
+
+  /* tier diagram */
+  .tiers { display: grid; gap: .4rem; max-width: 56rem; margin-bottom: .4rem; }
+  .tier { border: 1px solid oklch(23% 0.025 258); border-radius: 2px; padding: .8rem 1rem; background: oklch(17% 0.02 260); }
+  .tier .n { font-family: ui-monospace, monospace; font-weight: 700; font-size: .82rem; }
+  .tier .e { font-family: ui-monospace, monospace; font-size: .72rem; color: oklch(82% 0.02 250 / 0.7); margin-top: .25rem; }
+  .tier.prim { border-left: 2px solid oklch(76% 0.15 285 / 0.7); } .tier.prim .n { color: oklch(76% 0.15 285); }
+  .tier.sem { border-left: 2px solid var(--glow-cyan); } .tier.sem .n { color: var(--glow-cyan); }
+  .tier.comp { border-left: 2px solid oklch(78% 0.12 175 / 0.7); } .tier.comp .n { color: var(--st-green); }
+  .arrow { text-align: center; font-family: ui-monospace, monospace; font-size: .72rem; color: oklch(60% 0.02 250); padding: .1rem 0; }
+  .arrow b { color: var(--glow-cyan); }
+
+  /* ramps */
+  .ramp { display: flex; gap: 0; max-width: 46rem; border-radius: 2px; overflow: hidden; margin-bottom: .3rem; border: 1px solid oklch(80% 0.12 210 / 0.12); }
+  .sw { flex: 1; height: 3rem; display: flex; align-items: flex-end; justify-content: center; padding-bottom: .25rem; font-family: ui-monospace, monospace; font-size: .58rem; }
+  .ramp-label { font-family: ui-monospace, monospace; font-size: .74rem; color: var(--glow-cyan); margin: .8rem 0 .25rem; }
+  .vals { font-family: ui-monospace, monospace; font-size: .64rem; color: oklch(82% 0.02 250 / 0.55); max-width: 46rem; margin-bottom: .4rem; }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px; padding: 1rem 1.1rem; overflow-x: auto;
+    font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; color: oklch(85% 0.02 250 / 0.85); max-width: 62rem; }
+  pre .c { color: oklch(60% 0.02 250); } pre .k { color: oklch(80% 0.12 210); } pre .v { color: oklch(76% 0.15 285); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; max-width: 64rem; }
+  th { text-align: left; font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .45rem .5rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .45rem .5rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.role { font-family: ui-monospace, monospace; color: var(--glow-cyan); white-space: nowrap; }
+  td.prim { font-family: ui-monospace, monospace; font-size: .74rem; color: oklch(76% 0.15 285); white-space: nowrap; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Color scale model</h1>
+  <div class="status">&#9678; Proposed — the two-tier color system. The matured <strong style="color:inherit">Color palette</strong> card becomes its primitive reference.</div>
+  <p class="lede">A mature palette is <strong>two tiers</strong>: <em>primitives</em> (the raw ramps, named by hue) and
+    <em>semantics</em> (the roles, named by job). Components touch <strong>only</strong> semantics. This is the
+    color-specific instance of the skin / outfit / body architecture — and it's what retires the alpha-faking and the
+    badge drift the contrast audit caught.</p>
+
+  <p class="section-label">The two tiers</p>
+  <div class="tiers">
+    <div class="tier comp"><div class="n">COMPONENT</div><div class="e">.btn-primary { color: var(--on-action) } &nbsp;·&nbsp; never a hue, never a primitive</div></div>
+    <div class="arrow">&#9595; references &#9595;</div>
+    <div class="tier sem"><div class="n">SEMANTIC · named by JOB</div><div class="e">--color-action · --on-action · --status-critical-fill · --border-focus · --chart-series-1</div></div>
+    <div class="arrow">&#9595; references &#9595;</div>
+    <div class="tier prim"><div class="n">PRIMITIVE · named by HUE</div><div class="e">cyan-500 · red-600 · green-400 · blue-500 &nbsp;·&nbsp; role-neutral, so one hue serves many roles</div></div>
+  </div>
+  <p class="note">Why primitives stay hue-named: <strong>one hue serves multiple roles.</strong> <code>cyan-500</code> is
+    <code>--color-action</code> <em>and</em> <code>--chart-series-1</code> <em>and</em> <code>--border-focus</code>. A
+    primitive named <code>--action</code> couldn't honestly be a chart line. Meaning lives one tier up.</p>
+
+  <p class="section-label">Primitive ramps — worked example: cyan</p>
+  <div class="ramp">
+    <div class="sw" style="background:oklch(90% 0.07 210);color:oklch(20% 0 0)">300</div>
+    <div class="sw" style="background:oklch(84% 0.10 210);color:oklch(20% 0 0)">400</div>
+    <div class="sw" style="background:oklch(80% 0.12 210);color:oklch(20% 0 0)">500</div>
+    <div class="sw" style="background:oklch(70% 0.14 210);color:oklch(95% 0 0)">600</div>
+    <div class="sw" style="background:oklch(60% 0.13 210);color:oklch(95% 0 0)">700</div>
+    <div class="sw" style="background:oklch(18% 0.04 210);color:oklch(84% 0.10 210)">on</div>
+  </div>
+  <div class="vals">500 = today's --glow-cyan (oklch 80% .12 210). ~5 steps + a paired "on" (dark text for cyan fills). Not a 50–950 ramp — only the steps that have a job.</div>
+
+  <p class="ramp-label">status hues — same shape, one ramp each</p>
+  <div class="ramp">
+    <div class="sw" style="background:oklch(70% 0.20 25);color:oklch(15% 0 0)">red 400</div>
+    <div class="sw" style="background:oklch(62% 0.25 25);color:oklch(98% 0 0)">500</div>
+    <div class="sw" style="background:oklch(55% 0.24 25);color:oklch(98% 0 0)">600 fill</div>
+    <div class="sw" style="background:oklch(82% 0.16 55);color:oklch(15% 0 0)">yel 400</div>
+    <div class="sw" style="background:oklch(78% 0.18 55);color:oklch(15% 0 0)">fill</div>
+    <div class="sw" style="background:oklch(82% 0.13 175);color:oklch(15% 0 0)">grn 400</div>
+    <div class="sw" style="background:oklch(70% 0.16 175);color:oklch(15% 0 0)">fill</div>
+    <div class="sw" style="background:oklch(74% 0.14 250);color:oklch(15% 0 0)">blu 400</div>
+    <div class="sw" style="background:oklch(70% 0.18 250);color:oklch(15% 0 0)">fill</div>
+  </div>
+  <p class="note win">&#10003; <strong>Green is officially hue 175</strong> — unifying the old badge <code>155</code>
+    / token <code>185</code> split into one. Surfaces &amp; neutrals are <em>already</em> mature ramps — leave them;
+    this tier only fills in the chromatic hues. The tuned, contrast-verified step values live in <strong>Color
+    palette</strong>.</p>
+
+  <p class="section-label">Semantic layer — roles point at ramp steps</p>
+  <table>
+    <thead><tr><th>Semantic (job)</th><th>&rarr; primitive</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="role">--color-action</td><td class="prim">cyan-500</td><td>links, primary buttons, focus (rest)</td></tr>
+      <tr><td class="role">--color-action-strong</td><td class="prim">cyan-600</td><td>hover, emphasis, fills</td></tr>
+      <tr><td class="role">--color-action-muted</td><td class="prim">cyan-400</td><td>secondary / disabled</td></tr>
+      <tr><td class="role">--on-action</td><td class="prim">cyan-on</td><td>text/icon on a cyan fill</td></tr>
+      <tr><td class="role">--status-critical-text</td><td class="prim">red-400</td><td>red text on dark surfaces</td></tr>
+      <tr><td class="role">--status-critical-fill</td><td class="prim">red-600</td><td>badge / chip background</td></tr>
+      <tr><td class="role">--on-status-critical</td><td class="prim">red-on</td><td>text on the red fill</td></tr>
+      <tr><td class="role">--status-critical-border</td><td class="prim">red-500</td><td>borders, dividers</td></tr>
+    </tbody>
+  </table>
+  <p class="note win">&#10003; This <em>retires the badge drift</em>: <code>badge-error</code> bg becomes
+    <code>--status-critical-fill</code> (a defined step) with <code>--on-status-critical</code> text — one systematized
+    pair, not an ad-hoc value that diverges from the token and fails contrast. The fix the audit applied by hand becomes
+    structural.</p>
+
+  <p class="section-label">Derivation — oklch does the work</p>
+<pre><span class="c">/* one base hue + lightness/chroma offsets — relative-color syntax derives the rest.
+   No 11 hand-picked hex values; the ramp is computed and stays perceptually even. */</span>
+<span class="k">--cyan-500</span>: <span class="v">oklch(80% 0.12 210)</span>;                          <span class="c">/* the anchor */</span>
+<span class="k">--cyan-600</span>: <span class="v">oklch(from var(--cyan-500) 70% 0.13 h)</span>;       <span class="c">/* darker, hue locked */</span>
+<span class="k">--cyan-400</span>: <span class="v">oklch(from var(--cyan-500) 85% 0.10 h)</span>;       <span class="c">/* lighter */</span>
+<span class="c">/* rule: vary L on a fixed ladder, keep H constant, nudge C so saturation
+   reads even (chroma peaks mid-lightness, tapers at the extremes). */</span></pre>
+
+  <p class="section-label">The job matrix — why ~6 steps, not 11</p>
+  <p class="note">Each chromatic color must cover a fixed set of <em>jobs</em>: <strong>text-on-dark · fill ·
+    on-fill · border · subtle-surface · muted</strong>. That's the ramp's size — defined by what the color must
+    <em>do</em>, not by a convention. A step with no job doesn't get authored; that restraint is the maturity, and it
+    keeps the closed-set discipline the frozen-CSS rule used to enforce crudely.</p>
+
+  <p class="section-label">Coherence — how the color cards relate</p>
+  <p class="note"><strong>Color palette</strong> = the primitive <em>reference</em> (the ramps as swatches — it should
+    grow from today's single values into these ramps). <strong>This card</strong> = the <em>model</em> (tiers,
+    derivation, jobs, semantics). The color semantics here <em>extend</em> the Outfit layer in
+    <strong>Semantic tokens</strong> — same tier, more color roles. Three cards, three jobs, no overlap.</p>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!-- @dsCard group="Components" name="Empty state" subtitle="<.empty_state> — no-rows placeholder · compact" width="960" height="800" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Empty state</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 68ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .75rem; }
+  .section-label + .section-label, .specimen + .section-label { margin-top: 1.75rem; }
+  /* Faithful default: dashed base-300/60 border, base-100/30 wash, p-8, centered */
+  .empty { border: 1px dashed oklch(23% 0.025 258 / 0.6); border-radius: 2px;
+    background: oklch(12% 0.02 265 / 0.3); padding: 2rem; text-align: center; }
+  .empty .icon { display: block; width: 2.5rem; height: 2.5rem; margin: 0 auto;
+    color: oklch(85% 0.02 250 / 0.3); }
+  /* Title is hud-label — chrome text at --chrome-chroma 0.02 */
+  .empty .title { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.02 210); margin: .75rem 0 0; }
+  .empty .desc { margin: .5rem auto 0; max-width: 28rem; font-size: .875rem; line-height: 1.45;
+    color: oklch(85% 0.02 250 / 0.7); }
+  .empty .cta { margin-top: 1.25rem; }
+  /* Faithful <.button> primary: cyan bg, dark content, 2px corners, never glows */
+  .btn { display: inline-flex; align-items: center; gap: .25rem; border: 0; border-radius: 2px;
+    background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); font: 600 .875rem/1 inherit;
+    font-family: inherit; padding: .65rem 1rem; cursor: pointer; }
+  .btn .plus { font-size: 1rem; line-height: 1; margin-left: -.125rem; }
+  /* Compact host: a card sub-panel (base-200, base-300 border) */
+  .panel { background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258); border-radius: 2px;
+    padding: 1rem; }
+  .panel .panel-title { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.02 210); margin: 0 0 .5rem; }
+  /* Faithful compact: one muted line, text-sm text-base-content/60 */
+  .compact-line { font-size: .875rem; color: oklch(85% 0.02 250 / 0.6); margin: 0; }
+  .caption { font-size: .72rem; color: oklch(60% 0.02 250); margin: .6rem 0 0; }
+  .caption code { font-family: ui-monospace, monospace; }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 78ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Empty state</h1>
+  <p class="lede">The no-rows placeholder — <code>&lt;.empty_state title="No transports" /&gt;</code>.
+    A dashed panel with an optional icon (<code>icon</code>, base-content/30), a <code>hud-label</code>
+    title (required), a <code>description</code>, and a primary create <code>&lt;.button&gt;</code> when
+    <code>action_label</code> is set with <code>action_navigate</code> or <code>action_patch</code>.
+    <code>compact</code> collapses everything to one muted line for inside a card or sub-panel.</p>
+
+  <p class="section-label">Default — icon · title · description · action</p>
+  <div class="specimen empty">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661l-2.02-6.682a2.25 2.25 0 00-2.154-1.6H6.524a2.25 2.25 0 00-2.154 1.6l-2.02 6.682a2.25 2.25 0 00-.1.661z"/>
+    </svg>
+    <p class="title">No transports</p>
+    <p class="desc">Create a transport to describe an external capability for moving bytes.</p>
+    <div class="cta">
+      <button type="button" class="btn"><span class="plus" aria-hidden="true">+</span> Create the first transport</button>
+    </div>
+  </div>
+  <p class="caption">Icon and description are optional; the action button renders only when
+    <code>action_label</code> is set. Without <code>icon</code> the title sits flush at the top.</p>
+
+  <p class="section-label">Compact — <code style="font-family:monospace;text-transform:none;letter-spacing:0">compact</code> inside a card sub-panel</p>
+  <div class="specimen panel">
+    <p class="panel-title">Pending invitations</p>
+    <p class="compact-line">No pending invitations.</p>
+  </div>
+  <p class="caption"><code>compact</code> renders only the title as <code>text-sm text-base-content/60</code> —
+    no border, icon, description, or action.</p>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Use when a list has <strong>no rows</strong> — it replaces the list's <code>&lt;.card&gt;</code>/table entirely, not a row inside it.</li>
+      <li class="do"><span class="mark">&#10003;</span> Put the create action <strong>inside</strong> the empty state via <code>action_label</code> + <code>action_navigate</code> (or <code>action_patch</code> for modal flows).</li>
+      <li class="do"><span class="mark">&#10003;</span> Use <code>compact</code> for empty sub-sections within a card ("No runs yet.") where the full dashed panel would be too loud.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't hand-roll a "nothing here" div or drop a bare <code>&lt;.button&gt;</code> on a blank page — this component is the one empty pattern.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't stack extra buttons in it; one create action. Secondary paths belong on the page header or docs links.</li>
+    </ul>
+  </div>
+</body>
+</html>

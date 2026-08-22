@@ -1,0 +1,153 @@
+<!-- @dsCard group="Foundations" name="Effect tokens & skins" subtitle="Dial-able flourishes · legibility & reduced-motion · step 2" width="1020" height="1560" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Effect tokens &amp; skins</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 74ch; font-size: .9rem; line-height: 1.5; }
+  .lede code, td code, .note code, li code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px;
+    padding: .4rem .7rem; margin-bottom: 1.8rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .82rem; color: oklch(82% 0.02 250 / 0.78); line-height: 1.5; max-width: 76ch; margin: 0 0 1rem;
+    border-left: 2px solid oklch(78% 0.12 175 / 0.5); padding-left: .9rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; max-width: 64rem; }
+  th { text-align: left; font-size: .66rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.role { font-family: ui-monospace, monospace; color: oklch(80% 0.12 210); white-space: nowrap; }
+  td.def { font-family: ui-monospace, monospace; font-size: .74rem; color: oklch(82% 0.02 250 / 0.7); }
+  td.leg { font-family: ui-monospace, monospace; font-size: .74rem; color: oklch(78% 0.12 175); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .75rem;
+    line-height: 1.55; color: oklch(85% 0.02 250 / 0.85); max-width: 64rem; }
+  pre .c { color: oklch(60% 0.02 250); }
+  pre .k { color: oklch(80% 0.12 210); }
+  pre .v { color: oklch(76% 0.15 285); }
+  pre .bad { color: oklch(72% 0.20 10); }
+  pre .good { color: oklch(78% 0.12 175); }
+  .ba { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; max-width: 64rem; }
+  .ba h3 { font-size: .68rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 .5rem; }
+  .ba .before h3 { color: oklch(72% 0.20 10); }
+  .ba .after h3 { color: oklch(78% 0.12 175); }
+
+  .un { display: grid; gap: .55rem; max-width: 80ch; padding: 0; margin: 0; }
+  .un li { list-style: none; display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(80% 0.02 250); }
+  .un .mark { flex: none; font-weight: 700; width: 1rem; text-align: center; }
+  .un .yes { color: oklch(78% 0.12 175); }
+  .un .no { color: oklch(72% 0.20 10); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Effect tokens &amp; skins</h1>
+  <div class="status">&#10003; Implemented (step 2) &mdash; the knobs are live in <code style="color:inherit">tokens.css</code>, wired through the CSS, and <code style="color:inherit">[data-skin="legible"]</code> ships in app.css. &#9678; ~54 Tailwind <code style="color:inherit">uppercase</code> utilities in templates still bypass <code style="color:inherit">--label-case</code>.</div>
+  <p class="lede">Step 1 named the <strong>roles</strong>; step 2 makes the <strong>flourishes</strong> dial-able.
+    Today the glow, the uppercase labels, and the pulsing dots are hardcoded literals in the HUD utilities, so
+    you can't turn them down. Here each becomes a <strong>Skin token</strong> the utilities read — which is what
+    finally makes a high-legibility mode and <code>prefers-reduced-motion</code> possible without touching a
+    single component.</p>
+
+  <p class="section-label">The knobs</p>
+  <table>
+    <thead><tr><th>Token</th><th>Default (HUD skin)</th><th>Dials</th><th>Legibility / reduced</th></tr></thead>
+    <tbody>
+      <tr><td class="role">--fx-glow-strength</td><td class="def">1</td><td>All neon glow — multiplies every glow's opacity.</td><td class="leg">0</td></tr>
+      <tr><td class="role">--label-case</td><td class="def">uppercase</td><td>Casing of <code>hud-label</code>, card titles, badges, table heads.</td><td class="leg">none</td></tr>
+      <tr><td class="role">--label-tracking</td><td class="def">0.12em</td><td>Letter-spacing on those same labels.</td><td class="leg">0.02em</td></tr>
+      <tr><td class="role">--pulse-nominal</td><td class="def">hud-pulse 2s …</td><td>Nominal status-dot breathe.</td><td class="leg">none</td></tr>
+      <tr><td class="role">--pulse-warning</td><td class="def">hud-pulse-warning 1s …</td><td>Warning status-dot blink.</td><td class="leg">none</td></tr>
+      <tr><td class="role">--pulse-critical</td><td class="def">hud-pulse-critical 0.5s …</td><td>Critical status-dot strobe.</td><td class="leg">none *</td></tr>
+      <tr><td class="role">--fx-scanline-opacity</td><td class="def">0.03</td><td>The scanline overlay intensity.</td><td class="leg">0</td></tr>
+      <tr><td class="role">--fx-corner-size</td><td class="def">12px</td><td>Length of the <code>hud-corners</code> brackets.</td><td class="leg">12px (kept)</td></tr>
+    </tbody>
+  </table>
+  <p class="note">* A skin can <em>retune</em> rather than kill: legibility could swap the critical strobe for a gentle
+    <code>hud-pulse 1.6s</code> opacity fade — attention without the photosensitive 0.5s scale-strobe. Removing motion
+    never removes meaning here: the dot keeps its red color and shape, so status survives with the animation gone.</p>
+
+  <p class="section-label">How a utility reads a knob</p>
+  <div class="ba">
+    <div class="before">
+      <h3>Before &mdash; hardcoded literal</h3>
+<pre><span class="k">.glow-cyan</span> {
+  box-shadow:
+    0 0 10px oklch(from var(--glow-cyan) l c h / <span class="bad">0.5</span>),
+    0 0 20px oklch(from var(--glow-cyan) l c h / <span class="bad">0.3</span>);
+}
+<span class="k">.hud-label</span> {
+  text-transform: <span class="bad">uppercase</span>;
+  letter-spacing: <span class="bad">0.12em</span>;
+}
+<span class="k">.hud-status-critical</span> .hud-status-dot {
+  animation: <span class="bad">hud-pulse-critical 0.5s …</span>;
+}</pre>
+    </div>
+    <div class="after">
+      <h3>After &mdash; reads the Skin knob</h3>
+<pre><span class="k">.glow-cyan</span> {
+  box-shadow:
+    0 0 10px oklch(from var(--glow-cyan) l c h / <span class="good">calc(0.5 * var(--fx-glow-strength))</span>),
+    0 0 20px oklch(from var(--glow-cyan) l c h / <span class="good">calc(0.3 * var(--fx-glow-strength))</span>);
+}
+<span class="k">.hud-label</span> {
+  text-transform: <span class="good">var(--label-case)</span>;
+  letter-spacing: <span class="good">var(--label-tracking)</span>;
+}
+<span class="k">.hud-status-critical</span> .hud-status-dot {
+  animation: <span class="good">var(--pulse-critical)</span>;
+}</pre>
+    </div>
+  </div>
+  <p class="note" style="border-color:oklch(80% 0.12 210 / 0.4)">This is value-tuning of <em>existing</em> declarations
+    plus new tokens — no new selectors — so it stays inside the frozen-CSS rule. The only added selector is the
+    <code>[data-skin]</code> root below, which is the same family as the existing <code>[data-theme="light"]</code> /
+    <code>[data-theme="dark"]</code> roots.</p>
+
+  <p class="section-label">Consumer 1 &mdash; reduced motion (automatic)</p>
+<pre><span class="c">/* respects the OS setting; kills only decorative motion */</span>
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    <span class="k">--pulse-nominal</span>:  <span class="v">none</span>;
+    <span class="k">--pulse-warning</span>:  <span class="v">none</span>;
+    <span class="k">--pulse-critical</span>: <span class="v">none</span>;
+  }
+}</pre>
+
+  <p class="section-label">Consumer 2 &mdash; the legibility skin (opt-in)</p>
+  <p class="note">A second axis that composes with <code>data-theme</code> (so <code>legible</code> works in dark or light).
+    Same Body, same Outfit roles — only the Skin knobs flip.</p>
+<pre><span class="k">[data-skin="legible"]</span> {
+  <span class="k">--fx-glow-strength</span>:    <span class="v">0</span>;         <span class="c">/* no glow */</span>
+  <span class="k">--label-case</span>:          <span class="v">none</span>;      <span class="c">/* sentence-case labels */</span>
+  <span class="k">--label-tracking</span>:      <span class="v">0.02em</span>;
+  <span class="k">--pulse-nominal</span>:       <span class="v">none</span>;
+  <span class="k">--pulse-warning</span>:       <span class="v">none</span>;
+  <span class="k">--pulse-critical</span>:      <span class="v">none</span>;
+  <span class="k">--fx-scanline-opacity</span>: <span class="v">0</span>;
+  <span class="c">/* and lift the lowest-contrast tier while we're here */</span>
+  <span class="k">--border-subtle</span>:       <span class="v">oklch(from var(--color-action) l c h / 0.30)</span>;
+}</pre>
+
+  <p class="section-label">What this unlocks — and what it doesn't</p>
+  <ul class="un">
+    <li><span class="mark yes">&#10003;</span> <strong>Reduced-motion respected</strong> — the 0.5s critical strobe was a genuine photosensitivity / fatigue risk in a 24/7 ops room. Now it's gone for anyone who asks the OS for it.</li>
+    <li><span class="mark yes">&#10003;</span> <strong>Legibility mode</strong> — drops the uppercase-tracked-tiny labels (the single biggest readability tax) and the glow, in one attribute.</li>
+    <li><span class="mark yes">&#10003;</span> <strong>Re-skinnable</strong> — the same knobs are how a future theme or white-label restyles without re-architecting.</li>
+    <li><span class="mark no">&#10007;</span> Does <em>not</em> fix the palette's raw contrast ratios — that's a Skin <em>value</em> audit (verify the oklch text/border pairs against AA), separate work.</li>
+    <li><span class="mark no">&#10007;</span> Does <em>not</em> address color-only status in charts / limits — that belongs to the data-visualization foundations (still unbuilt).</li>
+  </ul>
+</body>
+</html>

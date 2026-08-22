@@ -1,0 +1,180 @@
+<!-- @dsCard group="Components" name="List controls" subtitle="<.toolbar> + <.pagination>" width="960" height="1240" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — List controls</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --chrome: oklch(from var(--glow-cyan) 68% 0.02 h); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 66ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+  .note { font-size: .8rem; color: oklch(65% 0.02 250); margin: .6rem 0 0; }
+  .note code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+
+  /* Faithful flush card chrome (padding={:none}): base-200 bg, base-300 border, 2px corners */
+  .card { position: relative; background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258);
+    border-radius: 2px; }
+  .card::before, .card::after { content: ''; position: absolute; width: 12px; height: 12px;
+    border: 0 solid oklch(80% 0.12 210 / 0.5); }
+  .card::before { top: 0; left: 0; border-width: 2px 0 0 2px; }
+  .card::after { top: 0; right: 0; border-width: 2px 2px 0 0; }
+
+  /* Faithful <.toolbar>: flex wrap row, border-b base-300, px-4 py-2 */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: .75rem; border-bottom: 1px solid oklch(23% 0.025 258); padding: .5rem 1rem; }
+  .toolbar-group { display: flex; align-items: center; gap: .5rem; }
+
+  /* Faithful input-sm: sunken well bg, action-cyan border at 0.5 (dark), focus ring + ring */
+  .search { width: 16rem; max-width: 100%; background: oklch(10% 0.015 265);
+    border: 1px solid oklch(80% 0.12 210 / 0.5); border-radius: 2px; color: oklch(90% 0.02 250);
+    font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .8125rem; padding: .35rem .6rem;
+    box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.35); }
+  .search::placeholder { color: oklch(60% 0.02 250); }
+  .search:focus, .search.focused { border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.35), 0 0 0 1px oklch(80% 0.12 210 / 0.2),
+      0 0 10px oklch(80% 0.12 210 / 0.1); outline: none; }
+  .select-wrap { position: relative; }
+  .select-wrap .chev { position: absolute; right: .55rem; top: 50%; transform: translateY(-50%);
+    color: oklch(80% 0.12 210); pointer-events: none; font-size: .75rem; }
+  select.search { width: auto; appearance: none; -webkit-appearance: none; padding-right: 2rem; }
+
+  /* Faithful .btn ghost / xs-sm: 2px radius, uppercase, tracked */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    border: 1px solid transparent; border-radius: 2px; background: transparent;
+    color: oklch(85% 0.02 250); font-weight: 500; font-size: .75rem; letter-spacing: .08em;
+    text-transform: uppercase; cursor: pointer; }
+  .btn-sm { height: 2rem; padding: 0 .85rem; }
+  .btn-xs { height: 1.5rem; padding: 0 .6rem; font-size: .6875rem; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  /* Faithful .table slice: hud-label heads (chrome chroma 0.02), mono, cyan hairlines */
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: .8125rem; }
+  th { text-align: left; font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--chrome); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .75rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.1); padding: .55rem .75rem;
+    color: oklch(82% 0.02 250); }
+  .name { color: oklch(80% 0.12 210); }
+  .dim { color: oklch(82% 0.02 250 / 0.7); }
+
+  /* Faithful <.pagination>: border-t base-300, mono range label, ghost xs Prev/Next */
+  .pager { display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid oklch(23% 0.025 258); padding: .5rem 1rem; }
+  .range { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .75rem;
+    color: oklch(85% 0.02 250 / 0.7); }
+  .pager-btns { display: flex; align-items: center; gap: .25rem; }
+  .ghost-slot { border: 1px dashed oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: .6rem 1rem; font-size: .8rem; color: oklch(60% 0.02 250); font-style: italic; }
+  .stack { display: grid; gap: 1rem; }
+
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 80ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>List controls</h1>
+  <p class="lede">The fleet-scale list pair from <code>ListControls</code>: <code>&lt;.toolbar&gt;</code>
+    is the search row at the top of a flush card, <code>&lt;.pagination&gt;</code> the matching footer.
+    They own markup and event emission only — the LiveView owns state, URL, and data fetch. The search
+    box emits <code>"search"</code> with <code>%{"q" =&gt; term}</code>, debounced 300&nbsp;ms;
+    Prev/Next emit <code>"paginate"</code> with <code>%{"page" =&gt; n}</code>.</p>
+
+  <p class="section-label">Toolbar — search box · :filters slot · :actions slot</p>
+  <div class="card">
+    <div class="toolbar" style="border-bottom-color: transparent;">
+      <form onsubmit="return false" style="margin:0;">
+        <input class="search" type="search" placeholder="Search transports">
+      </form>
+      <div class="toolbar-group">
+        <div class="select-wrap">
+          <select class="search"><option>All kinds</option><option>TCP socket</option><option>Loopback</option></select>
+          <span class="chev">&#9662;</span>
+        </div>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn btn-sm" style="border-color: oklch(80% 0.12 210 / 0.4);">Export</button>
+      </div>
+    </div>
+  </div>
+  <p class="note">The <code>:filters</code> and <code>:actions</code> groups only render when the slot is
+    given. Filter selects patch a <code>&amp;filter=</code> param, same as search patches <code>?q=</code>.</p>
+
+  <p class="section-label">Composed — flush card: toolbar · &lt;.table&gt; · pagination</p>
+  <div class="card">
+    <div class="toolbar">
+      <form onsubmit="return false" style="margin:0;">
+        <input class="search focused" type="search" value="relay">
+      </form>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Name &#9650;</th><th>Kind</th><th>Capability</th><th>Endpoint</th><th>Version</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">Relay East A</td><td class="name" style="opacity:.8;">TCP SOCKET</td><td class="dim">BIDIRECTIONAL</td><td class="dim">gs-east.cadence.io:7500</td><td class="dim">v3</td></tr>
+        <tr><td class="name">Relay East B</td><td class="name" style="opacity:.8;">TCP SOCKET</td><td class="dim">BIDIRECTIONAL</td><td class="dim">gs-east.cadence.io:7501</td><td class="dim">v3</td></tr>
+        <tr><td class="name">Relay Polar Uplink</td><td class="name" style="opacity:.8;">TCP SOCKET</td><td class="dim">SEND ONLY</td><td class="dim">polar.cadence.io:9010</td><td class="dim">v1</td></tr>
+        <tr><td class="name">Relay West A</td><td class="name" style="opacity:.8;">TCP SOCKET</td><td class="dim">RECEIVE ONLY</td><td class="dim">gs-west.cadence.io:7500</td><td class="dim">v2</td></tr>
+      </tbody>
+    </table>
+    <div class="pager">
+      <span class="range">51&#8211;100 of 112</span>
+      <div class="pager-btns">
+        <button class="btn btn-xs">Prev</button>
+        <button class="btn btn-xs">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="section-label">Pagination states</p>
+  <div class="stack">
+    <div class="card">
+      <div class="pager" style="border-top-color: transparent;">
+        <span class="range">1&#8211;50 of 132</span>
+        <div class="pager-btns">
+          <button class="btn btn-xs" disabled>Prev</button>
+          <button class="btn btn-xs">Next</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pager" style="border-top-color: transparent;">
+        <span class="range">101&#8211;132 of 132</span>
+        <div class="pager-btns">
+          <button class="btn btn-xs">Prev</button>
+          <button class="btn btn-xs" disabled>Next</button>
+        </div>
+      </div>
+    </div>
+    <div class="ghost-slot">total_count &#8804; page_size &#8594; <code style="font-style:normal; color: oklch(80% 0.10 210); font-family: ui-monospace, monospace;">&lt;.pagination&gt;</code> renders nothing</div>
+  </div>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> The <strong>URL is the source of truth</strong> for list state: translate <code>"search"</code>/<code>"sort"</code>/<code>"paginate"</code> into <code>push_patch</code> so <code>?q=&amp;sort=&amp;dir=&amp;page=&amp;filter=</code> stays shareable and back-button-safe. Parse with <code>CadenceWeb.ListParams</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Search is debounced (<code>debounce</code> default <code>300</code>) and emits <code>%{"q" =&gt; term}</code>; reset <code>page: 1</code> on a new query so results don't land on a stale page.</li>
+      <li class="do"><span class="mark">&#10003;</span> The toolbar lives <em>inside</em> the flush card (<code>&lt;.card padding={:none}&gt;</code>) directly above <code>&lt;.table&gt;</code>; <code>&lt;.pagination&gt;</code> is the matching footer fed by <code>Cadence.Listing.Page</code> fields.</li>
+      <li class="do"><span class="mark">&#10003;</span> Adopt these only when a list can realistically exceed a screenful — organizationally bounded lists (missions, profiles, catalog) can skip them.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't build "Page 1 of 1" chrome or hide the footer by hand — <code>&lt;.pagination&gt;</code> already renders nothing when everything fits on one page.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't keep search/sort/page in socket-only assigns — a list state that isn't in the URL can't be shared, bookmarked, or restored by the back button.</li>
+    </ul>
+  </div>
+</body>
+</html>

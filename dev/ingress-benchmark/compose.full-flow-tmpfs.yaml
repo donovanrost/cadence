@@ -1,0 +1,221 @@
+name: ${CADENCE_INGRESS_BENCHMARK_PROJECT:-cadence-ingress-500}
+
+x-bounded-logging: &bounded-logging
+  driver: local
+  options:
+    max-size: 2m
+    max-file: "1"
+    compress: "false"
+
+x-harness-mounts: &harness-mounts
+  - type: bind
+    source: ${CADENCE_INGRESS_BENCHMARK_MANIFEST:-./full-flow-500mbps-manifest.yaml}
+    target: /benchmark/config/run-manifest.yaml
+    read_only: true
+  - type: tmpfs
+    target: /benchmark/corpus
+    tmpfs: {size: 16777216, mode: 448}
+  - type: tmpfs
+    target: /benchmark/results
+    tmpfs: {size: 8388608, mode: 448}
+  - type: tmpfs
+    target: /benchmark/scratch
+    tmpfs: {size: 16777216, mode: 448}
+  - type: tmpfs
+    target: /benchmark/journal
+    tmpfs: {size: 1073741824, mode: 448}
+  - type: tmpfs
+    target: /tmp
+    tmpfs: {size: 16777216, mode: 511}
+
+x-source-mounts: &source-mounts
+  - type: bind
+    source: ${CADENCE_INGRESS_BENCHMARK_MANIFEST:-./full-flow-500mbps-manifest.yaml}
+    target: /benchmark/config/run-manifest.yaml
+    read_only: true
+  - type: tmpfs
+    target: /benchmark/corpus
+    tmpfs: {size: 16777216, mode: 448}
+  - type: tmpfs
+    target: /benchmark/results
+    tmpfs: {size: 8388608, mode: 448}
+  - type: tmpfs
+    target: /benchmark/scratch
+    tmpfs: {size: 16777216, mode: 448}
+  - type: tmpfs
+    target: /tmp
+    tmpfs: {size: 16777216, mode: 511}
+
+services:
+  preflight:
+    profiles: [preflight]
+    build:
+      context: ../..
+      dockerfile: dev/ingress-benchmark/Dockerfile
+      target: runtime
+    image: cadence-ingress-harness:local
+    read_only: true
+    init: true
+    restart: "no"
+    mem_limit: 256m
+    cpus: 1.0
+    volumes: *harness-mounts
+    command:
+      - ingress_preflight
+      - --manifest
+      - /benchmark/config/run-manifest.yaml
+      - --component
+      - cadence
+      - --pretty
+    logging: *bounded-logging
+
+  traffic_source:
+    build:
+      context: ../..
+      dockerfile: dev/ingress-benchmark/Dockerfile
+      target: runtime
+    image: cadence-ingress-harness:local
+    read_only: true
+    init: true
+    restart: "no"
+    mem_limit: 384m
+    cpus: 2.0
+    volumes: *source-mounts
+    depends_on:
+      cadence:
+        condition: service_started
+    command:
+      - ingress_source
+      - --manifest
+      - /benchmark/config/run-manifest.yaml
+      - --component
+      - traffic_source
+      - --tcp
+      - cadence:4601
+      - --connect-timeout-ms
+      - "90000"
+      - --send-timeout-ms
+      - "5000"
+      - --pretty
+    logging: *bounded-logging
+
+  cadence:
+    build:
+      context: ../..
+      dockerfile: dev/ingress-benchmark/Dockerfile
+      target: cadence-full-flow
+    image: cadence-ingress-full-flow:local
+    read_only: true
+    init: true
+    restart: "no"
+    mem_limit: ${CADENCE_INGRESS_CADENCE_MEM_LIMIT:-3584m}
+    cpus: 4.0
+    expose: ["4601"]
+    volumes: *harness-mounts
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cadence_ingress_benchmark
+      OTEL_SERVICE_NAME: cadence-ingress-benchmark
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: http://otel_collector:4318/v1/metrics
+      CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS: "1000"
+      CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS: "1000"
+      CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS: "60000"
+      CADENCE_OTEL_LOG_LEVEL: warning
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel_collector:
+        condition: service_started
+    logging: *bounded-logging
+
+  postgres:
+    image: postgres:17-bookworm
+    read_only: true
+    restart: "no"
+    mem_limit: ${CADENCE_INGRESS_POSTGRES_MEM_LIMIT:-1536m}
+    shm_size: 256m
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cadence_ingress_benchmark
+    tmpfs:
+      - /var/lib/postgresql/data:size=${CADENCE_INGRESS_POSTGRES_TMPFS_BYTES:-1342177280},mode=0700
+      - /var/run/postgresql:size=16777216,mode=0775
+      - /tmp:size=16777216,mode=1777
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cadence_ingress_benchmark"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    logging: *bounded-logging
+
+  greptimedb:
+    image: greptime/greptimedb:v1.1.2
+    command:
+      - standalone
+      - start
+      - --http-addr=0.0.0.0:4000
+      - --rpc-bind-addr=0.0.0.0:4001
+      - --mysql-addr=0.0.0.0:4002
+      - --postgres-addr=0.0.0.0:4003
+    read_only: true
+    restart: "no"
+    mem_limit: 512m
+    tmpfs:
+      - /greptimedb_data:size=268435456,mode=0755
+      - /tmp:size=16777216,mode=1777
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:4000/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    logging: *bounded-logging
+
+  otel_collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    command: ["--config=/etc/otel-collector/config.yaml"]
+    read_only: true
+    restart: "no"
+    mem_limit: 128m
+    volumes:
+      - type: bind
+        source: ./otel-collector.metrics-only.yaml
+        target: /etc/otel-collector/config.yaml
+        read_only: true
+    tmpfs:
+      - /tmp:size=16777216,mode=1777
+    depends_on:
+      greptimedb:
+        condition: service_healthy
+    logging: *bounded-logging
+
+  grafana:
+    image: grafana/grafana:12.2.10
+    read_only: true
+    restart: "no"
+    mem_limit: 256m
+    ports:
+      - "3300:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ALERTING_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "false"
+    volumes:
+      - type: bind
+        source: ../grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+      - type: tmpfs
+        target: /var/lib/grafana
+        tmpfs: {size: 67108864, mode: 511}
+      - type: tmpfs
+        target: /tmp
+        tmpfs: {size: 16777216, mode: 511}
+    depends_on:
+      greptimedb:
+        condition: service_healthy
+    logging: *bounded-logging

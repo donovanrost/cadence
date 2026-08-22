@@ -1,0 +1,372 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Golden signals, mission-aware service levels, runtime saturation, and OTLP pipeline health for Cadence.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Ingress load test",
+      "type": "link",
+      "url": "/d/cadence-ingress-load-test/cadence-ingress-load-test"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Logs drilldown",
+      "type": "link",
+      "url": "/a/grafana-lokiexplore-app/explore"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Traces drilldown",
+      "type": "link",
+      "url": "/a/grafana-exploretraces-app/explore"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [],
+      "title": "Service golden signals",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.01}]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1},
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\",error_type!=\"\"}[5m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[5m])), 1)",
+          "legendFormat": "error ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP error ratio (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "reqps"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 9, "x": 6, "y": 1},
+      "id": 2,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (http_request_method, http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[5m]))",
+          "legendFormat": "{{http_request_method}} {{http_route}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 9, "x": 15, "y": 1},
+      "id": 3,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[5m])))",
+          "legendFormat": "p95 {{http_route}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[5m])))",
+          "legendFormat": "p99 {{http_route}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "HTTP latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 6},
+      "id": 4,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(db_client_operation_duration_seconds_bucket{service_name=~\"$service\"}[5m])))",
+          "legendFormat": "db p95",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Database latency",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+      "id": 101,
+      "panels": [],
+      "title": "Mission-aware service levels",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.01}]},
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 15},
+      "id": 5,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "percentChangeColorMode": "standard", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(cadence_telemetry_availability_interval_total{service_name=~\"$service\",outcome=\"missed\"}[15m])) / clamp_min(sum(rate(cadence_telemetry_availability_interval_total{service_name=~\"$service\"}[15m])), 1)",
+          "legendFormat": "missed ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Expected-contact miss ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 6, "y": 15},
+      "id": 6,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "cadence_telemetry_freshness_seconds{service_name=~\"$service\",cadence_mission_id=~\"$mission\"} and on(cadence_mission_id) cadence_telemetry_expected{service_name=~\"$service\"} == 1",
+          "legendFormat": "{{cadence_mission_id}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Telemetry freshness while expected",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 15, "y": 15},
+      "id": 7,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "cadence_commanding_queue_pending{service_name=~\"$service\",cadence_mission_id=~\"$mission\"}",
+          "legendFormat": "pending {{cadence_mission_id}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "cadence_commanding_queue_oldest_eligible_age_seconds{service_name=~\"$service\",cadence_mission_id=~\"$mission\"}",
+          "legendFormat": "age {{cadence_mission_id}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Command queue pressure",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 102,
+      "panels": [],
+      "title": "Runtime and ingestion saturation",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_queue_depth{service_name=~\"$service\"}", "legendFormat": "ingress {{downstream}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "cadence_telemetry_persistence_queue_depth{service_name=~\"$service\"}", "legendFormat": "persistence", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "cadence_telemetry_ingress_backpressure{service_name=~\"$service\"}", "legendFormat": "backpressure", "range": true, "refId": "C"}
+      ],
+      "title": "Ingress queues and backpressure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24},
+      "id": 9,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "beam_memory_usage_bytes{service_name=~\"$service\"}", "legendFormat": "{{memory_type}}", "range": true, "refId": "A"}
+      ],
+      "title": "BEAM memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24},
+      "id": 10,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "beam_process_count{service_name=~\"$service\"} / beam_process_limit{service_name=~\"$service\"}", "legendFormat": "process utilization", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "beam_port_count{service_name=~\"$service\"} / beam_port_limit{service_name=~\"$service\"}", "legendFormat": "port utilization", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "beam_scheduler_run_queue{service_name=~\"$service\"}", "legendFormat": "run queue", "range": true, "refId": "C"}
+      ],
+      "title": "BEAM saturation",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 103,
+      "panels": [],
+      "title": "Observability pipeline",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+      "id": 11,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "otel_sdk_processor_log_queue_size{service_name=~\"$service\"}", "legendFormat": "log queue", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "otel_sdk_processor_log_queue_capacity{service_name=~\"$service\"}", "legendFormat": "log capacity", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "otel_sdk_exporter_metric_data_point_inflight{service_name=~\"$service\"}", "legendFormat": "metric series", "range": true, "refId": "C"}
+      ],
+      "title": "Exporter queues",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 8, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+      "id": 12,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum by (error_type) (rate(otel_sdk_exporter_log_exported_total{service_name=~\"$service\"}[5m]))", "legendFormat": "logs {{error_type}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum by (error_type) (rate(otel_sdk_exporter_metric_data_point_exported_total{service_name=~\"$service\"}[5m]))", "legendFormat": "metrics {{error_type}}", "range": true, "refId": "B"}
+      ],
+      "title": "Export outcomes",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["cadence", "sre", "opentelemetry"],
+  "templating": {
+    "list": [
+      {
+        "current": {"text": "cadence.*", "value": "cadence.*"},
+        "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+        "definition": "label_values(beam_memory_usage_bytes, service_name)",
+        "includeAll": false,
+        "label": "Service",
+        "name": "service",
+        "options": [],
+        "query": {"query": "label_values(beam_memory_usage_bytes, service_name)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+        "refresh": 1,
+        "regex": "/cadence.*/",
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "greptimedb-prometheus"},
+        "definition": "label_values(cadence_telemetry_expected, cadence_mission_id)",
+        "includeAll": true,
+        "label": "Mission",
+        "name": "mission",
+        "options": [],
+        "query": {"query": "label_values(cadence_telemetry_expected, cadence_mission_id)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Cadence / SRE Overview",
+  "uid": "cadence-sre-overview",
+  "version": 1,
+  "weekStart": ""
+}

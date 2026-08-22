@@ -1,0 +1,159 @@
+<!-- @dsCard group="Foundations" name="Data viz · charts" subtitle="Chart anatomy · series palette · limit overlays" width="1040" height="1440" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Data viz · charts</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 74ch; font-size: .9rem; line-height: 1.5; }
+  .lede code, .note code, .rules code, td code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.12 210);
+    border: 1px solid oklch(80% 0.12 210 / 0.35); background: oklch(80% 0.12 210 / 0.07); border-radius: 2px;
+    padding: .4rem .7rem; margin-bottom: 1.8rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .82rem; color: oklch(82% 0.02 250 / 0.78); line-height: 1.5; max-width: 78ch; margin: .2rem 0 1rem;
+    border-left: 2px solid oklch(78% 0.12 175 / 0.5); padding-left: .9rem; }
+  .note.warn { border-color: oklch(72% 0.20 10 / 0.6); }
+  .tag { font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .35rem;
+    border-radius: 2px; vertical-align: middle; margin-left: .4rem; }
+  .tag.cur { color: oklch(78% 0.12 175); background: oklch(78% 0.12 175 / 0.15); }
+  .tag.prop { color: oklch(80% 0.15 50); background: oklch(72% 0.15 50 / 0.15); }
+
+  .chart-wrap { border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px; background: oklch(10% 0.02 265 / 0.5);
+    padding: 1rem; max-width: 600px; }
+  .tick { font-family: ui-monospace, monospace; font-size: 9px; fill: oklch(82% 0.02 250 / 0.6); }
+  .legend { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-top: .75rem; font-family: ui-monospace, monospace; font-size: .72rem; color: oklch(82% 0.02 250 / 0.8); }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .swatch { width: 1.4rem; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
+
+  .pal { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .pal .s { text-align: center; }
+  .pal .bar { width: 5.5rem; height: 1.4rem; border-radius: 2px; }
+  .pal .nm { font-family: ui-monospace, monospace; font-size: .68rem; margin-top: .3rem; color: oklch(82% 0.02 250 / 0.8); }
+  .reserved { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .reserved .r { font-family: ui-monospace, monospace; font-size: .7rem; padding: .25rem .55rem; border-radius: 2px;
+    border: 1px dashed currentColor; }
+
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Data viz &middot; charts</h1>
+  <div class="status">&#9678; Grounded in the real <code style="color:inherit">telemetry_chart.js</code> hook. Tags mark <span class="tag cur">current</span> vs <span class="tag prop">proposed</span>.</div>
+  <p class="lede">Cadence is a telemetry product — the time-series strip chart is its core surface, not an afterthought.
+    The governing rule: <strong>a series' color identifies <em>which signal</em> it is; a value's color says
+    <em>how it's doing</em></strong>. Those two jobs must never share a hue, or a red line becomes ambiguous —
+    is it "series 4" or "in red limit"?</p>
+
+  <p class="section-label">Anatomy</p>
+  <div class="chart-wrap">
+    <svg viewBox="0 0 600 250" width="100%" role="img" aria-label="Telemetry strip chart specimen">
+      <!-- caution band (proposed shading) -->
+      <rect x="50" y="30" width="500" height="34" fill="oklch(72% 0.15 50 / 0.06)"></rect>
+      <!-- grid -->
+      <g stroke="oklch(82% 0.04 270 / 0.08)" stroke-width="1">
+        <line x1="50" y1="64" x2="550" y2="64"></line>
+        <line x1="50" y1="110" x2="550" y2="110"></line>
+        <line x1="50" y1="156" x2="550" y2="156"></line>
+        <line x1="50" y1="202" x2="550" y2="202"></line>
+        <line x1="170" y1="20" x2="170" y2="210"></line>
+        <line x1="290" y1="20" x2="290" y2="210"></line>
+        <line x1="410" y1="20" x2="410" y2="210"></line>
+        <line x1="530" y1="20" x2="530" y2="210"></line>
+      </g>
+      <!-- red limit threshold (current: solid red line) -->
+      <line x1="50" y1="30" x2="550" y2="30" stroke="oklch(68% 0.20 10 / 0.82)" stroke-width="1.5"></line>
+      <text x="554" y="33" class="tick" style="fill:oklch(68% 0.20 10 / 0.9)">RED HI</text>
+      <!-- yellow limit threshold (current: dashed yellow) -->
+      <line x1="50" y1="64" x2="550" y2="64" stroke="oklch(72% 0.15 50 / 0.82)" stroke-width="1.5" stroke-dasharray="6 4"></line>
+      <!-- axes -->
+      <line x1="50" y1="20" x2="50" y2="210" stroke="oklch(82% 0.04 270 / 0.6)" stroke-width="1"></line>
+      <line x1="50" y1="210" x2="550" y2="210" stroke="oklch(82% 0.04 270 / 0.6)" stroke-width="1"></line>
+      <!-- series A (cyan identity) -->
+      <polyline fill="none" stroke="oklch(80% 0.12 210)" stroke-width="1.5"
+        points="50,150 110,140 170,120 230,132 290,108 350,96 410,104 470,84 530,92 550,88"></polyline>
+      <!-- series B (violet identity) -->
+      <polyline fill="none" stroke="oklch(72% 0.15 285)" stroke-width="1.5"
+        points="50,185 110,178 170,186 230,172 290,166 350,173 410,160 470,168 530,150 550,154"></polyline>
+      <!-- compare trace (slate dashed, thin) -->
+      <polyline fill="none" stroke="oklch(78% 0.02 250 / 0.76)" stroke-width="1.1" stroke-dasharray="6 4"
+        points="50,196 110,194 170,198 230,190 290,192 350,186 410,190 470,184 530,182 550,184"></polyline>
+      <!-- y ticks -->
+      <text x="44" y="67" text-anchor="end" class="tick">40.0</text>
+      <text x="44" y="113" text-anchor="end" class="tick">30.0</text>
+      <text x="44" y="159" text-anchor="end" class="tick">20.0</text>
+      <text x="44" y="205" text-anchor="end" class="tick">10.0</text>
+      <!-- x ticks -->
+      <text x="170" y="223" text-anchor="middle" class="tick">14:20:00Z</text>
+      <text x="290" y="223" text-anchor="middle" class="tick">14:25:00Z</text>
+      <text x="410" y="223" text-anchor="middle" class="tick">14:30:00Z</text>
+      <text x="530" y="223" text-anchor="middle" class="tick">14:35:00Z</text>
+    </svg>
+    <div class="legend">
+      <span><span class="swatch" style="border-top-color:oklch(80% 0.12 210)"></span> BATT_V</span>
+      <span><span class="swatch" style="border-top-color:oklch(72% 0.15 285)"></span> BUS_V</span>
+      <span><span class="swatch" style="border-top-color:oklch(78% 0.02 250 / 0.76);border-top-style:dashed"></span> BATT_V · prior pass</span>
+    </div>
+  </div>
+  <p class="note">Axis <code>oklch(82% .04 270 / .6)</code>, grid <code>/ .08</code>, mono tick labels — the existing
+    hook values, just expressed in tokens. <span class="tag cur">current</span> these are literal rgba in the JS; they
+    should read a <code>--chart-axis</code> / <code>--border-subtle</code> token (ties to Token architecture).</p>
+
+  <p class="section-label">Series palette — identity, never status</p>
+  <div class="pal">
+    <div class="s"><div class="bar" style="background:oklch(80% 0.12 210)"></div><div class="nm">1 · cyan 210</div></div>
+    <div class="s"><div class="bar" style="background:oklch(72% 0.15 285)"></div><div class="nm">2 · violet 285</div></div>
+    <div class="s"><div class="bar" style="background:oklch(70% 0.20 330)"></div><div class="nm">3 · magenta 330</div></div><!-- ds-allow: proposed series palette -->
+    <div class="s"><div class="bar" style="background:oklch(82% 0.09 230)"></div><div class="nm">4 · sky 230</div></div><!-- ds-allow: proposed series palette -->
+    <div class="s"><div class="bar" style="background:oklch(78% 0.02 250)"></div><div class="nm">compare · slate</div></div>
+  </div>
+  <p class="note warn"><span class="tag prop">proposed</span> Today's palette in the hook is
+    <code>[cyan, cyan, yellow, red, purple]</code> — <strong>yellow and red collide with alarm meaning.</strong>
+    Drop them. Identity hues must avoid the reserved status hues below; extend a long series list with
+    <em>lightness + dash weight</em>, not more hues, and switch to small multiples past ~6 signals.</p>
+  <div class="reserved">
+    <span class="r" style="color:oklch(68% 0.20 10)">red 25 — limit</span>
+    <span class="r" style="color:oklch(72% 0.15 50)">yellow 50 — limit</span>
+    <span class="r" style="color:oklch(78% 0.12 175)">green 185 — limit</span>
+    <span class="r" style="color:oklch(70% 0.14 250)">blue 250 — limit/info</span>
+  </div>
+
+  <p class="section-label">Limit overlays on a chart</p>
+  <p class="note"><strong>Threshold lines</strong> <span class="tag cur">current</span> — red limits solid, yellow limits
+    dashed, at the limit value. <strong>Caution-band shading</strong> <span class="tag prop">proposed</span> — a faint
+    fill (<code>status / 0.06</code>) between thresholds so the safe corridor reads at a glance without staring at
+    the y-axis. Keep both subtle: the data line is the figure, the limits are ground.</p>
+
+  <p class="section-label">Numbers &amp; time</p>
+  <p class="note">Values are monospace with <code>tabular-nums</code> (use <code>.mc-value-*</code>), fixed per-point
+    precision, unit as a dim suffix. Time is always <strong>UTC</strong>, <code>HH:MM:SSZ</code> on axes and
+    <code>YYYY-MM-DDTHH:MM:SSZ</code> in detail. Never let digits reflow — tabular figures keep a streaming value
+    from twitching.</p>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Color a series by <strong>identity</strong> from the palette above; color a <em>value</em> by its limit state. Never the same hue for both jobs.</li>
+      <li class="do"><span class="mark">&#10003;</span> Keep limits as <em>ground</em> (thin lines, faint bands) and the signal as <em>figure</em> — the data line is always the most prominent mark.</li>
+      <li class="do"><span class="mark">&#10003;</span> Secondary / compare traces are slate, thinner (1.1), dashed — visibly subordinate to the live series.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't put red, yellow, green, or info-blue in the identity palette — those hues are spoken for by limits.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't solve "many series" with more colors — past ~6, vary lightness/dash or break into small multiples.</li>
+    </ul>
+  </div>
+</body>
+</html>

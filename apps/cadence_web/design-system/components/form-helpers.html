@@ -1,0 +1,139 @@
+<!-- @dsCard group="Components" name="Form helpers" subtitle="<.form_section> + <.form_actions>" width="980" height="1240" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Form helpers</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 70ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.4rem 0 1.1rem; }
+
+  /* specimens live at form width — max-w-2xl */
+  .specimen { max-width: 42rem; }
+  .stack-8 > * + * { margin-top: 2rem; }
+  .stack-4 > * + * { margin-top: 1rem; }
+
+  /* faithful hud-label: dark-mode chrome text at --chrome-chroma (0.02) */
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); margin: 0; }
+
+  /* <.form_section> heading: hud-label number (text-primary/70) + title + h-px divider */
+  .sec-head { display: flex; align-items: center; gap: .75rem; }
+  .sec-head .num { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(80% 0.12 210 / 0.7); }
+  .sec-head .line { flex: 1; height: 1px; background: oklch(23% 0.025 258 / 0.6); }
+
+  /* faithful <.input> (resting border: action cyan at 0.2 alpha) */
+  .flabel { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); display: block; margin-bottom: .375rem; }
+  .control { width: 100%; background: oklch(10% 0.015 265); border: 1px solid oklch(80% 0.12 210 / 0.5);
+    border-radius: 2px; color: oklch(90% 0.02 250); font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: .875rem; padding: .45rem .6rem; }
+  .control::placeholder { color: oklch(55% 0.02 250); }
+  .select-wrap { position: relative; }
+  .select-wrap .chev { position: absolute; right: .6rem; top: 50%; transform: translateY(-50%);
+    color: oklch(80% 0.12 210); pointer-events: none; font-size: .8rem; }
+  select.control { appearance: none; -webkit-appearance: none; padding-right: 2.2rem; }
+
+  /* <.form_actions> row: border-t border-base-300/60 pt-5, :md submit + ghost cancel */
+  .actions { display: flex; align-items: center; gap: .75rem; border-top: 1px solid oklch(23% 0.025 258 / 0.6); padding-top: 1.25rem; }
+  .btn { display: inline-flex; align-items: center; gap: .4rem; height: 2.75rem; padding: 0 1.4rem; border-radius: 2px;
+    border: 1px solid transparent; cursor: pointer; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; font-size: .75rem; }
+  .btn-primary { background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(80% 0.12 210 / 0.2); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: transparent; }
+  .extra-note { font-size: .8rem; color: oklch(85% 0.02 250 / 0.6); margin-left: auto; }
+
+  /* attrs + usage */
+  .anatomy { display: grid; gap: .55rem; max-width: 84ch; margin: .4rem 0 0; padding: 0; }
+  .anatomy li { display: grid; grid-template-columns: 15rem 1fr; gap: 1rem; font-size: .85rem; line-height: 1.45;
+    color: oklch(78% 0.02 250); list-style: none; }
+  .anatomy .k { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 84ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(70% 0.16 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code, .anatomy code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Form helpers</h1>
+  <p class="lede">The two composition helpers from <code>CadenceWeb.Components.Forms</code>.
+    <code>&lt;.form_section&gt;</code> renders a numbered <code>hud-label</code> heading — number
+    (<code>text-primary/70</code>), title, <code>h-px</code> divider — over a <code>space-y-4</code>
+    body of fields. <code>&lt;.form_actions&gt;</code> is the canonical footer: a <code>:md</code>
+    primary submit and an optional ghost Cancel over <code>border-t border-base-300/60 pt-5</code>.
+    Sections stack with <code>space-y-8</code> inside a <code>max-w-2xl</code> form.</p>
+
+  <p class="section-label">&lt;.form_section&gt; — numbered sections</p>
+  <div class="specimen stack-8">
+    <section class="stack-4">
+      <div class="sec-head"><span class="num">01</span><h2 class="hud-label">Identity</h2><div class="line"></div></div>
+      <div><label class="flabel">Display Name</label>
+        <input class="control" type="text" value="AWS Ground Station"></div>
+      <div><label class="flabel">Transport Kind</label>
+        <div class="select-wrap"><select class="control"><option>TCP socket</option></select><span class="chev">&#9662;</span></div></div>
+    </section>
+    <section class="stack-4">
+      <div class="sec-head"><span class="num">02</span><h2 class="hud-label">TCP Socket Capability</h2><div class="line"></div></div>
+      <div><label class="flabel">Direction Capability</label>
+        <div class="select-wrap"><select class="control"><option>Bidirectional</option><option>Inbound</option><option>Outbound</option></select><span class="chev">&#9662;</span></div></div>
+      <div><label class="flabel">Host</label>
+        <input class="control" type="text" value="us-west-2.ags.amazonaws.com"></div>
+    </section>
+  </div>
+
+  <p class="section-label">&lt;.form_actions&gt; — footer variants</p>
+  <div class="specimen stack-8">
+    <!-- submit + cancel_navigate (the usual pairing) -->
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Create Transport</button>
+      <button class="btn btn-ghost">Cancel</button>
+    </div>
+    <!-- defaults: submit="Save", no cancel_navigate -->
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Save</button>
+    </div>
+    <!-- inner block renders after Cancel -->
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Save Identity</button>
+      <button class="btn btn-ghost">Cancel</button>
+      <span class="extra-note">Changes apply on the next contact</span>
+    </div>
+  </div>
+
+  <p class="section-label">Attributes</p>
+  <ul class="anatomy">
+    <li><span class="k">form_section number</span><span>Required string, zero-padded (<code>"01"</code>, <code>"02"</code>…); renders as <code>hud-label text-primary/70</code>.</span></li>
+    <li><span class="k">form_section title</span><span>Required string; the <code>hud-label</code> <code>&lt;h2&gt;</code> before the <code>h-px bg-base-300/60</code> divider.</span></li>
+    <li><span class="k">form_actions submit</span><span>Submit label, default <code>"Save"</code>; <code>submit_type</code> defaults to <code>"submit"</code>.</span></li>
+    <li><span class="k">form_actions cancel_navigate</span><span>Optional path; when set, renders a ghost Cancel (<code>cancel_label</code>, default <code>"Cancel"</code>) that navigates back.</span></li>
+    <li><span class="k">inner_block / class</span><span>Both helpers take <code>class</code>; extra actions in <code>form_actions</code>' block render after Cancel.</span></li>
+  </ul>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Always compose forms from <code>&lt;.form_section&gt;</code> and <code>&lt;.form_actions&gt;</code> — never hand-roll the numbered heading or footer as raw <code>&lt;section&gt;</code> markup.</li>
+      <li class="do"><span class="mark">&#10003;</span> One primary <code>:md</code> submit per form, paired with a ghost Cancel via <code>cancel_navigate</code> back to where the user came from.</li>
+      <li class="do"><span class="mark">&#10003;</span> Keep forms narrow (<code>max-w-2xl</code>) and single-column, with <code>space-y-8</code> between sections; fields inside get <code>space-y-4</code> for free.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't wrap sections in a <code>&lt;.card&gt;</code> — Cadence forms are bare; the <code>hud-label</code> divider headings carry the structure.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't add a second primary button or put destructive actions in the footer row — extra actions go in the inner block as ghost/secondary.</li>
+    </ul>
+  </div>
+</body>
+</html>

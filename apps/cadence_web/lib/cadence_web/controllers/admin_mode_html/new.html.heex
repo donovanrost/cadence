@@ -1,0 +1,21 @@
+<div class="space-y-4">
+  <div class="text-center">
+    <p class="text-primary tracking-[0.15em] text-sm font-semibold">◆ CADENCE</p>
+    <h1 class="mt-3 text-xl font-bold text-base-content">Enter admin mode</h1>
+    <p class="mt-1 text-xs text-base-content/70">
+      Re-enter your password to temporarily enable platform-wide administration.
+    </p>
+  </div>
+
+  <.form for={@form} id="admin-mode-form" action={~p"/admin-mode"} class="space-y-4">
+    <.input
+      field={@form[:password]}
+      type="password"
+      label="Password"
+      required
+      autocomplete="current-password"
+      autofocus
+    />
+    <.button type="submit" size={:md} class="w-full">Enter admin mode</.button>
+  </.form>
+</div>

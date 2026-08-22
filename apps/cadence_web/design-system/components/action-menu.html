@@ -1,0 +1,119 @@
+<!-- @dsCard group="Components" name="Action menu" subtitle="<.action_menu> — row secondary actions" width="960" height="880" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Action menu</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 68ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .75rem; }
+  .specimen + .section-label, .caption + .section-label { margin-top: 1.75rem; }
+  /* Row context: name-cell link owns navigation; the menu sits at the row's end */
+  .row { display: flex; align-items: center; justify-content: space-between; max-width: 34rem;
+    background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258); border-radius: 2px;
+    padding: .5rem .75rem; }
+  .name-link { font-size: .875rem; color: oklch(80% 0.12 210); text-decoration: none; }
+  .name-link:hover { text-decoration: underline; }
+  /* Faithful trigger: btn btn-ghost btn-xs with hero-ellipsis-vertical */
+  .trigger { display: inline-flex; align-items: center; justify-content: center; height: 1.5rem;
+    min-width: 1.5rem; padding: 0 .25rem; border: 0; border-radius: 2px; background: transparent;
+    color: oklch(85% 0.02 250); cursor: pointer; font: inherit; }
+  .trigger:hover { background: oklch(85% 0.02 250 / 0.1); }
+  .trigger .glyph { font-size: 1rem; line-height: 1; letter-spacing: -.05em; }
+  /* Faithful open menu: dropdown-content menu, bg-base-200, w-52, p-2, shadow-lg, border-primary/20 */
+  .menu { width: 13rem; margin: .25rem 0 0 auto; padding: .5rem; list-style: none;
+    background: oklch(17% 0.02 260); border: 1px solid oklch(80% 0.12 210 / 0.2); border-radius: 2px;
+    box-shadow: 0 10px 15px -3px oklch(0% 0 0 / 0.35), 0 4px 6px -4px oklch(0% 0 0 / 0.35); }
+  .menu li a, .menu li button { display: block; width: 100%; text-align: left; border: 0;
+    background: transparent; font: .875rem/1.3 inherit; font-family: inherit; padding: .4rem .6rem;
+    border-radius: 2px; color: oklch(85% 0.02 250); text-decoration: none; cursor: pointer; }
+  .menu li a:hover, .menu li button:hover { background: oklch(85% 0.02 250 / 0.1); }
+  .menu li .focused { background: oklch(85% 0.02 250 / 0.1);
+    outline: 2px solid oklch(80% 0.12 210 / 0.6); outline-offset: -2px; }
+  .caption { font-size: .72rem; color: oklch(60% 0.02 250); margin: .6rem 0 0; max-width: 70ch; }
+  .caption code { font-family: ui-monospace, monospace; }
+  /* Keyboard / ARIA reference grid */
+  .keys { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1.4rem; align-items: baseline;
+    max-width: 64ch; }
+  .keys .key { font-family: ui-monospace, monospace; font-size: .78rem; color: oklch(60% 0.02 250); }
+  .keys .val { font-size: .82rem; line-height: 1.4; color: oklch(78% 0.02 250); }
+  .keys .val code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 78ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Action menu</h1>
+  <p class="lede">The vertical-ellipsis menu for row and card secondary actions —
+    <code>&lt;.action_menu id={"&#35;{thing.id}-actions"}&gt;</code> with one <code>&lt;:action&gt;</code>
+    slot per item (a <code>&lt;.link&gt;</code> or <code>&lt;button&gt;</code>). daisyUI dropdown styling
+    driven by the <code>DropdownMenu</code> hook: a real button trigger with <code>aria-expanded</code>,
+    arrow-key navigation, and Escape-to-close with focus return.</p>
+
+  <p class="section-label">Trigger (closed) — end of a table row</p>
+  <div class="specimen row">
+    <a class="name-link" href="#">CDX-SAT-014</a>
+    <button type="button" class="trigger" aria-haspopup="menu" aria-expanded="false" aria-label="Actions">
+      <span class="glyph" aria-hidden="true">&#8942;</span>
+    </button>
+  </div>
+  <p class="caption">A <code>btn btn-ghost btn-xs</code> button — <code>aria-label="Actions"</code>,
+    <code>aria-haspopup="menu"</code>, <code>aria-controls</code> pointing at the menu. Row navigation
+    stays on the Name-cell link at left.</p>
+
+  <p class="section-label">Open — <code style="font-family:monospace;text-transform:none;letter-spacing:0">&lt;:action&gt;</code> items</p>
+  <div class="specimen" style="max-width:34rem">
+    <div class="row" style="border-color: oklch(80% 0.12 210 / 0.3)">
+      <a class="name-link" href="#">CDX-SAT-014</a>
+      <button type="button" class="trigger" aria-haspopup="menu" aria-expanded="true" aria-label="Actions">
+        <span class="glyph" aria-hidden="true">&#8942;</span>
+      </button>
+    </div>
+    <ul class="menu" role="menu">
+      <li role="none"><a href="#" class="focused">View</a></li>
+      <li role="none"><a href="#">Identity</a></li>
+      <li role="none"><button type="button">Delete</button></li>
+    </ul>
+  </div>
+  <p class="caption">Menu is <code>w-52 bg-base-200 p-2 shadow-lg border border-primary/20</code>, layered at
+    <code>z-[var(--z-popover)]</code>; first item focused on open. Destructive items get no special color —
+    guard them with <code>data-confirm="Are you sure?"</code> on the button.</p>
+
+  <p class="section-label">Keyboard &amp; ARIA</p>
+  <div class="keys">
+    <span class="key">ArrowDown (closed)</span><span class="val">Opens the menu and focuses the first item (click does the same).</span>
+    <span class="key">ArrowDown / ArrowUp</span><span class="val">Move focus through items, wrapping at both ends.</span>
+    <span class="key">Home / End</span><span class="val">Jump to first / last item.</span>
+    <span class="key">Escape</span><span class="val">Closes and returns focus to the trigger.</span>
+    <span class="key">Tab · outside click</span><span class="val">Closes without stealing focus back.</span>
+    <span class="key">roles</span><span class="val"><code>role="menu"</code> on the list, <code>role="none"</code> on each <code>li</code>; items are the links/buttons your slots render.</span>
+  </div>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Use only when a row has <strong>real secondary actions beyond View</strong> — a View-only menu should be dropped (the Name-cell link already navigates).</li>
+      <li class="do"><span class="mark">&#10003;</span> Give every menu a unique <code>id</code> (<code>"&#35;{thing.id}-actions"</code>) — the hook and <code>aria-controls</code> depend on it.</li>
+      <li class="do"><span class="mark">&#10003;</span> Guard destructive items with <code>data-confirm</code> on a plain <code>&lt;button phx-click&gt;</code>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Never put multiple action buttons directly in a table cell — fold them into one action menu.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't make rows navigate via <code>phx-click</code> or the menu — row navigation is the Name-cell link (<code>text-primary hover:underline</code>).</li>
+    </ul>
+  </div>
+</body>
+</html>

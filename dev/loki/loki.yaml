@@ -1,0 +1,42 @@
+# Loki (monolithic, filesystem storage) for local development.
+#
+# Loki is the logs backend: the collector ships OTLP logs to Loki's native
+# OTLP ingest (/otlp/v1/logs), and Grafana's Logs Drilldown app queries it
+# (that app only accepts Loki/LogQL datasources). Loki maps the service.name
+# resource attribute to the service_name index label, which is what Logs
+# Drilldown facets on.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Required for native OTLP ingestion (default in Loki 3.x, kept explicit).
+  allow_structured_metadata: true
+  # Serves the index volume API that Logs Drilldown's volume panels query.
+  volume_enabled: true
+
+analytics:
+  reporting_enabled: false

@@ -1,0 +1,126 @@
+<!-- @dsCard group="Components" name="Input" subtitle="<.input> — types · states · errors" width="980" height="1180" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Input</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 66ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 2.5rem; }
+
+  /* Faithful <.input>: .fieldset wrapper, hud-label span, w-full input/select */
+  .field { margin-bottom: 0; }
+  .flabel { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); display: block; margin-bottom: .375rem; }
+  /* Recessed well: fields sit darker than their container (surface-input = sunken) */
+  .control { width: 100%; background: oklch(10% 0.015 265); border: 1px solid oklch(80% 0.12 210 / 0.5);
+    border-radius: 2px; color: oklch(90% 0.02 250); font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: .875rem; padding: .45rem .6rem; box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.35); }
+  .control::placeholder { color: oklch(60% 0.02 250); }
+  .control:focus, .control.focused { border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.35), 0 0 0 1px oklch(80% 0.12 210 / 0.2),
+      0 0 10px oklch(80% 0.12 210 / 0.15); outline: none; }
+  .control.error { border-color: oklch(68% 0.20 10); }
+  .control:disabled, .control.disabled { background: oklch(15% 0.01 260); border-color: oklch(80% 0.12 210 / 0.1);
+    color: oklch(50% 0.02 250); cursor: not-allowed; box-shadow: none; }
+  .err-msg { margin-top: .375rem; font-size: .875rem; color: oklch(72% 0.20 10); }
+  textarea.control { resize: vertical; min-height: 4.5rem; }
+  .check-row { display: flex; gap: .6rem; align-items: flex-start; }
+  .check { flex: none; width: 1rem; height: 1rem; margin-top: .15rem; border: 1px solid oklch(80% 0.12 210 / 0.5);
+    border-radius: 2px; background: oklch(10% 0.015 265); display: grid; place-items: center;
+    color: oklch(80% 0.12 210); font-size: .7rem; font-weight: 700; }
+  .check-desc { font-size: .8rem; color: oklch(85% 0.02 250 / 0.7); margin: .15rem 0 0; }
+  .select-wrap { position: relative; }
+  .select-wrap .chev { position: absolute; right: .6rem; top: 50%; transform: translateY(-50%);
+    color: oklch(80% 0.12 210); pointer-events: none; font-size: .8rem; }
+  select.control { appearance: none; -webkit-appearance: none; padding-right: 2.2rem; }
+
+  /* usage */
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 80ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Input</h1>
+  <p class="lede">The one form field — <code>&lt;.input&gt;</code> from <code>FormInputs</code>. It owns the
+    <code>hud-label</code>, the daisyUI control styling, and error display. Bind it with
+    <code>field={@form[:name]}</code> inside <code>&lt;.form&gt;</code>; for standalone controls (filter
+    boxes, <code>phx-change</code> selectors) pass <code>name</code>/<code>value</code> instead.</p>
+
+  <p class="section-label">Types</p>
+  <div class="cols">
+    <div class="field"><label class="flabel">Display name</label>
+      <input class="control" type="text" value="SAT-04 Aurora"></div>
+    <div class="field"><label class="flabel">Operator email</label>
+      <input class="control" type="email" placeholder="you@operator.io"></div>
+    <div class="field"><label class="flabel">API token</label>
+      <input class="control" type="password" value="hunter2hunter2"></div>
+    <div class="field"><label class="flabel">SCID</label>
+      <input class="control" type="number" value="42"></div>
+    <div class="field"><label class="flabel">Search</label>
+      <input class="control" type="search" placeholder="Search transports"></div>
+    <div class="field"><label class="flabel">Transport kind</label>
+      <div class="select-wrap">
+        <select class="control"><option>Ground station</option><option>Relay</option><option>Loopback</option></select>
+        <span class="chev">&#9662;</span>
+      </div></div>
+    <div class="field"><label class="flabel">Notes</label>
+      <textarea class="control" placeholder="Pass notes, anomalies, handover context&hellip;"></textarea></div>
+    <div class="field"><label class="flabel">Capabilities</label>
+      <div class="check-row"><span class="check">&#10003;</span>
+        <div><span style="font-size:.875rem">Platform admin</span>
+          <p class="check-desc">Grants access to the <code style="font-family:ui-monospace,monospace">/admin</code> surface. Type <code style="font-family:ui-monospace,monospace">checkbox</code> with the <code style="font-family:ui-monospace,monospace">description</code> attr.</p></div>
+      </div></div>
+  </div>
+
+  <p class="section-label">States</p>
+  <div class="cols">
+    <div class="field"><label class="flabel">Default</label>
+      <input class="control" type="text" placeholder="Enter a display name"></div>
+    <div class="field"><label class="flabel">Filled</label>
+      <input class="control" type="text" value="Aurora Constellation"></div>
+    <div class="field"><label class="flabel">Focused</label>
+      <input class="control focused" type="text" value="Aurora Constellation"></div>
+    <div class="field"><label class="flabel">Disabled</label>
+      <input class="control" type="text" value="org_01Hct5P2RA9F" disabled></div>
+    <div class="field"><label class="flabel">Error</label>
+      <input class="control error" type="text" value="">
+      <p class="err-msg">can&rsquo;t be blank</p></div>
+    <div class="field"><label class="flabel">Error (select)</label>
+      <div class="select-wrap">
+        <select class="control error"><option value="">Choose a kind…</option></select>
+        <span class="chev">&#9662;</span>
+      </div>
+      <p class="err-msg">must select a transport kind</p></div>
+  </div>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Use <code>&lt;.input&gt;</code> for <strong>every</strong> field — never hand-write a raw <code>&lt;input&gt;</code>, <code>&lt;select&gt;</code>, or <code>&lt;textarea&gt;</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Bind with <code>field={@form[:name]}</code> in a form; errors render automatically once the field is touched.</li>
+      <li class="do"><span class="mark">&#10003;</span> For standalone controls (filters, <code>phx-change</code> selectors) pass <code>name</code>/<code>value</code>, and add <code>compact</code> to drop the wrapper margin.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't add a separate <code>&lt;label&gt;</code> — pass <code>label</code> and the component renders the <code>hud-label</code> for you.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't style error states by hand; the <code>input-error</code> border and <code>text-error</code> message come from the errors list.</li>
+    </ul>
+  </div>
+</body>
+</html>

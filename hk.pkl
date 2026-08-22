@@ -1,22 +1,29 @@
-amends "package://github.com/jdx/hk/releases/download/v1.28.0/hk@1.28.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.56.0/hk@1.56.0#/Config.pkl"
 
 hooks {
     ["pre-commit"] {
         fix = true
         stash = "git"
         steps {
+            ["css-frozen"] {
+                glob = List("*.css")
+                check = "scripts/check-css-frozen.sh"
+            }
             ["elixir-format"] {
                 glob = List("*.ex", "*.exs")
-                check = "mix format --check-formatted {{files}}"
-                fix = "mix format {{files}}"
+                check = "mix format.all --check-formatted {{files}}"
+                fix = "mix format.all {{files}}"
             }
-            ["precommit"] {
-                profiles = List("full")
-                check = "mix precommit"
+            ["precommit-affected"] {
+                profiles = List("!full")
+                check = "mix precommit.affected"
+                stdin = ""
                 exclusive = true
             }
-            ["test"] {
-                check = "mix test"
+            ["precommit-full"] {
+                profiles = List("full")
+                check = "mix precommit"
+                stdin = ""
                 exclusive = true
             }
         }
@@ -26,8 +33,8 @@ hooks {
         steps {
             ["elixir-format"] {
                 glob = List("*.ex", "*.exs")
-                check = "mix format --check-formatted {{files}}"
-                fix = "mix format {{files}}"
+                check = "mix format.all --check-formatted {{files}}"
+                fix = "mix format.all {{files}}"
             }
         }
     }
@@ -35,7 +42,7 @@ hooks {
         steps {
             ["elixir-format"] {
                 glob = List("*.ex", "*.exs")
-                check = "mix format --check-formatted {{files}}"
+                check = "mix format.all --check-formatted {{files}}"
             }
         }
     }

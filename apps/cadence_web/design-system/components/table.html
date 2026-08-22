@@ -1,0 +1,78 @@
+<!-- @dsCard group="Components" name="Table" subtitle="<.table> — hud-label heads · mono · row accent" width="960" height="600" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Table</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --icon-muted: oklch(from var(--glow-cyan) 68% 0.02 h); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 66ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+
+  /* Faithful .table: mono .8125rem, hud-label heads, cyan hairline borders */
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: .8125rem; }
+  th { text-align: left; font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--icon-muted); border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.2);
+    padding: .5rem .75rem; }
+  th.r, td.r { text-align: right; }
+  td { border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.1); padding: .55rem .75rem;
+    color: oklch(82% 0.02 250); }
+  /* Row hover is the border-l reveal only — the component adds no hover background */
+  tr { border-left: 2px solid transparent; transition: border-color .15s ease; }
+  tbody tr:hover { border-left-color: oklch(80% 0.12 210 / 0.6); }
+  th.sorted { color: oklch(80% 0.12 210); cursor: pointer; }
+  th .dir { font-size: .6rem; vertical-align: middle; }
+  .name { color: oklch(80% 0.12 210); }
+  .ok { color: oklch(78% 0.12 175); }
+  .warn { color: oklch(72% 0.15 50); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 80ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(68% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Table</h1>
+  <p class="lede">The canonical data table. Headers are <code>hud-label</code>; cells are monospace.
+    Hovering a row reveals a cyan <code>border-l-2</code> accent. Columns opt into
+    <code>align={:right}</code> and <code>mono</code>; the Name cell is the row's link to its show page.</p>
+
+  <table>
+    <thead>
+      <tr><th class="sorted" aria-sort="ascending">Spacecraft <span class="dir">&#9650;</span></th><th>Bus</th><th class="r">Alt (km)</th><th>Link</th><th class="r">Battery</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="name">SAT-01</td><td>LEOStar-2</td><td class="r">545.2</td><td class="ok">S-band · up</td><td class="r">98%</td></tr>
+      <tr><td class="name">SAT-02</td><td>LEOStar-2</td><td class="r">544.8</td><td class="ok">S-band · up</td><td class="r">96%</td></tr>
+      <tr><td class="name">SAT-03</td><td>SmallSat-X</td><td class="r">612.0</td><td class="warn">UHF · standby</td><td class="r">72%</td></tr>
+      <tr><td class="name">SAT-04</td><td>SmallSat-X</td><td class="r">611.5</td><td class="ok">X-band · up</td><td class="r">88%</td></tr>
+    </tbody>
+  </table>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Row navigation is the <strong>Name-cell link</strong> (<code>text-primary hover:underline</code>) to the show page.</li>
+      <li class="do"><span class="mark">&#10003;</span> Right-align numeric columns (<code>align={:right}</code>); use <code>mono</code> for identifiers, versions, counts.</li>
+      <li class="do"><span class="mark">&#10003;</span> Sortable columns: per-col <code>sort</code> + table-level <code>sort_by</code>/<code>sort_dir</code>/<code>on_sort</code> — headers become buttons with <code>aria-sort</code>; round-trip the sort through the URL (see List controls).</li>
+      <li class="do"><span class="mark">&#10003;</span> Large collections: pass a LiveStream as <code>rows</code> — DOM ids derive automatically (override with <code>row_id</code>/<code>body_id</code>); an <code>:empty</code> slot renders the zero-row body.</li>
+      <li class="do"><span class="mark">&#10003;</span> Keep <code>&lt;.action_menu&gt;</code> only when a row has real secondary actions beyond View.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Never use whole-row <code>phx-click</code>, and never put multiple action buttons directly in a cell.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Tables needing checkboxes, expanders, or nesting stay hand-rolled — don't force them into <code>&lt;.table&gt;</code>.</li>
+    </ul>
+  </div>
+</body>
+</html>

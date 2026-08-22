@@ -27,12 +27,20 @@ cadence-*.tar
 
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
+/apps/*/priv/static/assets/
 
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json
 /priv/telemetry_logs/
+/var/
+.DS_Store
 
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
+/legacy/cadence_legacy/assets/node_modules/
+/legacy/cadence_legacy/priv/telemetry_logs/
+/apps/cadence_simulator/cadence_simulator
 
+# Transient state for the superpowers brainstorming visual companion.
+.superpowers/

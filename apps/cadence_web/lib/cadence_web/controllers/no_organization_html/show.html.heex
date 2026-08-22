@@ -1,0 +1,27 @@
+<div class="space-y-4 text-center">
+  <h1 class="text-xl font-bold text-base-content">No organization access</h1>
+  <p class="text-sm text-base-content/70">
+    You don&#39;t have access to any organization yet.
+    Ask an administrator for an invitation.
+  </p>
+  <div
+    :if={@pending_invitations_count > 0}
+    class="p-4 border border-primary/30 rounded-sm bg-primary/5 text-left"
+  >
+    <p class="text-sm text-base-content">
+      You have <span class="font-bold text-primary">{@pending_invitations_count}</span>
+      pending invitation{if @pending_invitations_count == 1, do: "", else: "s"}.
+    </p>
+    <.link navigate={~p"/notifications"} class="mt-2 inline-flex items-center gap-1 text-xs text-primary uppercase tracking-wide hover:underline">
+      View notifications
+      <span class="hero-arrow-right h-3 w-3"></span>
+    </.link>
+  </div>
+  <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
+    <%!-- Sign-out chrome matches the sidebar rail treatment; needs too many class overrides for <.button>. --%>
+    <button type="submit" class="btn btn-ghost btn-sm w-full gap-2 text-xs uppercase tracking-wide">
+      <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+      Sign out
+    </button>
+  </.form>
+</div>

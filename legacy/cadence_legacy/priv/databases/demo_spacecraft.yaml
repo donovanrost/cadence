@@ -1,0 +1,2148 @@
+# Demo Spacecraft Command & Telemetry Database
+# This database demonstrates the full range of features supported by the MissionDatabase YAML importer
+#
+# Features demonstrated:
+# - Multiple packet types with varying data types (float, uint, int, bool, string)
+# - Polynomial calibrations (temperature sensors)
+# - State table conversions (mode enumerations)
+# - Alarm limits (watch/warning thresholds)
+# - Big and little endian encoding
+# - Hazardous and non-hazardous commands
+# - Commands with various parameter types and constraints
+
+version: "1.0.0"
+description: "Demo spacecraft telemetry and command database for testing"
+
+# =============================================================================
+# TELEMETRY PACKETS
+# =============================================================================
+
+packets:
+  # ---------------------------------------------------------------------------
+  # CCSDS_HDR - Abstract base packet header (demonstrates header fields)
+  # ---------------------------------------------------------------------------
+  - name: CCSDS_HDR
+    apid: 0
+    description: "CCSDS primary header - inherited by all packets"
+    items:
+      - name: version
+        bit_offset: 0
+        bit_size: 3
+        data_type: uint
+        description: "CCSDS version number"
+
+      - name: type
+        bit_offset: 3
+        bit_size: 1
+        data_type: uint
+        description: "Packet type (0=TLM, 1=CMD)"
+
+      - name: sec_hdr_flag
+        bit_offset: 4
+        bit_size: 1
+        data_type: uint
+        description: "Secondary header flag"
+
+      - name: apid
+        bit_offset: 5
+        bit_size: 11
+        data_type: uint
+        description: "Application Process ID"
+
+      - name: seq_flags
+        bit_offset: 16
+        bit_size: 2
+        data_type: uint
+        description: "Sequence flags"
+
+      - name: seq_count
+        bit_offset: 18
+        bit_size: 14
+        data_type: uint
+        description: "Sequence count"
+
+      - name: length
+        bit_offset: 32
+        bit_size: 16
+        data_type: uint
+        description: "Packet data length minus 1"
+
+  # ---------------------------------------------------------------------------
+  # HK - Housekeeping telemetry (most common packet type)
+  # ---------------------------------------------------------------------------
+  - name: HK
+    apid: 1
+    description: "Housekeeping telemetry - core health and status"
+    items:
+      # Timestamps
+      - name: timestamp_sec
+        bit_offset: 0
+        bit_size: 32
+        data_type: uint
+        description: "Timestamp seconds since epoch"
+
+      - name: timestamp_subsec
+        bit_offset: 32
+        bit_size: 16
+        data_type: uint
+        description: "Timestamp subseconds (1/65536 sec)"
+
+      # Spacecraft mode with state table
+      - name: sc_mode
+        bit_offset: 48
+        bit_size: 8
+        data_type: uint
+        description: "Spacecraft operational mode"
+        conversion:
+          type: state_table
+          states:
+            0: "BOOT"
+            1: "SAFE"
+            2: "IDLE"
+            3: "NOMINAL"
+            4: "SCIENCE"
+            5: "MANEUVER"
+            6: "EMERGENCY"
+            255: "UNKNOWN"
+
+      # Flags byte
+      - name: flags
+        bit_offset: 56
+        bit_size: 8
+        data_type: uint
+        description: "Status flags bitmap"
+
+      # Command counters
+      - name: cmd_recv_count
+        bit_offset: 64
+        bit_size: 16
+        data_type: uint
+        description: "Commands received counter"
+
+      - name: cmd_exec_count
+        bit_offset: 80
+        bit_size: 16
+        data_type: uint
+        description: "Commands executed counter"
+
+      - name: cmd_reject_count
+        bit_offset: 96
+        bit_size: 16
+        data_type: uint
+        description: "Commands rejected counter"
+        limits:
+          yellow_high: 5
+          red_high: 20
+
+      # Error counters
+      - name: error_count
+        bit_offset: 112
+        bit_size: 16
+        data_type: uint
+        description: "System error counter"
+        limits:
+          yellow_high: 10
+          red_high: 50
+
+      # Watchdog
+      - name: watchdog_timer
+        bit_offset: 128
+        bit_size: 16
+        data_type: uint
+        units: "s"
+        description: "Watchdog countdown timer"
+        limits:
+          red_low: 5
+          yellow_low: 30
+
+      # Uptime
+      - name: uptime
+        bit_offset: 144
+        bit_size: 32
+        data_type: uint
+        units: "s"
+        description: "System uptime since last boot"
+
+  # ---------------------------------------------------------------------------
+  # THERM - Thermal subsystem telemetry
+  # ---------------------------------------------------------------------------
+  - name: THERM
+    apid: 10
+    description: "Thermal subsystem telemetry"
+    items:
+      # Raw ADC values with polynomial calibration to temperature
+      - name: temp_obc_raw
+        bit_offset: 0
+        bit_size: 12
+        data_type: uint
+        description: "OBC temperature raw ADC"
+
+      - name: temp_obc
+        bit_offset: 16
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "OBC temperature calibrated"
+        limits:
+          red_low: -40.0
+          yellow_low: -20.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_battery_raw
+        bit_offset: 48
+        bit_size: 12
+        data_type: uint
+        description: "Battery temperature raw ADC"
+
+      - name: temp_battery
+        bit_offset: 64
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Battery temperature calibrated"
+        limits:
+          red_low: -10.0
+          yellow_low: 0.0
+          yellow_high: 40.0
+          red_high: 50.0
+
+      - name: temp_solar_panel_1
+        bit_offset: 96
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Solar panel 1 temperature"
+        limits:
+          red_low: -150.0
+          yellow_low: -100.0
+          yellow_high: 100.0
+          red_high: 150.0
+
+      - name: temp_solar_panel_2
+        bit_offset: 128
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Solar panel 2 temperature"
+        limits:
+          red_low: -150.0
+          yellow_low: -100.0
+          yellow_high: 100.0
+          red_high: 150.0
+
+      - name: temp_payload
+        bit_offset: 160
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Payload bay temperature"
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 45.0
+          red_high: 55.0
+
+      # Heater states
+      - name: heater_1_state
+        bit_offset: 192
+        bit_size: 8
+        data_type: uint
+        description: "Heater 1 state"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "ON"
+            2: "AUTO"
+            3: "FAULT"
+
+      - name: heater_2_state
+        bit_offset: 200
+        bit_size: 8
+        data_type: uint
+        description: "Heater 2 state"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "ON"
+            2: "AUTO"
+            3: "FAULT"
+
+      - name: heater_power_total
+        bit_offset: 208
+        bit_size: 32
+        data_type: float
+        units: "W"
+        description: "Total heater power consumption"
+        limits:
+          yellow_high: 15.0
+          red_high: 20.0
+
+      - name: thermal_mode
+        bit_offset: 240
+        bit_size: 8
+        data_type: uint
+        description: "Thermal control mode"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "PASSIVE"
+            2: "ACTIVE"
+            3: "SURVIVAL"
+
+  # ---------------------------------------------------------------------------
+  # EPS - Electrical Power Subsystem
+  # ---------------------------------------------------------------------------
+  - name: EPS
+    apid: 20
+    description: "Electrical Power Subsystem telemetry"
+    items:
+      # Battery
+      - name: batt_voltage
+        bit_offset: 0
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "Battery voltage"
+        limits:
+          red_low: 22.0
+          yellow_low: 24.0
+          yellow_high: 32.0
+          red_high: 33.5
+
+      - name: batt_current
+        bit_offset: 32
+        bit_size: 32
+        data_type: float
+        units: "A"
+        description: "Battery current (positive=charging)"
+        limits:
+          red_low: -15.0
+          yellow_low: -10.0
+          yellow_high: 10.0
+          red_high: 15.0
+
+      - name: batt_soc
+        bit_offset: 64
+        bit_size: 8
+        data_type: uint
+        units: "%"
+        description: "Battery state of charge"
+        limits:
+          red_low: 10
+          yellow_low: 20
+          yellow_high: 98
+          red_high: 100
+
+      - name: batt_temp
+        bit_offset: 72
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Battery pack temperature"
+        limits:
+          red_low: -10.0
+          yellow_low: 0.0
+          yellow_high: 40.0
+          red_high: 50.0
+
+      # Solar arrays
+      - name: sa1_voltage
+        bit_offset: 104
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "Solar array 1 voltage"
+
+      - name: sa1_current
+        bit_offset: 136
+        bit_size: 32
+        data_type: float
+        units: "A"
+        description: "Solar array 1 current"
+
+      - name: sa2_voltage
+        bit_offset: 168
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "Solar array 2 voltage"
+
+      - name: sa2_current
+        bit_offset: 200
+        bit_size: 32
+        data_type: float
+        units: "A"
+        description: "Solar array 2 current"
+
+      # Power buses
+      - name: bus_3v3
+        bit_offset: 232
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "3.3V bus voltage"
+        limits:
+          red_low: 3.1
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.5
+
+      - name: bus_5v
+        bit_offset: 264
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "5V bus voltage"
+        limits:
+          red_low: 4.7
+          yellow_low: 4.8
+          yellow_high: 5.2
+          red_high: 5.3
+
+      - name: bus_12v
+        bit_offset: 296
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "12V bus voltage"
+        limits:
+          red_low: 11.4
+          yellow_low: 11.6
+          yellow_high: 12.4
+          red_high: 12.6
+
+      - name: total_power
+        bit_offset: 328
+        bit_size: 32
+        data_type: float
+        units: "W"
+        description: "Total power consumption"
+        limits:
+          yellow_high: 80.0
+          red_high: 100.0
+
+      - name: eps_mode
+        bit_offset: 360
+        bit_size: 8
+        data_type: uint
+        description: "EPS mode"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "SAFE"
+            2: "NOMINAL"
+            3: "HIGH_POWER"
+            4: "ECLIPSE"
+
+      - name: eclipse_flag
+        bit_offset: 368
+        bit_size: 8
+        data_type: uint
+        description: "Eclipse status"
+        conversion:
+          type: state_table
+          states:
+            0: "SUNLIT"
+            1: "PENUMBRA"
+            2: "UMBRA"
+
+  # ---------------------------------------------------------------------------
+  # ADCS - Attitude Determination and Control Subsystem
+  # ---------------------------------------------------------------------------
+  - name: ADCS
+    apid: 30
+    description: "Attitude Determination and Control telemetry"
+    items:
+      # Quaternion
+      - name: q_w
+        bit_offset: 0
+        bit_size: 32
+        data_type: float
+        description: "Quaternion W component"
+
+      - name: q_x
+        bit_offset: 32
+        bit_size: 32
+        data_type: float
+        description: "Quaternion X component"
+
+      - name: q_y
+        bit_offset: 64
+        bit_size: 32
+        data_type: float
+        description: "Quaternion Y component"
+
+      - name: q_z
+        bit_offset: 96
+        bit_size: 32
+        data_type: float
+        description: "Quaternion Z component"
+
+      # Euler angles
+      - name: roll
+        bit_offset: 128
+        bit_size: 32
+        data_type: float
+        units: "deg"
+        description: "Roll angle"
+        limits:
+          red_low: -180.0
+          yellow_low: -45.0
+          yellow_high: 45.0
+          red_high: 180.0
+
+      - name: pitch
+        bit_offset: 160
+        bit_size: 32
+        data_type: float
+        units: "deg"
+        description: "Pitch angle"
+        limits:
+          red_low: -90.0
+          yellow_low: -30.0
+          yellow_high: 30.0
+          red_high: 90.0
+
+      - name: yaw
+        bit_offset: 192
+        bit_size: 32
+        data_type: float
+        units: "deg"
+        description: "Yaw angle"
+        limits:
+          red_low: -180.0
+          yellow_low: -45.0
+          yellow_high: 45.0
+          red_high: 180.0
+
+      # Angular rates
+      - name: roll_rate
+        bit_offset: 224
+        bit_size: 32
+        data_type: float
+        units: "deg/s"
+        description: "Roll rate"
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: pitch_rate
+        bit_offset: 256
+        bit_size: 32
+        data_type: float
+        units: "deg/s"
+        description: "Pitch rate"
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: yaw_rate
+        bit_offset: 288
+        bit_size: 32
+        data_type: float
+        units: "deg/s"
+        description: "Yaw rate"
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      # Reaction wheels
+      - name: rw1_speed
+        bit_offset: 320
+        bit_size: 32
+        data_type: float
+        units: "RPM"
+        description: "Reaction wheel 1 speed"
+        limits:
+          red_low: -6000.0
+          yellow_low: -5000.0
+          yellow_high: 5000.0
+          red_high: 6000.0
+
+      - name: rw2_speed
+        bit_offset: 352
+        bit_size: 32
+        data_type: float
+        units: "RPM"
+        description: "Reaction wheel 2 speed"
+        limits:
+          red_low: -6000.0
+          yellow_low: -5000.0
+          yellow_high: 5000.0
+          red_high: 6000.0
+
+      - name: rw3_speed
+        bit_offset: 384
+        bit_size: 32
+        data_type: float
+        units: "RPM"
+        description: "Reaction wheel 3 speed"
+        limits:
+          red_low: -6000.0
+          yellow_low: -5000.0
+          yellow_high: 5000.0
+          red_high: 6000.0
+
+      - name: adcs_mode
+        bit_offset: 416
+        bit_size: 8
+        data_type: uint
+        description: "ADCS mode"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "DETUMBLE"
+            2: "SUN_POINT"
+            3: "NADIR_POINT"
+            4: "TARGET_TRACK"
+            5: "INERTIAL_HOLD"
+            6: "SAFE"
+
+      - name: adcs_error
+        bit_offset: 424
+        bit_size: 8
+        data_type: uint
+        description: "ADCS error code"
+        conversion:
+          type: state_table
+          states:
+            0: "NONE"
+            1: "SENSOR_FAULT"
+            2: "ACTUATOR_FAULT"
+            3: "MOMENTUM_LIMIT"
+            4: "ATTITUDE_LOST"
+            255: "UNKNOWN"
+
+  # ---------------------------------------------------------------------------
+  # COMM - Communications Subsystem
+  # ---------------------------------------------------------------------------
+  - name: COMM
+    apid: 40
+    description: "Communications subsystem telemetry"
+    items:
+      - name: tx_power
+        bit_offset: 0
+        bit_size: 32
+        data_type: float
+        units: "dBm"
+        description: "Transmitter power"
+        limits:
+          red_low: 25.0
+          yellow_low: 27.0
+          yellow_high: 33.0
+          red_high: 35.0
+
+      - name: tx_freq
+        bit_offset: 32
+        bit_size: 32
+        data_type: float
+        units: "MHz"
+        description: "Transmit frequency"
+
+      - name: rx_rssi
+        bit_offset: 64
+        bit_size: 32
+        data_type: float
+        units: "dBm"
+        description: "Received signal strength"
+        limits:
+          red_low: -120.0
+          yellow_low: -110.0
+
+      - name: rx_snr
+        bit_offset: 96
+        bit_size: 32
+        data_type: float
+        units: "dB"
+        description: "Signal to noise ratio"
+        limits:
+          red_low: 3.0
+          yellow_low: 6.0
+
+      - name: packets_tx
+        bit_offset: 128
+        bit_size: 32
+        data_type: uint
+        description: "Packets transmitted"
+
+      - name: packets_rx
+        bit_offset: 160
+        bit_size: 32
+        data_type: uint
+        description: "Packets received"
+
+      - name: packets_err
+        bit_offset: 192
+        bit_size: 32
+        data_type: uint
+        description: "Packet errors"
+        limits:
+          yellow_high: 100
+          red_high: 500
+
+      - name: link_state
+        bit_offset: 224
+        bit_size: 8
+        data_type: uint
+        description: "Link state"
+        conversion:
+          type: state_table
+          states:
+            0: "NO_LINK"
+            1: "ACQUIRING"
+            2: "LOCKED"
+            3: "DEGRADED"
+
+      - name: comm_mode
+        bit_offset: 232
+        bit_size: 8
+        data_type: uint
+        description: "Communications mode"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "RX_ONLY"
+            2: "TX_ONLY"
+            3: "FULL_DUPLEX"
+            4: "BEACON"
+
+  # ---------------------------------------------------------------------------
+  # PAYLOAD - Science Payload
+  # ---------------------------------------------------------------------------
+  - name: PAYLOAD
+    apid: 50
+    description: "Science payload telemetry"
+    items:
+      - name: state
+        bit_offset: 0
+        bit_size: 8
+        data_type: uint
+        description: "Payload state"
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "STANDBY"
+            2: "WARMUP"
+            3: "COLLECTING"
+            4: "PROCESSING"
+            5: "COOLDOWN"
+            6: "ERROR"
+
+      - name: detector_temp
+        bit_offset: 8
+        bit_size: 32
+        data_type: float
+        units: "degC"
+        description: "Detector temperature"
+        limits:
+          red_low: -50.0
+          yellow_low: -45.0
+          yellow_high: -35.0
+          red_high: -30.0
+
+      - name: detector_voltage
+        bit_offset: 40
+        bit_size: 32
+        data_type: float
+        units: "V"
+        description: "Detector bias voltage"
+        limits:
+          red_low: 95.0
+          yellow_low: 98.0
+          yellow_high: 102.0
+          red_high: 105.0
+
+      - name: data_collected
+        bit_offset: 72
+        bit_size: 32
+        data_type: uint
+        units: "MB"
+        description: "Data collected this session"
+
+      - name: data_stored
+        bit_offset: 104
+        bit_size: 32
+        data_type: uint
+        units: "MB"
+        description: "Total data stored"
+        limits:
+          yellow_high: 28000
+          red_high: 31000
+
+      - name: collection_count
+        bit_offset: 136
+        bit_size: 16
+        data_type: uint
+        description: "Number of collections"
+
+      - name: error_count
+        bit_offset: 152
+        bit_size: 16
+        data_type: uint
+        description: "Error count"
+        limits:
+          yellow_high: 5
+          red_high: 20
+
+      - name: power_draw
+        bit_offset: 168
+        bit_size: 32
+        data_type: float
+        units: "W"
+        description: "Power consumption"
+        limits:
+          yellow_high: 25.0
+          red_high: 30.0
+
+  # ---------------------------------------------------------------------------
+  # SCIENCE_DATA - Large science data packet for throughput testing
+  # ---------------------------------------------------------------------------
+  - name: SCIENCE_DATA
+    apid: 100
+    description: "Science data dump - 4KB payload for throughput testing"
+    items:
+      - name: sequence
+        bit_offset: 0
+        bit_size: 32
+        data_type: uint
+        description: "Sequence counter"
+
+      - name: timestamp
+        bit_offset: 32
+        bit_size: 64
+        data_type: uint
+        description: "Collection timestamp"
+
+      - name: data_block
+        bit_offset: 96
+        bit_size: 32672
+        data_type: binary
+        description: "Raw science data (~4KB)"
+
+  # ---------------------------------------------------------------------------
+  # STRESS_TEST - High item count packet for pipeline stress testing
+  # 64 items with calibrations and limits = real CPU work per packet
+  # ---------------------------------------------------------------------------
+  - name: STRESS_TEST
+    apid: 101
+    description: "Stress test packet - 64 sensors with calibrations and limits"
+    items:
+      # Batch 1: Temperature sensors (16 items) - polynomial calibration + limits
+      - name: temp_sensor_00
+        bit_offset: 0
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_01
+        bit_offset: 16
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_02
+        bit_offset: 32
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_03
+        bit_offset: 48
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_04
+        bit_offset: 64
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_05
+        bit_offset: 80
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_06
+        bit_offset: 96
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_07
+        bit_offset: 112
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_08
+        bit_offset: 128
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_09
+        bit_offset: 144
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_10
+        bit_offset: 160
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_11
+        bit_offset: 176
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_12
+        bit_offset: 192
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_13
+        bit_offset: 208
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_14
+        bit_offset: 224
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_15
+        bit_offset: 240
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      # Batch 2: Voltage sensors (16 items) - polynomial calibration + limits
+      - name: voltage_sensor_00
+        bit_offset: 256
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_01
+        bit_offset: 272
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_02
+        bit_offset: 288
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_03
+        bit_offset: 304
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_04
+        bit_offset: 320
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_05
+        bit_offset: 336
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_06
+        bit_offset: 352
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_07
+        bit_offset: 368
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_08
+        bit_offset: 384
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_09
+        bit_offset: 400
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_10
+        bit_offset: 416
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_11
+        bit_offset: 432
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_12
+        bit_offset: 448
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_13
+        bit_offset: 464
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_14
+        bit_offset: 480
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_15
+        bit_offset: 496
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      # Batch 3: Current sensors (16 items) - polynomial calibration + limits
+      - name: current_sensor_00
+        bit_offset: 512
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_01
+        bit_offset: 528
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_02
+        bit_offset: 544
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_03
+        bit_offset: 560
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_04
+        bit_offset: 576
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_05
+        bit_offset: 592
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_06
+        bit_offset: 608
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_07
+        bit_offset: 624
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_08
+        bit_offset: 640
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_09
+        bit_offset: 656
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_10
+        bit_offset: 672
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_11
+        bit_offset: 688
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_12
+        bit_offset: 704
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_13
+        bit_offset: 720
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_14
+        bit_offset: 736
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_15
+        bit_offset: 752
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      # Batch 4: Status flags with state tables (16 items)
+      - name: status_flag_00
+        bit_offset: 768
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_01
+        bit_offset: 776
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_02
+        bit_offset: 784
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_03
+        bit_offset: 792
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_04
+        bit_offset: 800
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_05
+        bit_offset: 808
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_06
+        bit_offset: 816
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_07
+        bit_offset: 824
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_08
+        bit_offset: 832
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_09
+        bit_offset: 840
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_10
+        bit_offset: 848
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_11
+        bit_offset: 856
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_12
+        bit_offset: 864
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_13
+        bit_offset: 872
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_14
+        bit_offset: 880
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_15
+        bit_offset: 888
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+  # ---------------------------------------------------------------------------
+  # DEBUG - Debug/diagnostic packet (little endian, signed integers)
+  # ---------------------------------------------------------------------------
+  - name: DEBUG
+    apid: 255
+    big_endian: false
+    description: "Debug and diagnostic telemetry (little endian)"
+    items:
+      - name: debug_counter
+        bit_offset: 0
+        bit_size: 32
+        data_type: uint
+        endianness: little
+        description: "Debug counter"
+
+      - name: signed_value_16
+        bit_offset: 32
+        bit_size: 16
+        data_type: int
+        endianness: little
+        description: "Signed 16-bit test value"
+
+      - name: signed_value_32
+        bit_offset: 48
+        bit_size: 32
+        data_type: int
+        endianness: little
+        description: "Signed 32-bit test value"
+
+      - name: float_le
+        bit_offset: 80
+        bit_size: 32
+        data_type: float
+        endianness: little
+        description: "Little-endian float"
+
+      - name: raw_bytes
+        bit_offset: 112
+        bit_size: 64
+        data_type: binary
+        description: "Raw debug bytes"
+
+# =============================================================================
+# COMMANDS
+# =============================================================================
+
+commands:
+  # ---------------------------------------------------------------------------
+  # System Commands
+  # ---------------------------------------------------------------------------
+  - name: NOOP
+    opcode: 0x00
+    description: "No operation - used to verify command link"
+
+  - name: RESET_COUNTERS
+    opcode: 0x01
+    description: "Reset command and error counters"
+
+  - name: REBOOT
+    opcode: 0x02
+    description: "Reboot the spacecraft computer"
+    is_hazardous: true
+    hazard_description: "Will cause temporary loss of control and data"
+    requires_confirmation: true
+
+  - name: SET_MODE
+    opcode: 0x03
+    description: "Set spacecraft operational mode"
+    parameters:
+      - name: mode
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [0, 1, 2, 3, 4, 5, 6]
+        description: "Mode (0=BOOT, 1=SAFE, 2=IDLE, 3=NOMINAL, 4=SCIENCE, 5=MANEUVER, 6=EMERGENCY)"
+    effects:
+      - target: HK.sc_mode
+        operation: set
+        argument: mode
+
+  - name: SAFE_MODE
+    opcode: 0x04
+    description: "Enter safe mode immediately"
+    is_hazardous: true
+    hazard_description: "Will disable normal operations and science collection"
+    requires_confirmation: true
+    effects:
+      - target: HK.sc_mode
+        operation: set
+        value: 1
+
+  # ---------------------------------------------------------------------------
+  # Thermal Commands
+  # ---------------------------------------------------------------------------
+  - name: SET_HEATER
+    opcode: 0x10
+    description: "Control heater state"
+    parameters:
+      - name: heater_id
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [1, 2]
+        description: "Heater ID (1 or 2)"
+      - name: state
+        data_type: uint
+        required: true
+        bit_offset: 8
+        bit_length: 8
+        valid_values: [0, 1, 2]
+        description: "State (0=OFF, 1=ON, 2=AUTO)"
+
+  - name: SET_THERMAL_MODE
+    opcode: 0x11
+    description: "Set thermal control mode"
+    parameters:
+      - name: mode
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [0, 1, 2, 3]
+        description: "Mode (0=OFF, 1=PASSIVE, 2=ACTIVE, 3=SURVIVAL)"
+    effects:
+      - target: THERM.thermal_mode
+        operation: set
+        argument: mode
+
+  - name: SET_HEATER_SETPOINT
+    opcode: 0x12
+    description: "Set heater temperature setpoint"
+    parameters:
+      - name: heater_id
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [1, 2]
+        description: "Heater ID"
+      - name: setpoint
+        data_type: float
+        required: true
+        bit_offset: 8
+        bit_length: 32
+        min_value: -40.0
+        max_value: 60.0
+        units: "degC"
+        description: "Temperature setpoint"
+
+  # ---------------------------------------------------------------------------
+  # EPS Commands
+  # ---------------------------------------------------------------------------
+  - name: SET_EPS_MODE
+    opcode: 0x20
+    description: "Set EPS operational mode"
+    parameters:
+      - name: mode
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [0, 1, 2, 3, 4]
+        description: "Mode (0=OFF, 1=SAFE, 2=NOMINAL, 3=HIGH_POWER, 4=ECLIPSE)"
+    effects:
+      - target: EPS.eps_mode
+        operation: set
+        argument: mode
+
+  - name: ENABLE_LOAD
+    opcode: 0x21
+    description: "Enable a power load"
+    parameters:
+      - name: load_id
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        description: "Load identifier (0-15)"
+        min_value: 0
+        max_value: 15
+
+  - name: DISABLE_LOAD
+    opcode: 0x22
+    description: "Disable a power load"
+    parameters:
+      - name: load_id
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        description: "Load identifier (0-15)"
+        min_value: 0
+        max_value: 15
+
+  - name: BATTERY_RECONDITIONING
+    opcode: 0x23
+    description: "Start battery reconditioning cycle"
+    is_hazardous: true
+    hazard_description: "Will deep discharge the battery - may cause power issues"
+    requires_confirmation: true
+
+  # ---------------------------------------------------------------------------
+  # ADCS Commands
+  # ---------------------------------------------------------------------------
+  - name: SET_ADCS_MODE
+    opcode: 0x30
+    description: "Set ADCS operational mode"
+    parameters:
+      - name: mode
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [0, 1, 2, 3, 4, 5, 6]
+        description: "Mode (0=OFF, 1=DETUMBLE, 2=SUN_POINT, 3=NADIR_POINT, 4=TARGET_TRACK, 5=INERTIAL_HOLD, 6=SAFE)"
+    effects:
+      - target: ADCS.adcs_mode
+        operation: set
+        argument: mode
+
+  - name: SLEW_TO_ATTITUDE
+    opcode: 0x31
+    description: "Slew to specified attitude"
+    parameters:
+      - name: target_roll
+        data_type: float
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        min_value: -180.0
+        max_value: 180.0
+        units: "deg"
+        description: "Target roll angle"
+      - name: target_pitch
+        data_type: float
+        required: true
+        bit_offset: 32
+        bit_length: 32
+        min_value: -90.0
+        max_value: 90.0
+        units: "deg"
+        description: "Target pitch angle"
+      - name: target_yaw
+        data_type: float
+        required: true
+        bit_offset: 64
+        bit_length: 32
+        min_value: -180.0
+        max_value: 180.0
+        units: "deg"
+        description: "Target yaw angle"
+
+  - name: SET_RW_SPEED
+    opcode: 0x32
+    description: "Set reaction wheel speed"
+    parameters:
+      - name: wheel_id
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [1, 2, 3]
+        description: "Wheel ID (1-3)"
+      - name: speed
+        data_type: float
+        required: true
+        bit_offset: 8
+        bit_length: 32
+        min_value: -6000.0
+        max_value: 6000.0
+        units: "RPM"
+        description: "Target speed"
+
+  - name: MOMENTUM_DUMP
+    opcode: 0x33
+    description: "Perform momentum dump using magnetorquers"
+    is_hazardous: true
+    hazard_description: "Will temporarily affect attitude control"
+    requires_confirmation: true
+
+  # ---------------------------------------------------------------------------
+  # COMM Commands
+  # ---------------------------------------------------------------------------
+  - name: SET_COMM_MODE
+    opcode: 0x40
+    description: "Set communications mode"
+    parameters:
+      - name: mode
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 8
+        valid_values: [0, 1, 2, 3, 4]
+        description: "Mode (0=OFF, 1=RX_ONLY, 2=TX_ONLY, 3=FULL_DUPLEX, 4=BEACON)"
+    effects:
+      - target: COMM.comm_mode
+        operation: set
+        argument: mode
+
+  - name: SET_TX_POWER
+    opcode: 0x41
+    description: "Set transmitter power level"
+    parameters:
+      - name: power
+        data_type: float
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        min_value: 20.0
+        max_value: 35.0
+        units: "dBm"
+        description: "Transmit power"
+    effects:
+      - target: COMM.tx_power
+        operation: set
+        argument: power
+
+  - name: SET_TX_FREQ
+    opcode: 0x42
+    description: "Set transmitter frequency"
+    parameters:
+      - name: frequency
+        data_type: float
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        min_value: 400.0
+        max_value: 450.0
+        units: "MHz"
+        description: "Transmit frequency"
+    effects:
+      - target: COMM.tx_freq
+        operation: set
+        argument: frequency
+
+  # ---------------------------------------------------------------------------
+  # Payload Commands
+  # ---------------------------------------------------------------------------
+  - name: PAYLOAD_ON
+    opcode: 0x50
+    description: "Turn on the payload"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 1
+
+  - name: PAYLOAD_OFF
+    opcode: 0x51
+    description: "Turn off the payload"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 0
+
+  - name: START_COLLECTION
+    opcode: 0x52
+    description: "Start payload data collection"
+    parameters:
+      - name: duration
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        min_value: 10
+        max_value: 3600
+        units: "s"
+        description: "Collection duration"
+      - name: mode
+        data_type: uint
+        required: false
+        bit_offset: 32
+        bit_length: 8
+        valid_values: [0, 1, 2]
+        default_value: 0
+        description: "Collection mode (0=NORMAL, 1=HIGH_RES, 2=BURST)"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 3
+
+  - name: STOP_COLLECTION
+    opcode: 0x53
+    description: "Stop payload data collection"
+    effects:
+      - target: PAYLOAD.state
+        operation: set
+        value: 1
+
+  - name: FORMAT_STORAGE
+    opcode: 0x54
+    description: "Format payload data storage"
+    is_hazardous: true
+    hazard_description: "Will permanently delete all stored science data"
+    requires_confirmation: true
+
+  - name: DOWNLOAD_DATA
+    opcode: 0x55
+    description: "Schedule data download"
+    parameters:
+      - name: start_addr
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        description: "Start address"
+      - name: length
+        data_type: uint
+        required: true
+        bit_offset: 32
+        bit_length: 32
+        min_value: 1
+        max_value: 1048576
+        units: "bytes"
+        description: "Download length"
+
+  # ---------------------------------------------------------------------------
+  # Debug Commands
+  # ---------------------------------------------------------------------------
+  - name: DEBUG_ECHO
+    opcode: 0xFE
+    description: "Echo back debug data"
+    parameters:
+      - name: echo_data
+        data_type: uint
+        required: true
+        bit_offset: 0
+        bit_length: 32
+        description: "Data to echo"
+
+  - name: FORCE_WATCHDOG
+    opcode: 0xFF
+    description: "Force watchdog reset (for testing)"
+    is_hazardous: true
+    hazard_description: "Will cause an immediate watchdog reset"
+    requires_confirmation: true

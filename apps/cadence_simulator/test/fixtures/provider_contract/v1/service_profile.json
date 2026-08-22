@@ -1,0 +1,12 @@
+{
+  "id": "service-realtime-ttc-downlink",
+  "version": 1,
+  "display_name": "Realtime TT&C downlink",
+  "service_kind": "realtime_telemetry",
+  "direction": "downlink",
+  "supported_delivery_kinds": ["realtime_stream"],
+  "data_families": ["ccsds_tm"],
+  "minimum_duration_seconds": 30,
+  "state": "active",
+  "extensions": {}
+}

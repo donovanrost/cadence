@@ -1,0 +1,9 @@
+/_build/
+/cover/
+/deps/
+/doc/
+/tmp/
+/erl_crash.dump
+*.ez
+cadence_simulator-*.tar
+/cadence_simulator
