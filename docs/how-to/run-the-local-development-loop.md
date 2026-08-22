@@ -136,6 +136,18 @@ The simulator does not create or administer Cadence mission resources.
 
 ## 9. Run commit checks
 
+Run focused tests from the project that owns them. Test paths are relative to
+that project:
+
+```bash
+cd apps/cadence_web
+mix test test/cadence_web/live/user_session_live_test.exs
+```
+
+Return to the repository root for aggregate Workspace gates. Root `mix test`
+runs every project's default suite and intentionally does not route
+`apps/<child>/...` or `packages/<child>/...` paths to child projects.
+
 The default hk pre-commit hook runs the shared quality checks and tests only
 the Mix projects affected by the staged changes:
 

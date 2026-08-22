@@ -115,7 +115,10 @@ release entry point.
 
 Ordinary application commands will run from the owning project. In particular,
 the Phoenix server will run from `apps/cadence_web`, and the simulator will run
-from `apps/cadence_simulator`.
+from `apps/cadence_simulator`. The root `mix test` command is an aggregate
+Workspace gate; it does not translate root-relative child test paths. Focused
+tests run from the owning application or package with paths relative to that
+project.
 
 ### 2. Applications Live Under `apps/`
 

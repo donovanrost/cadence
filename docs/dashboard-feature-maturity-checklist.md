@@ -1345,13 +1345,10 @@ Stale replacement-job inspection/requeue now follows the same scope-retention
 contract at the action boundary: rendered stale-job controls submit replacement
 run ids, and success/error outcomes preserve the replacement run as the target
 run for follow-on latest-action evidence.
-The umbrella test runner now preserves fast dashboard inner-loop verification:
-root-level `mix test apps/<child>/...` paths are routed only to their owning
-child app with child-relative paths, while unscoped `mix test` and
-`mix precommit` still run the full umbrella gate. Dry-run verification covers
-Cadence, Cadence Simulator, Cadence Web, and mixed Cadence/Cadence Web path
-selection, and a real root-level focused Cadence Web historical workflow test
-run completed without invoking the full 1600+ test web suite.
+The former root-level focused-test compatibility router was retired when the
+poncho ownership boundary became authoritative. Focused tests now run from
+their owning application or package with project-relative paths. Root `mix
+test` and `mix precommit` remain aggregate Workspace gates.
 The next testing maturity rule is to stop growing
 `ops_dashboard_live_test.exs` as the default proof bucket. Profiling that file
 with `--slowest 15` showed the serial LiveView module takes roughly 47-49

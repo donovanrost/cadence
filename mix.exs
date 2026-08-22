@@ -10,7 +10,6 @@ defmodule CadenceWorkspace.MixProject do
       elixirc_paths: [],
       version: "0.1.0",
       elixir: "~> 1.15",
-      start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases()
     ]
@@ -20,6 +19,7 @@ defmodule CadenceWorkspace.MixProject do
     [
       preferred_envs: [
         precommit: :test,
+        "precommit.checks": :test,
         "precommit.affected": :test,
         "test.fast": :test,
         "test.runtime": :test,
@@ -46,58 +46,139 @@ defmodule CadenceWorkspace.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get", &setup_children/1],
+      setup: ["deps.get", workspace_command("deps.get")],
       "format.all": [&run_format_all/1],
-      test: [&run_child_tests/1],
-      "test.fast": [&run_fast_tests/1],
-      "test.runtime": [&run_runtime_tests/1],
-      "test.management": [&run_plane_tests(:management, &1)],
-      "test.control": [&run_plane_tests(:control, &1)],
-      "test.data": [&run_plane_tests(:data, &1)],
-      "test.projections": [&run_plane_tests(:projections, &1)],
-      "test.planes": [&run_all_plane_tests/1],
-      "test.integration": [&run_integration_tests/1],
-      "test.browser": [&run_browser_tests/1],
-      "test.browser.full": [&run_full_browser_tests/1],
+      test: [workspace_test_command()],
+      "test.fast": [
+        workspace_test_command(
+          task_args: ["--exclude", "runtime", "--exclude", "config", "--exclude", "integration"]
+        )
+      ],
+      "test.runtime": [
+        workspace_test_command(projects: [:cadence], task_args: ["--only", "runtime"])
+      ],
+      "test.management": [plane_test_command(:management)],
+      "test.control": [plane_test_command(:control)],
+      "test.data": [plane_test_command(:data)],
+      "test.projections": [plane_test_command(:projections)],
+      "test.planes": [&run_plane_tests/1],
+      "test.integration": [
+        workspace_test_command(
+          projects: [:cadence, :cadence_simulator, :cadence_web],
+          task_args: ["--only", "integration"]
+        )
+      ],
+      "test.browser": [
+        workspace_command("test.browser",
+          projects: [:cadence_web],
+          env: [{"MIX_ENV", "test"}]
+        )
+      ],
+      "test.browser.full": [
+        workspace_command("test.browser.full",
+          projects: [:cadence_web],
+          env: [{"MIX_ENV", "test"}]
+        )
+      ],
       "precommit.checks": [
         "format.all",
-        "workspace.run -t compile --env-var MIX_ENV=test -- --warnings-as-errors",
+        workspace_command("compile",
+          env: [{"MIX_ENV", "test"}],
+          task_args: ["--warnings-as-errors"]
+        ),
         "credo --strict",
         "workspace.check",
-        &run_architecture_checks/1
+        workspace_command("cadence.extensions.check",
+          projects: [:cadence],
+          env: [{"MIX_ENV", "test"}]
+        ),
+        workspace_command("cadence.architecture.check",
+          projects: [:cadence],
+          env: [{"MIX_ENV", "test"}],
+          task_args: ["--summary"]
+        )
       ],
       precommit: [
         "precommit.checks",
         "test.planes",
         "test"
       ],
-      "precommit.affected": ["precommit.checks", &run_affected_tests/1]
+      "precommit.affected": [
+        "precommit.checks",
+        affected_plane_test_command(:management),
+        affected_plane_test_command(:control),
+        affected_plane_test_command(:data),
+        affected_plane_test_command(:projections),
+        workspace_test_command(affected: true)
+      ]
     ]
   end
 
-  defp run_affected_tests(_args) do
-    affected_apps =
-      __DIR__
-      |> Workspace.new!(Path.join(__DIR__, ".workspace.exs"))
-      |> Workspace.Status.affected()
-
-    case affected_apps do
-      [] ->
-        Mix.shell().info("No Cadence applications are affected; skipping application tests.")
-
-      apps ->
-        Mix.shell().info("Affected Cadence applications: #{Enum.join(apps, ", ")}")
-
-        if :cadence in apps do
-          run_all_plane_tests([])
-        end
-
-        Mix.Task.run("workspace.run", ["-t", "test", "--affected"])
-    end
+  defp workspace_test_command(opts \\ []) do
+    workspace_command("test", with_test_env(opts))
   end
 
-  defp setup_children(args) do
-    Enum.each(@child_apps, &run_child_mix_command(&1, ["deps.get" | args]))
+  defp plane_test_command(plane, opts \\ []) do
+    workspace_test_command(plane_test_options(plane, opts))
+  end
+
+  defp affected_plane_test_command(plane) do
+    plane_test_command(plane, affected: true)
+  end
+
+  defp run_plane_tests(args) do
+    Enum.each([:management, :control, :data, :projections], fn plane ->
+      Mix.Task.reenable("workspace.run")
+
+      Mix.Task.run(
+        "workspace.run",
+        workspace_command_args(
+          "test",
+          plane |> plane_test_options(task_args: args) |> with_test_env()
+        )
+      )
+    end)
+  end
+
+  defp plane_test_options(plane, opts) do
+    task_args = ["--no-start" | plane_test_paths(plane)] ++ Keyword.get(opts, :task_args, [])
+    env = [{"CADENCE_TEST_PLANE", Atom.to_string(plane)} | Keyword.get(opts, :env, [])]
+
+    opts
+    |> Keyword.put(:projects, [:cadence])
+    |> Keyword.put(:env, env)
+    |> Keyword.put(:task_args, task_args)
+  end
+
+  defp with_test_env(opts) do
+    Keyword.update(opts, :env, [{"MIX_ENV", "test"}], &[{"MIX_ENV", "test"} | &1])
+  end
+
+  defp workspace_command(task, opts \\ []) do
+    ["workspace.run" | workspace_command_args(task, opts)]
+    |> Enum.join(" ")
+  end
+
+  defp workspace_command_args(task, opts) do
+    project_args =
+      opts
+      |> Keyword.get(:projects, [])
+      |> Enum.flat_map(&["-p", Atom.to_string(&1)])
+
+    affected_args = if Keyword.get(opts, :affected, false), do: ["--affected"], else: []
+
+    env_args =
+      opts
+      |> Keyword.get(:env, [])
+      |> Enum.flat_map(fn {name, value} -> ["--env-var", "#{name}=#{value}"] end)
+
+    task_args = Keyword.get(opts, :task_args, [])
+
+    ["-t", task, "--order", "postorder", "--early-stop"]
+    |> Kernel.++(project_args)
+    |> Kernel.++(affected_args)
+    |> Kernel.++(env_args)
+    |> Kernel.++(["--" | task_args])
   end
 
   defp run_format_all(args) do
@@ -129,138 +210,6 @@ defmodule CadenceWorkspace.MixProject do
     end
   end
 
-  defp run_architecture_checks(_args) do
-    run_child_mix_command(:cadence, ["cadence.extensions.check"])
-    run_child_mix_command(:cadence, ["cadence.architecture.check", "--summary"])
-  end
-
-  defp run_fast_tests(args) do
-    run_child_tests([
-      "--exclude",
-      "runtime",
-      "--exclude",
-      "config",
-      "--exclude",
-      "integration"
-      | args
-    ])
-  end
-
-  defp run_runtime_tests(args) do
-    run_child_mix_command(:cadence, ["db.setup.test"])
-    run_child_test_command(:cadence, ["--only", "runtime" | args])
-  end
-
-  defp run_all_plane_tests(args) do
-    Enum.each([:management, :control, :data, :projections], &run_plane_tests(&1, args))
-  end
-
-  defp run_plane_tests(plane, args) do
-    if plane == :management do
-      run_child_mix_command(:cadence, ["db.setup.test"])
-    end
-
-    run_child_test_command(
-      :cadence,
-      ["--no-start" | plane_test_paths(plane)] ++ args,
-      [{"CADENCE_TEST_PLANE", Atom.to_string(plane)}]
-    )
-  end
-
-  defp run_integration_tests(args) do
-    run_child_mix_command(:cadence, ["db.setup.test"])
-
-    run_child_test_command(:cadence, ["--only", "integration" | args])
-    run_child_test_command(:cadence_simulator, ["--only", "integration" | args])
-    run_child_test_command(:cadence_web, ["--only", "integration" | args])
-  end
-
-  defp run_child_tests(args) do
-    args
-    |> child_test_args()
-    |> run_child_tests_by_app()
-  end
-
-  defp run_child_tests_by_app(args_by_app) do
-    if args = Map.get(args_by_app, :cadence) do
-      run_child_mix_command(:cadence, ["db.setup.test"])
-      run_child_test_command(:cadence, args)
-    end
-
-    if args = Map.get(args_by_app, :cadence_catalog) do
-      run_child_test_command(:cadence_catalog, args)
-    end
-
-    if args = Map.get(args_by_app, :cadence_ccsds) do
-      run_child_test_command(:cadence_ccsds, args)
-    end
-
-    if args = Map.get(args_by_app, :cadence_simulator) do
-      run_child_test_command(:cadence_simulator, args)
-    end
-
-    if args = Map.get(args_by_app, :cadence_web) do
-      run_child_test_command(:cadence_web, args)
-    end
-  end
-
-  defp run_browser_tests(args) do
-    run_child_test_command(:cadence_web, [
-      "--include",
-      "browser_smoke",
-      "--only",
-      "browser_smoke",
-      "browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
-      | args
-    ])
-  end
-
-  defp run_full_browser_tests(args) do
-    run_child_test_command(:cadence_web, [
-      "--include",
-      "browser",
-      "--include",
-      "browser_smoke",
-      "browser_test/cadence_web/assets"
-      | args
-    ])
-  end
-
-  defp child_test_args(args) do
-    selected_apps =
-      args
-      |> Enum.flat_map(&child_apps_for_arg/1)
-      |> Enum.uniq()
-
-    case selected_apps do
-      [] ->
-        %{
-          cadence: args,
-          cadence_catalog: args,
-          cadence_ccsds: args,
-          cadence_simulator: args,
-          cadence_web: args
-        }
-
-      apps ->
-        Map.new(apps, &{&1, rewrite_child_args(args, &1)})
-    end
-  end
-
-  defp child_apps_for_arg(arg) do
-    Enum.filter(@child_apps, &child_path_arg?(arg, &1))
-  end
-
-  defp rewrite_child_args(args, app) do
-    Enum.flat_map(args, fn arg ->
-      cond do
-        child_path_arg?(arg, app) -> [child_relative_arg(arg, app)]
-        known_child_path_arg?(arg) -> []
-        true -> [arg]
-      end
-    end)
-  end
-
   defp child_path_arg?(arg, app) when is_binary(arg) and is_atom(app) do
     path = child_path(app)
     arg == path or String.starts_with?(arg, path <> "/")
@@ -274,6 +223,21 @@ defmodule CadenceWorkspace.MixProject do
     path = child_path(app)
 
     if arg == path, do: ".", else: String.replace_prefix(arg, path <> "/", "")
+  end
+
+  defp run_child_mix_command(app, args, extra_env \\ [])
+       when is_atom(app) and is_list(args) and is_list(extra_env) do
+    {_output, status} =
+      System.cmd("mix", args,
+        cd: child_path(app),
+        env: [{"MIX_ENV", Atom.to_string(Mix.env())} | extra_env],
+        into: IO.stream(:stdio, :line),
+        stderr_to_stdout: true
+      )
+
+    if status != 0 do
+      Mix.raise("#{app} mix command failed: mix #{Enum.join(args, " ")}")
+    end
   end
 
   defp child_path(:cadence), do: "apps/cadence"
@@ -294,23 +258,4 @@ defmodule CadenceWorkspace.MixProject do
   end
 
   defp plane_test_paths(plane), do: ["plane_test/#{plane}"]
-
-  defp run_child_mix_command(app, args, extra_env \\ [])
-       when is_atom(app) and is_list(args) and is_list(extra_env) do
-    {_output, status} =
-      System.cmd("mix", args,
-        cd: child_path(app),
-        env: [{"MIX_ENV", Atom.to_string(Mix.env())} | extra_env],
-        into: IO.stream(:stdio, :line),
-        stderr_to_stdout: true
-      )
-
-    if status != 0 do
-      Mix.raise("#{app} mix command failed: mix #{Enum.join(args, " ")}")
-    end
-  end
-
-  defp run_child_test_command(app, args, extra_env \\ []) when is_atom(app) do
-    run_child_mix_command(app, ["test" | args], extra_env)
-  end
 end
