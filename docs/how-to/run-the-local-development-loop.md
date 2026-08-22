@@ -3,7 +3,7 @@ title: Run the Local Development Loop
 tags: [how-to, developer, simulator, profiler, provider]
 status: active
 created: 2026-04-03
-updated: 2026-07-30
+updated: 2026-08-21
 ---
 
 # Run the Local Development Loop
@@ -49,6 +49,7 @@ removes that access the next time Cadence starts.
 If you are starting from a fresh local database, run migrations first:
 
 ```bash
+cd apps/cadence_web
 mix ecto.migrate
 ```
 
@@ -60,6 +61,7 @@ starting the server.
 For local profiling tasks, start Cadence with a distributed node name:
 
 ```bash
+cd apps/cadence_web
 iex --sname cadence -S mix phx.server
 ```
 
@@ -138,13 +140,15 @@ The default hk pre-commit hook runs the shared quality checks and tests only
 the Mix projects affected by the staged changes:
 
 ```bash
+cd ../..
 mix precommit.affected
 ```
 
 Workspace follows the declared path dependencies transitively. For
 example, a `cadence_ccsds` change also tests `cadence`, `cadence_simulator`, and
 `cadence_web`, while a `cadence_web`-only change tests only `cadence_web`.
-Changes to the root `mix.exs`, `mix.lock`, or shared `config` affect every
+Each project's configuration and lockfile affect that project and its declared
+dependents. Root orchestration and Workspace policy changes affect every
 project.
 
 Inspect the current selection and package graph with:

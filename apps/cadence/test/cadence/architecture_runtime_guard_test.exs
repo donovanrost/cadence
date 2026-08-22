@@ -117,7 +117,7 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
   end
 
   test "application defaults configure slow safety scans, not primary polling loops" do
-    config = read_repo_file!("config/config.exs")
+    config = read_app_file!("config/config.exs")
 
     for config_key <- @config_guarded_keys do
       assert config =~ "#{config_key}:",
@@ -131,13 +131,6 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
   defp read_app_file!(relative_path) do
     __DIR__
     |> Path.join("../../#{relative_path}")
-    |> Path.expand()
-    |> File.read!()
-  end
-
-  defp read_repo_file!(relative_path) do
-    __DIR__
-    |> Path.join("../../../../#{relative_path}")
     |> Path.expand()
     |> File.read!()
   end

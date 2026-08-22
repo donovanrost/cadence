@@ -15,7 +15,13 @@ defmodule CadenceSimulator.GeneratorWorker do
 
   require Logger
 
-  alias CadenceSimulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics, TMFramePlan}
+  alias CadenceSimulator.{
+    PacketEncoder,
+    SendBuffer,
+    SequenceAllocator,
+    SimulatorMetrics,
+    TMFramePlan
+  }
 
   defstruct [
     :worker_id,
@@ -236,7 +242,8 @@ defmodule CadenceSimulator.GeneratorWorker do
        when is_pid(pid) do
     send(
       pid,
-      {:generator_batch_complete, worker_id, start_step, step_count, packet_count, delivery_result}
+      {:generator_batch_complete, worker_id, start_step, step_count, packet_count,
+       delivery_result}
     )
   end
 

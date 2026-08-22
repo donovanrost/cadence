@@ -295,7 +295,7 @@ Exercise the integration as an operator would:
     revision.
 
 Run focused tests from the owning application, then run `mix precommit` from the
-umbrella root.
+Workspace root.
 
 ## Checklist
 

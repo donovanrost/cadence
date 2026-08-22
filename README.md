@@ -1,13 +1,16 @@
 # Cadence
 
-Cadence is now structured as an umbrella project.
+Cadence is a monorepo poncho coordinated by a code-free Elixir Workspace root.
+Each application and package owns its Mix build, dependencies, lockfile, and
+configuration boundary.
 
 ## Layout
 
-- `apps/cadence` - new core application for the redesigned ground data system
-- `apps/cadence_web` - new web/application boundary for Cadence
-- `apps/cadence_ccsds` - shared CCSDS protocol library
+- `apps/cadence` - core domain, persistence, and runtime application
+- `apps/cadence_web` - Phoenix boundary and Cadence server composition root
 - `apps/cadence_simulator` - independently runnable external provider simulator
+- `packages/cadence_catalog` - catalog and Mission Model compiler package
+- `packages/cadence_ccsds` - shared CCSDS protocol package
 - `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
 ## Documentation
@@ -21,5 +24,6 @@ Cadence is now structured as an umbrella project.
 
 ## Legacy Code
 
-The legacy application is intentionally kept outside the umbrella `apps/` path so
-its `Cadence` and `CadenceWeb` modules do not conflict with the new system.
+The legacy application is intentionally kept outside the active Workspace
+project paths so its `Cadence` and `CadenceWeb` modules do not conflict with the
+new system.

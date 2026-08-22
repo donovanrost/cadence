@@ -3,7 +3,7 @@ title: Developer Architecture Guide
 tags: [developer, architecture, runtime, persistence, simulator, onboarding]
 status: active
 created: 2026-04-03
-updated: 2026-07-31
+updated: 2026-08-21
 ---
 
 # Developer Architecture Guide
@@ -39,15 +39,16 @@ reconciled mission data plane. The authority model is defined by
 the intended end state is described in the
 [target architecture](./architecture/management-control-data-plane-target.md).
 
-At the umbrella level:
+At the Workspace project level:
 
 - `apps/cadence` contains the core domain, runtime, persistence, replay, and
   provider-client boundary.
 - `apps/cadence_web` contains the Phoenix API and UI boundary.
-- `apps/cadence_ccsds` contains protocol primitives shared by Cadence and
-  external peers.
 - `apps/cadence_simulator` contains the independently runnable external ground
   network simulator.
+- `packages/cadence_catalog` contains the catalog and Mission Model compiler.
+- `packages/cadence_ccsds` contains protocol primitives shared by Cadence and
+  external peers.
 - `legacy/cadence_legacy` is a preserved reference snapshot of the previous
   system and is useful for migration and performance comparisons.
 
@@ -377,6 +378,7 @@ The preferred local workflow is profile-driven.
 Run the server as a named node when you want to use the profiler tasks:
 
 ```bash
+cd apps/cadence_web
 iex --sname cadence -S mix phx.server
 ```
 
@@ -463,7 +465,7 @@ When adding new code, these are the first places to look.
 
 ### Shared CCSDS library
 
-- `apps/cadence_ccsds/lib/cadence/ccsds`
+- `packages/cadence_ccsds/lib/cadence/ccsds`
 
 ### External simulator
 

@@ -9,6 +9,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 
 
 [tasks.cadence]
+dir = "apps/cadence_web"
 run = "iex --sname cadence --cookie cadence -S mix phx.server"
 
 [tools]

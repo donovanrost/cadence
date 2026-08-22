@@ -36,6 +36,7 @@ with the Phoenix dev server, and only in-network services need it.
 Export OTLP from the BEAM to the collector:
 
 ```
+cd apps/cadence_web
 OTEL_SERVICE_NAME=cadence \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=development \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
@@ -50,10 +51,11 @@ exporter.
 
 ## Exercise the full contact and telemetry path
 
-After starting the observability stack and applying migrations, run the SRE
-demo from the umbrella root:
+After starting the observability stack, run the SRE demo from the web
+composition root:
 
 ```
+cd apps/cadence_web
 mix ecto.migrate
 
 OTEL_SERVICE_NAME=cadence-sre-demo \
@@ -62,7 +64,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 CADENCE_OTEL_METRICS_EXPORT_INTERVAL_MS=1000 \
 CADENCE_OTEL_METRICS_SAMPLE_INTERVAL_MS=1000 \
 CADENCE_OTEL_MISSION_HEALTH_INTERVAL_MS=1000 \
-mix run --no-start dev/dashboard_ops_demo.exs
+mix run --no-start ../../dev/dashboard_ops_demo.exs
 ```
 
 The script persists a uniquely named organization, mission, spacecraft, source

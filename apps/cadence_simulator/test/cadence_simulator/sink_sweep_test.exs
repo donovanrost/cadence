@@ -51,7 +51,14 @@ defmodule CadenceSimulator.SinkSweepTest do
     }
 
     summary =
-      SinkSweep.build_summary(400.0, 8, simulator_before, simulator_after, sink_before, sink_after)
+      SinkSweep.build_summary(
+        400.0,
+        8,
+        simulator_before,
+        simulator_after,
+        sink_before,
+        sink_after
+      )
 
     assert summary.rate_hz == 400.0
     assert summary.simulator_tx_per_sec == 10.0

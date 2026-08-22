@@ -3,7 +3,7 @@ title: Profile Cadence Telemetry Ingress
 tags: [how-to, profiling, telemetry, runtime, simulator]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-08-21
 ---
 
 # Profile Cadence Telemetry Ingress
@@ -17,6 +17,7 @@ The profiler task connects to a running Cadence node, so start the server like
 this:
 
 ```bash
+cd apps/cadence_web
 iex --sname cadence -S mix phx.server
 ```
 

@@ -3,7 +3,7 @@ title: Configuration Reference
 tags: [reference, developer, config, env, profiles, runtime]
 status: active
 created: 2026-04-03
-updated: 2026-07-20
+updated: 2026-08-21
 ---
 
 # Configuration Reference
@@ -18,11 +18,14 @@ Use this as a quick reference when you need to answer:
 - what fields exist in a dev profile?
 - how do profiler tasks attach to a named node?
 
-## 1. Runtime defaults in `config/config.exs`
+## 1. Runtime defaults in application-owned configuration
 
 The main runtime defaults currently live in:
 
-- [`config/config.exs`](../../config/config.exs)
+- [`apps/cadence/config/config.exs`](../../apps/cadence/config/config.exs)
+
+The Phoenix composition root imports those core defaults and adds web policy in
+[`apps/cadence_web/config/config.exs`](../../apps/cadence_web/config/config.exs).
 
 Important keys:
 
@@ -141,11 +144,11 @@ plus stale-timer and safety-activity totals and a bounded recent-event list.
 This view is intentionally in memory only; it is suitable for a runtime health
 page or alert adapter, not as durable audit history.
 
-## 2. Environment administrator in `config/runtime.exs`
+## 2. Environment administrator in runtime configuration
 
 The environment administrator is configured in:
 
-- [`config/runtime.exs`](../../config/runtime.exs)
+- [`apps/cadence_web/config/runtime.exs`](../../apps/cadence_web/config/runtime.exs)
 
 Primary env vars:
 
@@ -164,7 +167,7 @@ Behavior:
 - it uses the normal browser sign-in flow and enters admin mode immediately
 - durable platform administrators reauthenticate to enter time-bounded admin mode
 
-## 3. Production env in `config/runtime.exs`
+## 3. Production environment composition
 
 For `config_env() == :prod`, Cadence currently expects:
 
@@ -178,6 +181,11 @@ These configure:
 
 - `Cadence.Repo`
 - `CadenceWeb.Endpoint`
+
+The web application is the production composition root, so
+[`apps/cadence_web/config/runtime.exs`](../../apps/cadence_web/config/runtime.exs)
+owns both core runtime settings and endpoint settings. Runtime configuration
+cannot import another configuration file in an Elixir release.
 
 Optional production settings:
 
@@ -353,6 +361,7 @@ The live profiler tasks attach to a running named Cadence node.
 Typical local startup:
 
 ```bash
+cd apps/cadence_web
 iex --sname cadence -S mix phx.server
 ```
 
@@ -386,8 +395,9 @@ configuration.
 
 Use this rule of thumb:
 
-- durable application/runtime defaults -> `config/config.exs`
-- environment-sensitive production settings -> `config/runtime.exs`
+- durable core defaults -> `apps/cadence/config/config.exs`
+- environment-sensitive product settings -> `apps/cadence_web/config/runtime.exs`
+- Phoenix and server composition -> `apps/cadence_web/config/`
 - local developer workflow defaults -> `dev/profiles/*.yaml`
 - one-off experiment knobs -> task or CLI flags
 
@@ -405,8 +415,9 @@ When adding new configuration, decide:
 
 Then place it in:
 
-- `config/config.exs`
-- `config/runtime.exs`
+- `apps/cadence/config/config.exs`
+- `apps/cadence_web/config/runtime.exs`
+- another application-owned `config/` directory
 - `dev/profiles/*.yaml`
 - or a task/CLI flag
 

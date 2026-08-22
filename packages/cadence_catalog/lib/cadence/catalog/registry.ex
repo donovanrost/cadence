@@ -1,11 +1,10 @@
 defmodule Cadence.Catalog.Registry do
   @moduledoc """
-  Registry of built-in and configured catalog importers.
+  Registry of built-in and explicitly supplied catalog importers.
 
   The portable Cadence YAML importer is available without application
   configuration. `registrations/1` builds an immutable, request-local registry
-  while `list_importers/1` preserves the `:catalog_importers`
-  application-environment fallback used by the running application.
+  while `list_importers/1` accepts caller-owned registrations.
   """
 
   alias Cadence.Catalog.ImporterDescriptor
@@ -32,7 +31,7 @@ defmodule Cadence.Catalog.Registry do
     catalog_family = Keyword.get(opts, :catalog_family)
 
     opts
-    |> Keyword.get_lazy(:importer_registrations, &configured_importers/0)
+    |> Keyword.get_lazy(:importer_registrations, &builtin_importers/0)
     |> filter_and_sort(catalog_family)
   end
 
@@ -156,11 +155,7 @@ defmodule Cadence.Catalog.Registry do
     end)
   end
 
-  defp configured_importers do
-    :cadence_catalog
-    |> Application.get_env(:catalog_importers, @builtin_importers)
-    |> registrations()
-  end
+  defp builtin_importers, do: registrations(@builtin_importers)
 
   defp fetch_from(importers, importer_key, version) do
     matches =

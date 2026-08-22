@@ -1,4 +1,3 @@
 [
-  inputs: ["{mix,.formatter}.exs", ".credo.exs", ".workspace.exs", "config/*.exs"],
-  subdirectories: ["apps/*"]
+  inputs: ["{mix,.formatter}.exs", ".credo.exs", ".workspace.exs", "config/*.exs"]
 ]

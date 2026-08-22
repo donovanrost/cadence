@@ -1,9 +1,9 @@
 import Config
 
 # Simulator integration tests intentionally exercise a real Cadence runtime.
-# Load its complete test configuration so Cadence dependencies are validated
-# against the same compile-time environment as workspace-root invocations.
-import_config "../../../config/config.exs"
+# Load the core application's owned test configuration explicitly. Simulator
+# production configuration remains independent from Cadence.
+import_config "../../cadence/config/config.exs"
 
 config :cadence_simulator,
   provider_http: [enabled: false],

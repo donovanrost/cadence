@@ -9,7 +9,7 @@ const fs = require("fs")
 const path = require("path")
 
 module.exports = plugin(function({matchComponents, theme}) {
-  const iconsDir = path.join(__dirname, "../../../../deps/heroicons/optimized")
+  const iconsDir = path.join(__dirname, "../../deps/heroicons/optimized")
   const values = {}
   const icons = [
     ["", "/24/outline"],

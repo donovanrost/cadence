@@ -12,7 +12,7 @@
 - Concatenated wire-byte SHA-256:
   `a9e02e21288a66d91d2a052cf87b4dc915b2cc154f5d287b086ea30ba5c56f90`
 
-Reproduction command, from `apps/cadence_ccsds`:
+Reproduction command, from `packages/cadence_ccsds`:
 
 ```sh
 bash conformance/hermes/run.sh

@@ -62,7 +62,9 @@ defmodule CadenceSimulator.Providers.ScenarioProvider do
   def parallel_safe?(_config), do: false
 
   defp load_scenario(%{scenario_path: path}) when is_binary(path), do: Parser.parse_file(path)
-  defp load_scenario(%{scenario: scenario}) when is_map(scenario), do: {:ok, normalize_scenario(scenario)}
+
+  defp load_scenario(%{scenario: scenario}) when is_map(scenario),
+    do: {:ok, normalize_scenario(scenario)}
 
   defp load_scenario(config) do
     {:error, {:invalid_config, "Expected :scenario_path or :scenario key", config}}

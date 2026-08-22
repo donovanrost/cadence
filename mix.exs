@@ -1,6 +1,8 @@
 defmodule CadenceWorkspace.MixProject do
   use Mix.Project
 
+  @child_apps [:cadence, :cadence_catalog, :cadence_ccsds, :cadence_simulator, :cadence_web]
+
   def project do
     [
       app: :cadence_workspace,
@@ -9,7 +11,6 @@ defmodule CadenceWorkspace.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      listeners: [Phoenix.CodeReloader],
       deps: deps(),
       aliases: aliases()
     ]
@@ -37,7 +38,7 @@ defmodule CadenceWorkspace.MixProject do
   defp deps do
     [
       {:cadence_simulator, path: "apps/cadence_simulator", env: Mix.env(), runtime: false},
-      {:cadence_web, path: "apps/cadence_web", env: Mix.env()},
+      {:cadence_web, path: "apps/cadence_web", env: Mix.env(), runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:workspace, "~> 0.3", only: [:dev, :test], runtime: false}
     ]
@@ -45,7 +46,8 @@ defmodule CadenceWorkspace.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get"],
+      setup: ["deps.get", &setup_children/1],
+      "format.all": [&run_format_all/1],
       test: [&run_child_tests/1],
       "test.fast": [&run_fast_tests/1],
       "test.runtime": [&run_runtime_tests/1],
@@ -58,12 +60,11 @@ defmodule CadenceWorkspace.MixProject do
       "test.browser": [&run_browser_tests/1],
       "test.browser.full": [&run_full_browser_tests/1],
       "precommit.checks": [
-        "format",
+        "format.all",
         "workspace.run -t compile --env-var MIX_ENV=test -- --warnings-as-errors",
         "credo --strict",
         "workspace.check",
-        "cadence.extensions.check",
-        "cadence.architecture.check --summary"
+        &run_architecture_checks/1
       ],
       precommit: [
         "precommit.checks",
@@ -93,6 +94,44 @@ defmodule CadenceWorkspace.MixProject do
 
         Mix.Task.run("workspace.run", ["-t", "test", "--affected"])
     end
+  end
+
+  defp setup_children(args) do
+    Enum.each(@child_apps, &run_child_mix_command(&1, ["deps.get" | args]))
+  end
+
+  defp run_format_all(args) do
+    option_args = Enum.filter(args, &String.starts_with?(&1, "-"))
+    path_args = args -- option_args
+
+    if path_args == [] do
+      Mix.Task.run("format", option_args)
+      Enum.each(@child_apps, &run_child_mix_command(&1, ["format" | option_args]))
+    else
+      root_paths = Enum.reject(path_args, &known_child_path_arg?/1)
+
+      if root_paths != [] do
+        Mix.Task.run("format", option_args ++ root_paths)
+      end
+
+      Enum.each(@child_apps, &run_child_format(&1, path_args, option_args))
+    end
+  end
+
+  defp run_child_format(app, path_args, option_args) do
+    child_paths =
+      path_args
+      |> Enum.filter(&child_path_arg?(&1, app))
+      |> Enum.map(&child_relative_arg(&1, app))
+
+    if child_paths != [] do
+      run_child_mix_command(app, ["format" | option_args ++ child_paths])
+    end
+  end
+
+  defp run_architecture_checks(_args) do
+    run_child_mix_command(:cadence, ["cadence.extensions.check"])
+    run_child_mix_command(:cadence, ["cadence.architecture.check", "--summary"])
   end
 
   defp run_fast_tests(args) do
@@ -209,8 +248,7 @@ defmodule CadenceWorkspace.MixProject do
   end
 
   defp child_apps_for_arg(arg) do
-    [:cadence, :cadence_catalog, :cadence_ccsds, :cadence_simulator, :cadence_web]
-    |> Enum.filter(&child_path_arg?(arg, &1))
+    Enum.filter(@child_apps, &child_path_arg?(arg, &1))
   end
 
   defp rewrite_child_args(args, app) do
@@ -229,10 +267,7 @@ defmodule CadenceWorkspace.MixProject do
   end
 
   defp known_child_path_arg?(arg) when is_binary(arg) do
-    Enum.any?(
-      [:cadence, :cadence_catalog, :cadence_ccsds, :cadence_simulator, :cadence_web],
-      &child_path_arg?(arg, &1)
-    )
+    Enum.any?(@child_apps, &child_path_arg?(arg, &1))
   end
 
   defp child_relative_arg(arg, app) do
@@ -242,8 +277,8 @@ defmodule CadenceWorkspace.MixProject do
   end
 
   defp child_path(:cadence), do: "apps/cadence"
-  defp child_path(:cadence_catalog), do: "apps/cadence_catalog"
-  defp child_path(:cadence_ccsds), do: "apps/cadence_ccsds"
+  defp child_path(:cadence_catalog), do: "packages/cadence_catalog"
+  defp child_path(:cadence_ccsds), do: "packages/cadence_ccsds"
   defp child_path(:cadence_simulator), do: "apps/cadence_simulator"
   defp child_path(:cadence_web), do: "apps/cadence_web"
 

@@ -11,20 +11,21 @@ WORKDIR /workspace
 
 RUN mix local.hex --force && mix local.rebar --force
 
-COPY mix.lock ./mix.lock
-COPY config ./config
-COPY apps/cadence_catalog/mix.exs ./apps/cadence_catalog/mix.exs
-COPY apps/cadence_ccsds/mix.exs ./apps/cadence_ccsds/mix.exs
 COPY apps/cadence_simulator/mix.exs ./apps/cadence_simulator/mix.exs
+COPY apps/cadence_simulator/mix.lock ./apps/cadence_simulator/mix.lock
 COPY apps/cadence_simulator/config ./apps/cadence_simulator/config
+COPY packages/cadence_catalog/mix.exs ./packages/cadence_catalog/mix.exs
+COPY packages/cadence_catalog/mix.lock ./packages/cadence_catalog/mix.lock
+COPY packages/cadence_ccsds/mix.exs ./packages/cadence_ccsds/mix.exs
+COPY packages/cadence_ccsds/mix.lock ./packages/cadence_ccsds/mix.lock
 
 WORKDIR /workspace/apps/cadence_simulator
 RUN mix deps.get --only prod
 
 WORKDIR /workspace
-COPY apps/cadence_catalog/lib ./apps/cadence_catalog/lib
-COPY apps/cadence_ccsds/lib ./apps/cadence_ccsds/lib
 COPY apps/cadence_simulator/lib ./apps/cadence_simulator/lib
+COPY packages/cadence_catalog/lib ./packages/cadence_catalog/lib
+COPY packages/cadence_ccsds/lib ./packages/cadence_ccsds/lib
 
 WORKDIR /workspace/apps/cadence_simulator
 RUN mix escript.build

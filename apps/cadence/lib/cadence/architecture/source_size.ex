@@ -15,7 +15,9 @@ defmodule Cadence.Architecture.SourceSize do
   @source_globs [
     "apps/*/lib/**/*.ex",
     "apps/*/test/**/*.{ex,exs}",
-    "apps/*/browser_test/**/*.{ex,exs}"
+    "apps/*/browser_test/**/*.{ex,exs}",
+    "packages/*/lib/**/*.ex",
+    "packages/*/test/**/*.{ex,exs}"
   ]
 
   @type finding_kind :: :production_file | :test_file | :test_function

@@ -23,9 +23,18 @@ defmodule CadenceSimulator.SinkSweep do
 
   @spec build_summary(float(), pos_integer(), map() | nil, map() | nil, map() | nil, map() | nil) ::
           summary()
-  def build_summary(rate_hz, duration_seconds, simulator_before, simulator_after, sink_before, sink_after)
+  def build_summary(
+        rate_hz,
+        duration_seconds,
+        simulator_before,
+        simulator_after,
+        sink_before,
+        sink_after
+      )
       when is_number(rate_hz) and is_integer(duration_seconds) and duration_seconds > 0 do
-    simulator = ProfileSweep.build_simulator_summary(simulator_before, simulator_after, duration_seconds)
+    simulator =
+      ProfileSweep.build_simulator_summary(simulator_before, simulator_after, duration_seconds)
+
     sink_before = sink_before || %{}
     sink_after = sink_after || %{}
 

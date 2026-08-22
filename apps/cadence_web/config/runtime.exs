@@ -1,5 +1,8 @@
 import Config
 
+# The web application is the production composition root. It owns runtime
+# configuration for both the Cadence core and its web endpoint.
+
 case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
   endpoint when is_binary(endpoint) and endpoint != "" ->
     config :opentelemetry,
@@ -170,10 +173,6 @@ case {admin_email, admin_password} do
     raise("CADENCE_ADMIN_EMAIL and CADENCE_ADMIN_PASSWORD must be set together")
 end
 
-config :cadence_web,
-       :admin_mode_ttl_seconds,
-       System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()
-
 case System.get_env("CADENCE_TELEMETRY_CURRENT_VALUE_STORE", "ets") |> String.downcase() do
   "postgres" ->
     config :cadence, :telemetry_current_value_store,
@@ -206,6 +205,10 @@ case System.get_env("CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES") ||
         raise "CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES is invalid JSON: #{inspect(reason)}"
     end
 end
+
+config :cadence_web,
+       :admin_mode_ttl_seconds,
+       System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()
 
 if config_env() == :prod do
   database_url =

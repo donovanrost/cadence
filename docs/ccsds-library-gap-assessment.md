@@ -251,7 +251,7 @@ compose those pieces:
 
 ## Conformance evidence boundary
 
-The maintained corpus lives under `apps/cadence_ccsds/conformance` and records
+The maintained corpus lives under `packages/cadence_ccsds/conformance` and records
 the exact CCSDS publication URL, SHA-256, locator, and evidence class for every
 vector. The normal test suite consumes all entries and runs reproducible seeded
 properties; `CCSDS_GENERATIVE_CASES` and `CCSDS_GENERATIVE_SEED` scale and

@@ -149,7 +149,8 @@ value. Do not omit the field shape.
 
 Backends are selected through application config.
 
-Current defaults in [`config/config.exs`](../../config/config.exs):
+Current defaults in
+[`apps/cadence/config/config.exs`](../../apps/cadence/config/config.exs):
 
 - `:ingress_archive` -> filesystem
 - `:protocol_record_archive` -> filesystem

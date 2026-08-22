@@ -5,10 +5,12 @@
       files: %{
         included: [
           "mix.exs",
-          "config/",
           "apps/*/mix.exs",
           "apps/*/lib/",
-          "apps/*/test/"
+          "apps/*/test/",
+          "packages/*/mix.exs",
+          "packages/*/lib/",
+          "packages/*/test/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/cover/"]
       }

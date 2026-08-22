@@ -59,6 +59,7 @@ defmodule CadenceSimulator.DrainSink do
 
     {:ok, listen_socket} = :gen_tcp.listen(port, listen_opts)
     counters = :counters.new(5, [:write_concurrency])
+
     acceptor_pid =
       spawn(fn ->
         accept_loop(listen_socket, counters)
@@ -101,7 +102,14 @@ defmodule CadenceSimulator.DrainSink do
       {:ok, socket} ->
         :counters.add(counters, @accepted_connections_idx, 1)
         :counters.add(counters, @open_connections_idx, 1)
-        :ok = :inet.setopts(socket, [active: false, recbuf: @default_socket_buffer, buffer: @default_socket_buffer])
+
+        :ok =
+          :inet.setopts(socket,
+            active: false,
+            recbuf: @default_socket_buffer,
+            buffer: @default_socket_buffer
+          )
+
         receive_loop(socket, counters)
         accept_loop(listen_socket, counters)
 
@@ -137,8 +145,11 @@ defmodule CadenceSimulator.DrainSink do
 
       {:error, _reason} ->
         case :inet.getaddr(host_charlist, :inet) do
-          {:ok, ip} -> ip
-          {:error, reason} -> raise ArgumentError, "invalid TCP drain host #{inspect(host)}: #{inspect(reason)}"
+          {:ok, ip} ->
+            ip
+
+          {:error, reason} ->
+            raise ArgumentError, "invalid TCP drain host #{inspect(host)}: #{inspect(reason)}"
         end
     end
   end

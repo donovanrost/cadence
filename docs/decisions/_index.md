@@ -2,14 +2,14 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-08-11
+updated: 2026-08-21
 status: active
 ---
 
 # Architecture Decision Records
 
-This directory holds ADRs for the redesigned Cadence system in `apps/cadence`
-and `apps/cadence_web`.
+This directory holds ADRs for the redesigned Cadence system across its
+applications and packages.
 
 For the current implementation shape and developer workflow, start with the
 [Developer Architecture Guide](../developer-architecture-guide.md).
@@ -38,6 +38,7 @@ Legacy ADRs remain under
 | [ADR-016](016-typed-extension-packages-and-product-applications.md) | Typed Extension Packages and Product Applications | Accepted |
 | [ADR-019](019-telemetry-data-plane-persistence-and-projection-topology.md) | Telemetry Data-Plane Persistence and Projection Topology | Accepted |
 | [ADR-020](020-xtce-informed-mission-model-intermediate-representation.md) | XTCE-Informed Mission Model Intermediate Representation | Accepted |
+| [ADR-021](021-monorepo-poncho-project-and-package-layout.md) | Monorepo Poncho Project and Package Layout | Accepted |
 
 ## Proposed Decisions
 

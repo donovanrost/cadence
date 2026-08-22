@@ -36,7 +36,8 @@ migrations:
 
 ```sh
 docker compose up -d postgres questdb greptimedb tempo loki otel_collector grafana
-(cd apps/cadence && mix ecto.migrate)
+cd apps/cadence_web
+mix ecto.migrate
 ```
 
 The dashboard management migrations in the current checkout must be applied
@@ -48,6 +49,7 @@ In the first terminal, start Phoenix with the shared Postgres current-value
 projection. The standalone demo process and Phoenix must use the same store.
 
 ```sh
+cd apps/cadence_web
 CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres mix phx.server
 ```
 
@@ -61,9 +63,10 @@ administration stops in the walkthrough.
 In a second terminal, run:
 
 ```sh
+cd apps/cadence_web
 CADENCE_DASHBOARD_DEMO_BROWSER_EMAIL=operator@example.com \
 CADENCE_DASHBOARD_DEMO_GRAFANA_URL=http://localhost:3300 \
-mix run --no-start dev/dashboard_ops_demo.exs
+mix run --no-start ../../dev/dashboard_ops_demo.exs
 ```
 
 Replace `operator@example.com` with the signed-in account. The script waits for

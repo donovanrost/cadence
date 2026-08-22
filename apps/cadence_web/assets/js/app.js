@@ -1,7 +1,7 @@
 import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
-import {createLiveToastHook} from "../../../../deps/live_toast"
+import {createLiveToastHook} from "../../deps/live_toast"
 import ClipboardButton from "./hooks/clipboard_button"
 import CsvDownload from "./hooks/csv_download"
 import DashboardGrid from "./hooks/dashboard_grid"

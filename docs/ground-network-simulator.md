@@ -198,9 +198,10 @@ Endpoint, environment, and credential ownership is organization-scoped:
    `provider_environment_ref`, and polling event mode.
 3. Select a secret backend and enter only its locator. For local development,
    choose **Local environment** and use
-   `CADENCE_SIMULATOR_PROVIDER_API_TOKEN`. `config/dev.exs` enables this local
-   backend; unset or disable `:provider_local_credentials` outside local
-   environments. For production, choose **External secret manager** and
+   `CADENCE_SIMULATOR_PROVIDER_API_TOKEN`.
+   `apps/cadence/config/dev.exs` enables this local backend; unset or disable
+   `:provider_local_credentials` outside local environments. For production,
+   choose **External secret manager** and
    configure `config :cadence, :secrets` with `:secret_manager_url` (HTTPS by
    default) plus `:secret_manager_token` or `:secret_manager_token_env`.
 4. Define organization guardrails, validate the account, and grant an exact

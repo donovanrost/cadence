@@ -8,10 +8,6 @@ defmodule Cadence.MixProject do
       app: :cadence,
       workspace: workspace(),
       version: "0.1.0",
-      build_path: "../../_build",
-      config_path: "../../config/config.exs",
-      deps_path: "../../deps",
-      lockfile: "../../mix.lock",
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -34,15 +30,15 @@ defmodule Cadence.MixProject do
   defp workspace do
     [
       tags: [{:layer, :domain}],
-      affected_by: ["../../mix.exs", "../../mix.lock", "../../config"]
+      affected_by: ["../../mix.exs", "../../.workspace.exs"]
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:cadence_catalog, path: "../cadence_catalog", env: Mix.env()},
-      {:cadence_ccsds, path: "../cadence_ccsds", env: Mix.env()},
+      {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
+      {:cadence_ccsds, path: "../../packages/cadence_ccsds", env: Mix.env()},
       {:ecto_sql, "~> 3.13"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},

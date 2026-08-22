@@ -90,7 +90,7 @@ The following namespaces are transitional and are not context APIs:
 
 ## Executable enforcement
 
-Run the policy check from the umbrella root:
+Run the policy check from the Workspace root:
 
 ```bash
 mix cadence.architecture.check

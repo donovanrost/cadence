@@ -35,10 +35,7 @@ defmodule Cadence.Catalog.Importers.Xtce13.SchemaValidator do
   def schema_sha256, do: @schema_sha256
 
   defp validator_executable do
-    configured =
-      Application.get_env(:cadence_catalog, :xtce_schema_validator_executable)
-
-    case configured || System.find_executable("xmllint") do
+    case System.find_executable("xmllint") do
       executable when is_binary(executable) and executable != "" -> {:ok, executable}
       _other -> {:error, :xtce_schema_validator_unavailable}
     end

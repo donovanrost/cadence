@@ -55,8 +55,8 @@ Select `Ground Network Simulator` and enter:
   guardrails appropriate for the demo.
 
 Cadence stores only a stable registry reference and the environment-variable
-name. The local backend is enabled by `config/dev.exs`; production must use an
-approved external secret manager over HTTPS. On the new account detail, select
+name. The local backend is enabled by `apps/cadence/config/dev.exs`; production
+must use an approved external secret manager over HTTPS. On the new account detail, select
 **Validate**, then grant the exact account version to the mission. Mission grant
 restrictions can narrow but never widen the account guardrails.
 
@@ -274,12 +274,13 @@ DELIVERY_PROFILE_ID=$(curl --silent --fail \
 echo "$DELIVERY_PROFILE_ID"
 ```
 
-Start Cadence as the second BEAM from the repository root in terminal C. The
+Start Cadence as the second BEAM from the web composition root in terminal C. The
 credential reference configured in Cadence below resolves the provider token
 from this process environment; the token is never persisted in the Provider
 Account, Mission Provider, reservation, diagnostics, event, or audit record:
 
 ```bash
+cd apps/cadence_web
 export SIMULATOR_PROVIDER_TOKEN=local-simulator-provider-token
 mix phx.server
 ```

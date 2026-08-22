@@ -2,7 +2,7 @@
 @source "../../lib/cadence_web";
 @source "../js";
 @source "../css";
-@source "../../../../deps/live_toast/lib";
+@source "../../deps/live_toast/lib";
 
 @plugin "../vendor/heroicons";
 

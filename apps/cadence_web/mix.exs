@@ -6,10 +6,6 @@ defmodule CadenceWeb.MixProject do
       app: :cadence_web,
       workspace: workspace(),
       version: "0.1.0",
-      build_path: "../../_build",
-      config_path: "../../config/config.exs",
-      deps_path: "../../deps",
-      lockfile: "../../mix.lock",
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -42,7 +38,7 @@ defmodule CadenceWeb.MixProject do
   defp workspace do
     [
       tags: [{:layer, :application}],
-      affected_by: ["../../mix.exs", "../../mix.lock", "../../config"]
+      affected_by: ["../../mix.exs", "../../.workspace.exs"]
     ]
   end
 
@@ -51,7 +47,7 @@ defmodule CadenceWeb.MixProject do
     [
       {:bandit, "~> 1.5"},
       {:cadence, path: "../cadence", env: Mix.env()},
-      {:cadence_catalog, path: "../cadence_catalog", env: Mix.env()},
+      {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:heroicons,
        github: "tailwindlabs/heroicons",
