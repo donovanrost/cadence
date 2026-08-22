@@ -1,8 +1,8 @@
 defmodule CadenceSimulator.IngressBenchmark.DeterministicPatternTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.CCSDS.SDLP.TM.FrameCodec
   alias CadenceSimulator.IngressBenchmark.DeterministicPattern
+  alias CCSDS.SDLP.TM.FrameCodec
 
   test "TM corpus emits fixed frames with continuous counters across arbitrary slices" do
     frame_size = 62_500

@@ -7,8 +7,8 @@ defmodule CadenceSimulator.TMFramePlan do
   emission.
   """
 
-  alias Cadence.CCSDS.FrameErrorControl
-  alias Cadence.CCSDS.SpacePacket.Idle
+  alias CCSDS.FrameErrorControl
+  alias CCSDS.SpacePacket.Idle
 
   @primary_header_size 6
   @min_idle_packet_size 7

@@ -21,7 +21,7 @@ simulator production escript, the web production release, Workspace and
 architecture checks, and the authoritative root precommit gate all pass.
 
 This ADR amends [ADR-014](014-shared-ccsds-library-boundary.md) by classifying
-`cadence_ccsds` as a package rather than an umbrella application. It does not
+`ccsds` as a package rather than an umbrella application. It does not
 change ADR-014's protocol ownership or dependency direction.
 
 ## Context
@@ -51,7 +51,7 @@ The existing projects also have two different architectural roles:
 
 - `cadence`, `cadence_web`, and `cadence_simulator` own runtime behavior,
   supervision, persistence, endpoints, or an independently running process;
-- `cadence_catalog` and `cadence_ccsds` are reusable dependency leaves with no
+- `cadence_catalog` and `ccsds` are reusable dependency leaves with no
   application callback or supervision tree.
 
 Keeping both roles under one `apps/` directory obscures the distinction between
@@ -80,7 +80,7 @@ cadence/
 │   └── cadence_simulator/
 ├── packages/
 │   ├── cadence_catalog/
-│   └── cadence_ccsds/
+│   └── ccsds/
 ├── .workspace.exs
 └── mix.exs
 ```
@@ -177,9 +177,9 @@ runtime.
 
 The initial package set is:
 
-#### `packages/cadence_ccsds`
+#### `packages/ccsds`
 
-`cadence_ccsds` owns protocol codecs, validation, segmentation, reassembly,
+`ccsds` owns protocol codecs, validation, segmentation, reassembly,
 state machines, and caller-owned CCSDS effects as established by ADR-014.
 
 #### `packages/cadence_catalog`
@@ -252,11 +252,11 @@ apps/cadence_web
 
 apps/cadence
     ├──> packages/cadence_catalog
-    └──> packages/cadence_ccsds
+    └──> packages/ccsds
 
 apps/cadence_simulator
     ├──> packages/cadence_catalog
-    └──> packages/cadence_ccsds
+    └──> packages/ccsds
 ```
 
 `cadence_simulator` may retain an explicit test-only dependency on `cadence`
@@ -292,7 +292,7 @@ rewrite.
 
 1. Add this ADR and correct documentation that still calls the live Workspace
    root an umbrella.
-2. Move and detach `cadence_ccsds`, then verify its focused suite and every
+2. Move and detach `ccsds`, then verify its focused suite and every
    consuming project.
 3. Move and detach `cadence_catalog`, including removal of deployment-specific
    global configuration from the package boundary.
@@ -314,7 +314,7 @@ checks, and the authoritative root precommit gate before completion.
 The migration is complete when:
 
 - `apps/cadence`, `apps/cadence_web`, `apps/cadence_simulator`,
-  `packages/cadence_catalog`, and `packages/cadence_ccsds` each build and run
+  `packages/cadence_catalog`, and `packages/ccsds` each build and run
   focused tests from their own directory;
 - no child points `build_path`, `config_path`, `deps_path`, or `lockfile` at
   repository-root state;

@@ -22,11 +22,11 @@
 !packages/cadence_catalog/mix.lock
 !packages/cadence_catalog/lib/
 !packages/cadence_catalog/lib/**
-!packages/cadence_ccsds/
-!packages/cadence_ccsds/mix.exs
-!packages/cadence_ccsds/mix.lock
-!packages/cadence_ccsds/lib/
-!packages/cadence_ccsds/lib/**
+!packages/ccsds/
+!packages/ccsds/mix.exs
+!packages/ccsds/mix.lock
+!packages/ccsds/lib/
+!packages/ccsds/lib/**
 !dev/
 !dev/ingress-benchmark/
 !dev/ingress-benchmark/**

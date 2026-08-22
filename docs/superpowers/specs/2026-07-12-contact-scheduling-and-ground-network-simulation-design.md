@@ -160,7 +160,7 @@ design:
   proof loses the HTTP response after provider commit and recovers the Contact
   by client reference without replaying the mutation.
 - CCSDS framing, segmentation, reassembly, and COP-1 primitives live in the
-  shared `cadence_ccsds` application.
+  shared `ccsds` application.
 
 This completes Stages 1 through 3, not the full contact-planning product.
 Contact Requirements, versioned Contact Plans, provider-fleet reconciliation,
@@ -718,7 +718,7 @@ downlink, a worker:
 
 1. loads the simulator-owned telemetry definition or generator profile;
 2. generates deterministic values for the provider spacecraft;
-3. packetizes and frames data with `cadence_ccsds`;
+3. packetizes and frames data with `ccsds`;
 4. applies configured faults and timing behavior;
 5. opens or accepts the negotiated data-plane session;
 6. streams bytes until contact completion, failure, or termination;

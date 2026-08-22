@@ -1,0 +1,13 @@
+defmodule CCSDS.SDLP.FrameCodec do
+  @moduledoc """
+  Behaviour for SDLP profile frame codecs.
+  """
+
+  alias CCSDS.Core.LinkFrame
+  alias CCSDS.Core.Types
+
+  @callback profile() :: Types.profile()
+  @callback decode(binary(), keyword()) ::
+              {:ok, [LinkFrame.t()], rest :: binary()} | {:error, term()}
+  @callback encode(LinkFrame.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+end

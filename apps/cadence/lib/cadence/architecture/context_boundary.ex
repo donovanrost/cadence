@@ -194,7 +194,6 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/runtime/"
     ],
     telemetry: [
-      "lib/cadence/ccsds/",
       "lib/cadence/derived_telemetry.ex",
       "lib/cadence/derived_telemetry/",
       "lib/cadence/ingress/",

@@ -1,8 +1,8 @@
 defmodule CadenceSimulator.PacketEncoderTest do
   use CadenceSimulator.Case, async: true
 
-  alias Cadence.CCSDS.SpacePacket.Codec
   alias CadenceSimulator.PacketEncoder
+  alias CCSDS.SpacePacket.Codec
 
   @definitions """
   version: "1.0.0"

@@ -3,11 +3,11 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
   Cadence adapter over the shared CCSDS Space Packet codec.
   """
 
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.Codec
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.Identity
   alias Cadence.Protocol.PacketRecord
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.Codec
 
   @spec decode(RawEvidence.t()) :: {:ok, PacketRecord.t()} | {:error, term()}
   def decode(%RawEvidence{} = raw_evidence) do

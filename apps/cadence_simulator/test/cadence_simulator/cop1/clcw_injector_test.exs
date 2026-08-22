@@ -1,8 +1,8 @@
 defmodule CadenceSimulator.COP1.CLCWInjectorTest do
   use CadenceSimulator.Case, async: true
 
-  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias CadenceSimulator.COP1.CLCWInjector
+  alias CCSDS.Transport.COP1.CLCW
 
   test "applies static overrides" do
     injector =

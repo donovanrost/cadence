@@ -3,7 +3,7 @@ defmodule CadenceSimulator.COP1.CLCWInjector do
   Applies deterministic overrides to CLCW fields for simulator error injection.
   """
 
-  alias Cadence.CCSDS.Transport.COP1.CLCW
+  alias CCSDS.Transport.COP1.CLCW
 
   @type schedule_entry :: %{
           at: non_neg_integer(),

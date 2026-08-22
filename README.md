@@ -10,7 +10,7 @@ configuration boundary.
 - `apps/cadence_web` - Phoenix boundary and Cadence server composition root
 - `apps/cadence_simulator` - independently runnable external provider simulator
 - `packages/cadence_catalog` - catalog and Mission Model compiler package
-- `packages/cadence_ccsds` - shared CCSDS protocol package
+- `packages/ccsds` - standalone-ready CCSDS protocol package
 - `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
 ## Documentation

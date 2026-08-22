@@ -1,9 +1,9 @@
 defmodule CadenceSimulator.TMFramePlanTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias CadenceSimulator.TMFramePlan
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   test "planned tm frames encode identically to segmentation" do
     frame = %{format: :tm, frame_size: 32, scid: 11, vcid: 2, fecf: true}

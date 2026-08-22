@@ -1,13 +1,13 @@
 defmodule CadenceSimulator.COP1.LoopbackPeerTest do
   use CadenceSimulator.Case, async: false
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
-  alias Cadence.CCSDS.TC.{FrameCodec, Segmentation, TransferFrame}
-  alias Cadence.CCSDS.Transport.COP1.{CLCW, ControlCommand}
   alias CadenceSimulator.COP1.LoopbackPeer
   alias CadenceSimulator.TestSupport.FakeRuntimeResolver
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias CCSDS.TC.{FrameCodec, Segmentation, TransferFrame}
+  alias CCSDS.Transport.COP1.{CLCW, ControlCommand}
 
   @tc_frame_size 16
 

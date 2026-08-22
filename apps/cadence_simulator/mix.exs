@@ -35,7 +35,7 @@ defmodule CadenceSimulator.MixProject do
     [
       {:bandit, "~> 1.5"},
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
-      {:cadence_ccsds, path: "../../packages/cadence_ccsds", env: Mix.env()},
+      {:ccsds, path: "../../packages/ccsds"},
       {:cadence, path: "../cadence", env: Mix.env(), only: :test},
       {:jason, "~> 1.4"},
       {:plug, "~> 1.18"},

@@ -38,7 +38,7 @@ defmodule Cadence.MixProject do
   defp deps do
     [
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
-      {:cadence_ccsds, path: "../../packages/cadence_ccsds", env: Mix.env()},
+      {:ccsds, path: "../../packages/ccsds"},
       {:ecto_sql, "~> 3.13"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},

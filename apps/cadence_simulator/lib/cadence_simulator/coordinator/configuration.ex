@@ -3,9 +3,9 @@ defmodule CadenceSimulator.Coordinator.Configuration do
 
   require Logger
 
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias CadenceSimulator.PacketEncoder
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
+  alias CCSDS.SDLP.TM.Segmentation
 
   @default_generator_count System.schedulers_online()
   @default_metrics_sample_rate 100

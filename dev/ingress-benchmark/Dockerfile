@@ -16,8 +16,8 @@ COPY apps/cadence_simulator/mix.lock ./apps/cadence_simulator/mix.lock
 COPY apps/cadence_simulator/config ./apps/cadence_simulator/config
 COPY packages/cadence_catalog/mix.exs ./packages/cadence_catalog/mix.exs
 COPY packages/cadence_catalog/mix.lock ./packages/cadence_catalog/mix.lock
-COPY packages/cadence_ccsds/mix.exs ./packages/cadence_ccsds/mix.exs
-COPY packages/cadence_ccsds/mix.lock ./packages/cadence_ccsds/mix.lock
+COPY packages/ccsds/mix.exs ./packages/ccsds/mix.exs
+COPY packages/ccsds/mix.lock ./packages/ccsds/mix.lock
 
 WORKDIR /workspace/apps/cadence_simulator
 RUN mix deps.get --only prod
@@ -25,7 +25,7 @@ RUN mix deps.get --only prod
 WORKDIR /workspace
 COPY apps/cadence_simulator/lib ./apps/cadence_simulator/lib
 COPY packages/cadence_catalog/lib ./packages/cadence_catalog/lib
-COPY packages/cadence_ccsds/lib ./packages/cadence_ccsds/lib
+COPY packages/ccsds/lib ./packages/ccsds/lib
 
 WORKDIR /workspace/apps/cadence_simulator
 RUN mix escript.build

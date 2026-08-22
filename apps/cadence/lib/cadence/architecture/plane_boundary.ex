@@ -276,7 +276,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
 
   @plane_prefix_overrides [
     shared: [
-      "lib/cadence/ccsds/",
       "lib/cadence/capabilities/definitions/",
       "lib/cadence/data_sources/",
       "lib/cadence/extensions/"

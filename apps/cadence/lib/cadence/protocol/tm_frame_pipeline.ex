@@ -7,10 +7,10 @@ defmodule Cadence.Protocol.TMFramePipeline do
   frames without importing the legacy channel-service process topology.
   """
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.{FrameCodec, Reassembly}
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.{FrameCodec, Reassembly}
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.Codec, as: SpacePacketCodec
 
   @type state :: term()
 

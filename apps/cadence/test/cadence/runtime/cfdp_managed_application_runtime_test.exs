@@ -8,14 +8,14 @@ defmodule Cadence.Runtime.CFDPManagedApplicationRuntimeTest do
     CapabilityInstance
   }
 
-  alias Cadence.CCSDS.CFDP.Class1.Sender
-  alias Cadence.CCSDS.CFDP.Codec
   alias Cadence.CFDP.TransactionEvent
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime
   alias Cadence.Runtime.ManagedRecords.ManagedCapabilityRecordRow
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias CCSDS.CFDP.Class1.Sender
+  alias CCSDS.CFDP.Codec
 
   setup do
     mission_id = "mission-cfdp-runtime-#{System.unique_integer([:positive])}"

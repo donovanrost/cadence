@@ -392,7 +392,7 @@ defmodule CadenceSimulator.CLITest do
     assert mix_source =~ ~s|{:cadence, path: "../cadence", env: Mix.env(), only: :test}|
 
     assert mix_source =~
-             ~s|{:cadence_ccsds, path: "../../packages/cadence_ccsds", env: Mix.env()}|
+             ~s|{:ccsds, path: "../../packages/ccsds"}|
   end
 
   defp write_config!(yaml_content) do

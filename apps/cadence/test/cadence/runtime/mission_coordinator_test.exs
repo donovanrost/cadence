@@ -2,13 +2,13 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   setup do
     mission_id = "mission-runtime-" <> Integer.to_string(System.unique_integer([:positive]))

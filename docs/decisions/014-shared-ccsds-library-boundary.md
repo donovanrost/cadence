@@ -3,7 +3,7 @@ title: "ADR-014: Shared CCSDS Library Boundary"
 tags: [adr, architecture, ccsds, simulator, dependencies]
 status: accepted
 created: 2026-07-13
-updated: 2026-07-21
+updated: 2026-08-21
 ---
 
 # ADR-014: Shared CCSDS Library Boundary
@@ -24,12 +24,16 @@ exercise as an external peer.
 
 ## Decision
 
-The dependency-leaf umbrella application `cadence_ccsds` owns the existing
-`Cadence.CCSDS.*` modules and focused unit tests.
+The dependency-leaf package `packages/ccsds` owns the `CCSDS.*` modules and
+focused unit tests. Its OTP application is `:ccsds`.
 
-Both `cadence` and `cadence_simulator` depend on `cadence_ccsds`. The namespace is
-preserved to avoid combining the architectural extraction with an unrelated API
-rename.
+Both `cadence` and `cadence_simulator` depend on `ccsds`. The package and module
+names intentionally omit Cadence because the implementation is portable and
+the protocols are standardized independently of the consuming products.
+
+The package carries the metadata, documentation, changelog, and Apache-2.0
+license required to build a standalone Hex artifact. Publication remains a
+separate release decision.
 
 `cadence_simulator` has no production dependency on `cadence`. Cadence remains a
 test-only dependency for simulator integration tests that deliberately exercise a
@@ -43,5 +47,7 @@ not load Cadence database, web, or background-job configuration.
 - CCSDS behavior can be tested without starting Cadence or the simulator.
 - Simulator releases can be built and started independently.
 - Cadence and simulator protocol behavior still share one implementation.
-- A future extraction into a standalone package or repository can occur without
-  changing the current module API.
+- The package can be built, documented, and inspected as a standalone Hex
+  artifact without publishing it.
+- A future extraction into a separate repository can preserve the current
+  package and module API.

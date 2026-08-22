@@ -5,10 +5,10 @@ defmodule Cadence.Capabilities.CFDPReceiveTest do
   alias Cadence.Capabilities.ExecutionContext
   alias Cadence.Capabilities.ManagedApplications.CFDPReceive
   alias Cadence.Capabilities.ValidationContext
-  alias Cadence.CCSDS.CFDP.Codec
-  alias Cadence.CCSDS.CFDP.Directive.Metadata
-  alias Cadence.CCSDS.CFDP.PDU
   alias Cadence.Protocol.PacketRecord
+  alias CCSDS.CFDP.Codec
+  alias CCSDS.CFDP.Directive.Metadata
+  alias CCSDS.CFDP.PDU
 
   test "declares a bounded source-endpoint managed application contract" do
     descriptor = CFDPReceiveDefinition.descriptor()

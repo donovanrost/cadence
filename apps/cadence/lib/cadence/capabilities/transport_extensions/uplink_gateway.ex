@@ -14,11 +14,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   alias Cadence.ActionRequests.{CancelTimer, ProviderRequest, ScheduleTimer, UplinkRequest}
   alias Cadence.Capabilities.Definitions.UplinkGateway, as: Definition
   alias Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.{Codec, Sequence}
-  alias Cadence.CCSDS.TC.{FrameCodec, Segmentation}
-  alias Cadence.CCSDS.Transport.COP1.{CLCW, FOP}
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.{Codec, Sequence}
+  alias CCSDS.TC.{FrameCodec, Segmentation}
+  alias CCSDS.Transport.COP1.{CLCW, FOP}
 
   alias Cadence.Capabilities.{
     ExecutionContext,

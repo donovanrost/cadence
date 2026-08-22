@@ -3,10 +3,10 @@ defmodule CadenceSimulator.CLI do
   Thin executable entrypoint for running the simulator as its own app.
   """
 
-  alias Cadence.CCSDS.Transport.COP1.FARM
   alias CadenceSimulator.CadenceRuntimeBootstrap
   alias CadenceSimulator.IngressBenchmark.CLI, as: IngressBenchmarkCLI
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
+  alias CCSDS.Transport.COP1.FARM
 
   @telemetry_switches [
     config: :string,

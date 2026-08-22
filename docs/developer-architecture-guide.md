@@ -47,7 +47,7 @@ At the Workspace project level:
 - `apps/cadence_simulator` contains the independently runnable external ground
   network simulator.
 - `packages/cadence_catalog` contains the catalog and Mission Model compiler.
-- `packages/cadence_ccsds` contains protocol primitives shared by Cadence and
+- `packages/ccsds` contains protocol primitives shared by Cadence and
   external peers.
 - `legacy/cadence_legacy` is a preserved reference snapshot of the previous
   system and is useful for migration and performance comparisons.
@@ -465,7 +465,7 @@ When adding new code, these are the first places to look.
 
 ### Shared CCSDS library
 
-- `packages/cadence_ccsds/lib/cadence/ccsds`
+- `packages/ccsds/lib/ccsds`
 
 ### External simulator
 

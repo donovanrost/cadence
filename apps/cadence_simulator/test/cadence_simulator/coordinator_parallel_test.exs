@@ -1,10 +1,10 @@
 defmodule CadenceSimulator.CoordinatorParallelTest do
   use CadenceSimulator.Case, async: false
 
-  alias Cadence.CCSDS.SDLP.TM.FrameCodec
   alias CadenceSimulator.Coordinator
   alias CadenceSimulator.Providers.DatabaseDynamics
   alias CadenceSimulator.TestSupport.SlowCounterProvider
+  alias CCSDS.SDLP.TM.FrameCodec
 
   @definitions """
   version: "1.0.0"

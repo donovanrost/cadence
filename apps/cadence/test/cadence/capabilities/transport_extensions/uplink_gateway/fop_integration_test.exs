@@ -3,8 +3,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
 
   alias Cadence.ActionRequests.{CancelTimer, ScheduleTimer, UplinkRequest}
   alias Cadence.Capabilities.{ExecutionContext, TransportExtensions.UplinkGateway}
-  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Runtime.PartitionKey
+  alias CCSDS.Transport.COP1.CLCW
 
   test "initializes a full sliding window and uses one VC-scoped T1 timer" do
     assert {:ok, initialized} =

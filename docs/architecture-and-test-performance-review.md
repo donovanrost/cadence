@@ -52,12 +52,12 @@ alongside it.
 The umbrella-level dependency direction is healthy:
 
 ```text
-cadence_web ──> cadence ──> cadence_ccsds
-cadence_simulator ─────────> cadence_ccsds
+cadence_web ──> cadence ──> ccsds
+cadence_simulator ─────────> ccsds
 ```
 
 `cadence_simulator` depends on `:cadence` only in tests. There are no compile
-cycles in the core `:cadence` application. `cadence_ccsds` is already a good
+cycles in the core `:cadence` application. `ccsds` is already a good
 example of a small dependency-leaf application.
 
 The main problems are inside the applications:
@@ -169,7 +169,7 @@ production structure and the shape of the verification system.
 | Application | Production files | Production lines | Test files | Test lines |
 | --- | ---: | ---: | ---: | ---: |
 | `cadence` | 659 | 171,226 | 208 | 93,711 |
-| `cadence_ccsds` | 14 | 1,864 | 8 | 434 |
+| `ccsds` | 14 | 1,864 | 8 | 434 |
 | `cadence_simulator` | 45 | 10,728 | 35 | 6,350 |
 | `cadence_web` | 386 | 89,379 | 469 | 149,433 |
 
@@ -460,7 +460,7 @@ Acceptance criteria:
 | Root Credo strict | Passed, 1,825 files | 27.41s |
 | `cadence` normal test run | 1,522 passed | 71.61s |
 | `cadence` serial/profile-style run | One transient failure; failed test passed alone | about 60s |
-| `cadence_ccsds` | 11 passed | 0.50s |
+| `ccsds` | 11 passed | 0.50s |
 | `cadence_simulator` second full run | 106 passed | 10.19s |
 | `cadence_web` normal test run | 1,632 passed, 93 excluded | 166.54s |
 
@@ -655,7 +655,7 @@ application boot requirement, and a fast focused test suite.
 
 ### Ready or close
 
-#### `cadence_ccsds`
+#### `ccsds`
 
 This is already the strongest library boundary. It is small, shared by core and
 simulator, and dependency-light. It can remain an umbrella application now and

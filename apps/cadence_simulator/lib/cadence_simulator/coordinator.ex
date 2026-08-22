@@ -20,9 +20,9 @@ defmodule CadenceSimulator.Coordinator do
 
   require Logger
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias CadenceSimulator.Coordinator.Configuration
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   alias CadenceSimulator.{
     GeneratorWorker,

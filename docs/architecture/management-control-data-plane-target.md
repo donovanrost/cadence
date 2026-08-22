@@ -603,9 +603,9 @@ cadence_web
   |---> cadence_projections ---> management/control/runtime public facts
 
 cadence_runtime ---------------> cadence_catalog
-  |----------------------------> cadence_ccsds
+  |----------------------------> ccsds
 
-cadence_simulator -------------> cadence_ccsds
+cadence_simulator -------------> ccsds
 ```
 
 Shared platform infrastructure remains narrow: Repo process, PubSub/event

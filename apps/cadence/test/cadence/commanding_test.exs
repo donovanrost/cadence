@@ -6,9 +6,9 @@ defmodule Cadence.CommandingTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
-  alias Cadence.CCSDS.TC.TransferFrame
-  alias Cadence.CCSDS.Transport.COP1.CLCW
+  alias CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias CCSDS.TC.TransferFrame
+  alias CCSDS.Transport.COP1.CLCW
 
   alias Cadence.Commanding.{
     CommandApproval,

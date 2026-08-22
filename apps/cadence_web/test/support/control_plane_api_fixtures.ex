@@ -7,8 +7,6 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog.MissionModel.Layer
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
@@ -18,6 +16,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   def bootstrap(conn) do
     organization =

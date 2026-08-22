@@ -17,15 +17,15 @@ defmodule Cadence.Capabilities.ManagedApplications.CFDPReceive do
   alias Cadence.Capabilities.Definitions.CFDPReceive, as: Definition
   alias Cadence.Capabilities.ExecutionContext
   alias Cadence.Capabilities.ExecutionResult
-  alias Cadence.CCSDS.CFDP.Class1.Receiver
-  alias Cadence.CCSDS.CFDP.Codec
-  alias Cadence.CCSDS.CFDP.Directive.EndOfFile
-  alias Cadence.CCSDS.CFDP.Directive.Metadata
-  alias Cadence.CCSDS.CFDP.FileData
-  alias Cadence.CCSDS.CFDP.PDU
-  alias Cadence.CCSDS.CFDP.Transition
   alias Cadence.CFDP.TransactionEvent
   alias Cadence.Protocol.PacketRecord
+  alias CCSDS.CFDP.Class1.Receiver
+  alias CCSDS.CFDP.Codec
+  alias CCSDS.CFDP.Directive.EndOfFile
+  alias CCSDS.CFDP.Directive.Metadata
+  alias CCSDS.CFDP.FileData
+  alias CCSDS.CFDP.PDU
+  alias CCSDS.CFDP.Transition
 
   @impl true
   defdelegate descriptor(), to: Definition

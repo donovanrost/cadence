@@ -10,7 +10,7 @@ updated: 2026-07-21
 
 ## Purpose
 
-`cadence_ccsds` is the shared, dependency-leaf protocol library used by Cadence
+`ccsds` is the shared, dependency-leaf protocol library used by Cadence
 and the simulator. It is deliberately separate from catalog interpretation,
 persistence, tenancy, jobs, activation, and runtime orchestration.
 
@@ -229,7 +229,7 @@ product design:
 
 These are honest extension points rather than requirements for composing the
 current PDU codec and mandatory transfer core. This is not a claim that
-`cadence_ccsds` implements every CCSDS publication or is flight-qualified;
+`ccsds` implements every CCSDS publication or is flight-qualified;
 additional protocol families should still be driven by concrete mission or
 product requirements.
 
@@ -251,7 +251,7 @@ compose those pieces:
 
 ## Conformance evidence boundary
 
-The maintained corpus lives under `packages/cadence_ccsds/conformance` and records
+The maintained corpus lives under `packages/ccsds/conformance` and records
 the exact CCSDS publication URL, SHA-256, locator, and evidence class for every
 vector. The normal test suite consumes all entries and runs reproducible seeded
 properties; `CCSDS_GENERATIVE_CASES` and `CCSDS_GENERATIVE_SEED` scale and

@@ -4,8 +4,6 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
   alias Cadence.IngressArchive.FileSystem, as: IngressArchiveFileSystem
@@ -22,6 +20,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
   alias Cadence.Telemetry.{CurrentValueStore, Storage}
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   test "persists protocol anomalies when raw evidence is archived outside Postgres" do
     ingress_base_path =

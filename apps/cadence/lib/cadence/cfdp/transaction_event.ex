@@ -1,7 +1,7 @@
 defmodule Cadence.CFDP.TransactionEvent do
   @moduledoc "JSON-safe protocol event emitted by the CFDP managed runtime adapter."
 
-  alias Cadence.CCSDS.CFDP.Indication
+  alias CCSDS.CFDP.Indication
 
   @type t :: %__MODULE__{
           event_type: Indication.kind(),

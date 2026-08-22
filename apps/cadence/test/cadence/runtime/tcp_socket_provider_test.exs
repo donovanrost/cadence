@@ -5,8 +5,6 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   import ExUnit.CaptureLog
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact}
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.RecordArchive.Postgres.TransferFrameRecordRow
@@ -16,6 +14,8 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.SampleRecords.TelemetrySampleRow
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   test "tcp provider ingests fixed-size TM frames into the active mission runtime" do
     handler_id = "tcp-receive-test-#{System.unique_integer([:positive])}"

@@ -883,7 +883,7 @@ into the host.
 
 ### CFDP
 
-The `cadence_ccsds` library continues to own pure codecs, protocol validation,
+The `ccsds` library continues to own pure codecs, protocol validation,
 segmentation, reassembly, and state machines. A first-party CFDP extension
 package in Cadence owns installation, authorization, activation, persistence,
 file-effect execution, operational records, and surfaces. The protocol library
@@ -894,7 +894,7 @@ The first runtime proving slice is implemented without claiming the unfinished
 product boundary. The compiled `cadence.cfdp` package contributes a roadmap CFDP
 application and the `:cfdp_receive` capability family. That family runs a real,
 long-lived Class-1 receiver at source-endpoint partition affinity, decodes CFDP
-PDUs through `cadence_ccsds`, carries transaction state across packet records,
+PDUs through `ccsds`, carries transaction state across packet records,
 uses platform-owned Check timers, emits sanitized transaction events, enforces
 hard memory and transaction-count bounds, and persists only its declared
 JSON-safe snapshot. It explicitly rejects acknowledged mode, closure-requested

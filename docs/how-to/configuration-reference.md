@@ -338,7 +338,7 @@ An uplink gateway transport binding enables the shared FOP-1B sender with
 Cadence initializes AD service without a CLCW check and uses one replaceable T1
 timer per TC virtual channel. The standard initialize-with-check, Unlock, Set
 V(R), terminate, resume, and setup directives are available from the shared
-`Cadence.CCSDS.Transport.COP1.FOP` library for runtimes that expose a COP
+`CCSDS.Transport.COP1.FOP` library for runtimes that expose a COP
 management boundary.
 
 Relative paths in profiles are resolved relative to the profile file.

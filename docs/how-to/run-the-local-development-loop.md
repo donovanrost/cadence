@@ -157,7 +157,7 @@ mix precommit.affected
 ```
 
 Workspace follows the declared path dependencies transitively. For
-example, a `cadence_ccsds` change also tests `cadence`, `cadence_simulator`, and
+example, a `ccsds` change also tests `cadence`, `cadence_simulator`, and
 `cadence_web`, while a `cadence_web`-only change tests only `cadence_web`.
 Each project's configuration and lockfile affect that project and its declared
 dependents. Root orchestration and Workspace policy changes affect every

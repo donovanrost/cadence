@@ -11,12 +11,12 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   require Logger
 
-  alias Cadence.CCSDS.Core.LinkFrame
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.Codec, as: SpacePacketCodec
-  alias Cadence.CCSDS.TC.{FrameCodec, Reassembly}
-  alias Cadence.CCSDS.Transport.COP1.{CLCW, FARM}
   alias CadenceSimulator.COP1.CLCWInjector
+  alias CCSDS.Core.LinkFrame
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.Codec, as: SpacePacketCodec
+  alias CCSDS.TC.{FrameCodec, Reassembly}
+  alias CCSDS.Transport.COP1.{CLCW, FARM}
 
   @tcp_opts [:binary, packet: 0, active: false, nodelay: true]
   @default_reconnect_interval_ms 250

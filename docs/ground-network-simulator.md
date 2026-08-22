@@ -315,7 +315,7 @@ operator summary.
 ## Shared CCSDS library
 
 `cadence` and `cadence_simulator` both depend on the leaf application
-`cadence_ccsds`. The shared app owns the `Cadence.CCSDS.*` codecs, segmentation,
+`ccsds`. The shared app owns the `CCSDS.*` codecs, segmentation,
 reassembly, and COP-1 primitives. The simulator has no production dependency on
 Cadence core; Cadence is present only in the simulator test environment for
 end-to-end integration coverage.

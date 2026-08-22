@@ -9,8 +9,8 @@ defmodule CadenceSimulator.PacketEncoder do
 
   require Logger
 
-  alias Cadence.CCSDS.SpacePacket
-  alias Cadence.CCSDS.SpacePacket.{Codec, Sequence}
+  alias CCSDS.SpacePacket
+  alias CCSDS.SpacePacket.{Codec, Sequence}
 
   defstruct [
     :packets,

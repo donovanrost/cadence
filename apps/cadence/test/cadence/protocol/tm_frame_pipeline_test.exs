@@ -1,9 +1,9 @@
 defmodule Cadence.Protocol.TMFramePipelineTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Protocol.TMFramePipeline
+  alias CCSDS.Core.SDUOctets
+  alias CCSDS.SDLP.TM.Segmentation
 
   test "decodes a packet-carrying TM frame into reassembled space packets" do
     frame_size = 32
