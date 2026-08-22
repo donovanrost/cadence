@@ -3,23 +3,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceScenario
 
   alias CadenceWeb.OpsDashboardShowLive.{
     RuntimeReplayTransportEvidenceSetup,
-    RuntimeReplayTransportFailedEvidenceCycleOne,
-    RuntimeReplayTransportFailedEvidenceCycleTwo,
-    RuntimeReplayTransportFailedEvidenceFinish,
-    RuntimeReplayTransportFailedEvidenceStart,
-    RuntimeReplayTransportRecordEvidence,
-    RuntimeReplayTransportReleaseEvidence,
-    RuntimeReplayTransportVerifierEvidence
+    ViewTestSupport
   }
 
   def run do
-    RuntimeReplayTransportEvidenceSetup.run()
-    |> RuntimeReplayTransportReleaseEvidence.run()
-    |> RuntimeReplayTransportFailedEvidenceStart.run()
-    |> RuntimeReplayTransportFailedEvidenceCycleOne.run()
-    |> RuntimeReplayTransportFailedEvidenceCycleTwo.run()
-    |> RuntimeReplayTransportFailedEvidenceFinish.run()
-    |> RuntimeReplayTransportVerifierEvidence.run()
-    |> RuntimeReplayTransportRecordEvidence.run()
+    %{view: view} = RuntimeReplayTransportEvidenceSetup.run()
+    ViewTestSupport.stop_dashboard_view(view)
   end
 end

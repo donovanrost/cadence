@@ -1,8 +1,6 @@
 defmodule CadenceWeb.AdminLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
-
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -10,7 +8,7 @@ defmodule CadenceWeb.AdminLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Accounts.{Password, User, UserLocalCredentialRow, UserRow}
+  alias Cadence.Accounts.{Authentication, Password, User, UserLocalCredentialRow, UserRow}
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias Cadence.Ids
@@ -18,29 +16,21 @@ defmodule CadenceWeb.AdminLiveTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  @environment_admin_email "environment-admin@example.com"
-  @environment_admin_password "environment-admin-password-123"
-
-  setup do
-    previous_environment_admin = Application.get_env(:cadence, :environment_admin, [])
-
-    Application.put_env(:cadence, :environment_admin,
-      enabled: true,
-      email: @environment_admin_email,
-      display_name: "Environment Admin",
-      password: @environment_admin_password
-    )
-
-    reset_control_plane_state!()
-    assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
+  setup %{conn: conn} do
+    issued_session = issue_platform_admin_session!()
     flush_mailbox()
 
     on_exit(fn ->
-      Application.put_env(:cadence, :environment_admin, previous_environment_admin)
       flush_mailbox()
     end)
 
-    :ok
+    admin_conn =
+      init_test_session(conn, %{
+        user_session_token: issued_session.session_token,
+        admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
+      })
+
+    {:ok, admin_conn: admin_conn}
   end
 
   describe "authorization" do
@@ -75,27 +65,27 @@ defmodule CadenceWeb.AdminLiveTest do
       assert {:error, {:redirect, %{to: "/admin-mode"}}} = live(conn, ~p"/admin")
     end
 
-    test "platform admin can access the dashboard" do
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin")
+    test "platform admin can access the dashboard", %{admin_conn: admin_conn} do
+      {:ok, _view, html} = live(admin_conn, ~p"/admin")
       assert html =~ "Platform Administration"
     end
   end
 
   describe "organization management" do
-    test "admin dashboard shows organization and user counts" do
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin")
+    test "admin dashboard shows organization and user counts", %{admin_conn: admin_conn} do
+      {:ok, _view, html} = live(admin_conn, ~p"/admin")
       assert html =~ "Organizations"
       assert html =~ "Users"
       assert html =~ "Runtime"
     end
 
-    test "organization list shows empty state when no orgs exist" do
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin/organizations")
+    test "organization list shows empty state when no orgs exist", %{admin_conn: admin_conn} do
+      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations")
       assert html =~ "No organizations yet"
     end
 
-    test "admin can create an organization" do
-      {:ok, view, _html} = live(admin_conn(), ~p"/admin/organizations/new")
+    test "admin can create an organization", %{admin_conn: admin_conn} do
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/new")
 
       view
       |> form("#org-form", organization: %{display_name: "Test Org", slug: "test-org"})
@@ -104,14 +94,14 @@ defmodule CadenceWeb.AdminLiveTest do
       assert_redirect(view, ~p"/admin/organizations")
 
       # Verify the org appears in the list
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin/organizations")
+      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations")
       assert html =~ "Test Org"
       assert html =~ "test-org"
     end
 
-    test "admin can view organization detail with no members" do
+    test "admin can view organization detail with no members", %{admin_conn: admin_conn} do
       org = create_test_org!("Cadence Ops", "cadence-ops")
-      {:ok, view, html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
+      {:ok, view, html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
       assert html =~ "Cadence Ops"
       assert html =~ "No members yet"
       assert has_element?(view, "#admin-service-identities")
@@ -119,9 +109,9 @@ defmodule CadenceWeb.AdminLiveTest do
       assert has_element?(view, ~s(form[action="/session/organization"]))
     end
 
-    test "admin can issue the first product API service credential" do
+    test "admin can issue the first product API service credential", %{admin_conn: admin_conn} do
       org = create_test_org!("Cadence Ops", "cadence-ops")
-      {:ok, view, _html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
 
       view
       |> form("#service-identity-form",
@@ -143,11 +133,13 @@ defmodule CadenceWeb.AdminLiveTest do
   end
 
   describe "invitation" do
-    test "admin can invite a new user and invitation email is delivered" do
+    test "admin can invite a new user and invitation email is delivered", %{
+      admin_conn: admin_conn
+    } do
       org = create_test_org!("Cadence Ops", "cadence-ops")
 
       {:ok, view, _html} =
-        live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}/invite")
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
 
       view
       |> form("#invite-form",
@@ -166,12 +158,12 @@ defmodule CadenceWeb.AdminLiveTest do
       assert email.to == [{"", "new-user@example.com"}]
     end
 
-    test "admin can grant an existing durable user directly" do
+    test "admin can grant an existing durable user directly", %{admin_conn: admin_conn} do
       org = create_test_org!("Cadence Ops", "cadence-ops")
       persist_durable_user!(email: "existing@example.com", password: "password-123456")
 
       {:ok, view, _html} =
-        live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}/invite")
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
 
       view
       |> form("#invite-form",
@@ -186,13 +178,15 @@ defmodule CadenceWeb.AdminLiveTest do
       assert_redirect(view, ~p"/admin/organizations/#{org.organization_id}")
 
       # Verify the member appears on the org detail page
-      {:ok, _view, html} = live(admin_conn(), ~p"/admin/organizations/#{org.organization_id}")
+      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
       assert html =~ "existing@example.com"
     end
   end
 
   describe "runtime diagnostics" do
-    test "admin can inspect dashboard runtime invalidation decisions" do
+    test "admin can inspect dashboard runtime invalidation decisions", %{
+      admin_conn: admin_conn
+    } do
       reset_runtime_health!()
 
       invalidation =
@@ -229,7 +223,7 @@ defmodule CadenceWeb.AdminLiveTest do
 
       Cadence.runtime_health_snapshot()
 
-      {:ok, view, _html} = live(admin_conn(), ~p"/admin/runtime")
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/runtime")
 
       assert has_element?(
                view,
@@ -265,7 +259,9 @@ defmodule CadenceWeb.AdminLiveTest do
              )
     end
 
-    test "admin can filter durable runtime invalidation decisions by impact metadata" do
+    test "admin can filter durable runtime invalidation decisions by impact metadata", %{
+      admin_conn: admin_conn
+    } do
       reset_runtime_health!()
 
       org = TestFixtures.persist_org!(display_name: "Runtime Diagnostics Org")
@@ -357,7 +353,7 @@ defmodule CadenceWeb.AdminLiveTest do
 
       {:ok, view, _html} =
         live(
-          admin_conn(),
+          admin_conn,
           ~p"/admin/runtime?#{%{dashboard_id: dashboard.dashboard_id, boundary: "source_watermark_changed", context_reason: "replay_run_mismatch", replay_run_id: "replay-admin-run-1", affected_placement_id: "placement-admin-counter", decision: matching_decision_event.dashboard_runtime_invalidation_decision_event_id}}"
         )
 
@@ -438,7 +434,9 @@ defmodule CadenceWeb.AdminLiveTest do
              )
     end
 
-    test "admin deep links render selected decision detail outside filtered results" do
+    test "admin deep links render selected decision detail outside filtered results", %{
+      admin_conn: admin_conn
+    } do
       reset_runtime_health!()
 
       org = TestFixtures.persist_org!(display_name: "Runtime Deep Link Org")
@@ -491,7 +489,7 @@ defmodule CadenceWeb.AdminLiveTest do
 
       {:ok, view, _html} =
         live(
-          admin_conn(),
+          admin_conn,
           ~p"/admin/runtime?#{%{dashboard_id: "dashboard-filter-miss", decision: decision_event.dashboard_runtime_invalidation_decision_event_id}}"
         )
 
@@ -562,10 +560,10 @@ defmodule CadenceWeb.AdminLiveTest do
              )
     end
 
-    test "admin runtime diagnostics show an empty decision state" do
+    test "admin runtime diagnostics show an empty decision state", %{admin_conn: admin_conn} do
       reset_runtime_health!()
 
-      {:ok, view, _html} = live(admin_conn(), ~p"/admin/runtime")
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/runtime")
 
       assert has_element?(view, "#admin-runtime-page[data-runtime-decision-count=\"0\"]")
       assert has_element?(view, "#admin-runtime-decisions-empty")
@@ -573,16 +571,6 @@ defmodule CadenceWeb.AdminLiveTest do
   end
 
   ## Helpers
-
-  defp admin_conn do
-    issued_session = environment_admin_session()
-
-    build_conn()
-    |> init_test_session(%{
-      user_session_token: issued_session.session_token,
-      admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
-    })
-  end
 
   defp reset_runtime_health! do
     Cadence.reset_runtime_health()
@@ -592,13 +580,20 @@ defmodule CadenceWeb.AdminLiveTest do
     end)
   end
 
-  defp environment_admin_session do
-    assert {:ok, issued_session} =
-             Cadence.Auth.login_environment_admin(
-               @environment_admin_email,
-               @environment_admin_password
-             )
+  defp issue_platform_admin_session! do
+    user =
+      User.new(%{
+        user_id: Ids.new("user"),
+        email: "platform-admin-#{System.unique_integer([:positive])}@example.test",
+        display_name: "Platform Administrator",
+        capabilities: [:platform_admin],
+        confirmed_at: DateTime.utc_now(),
+        lifecycle_state: :active,
+        metadata: %{}
+      })
 
+    assert {:ok, _user_row} = Repo.insert(UserRow.changeset(user))
+    assert {:ok, issued_session} = Authentication.issue_browser_session(user, nil)
     issued_session
   end
 

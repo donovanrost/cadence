@@ -3,7 +3,6 @@ defmodule CadenceWeb.ConnCase do
 
   use ExUnit.CaseTemplate
 
-  alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
   using do
@@ -17,6 +16,10 @@ defmodule CadenceWeb.ConnCase do
   end
 
   setup tags do
+    if tags[:runtime] do
+      Cadence.RuntimeTestSupport.prepare_default_runtime()
+    end
+
     owner =
       Sandbox.start_owner!(
         Cadence.Repo,
@@ -24,7 +27,15 @@ defmodule CadenceWeb.ConnCase do
       )
 
     on_exit(fn ->
+      if tags[:runtime] do
+        Cadence.RuntimeTestSupport.cleanup_default_runtime()
+      end
+
       Sandbox.stop_owner(owner)
+
+      if tags[:runtime] do
+        Cadence.DataCase.ensure_cadence_started!()
+      end
     end)
 
     {:ok, conn: Phoenix.ConnTest.build_conn(), sandbox_owner: owner}
@@ -47,8 +58,4 @@ defmodule CadenceWeb.ConnCase do
   end
 
   defp maybe_put_ownership_timeout(options, _timeout), do: options
-
-  def reset_control_plane_state! do
-    SQL.query!(Cadence.Repo, "TRUNCATE organizations CASCADE", [])
-  end
 end

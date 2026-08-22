@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Telemetry.Storage
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands

@@ -1,5 +1,5 @@
 defmodule CadenceWeb.UserSessionLiveTest do
-  use CadenceWeb.ConnCase, async: false
+  use CadenceWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
 

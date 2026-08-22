@@ -5,6 +5,7 @@ defmodule Cadence.Application do
 
   use Application
 
+  alias Cadence.Accounts.EnvironmentAdminPolicy
   alias Cadence.Auth
   alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
@@ -18,12 +19,22 @@ defmodule Cadence.Application do
     Cadence.Observability.setup_repo_tracing()
     root_composition = RootComposition.from_application()
 
+    environment_admin_policy =
+      :cadence
+      |> Application.get_env(:environment_admin, [])
+      |> EnvironmentAdminPolicy.from_config()
+
+    control_supervisor_opts =
+      :cadence
+      |> Application.get_env(:control_supervisor, [])
+      |> Keyword.put(:root_composition, root_composition)
+
     children =
       [
         {Cadence.Platform.Supervisor, root_composition: root_composition},
         Cadence.Management.Supervisor,
         {Cadence.Runtime.Supervisor, root_composition: root_composition},
-        {Cadence.Control.Supervisor, root_composition: root_composition},
+        {Cadence.Control.Supervisor, control_supervisor_opts},
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
         background_job_children(root_composition)
@@ -32,7 +43,7 @@ defmodule Cadence.Application do
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
-        case initialize_after_start() do
+        case initialize_after_start(environment_admin_policy) do
           {:ok, _environment_admin} ->
             {:ok, pid}
 
@@ -46,10 +57,10 @@ defmodule Cadence.Application do
     end
   end
 
-  defp initialize_after_start do
+  defp initialize_after_start(environment_admin_policy) do
     maybe_bootstrap_data_sources()
 
-    Auth.reconcile_environment_admin()
+    Auth.reconcile_environment_admin(environment_admin_policy)
   end
 
   defp maybe_bootstrap_data_sources do

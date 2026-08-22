@@ -1,5 +1,5 @@
 defmodule CadenceWeb.Plugs.AssignUserMenuContextTest do
-  use CadenceWeb.ConnCase, async: false
+  use CadenceWeb.ConnCase, async: true
 
   alias CadenceWeb.Plugs.AssignUserMenuContext
   alias CadenceWeb.Plugs.FetchBrowserCurrentScope

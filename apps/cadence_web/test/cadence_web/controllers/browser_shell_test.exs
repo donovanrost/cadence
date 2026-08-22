@@ -1,9 +1,14 @@
 defmodule CadenceWeb.BrowserShellTest do
   use CadenceWeb.ConnCase, async: false
 
-  @moduletag :config
+  alias Cadence.Accounts.{
+    EnvironmentAdminPolicy,
+    Password,
+    User,
+    UserLocalCredentialRow,
+    UserRow
+  }
 
-  alias Cadence.Accounts.{Password, User, UserLocalCredentialRow, UserRow}
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
@@ -12,20 +17,12 @@ defmodule CadenceWeb.BrowserShellTest do
   @environment_admin_password "environment-admin-password-123"
 
   setup do
-    previous_environment_admin = Application.get_env(:cadence, :environment_admin, [])
+    assert {:ok, _user} =
+             Cadence.Auth.reconcile_environment_admin(environment_admin_policy())
 
-    Application.put_env(:cadence, :environment_admin,
-      enabled: true,
-      email: @environment_admin_email,
-      display_name: "Environment Admin",
-      password: @environment_admin_password
-    )
-
-    assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
     flush_mailbox()
 
     on_exit(fn ->
-      Application.put_env(:cadence, :environment_admin, previous_environment_admin)
       flush_mailbox()
     end)
 
@@ -290,7 +287,10 @@ defmodule CadenceWeb.BrowserShellTest do
 
   test "disabled environment-admin config rejects environment-admin credentials",
        %{conn: conn} do
-    Application.put_env(:cadence, :environment_admin, enabled: false)
+    assert {:ok, nil} =
+             Cadence.Auth.reconcile_environment_admin(
+               EnvironmentAdminPolicy.from_config(enabled: false)
+             )
 
     conn =
       post(conn, "/sign-in", %{
@@ -312,6 +312,15 @@ defmodule CadenceWeb.BrowserShellTest do
              )
 
     issued_session
+  end
+
+  defp environment_admin_policy do
+    EnvironmentAdminPolicy.from_config(
+      enabled: true,
+      email: @environment_admin_email,
+      display_name: "Environment Admin",
+      password: @environment_admin_password
+    )
   end
 
   defp environment_admin_conn(conn) do

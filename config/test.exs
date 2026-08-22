@@ -11,6 +11,7 @@ config :cadence, Cadence.Repo,
   queue_interval: 10_000
 
 config :cadence, start_background_jobs: false
+config :cadence, control_supervisor: [start_mission_recovery?: false]
 
 config :cadence, :event_bus,
   delivery: :sync,

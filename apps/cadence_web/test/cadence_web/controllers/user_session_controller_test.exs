@@ -1,7 +1,5 @@
 defmodule CadenceWeb.UserSessionControllerTest do
-  use CadenceWeb.ConnCase, async: false
-
-  @moduletag :config
+  use CadenceWeb.ConnCase, async: true
 
   alias CadenceWeb.TestFixtures
 

@@ -3,17 +3,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
 
   alias CadenceWeb.OpsDashboardShowLive.{
     OperationalObservableSourceEndpointCommandQueueSetup,
-    OperationalObservableSourceEndpointReleaseBackLinks,
-    OperationalObservableSourceEndpointReleaseEvidence,
-    OperationalObservableSourceEndpointTransportEvidence,
-    OperationalObservableSourceEndpointVerifierEvidence
+    ViewTestSupport
   }
 
   def run do
-    OperationalObservableSourceEndpointCommandQueueSetup.run()
-    |> OperationalObservableSourceEndpointReleaseEvidence.run()
-    |> OperationalObservableSourceEndpointVerifierEvidence.run()
-    |> OperationalObservableSourceEndpointTransportEvidence.run()
-    |> OperationalObservableSourceEndpointReleaseBackLinks.run()
+    %{views: views} = OperationalObservableSourceEndpointCommandQueueSetup.run()
+    ViewTestSupport.stop_dashboard_views(views)
   end
 end

@@ -1,7 +1,5 @@
 defmodule CadenceWeb.ScopeLoaderTest do
-  use CadenceWeb.ConnCase, async: false
-
-  @moduletag :config
+  use Cadence.DataCase, async: true
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.ScopeLoader

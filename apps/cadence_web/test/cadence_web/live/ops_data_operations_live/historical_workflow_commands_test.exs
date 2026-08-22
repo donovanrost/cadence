@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Telemetry.Storage
   alias CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommands

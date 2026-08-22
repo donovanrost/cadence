@@ -10,11 +10,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Runtime.MissionModelPlanDecoder
 
-  setup do
-    reset_control_plane_state!()
-    :ok
-  end
-
   defp assert_dev_telemetry_ingress(
          conn,
          api_token,

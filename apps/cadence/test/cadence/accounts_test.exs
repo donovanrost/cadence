@@ -1,9 +1,10 @@
 defmodule Cadence.AccountsTest do
-  use Cadence.ConfigCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Accounts
 
   alias Cadence.Accounts.{
+    EnvironmentAdminPolicy,
     OrganizationMembership,
     OrganizationMembershipRow,
     Password,
@@ -20,16 +21,6 @@ defmodule Cadence.AccountsTest do
   @environment_admin_password "environment-admin-password-123"
 
   describe "sign_in/2" do
-    setup do
-      previous_environment_admin = Application.get_env(:cadence, :environment_admin, [])
-
-      on_exit(fn ->
-        Application.put_env(:cadence, :environment_admin, previous_environment_admin)
-      end)
-
-      :ok
-    end
-
     test "durable user with only a password credential can sign in" do
       password = "durable-password-123"
       persist_durable_user!(email: "ops@example.com", password: password)
@@ -61,8 +52,8 @@ defmodule Cadence.AccountsTest do
     end
 
     test "environment admin with configured credentials signs in directly to admin mode" do
-      enable_environment_admin!()
-      assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
+      assert {:ok, _user} =
+               Cadence.Auth.reconcile_environment_admin(environment_admin_policy())
 
       assert {:ok, session} =
                Accounts.sign_in(@environment_admin_email, @environment_admin_password)
@@ -72,26 +63,29 @@ defmodule Cadence.AccountsTest do
     end
 
     test "environment admin with wrong password fails with :invalid_credentials" do
-      enable_environment_admin!()
-      assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
+      assert {:ok, _user} =
+               Cadence.Auth.reconcile_environment_admin(environment_admin_policy())
 
       assert {:error, :invalid_credentials} =
                Accounts.sign_in(@environment_admin_email, "wrong")
     end
 
     test "disabling the environment admin rejects its credentials and existing sessions" do
-      enable_environment_admin!()
-      assert {:ok, _user} = Cadence.Auth.reconcile_environment_admin()
+      assert {:ok, _user} =
+               Cadence.Auth.reconcile_environment_admin(environment_admin_policy())
 
       assert {:ok, session} =
                Accounts.sign_in(@environment_admin_email, @environment_admin_password)
 
-      Application.put_env(:cadence, :environment_admin, enabled: false)
+      assert {:ok, nil} =
+               Cadence.Auth.reconcile_environment_admin(
+                 EnvironmentAdminPolicy.from_config(enabled: false)
+               )
 
       assert {:error, :invalid_credentials} =
                Accounts.sign_in(@environment_admin_email, @environment_admin_password)
 
-      assert {:error, :invalid_credentials} =
+      assert {:error, :unauthenticated} =
                Accounts.authenticate_user_session(session.session_token)
     end
 
@@ -103,9 +97,9 @@ defmodule Cadence.AccountsTest do
           capabilities: []
         )
 
-      enable_environment_admin!()
+      assert {:error, %Ecto.Changeset{}} =
+               Cadence.Auth.reconcile_environment_admin(environment_admin_policy())
 
-      assert {:error, %Ecto.Changeset{}} = Cadence.Auth.reconcile_environment_admin()
       assert {:ok, unchanged_user} = Accounts.fetch_user(durable_user.user_id)
       refute :platform_admin in unchanged_user.capabilities
     end
@@ -248,8 +242,8 @@ defmodule Cadence.AccountsTest do
 
   ## Fixtures
 
-  defp enable_environment_admin! do
-    Application.put_env(:cadence, :environment_admin,
+  defp environment_admin_policy do
+    EnvironmentAdminPolicy.from_config(
       enabled: true,
       email: @environment_admin_email,
       display_name: "Environment Admin",

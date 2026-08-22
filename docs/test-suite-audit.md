@@ -1163,3 +1163,518 @@ partition: warnings-as-errors compilation, strict Credo, workspace and
 architecture checks, all four plane checks, 1,829 core tests, 27 catalog tests,
 295 CCSDS tests, 136 simulator tests, and 1,694 non-browser web tests. Browser
 tests remained intentionally excluded.
+
+### ConnCase profile and first low-contention cohort
+
+The next normal-concurrency profile found 134 `CadenceWeb.ConnCase` modules and
+435 tests, all synchronous. At seed 424242 and `max_cases: 8`, the selected
+cohort passed in 44.2 seconds. A second run with the temporary module formatter
+passed in 45.1 seconds and attributed 40.0 seconds directly to module
+start-to-finish time. The formatter was removed after profiling.
+
+The leading modules were:
+
+| Module | Tests | Wall time |
+| --- | ---: | ---: |
+| `CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest` | 5 | 5,476 ms |
+| `CadenceWeb.AdminLiveTest` | 14 | 2,770 ms |
+| `CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeLiveTest` | 3 | 1,737 ms |
+| `CadenceWeb.ControlPlaneApiTest` | 6 | 1,318 ms |
+| `CadenceWeb.SpacecraftTelemetryDecomLiveTest` | 14 | 1,002 ms |
+| `CadenceWeb.ControlPlaneMissionDataApiTest` | 3 | 918 ms |
+
+The first retained cohort is intentionally low-contention:
+
+- Eight files under the LiveView test tree never mount a LiveView. Five exercise
+  authentication, scope, or notification hooks directly, and three exercise
+  database-backed dashboard command modules. They now use async `DataCase`
+  owners instead of `ConnCase`.
+- Four controller modules and the user-menu plug module execute requests in the
+  test process and now use async `ConnCase` owners. The sign-in LiveView is
+  database-free and is also async.
+- The stale `:config` tags were removed from the scope-loader and user-session
+  controller tests; neither mutates application configuration after the A5
+  sandbox bridge removal.
+
+The resulting 53-test cohort passed 5,353 tests over 101 executions at seed
+424242, with no sandbox-owner exits or cross-test failures. The web inventory is
+now 126 `ConnCase` modules: six async and 120 synchronous. The eight corrected
+files join the web `DataCase` inventory as async database tests.
+
+A later full-web run exposed a separate 60-second ownership boundary even
+though all assertions passed. The default `Cadence.Control.MissionRecovery`
+timer fired while a synchronous `ConnCase` had placed the Repo under a shared
+owner, borrowed that transaction, and was still querying when the owner exited.
+The test boot composition now disables the unrelated periodic recovery child;
+tests of recovery and multi-root behavior continue to start explicit recovery
+instances. Production retains the supervisor's existing enabled-by-default
+behavior.
+
+A broader CRUD/read LiveView experiment was correctness-clean but was rejected
+on performance evidence. Twenty-seven async `ConnCase` modules grew from 2.29
+seconds of serialized module work in the baseline profile to 5.41 seconds of
+module wall time when allowed to compete freely for PostgreSQL. All 149 tests
+still passed 15,049 tests over 101 executions, demonstrating that correctness
+and throughput were separate questions.
+
+An ExUnit resource-group experiment serialized the repository-owning async
+modules while allowing them to overlap database-free work. It removed the
+direct contention spike, but an exact three-seed full-web A/B remained worse and
+more variable overall: the committed baseline passed in 56.5, 59.5, and 52.3
+seconds, while the grouped experiment passed in 51.7, 62.7, and 64.6 seconds.
+The group and broad conversion were therefore removed rather than claiming a
+one-seed win.
+
+The next web tranche should target the cost inside the remaining serialized
+modules, beginning with the dashboard transport-evidence and operational-scope
+outliers, before attempting another blanket async conversion. Control-plane API
+tests also retain destructive table reset and global fact-consumer coupling;
+those ownership seams should be removed before those modules become async.
+
+### Dashboard evidence journey reduction
+
+The two leading serialized dashboard modules were dominated by one composite
+scenario each, not by their ordinary LiveView cases. Stage timing attributed
+the replay transport scenario's roughly 5.0 seconds across seven follow-on
+evidence stages. The source-endpoint command-queue scenario mounted and
+resolved about two dozen dashboards while walking related links, copy links,
+reopened routes, and back links through the same record graph.
+
+Those graph walks repeated contracts already owned by the focused data-link
+resolver tests for command requests, queue entries, release attempts, verifier
+instances, transport actions, capability records, operational events, and
+their related links. The web tests now retain the boundaries that only the web
+layer can prove:
+
+- the operational-observable widget renders the scoped record and exposes its
+  evidence action;
+- the evidence inspector resolves the expected reference;
+- selecting the reference hydrates the data-link inspector with the selected
+  realm, source, binding, time mode, and scope;
+- the copied URL reopens the same resolved record and displays its identifying
+  fields.
+
+The repeated cross-record traversal stages were deleted, along with fixture
+records that existed only to feed them. This removed 8,600 lines and added
+seven lines of deterministic view cleanup. The affected eight-test web slice
+passed in 1.7 seconds, compared with 7.2 seconds of attributed module time in
+the baseline profile. Its two retained boundary scenarios passed 202 tests over
+101 executions at seed 424242. The 30 focused core resolver tests also passed.
+
+After this tranche, the complete 126-file ConnCase cohort contains 403 tests
+and passed at seed 424242 in 41.1 seconds, with 4.8 seconds of async work and
+36.2 seconds of serialized work. The original profile contained 435 tests and
+passed in 44.2 seconds; the intervening layer correction moved 32 tests out of
+ConnCase, so that cohort comparison includes both the ownership and journey
+reductions rather than attributing the full difference to this tranche alone.
+
+The final root `mix precommit` passed: warnings-as-errors compilation, strict
+Credo over 2,716 source files, workspace and architecture checks, all four
+plane checks, 1,829 core tests, 27 catalog tests, 295 CCSDS tests, 136 simulator
+tests, and 1,694 non-browser web tests. Browser tests remained intentionally
+excluded.
+
+### Environment-admin boot policy and runtime authentication
+
+The next serialized outlier exposed a production ownership problem rather than
+an intrinsically expensive LiveView. Every `AdminLiveTest` case mutated the
+process-global environment-admin configuration, reconciled a special principal,
+and truncated the organization graph before exercising otherwise ordinary
+platform-admin behavior. Production sign-in and session validation also reread
+that mutable application configuration, so boot input remained an ambient
+runtime dependency after it had already been persisted.
+
+Environment-admin configuration is now captured once as an immutable, redacted
+boot policy. Application startup passes that policy explicitly into
+reconciliation. After reconciliation, active user, credential, lifecycle, and
+session rows are the runtime authentication truth; sign-in and session
+validation no longer consult application configuration. The zero-arity
+configuration APIs remain as compatibility boundaries, while application-owned
+startup and tests use the explicit policy API.
+
+The tests now follow the same ownership split:
+
+- policy parsing and secret redaction are database-free `UnitCase` tests;
+- account reconciliation uses async sandboxed `DataCase` tests with explicit
+  policies rather than global configuration mutation;
+- the browser-shell boundary explicitly reconciles the environment admin when
+  it is testing boot-provisioned authentication; and
+- general admin LiveView tests issue a session for a durable platform-admin
+  principal, without reconciling an environment administrator or truncating
+  unrelated control-plane state.
+
+The isolated 14-test admin module passed in 0.7 seconds, down from 2.77 seconds
+of attributed module time in the baseline profile. The 27 browser-shell/admin
+tests passed in 1.0 second, and an 85-test authentication/admin consumer slice
+passed in 0.8 seconds. The browser boundary passed 2,727 tests over 101
+executions and the policy/account boundary passed 2,222 tests over 101
+executions, with no failures.
+
+This is deliberately not recorded as a suite-wide timing claim. The complete
+403-test ConnCase cohort passed at the same seed in 45.2 seconds, versus 41.1
+seconds in the preceding run, demonstrating the variance elsewhere in that
+cohort. The useful evidence is that a slow, uniform setup path revealed and
+removed ambient configuration, destructive reset, and mixed authentication/UI
+responsibilities.
+
+The final root `mix precommit` passed: warnings-as-errors compilation, strict
+Credo over 2,718 source files, workspace and architecture checks, all four
+plane checks, 1,832 core tests, 27 catalog tests, 295 CCSDS tests, 136 simulator
+tests, and 1,694 non-browser web tests. Browser tests remained intentionally
+excluded.
+
+### Remaining slow-design inventory and parallel reservations
+
+The remaining inventory uses slow tests as design evidence rather than treating
+wall-clock reduction as the objective. Trace profiles force `max_cases: 1`, so
+their timings rank serialized ownership cost but do not predict normal-suite
+throughput. On isolated worktree partitions the current serialized families
+passed 212 ConfigCase tests across 31 files in 46.9 seconds, 166 RuntimeCase
+tests across 30 files in 11.1 seconds, 355 DataCase tests across 82 core and web
+files in 9.7 seconds, and 426 non-control-plane ConnCase tests across 132 files
+in 42.4 seconds.
+
+The ranked remaining design seams are:
+
+| Rank | Area | Evidence and likely design seam | First bounded slice |
+| ---: | --- | --- | --- |
+| 1 | Control-plane API ownership | Nine tests occupy 2,414 lines, recreate the same graph after `TRUNCATE organizations CASCADE`, and mix auth, catalog, contact runtime, ingress, commanding, and read-projection owners. | Extract database-only authenticated API contracts into async modules; retain only explicitly owned runtime workflows. |
+| 2 | Data-source persistence ownership | `DataSourcesTest` and `DataSourcesBindingHistoryTest` contributed 10.17 and 7.70 seconds of serialized trace work without mutating application configuration. | Move binding history from ConfigCase to private async DataCase before splitting the broader lifecycle module. |
+| 3 | Read models classified as runtimes | Mission events, operational events, observable families, and Postgres current values mostly persist, rebuild, and read rows while paying RuntimeCase global teardown. | Move row-backed cases to async DataCase; isolate only the durable-job rebuild owner. |
+| 4 | Telemetry ingress persistence | A 2.66-second ConfigCase/runtime module combines database persistence, archive policy, and filesystem lifecycle. | Split explicit Postgres policy contracts from owned archive integration. |
+| 5 | Cache policy/default clients | A 2.31-second runtime ConfigCase mixes anonymous composed caches, global invalidation compatibility, and a quiet-period assertion. | Separate local client behavior from the default global compatibility boundary. |
+| 6 | Command-dispatch retry ownership | One wall-clock retry case accounts for about 3.12 seconds and relies on registered dispatcher lifecycle and timer passage. | Expose a deterministic trigger/settled boundary for an explicitly named dispatcher while preserving default arities. |
+| 7 | Contact-scheduler boot policy | Setup mutates VM-global scheduler configuration even though most cases use names, process namespaces, and `await_settled/1`. | Capture immutable scheduler policy and retain one serialized default-boot compatibility test. |
+| 8 | Ordinary store and LiveView ownership | Eighty-two DataCase files remain serialized; non-dashboard ConnCase leaders may still hide unowned tasks, subscriptions, or runtime lookups. | Convert one domain store cohort at a time, then use the existing deterministic LiveView lifecycle support on a small clean cohort. |
+
+Three Herdr worktrees reserve the first collision-free slices:
+
+- `audit/control-plane-api-ownership`, partition `_cpapi_w1`, owns only
+  `control_plane_api_test.exs` and new auth/contact controller-test files;
+- `audit/mission-data-api-ownership`, partition `_missionapi_w2`, owns only
+  `control_plane_mission_data_api_test.exs` and a new catalog controller-test
+  file; and
+- `audit/remaining-slow-design`, partition `_slowdesign_w3`, owns only
+  `data_sources_binding_history_test.exs` for its first implementation.
+
+Shared `ConnCase` support, `ControlPlaneApiFixtures`, router/controllers,
+production EventBus and root composition, `config/test.exs`, and this audit
+document remain integration-owned. The API routes remain under the existing
+`/api` scope with `[:api, :authenticated_api]`: these endpoints require service
+bearer authentication and `current_scope`, and no router change is indicated.
+
+All three reservations produced bounded changes and were integrated. The
+control-plane file was split into an async authentication contract, an async
+contact-configuration contract, and three explicitly runtime-owned workflows
+(`87247ac4`). The mission-data file yielded an async catalog/import contract
+while retaining its two runtime workflows (`41b66b4f`). Binding-history coverage
+now uses async `DataCase` rather than serialized `ConfigCase` (`e8961bb1`); its
+12-test file passed 101 repetitions, and the combined 28-test data-source cohort
+passed after integration.
+
+Integration stress exposed one issue hidden by the former destructive reset:
+the retained runtime API workflow failed on its second execution with
+`{:generation_conflict, 1}` because `ConnCase` owned SQL rollback but did not own
+the runtime processes created by the request. `Cadence.RuntimeTestSupport` now
+defines the shared default-runtime preparation and cleanup boundary used by
+both `RuntimeCase` and runtime-tagged `ConnCase`. With that lifecycle in place,
+the final `TRUNCATE organizations CASCADE` reset and its helper were deleted.
+The three-workflow API file then passed 63 tests over 21 executions, the
+two-workflow mission-data file passed 42 tests over 21 executions without the
+truncate, and the broader runtime gates passed 209 core and 5 web tests. This
+is the intended diagnostic outcome: the slow tests revealed two independently
+owned resources, not merely an opportunity to shorten setup.
+
+### Process-owned persistence wave
+
+The next three reservations addressed ranks 2 through 4 in parallel, with a
+separate review pass before integration. That review was important: individually
+green tests still hid a timed child-process owner, process-global fact consumers,
+and PostgreSQL keys that would have serialized nominally async modules.
+
+The data-source lifecycle tranche split one 16-test `ConfigCase` module into
+three async `DataCase` modules: two lifecycle contracts, seven probe contracts,
+and seven credential/BYO contracts. The probe tests own anonymous synchronous
+event buses and prove that capability materialization and source-health facts are
+published through the selected bus. Production capability materialization now
+propagates an explicitly supplied `:event_bus` into its nested persistence call;
+callers that omit the option retain the application-global compatibility
+fallback. Each async module uses a distinct organization and mission identity so
+unique-index locking cannot silently serialize their sandbox transactions. The
+combined three-module overlap gate passed 1,616 tests across 101 executions with
+`--max-cases 3`.
+
+The read-model tranche moved 33 row-backed contracts into four async `DataCase`
+modules. Activation and source-binding paths use explicit non-delivering event
+bus targets, and mission-event projection is performed by the sandbox owner.
+Three genuine integrations remain in a synchronous `RuntimeCase` sibling:
+contact/limit projection through the application fact consumer, managed-action
+projection through the mission runtime, and durable job-queue rebuild. The four
+async modules passed 3,333 tests across 101 executions, and the 60-test neighbor
+cohort passed after the reviewer-requested ownership corrections.
+
+The telemetry-ingress tranche split nine contracts by resource owner. Three
+explicit Postgres-policy contracts are async `DataCase`; configured public-arity
+compatibility and filesystem archive writers remain synchronous `ConfigCase`;
+four state-carrying archive, retry, and TM-reassembly contracts remain
+`RuntimeCase`. Anonymous event buses capture the complete synchronous delivery
+policy. The async module passed 303 tests across 101 executions, and the complete
+nine-test cohort passed. Keeping the filesystem test in `ConfigCase` is
+intentional: its timed writer GenServers must share the SQL sandbox owner even
+when a five-second flush fires.
+
+After integration, the combined 61-test slice passed with 1.1 seconds of async
+work and 0.7 seconds of serialized work at seed 424242. The useful result is not
+the elapsed time alone. This wave removed ambient EventBus and projection
+ownership, preserved the process-owned cases that could not honestly become
+async, and exposed database locking that per-module repetition could not detect.
+
+The first authoritative root gate also invalidated an older concurrency proof.
+Its two scheduler-isolation tests rendezvoused through a registered barrier in
+separate ExUnit modules. Under full-suite scheduling, one module could occupy a
+worker more than 15 seconds before the other module started, so both tests timed
+out even though the focused two-file repetition had been green. The proof is now
+self-contained: one test explicitly starts two private sandbox owners and two
+gated schedulers, confirms their identities differ, runs the primary scheduler,
+rolls its owner back, and then persists the same identifiers through the peer
+owner. The ordinary timer-reconciliation contract no longer coordinates with an
+unrelated test module, and the global barrier process has been deleted. The
+focused five-test scheduler cohort passed at the failing root seed, the complete
+cohort passed 505 tests across 101 executions, and the self-contained overlap
+proof passed another 101 executions after its final cleanup correction. A
+load-sensitive 100-millisecond telemetry wait now uses the scheduler's
+synchronous snapshot as a completion barrier before inspecting the mailbox.
+
+The final root `mix precommit` passed: warnings-as-errors compilation, strict
+Credo over 2,727 source files, workspace and architecture checks, all four plane
+checks, 1,832 core tests, 27 catalog tests, 295 CCSDS tests, 136 simulator tests,
+and 1,694 non-browser web tests. Browser tests remained intentionally excluded.
+
+The remaining ranked design seams are now:
+
+| Rank | Area | Current design question |
+| ---: | --- | --- |
+| 1 | Cache policy/default clients | Can anonymous composed caches own all policy, invalidation, and quiet-period behavior while retaining one serialized default-client compatibility proof? |
+| 2 | Command-dispatch retry ownership | Can retry passage become an explicit dispatcher-owned trigger/settled boundary instead of a wall-clock test against a registered global dispatcher? |
+| 3 | Contact-scheduler boot policy | Can scheduler policy be captured immutably at boot while named schedulers own their runtime dependencies? |
+| 4 | Ordinary store and LiveView ownership | Which remaining serialized stores and LiveViews still hide tasks, subscriptions, runtime lookups, or shared database consumers? |
+
+The next bounded batch should start with cache policy/default clients and command
+dispatch retry ownership in separate worktrees; contact-scheduler policy can run
+in parallel only if its production and test files do not overlap the dispatcher
+reservation. Shared test support, root composition, configuration, and this
+audit document remain integration-owned.
+
+### Cache, command-owner, and scheduler-policy wave
+
+This batch closed the first three items above in isolated worktrees and used a
+separate agent to review each ownership claim before integration. The important
+result is the dependency boundary each slow module exposed, not merely that more
+tests now run concurrently.
+
+The dashboard-cache module had combined three different owners. Eleven row,
+query, and local-cache policy contracts now run as async `DataCase` tests. Every
+write targets an explicit non-global event bus; invalidation tests own an
+anonymous synchronous bus, fact consumer, and runtime cache. One activation
+interval contract remains `RuntimeCase` because it intentionally applies the
+registered mission runtime. Three fixed/default-client compatibility contracts
+remain serialized `ConfigCase` tests and reset the application cache around the
+test. The former 20-millisecond quiet-period assertion is now an immediate
+mailbox assertion: `Engine.resolve/2` joins its source tasks before returning, so
+no callback from that invocation remains in flight. The 11 async contracts and
+the binding-history neighbor passed 2,323 tests over 101 executions with three
+modules allowed to overlap; the four retained serialized contracts passed 84
+tests over 21 executions.
+
+The contact-scheduler outlier did not require a production rewrite. Boot
+composition already captures scheduler configuration into the root composition,
+passes it through mission-runtime child options, and stores it in the scheduler
+state. The test smell was a module-wide application-configuration mutation.
+Eleven ordinary scheduler contracts now use `RuntimeCase` without changing
+global configuration; the sole default-boot policy contract is isolated in a
+serialized `ConfigCase`. The ordinary and compatibility files passed 1,212
+tests over 101 executions, and the historical scheduler-owner cohort passed 918
+tests over 51 executions without SQL-owner exit logs.
+
+The command retry profile also corrected the inventory's original diagnosis.
+The test was not waiting for its safety timer: synchronous fact delivery already
+caused contact persistence to wake and drain the registered lane before the
+write returned. The real defect was owner routing. Enqueue, release retry,
+release completion, contact facts, telemetry facts, and transport facts could
+fall back to the application command dispatcher or verifier scheduler even when
+they originated in a separately composed root. The dispatcher now owns the
+lane policy used by external drains, and the command process namespace is
+carried through every rescheduling and verifier-notification path. Root
+composition force-injects that namespace into both control fact consumers,
+overriding a conflicting nested default while preserving all default public
+arities as compatibility boundaries.
+
+The command outcome proof starts two complete roots over the same durable
+mission identity. A selected-uplink contact wakes only the selected root's
+dispatcher; nonempty telemetry and transport facts notify only that root's
+verifier scheduler; neither path creates a default-owner lane. A separate test
+proves that namespaced enqueue automatically starts the private lane, while a
+first-start external drain cannot override the dispatcher's captured callback
+or safety policy. The process-owner proof passed 303 tests over 101 executions,
+and the full two-root lifecycle passed 20 consecutive executions. An independent
+review found no remaining production routing blocker before integration.
+
+One test-support smell is now explicit. `RootLifecycleTest` and some dispatcher
+tests need a shared SQL sandbox owner for supervised child processes but do not
+mutate application configuration. The former uses `UnitCase` plus manual sandbox
+setup; the latter uses `ConfigCase`. Neither label states the real ownership
+contract. A future generic process/database case should own the shared checkout,
+supervised-child access, and deterministic teardown without implying global
+configuration or application-runtime ownership.
+
+After integration, the combined cache, contact-scheduler, command, composition,
+and neighboring consumer cohort passed 63 tests at seed 424242 in 6.2 seconds
+(2.2 seconds async and 3.9 seconds sync).
+
+The final root `mix precommit` passed: warnings-as-errors compilation, strict
+Credo over 2,730 source files, workspace and architecture checks, all four plane
+checks, 1,833 core tests, 27 catalog tests, 295 CCSDS tests, 136 simulator tests,
+and 1,694 non-browser web tests. Browser tests remained intentionally excluded.
+The core run emitted one PostgreSQL client-exit log without an assertion failure.
+That is retained as ownership evidence for the next inventory rather than being
+treated as harmless merely because the suite stayed green.
+
+The remaining ranked design seams are now:
+
+| Rank | Area | Current design question |
+| ---: | --- | --- |
+| 1 | Shared process/database test ownership | Can a dedicated case replace manual shared-sandbox setup and misclassified `ConfigCase` modules while guaranteeing child-process teardown? |
+| 2 | Ordinary store ownership | Which remaining serialized `DataCase` modules are row-only, and which actually lend their transaction to children or global consumers? |
+| 3 | LiveView ownership | Which remaining serialized LiveViews still mount global dashboard/runtime owners instead of using deterministic per-view resolve and stop boundaries? |
+| 4 | Default compatibility surfaces | Which zero-arity/default-client APIs are genuine public compatibility boundaries, and which are ambient ownership that should be removed from internal call paths? |
+
+The next bounded batch should begin with an inventory of manual sandbox-owner
+setup and serialized `ConfigCase` modules that do not read or write application
+configuration. That creates the evidence for a generic process/database case
+before converting further store or LiveView modules.
+
+### Process/database and probe-ownership wave
+
+The manual-sandbox inventory confirmed that SQL rollback and process lifecycle
+need a case boundary distinct from both global configuration and the application
+runtime. `Cadence.ProcessDataCase` now owns a shared sandbox checkout for
+serialized tests whose supervised children use the database, and stops that
+owner only after ExUnit has synchronously stopped the supervised children. It
+does not mutate application configuration or perform RuntimeCase's global
+runtime, ETS, or filesystem cleanup. The dispatcher integration, two-root
+lifecycle proof, and path-journal instance-isolation proof now use this case;
+their four test bodies and assertions are unchanged. Focused repetition passed
+84 tests over 21 executions, and the dispatcher subset passed 202 tests over 101
+executions without PostgreSQL owner/client-exit logs. The new `:process_data`
+tag also makes this ownership class visible to selectors instead of hiding it
+behind `UnitCase` or `ConfigCase`.
+
+The remaining data-source backend modules exposed a second ambient owner.
+Managed QuestDB provisioning and TSDB lifecycle completion persisted through
+the application EventBus even when their callers had selected a private bus.
+Those completion paths now propagate only an explicitly supplied `:event_bus`;
+omitting the option preserves the existing application-default compatibility
+behavior. The three lifecycle/provisioning modules use distinct database scopes
+and private synchronous buses, assert the selected completion facts, and now run
+as async `DataCase` tests. Their 23 contracts passed 2,323 tests over 101
+executions and a 31-test neighbor cohort without owner/client-exit logs.
+
+Instrumenting the intermittent PostgreSQL warning then revealed a production
+design defect rather than another case-label problem. `ProbeScheduler` bounded
+an entire `Control.DataSources.probe/3` call with
+`Task.async_stream(..., on_timeout: :kill_task)`. That call included source and
+credential reads, credential audit work, source-health persistence, drift
+queries, and capability materialization as well as external adapter I/O. Under
+contention at seed 398210, the timeout killed a task during a Repo transaction;
+Postgrex disconnected the client, and the scheduler's owner-side timeout write
+then encountered the damaged checkout.
+
+Source probing is now an explicit three-stage operation:
+
+1. preparation fetches and validates the durable source, resolves credentials
+   and adapter policy, and returns an opaque prepared token in the scheduler
+   owner;
+2. only the adapter's observation-only `probe/2` call runs in a timeout-bound
+   task; and
+3. health, audit, drift, and capability results are persisted back in the
+   scheduler owner.
+
+The public synchronous `Control.DataSources.probe/3` compatibility boundary
+composes the same stages. The legacy injected `:probe_fun` remains supported but
+runs synchronously because an arbitrary callback cannot safely be killed while
+it may own database work. The staged timed path does not accept an arbitrary
+observation callback: it always calls `DataSourceControl.observe_probe/1`, and
+the obsolete option is removed before adapter preparation. The built-in
+Telemetry/QuestDB observation chain performs Req queries and pure result shaping
+without Repo access. Prepared credentials stay out of task arguments, logs, and
+summaries; compound exits, throws, and exceptions are reduced to bounded
+classifications while simple atom exits retain their compatibility shape.
+
+The scheduler cohort passed 909 tests over 101 executions, the explicit
+contention regression passed 101 executions, and the previously failing full
+core seed passed 1,834 tests without Postgrex, client-exit, owner-exit, or
+credential-marker logs. After integration, the combined process-data, backend,
+probe, and public-probe cohort passed 43 tests at seed 424242 in 1.7 seconds
+(1.1 seconds async and 0.5 seconds sync).
+
+The staged probe failure is the same *class* as the earlier intermittent
+client-exit logs, but process-lineage tracing did not prove that it caused those
+specific late log-only occurrences. They remain ownership evidence to monitor,
+not a warning that may be declared solved from correlation alone.
+
+The next ranked design seams are:
+
+| Rank | Area | Current design question |
+| ---: | --- | --- |
+| 1 | Timed archive writers | Which ingress, protocol-record, and telemetry archive tests should move to `ProcessDataCase` so their writer processes always stop before the sandbox owner? |
+| 2 | Row-only `ConfigCase` modules | Can ground-network mission-provider, provider-credential, and management-provider contracts become async `DataCase` tests once their identifiers are made collision-free? |
+| 3 | Ambient EventBus and ETS stores | Which telemetry data-management, storage, catalog, and limits tests still use global buses or globally named ETS stores despite injectable policy/client APIs? |
+| 4 | LiveView ownership | Which serialized LiveViews still mount global dashboard/runtime owners instead of deterministic per-view resolve and stop boundaries? |
+| 5 | Intermittent client-exit lineage | If the late warning recurs after the probe fix, which supervised or timed database client remains alive past its case owner? |
+
+The next bounded batch should start with the timed archive-writer modules. They
+are the closest remaining match for the new process/database case and the most
+plausible place for a timer-driven child to outlive SQL ownership. Row-only
+provider modules can be audited in parallel because they do not overlap archive
+production or test-support files.
+
+### Archive-writer ownership follow-up
+
+The archive audit found six modules whose existing production boundaries were
+already correct but whose test-case labels were not. The ingress filesystem and
+instance-isolation modules, protocol-record filesystem and instance-isolation
+modules, filesystem telemetry-persistence contract, and combined telemetry
+instance-isolation module all start their writers with `start_supervised!`.
+Those writers own flush timers and perform Repo-backed segment indexing from the
+writer GenServer. None of the six modules reads or mutates application
+configuration, so `ConfigCase` added a misleading global-configuration contract
+and its application-restart cleanup without owning the real resource.
+
+All six modules now use serialized `ProcessDataCase`. This keeps the shared SQL
+checkout required by writer processes and ensures ExUnit stops those supervised
+processes before the sandbox owner is rolled back. No production code, fixture,
+test body, or assertion changed, and the modules intentionally remain
+synchronous. The 12 archive contracts passed directly at seed 424242, then
+passed 1,212 tests over 101 executions with no Postgrex client-exit, sandbox
+owner-exit, or ownership-error output. The complete `:process_data` selector now
+contains 16 tests across nine modules and passed with 1,821 unrelated tests
+excluded.
+
+This tranche closes the known timed archive-writer classification list. It does
+not prove that the earlier intermittent late client-exit warning can no longer
+occur; it removes the most plausible remaining teardown ambiguity by making
+writer-process ownership explicit.
+
+The next ranked design seams are now:
+
+| Rank | Area | Current design question |
+| ---: | --- | --- |
+| 1 | Row-only `ConfigCase` modules | Can ground-network mission-provider, provider-credential, and management-provider contracts become collision-free async `DataCase` tests? |
+| 2 | Ambient EventBus and ETS stores | Which telemetry data-management, storage, catalog, and limits tests still use global buses or globally named ETS stores despite injectable policy/client APIs? |
+| 3 | LiveView ownership | Which serialized LiveViews still mount global dashboard/runtime owners instead of deterministic per-view resolve and stop boundaries? |
+| 4 | Default compatibility surfaces | Which remaining default clients genuinely specify compatibility, and which are ambient dependencies on the application root? |
+| 5 | Intermittent client-exit lineage | If the late warning recurs, which database client remains alive past its explicitly classified owner? |
+
+The next bounded batch should take the three row-only provider modules together.
+They share no writer/runtime ownership and can become a small async overlap
+cohort once their durable identifiers are checked for cross-module collisions.

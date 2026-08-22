@@ -47,8 +47,15 @@ defmodule Cadence.Accounts do
   @spec environment_admin_enabled?() :: boolean()
   defdelegate environment_admin_enabled?(), to: Authentication
 
+  @spec environment_admin_enabled?(Cadence.Accounts.EnvironmentAdminPolicy.t()) :: boolean()
+  defdelegate environment_admin_enabled?(policy), to: Authentication
+
   @spec reconcile_environment_admin() :: {:ok, User.t() | nil} | {:error, term()}
   defdelegate reconcile_environment_admin(), to: Authentication
+
+  @spec reconcile_environment_admin(Cadence.Accounts.EnvironmentAdminPolicy.t()) ::
+          {:ok, User.t() | nil} | {:error, term()}
+  defdelegate reconcile_environment_admin(policy), to: Authentication
 
   @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   defdelegate sign_in(email, password), to: Authentication

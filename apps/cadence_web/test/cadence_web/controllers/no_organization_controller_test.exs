@@ -1,5 +1,5 @@
 defmodule CadenceWeb.NoOrganizationControllerTest do
-  use CadenceWeb.ConnCase, async: false
+  use CadenceWeb.ConnCase, async: true
 
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification

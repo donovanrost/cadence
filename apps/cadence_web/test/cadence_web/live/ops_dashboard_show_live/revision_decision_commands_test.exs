@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OpsDashboardShowLive.RevisionDecisionCommandsTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, ObservationIdentityStates, WriteContext}

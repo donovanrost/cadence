@@ -1,5 +1,5 @@
 defmodule CadenceWeb.OrganizationAuthTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.OrganizationAuth

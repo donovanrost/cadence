@@ -116,6 +116,12 @@ defmodule Cadence.Auth do
     Accounts.reconcile_environment_admin()
   end
 
+  @spec reconcile_environment_admin(Cadence.Accounts.EnvironmentAdminPolicy.t()) ::
+          {:ok, Cadence.Accounts.User.t() | nil} | {:error, term()}
+  def reconcile_environment_admin(%Cadence.Accounts.EnvironmentAdminPolicy{} = policy) do
+    Accounts.reconcile_environment_admin(policy)
+  end
+
   @spec revoke_user_session(binary()) :: :ok
   def revoke_user_session(session_token) when is_binary(session_token) do
     Accounts.revoke_user_session(session_token)

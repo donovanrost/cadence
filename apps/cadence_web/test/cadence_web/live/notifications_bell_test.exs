@@ -1,5 +1,5 @@
 defmodule CadenceWeb.NotificationsBellTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification

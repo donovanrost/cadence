@@ -1,5 +1,5 @@
 defmodule CadenceWeb.CatalogArtifactDownloadControllerTest do
-  use CadenceWeb.ConnCase, async: false
+  use CadenceWeb.ConnCase, async: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,

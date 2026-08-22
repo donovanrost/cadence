@@ -1,5 +1,5 @@
 defmodule CadenceWeb.MissionAuthTest do
-  use CadenceWeb.ConnCase, async: false
+  use Cadence.DataCase, async: true
 
   alias Cadence.Missions.Mission
   alias CadenceWeb.MissionAuth

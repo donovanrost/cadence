@@ -3,10 +3,6 @@ defmodule Cadence.RuntimeCase do
 
   use ExUnit.CaseTemplate
 
-  alias Cadence.Control.Missions, as: ControlMissions
-  alias Cadence.Telemetry.CurrentValueStore
-  alias Cadence.Telemetry.CurrentValueStore.ETS
-
   using opts do
     isolated? = Keyword.get(opts, :isolated, false)
 
@@ -41,30 +37,17 @@ defmodule Cadence.RuntimeCase do
   end
 
   def setup_owned_runtime(tags) do
-    Cadence.DataCase.ensure_cadence_started!()
-    stop_all_control_missions()
-    Cadence.Runtime.stop_all_missions()
+    Cadence.RuntimeTestSupport.prepare_default_runtime()
 
     pid = Cadence.DataCase.start_sandbox_owner!(tags, shared?: true)
 
     on_exit(fn ->
-      stop_all_control_missions()
-      Cadence.Runtime.stop_all_missions()
-
-      if Cadence.DataCase.telemetry_current_value_store_module() == ETS do
-        CurrentValueStore.reset()
-      end
-
+      Cadence.RuntimeTestSupport.cleanup_default_runtime()
       Cadence.DataCase.stop_sandbox_owner(pid)
       Cadence.DataCase.ensure_cadence_started!()
     end)
 
     :ok
-  end
-
-  defp stop_all_control_missions do
-    ControlMissions.running_mission_ids()
-    |> Enum.each(&ControlMissions.stop/1)
   end
 
   defp stop_isolated_sandbox_owner(pid) do
