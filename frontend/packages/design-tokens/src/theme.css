@@ -1,0 +1,53 @@
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/jetbrains-mono";
+
+:root {
+  color-scheme: dark;
+
+  --cadence-font-sans: "Archivo Variable", sans-serif;
+  --cadence-font-mono: "JetBrains Mono Variable", monospace;
+
+  --cadence-color-canvas: #0c1112;
+  --cadence-color-shell: #111719;
+  --cadence-color-surface-inset: #12191a;
+  --cadence-color-surface: #151c1e;
+  --cadence-color-surface-raised: #1a2224;
+  --cadence-color-border-subtle: #242e30;
+  --cadence-color-border: #303b3d;
+  --cadence-color-border-strong: #445154;
+  --cadence-color-text: #d8dedc;
+  --cadence-color-text-strong: #edf0ed;
+  --cadence-color-text-secondary: #879395;
+  --cadence-color-text-muted: #5a6769;
+  --cadence-color-accent: #f5a623;
+  --cadence-color-accent-muted: #b97a19;
+  --cadence-color-signal: #46d9d0;
+  --cadence-color-danger: #ff755f;
+
+  --cadence-space-1: 4px;
+  --cadence-space-2: 8px;
+  --cadence-space-3: 12px;
+  --cadence-space-4: 16px;
+  --cadence-space-5: 20px;
+  --cadence-space-6: 24px;
+  --cadence-space-8: 32px;
+
+  --cadence-control-sm: 32px;
+  --cadence-control-md: 38px;
+  --cadence-focus-ring: 0 0 0 2px var(--cadence-color-signal);
+  --cadence-transition-fast: 120ms ease;
+
+  /* Temporary aliases while the host shell migrates to semantic token names. */
+  --ink-950: var(--cadence-color-canvas);
+  --ink-900: var(--cadence-color-shell);
+  --ink-850: var(--cadence-color-surface);
+  --ink-800: var(--cadence-color-surface-raised);
+  --ink-700: var(--cadence-color-border);
+  --steel-500: #697678;
+  --steel-300: #a9b4b2;
+  --paper: var(--cadence-color-text);
+  --amber: var(--cadence-color-accent);
+  --amber-soft: var(--cadence-color-accent-muted);
+  --cyan: var(--cadence-color-signal);
+  --danger: var(--cadence-color-danger);
+}

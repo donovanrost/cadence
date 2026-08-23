@@ -1,0 +1,35 @@
+.sb-show-main.sb-main-centered {
+  padding: var(--cadence-space-8);
+}
+
+.sb-show-main.sb-main-fullscreen {
+  min-height: 100vh;
+}
+
+#storybook-root {
+  color: var(--cadence-color-text);
+  font-family: var(--cadence-font-sans);
+}
+
+.story-column {
+  display: flex;
+  min-width: 320px;
+  flex-direction: column;
+  gap: var(--cadence-space-4);
+}
+
+.story-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cadence-space-3);
+}
+
+.story-state {
+  margin: 0;
+  color: var(--cadence-color-text-secondary);
+  font-family: var(--cadence-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

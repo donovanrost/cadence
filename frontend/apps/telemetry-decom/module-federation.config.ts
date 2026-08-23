@@ -1,0 +1,19 @@
+import { createModuleFederationConfig } from "@module-federation/vite";
+
+export default createModuleFederationConfig({
+  name: "cadence_telemetry_decom",
+  filename: "remoteEntry.js",
+  manifest: true,
+  exposes: {
+    "./Application": "./src/federated-application.ts",
+    "./Failure": "./src/failure-application.ts",
+  },
+  shared: {
+    vue: {
+      singleton: true,
+      requiredVersion: "^3.5.40",
+      allowNodeModulesSuffixMatch: true,
+    },
+  },
+  dts: false,
+});
