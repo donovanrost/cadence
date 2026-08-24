@@ -220,81 +220,350 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
   test "validates, rotates, and revokes a stable credential reference" do
     {conn, _user, organization} = signed_in_organization_admin()
-    {account, _version, credential} = persist_account!(organization)
+    {account, version, credential} = persist_account!(organization)
+
+    previous_opts = Application.get_env(:cadence_web, :provider_account_live_opts)
+
+    Application.put_env(:cadence_web, :provider_account_live_opts,
+      manage_backend?: true,
+      secret_backend: __MODULE__,
+      test_pid: self()
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence_web, :provider_account_live_opts, previous_opts)
+    end)
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
 
     track_async_view(view)
 
-    assert has_element?(view, "#provider-account-show-page")
-    assert has_element?(view, "#provider-account-credential-status", "Active · v1")
-    assert has_element?(view, "#validate-provider-account-button")
-    assert has_element?(view, "#rotate-provider-credential-button")
-    assert has_element?(view, "#revoke-provider-credential-button")
+    assert has_element?(view, "#provider-account-show-component.contents")
+    refute has_element?(view, "#provider-account-show-page")
     refute has_element?(view, "input[type='password']")
 
-    view |> element("#validate-provider-account-button") |> render_click()
-    render_async(view)
-    assert has_element?(view, "#provider-account-health", "Validated")
+    initial_vue = provider_account_show_vue(view)
 
-    view |> element("#rotate-provider-credential-button") |> render_click()
-    render_async(view)
-    assert has_element?(view, "#provider-account-credential-status", "Active · v2")
+    assert initial_vue.component == "ProviderAccountShow"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
 
-    assert {:ok, rotated} =
+    assert initial_vue.handlers == %{
+             "grant-mission" => Phoenix.LiveView.JS.push("grant-mission"),
+             "revoke-credential" => Phoenix.LiveView.JS.push("revoke-credential"),
+             "revoke-grant" => Phoenix.LiveView.JS.push("revoke-grant"),
+             "rotate-credential" => Phoenix.LiveView.JS.push("rotate-credential"),
+             "validate-account" => Phoenix.LiveView.JS.push("validate-account")
+           }
+
+    assert initial_vue.props == provider_account_show_props(account, version, credential)
+    assert_reset_provider_account_stream(initial_vue, "account_grants", [])
+
+    assert_reset_provider_account_stream(
+      initial_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert_provider_account_json_safe(initial_vue, credential)
+
+    render_hook(view, "validate-account", %{})
+    assert_receive {:provider_account_secret_backend, :resolve, validate_task}
+
+    validating_vue = provider_account_show_vue(view)
+
+    assert validating_vue.props ==
+             provider_account_show_props(account, version, credential, account_action: :validate)
+
+    assert_no_provider_account_stream_mutations(validating_vue)
+    send(validate_task, {:continue_provider_account_secret_backend, :resolve})
+    render_async(view)
+
+    assert has_element?(view, "#flash-info[role='alert']", "Provider Account validated.")
+
+    assert {:ok, validated_account, ^version} =
+             ProviderAccounts.fetch_for_system(
+               organization.organization_id,
+               account.provider_account_id
+             )
+
+    assert {:ok, resolved_credential} =
              ProviderCredentials.fetch(
                organization.organization_id,
                account.provider_account_id,
                credential.provider_credential_ref
              )
 
-    assert rotated.provider_credential_ref == credential.provider_credential_ref
+    validated_vue = provider_account_show_vue(view)
 
-    view |> element("#revoke-provider-credential-button") |> render_click()
+    assert validated_vue.props ==
+             provider_account_show_props(validated_account, version, resolved_credential)
+
+    assert_reset_provider_account_stream(validated_vue, "account_grants", [])
+
+    assert_reset_provider_account_stream(
+      validated_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert_provider_account_json_safe(validated_vue, resolved_credential)
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
+    track_async_view(view)
+
+    remounted_validated_vue = provider_account_show_vue(view)
+
+    assert remounted_validated_vue.props ==
+             provider_account_show_props(validated_account, version, resolved_credential)
+
+    assert_reset_provider_account_stream(remounted_validated_vue, "account_grants", [])
+
+    render_hook(view, "rotate-credential", %{})
+    assert_receive {:provider_account_secret_backend, :rotate, rotate_task}
+
+    rotating_vue = provider_account_show_vue(view)
+
+    assert rotating_vue.props ==
+             provider_account_show_props(validated_account, version, resolved_credential,
+               account_action: :rotate
+             )
+
+    assert_no_provider_account_stream_mutations(rotating_vue)
+    send(rotate_task, {:continue_provider_account_secret_backend, :rotate})
     render_async(view)
-    assert has_element?(view, "#provider-account-credential-status", "Revoked · v3")
-    refute has_element?(view, "#revoke-provider-credential-button")
+
+    assert has_element?(
+             view,
+             "#flash-info[role='alert']",
+             "Credential rotated without changing its reference."
+           )
+
+    assert {:ok, rotated_credential} =
+             ProviderCredentials.fetch(
+               organization.organization_id,
+               account.provider_account_id,
+               credential.provider_credential_ref
+             )
+
+    assert rotated_credential.provider_credential_ref == credential.provider_credential_ref
+
+    rotated_vue = provider_account_show_vue(view)
+
+    assert rotated_vue.props ==
+             provider_account_show_props(validated_account, version, rotated_credential)
+
+    assert_reset_provider_account_stream(rotated_vue, "account_grants", [])
+
+    assert_reset_provider_account_stream(
+      rotated_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert_provider_account_json_safe(rotated_vue, rotated_credential)
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
+    track_async_view(view)
+
+    remounted_rotated_vue = provider_account_show_vue(view)
+
+    assert remounted_rotated_vue.props ==
+             provider_account_show_props(validated_account, version, rotated_credential)
+
+    assert_reset_provider_account_stream(remounted_rotated_vue, "account_grants", [])
+
+    render_hook(view, "revoke-credential", %{})
+    assert_receive {:provider_account_secret_backend, :revoke, revoke_task}
+
+    revoking_vue = provider_account_show_vue(view)
+
+    assert revoking_vue.props ==
+             provider_account_show_props(validated_account, version, rotated_credential,
+               account_action: :revoke
+             )
+
+    assert_no_provider_account_stream_mutations(revoking_vue)
+    send(revoke_task, {:continue_provider_account_secret_backend, :revoke})
+    render_async(view)
+
+    assert has_element?(
+             view,
+             "#flash-info[role='alert']",
+             "Credential revoked. New provider operations are blocked."
+           )
+
+    assert {:ok, revoked_credential} =
+             ProviderCredentials.fetch(
+               organization.organization_id,
+               account.provider_account_id,
+               credential.provider_credential_ref
+             )
+
+    revoked_vue = provider_account_show_vue(view)
+
+    assert revoked_vue.props ==
+             provider_account_show_props(validated_account, version, revoked_credential)
+
+    assert revoked_vue.props["actions"]["revoke"] == nil
+    assert revoked_vue.props["actions"]["validate"]["disabled"] == true
+    assert revoked_vue.props["actions"]["rotate"]["disabled"] == true
+    assert_reset_provider_account_stream(revoked_vue, "account_grants", [])
+
+    assert_reset_provider_account_stream(
+      revoked_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert_provider_account_json_safe(revoked_vue, revoked_credential)
   end
 
   test "grants and revokes mission access from the account page" do
     {conn, _user, organization} = signed_in_organization_admin()
     mission = TestFixtures.persist_mission!(organization, display_name: "Aurora")
-    {account, _version, _credential} = persist_account!(organization)
+    {account, version, credential} = persist_account!(organization)
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
 
-    view
-    |> form("#provider-account-grant-form",
-      grant: %{
-        mission_id: mission.mission_id,
-        allowed_services: "telemetry",
-        allowed_stations: "station-alpha",
-        max_quota: "20",
-        grant_reason: "Aurora flight operations"
+    initial_vue = provider_account_show_vue(view)
+
+    assert initial_vue.props ==
+             provider_account_show_props(account, version, credential,
+               mission_options: [{"Aurora", mission.mission_id}]
+             )
+
+    assert initial_vue.props["grant_form"] ==
+             provider_account_grant_form_props([{"Aurora", mission.mission_id}])
+
+    assert initial_vue.props["grant_form"]["fields"]["mission_id"]["name"] ==
+             "grant[mission_id]"
+
+    assert initial_vue.props["grant_form"]["fields"]["allowed_services"]["name"] ==
+             "grant[allowed_services]"
+
+    assert initial_vue.props["grant_form"]["fields"]["allowed_stations"]["name"] ==
+             "grant[allowed_stations]"
+
+    assert initial_vue.props["grant_form"]["fields"]["max_quota"]["name"] ==
+             "grant[max_quota]"
+
+    assert initial_vue.props["grant_form"]["fields"]["grant_reason"]["name"] ==
+             "grant[grant_reason]"
+
+    assert initial_vue.props["actions"]["revoke"]["confirm"] ==
+             "Revoke this Provider Account credential? New provider operations will stop."
+
+    assert_reset_provider_account_stream(initial_vue, "account_grants", [])
+    assert_provider_account_json_safe(initial_vue, credential)
+
+    grant_payload = %{
+      "grant" => %{
+        "mission_id" => mission.mission_id,
+        "allowed_services" => "telemetry",
+        "allowed_stations" => "station-alpha",
+        "max_quota" => "20",
+        "grant_reason" => "Aurora flight operations"
       }
-    )
-    |> render_submit()
+    }
+
+    assert Enum.sort(Map.keys(grant_payload["grant"])) ==
+             ~w(allowed_services allowed_stations grant_reason max_quota mission_id)
+
+    assert Enum.all?(grant_payload["grant"], fn {_field, value} -> is_binary(value) end)
+    assert grant_payload["grant"]["max_quota"] == "20"
+
+    render_hook(view, "grant-mission", grant_payload)
+
+    assert has_element?(view, "#flash-info[role='alert']", "Mission grant created.")
 
     [grant] =
       ProviderAccountGrants.list_for_mission(organization.organization_id, mission.mission_id)
 
-    assert has_element?(view, "#account-grant-#{grant.provider_account_grant_id}")
-    assert has_element?(view, "#revoke-grant-#{grant.provider_account_grant_id}")
+    granted_vue = provider_account_show_vue(view)
+    grant_row = provider_account_grant_row(grant, "Aurora")
 
-    view
-    |> element("#revoke-grant-#{grant.provider_account_grant_id}")
-    |> render_click()
+    assert provider_account_stream_upserts(granted_vue, "account_grants") == [grant_row]
+
+    assert_reset_provider_account_stream(granted_vue, "account_grants", [grant_row])
+
+    assert_reset_provider_account_stream(
+      granted_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert granted_vue.props ==
+             provider_account_show_props(account, version, credential, active_grant_count: 1)
+
+    assert grant_row["__dom_id"] == "account-grant-#{grant.provider_account_grant_id}"
+    assert grant_row["mission_name"] == "Aurora"
+    assert grant_row["version_label"] == "grant v1 · account v1"
+
+    assert grant_row["restriction_summary"] ==
+             "Allowed Services: telemetry · Allowed Stations: station-alpha · Max Quota: 20"
+
+    assert grant_row["lifecycle"] == %{"status" => "ready", "label" => "Active"}
+
+    assert grant_row["revoke"] == %{
+             "id" => "revoke-grant-#{grant.provider_account_grant_id}",
+             "label" => "Revoke",
+             "confirm" => "Revoke this mission grant? New operations will stop.",
+             "payload" => %{"grant-id" => grant.provider_account_grant_id}
+           }
+
+    assert_provider_account_json_safe(granted_vue, credential)
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
+    remounted_granted_vue = provider_account_show_vue(view)
+
+    assert remounted_granted_vue.props ==
+             provider_account_show_props(account, version, credential, active_grant_count: 1)
+
+    assert_reset_provider_account_stream(remounted_granted_vue, "account_grants", [grant_row])
+
+    render_hook(view, "revoke-grant", %{"grant-id" => grant.provider_account_grant_id})
+
+    assert has_element?(
+             view,
+             "#flash-info[role='alert']",
+             "Mission grant revoked. Existing contacts were retained for review."
+           )
 
     assert {:error, :provider_account_grant_revoked} =
              ProviderAccountGrants.fetch_active_for_system(
                organization.organization_id,
                grant.provider_account_grant_id
              )
+
+    [revoked_grant] =
+      ProviderAccountGrants.list_for_mission(organization.organization_id, mission.mission_id,
+        active_only?: false
+      )
+
+    revoked_vue = provider_account_show_vue(view)
+    revoked_row = provider_account_grant_row(revoked_grant, "Aurora")
+
+    assert revoked_row["version_label"] == "grant v2 · account v1"
+    assert revoked_row["lifecycle"] == %{"status" => "blocked", "label" => "Revoked"}
+    assert revoked_row["revoke"] == nil
+
+    assert_reset_provider_account_stream(revoked_vue, "account_grants", [revoked_row])
+
+    assert_reset_provider_account_stream(
+      revoked_vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert revoked_vue.props == provider_account_show_props(account, version, credential)
+
+    assert_provider_account_json_safe(revoked_vue, credential)
   end
 
   test "shows durable cursor health, inbox backlog, and quarantine counts" do
     {conn, _user, organization} = signed_in_organization_admin()
-    {account, version, _credential} = persist_account!(organization)
+    {account, version, credential} = persist_account!(organization)
     now = ~U[2026-07-15 20:30:00.000000Z]
 
     {:ok, cursor} = ProviderEventCursors.ensure(version)
@@ -316,10 +585,68 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts/#{account.provider_account_id}")
 
-    assert has_element?(view, "#provider-account-ingestion-health", "Healthy")
-    assert has_element?(view, "#provider-account-ingestion-backlog", "1")
-    assert has_element?(view, "#provider-account-ingestion-quarantined", "1")
-    assert has_element?(view, "#provider-account-ingestion-last-event", "2026-07-15 20:29Z")
+    vue = provider_account_show_vue(view)
+
+    ingestion = %{
+      "id" => "provider-account-ingestion",
+      "title" => "Event Ingestion",
+      "rows" => [
+        detail_props("Mode", "Polling"),
+        detail_props("Cursor health", "Healthy", false, "provider-account-ingestion-health"),
+        detail_props("Inbox backlog", "1", true, "provider-account-ingestion-backlog"),
+        detail_props("Quarantined", "1", true, "provider-account-ingestion-quarantined"),
+        detail_props(
+          "Last provider event",
+          "2026-07-15 20:29Z",
+          false,
+          "provider-account-ingestion-last-event"
+        )
+      ],
+      "description" => "default/events · last fetched 2026-07-15 20:30Z"
+    }
+
+    assert vue.props["ingestion"] == ingestion
+
+    assert vue.props ==
+             provider_account_show_props(account, version, credential, ingestion: ingestion)
+
+    assert_reset_provider_account_stream(vue, "account_grants", [])
+
+    assert_reset_provider_account_stream(
+      vue,
+      "account_audit",
+      provider_account_audit_rows(organization, account)
+    )
+
+    assert_provider_account_json_safe(vue, credential)
+  end
+
+  def capabilities(_opts), do: [:resolve, :rotate, :revoke]
+
+  def resolve(_descriptor, opts), do: await_provider_account_secret_backend(:resolve, opts)
+  def rotate(_descriptor, opts), do: await_provider_account_secret_backend(:rotate, opts)
+  def revoke(_descriptor, opts), do: await_provider_account_secret_backend(:revoke, opts)
+
+  defp await_provider_account_secret_backend(operation, opts) do
+    test_pid = Keyword.fetch!(opts, :test_pid)
+    send(test_pid, {:provider_account_secret_backend, operation, self()})
+
+    receive do
+      {:continue_provider_account_secret_backend, ^operation} ->
+        case operation do
+          :resolve ->
+            {:ok,
+             %{
+               material: %{value: "ephemeral-provider-account-test-secret"},
+               backend_version: "test-v1"
+             }}
+
+          mutation when mutation in [:rotate, :revoke] ->
+            {:ok, %{backend_version: "test-v2"}}
+        end
+    after
+      5_000 -> {:error, :provider_account_secret_backend_timeout}
+    end
   end
 
   defp signed_in_organization_admin do
@@ -391,6 +718,391 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
       "data" => %{}
     }
   end
+
+  defp provider_account_show_vue(view) do
+    LiveVue.Test.get_vue(view, id: "provider-account-show-component")
+  end
+
+  defp provider_account_show_props(account, version, credential, opts \\ []) do
+    mission_options = Keyword.get(opts, :mission_options, [])
+    account_action = Keyword.get(opts, :account_action)
+
+    %{
+      "page" => %{
+        "id" => "provider-account-show-page",
+        "header" => %{
+          "title" => account.display_name,
+          "subtitle" => account.provider_account_id,
+          "config_label" => "config v#{version.version}",
+          "breadcrumbs" => [
+            %{"label" => "Provider Accounts", "href" => "/provider-accounts"},
+            %{"label" => account.display_name, "href" => nil}
+          ]
+        },
+        "grants" => %{
+          "card_id" => "provider-account-grants-card",
+          "heading" => "Mission Grants",
+          "subtitle" =>
+            "Explicit, versioned authorization. Mission restrictions may narrow but never widen organization guardrails.",
+          "stream_id" => "provider-account-grants",
+          "empty" => %{
+            "id" => "provider-account-grants-empty",
+            "text" => "No missions have access to this account."
+          }
+        },
+        "grant_form_card" => %{
+          "id" => "provider-account-grant-form-card",
+          "heading" => "Grant Mission Access",
+          "subtitle" =>
+            "Start from organization guardrails and optionally narrow the mission scope."
+        },
+        "audit" => %{
+          "card_id" => "provider-account-audit-card",
+          "heading" => "Recent Account Activity",
+          "subtitle" => "Bounded, append-only account and credential evidence.",
+          "stream_id" => "provider-account-audit",
+          "empty" => %{
+            "id" => "provider-account-audit-empty",
+            "text" => "No account activity recorded."
+          }
+        }
+      },
+      "actions" => provider_account_action_props(account_action, credential.status),
+      "stats" => [
+        %{
+          "id" => "provider-account-health",
+          "label" => "Account Health",
+          "value" => provider_account_health(account)
+        },
+        %{
+          "id" => "provider-account-credential-status",
+          "label" => "Credential",
+          "value" =>
+            "#{provider_account_humanize(credential.status)} · v#{credential.registry_version}"
+        },
+        %{
+          "id" => "provider-account-event-mode",
+          "label" => "Event Mode",
+          "value" => provider_account_humanize(version.event_ingestion_mode)
+        },
+        %{
+          "id" => "provider-account-grant-count",
+          "label" => "Mission Grants",
+          "value" => Keyword.get(opts, :active_grant_count, 0)
+        }
+      ],
+      "grant_form" => provider_account_grant_form_props(mission_options),
+      "configuration" => %{
+        "id" => "provider-account-configuration",
+        "title" => "Effective Configuration",
+        "rows" => [
+          detail_props("Provider", provider_account_humanize(version.provider_type)),
+          detail_props("Region", version.region_ref || "Not specified", true),
+          detail_props("Environment", version.environment_ref, true),
+          detail_props("Validated", provider_account_timestamp(account.last_validated_at))
+        ]
+      },
+      "ingestion" => Keyword.get(opts, :ingestion, provider_account_default_ingestion_props()),
+      "guardrails" => %{
+        "id" => "provider-account-guardrails",
+        "title" => "Organization Guardrails",
+        "json" => Jason.encode!(version.guardrails, pretty: true)
+      },
+      "diagnostics" => %{
+        "id" => "provider-account-admin-diagnostics",
+        "title" => "Admin Diagnostics",
+        "columns" => [
+          [
+            detail_props("API base URL", version.base_url, true),
+            detail_props("Client adapter", Atom.to_string(version.client_key), true),
+            detail_props(
+              "Credential registry version",
+              "v#{credential.registry_version}",
+              true
+            ),
+            detail_props("Credential backend", provider_account_humanize(credential.backend_type))
+          ],
+          [
+            detail_props("Account version", "v#{version.version}", true),
+            detail_props("Credential status", provider_account_humanize(credential.status)),
+            detail_props(
+              "Last resolved",
+              provider_account_timestamp(credential.last_resolved_at)
+            ),
+            detail_props("Last rotated", provider_account_timestamp(credential.last_rotated_at))
+          ]
+        ]
+      }
+    }
+  end
+
+  defp provider_account_action_props(account_action, credential_status) do
+    busy? = not is_nil(account_action)
+    revoked? = credential_status == :revoked
+
+    %{
+      "validate" => %{
+        "id" => "validate-provider-account-button",
+        "icon" => "hero-shield-check",
+        "label" => if(account_action == :validate, do: "Validating…", else: "Validate"),
+        "disabled" => busy? or revoked?,
+        "payload" => %{}
+      },
+      "rotate" => %{
+        "id" => "rotate-provider-credential-button",
+        "icon" => "hero-arrow-path",
+        "label" => if(account_action == :rotate, do: "Rotating…", else: "Rotate"),
+        "disabled" => busy? or revoked?,
+        "payload" => %{}
+      },
+      "revoke" =>
+        if(revoked?,
+          do: nil,
+          else: %{
+            "id" => "revoke-provider-credential-button",
+            "label" => "Revoke Credential",
+            "confirm" =>
+              "Revoke this Provider Account credential? New provider operations will stop.",
+            "disabled" => busy?,
+            "payload" => %{}
+          }
+        )
+    }
+  end
+
+  defp provider_account_grant_form_props(mission_options) do
+    values = %{
+      "mission_id" => "",
+      "allowed_services" => "",
+      "allowed_stations" => "",
+      "max_quota" => "",
+      "grant_reason" => ""
+    }
+
+    %{
+      "id" => "provider-account-grant-form",
+      "values" => values,
+      "fields" => %{
+        "mission_id" =>
+          grant_field_props("mission_id", "select", "Mission", values,
+            required: true,
+            options:
+              Enum.map(mission_options, fn {label, value} ->
+                %{"label" => label, "value" => value, "disabled" => false}
+              end)
+          ),
+        "allowed_services" =>
+          grant_field_props("allowed_services", "text", "Allowed Services", values,
+            placeholder: "telemetry, tracking"
+          ),
+        "allowed_stations" =>
+          grant_field_props("allowed_stations", "text", "Allowed Stations", values,
+            placeholder: "station-alpha"
+          ),
+        "max_quota" => grant_field_props("max_quota", "number", "Maximum Quota", values, min: 0),
+        "grant_reason" =>
+          grant_field_props("grant_reason", "text", "Grant Reason", values,
+            placeholder: "Flight operations authorization"
+          )
+      },
+      "action" => %{"id" => "grant-provider-account-button", "label" => "Grant Access"}
+    }
+  end
+
+  defp grant_field_props(key, type, label, values, opts) do
+    %{
+      "key" => key,
+      "id" => "grant_#{key}",
+      "name" => "grant[#{key}]",
+      "type" => type,
+      "label" => label,
+      "value" => Map.fetch!(values, key),
+      "required" => Keyword.get(opts, :required, false),
+      "min" => Keyword.get(opts, :min),
+      "placeholder" => Keyword.get(opts, :placeholder),
+      "options" => Keyword.get(opts, :options, [])
+    }
+  end
+
+  defp provider_account_default_ingestion_props do
+    %{
+      "id" => "provider-account-ingestion",
+      "title" => "Event Ingestion",
+      "rows" => [
+        detail_props("Mode", "Polling"),
+        detail_props(
+          "Cursor health",
+          "Not initialized",
+          false,
+          "provider-account-ingestion-health"
+        ),
+        detail_props("Inbox backlog", "0", true, "provider-account-ingestion-backlog"),
+        detail_props("Quarantined", "0", true, "provider-account-ingestion-quarantined"),
+        detail_props(
+          "Last provider event",
+          "Never",
+          false,
+          "provider-account-ingestion-last-event"
+        )
+      ],
+      "description" => "The durable cursor will initialize on the first polling cycle."
+    }
+  end
+
+  defp detail_props(label, value, mono \\ false, wrapper_id \\ nil) do
+    %{"label" => label, "value" => value || "—", "mono" => mono, "wrapper_id" => wrapper_id}
+  end
+
+  defp provider_account_grant_row(grant, mission_name) do
+    %{
+      "__dom_id" => "account-grant-#{grant.provider_account_grant_id}",
+      "id" => grant.provider_account_grant_id,
+      "provider_account_grant_id" => grant.provider_account_grant_id,
+      "mission_name" => mission_name,
+      "version_label" => "grant v#{grant.version} · account v#{grant.provider_account_version}",
+      "restriction_summary" => provider_account_restriction_summary(grant.restrictions),
+      "lifecycle" => %{
+        "status" => if(grant.lifecycle_state == :active, do: "ready", else: "blocked"),
+        "label" => provider_account_humanize(grant.lifecycle_state)
+      },
+      "revoke" =>
+        if(grant.lifecycle_state == :active,
+          do: %{
+            "id" => "revoke-grant-#{grant.provider_account_grant_id}",
+            "label" => "Revoke",
+            "confirm" => "Revoke this mission grant? New operations will stop.",
+            "payload" => %{"grant-id" => grant.provider_account_grant_id}
+          },
+          else: nil
+        )
+    }
+  end
+
+  defp provider_account_restriction_summary(restrictions) when map_size(restrictions) == 0,
+    do: nil
+
+  defp provider_account_restriction_summary(restrictions) do
+    Enum.map_join(restrictions, " · ", fn {key, value} ->
+      display = if is_list(value), do: Enum.join(value, ", "), else: to_string(value)
+      "#{provider_account_humanize(key)}: #{display}"
+    end)
+  end
+
+  defp provider_account_audit_rows(organization, account) do
+    organization.organization_id
+    |> Cadence.GroundNetworks.ProviderAudit.list_entries(
+      provider_account_id: account.provider_account_id,
+      limit: 20
+    )
+    |> Enum.map(fn entry ->
+      %{
+        "__dom_id" => "account-audit-#{entry.provider_audit_entry_id}",
+        "id" => entry.provider_audit_entry_id,
+        "provider_audit_entry_id" => entry.provider_audit_entry_id,
+        "recorded_at" => provider_account_timestamp(entry.recorded_at),
+        "action" =>
+          entry.action |> String.replace("provider_", "") |> provider_account_humanize(),
+        "outcome" => %{
+          "status" =>
+            if(entry.outcome in ["failed", "rejected", "blocked"],
+              do: "blocked",
+              else: "ready"
+            ),
+          "label" => entry.outcome
+        }
+      }
+    end)
+  end
+
+  defp provider_account_stream_upserts(vue, stream) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", path, _row] -> String.starts_with?(path, "/#{stream}/")
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, row] -> row end)
+  end
+
+  defp provider_account_stream_mutations(vue, stream) do
+    Enum.filter(vue.streams_diff, fn
+      [_operation, path | _rest] ->
+        path == "/#{stream}" or String.starts_with?(path, "/#{stream}/")
+
+      _operation ->
+        false
+    end)
+  end
+
+  defp assert_reset_provider_account_stream(vue, stream, rows) do
+    assert provider_account_stream_mutations(vue, stream) ==
+             [["replace", "/#{stream}", []]] ++
+               Enum.map(rows, &["upsert", "/#{stream}/-", &1])
+  end
+
+  defp assert_no_provider_account_stream_mutations(vue) do
+    assert provider_account_stream_mutations(vue, "account_grants") == []
+    assert provider_account_stream_mutations(vue, "account_audit") == []
+  end
+
+  defp assert_provider_account_json_safe(vue, credential) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+
+    encoded = Jason.encode!(contract)
+    refute encoded =~ credential.provider_credential_ref
+    refute encoded =~ credential.backend_key
+    refute encoded =~ "ephemeral-provider-account-test-secret"
+    assert_provider_account_value_has_no_secret_fields(contract)
+  end
+
+  defp assert_provider_account_value_has_no_secret_fields(value) when is_map(value) do
+    Enum.each(value, fn {key, nested} ->
+      key = to_string(key)
+
+      refute key in [
+               "secret",
+               "secret_material",
+               "password",
+               "password_confirmation",
+               "backend_key",
+               "credential_ref",
+               "provider_credential_ref",
+               "material"
+             ]
+
+      if key == "type", do: refute(nested == "password")
+
+      if key == "name" and is_binary(nested) do
+        refute String.contains?(nested, ["secret", "password"])
+      end
+
+      assert_provider_account_value_has_no_secret_fields(nested)
+    end)
+  end
+
+  defp assert_provider_account_value_has_no_secret_fields(value) when is_list(value),
+    do: Enum.each(value, &assert_provider_account_value_has_no_secret_fields/1)
+
+  defp assert_provider_account_value_has_no_secret_fields(_value), do: :ok
+
+  defp provider_account_health(%{credential_status: :revoked}), do: "Blocked"
+  defp provider_account_health(%{last_validated_at: %DateTime{}}), do: "Validated"
+  defp provider_account_health(_account), do: "Not validated"
+
+  defp provider_account_humanize(value) when is_atom(value),
+    do: value |> Atom.to_string() |> provider_account_humanize()
+
+  defp provider_account_humanize(value) when is_binary(value) do
+    value
+    |> String.replace(["_", "."], " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp provider_account_timestamp(nil), do: "Never"
+
+  defp provider_account_timestamp(%DateTime{} = timestamp),
+    do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%MZ")
 
   defp provider_account_new_vue(view) do
     LiveVue.Test.get_vue(view, id: "provider-account-new-component")
