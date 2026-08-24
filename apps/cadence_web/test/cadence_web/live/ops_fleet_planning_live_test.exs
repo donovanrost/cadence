@@ -123,8 +123,12 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, template_view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/requirement-templates")
 
-    assert has_element?(template_view, "#ops-requirement-templates-page")
-    assert has_element?(template_view, "#requirement-template-admin-required")
+    assert contact_requirement_template_vue(template_view).props["page"]["id"] ==
+             "ops-requirement-templates-page"
+
+    assert contact_requirement_template_vue(template_view).props["authorization"][
+             "admin_required"
+           ]["id"] == "requirement-template-admin-required"
   end
 
   test "planning workspace refresh replaces the ledger with exact run contracts" do
@@ -647,35 +651,108 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/requirement-templates")
 
-    assert has_element?(view, "#requirement-template-form")
-    assert has_element?(view, "#template-interval-minutes")
-    refute has_element?(view, "#template-time-utc")
+    initial_vue = contact_requirement_template_vue(view)
+
+    assert initial_vue.component == "OpsContactRequirementTemplate"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
+    assert initial_vue.slots == %{}
+
+    assert initial_vue.handlers == %{
+             "activate-template" => Phoenix.LiveView.JS.push("activate-template"),
+             "close-template" => Phoenix.LiveView.JS.push("close-template"),
+             "create-template" => Phoenix.LiveView.JS.push("create-template"),
+             "pause-template" => Phoenix.LiveView.JS.push("pause-template"),
+             "validate-template" => Phoenix.LiveView.JS.push("validate-template")
+           }
+
+    assert initial_vue.props["page"] == %{
+             "id" => "ops-requirement-templates-page",
+             "back" => %{
+               "href" => "/missions/#{mission.mission_id}/ops/planning",
+               "icon" => "hero-arrow-left",
+               "label" => "Fleet planning"
+             },
+             "header" => %{
+               "eyebrow" => "Recurring demand definition",
+               "title" => "Requirement Templates",
+               "copy" =>
+                 "Define a UTC recurrence once. Each due occurrence materializes exactly one ordinary Contact Requirement with immutable provenance."
+             }
+           }
+
+    assert initial_vue.props["authorization"] == %{
+             "admin_required" => nil,
+             "organization_admin" => true
+           }
+
+    assert initial_vue.props["template_form"]["id"] == "requirement-template-form"
+    assert initial_vue.props["template_form"]["panel_id"] == "requirement-template-editor"
+
+    initial_values = template_form_values(initial_vue.props["template_form"])
+
+    assert Enum.all?(initial_values, fn {_field, value} -> is_binary(value) end)
+
+    assert Map.take(initial_values, [
+             "schedule_type",
+             "interval_minutes",
+             "window_offset_minutes",
+             "window_duration_minutes",
+             "success_measure",
+             "minimum_duration_seconds",
+             "minimum_data_volume_bytes",
+             "contact_count",
+             "priority",
+             "approval_mode",
+             "maximum_occurrences_per_run",
+             "maximum_lookback_hours"
+           ]) == %{
+             "schedule_type" => "fixed_interval",
+             "interval_minutes" => "360",
+             "window_offset_minutes" => "0",
+             "window_duration_minutes" => "30",
+             "success_measure" => "minimum_duration",
+             "minimum_duration_seconds" => "600",
+             "minimum_data_volume_bytes" => "",
+             "contact_count" => "1",
+             "priority" => "high",
+             "approval_mode" => "manual",
+             "maximum_occurrences_per_run" => "100",
+             "maximum_lookback_hours" => "168"
+           }
+
+    assert initial_vue.props["template_form"]["fields"]["interval_minutes"]["id"] ==
+             "template-interval-minutes"
+
+    assert initial_vue.props["template_form"]["fields"]["time_utc"]["id"] ==
+             "template-time-utc"
+
+    assert contact_requirement_template_stream_mutations(initial_vue) == [
+             ["replace", "/templates", []]
+           ]
+
+    assert_json_safe_contact_requirement_template_vue(initial_vue)
 
     params = template_params(spacecraft)
 
-    view
-    |> form("#requirement-template-form",
-      template:
-        params
-        |> Map.drop(["interval_minutes", "minimum_data_volume_bytes", "time_utc"])
-        |> Map.put("schedule_type", "daily")
-    )
-    |> render_change()
+    daily_params = Map.put(params, "schedule_type", "daily")
 
-    assert has_element?(view, "#template-time-utc")
-    refute has_element?(view, "#template-interval-minutes")
+    render_hook(view, "validate-template", %{"template" => daily_params})
 
-    view
-    |> form("#requirement-template-form",
-      template: Map.drop(params, ["interval_minutes", "minimum_data_volume_bytes"])
-    )
-    |> render_change()
+    validated_vue = contact_requirement_template_vue(view)
 
-    view
-    |> form("#requirement-template-form",
-      template: Map.drop(params, ["minimum_data_volume_bytes", "time_utc"])
-    )
-    |> render_submit()
+    assert template_form_values(validated_vue.props["template_form"]) == daily_params
+    assert validated_vue.props["template_form"]["fields"]["schedule_type"]["value"] == "daily"
+    assert validated_vue.props["template_form"]["fields"]["time_utc"]["value"] == "12:00:00"
+    assert validated_vue.props["template_form"]["fields"]["interval_minutes"]["value"] == "360"
+
+    render_hook(view, "validate-template", %{"template" => params})
+
+    fixed_vue = contact_requirement_template_vue(view)
+
+    assert template_form_values(fixed_vue.props["template_form"]) == params
+
+    render_hook(view, "create-template", %{"template" => params})
 
     [{template, version}] =
       ContactRequirementTemplates.list(
@@ -686,11 +763,42 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert version.spacecraft_id == spacecraft.spacecraft_id
     assert version.schedule_document["type"] == "fixed_interval"
     assert version.schedule_document["interval_seconds"] == 21_600
-    assert has_element?(view, "#requirement-template-#{template.contact_requirement_template_id}")
 
-    view
-    |> element("#pause-template-#{template.contact_requirement_template_id}")
-    |> render_click()
+    created_vue = contact_requirement_template_vue(view)
+
+    assert created_vue.props["ledger"]["count"] == 1
+    assert created_vue.props["ledger"]["empty"] == nil
+
+    assert [created_row] = contact_requirement_template_upserts(created_vue)
+
+    assert created_row == %{
+             "__dom_id" => "requirement-template-#{template.contact_requirement_template_id}",
+             "actions" => %{
+               "activate" => nil,
+               "close" => %{
+                 "class" => "btn btn-ghost btn-xs text-error",
+                 "id" => "close-template-#{template.contact_requirement_template_id}",
+                 "label" => "Close"
+               },
+               "pause" => %{
+                 "class" => "btn btn-ghost btn-xs",
+                 "id" => "pause-template-#{template.contact_requirement_template_id}",
+                 "label" => "Pause"
+               }
+             },
+             "content_sha256" => version.content_sha256,
+             "id" => template.contact_requirement_template_id,
+             "lifecycle" => %{
+               "class" =>
+                 "border border-success/35 bg-success/10 px-1.5 py-0.5 font-mono text-[0.58rem] uppercase text-success",
+               "state" => "active"
+             },
+             "schedule" => "Every 360 min · 45 min window",
+             "title" => "#{spacecraft.spacecraft_id} · recurring payload downlink",
+             "version_label" => "v1"
+           }
+
+    render_hook(view, "pause-template", %{"id" => template.contact_requirement_template_id})
 
     [{paused, _version}] =
       ContactRequirementTemplates.list(
@@ -699,7 +807,58 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       )
 
     assert paused.lifecycle_state == :paused
-    assert has_element?(view, "#activate-template-#{template.contact_requirement_template_id}")
+
+    paused_vue = contact_requirement_template_vue(view)
+    assert [paused_row] = contact_requirement_template_upserts(paused_vue)
+    assert paused_row["lifecycle"]["state"] == "paused"
+    assert paused_row["actions"]["pause"] == nil
+
+    assert paused_row["actions"]["activate"]["id"] ==
+             "activate-template-#{template.contact_requirement_template_id}"
+
+    member = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(member, org, role: :member)
+
+    {:ok, member_view, _html} =
+      live(
+        TestFixtures.member_conn(member),
+        ~p"/missions/#{mission.mission_id}/ops/requirement-templates"
+      )
+
+    member_vue = contact_requirement_template_vue(member_view)
+
+    assert member_vue.props["template_form"] == nil
+
+    assert member_vue.props["authorization"] == %{
+             "admin_required" => %{
+               "id" => "requirement-template-admin-required",
+               "copy" =>
+                 "Organization administrator authority is required to manage recurring demand."
+             },
+             "organization_admin" => false
+           }
+
+    assert [member_row] = contact_requirement_template_upserts(member_vue)
+    refute Map.has_key?(member_row, "actions")
+
+    render_hook(member_view, "activate-template", %{
+      "id" => template.contact_requirement_template_id
+    })
+
+    assert has_element?(
+             member_view,
+             "#flash-error",
+             "Organization administrator authority is required."
+           )
+
+    [{still_paused, _version}] =
+      ContactRequirementTemplates.list(
+        org.organization_id,
+        mission.mission_id
+      )
+
+    assert still_paused.lifecycle_state == :paused
+    assert_json_safe_contact_requirement_template_vue(member_vue)
   end
 
   test "starting a horizon persists first and the run workspace resumes durable phases" do
@@ -1374,6 +1533,35 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
   defp fleet_planning_run_vue(view) do
     LiveVue.Test.get_vue(view, id: "ops-fleet-planning-run-component")
+  end
+
+  defp contact_requirement_template_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-contact-requirement-template-component")
+  end
+
+  defp contact_requirement_template_upserts(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/templates/" <> _index, _template] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, template] -> template end)
+  end
+
+  defp contact_requirement_template_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp template_form_values(form) do
+    Map.new(form["fields"], fn {field, contract} -> {field, contract["value"]} end)
+  end
+
+  defp assert_json_safe_contact_requirement_template_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
   defp fleet_planning_run_stream_upserts(vue, stream_name) do

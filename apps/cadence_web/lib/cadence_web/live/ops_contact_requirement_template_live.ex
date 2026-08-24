@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.ContactRequirementTemplates
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -55,7 +56,8 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
   def handle_event("create-template", %{"template" => params}, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    with {:ok, attrs} <- template_attrs(params),
+    with true <- socket.assigns.organization_admin?,
+         {:ok, attrs} <- template_attrs(params),
          {:ok, _template, _version} <-
            ContactRequirementTemplates.create(scope, mission.mission_id, attrs) do
       {:noreply,
@@ -63,6 +65,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
        |> load_templates()
        |> put_flash(:info, "Recurring Requirement Template activated.")}
     else
+      false -> {:noreply, put_flash(socket, :error, action_error(:forbidden))}
       {:error, reason} -> {:noreply, put_flash(socket, :error, action_error(reason))}
     end
   end
@@ -83,260 +86,340 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-requirement-templates-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto max-w-[100rem]">
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/planning"}
-              class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-            >
-              <.icon name="hero-arrow-left" class="h-3.5 w-3.5" /> Fleet planning
-            </.link>
-            <div class="mt-4">
-              <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-                Recurring demand definition
-              </p>
-              <h1 class="mt-1 text-2xl font-bold tracking-tight">Requirement Templates</h1>
-              <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-                Define a UTC recurrence once. Each due occurrence materializes exactly one ordinary Contact Requirement with immutable provenance.
-              </p>
-            </div>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7">
-          <section class="min-w-0 border border-base-300 bg-base-200/15">
-            <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-              <div>
-                <p class="hud-label">Template ledger</p>
-                <p class="mt-1 text-sm text-base-content/55">Lifecycle and current immutable schedule version.</p>
-              </div>
-              <span class="font-mono text-xs text-base-content/45">{@template_count}</span>
-            </div>
-
-            <div :if={@template_empty?} id="requirement-templates-empty" class="px-6 py-16 text-center">
-              <.icon name="hero-arrow-path-rounded-square" class="mx-auto h-8 w-8 text-primary/35" />
-              <h2 class="mt-4 text-base font-semibold">No recurring contact needs</h2>
-              <p class="mx-auto mt-2 max-w-xl text-sm text-base-content/55">
-                Use a template for routine downlinks. One-off operational needs remain ordinary Requirements.
-              </p>
-            </div>
-
-            <div id="requirement-templates" phx-update="stream">
-              <div id="requirement-templates-stream-empty" class="hidden only:block"></div>
-              <div
-                :for={{dom_id, item} <- @streams.templates}
-                id={dom_id}
-                class="border-b border-base-300 p-4 last:border-b-0"
-              >
-                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class={template_state_class(item.template.lifecycle_state)}>
-                        {item.template.lifecycle_state}
-                      </span>
-                      <span class="font-mono text-[0.6rem] text-base-content/40">
-                        v{item.version.version}
-                      </span>
-                    </div>
-                    <h2 class="mt-2 truncate text-sm font-semibold">
-                      {item.version.spacecraft_id} · {humanize(item.version.requirement_document["contact_intent"])}
-                    </h2>
-                    <p class="mt-1 text-xs text-base-content/55">
-                      {schedule_sentence(item.version.schedule_document)}
-                    </p>
-                    <p class="mt-2 break-all font-mono text-[0.56rem] text-base-content/35">
-                      {item.version.content_sha256}
-                    </p>
-                  </div>
-                  <div :if={@organization_admin?} class="flex shrink-0 gap-2">
-                    <button
-                      :if={item.template.lifecycle_state == :active}
-                      id={"pause-template-#{item.id}"}
-                      type="button"
-                      phx-click="pause-template"
-                      phx-value-id={item.id}
-                      class="btn btn-ghost btn-xs"
-                    >
-                      Pause
-                    </button>
-                    <button
-                      :if={item.template.lifecycle_state == :paused}
-                      id={"activate-template-#{item.id}"}
-                      type="button"
-                      phx-click="activate-template"
-                      phx-value-id={item.id}
-                      class="btn btn-ghost btn-xs text-success"
-                    >
-                      Activate
-                    </button>
-                    <button
-                      :if={item.template.lifecycle_state != :closed}
-                      id={"close-template-#{item.id}"}
-                      type="button"
-                      phx-click="close-template"
-                      phx-value-id={item.id}
-                      class="btn btn-ghost btn-xs text-error"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <aside class="min-w-0">
-            <section
-              :if={@organization_admin?}
-              id="requirement-template-editor"
-              class="border border-base-300 bg-base-200/15"
-            >
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Create recurring need</p>
-                <p class="mt-1 text-xs text-base-content/50">UTC schedule → ordinary Requirements</p>
-              </div>
-              <.form
-                for={@form}
-                id="requirement-template-form"
-                phx-change="validate-template"
-                phx-submit="create-template"
-                class="space-y-5 p-4"
-              >
-                <.input
-                  id="template-spacecraft"
-                  field={@form[:spacecraft_id]}
-                  type="select"
-                  label="Spacecraft"
-                  options={[{"Choose spacecraft", ""} | @spacecraft_options]}
-                  required
-                />
-
-                <div>
-                  <p class="hud-label">Recurrence</p>
-                  <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                    <.input
-                      id="template-schedule-type"
-                      field={@form[:schedule_type]}
-                      type="select"
-                      label="Schedule"
-                      options={[{"Fixed interval", "fixed_interval"}, {"Daily UTC", "daily"}]}
-                    />
-                    <.input id="template-anchor-at" field={@form[:anchor_at]} type="datetime-local" label="Starts (UTC)" required />
-                    <.input
-                      :if={@form[:schedule_type].value == "fixed_interval"}
-                      id="template-interval-minutes"
-                      field={@form[:interval_minutes]}
-                      type="number"
-                      min="1"
-                      label="Every minutes"
-                      required
-                    />
-                    <.input
-                      :if={@form[:schedule_type].value == "daily"}
-                      id="template-time-utc"
-                      field={@form[:time_utc]}
-                      type="time"
-                      step="1"
-                      label="Daily at UTC"
-                      required
-                    />
-                    <.input id="template-window-offset" field={@form[:window_offset_minutes]} type="number" label="Window offset minutes" required />
-                    <.input id="template-window-duration" field={@form[:window_duration_minutes]} type="number" min="1" label="Window duration minutes" required />
-                  </div>
-                </div>
-
-                <div>
-                  <p class="hud-label">Mission outcome</p>
-                  <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                    <.input id="template-contact-intent" field={@form[:contact_intent]} type="text" label="Contact intent" required />
-                    <.input
-                      id="template-success-measure"
-                      field={@form[:success_measure]}
-                      type="select"
-                      label="Success measure"
-                      options={[
-                        {"Minimum duration", "minimum_duration"},
-                        {"Minimum data volume", "minimum_data_volume"},
-                        {"Contact count", "contact_count"},
-                        {"Any eligible", "any_eligible"}
-                      ]}
-                    />
-                    <.input
-                      :if={@form[:success_measure].value in ["minimum_duration", "minimum_data_volume"]}
-                      id="template-minimum-duration"
-                      field={@form[:minimum_duration_seconds]}
-                      type="number"
-                      min="1"
-                      label="Minimum seconds"
-                    />
-                    <.input
-                      :if={@form[:success_measure].value == "minimum_data_volume"}
-                      id="template-minimum-data-volume"
-                      field={@form[:minimum_data_volume_bytes]}
-                      type="number"
-                      min="1"
-                      label="Minimum bytes"
-                    />
-                    <.input id="template-contact-count" field={@form[:contact_count]} type="number" min="1" label="Contact count" required />
-                    <.input
-                      id="template-priority"
-                      field={@form[:priority]}
-                      type="select"
-                      label="Priority"
-                      options={[{"Critical", "critical"}, {"High", "high"}, {"Normal", "normal"}, {"Low", "low"}]}
-                    />
-                    <.input
-                      id="template-approval-mode"
-                      field={@form[:approval_mode]}
-                      type="select"
-                      label="Approval"
-                      options={[{"Manual", "manual"}, {"Bounded automatic", "bounded_automatic"}]}
-                    />
-                  </div>
-                </div>
-
-                <details id="requirement-template-outcome-details" class="border border-base-300">
-                  <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
-                    Duration and separation preferences
-                  </summary>
-                  <div class="grid gap-3 border-t border-base-300 p-3 sm:grid-cols-2">
-                    <.input id="template-preferred-duration" field={@form[:preferred_duration_seconds]} type="number" min="1" label="Preferred seconds" />
-                    <.input id="template-minimum-separation" field={@form[:minimum_separation_seconds]} type="number" min="0" label="Separation seconds" required />
-                  </div>
-                </details>
-
-                <details id="requirement-template-catchup" class="border border-base-300">
-                  <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
-                    Catch-up guardrails
-                  </summary>
-                  <div class="grid gap-3 border-t border-base-300 p-3 sm:grid-cols-2">
-                    <.input id="template-max-occurrences" field={@form[:maximum_occurrences_per_run]} type="number" min="1" label="Max per run" required />
-                    <.input id="template-max-lookback" field={@form[:maximum_lookback_hours]} type="number" min="0" label="Lookback hours" required />
-                  </div>
-                </details>
-
-                <.input id="template-rationale" field={@form[:rationale]} type="textarea" label="Operational rationale" required />
-
-                <button id="create-requirement-template" type="submit" class="btn btn-primary btn-sm w-full">
-                  Activate template
-                </button>
-              </.form>
-            </section>
-
-            <p
-              :if={not @organization_admin?}
-              id="requirement-template-admin-required"
-              class="border-l-2 border-warning px-3 text-xs text-warning"
-            >
-              Organization administrator authority is required to manage recurring demand.
-            </p>
-          </aside>
-        </div>
-      </section>
+      <.vue
+        id="ops-contact-requirement-template-component"
+        v-component="OpsContactRequirementTemplate"
+        page={page_dto(@current_mission)}
+        ledger={ledger_dto(@template_count, @template_empty?)}
+        authorization={authorization_dto(@organization_admin?)}
+        template_form={template_form_dto(
+          @form,
+          @spacecraft_options,
+          @organization_admin?
+        )}
+        templates={@streams.templates}
+        v-on:validate-template={JS.push("validate-template")}
+        v-on:create-template={JS.push("create-template")}
+        v-on:pause-template={JS.push("pause-template")}
+        v-on:activate-template={JS.push("activate-template")}
+        v-on:close-template={JS.push("close-template")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
+
+  defp page_dto(mission) do
+    %{
+      id: "ops-requirement-templates-page",
+      back: %{
+        href: ~p"/missions/#{mission.mission_id}/ops/planning",
+        icon: "hero-arrow-left",
+        label: "Fleet planning"
+      },
+      header: %{
+        eyebrow: "Recurring demand definition",
+        title: "Requirement Templates",
+        copy:
+          "Define a UTC recurrence once. Each due occurrence materializes exactly one ordinary Contact Requirement with immutable provenance."
+      }
+    }
+  end
+
+  defp ledger_dto(template_count, template_empty?) do
+    %{
+      eyebrow: "Template ledger",
+      copy: "Lifecycle and current immutable schedule version.",
+      count: template_count,
+      count_label: Integer.to_string(template_count),
+      list_id: "requirement-templates",
+      stream_empty_id: "requirement-templates-stream-empty",
+      empty:
+        if(template_empty?,
+          do: %{
+            id: "requirement-templates-empty",
+            icon: "hero-arrow-path-rounded-square",
+            title: "No recurring contact needs",
+            copy:
+              "Use a template for routine downlinks. One-off operational needs remain ordinary Requirements."
+          },
+          else: nil
+        )
+    }
+  end
+
+  defp authorization_dto(organization_admin?) do
+    %{
+      organization_admin: organization_admin?,
+      admin_required:
+        if(organization_admin?,
+          do: nil,
+          else: %{
+            id: "requirement-template-admin-required",
+            copy: "Organization administrator authority is required to manage recurring demand."
+          }
+        )
+    }
+  end
+
+  defp template_form_dto(_form, _spacecraft_options, false), do: nil
+
+  defp template_form_dto(form, spacecraft_options, true) do
+    %{
+      panel_id: "requirement-template-editor",
+      id: "requirement-template-form",
+      header: %{
+        eyebrow: "Create recurring need",
+        copy: "UTC schedule → ordinary Requirements"
+      },
+      fields: %{
+        spacecraft_id:
+          form_field_dto(
+            form,
+            :spacecraft_id,
+            "template-spacecraft",
+            "Spacecraft",
+            "select",
+            required: true,
+            options: options_dto([{"Choose spacecraft", ""} | spacecraft_options])
+          ),
+        schedule_type:
+          form_field_dto(
+            form,
+            :schedule_type,
+            "template-schedule-type",
+            "Schedule",
+            "select",
+            options: options_dto([{"Fixed interval", "fixed_interval"}, {"Daily UTC", "daily"}])
+          ),
+        anchor_at:
+          form_field_dto(
+            form,
+            :anchor_at,
+            "template-anchor-at",
+            "Starts (UTC)",
+            "datetime-local",
+            required: true
+          ),
+        interval_minutes:
+          form_field_dto(
+            form,
+            :interval_minutes,
+            "template-interval-minutes",
+            "Every minutes",
+            "number",
+            required: true,
+            min: 1
+          ),
+        time_utc:
+          form_field_dto(
+            form,
+            :time_utc,
+            "template-time-utc",
+            "Daily at UTC",
+            "time",
+            required: true,
+            step: "1"
+          ),
+        window_offset_minutes:
+          form_field_dto(
+            form,
+            :window_offset_minutes,
+            "template-window-offset",
+            "Window offset minutes",
+            "number",
+            required: true
+          ),
+        window_duration_minutes:
+          form_field_dto(
+            form,
+            :window_duration_minutes,
+            "template-window-duration",
+            "Window duration minutes",
+            "number",
+            required: true,
+            min: 1
+          ),
+        contact_intent:
+          form_field_dto(
+            form,
+            :contact_intent,
+            "template-contact-intent",
+            "Contact intent",
+            "text",
+            required: true
+          ),
+        success_measure:
+          form_field_dto(
+            form,
+            :success_measure,
+            "template-success-measure",
+            "Success measure",
+            "select",
+            options:
+              options_dto([
+                {"Minimum duration", "minimum_duration"},
+                {"Minimum data volume", "minimum_data_volume"},
+                {"Contact count", "contact_count"},
+                {"Any eligible", "any_eligible"}
+              ])
+          ),
+        minimum_duration_seconds:
+          form_field_dto(
+            form,
+            :minimum_duration_seconds,
+            "template-minimum-duration",
+            "Minimum seconds",
+            "number",
+            min: 1
+          ),
+        minimum_data_volume_bytes:
+          form_field_dto(
+            form,
+            :minimum_data_volume_bytes,
+            "template-minimum-data-volume",
+            "Minimum bytes",
+            "number",
+            min: 1
+          ),
+        contact_count:
+          form_field_dto(
+            form,
+            :contact_count,
+            "template-contact-count",
+            "Contact count",
+            "number",
+            required: true,
+            min: 1
+          ),
+        priority:
+          form_field_dto(
+            form,
+            :priority,
+            "template-priority",
+            "Priority",
+            "select",
+            options:
+              options_dto([
+                {"Critical", "critical"},
+                {"High", "high"},
+                {"Normal", "normal"},
+                {"Low", "low"}
+              ])
+          ),
+        approval_mode:
+          form_field_dto(
+            form,
+            :approval_mode,
+            "template-approval-mode",
+            "Approval",
+            "select",
+            options:
+              options_dto([{"Manual", "manual"}, {"Bounded automatic", "bounded_automatic"}])
+          ),
+        preferred_duration_seconds:
+          form_field_dto(
+            form,
+            :preferred_duration_seconds,
+            "template-preferred-duration",
+            "Preferred seconds",
+            "number",
+            min: 1
+          ),
+        minimum_separation_seconds:
+          form_field_dto(
+            form,
+            :minimum_separation_seconds,
+            "template-minimum-separation",
+            "Separation seconds",
+            "number",
+            required: true,
+            min: 0
+          ),
+        maximum_occurrences_per_run:
+          form_field_dto(
+            form,
+            :maximum_occurrences_per_run,
+            "template-max-occurrences",
+            "Max per run",
+            "number",
+            required: true,
+            min: 1
+          ),
+        maximum_lookback_hours:
+          form_field_dto(
+            form,
+            :maximum_lookback_hours,
+            "template-max-lookback",
+            "Lookback hours",
+            "number",
+            required: true,
+            min: 0
+          ),
+        rationale:
+          form_field_dto(
+            form,
+            :rationale,
+            "template-rationale",
+            "Operational rationale",
+            "textarea",
+            required: true
+          )
+      },
+      outcome_details: %{
+        id: "requirement-template-outcome-details",
+        summary: "Duration and separation preferences"
+      },
+      catchup_details: %{
+        id: "requirement-template-catchup",
+        summary: "Catch-up guardrails"
+      },
+      submit: %{id: "create-requirement-template", label: "Activate template"}
+    }
+  end
+
+  defp form_field_dto(form, field, id, label, type, opts \\ []) do
+    %{
+      id: id,
+      name: "#{form.name}[#{field}]",
+      type: type,
+      label: label,
+      required: Keyword.get(opts, :required, false),
+      min: Keyword.get(opts, :min),
+      step: Keyword.get(opts, :step),
+      options: Keyword.get(opts, :options, []),
+      value: string_form_value(form, field),
+      errors: form_errors(form, field)
+    }
+  end
+
+  defp options_dto(options) do
+    Enum.map(options, fn {label, value} -> %{label: label, value: value} end)
+  end
+
+  defp string_form_value(form, field) do
+    case Map.get(form.params, Atom.to_string(field)) do
+      value when is_binary(value) -> value
+      nil -> ""
+      value -> to_string(value)
+    end
+  end
+
+  defp form_errors(form, field) do
+    form.errors
+    |> Keyword.get_values(field)
+    |> Enum.map(&format_form_error/1)
+  end
+
+  defp format_form_error({message, opts}) when is_binary(message) and is_list(opts) do
+    Enum.reduce(opts, message, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp format_form_error(message) when is_binary(message), do: message
+  defp format_form_error(error), do: inspect(error)
 
   defp load_templates(socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
@@ -353,66 +436,127 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
       end)
 
     spacecraft_options =
-      scope.organization_id
-      |> Cadence.SpacecraftStore.list_spacecraft(mission.mission_id)
-      |> Enum.map(&{&1.display_name, &1.spacecraft_id})
+      if socket.assigns.organization_admin? do
+        scope.organization_id
+        |> Cadence.SpacecraftStore.list_spacecraft(mission.mission_id)
+        |> Enum.map(&{&1.display_name, &1.spacecraft_id})
+      else
+        []
+      end
+
+    template_dtos = Enum.map(rows, &template_row_dto(&1, socket.assigns.organization_admin?))
 
     socket
     |> assign(:template_count, length(rows))
     |> assign(:template_empty?, rows == [])
     |> assign(:template_rows, rows)
     |> assign(:spacecraft_options, spacecraft_options)
-    |> stream(:templates, rows, reset: true)
+    |> stream(:templates, template_dtos, reset: true)
   end
+
+  defp template_row_dto(item, organization_admin?) do
+    base = %{
+      id: item.id,
+      lifecycle: %{
+        state: Atom.to_string(item.template.lifecycle_state),
+        class: template_state_class(item.template.lifecycle_state)
+      },
+      version_label: "v#{item.version.version}",
+      title:
+        "#{item.version.spacecraft_id} · #{humanize(item.version.requirement_document["contact_intent"])}",
+      schedule: schedule_sentence(item.version.schedule_document),
+      content_sha256: item.version.content_sha256
+    }
+
+    if organization_admin? do
+      Map.put(base, :actions, template_actions_dto(item))
+    else
+      base
+    end
+  end
+
+  defp template_actions_dto(item) do
+    state = item.template.lifecycle_state
+
+    %{
+      pause:
+        if(state == :active,
+          do: lifecycle_action_dto("pause-template-#{item.id}", "Pause", "btn btn-ghost btn-xs"),
+          else: nil
+        ),
+      activate:
+        if(state == :paused,
+          do:
+            lifecycle_action_dto(
+              "activate-template-#{item.id}",
+              "Activate",
+              "btn btn-ghost btn-xs text-success"
+            ),
+          else: nil
+        ),
+      close:
+        if(state != :closed,
+          do:
+            lifecycle_action_dto(
+              "close-template-#{item.id}",
+              "Close",
+              "btn btn-ghost btn-xs text-error"
+            ),
+          else: nil
+        )
+    }
+  end
+
+  defp lifecycle_action_dto(id, label, class), do: %{id: id, label: label, class: class}
 
   defp transition_template(socket, template_id, action) do
     %{current_scope: scope, current_mission: mission, template_rows: rows} = socket.assigns
 
-    case Enum.find(rows, &(&1.id == template_id)) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Template not found.")}
+    with true <- socket.assigns.organization_admin?,
+         %{} = item <- Enum.find(rows, &(&1.id == template_id)) do
+      result =
+        case action do
+          :pause ->
+            ContactRequirementTemplates.pause(
+              scope,
+              mission.mission_id,
+              template_id,
+              item.template.current_version,
+              "Paused from recurring demand workspace"
+            )
 
-      item ->
-        result =
-          case action do
-            :pause ->
-              ContactRequirementTemplates.pause(
-                scope,
-                mission.mission_id,
-                template_id,
-                item.template.current_version,
-                "Paused from recurring demand workspace"
-              )
+          :activate ->
+            ContactRequirementTemplates.activate(
+              scope,
+              mission.mission_id,
+              template_id,
+              item.template.current_version,
+              "Reactivated from recurring demand workspace"
+            )
 
-            :activate ->
-              ContactRequirementTemplates.activate(
-                scope,
-                mission.mission_id,
-                template_id,
-                item.template.current_version,
-                "Reactivated from recurring demand workspace"
-              )
-
-            :close ->
-              ContactRequirementTemplates.close(
-                scope,
-                mission.mission_id,
-                template_id,
-                item.template.current_version,
-                "Closed from recurring demand workspace"
-              )
-          end
-
-        case result do
-          {:ok, _template} ->
-            {:noreply,
-             socket
-             |> load_templates()
-             |> put_flash(:info, "Template lifecycle updated.")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, action_error(reason))}
+          :close ->
+            ContactRequirementTemplates.close(
+              scope,
+              mission.mission_id,
+              template_id,
+              item.template.current_version,
+              "Closed from recurring demand workspace"
+            )
         end
+
+      case result do
+        {:ok, _template} ->
+          {:noreply,
+           socket
+           |> load_templates()
+           |> put_flash(:info, "Template lifecycle updated.")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, action_error(reason))}
+      end
+    else
+      false -> {:noreply, put_flash(socket, :error, action_error(:forbidden))}
+      nil -> {:noreply, put_flash(socket, :error, "Template not found.")}
     end
   end
 
