@@ -510,15 +510,37 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
   test "spacecraft show page surfaces the telemetry decom section" do
     {conn, _org, mission, spacecraft} = setup_session()
 
-    {:ok, view, html} =
+    {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
 
-    assert html =~ "Applications"
-    assert has_element?(view, "#spacecraft-overview-applications", "Not configured")
-    assert has_element?(view, "#spacecraft-overview-applications a", "Review applications")
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-show-component")
+    assert vue.component == "SpacecraftShow"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert html =~
-             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+    applications = vue.props["applications"]
+    assert applications["title"] == "Applications"
+
+    assert [telemetry_decom] =
+             Enum.filter(
+               applications["rows"],
+               &(&1["application_key"] == "telemetry_decom")
+             )
+
+    assert telemetry_decom["status"] == %{"label" => "Not configured", "tone" => "blocked"}
+
+    application_workflow =
+      Enum.find(vue.props["workflow_cards"], &(&1["id"] == "spacecraft-overview-applications"))
+
+    applications_href =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+
+    assert application_workflow["value"] == "Not configured"
+
+    assert application_workflow["action"] == %{
+             "label" => "Review applications",
+             "href" => applications_href
+           }
   end
 
   test "Manage exposes no legacy packet-selection mutation controls" do

@@ -392,9 +392,7 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
 
       {:ok, applications_view, _html} = live(conn, applications_href)
 
-      applications_view
-      |> element("#install-spacecraft-application-telemetry_decom")
-      |> render_click()
+      render_hook(applications_view, "install_application", %{"key" => "telemetry_decom"})
 
       unbound_spacecraft = %Spacecraft{
         spacecraft
