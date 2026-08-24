@@ -54,10 +54,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
 
     assert "No open comparison reviews." = queue_message["text"]
 
-    assert false =
-             activity["empty_states"]
-             |> Enum.find(&(&1["key"] == "empty-filter"))
-             |> Map.fetch!("visible")
+    refute activity["empty_states"]
+           |> Enum.find(&(&1["key"] == "empty-filter"))
+           |> Map.fetch!("visible")
   end
 
   test "versions_panel renders stale selected placement queue state" do

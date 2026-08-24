@@ -342,8 +342,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
 
   defp comparison_review_queue_message?(_activity), do: false
 
-  defp comparison_review_action_rows(nil), do: []
-
   defp comparison_review_action_rows(%{metadata: metadata}) when is_map(metadata) do
     [
       {"Requested", Map.get(metadata, "requested")},
