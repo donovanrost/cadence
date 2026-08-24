@@ -7,6 +7,7 @@ defmodule CadenceWeb.Components.OpsShell do
 
   use CadenceWeb, :html
 
+  alias CadenceWeb.UI
   alias Phoenix.LiveView.JS
 
   attr :mission, :any, required: true
@@ -18,81 +19,160 @@ defmodule CadenceWeb.Components.OpsShell do
   attr :platform_admin?, :boolean, required: true
 
   def ops_status_bar(assigns) do
+    assigns = assign(assigns, :presentation, ops_status_bar_presentation(assigns))
+
     ~H"""
-    <header class="h-10 shrink-0 flex items-center gap-3 px-3 border-b border-primary/20 bg-base-200 hud-grid">
-      <.link
-        navigate={~p"/missions/#{@mission.mission_id}"}
-        class="flex items-center gap-2 min-w-0 text-base-content/60 hover:text-base-content"
-      >
-        <.icon name="hero-arrow-left" class="h-3.5 w-3.5 shrink-0" />
-        <span class="text-sm font-bold text-base-content truncate">{@mission.display_name}</span>
-        <span class="font-mono text-xs text-base-content/60">{@mission.slug}</span>
-      </.link>
-
-      <div id="ops-urgent-posture" class="flex-1 flex items-center justify-center gap-2 min-w-0">
-        <%= cond do %>
-          <% @fleet_health && @fleet_health.normalized_state_counts.red > 0 -> %>
-          <.severity_badge
-            severity={:critical}
-            count={@fleet_health.normalized_state_counts.red}
-            label="Critical"
-          />
-          <% @fleet_health && @fleet_health.normalized_state_counts.yellow > 0 -> %>
-          <.severity_badge
-            severity={:warning}
-            count={@fleet_health.normalized_state_counts.yellow}
-            label="Warning"
-          />
-          <% @fleet_health -> %>
-          <span class="inline-flex items-center gap-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-success">
-            <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-            Nominal
-          </span>
-          <% true -> %>
-          <span class="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-base-content/45">
-            Posture unavailable
-          </span>
-        <% end %>
-      </div>
-
-      <.vue
-        id="ops-utc-clock"
-        v-component="UtcClock"
-        v-ssr={false}
-        class="font-mono text-xs text-base-content/70 tabular-nums"
-      />
-      <span
-        id="ops-conn-ok"
-        class="h-2 w-2 rounded-full bg-success"
-        title="Connected"
-        phx-connected={JS.show()}
-        phx-disconnected={JS.hide()}
-      >
-      </span>
-      <span
-        id="ops-conn-lost"
-        class="hidden h-2 w-2 rounded-full bg-error motion-safe:animate-pulse"
-        title="Connection lost"
-        phx-disconnected={JS.show()}
-        phx-connected={JS.hide()}
-      >
-      </span>
-
-      <%= if @current_scope && @current_scope.user do %>
-        <.notifications_bell
-          id="notifications-bell-ops"
-          count={@unread_count}
-          notifications={@notifications}
-        />
-        <.user_menu
-          id="user-menu-ops"
-          scope={@current_scope}
-          memberships={@memberships}
-          platform_admin?={@platform_admin?}
-        />
-      <% end %>
-    </header>
+    <.vue
+      id="ops-status-bar-component"
+      v-component="OpsStatusBar"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp ops_status_bar_presentation(assigns) do
+    %{
+      "header" => %{
+        "class" =>
+          "h-10 shrink-0 flex items-center gap-3 px-3 border-b border-primary/20 bg-base-200 hud-grid"
+      },
+      "mission" => mission_presentation(assigns.mission),
+      "posture" =>
+        posture_presentation(assigns.fleet_health)
+        |> Map.merge(%{
+          "id" => "ops-urgent-posture",
+          "root_class" => "flex-1 flex items-center justify-center gap-2 min-w-0"
+        }),
+      "clock" => %{
+        "component" => "UtcClock",
+        "id" => "ops-utc-clock",
+        "class" => "font-mono text-xs text-base-content/70 tabular-nums"
+      },
+      "connection" => connection_presentation(),
+      "account" => account_presentation(assigns)
+    }
+  end
+
+  defp mission_presentation(mission) do
+    mission_path = ~p"/missions/#{mission.mission_id}"
+
+    %{
+      "class" => "flex items-center gap-2 min-w-0 text-base-content/60 hover:text-base-content",
+      "attrs" => %{
+        "href" => mission_path,
+        "data-phx-link" => "redirect",
+        "data-phx-link-state" => "push"
+      },
+      "icon_class" => "hero-arrow-left h-3.5 w-3.5 shrink-0",
+      "name" => %{
+        "class" => "text-sm font-bold text-base-content truncate",
+        "text" => mission.display_name
+      },
+      "slug" => %{
+        "class" => "font-mono text-xs text-base-content/60",
+        "text" => mission.slug
+      }
+    }
+  end
+
+  defp posture_presentation(fleet_health) do
+    cond do
+      fleet_health && fleet_health.normalized_state_counts.red > 0 ->
+        severity_posture(
+          "critical",
+          fleet_health.normalized_state_counts.red,
+          "Critical",
+          "bg-error/20 text-error"
+        )
+
+      fleet_health && fleet_health.normalized_state_counts.yellow > 0 ->
+        severity_posture(
+          "warning",
+          fleet_health.normalized_state_counts.yellow,
+          "Warning",
+          "bg-warning/20 text-warning"
+        )
+
+      fleet_health ->
+        %{
+          "kind" => "nominal",
+          "class" =>
+            "inline-flex items-center gap-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-success",
+          "dot_class" => "h-1.5 w-1.5 rounded-full bg-success",
+          "label" => "Nominal"
+        }
+
+      true ->
+        %{
+          "kind" => "unavailable",
+          "class" =>
+            "font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-base-content/45",
+          "label" => "Posture unavailable"
+        }
+    end
+  end
+
+  defp severity_posture(kind, count, label, severity_class) do
+    %{
+      "kind" => kind,
+      "class" =>
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium #{severity_class}",
+      "dot_class" => "w-1.5 h-1.5 rounded-full bg-current",
+      "count" => %{"class" => "font-mono", "text" => count},
+      "label" => %{"class" => "uppercase text-[0.65rem]", "text" => label}
+    }
+  end
+
+  defp connection_presentation do
+    show = Jason.encode!(JS.show())
+    hide = Jason.encode!(JS.hide())
+
+    %{
+      "ok" => %{
+        "id" => "ops-conn-ok",
+        "class" => "h-2 w-2 rounded-full bg-success",
+        "title" => "Connected",
+        "attrs" => %{"phx-connected" => show, "phx-disconnected" => hide}
+      },
+      "lost" => %{
+        "id" => "ops-conn-lost",
+        "class" => "hidden h-2 w-2 rounded-full bg-error motion-safe:animate-pulse",
+        "title" => "Connection lost",
+        "attrs" => %{"phx-disconnected" => show, "phx-connected" => hide}
+      }
+    }
+  end
+
+  defp account_presentation(assigns) do
+    if assigns.current_scope && assigns.current_scope.user do
+      %{
+        "notifications_bell" => %{
+          "component" => "NotificationsBell",
+          "id" => "notifications-bell-ops",
+          "class" => "contents",
+          "presentation" =>
+            UI.notifications_bell_presentation(%{
+              id: "notifications-bell-ops",
+              count: assigns.unread_count,
+              notifications: assigns.notifications
+            })
+        },
+        "user_menu" => %{
+          "component" => "UserMenu",
+          "id" => "user-menu-ops",
+          "class" => "contents",
+          "presentation" =>
+            UI.user_menu_presentation(%{
+              id: "user-menu-ops",
+              scope: assigns.current_scope,
+              memberships: assigns.memberships,
+              platform_admin?: assigns.platform_admin?
+            })
+        }
+      }
+    end
   end
 
   attr :mission, :any, required: true

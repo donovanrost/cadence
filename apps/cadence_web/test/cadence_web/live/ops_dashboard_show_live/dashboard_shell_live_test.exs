@@ -157,25 +157,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
                "label" => "Thermal"
              }
 
-      assert has_element?(view, "#ops-utc-clock")
+      assert has_element?(view, "#ops-status-bar-component.contents")
 
-      utc_clock = LiveVue.Test.get_vue(view, id: "ops-utc-clock")
+      status_bar = LiveVue.Test.get_vue(view, id: "ops-status-bar-component")
+      presentation = status_bar.props["presentation"]
+      notifications_bell = presentation["account"]["notifications_bell"]
+      user_menu = presentation["account"]["user_menu"]
 
-      assert utc_clock.component == "UtcClock"
-      assert utc_clock.class == "font-mono text-xs text-base-content/70 tabular-nums"
-      refute utc_clock.ssr
+      assert status_bar.component == "OpsStatusBar"
+      assert status_bar.class == "contents"
+      refute status_bar.ssr
 
-      notifications_bell = LiveVue.Test.get_vue(view, id: "notifications-bell-ops")
-      user_menu = LiveVue.Test.get_vue(view, id: "user-menu-ops")
+      assert presentation["clock"]["component"] == "UtcClock"
 
-      assert notifications_bell.component == "NotificationsBell"
-      assert notifications_bell.class == "contents"
-      refute notifications_bell.ssr
-      assert user_menu.component == "UserMenu"
-      assert user_menu.class == "contents"
-      refute user_menu.ssr
+      assert presentation["clock"]["class"] ==
+               "font-mono text-xs text-base-content/70 tabular-nums"
 
-      assert user_menu.props["presentation"]["menu"]["sign_out"]["attrs"]["action"] ==
+      refute Map.has_key?(presentation["clock"], "ssr")
+
+      assert notifications_bell["component"] == "NotificationsBell"
+      assert notifications_bell["class"] == "contents"
+      refute Map.has_key?(notifications_bell, "ssr")
+      assert user_menu["component"] == "UserMenu"
+      assert user_menu["class"] == "contents"
+      refute Map.has_key?(user_menu, "ssr")
+
+      assert user_menu["presentation"]["menu"]["sign_out"]["attrs"]["action"] ==
                "/session"
     end
 

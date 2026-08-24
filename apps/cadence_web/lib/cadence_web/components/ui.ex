@@ -45,7 +45,8 @@ defmodule CadenceWeb.UI do
     """
   end
 
-  defp notifications_bell_presentation(assigns) do
+  @doc false
+  def notifications_bell_presentation(assigns) do
     notifications_path = ~p"/notifications"
 
     %{
@@ -176,7 +177,8 @@ defmodule CadenceWeb.UI do
     """
   end
 
-  defp user_menu_presentation(assigns) do
+  @doc false
+  def user_menu_presentation(assigns) do
     user = assigns.scope.user
 
     %{
