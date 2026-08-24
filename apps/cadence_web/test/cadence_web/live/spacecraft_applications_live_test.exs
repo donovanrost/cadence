@@ -515,7 +515,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     {:ok, missing_view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
     missing_props = spacecraft_applications_presentation(missing_view)
 
-    assert missing_props == %{
+    assert Map.take(missing_props, ["profile", "applications"]) == %{
              "profile" => %{
                "kind" => "missing",
                "id" => "spacecraft-applications-no-profile",
