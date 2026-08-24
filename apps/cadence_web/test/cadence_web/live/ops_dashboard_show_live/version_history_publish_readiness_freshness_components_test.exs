@@ -29,35 +29,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessFreshnes
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = publish_validation_presentation(html)
+    freshness = presentation["freshness"]
 
-    assert ["stale"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-status")
+    assert presentation["root"]["attrs"]["data-publish-validation-status"] == "stale"
 
-    assert ["stale"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-freshness-state")
+    assert freshness["attrs"]["data-publish-validation-freshness-state"] == "stale"
 
-    assert ["draft_version_changed"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-freshness-reason")
+    assert freshness["attrs"]["data-publish-validation-freshness-reason"] ==
+             "draft_version_changed"
 
-    assert ["needs_recheck"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-result")
-             |> LazyHTML.attribute("data-publish-validation-result-state")
+    assert presentation["result"]["attrs"]["data-publish-validation-result-state"] ==
+             "needs_recheck"
 
-    assert document
-           |> LazyHTML.query("[data-publish-validation-freshness-message]")
-           |> selected_text() =~ "dashboard draft changed"
+    assert freshness["message"]["text"] =~ "dashboard draft changed"
 
-    assert document
-           |> LazyHTML.query("#dashboard-publish-validation")
-           |> selected_text() =~ "Re-check readiness before publishing"
+    assert presentation["message"]["text"] =~ "Re-check readiness before publishing"
+
+    assert freshness["message"]["visible"] == true
   end
 
   test "versions_panel renders source evidence stale publish validation reason" do
@@ -89,25 +78,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessFreshnes
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = publish_validation_presentation(html)
 
-    assert ["stale"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-status")
+    assert presentation["root"]["attrs"]["data-publish-validation-status"] == "stale"
 
-    assert ["source_watermark_stale"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-freshness-reason")
+    assert presentation["freshness"]["attrs"][
+             "data-publish-validation-freshness-reason"
+           ] == "source_watermark_stale"
 
-    assert document
-           |> LazyHTML.query("[data-publish-validation-freshness-message]")
-           |> selected_text() =~ "Source watermark evidence is stale"
+    assert presentation["freshness"]["message"]["text"] =~
+             "Source watermark evidence is stale"
 
-    assert document
-           |> LazyHTML.query("#dashboard-publish-validation-result")
-           |> selected_text() =~ "Source watermark evidence is stale"
+    assert presentation["result"]["message"]["text"] =~
+             "Source watermark evidence is stale"
+
+    assert presentation["result"]["label"]["text"] == "needs re-check"
   end
 
   defp dashboard_document do
@@ -123,9 +108,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessFreshnes
     PublishReadinessModel.build(validation, freshness)
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp publish_validation_presentation(html) do
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-publish-validation-component")
+    assert vue.component == "PublishValidation"
+    assert vue.id == "dashboard-publish-validation-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 end

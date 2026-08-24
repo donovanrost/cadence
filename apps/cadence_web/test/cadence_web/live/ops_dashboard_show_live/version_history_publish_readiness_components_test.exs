@@ -49,73 +49,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = publish_validation_presentation(html)
+    freshness = presentation["freshness"]
 
-    assert ["current"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-freshness-state")
+    assert freshness["attrs"]["data-publish-validation-freshness-state"] == "current"
 
-    assert ["2026-06-27T12:00:00Z"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-evaluated-at")
+    assert freshness["attrs"]["data-publish-validation-evaluated-at"] ==
+             "2026-06-27T12:00:00Z"
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-draft-version")
+    assert freshness["attrs"]["data-publish-validation-draft-version"] == "2"
 
-    assert ["draft_current"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-freshness")
-             |> LazyHTML.attribute("data-publish-validation-freshness-reason")
+    assert freshness["attrs"]["data-publish-validation-freshness-reason"] ==
+             "draft_current"
 
-    assert "Publish readiness was evaluated against the current draft version." =
-             document
-             |> LazyHTML.query("[data-publish-validation-freshness-message]")
-             |> selected_text()
+    assert freshness["message"]["text"] ==
+             "Publish readiness was evaluated against the current draft version."
 
-    assert ["refresh_publish_readiness"] =
-             document
-             |> LazyHTML.query("#refresh-publish-readiness")
-             |> LazyHTML.attribute("phx-click")
+    assert presentation["header"]["refresh"]["attrs"]["phx-click"] ==
+             "refresh_publish_readiness"
 
-    assert ["still_blocked"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-result")
-             |> LazyHTML.attribute("data-publish-validation-result-state")
+    assert presentation["result"]["attrs"]["data-publish-validation-result-state"] ==
+             "still_blocked"
 
-    assert document
-           |> LazyHTML.query("#dashboard-publish-validation-result")
-           |> selected_text() =~ "Latest check still has publish blockers."
+    assert presentation["result"]["message"]["text"] =~
+             "Latest check still has publish blockers."
 
-    assert ["data_sources"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action="unready_publish_source_request"])
-             )
-             |> LazyHTML.attribute("data-publish-validation-action-target")
+    [issue] = presentation["issues"]["rows"]
+    action = issue["action"]
 
-    assert "Create or select a source binding" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action="unready_publish_source_request"] .hud-label)
-             )
-             |> selected_text()
+    assert action["attrs"]["data-publish-validation-action-target"] == "data_sources"
 
-    assert document
-           |> LazyHTML.query(
-             ~s([data-publish-validation-action="unready_publish_source_request"])
-           )
-           |> selected_text() =~ "Open Data Sources"
+    assert action["label"]["text"] == "Create or select a source binding"
 
-    assert [href] =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action-link="unready_publish_source_request"])
-             )
-             |> LazyHTML.attribute("href")
+    assert action["link"]["text"] =~ "Open Data Sources"
+
+    href = action["link"]["href"]
+    assert is_binary(href)
 
     assert String.starts_with?(href, "/missions/mission-1/ops/data-sources?")
 
@@ -136,6 +105,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
              "source_empty_reason" => "missing_source_binding",
              "source_return_activity_filter" => "publish_readiness",
              "source_return_panel" => "versions"
+           }
+
+    assert action["link"]["attrs"] == %{
+             "data-publish-validation-action-link" => "unready_publish_source_request",
+             "data-publish-validation-action-href" => href,
+             "data-phx-link" => "redirect",
+             "data-phx-link-state" => "push"
            }
   end
 
@@ -196,69 +172,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = publish_validation_presentation(html)
 
-    assert ["selected"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-selected-issue-state")
+    assert presentation["root"]["attrs"][
+             "data-publish-validation-selected-issue-state"
+           ] == "selected"
 
-    assert [^selected_issue_id] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-selected-issue")
+    assert presentation["root"]["attrs"]["data-publish-validation-selected-issue"] ==
+             selected_issue_id
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query(~s([data-publish-validation-issue-id="#{selected_issue_id}"]))
-             |> LazyHTML.attribute("data-publish-validation-issue-selected")
+    [issue] = presentation["issues"]["rows"]
 
-    assert [issue_href] =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-issue-focus-link="#{selected_issue_id}"])
-             )
-             |> LazyHTML.attribute("href")
+    assert issue["attrs"]["data-publish-validation-issue-selected"] == "true"
+
+    issue_href = issue["header"]["focus"]["href"]
+    assert is_binary(issue_href)
 
     assert URI.decode_query(URI.parse(issue_href).query) == %{
              "panel" => "versions",
              "selected_publish_issue" => selected_issue_id
            }
 
-    assert document
-           |> LazyHTML.query(
-             ~s([data-publish-validation-message="unready_publish_source_request"])
-           )
-           |> selected_text() =~
+    assert issue["message"]["text"] =~
              "Dashboard context cannot support selected operational observables: ground.station.connection_state."
 
-    assert ["dashboard_editor"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action="unready_publish_source_request"])
-             )
-             |> LazyHTML.attribute("data-publish-validation-action-target")
+    action = issue["action"]
 
-    assert "Change widget context" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action="unready_publish_source_request"] .hud-label)
-             )
-             |> selected_text()
+    assert action["attrs"]["data-publish-validation-action-target"] == "dashboard_editor"
 
-    assert [href] =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action-link="unready_publish_source_request"])
-             )
-             |> LazyHTML.attribute("href")
+    assert action["label"]["text"] == "Change widget context"
 
-    assert "Open Widget Editor" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-action-link="unready_publish_source_request"])
-             )
-             |> selected_text()
+    href = action["link"]["href"]
+    assert is_binary(href)
+
+    assert action["link"]["text"] == "Open Widget Editor"
 
     assert String.starts_with?(href, "/missions/mission-1/ops/dashboards/dashboard-1?")
 
@@ -276,26 +223,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
              "unsupported_observables" => "ground.station.connection_state"
            }
 
-    assert "placement-ground-state" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-summary="unready_publish_source_request"] [data-publish-validation-summary-row="placement_id"])
-             )
-             |> selected_text()
+    summary_rows = issue["summary"]["rows"]
+    [placement, requested_scope, unsupported_observables] = summary_rows
 
-    assert "spacecraft" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-summary="unready_publish_source_request"] [data-publish-validation-summary-row="requested_scope"])
-             )
-             |> selected_text()
+    assert placement["value"]["text"] == "placement-ground-state"
 
-    assert "ground.station.connection_state" =
-             document
-             |> LazyHTML.query(
-               ~s([data-publish-validation-summary="unready_publish_source_request"] [data-publish-validation-summary-row="unsupported_observables"])
-             )
-             |> selected_text()
+    assert requested_scope["value"]["text"] == "spacecraft"
+
+    assert unsupported_observables["value"]["text"] ==
+             "ground.station.connection_state"
+
+    assert Enum.map(summary_rows, & &1["value"]["attrs"]) == [
+             %{"data-publish-validation-summary-row" => "placement_id"},
+             %{"data-publish-validation-summary-row" => "requested_scope"},
+             %{"data-publish-validation-summary-row" => "unsupported_observables"}
+           ]
+
+    assert issue["header"]["focus"]["attrs"] == %{
+             "data-publish-validation-issue-focus-link" => selected_issue_id,
+             "data-phx-link" => "patch",
+             "data-phx-link-state" => "push"
+           }
+
+    assert action["link"]["attrs"] == %{
+             "data-publish-validation-action-link" => "unready_publish_source_request",
+             "data-publish-validation-action-href" => href,
+             "data-phx-link" => "patch",
+             "data-phx-link-state" => "push"
+           }
   end
 
   test "versions_panel renders resolved publish validation result after a clean re-check" do
@@ -319,31 +274,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = publish_validation_presentation(html)
 
-    assert ["clean"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-status")
+    assert presentation["root"]["attrs"]["data-publish-validation-status"] == "clean"
 
-    assert ["resolved"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation-result")
-             |> LazyHTML.attribute("data-publish-validation-result-state")
+    assert presentation["result"]["attrs"]["data-publish-validation-result-state"] ==
+             "resolved"
 
-    assert document
-           |> LazyHTML.query("#dashboard-publish-validation-result")
-           |> selected_text() =~ "Latest check found no publish blockers."
+    assert presentation["result"]["message"]["text"] =~
+             "Latest check found no publish blockers."
 
-    assert ["resolved"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-validation")
-             |> LazyHTML.attribute("data-publish-validation-selected-issue-state")
+    assert presentation["root"]["attrs"][
+             "data-publish-validation-selected-issue-state"
+           ] == "resolved"
 
-    assert "Selected publish issue is no longer present in this check." =
-             document
-             |> LazyHTML.query("[data-publish-validation-selected-issue-resolved]")
-             |> selected_text()
+    assert presentation["resolved_notice"]["text"] ==
+             "Selected publish issue is no longer present in this check."
+
+    assert presentation["resolved_notice"]["visible"] == true
   end
 
   defp dashboard_document do
@@ -359,9 +307,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
     PublishReadinessModel.build(validation, freshness)
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp publish_validation_presentation(html) do
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-publish-validation-component")
+    assert vue.component == "PublishValidation"
+    assert vue.id == "dashboard-publish-validation-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 end

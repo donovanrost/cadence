@@ -77,17 +77,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
 
       render_hook(view, "publish_version", %{"version" => "1"})
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-publish-validation[data-publish-validation-status="blocked"])
-             )
+      presentation = publish_validation_presentation(view)
 
-      assert has_element?(
-               view,
-               ~s([data-publish-validation-severity="error"][data-publish-validation-code="invalid_grid"])
-             )
+      assert presentation["root"]["attrs"]["data-publish-validation-status"] == "blocked"
 
-      assert has_element?(view, ~s([data-publish-validation-detail="field"]), "columns")
+      [issue] = presentation["issues"]["rows"]
+
+      assert issue["attrs"] == %{
+               "data-publish-validation-issue-id" => "error:invalid_grid:columns",
+               "data-publish-validation-issue-selected" => "false",
+               "data-publish-validation-severity" => "error",
+               "data-publish-validation-code" => "invalid_grid"
+             }
+
+      field_detail =
+        Enum.find(issue["details"]["rows"], fn row ->
+          row["value"]["attrs"]["data-publish-validation-detail"] == "field"
+        end)
+
+      assert field_detail["value"]["text"] == "columns"
 
       assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
                Cadence.Dashboards.list_dashboard_summaries(
@@ -130,15 +138,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-publish-validation[data-publish-validation-status="warnings"])
-             )
+      presentation = publish_validation_presentation(view)
 
-      assert has_element?(
-               view,
-               ~s([data-publish-validation-severity="warning"][data-publish-validation-code="unknown_widget_type"])
-             )
+      assert presentation["root"]["attrs"]["data-publish-validation-status"] == "warnings"
+
+      [issue] = presentation["issues"]["rows"]
+
+      assert Map.take(issue["attrs"], [
+               "data-publish-validation-issue-selected",
+               "data-publish-validation-severity",
+               "data-publish-validation-code"
+             ]) == %{
+               "data-publish-validation-issue-selected" => "false",
+               "data-publish-validation-severity" => "warning",
+               "data-publish-validation-code" => "unknown_widget_type"
+             }
 
       render_hook(view, "publish_version", %{
         "version" => Integer.to_string(Document.version(warning_document))
@@ -178,5 +192,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
       assert event.dashboard_version == Document.version(warning_document)
       assert event.actor_id == user.user_id
     end
+  end
+
+  defp publish_validation_presentation(view) do
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-publish-validation-component")
+    assert vue.component == "PublishValidation"
+    assert vue.id == "dashboard-publish-validation-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 end

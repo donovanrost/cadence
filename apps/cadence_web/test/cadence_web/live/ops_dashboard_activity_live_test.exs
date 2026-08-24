@@ -92,14 +92,15 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     Enum.each([header_vue, versions_vue, detail_vue, events_vue], &assert_json_safe_vue/1)
 
     assert has_element?(view, ~s(#dashboard-version-detail[data-selected-version="1"]))
-    assert has_element?(view, "#dashboard-publish-validation")
 
-    assert has_element?(
-             view,
-             ~s(#refresh-publish-readiness[phx-click="refresh_publish_readiness"])
-           )
+    publish_validation = publish_validation_vue(view).props["presentation"]
 
-    view |> element("#refresh-publish-readiness") |> render_click()
+    assert publish_validation["root"]["id"] == "dashboard-publish-validation"
+
+    assert publish_validation["header"]["refresh"]["attrs"]["phx-click"] ==
+             "refresh_publish_readiness"
+
+    render_click(view, "refresh_publish_readiness")
 
     selected_link = Enum.find(expected_versions, &(&1["version"] == 2))
     assert selected_link["href"] == version_2_path
@@ -250,6 +251,18 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.slots == %{}
+    vue
+  end
+
+  defp publish_validation_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-publish-validation-component")
+    assert vue.component == "PublishValidation"
+    assert vue.id == "dashboard-publish-validation-component"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert_json_safe_vue(vue)
     vue
   end
 
