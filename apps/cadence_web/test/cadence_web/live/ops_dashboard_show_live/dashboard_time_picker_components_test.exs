@@ -503,9 +503,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
            |> Enum.count() == 1
 
     assert document
-           |> LazyHTML.query(
-             "#dashboard-time-replay-component .cadence-dashboard-query-section"
-           )
+           |> LazyHTML.query("#dashboard-time-replay-component .cadence-dashboard-query-section")
            |> Enum.empty?()
 
     assert vue.id == "dashboard-time-replay-component"
@@ -715,8 +713,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
                "title" =>
                  "Replay completed replay-run-1, started 2026-06-17T11:59:00Z, completed 2026-06-17T12:06:00Z, generation window 2026-06-17T12:00:00Z to 2026-06-17T12:05:00Z"
              },
-             "text" =>
-               "completed replay-run-1 / 2026-06-17T12:00:00Z -> 2026-06-17T12:05:00Z"
+             "text" => "completed replay-run-1 / 2026-06-17T12:00:00Z -> 2026-06-17T12:05:00Z"
            }
 
     scrub = selected_datum_action(html, "dashboard-replay-scrub-to-selection")
