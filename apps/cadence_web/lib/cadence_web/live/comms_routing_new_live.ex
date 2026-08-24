@@ -5,6 +5,7 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.RoutingRule
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(params, _session, socket) do
@@ -20,14 +21,14 @@ defmodule CadenceWeb.CommsRoutingNewLive do
      socket
      |> assign(:page_title, "New Routing Rule")
      |> assign(:nav_item, :comms_routing)
-     |> assign(:spacecraft, spacecraft)
-     |> assign(:transports, transports)
-     |> assign(:form, to_form(empty_form_params(params), as: :routing_rule))}
+     |> assign(:page, page_dto(mission))
+     |> assign(:form, form_dto(empty_form_params(params), mission))
+     |> assign(:options, options_dto(spacecraft, transports))}
   end
 
   @impl true
   def handle_event("validate", %{"routing_rule" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :routing_rule))}
+    {:noreply, assign(socket, :form, form_dto(params, socket.assigns.current_mission))}
   end
 
   @impl true
@@ -82,86 +83,21 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-routing-new-page" class="space-y-6 max-w-2xl">
-      <.page_header
-        title="New Routing Rule"
-        subtitle="Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Routing", ~p"/missions/#{@current_mission.mission_id}/comms/routing"},
-          {"New Routing Rule", nil}
-        ]}
-      />
-
-      <.routing_rule_form
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="comms-routing-new-component"
+        v-component="CommsRoutingNew"
+        page={@page}
         form={@form}
-        spacecraft={@spacecraft}
-        transports={@transports}
-        current_mission={@current_mission}
+        options={@options}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="space-y-6 max-w-2xl"
       />
-    </div>
+    </Layouts.app>
     """
   end
-
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :spacecraft, :list, required: true
-  attr :transports, :list, required: true
-  attr :current_mission, :map, required: true
-
-  defp routing_rule_form(assigns) do
-    ~H"""
-    <.form
-      for={@form}
-      id="routing-rule-form"
-      phx-change="validate"
-      phx-submit="save"
-      class="space-y-8"
-    >
-      <.form_section number="01" title="Intent">
-        <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        <.input field={@form[:purpose_label]} type="text" label="Purpose" required />
-      </.form_section>
-
-      <.form_section number="02" title="Spacecraft And Transport">
-        <.input
-          field={@form[:spacecraft_id]}
-          type="select"
-          label="Spacecraft"
-          options={spacecraft_options(@spacecraft)}
-          required
-        />
-        <.input
-          field={@form[:transport_ref]}
-          type="select"
-          label="Transport"
-          options={transport_options(@transports)}
-          required
-        />
-      </.form_section>
-
-      <.form_section number="03" title="Routing Policy">
-        <.input
-          field={@form[:direction]}
-          type="select"
-          label="Direction"
-          options={direction_options()}
-          required
-        />
-        <.input field={@form[:role]} type="select" label="Role" options={role_options()} required />
-      </.form_section>
-
-      <.form_actions
-        submit="Create Routing Rule"
-        cancel_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-      />
-    </.form>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-  slot :inner_block, required: true
 
   defp empty_form_params(params) do
     %{
@@ -174,26 +110,116 @@ defmodule CadenceWeb.CommsRoutingNewLive do
     }
   end
 
-  defp spacecraft_options(spacecraft) do
-    [{"Select spacecraft", ""} | Enum.map(spacecraft, &{&1.display_name, &1.spacecraft_id})]
+  defp page_dto(mission) do
+    %{
+      id: "comms-routing-new-page",
+      title: "New Routing Rule",
+      subtitle:
+        "Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{label: "Routing", href: ~p"/missions/#{mission.mission_id}/comms/routing"},
+        %{label: "New Routing Rule", href: nil}
+      ]
+    }
   end
 
-  defp transport_options(transports) do
-    [
-      {"Select transport", ""}
-      | Enum.map(
-          transports,
-          &{"#{&1.display_name} (v#{&1.version})", "#{&1.transport_id}:#{&1.version}"}
-        )
-    ]
+  defp form_dto(params, mission) do
+    %{
+      id: "routing-rule-form",
+      sections: %{
+        intent: %{number: "01", title: "Intent"},
+        transport: %{number: "02", title: "Spacecraft And Transport"},
+        policy: %{number: "03", title: "Routing Policy"}
+      },
+      fields: %{
+        display_name:
+          field_dto(
+            :display_name,
+            "text",
+            "Display Name",
+            string_param(params, "display_name")
+          ),
+        purpose_label:
+          field_dto(:purpose_label, "text", "Purpose", string_param(params, "purpose_label")),
+        spacecraft_id:
+          field_dto(
+            :spacecraft_id,
+            "select",
+            "Spacecraft",
+            string_param(params, "spacecraft_id")
+          ),
+        transport_ref:
+          field_dto(
+            :transport_ref,
+            "select",
+            "Transport",
+            string_param(params, "transport_ref")
+          ),
+        direction:
+          field_dto(:direction, "select", "Direction", string_param(params, "direction")),
+        role: field_dto(:role, "select", "Role", string_param(params, "role"))
+      },
+      actions: %{
+        submit: %{label: "Create Routing Rule"},
+        cancel: %{
+          label: "Cancel",
+          href: ~p"/missions/#{mission.mission_id}/comms/routing"
+        }
+      }
+    }
   end
 
-  defp direction_options do
-    [{"Inbound", "inbound"}, {"Outbound", "outbound"}, {"Bidirectional", "bidirectional"}]
+  defp field_dto(field, type, label, value) do
+    field_name = Atom.to_string(field)
+
+    %{
+      id: "routing_rule_#{field_name}",
+      name: "routing_rule[#{field_name}]",
+      type: type,
+      label: label,
+      required: true,
+      value: value
+    }
   end
 
-  defp role_options do
-    [{"Primary", "primary"}, {"Candidate", "candidate"}, {"Contributing", "contributing"}]
+  defp options_dto(spacecraft, transports) do
+    %{
+      spacecraft: [
+        option_dto("Select spacecraft", "")
+        | Enum.map(spacecraft, &option_dto(&1.display_name, &1.spacecraft_id))
+      ],
+      transports: [
+        option_dto("Select transport", "")
+        | Enum.map(
+            transports,
+            &option_dto(
+              "#{&1.display_name} (v#{&1.version})",
+              "#{&1.transport_id}:#{&1.version}"
+            )
+          )
+      ],
+      directions: [
+        option_dto("Inbound", "inbound"),
+        option_dto("Outbound", "outbound"),
+        option_dto("Bidirectional", "bidirectional")
+      ],
+      roles: [
+        option_dto("Primary", "primary"),
+        option_dto("Candidate", "candidate"),
+        option_dto("Contributing", "contributing")
+      ]
+    }
+  end
+
+  defp option_dto(label, value), do: %{label: label, value: value}
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 
   defp transport_ref(value) do
