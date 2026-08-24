@@ -4,18 +4,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.SelectedDataRef
 
-  attr :time_mode, :string, required: true
-  attr :time_axis, :string, default: "generation_time"
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :data_realm, :string, required: true
-  attr :data_view, :string, required: true
-  attr :compare_data_view, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :limit_mode, :string, required: true
-  attr :replay_runs, :list, default: []
-  attr :selected_replay_run, :any, default: nil
+  attr(:time_mode, :string, required: true)
+  attr(:time_axis, :string, default: "generation_time")
+  attr(:time_from, :string, default: nil)
+  attr(:time_to, :string, default: nil)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:data_realm, :string, required: true)
+  attr(:data_view, :string, required: true)
+  attr(:compare_data_view, :string, default: nil)
+  attr(:source_binding_id, :string, default: nil)
+  attr(:limit_mode, :string, required: true)
+  attr(:replay_runs, :list, default: [])
+  attr(:selected_replay_run, :any, default: nil)
 
   def replay_section(assigns) do
     assigns = assign(assigns, :replay_form, to_form(replay_form_params(assigns)))
@@ -78,9 +78,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
     """
   end
 
-  attr :time_mode, :string, required: true
-  attr :replay_run_id, :string, default: nil
-  attr :selected_data_ref, :any, default: nil
+  attr(:time_mode, :string, required: true)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:selected_data_ref, :any, default: nil)
 
   def selected_datum_section(assigns) do
     assigns =
