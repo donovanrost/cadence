@@ -1,6 +1,8 @@
 defmodule CadenceWeb.BrowserShellTest do
   use CadenceWeb.ConnCase, async: false
 
+  import Phoenix.LiveViewTest
+
   alias Cadence.Accounts.{
     EnvironmentAdminPolicy,
     Password,
@@ -12,6 +14,7 @@ defmodule CadenceWeb.BrowserShellTest do
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
+  alias LiveVue.Test
 
   @environment_admin_email "environment-admin@example.com"
   @environment_admin_password "environment-admin-password-123"
@@ -157,8 +160,27 @@ defmodule CadenceWeb.BrowserShellTest do
 
     assert ordinary_admin_conn |> get("/admin") |> redirected_to() == "/admin-mode"
 
-    admin_mode_page = build_conn() |> init_test_session(ordinary_session) |> get("/admin-mode")
-    assert html_response(admin_mode_page, 200) =~ ~s(id="admin-mode-form")
+    {:ok, admin_mode_view, _html} =
+      build_conn()
+      |> init_test_session(ordinary_session)
+      |> live("/admin-mode")
+
+    admin_mode_vue = Test.get_vue(admin_mode_view, id: "admin-mode-page-component")
+
+    assert admin_mode_vue.component == "AdminModePage"
+    assert admin_mode_vue.ssr == false
+    assert admin_mode_vue.props == Jason.decode!(Jason.encode!(admin_mode_vue.props))
+    admin_mode_form = admin_mode_vue.props["presentation"]["form"]
+
+    assert admin_mode_form["attrs"]["id"] == "admin-mode-form"
+    assert admin_mode_form["attrs"]["action"] == "/admin-mode"
+    assert admin_mode_form["attrs"]["method"] == "post"
+    assert admin_mode_form["password"]["input"]["attrs"]["name"] == "admin_mode[password]"
+
+    assert [%{"attrs" => %{"name" => "_csrf_token", "value" => csrf_token}}] =
+             admin_mode_form["hidden_fields"]
+
+    assert csrf_token != ""
 
     elevated_conn =
       build_conn()
@@ -232,13 +254,19 @@ defmodule CadenceWeb.BrowserShellTest do
 
     invitation_path = "/invitations/#{token}"
 
-    invitation_response =
-      build_conn()
-      |> get(invitation_path)
-      |> html_response(200)
+    {:ok, invitation_view, _html} = live(build_conn(), invitation_path)
+    invitation_vue = Test.get_vue(invitation_view, id: "organization-invitation-page-component")
 
-    assert invitation_response =~ "organization-invitation-acceptance-form"
-    assert invitation_response =~ "new-admin@example.com"
+    assert invitation_vue.component == "OrganizationInvitationPage"
+    assert invitation_vue.ssr == false
+    assert invitation_vue.props == Jason.decode!(Jason.encode!(invitation_vue.props))
+
+    assert invitation_vue.props["presentation"]["form"]["attrs"]["id"] ==
+             "organization-invitation-acceptance-form"
+
+    assert Enum.at(invitation_vue.props["presentation"]["cards"]["items"], 1)["primary"][
+             "text"
+           ] == "new-admin@example.com"
 
     accepted_conn =
       build_conn()

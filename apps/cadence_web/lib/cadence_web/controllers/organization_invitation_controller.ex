@@ -2,11 +2,13 @@ defmodule CadenceWeb.OrganizationInvitationController do
   use CadenceWeb, :controller
 
   import Phoenix.Component, only: [to_form: 2]
+  import Phoenix.LiveView.Controller, only: [live_render: 3]
 
   alias CadenceWeb.API.IdentityParams, as: IdentityParams
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.AuthenticatedEntry
+  alias CadenceWeb.OrganizationInvitationLive.Presentation
 
   def show(conn, %{"invitation_token" => invitation_token}) do
     case invitation_assigns(invitation_token) do
@@ -85,7 +87,10 @@ defmodule CadenceWeb.OrganizationInvitationController do
   defp render_invitation(conn, assigns, error_message) do
     conn
     |> put_layout(html: {CadenceWeb.Layouts, :auth})
-    |> render(:show, Map.merge(assigns, %{error_message: error_message}))
+    |> live_render(CadenceWeb.OrganizationInvitationLive,
+      session: live_session(conn, Presentation.build(assigns, error_message)),
+      container: {:div, class: "contents"}
+    )
   end
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do
@@ -176,5 +181,14 @@ defmodule CadenceWeb.OrganizationInvitationController do
     conn
     |> configure_session(renew: true)
     |> clear_session()
+  end
+
+  defp live_session(conn, presentation) do
+    %{
+      "admin_mode_expires_at" => get_session(conn, :admin_mode_expires_at),
+      "current_organization_id" => get_session(conn, :current_organization_id),
+      "user_session_token" => get_session(conn, :user_session_token),
+      "presentation" => presentation
+    }
   end
 end
