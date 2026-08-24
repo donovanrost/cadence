@@ -26,6 +26,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     vue = contact_requirements_vue(view)
 
     assert vue.props["page"]["id"] == "ops-contact-requirements-page"
+
     assert vue.props["page"]["header"]["create_action"]["id"] ==
              "new-contact-requirement-link"
 
@@ -109,8 +110,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     expected_rows = [
       %{
-        "__dom_id" =>
-          "contact-requirement-#{planned_requirement.contact_requirement_id}",
+        "__dom_id" => "contact-requirement-#{planned_requirement.contact_requirement_id}",
         "id" => planned_requirement.contact_requirement_id,
         "priority" => %{
           "label" => "critical",
@@ -133,8 +133,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
           "/missions/#{mission.mission_id}/ops/requirements/#{planned_requirement.contact_requirement_id}"
       },
       %{
-        "__dom_id" =>
-          "contact-requirement-#{searched_requirement.contact_requirement_id}",
+        "__dom_id" => "contact-requirement-#{searched_requirement.contact_requirement_id}",
         "id" => searched_requirement.contact_requirement_id,
         "priority" => %{
           "label" => "high",
@@ -157,8 +156,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
           "/missions/#{mission.mission_id}/ops/requirements/#{searched_requirement.contact_requirement_id}"
       },
       %{
-        "__dom_id" =>
-          "contact-requirement-#{declared_requirement.contact_requirement_id}",
+        "__dom_id" => "contact-requirement-#{declared_requirement.contact_requirement_id}",
         "id" => declared_requirement.contact_requirement_id,
         "priority" => %{
           "label" => "routine",
@@ -186,9 +184,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     assert requirement_stream_mutations(vue) ==
              [["replace", "/requirements", []]] ++
-               Enum.map(Enum.with_index(expected_rows), fn {row, index} ->
-                 ["upsert", "/requirements/#{index}", row]
-               end)
+               Enum.map(expected_rows, &["upsert", "/requirements/-", &1])
 
     assert_json_safe(vue)
   end

@@ -132,7 +132,7 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
   defp journey_state(%{latest_run: nil}), do: "Need declared"
   defp journey_state(_row), do: "Options captured"
 
-  defp journey_detail(%{plan: plan}), do: humanize(plan.lifecycle_state)
+  defp journey_detail(%{plan: %{lifecycle_state: state}}), do: humanize(state)
   defp journey_detail(%{latest_run: nil}), do: "Search not run"
   defp journey_detail(%{latest_run: run}), do: humanize(run.lifecycle_state)
 
