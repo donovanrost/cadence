@@ -21,13 +21,176 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     {:ok, view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
 
-    assert has_element?(view, "#ops-contact-requirements-page")
-    assert has_element?(view, "#new-contact-requirement-link")
+    assert has_element?(view, "#ops-contact-requirements-component.contents")
+
+    vue = contact_requirements_vue(view)
+
+    assert vue.props["page"]["id"] == "ops-contact-requirements-page"
+    assert vue.props["page"]["header"]["create_action"]["id"] ==
+             "new-contact-requirement-link"
 
     assert has_element?(
              view,
              ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/requirements"][class*="text-primary"])
            )
+  end
+
+  test "list page exposes an exact JSON-safe empty LiveVue contract" do
+    {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope()
+
+    {:ok, view, _html} =
+      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
+
+    vue = contact_requirements_vue(view)
+
+    assert vue.component == "OpsContactRequirementList"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == %{"page" => contact_requirements_page_props(mission.mission_id)}
+    assert requirement_rows(vue) == []
+
+    assert requirement_stream_mutations(vue) == [
+             ["replace", "/requirements", []]
+           ]
+
+    assert_json_safe(vue)
+  end
+
+  test "list page initially replaces and upserts exact requirement row contracts" do
+    {member_conn, scope, _org, mission, spacecraft} = signed_in_scope()
+
+    {planned_requirement, planned_version} =
+      create_requirement_with(scope, mission, spacecraft, %{
+        latest_end: DateTime.add(fixed_now(), 36_000, :second),
+        priority: :critical
+      })
+
+    {searched_requirement, searched_version} =
+      create_requirement_with(scope, mission, spacecraft, %{
+        contact_intent: "telemetry_downlink",
+        latest_end: DateTime.add(fixed_now(), 72_000, :second),
+        success_measure: :minimum_duration,
+        priority: :high
+      })
+
+    {declared_requirement, _declared_version} =
+      create_requirement_with(scope, mission, spacecraft, %{
+        service_direction: :tracking,
+        contact_intent: "tracking_support",
+        latest_end: DateTime.add(fixed_now(), 108_000, :second),
+        success_measure: :contact_count,
+        contact_count: 3,
+        priority: :routine
+      })
+
+    planned = run_planning(scope, mission, spacecraft, planned_requirement, planned_version)
+    searched = run_planning(scope, mission, spacecraft, searched_requirement, searched_version)
+    [planned_snapshot] = planned.snapshots
+
+    assert {:ok, plan, _plan_version} =
+             ContactPlans.create(
+               scope,
+               mission.mission_id,
+               %{
+                 planning_run_ids: [planned.run.contact_planning_run_id],
+                 selected_snapshot_ids: [planned_snapshot.contact_opportunity_snapshot_id],
+                 rationale: "Commit the first eligible pass"
+               },
+               now: fixed_now()
+             )
+
+    assert plan.lifecycle_state == :draft
+    assert searched.run.lifecycle_state == :completed
+
+    {:ok, view, _html} =
+      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
+
+    vue = contact_requirements_vue(view)
+
+    expected_rows = [
+      %{
+        "__dom_id" =>
+          "contact-requirement-#{planned_requirement.contact_requirement_id}",
+        "id" => planned_requirement.contact_requirement_id,
+        "priority" => %{
+          "label" => "critical",
+          "tone" => "error",
+          "class" =>
+            "border border-error/40 bg-error/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-error"
+        },
+        "version_direction" => "v1 · downlink",
+        "intent_label" => "Payload downlink",
+        "outcome_detail" => "Deliver at least 1.5 GB across 1 contact(s).",
+        "window" => %{
+          "label" => "Acceptable UTC window",
+          "detail" => "16 Jul 21:00Z → 17 Jul 06:00Z"
+        },
+        "journey" => %{
+          "label" => "Plan draft",
+          "detail" => "draft"
+        },
+        "detail_href" =>
+          "/missions/#{mission.mission_id}/ops/requirements/#{planned_requirement.contact_requirement_id}"
+      },
+      %{
+        "__dom_id" =>
+          "contact-requirement-#{searched_requirement.contact_requirement_id}",
+        "id" => searched_requirement.contact_requirement_id,
+        "priority" => %{
+          "label" => "high",
+          "tone" => "warning",
+          "class" =>
+            "border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-warning"
+        },
+        "version_direction" => "v1 · downlink",
+        "intent_label" => "Telemetry downlink",
+        "outcome_detail" => "Secure at least 600 seconds of contact time.",
+        "window" => %{
+          "label" => "Acceptable UTC window",
+          "detail" => "16 Jul 21:00Z → 17 Jul 16:00Z"
+        },
+        "journey" => %{
+          "label" => "Options captured",
+          "detail" => "completed"
+        },
+        "detail_href" =>
+          "/missions/#{mission.mission_id}/ops/requirements/#{searched_requirement.contact_requirement_id}"
+      },
+      %{
+        "__dom_id" =>
+          "contact-requirement-#{declared_requirement.contact_requirement_id}",
+        "id" => declared_requirement.contact_requirement_id,
+        "priority" => %{
+          "label" => "routine",
+          "tone" => "neutral",
+          "class" =>
+            "border border-base-300 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-base-content/55"
+        },
+        "version_direction" => "v1 · tracking",
+        "intent_label" => "Tracking support",
+        "outcome_detail" => "Secure 3 separated contact window(s).",
+        "window" => %{
+          "label" => "Acceptable UTC window",
+          "detail" => "16 Jul 21:00Z → 18 Jul 02:00Z"
+        },
+        "journey" => %{
+          "label" => "Need declared",
+          "detail" => "Search not run"
+        },
+        "detail_href" =>
+          "/missions/#{mission.mission_id}/ops/requirements/#{declared_requirement.contact_requirement_id}"
+      }
+    ]
+
+    assert requirement_rows(vue) == expected_rows
+
+    assert requirement_stream_mutations(vue) ==
+             [["replace", "/requirements", []]] ++
+               Enum.map(Enum.with_index(expected_rows), fn {row, index} ->
+                 ["upsert", "/requirements/#{index}", row]
+               end)
+
+    assert_json_safe(vue)
   end
 
   test "outcome-first form progressively changes and creates a durable Requirement" do
@@ -289,4 +452,110 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   end
 
   defp fixed_now, do: ~U[2026-07-16 20:00:00.000000Z]
+
+  defp contact_requirements_page_props(mission_id) do
+    %{
+      "id" => "ops-contact-requirements-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / planning horizon",
+        "title" => "Contact Requirements",
+        "description" =>
+          "Declare the mission outcome first. Cadence searches every ready provider route, preserves their evidence, and lets operators commit an exact plan.",
+        "create_action" => %{
+          "id" => "new-contact-requirement-link",
+          "label" => "Declare need",
+          "href" => "/missions/#{mission_id}/ops/requirements/new"
+        }
+      },
+      "journey_steps" => [
+        %{
+          "number" => "01",
+          "label" => "Need",
+          "detail" => "Mission outcome",
+          "active" => true
+        },
+        %{
+          "number" => "02",
+          "label" => "Options",
+          "detail" => "Provider evidence",
+          "active" => false
+        },
+        %{
+          "number" => "03",
+          "label" => "Plan",
+          "detail" => "Exact commitment",
+          "active" => false
+        },
+        %{
+          "number" => "04",
+          "label" => "Reserved",
+          "detail" => "Provider capacity",
+          "active" => false
+        }
+      ],
+      "empty_state" => %{
+        "id" => "contact-requirements-empty",
+        "title" => "No contact needs in this horizon",
+        "description" =>
+          "Start with the outcome the spacecraft needs—data volume, duration, or contact count. Provider details come later."
+      },
+      "list_id" => "contact-requirements"
+    }
+  end
+
+  defp create_requirement_with(scope, mission, spacecraft, overrides) do
+    attrs =
+      spacecraft.spacecraft_id
+      |> requirement_attrs()
+      |> Map.merge(overrides)
+
+    assert {:ok, requirement, version} =
+             ContactRequirements.create(scope, mission.mission_id, attrs, now: fixed_now())
+
+    {requirement, version}
+  end
+
+  defp run_planning(scope, mission, spacecraft, requirement, version) do
+    assert {:ok, planning} =
+             Planner.run(
+               scope,
+               mission.mission_id,
+               requirement.contact_requirement_id,
+               version.version,
+               now: fixed_now(),
+               list_routes: fn _, _, _ ->
+                 {:ok, %{routes: [route(spacecraft.spacecraft_id)], findings: []}}
+               end,
+               search_opportunities: fn _, _, _, _, _ ->
+                 {:ok, %{opportunities: [opportunity()]}}
+               end
+             )
+
+    planning
+  end
+
+  defp contact_requirements_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-contact-requirements-component")
+  end
+
+  defp requirement_rows(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/requirements/" <> _index, _requirement] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, requirement] -> requirement end)
+  end
+
+  defp requirement_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
 end

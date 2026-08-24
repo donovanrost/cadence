@@ -22,21 +22,22 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
 
         plan = plan_for_requirement(plans, requirement.contact_requirement_id)
 
-        %{
-          id: requirement.contact_requirement_id,
-          requirement: requirement,
-          version: version,
-          latest_run: List.first(runs),
-          plan: plan
-        }
+        requirement_row_dto(
+          %{
+            requirement: requirement,
+            version: version,
+            latest_run: List.first(runs),
+            plan: plan
+          },
+          mission.mission_id
+        )
       end)
 
     {:ok,
      socket
      |> assign(:page_title, "Contact Requirements")
      |> assign(:ops_nav_item, :requirements)
-     |> assign(:requirement_count, length(rows))
-     |> assign(:requirement_empty?, rows == [])
+     |> assign(:contact_requirements_page, page_dto(mission.mission_id))
      |> stream_configure(:requirements, dom_id: &"contact-requirement-#{&1.id}")
      |> stream(:requirements, rows)}
   end
@@ -45,116 +46,68 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-contact-requirements-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto flex max-w-[96rem] flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-                Mission operations / planning horizon
-              </p>
-              <h1 class="mt-1 text-2xl font-bold tracking-tight">Contact Requirements</h1>
-              <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-                Declare the mission outcome first. Cadence searches every ready provider route, preserves their evidence, and lets operators commit an exact plan.
-              </p>
-            </div>
-            <.link
-              id="new-contact-requirement-link"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/requirements/new"}
-              class="btn btn-primary btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
-            >
-              <.icon name="hero-plus" class="h-4 w-4" /> Declare need
-            </.link>
-          </div>
-        </header>
-
-        <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
-          <div class="mb-5 grid border border-base-300 bg-base-200/25 sm:grid-cols-4">
-            <.journey_step number="01" label="Need" detail="Mission outcome" active />
-            <.journey_step number="02" label="Options" detail="Provider evidence" />
-            <.journey_step number="03" label="Plan" detail="Exact commitment" />
-            <.journey_step number="04" label="Reserved" detail="Provider capacity" />
-          </div>
-
-          <div
-            :if={@requirement_empty?}
-            id="contact-requirements-empty"
-            class="border border-dashed border-base-300 bg-base-200/20 px-6 py-16 text-center"
-          >
-            <.icon name="hero-clipboard-document-list" class="mx-auto h-8 w-8 text-primary/40" />
-            <h2 class="mt-4 text-lg font-semibold">No contact needs in this horizon</h2>
-            <p class="mx-auto mt-2 max-w-xl text-sm text-base-content/60">
-              Start with the outcome the spacecraft needs—data volume, duration, or contact count. Provider details come later.
-            </p>
-          </div>
-
-          <div id="contact-requirements" phx-update="stream" class="space-y-3">
-            <div id="contact-requirements-stream-empty" class="hidden only:block"></div>
-            <.link
-              :for={{dom_id, row} <- @streams.requirements}
-              id={dom_id}
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/requirements/#{row.requirement.contact_requirement_id}"}
-              class="group block border border-base-300 bg-base-200/20 transition-colors hover:border-primary/50 hover:bg-primary/[0.03]"
-            >
-              <div class="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1.4fr)_minmax(15rem,0.8fr)_auto] md:items-center">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class={priority_class(row.version.priority)}>
-                      {row.version.priority}
-                    </span>
-                    <span class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45">
-                      v{row.version.version} · {row.version.service_direction}
-                    </span>
-                  </div>
-                  <h2 class="mt-2 truncate text-base font-semibold group-hover:text-primary">
-                    {intent_label(row.version.contact_intent)}
-                  </h2>
-                  <p class="mt-1 truncate text-sm text-base-content/55">
-                    {outcome_sentence(row.version)}
-                  </p>
-                </div>
-                <div>
-                  <p class="hud-label">Acceptable UTC window</p>
-                  <p class="mt-1 font-mono text-xs tabular-nums text-base-content/75">
-                    {short_time(row.version.earliest_start)} → {short_time(row.version.latest_end)}
-                  </p>
-                  <div class="mt-2 h-1.5 overflow-hidden bg-base-300">
-                    <div class="h-full w-2/3 bg-primary/65"></div>
-                  </div>
-                </div>
-                <div class="min-w-36 border-l border-base-300 pl-4">
-                  <p class="hud-label">Journey state</p>
-                  <p class="mt-1 text-sm font-semibold text-base-content/80">
-                    {journey_state(row)}
-                  </p>
-                  <p class="mt-1 font-mono text-[0.65rem] text-base-content/45">
-                    {journey_detail(row)}
-                  </p>
-                </div>
-              </div>
-            </.link>
-          </div>
-        </div>
-      </section>
+      <.vue
+        id="ops-contact-requirements-component"
+        v-component="OpsContactRequirementList"
+        page={@contact_requirements_page}
+        requirements={@streams.requirements}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :number, :string, required: true
-  attr :label, :string, required: true
-  attr :detail, :string, required: true
-  attr :active, :boolean, default: false
+  defp page_dto(mission_id) do
+    %{
+      id: "ops-contact-requirements-page",
+      header: %{
+        eyebrow: "Mission operations / planning horizon",
+        title: "Contact Requirements",
+        description:
+          "Declare the mission outcome first. Cadence searches every ready provider route, preserves their evidence, and lets operators commit an exact plan.",
+        create_action: %{
+          id: "new-contact-requirement-link",
+          label: "Declare need",
+          href: ~p"/missions/#{mission_id}/ops/requirements/new"
+        }
+      },
+      journey_steps: [
+        %{number: "01", label: "Need", detail: "Mission outcome", active: true},
+        %{number: "02", label: "Options", detail: "Provider evidence", active: false},
+        %{number: "03", label: "Plan", detail: "Exact commitment", active: false},
+        %{number: "04", label: "Reserved", detail: "Provider capacity", active: false}
+      ],
+      empty_state: %{
+        id: "contact-requirements-empty",
+        title: "No contact needs in this horizon",
+        description:
+          "Start with the outcome the spacecraft needs—data volume, duration, or contact count. Provider details come later."
+      },
+      list_id: "contact-requirements"
+    }
+  end
 
-  defp journey_step(assigns) do
-    ~H"""
-    <div class={[
-      "border-b border-base-300 px-4 py-3 sm:border-b-0 sm:border-r last:border-r-0",
-      @active && "bg-primary/[0.06]"
-    ]}>
-      <p class="font-mono text-[0.6rem] tracking-[0.2em] text-primary/60">{@number}</p>
-      <p class="mt-1 text-sm font-semibold">{@label}</p>
-      <p class="mt-0.5 text-xs text-base-content/45">{@detail}</p>
-    </div>
-    """
+  defp requirement_row_dto(row, mission_id) do
+    version = row.version
+    requirement_id = row.requirement.contact_requirement_id
+
+    %{
+      id: requirement_id,
+      priority: priority_dto(version.priority),
+      version_direction: "v#{version.version} · #{version.service_direction}",
+      intent_label: intent_label(version.contact_intent),
+      outcome_detail: outcome_sentence(version),
+      window: %{
+        label: "Acceptable UTC window",
+        detail: "#{short_time(version.earliest_start)} → #{short_time(version.latest_end)}"
+      },
+      journey: %{
+        label: journey_state(row),
+        detail: journey_detail(row)
+      },
+      detail_href: ~p"/missions/#{mission_id}/ops/requirements/#{requirement_id}"
+    }
   end
 
   defp plan_for_requirement(plans, requirement_id) do
@@ -183,17 +136,32 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
   defp journey_detail(%{latest_run: nil}), do: "Search not run"
   defp journey_detail(%{latest_run: run}), do: humanize(run.lifecycle_state)
 
-  defp priority_class(:critical),
-    do:
-      "border border-error/40 bg-error/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-error"
+  defp priority_dto(:critical) do
+    %{
+      label: "critical",
+      tone: "error",
+      class:
+        "border border-error/40 bg-error/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-error"
+    }
+  end
 
-  defp priority_class(:high),
-    do:
-      "border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-warning"
+  defp priority_dto(:high) do
+    %{
+      label: "high",
+      tone: "warning",
+      class:
+        "border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-warning"
+    }
+  end
 
-  defp priority_class(_priority),
-    do:
-      "border border-base-300 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-base-content/55"
+  defp priority_dto(priority) do
+    %{
+      label: to_string(priority),
+      tone: "neutral",
+      class:
+        "border border-base-300 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-base-content/55"
+    }
+  end
 
   defp outcome_sentence(%{success_measure: :minimum_data_volume} = version),
     do:
