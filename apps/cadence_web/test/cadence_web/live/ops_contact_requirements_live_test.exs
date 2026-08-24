@@ -32,51 +32,417 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
   test "outcome-first form progressively changes and creates a durable Requirement" do
     {conn, _scope, org, mission, spacecraft} = signed_in_scope()
+    before_mount = DateTime.utc_now()
+
+    sibling_mission =
+      TestFixtures.persist_mission!(org,
+        slug: "secondary-planning",
+        display_name: "Secondary Planning"
+      )
+
+    _foreign_spacecraft =
+      TestFixtures.persist_spacecraft!(sibling_mission, display_name: "Foreign Spacecraft")
 
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements/new")
 
-    assert has_element?(view, "#contact-requirement-form")
-    assert has_element?(view, "#requirement-minimum-data-volume")
-    assert has_element?(view, "#requirement-preferred-duration")
-    assert has_element?(view, "#requirement-advanced-constraints")
+    assert has_element?(view, "#ops-contact-requirement-new-component")
+    refute has_element?(view, "#contact-requirement-form")
 
-    params = requirement_form_params(spacecraft)
+    vue = contact_requirement_new_vue(view)
+    props = vue.props
+    fields = props["form"]["fields"]
+    earliest_start = fields["earliest_start"]["value"]
+    latest_end = fields["latest_end"]["value"]
 
-    view
-    |> form("#contact-requirement-form",
-      contact_requirement: Map.put(params, "success_measure", "contact_count")
-    )
-    |> render_change()
+    assert {:ok, earliest_naive} = NaiveDateTime.from_iso8601(earliest_start)
+    assert {:ok, latest_naive} = NaiveDateTime.from_iso8601(latest_end)
+    assert NaiveDateTime.diff(latest_naive, earliest_naive, :second) == 24 * 60 * 60
 
-    refute has_element?(view, "#requirement-minimum-data-volume")
-    assert has_element?(view, "#requirement-contact-count")
+    earliest_datetime = DateTime.from_naive!(earliest_naive, "Etc/UTC")
+    assert DateTime.diff(earliest_datetime, before_mount, :second) in (14 * 60)..(16 * 60)
 
-    view
-    |> form(
-      "#contact-requirement-form",
-      contact_requirement:
-        Map.drop(params, ["minimum_data_volume_bytes", "minimum_duration_seconds"])
-    )
-    |> render_change()
+    assert props["page"] == %{
+             "id" => "ops-contact-requirement-new-page",
+             "eyebrow" => "Need / outcome-first declaration",
+             "heading" => "What does the mission need?",
+             "description" =>
+               "Describe success and the acceptable horizon. Provider, station, and route choices remain planning concerns—not part of the need itself."
+           }
 
-    view
-    |> form("#contact-requirement-form", contact_requirement: params)
-    |> render_submit()
+    assert props["journey"] == %{
+             "outcome" => %{
+               "id" => "contact-requirement-outcome-section",
+               "step" => "01",
+               "title" => "Mission outcome",
+               "copy" => "The operator-readable reason this contact must exist."
+             },
+             "horizon" => %{
+               "id" => "contact-requirement-horizon-section",
+               "step" => "02",
+               "title" => "Acceptable horizon",
+               "copy" => "All times are coordinated universal time."
+             },
+             "advanced" => %{
+               "id" => "requirement-advanced-constraints",
+               "title" => "Advanced constraints",
+               "copy" => "Optional provider and station boundaries"
+             },
+             "rationale" => %{"id" => "contact-requirement-rationale-section"},
+             "progressive" => %{
+               "minimum_data_volume" => %{
+                 "id" => "requirement-minimum-data-volume-section",
+                 "visible" => true,
+                 "visible_for" => ["minimum_data_volume"]
+               },
+               "minimum_duration" => %{
+                 "id" => "requirement-minimum-duration-section",
+                 "visible" => true,
+                 "visible_for" => ["minimum_duration", "minimum_data_volume"]
+               }
+             }
+           }
+
+    assert props["actions"] == %{
+             "back" => %{
+               "id" => "contact-requirements-back-link",
+               "label" => "Requirements",
+               "href" => "/missions/#{mission.mission_id}/ops/requirements",
+               "icon" => "hero-arrow-left"
+             },
+             "cancel" => %{
+               "id" => "cancel-contact-requirement",
+               "label" => "Cancel",
+               "href" => "/missions/#{mission.mission_id}/ops/requirements"
+             },
+             "submit" => %{
+               "id" => "save-contact-requirement",
+               "label" => "Declare need"
+             }
+           }
+
+    assert props["form"] == %{
+             "id" => "contact-requirement-form",
+             "fields" =>
+               expected_contact_requirement_fields(spacecraft, earliest_start, latest_end),
+             "error" => nil
+           }
+
+    params =
+      spacecraft
+      |> requirement_form_params()
+      |> Map.put("allowed_providers", " provider-a, provider-a, ")
+
+    minimum_duration_params =
+      params
+      |> Map.put("success_measure", "minimum_duration")
+      |> Map.put("minimum_data_volume_bytes", "")
+
+    render_hook(view, "validate", %{"contact_requirement" => minimum_duration_params})
+
+    progressive = contact_requirement_new_vue(view).props["journey"]["progressive"]
+
+    refute progressive["minimum_data_volume"]["visible"]
+    assert progressive["minimum_duration"]["visible"]
+
+    contact_count_params =
+      params
+      |> Map.put("success_measure", "contact_count")
+      |> Map.drop(["minimum_data_volume_bytes", "minimum_duration_seconds"])
+
+    render_hook(view, "validate", %{"contact_requirement" => contact_count_params})
+
+    progressive = contact_requirement_new_vue(view).props["journey"]["progressive"]
+    fields = contact_requirement_new_vue(view).props["form"]["fields"]
+
+    refute progressive["minimum_data_volume"]["visible"]
+    refute progressive["minimum_duration"]["visible"]
+    assert fields["success_measure"]["value"] == "contact_count"
+    assert fields["minimum_data_volume_bytes"]["value"] == ""
+    assert fields["minimum_duration_seconds"]["value"] == ""
+
+    params_without_progressive_values =
+      Map.drop(params, ["minimum_data_volume_bytes", "minimum_duration_seconds"])
+
+    render_hook(view, "validate", %{
+      "contact_requirement" => params_without_progressive_values
+    })
+
+    progressive = contact_requirement_new_vue(view).props["journey"]["progressive"]
+    fields = contact_requirement_new_vue(view).props["form"]["fields"]
+
+    assert progressive["minimum_data_volume"]["visible"]
+    assert progressive["minimum_duration"]["visible"]
+    assert fields["minimum_data_volume_bytes"]["value"] == ""
+    assert fields["minimum_duration_seconds"]["value"] == ""
+
+    render_hook(view, "save", %{"contact_requirement" => params})
 
     [{requirement, version}] =
       ContactRequirements.list(org.organization_id, mission.mission_id)
 
-    assert_redirect(
-      view,
+    expected_path =
       ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
-    )
+
+    assert {^expected_path, %{}} = assert_redirect(view)
 
     assert version.spacecraft_id == spacecraft.spacecraft_id
+    assert version.service_direction == :downlink
+    assert version.contact_intent == "payload_downlink"
+    assert version.earliest_start == parsed_form_datetime(params["earliest_start"])
+    assert version.latest_end == parsed_form_datetime(params["latest_end"])
     assert version.success_measure == :minimum_data_volume
+    assert version.minimum_duration_seconds == 600
     assert version.minimum_data_volume_bytes == 1_500_000_000
     assert version.preferred_duration_seconds == 900
+    assert version.contact_count == 1
+    assert version.minimum_separation_seconds == 0
+    assert version.priority == :high
     assert version.provider_constraints_document["allowed"] == ["provider-a"]
+    assert version.provider_constraints_document["excluded"] == []
+    assert version.station_constraints_document == %{
+             "allowed" => [],
+             "excluded" => ["station-c"]
+           }
+
+    assert version.policy_constraints_document == %{}
+    assert version.approval_policy_document == %{"mode" => "manual"}
+    assert version.rationale == "Recorder pressure requires a downlink"
+    assert version.metadata == %{"source" => "ops_contact_requirement_form"}
+  end
+
+  test "new Requirement form keeps server validation values and errors authoritative" do
+    {conn, _scope, org, mission, spacecraft} = signed_in_scope()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements/new")
+
+    valid_params = requirement_form_params(spacecraft)
+
+    validation_cases = [
+      {Map.put(valid_params, "earliest_start", "not-a-time"),
+       "Enter a valid UTC start and end time."},
+      {Map.put(valid_params, "minimum_separation_seconds", "-1"),
+       "Numeric outcomes must be positive whole numbers."},
+      {Map.put(valid_params, "latest_end", valid_params["earliest_start"]),
+       "latest_end must be after earliest_start"},
+      {valid_params
+       |> Map.put("allowed_providers", "provider-a")
+       |> Map.put("excluded_providers", "provider-a"),
+       "Cadence could not declare this need. Review the outcome and constraints."}
+    ]
+
+    for {invalid_params, message} <- validation_cases do
+      render_hook(view, "save", %{"contact_requirement" => invalid_params})
+
+      form = contact_requirement_new_vue(view).props["form"]
+
+      assert form["error"] == %{
+               "id" => "contact-requirement-form-error",
+               "message" => message
+             }
+
+      for {field, value} <- invalid_params do
+        assert form["fields"][field]["value"] == value
+      end
+
+      assert ContactRequirements.list(org.organization_id, mission.mission_id) == []
+
+      render_hook(view, "validate", %{"contact_requirement" => valid_params})
+      assert contact_requirement_new_vue(view).props["form"]["error"] == nil
+    end
+  end
+
+  test "new Requirement route requires authenticated mission scope", %{conn: conn} do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(conn, ~p"/missions/mission-test/ops/requirements/new")
+  end
+
+  defp contact_requirement_new_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "ops-contact-requirement-new-component")
+
+    assert vue.component == "OpsContactRequirementNew"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert Enum.sort(Map.keys(vue.props)) == ["actions", "form", "journey", "page"]
+
+    assert vue.handlers == %{
+             "save" => Phoenix.LiveView.JS.push("save"),
+             "validate" => Phoenix.LiveView.JS.push("validate")
+           }
+
+    vue
+  end
+
+  defp expected_contact_requirement_fields(spacecraft, earliest_start, latest_end) do
+    %{
+      "spacecraft_id" => %{
+        "id" => "requirement-spacecraft",
+        "name" => "contact_requirement[spacecraft_id]",
+        "type" => "select",
+        "label" => "Spacecraft",
+        "required" => true,
+        "value" => spacecraft.spacecraft_id,
+        "options" => [
+          %{"label" => spacecraft.display_name, "value" => spacecraft.spacecraft_id}
+        ]
+      },
+      "contact_intent" => %{
+        "id" => "requirement-intent",
+        "name" => "contact_requirement[contact_intent]",
+        "type" => "select",
+        "label" => "Contact intent",
+        "required" => false,
+        "value" => "payload_downlink",
+        "options" => [
+          %{"label" => "Payload downlink", "value" => "payload_downlink"},
+          %{"label" => "Health and safety", "value" => "health_and_safety"},
+          %{"label" => "TT&C maintenance", "value" => "ttc_maintenance"},
+          %{"label" => "Commissioning", "value" => "commissioning"}
+        ]
+      },
+      "success_measure" => %{
+        "id" => "requirement-success-measure",
+        "name" => "contact_requirement[success_measure]",
+        "type" => "select",
+        "label" => "Success means",
+        "required" => false,
+        "value" => "minimum_data_volume",
+        "options" => [
+          %{"label" => "Minimum data volume", "value" => "minimum_data_volume"},
+          %{"label" => "Minimum contact duration", "value" => "minimum_duration"},
+          %{"label" => "Number of contacts", "value" => "contact_count"},
+          %{"label" => "Any eligible contact", "value" => "any_contact"}
+        ]
+      },
+      "priority" => %{
+        "id" => "requirement-priority",
+        "name" => "contact_requirement[priority]",
+        "type" => "select",
+        "label" => "Operational priority",
+        "required" => false,
+        "value" => "high",
+        "options" => [
+          %{"label" => "Routine", "value" => "routine"},
+          %{"label" => "High", "value" => "high"},
+          %{"label" => "Critical", "value" => "critical"}
+        ]
+      },
+      "earliest_start" => %{
+        "id" => "requirement-earliest-start",
+        "name" => "contact_requirement[earliest_start]",
+        "type" => "datetime-local",
+        "label" => "Earliest start (UTC)",
+        "required" => true,
+        "value" => earliest_start
+      },
+      "latest_end" => %{
+        "id" => "requirement-latest-end",
+        "name" => "contact_requirement[latest_end]",
+        "type" => "datetime-local",
+        "label" => "Latest end (UTC)",
+        "required" => true,
+        "value" => latest_end
+      },
+      "minimum_data_volume_bytes" => %{
+        "id" => "requirement-minimum-data-volume",
+        "name" => "contact_requirement[minimum_data_volume_bytes]",
+        "type" => "number",
+        "label" => "Minimum data volume (bytes)",
+        "required" => false,
+        "value" => "1000000000",
+        "min" => "1"
+      },
+      "minimum_duration_seconds" => %{
+        "id" => "requirement-minimum-duration",
+        "name" => "contact_requirement[minimum_duration_seconds]",
+        "type" => "number",
+        "label" => "Minimum window duration (seconds)",
+        "required" => false,
+        "value" => "600",
+        "min" => "1"
+      },
+      "preferred_duration_seconds" => %{
+        "id" => "requirement-preferred-duration",
+        "name" => "contact_requirement[preferred_duration_seconds]",
+        "type" => "number",
+        "label" => "Preferred window duration (seconds)",
+        "required" => false,
+        "value" => "900",
+        "min" => "1"
+      },
+      "contact_count" => %{
+        "id" => "requirement-contact-count",
+        "name" => "contact_requirement[contact_count]",
+        "type" => "number",
+        "label" => "Required contact count",
+        "required" => false,
+        "value" => "1",
+        "min" => "1"
+      },
+      "minimum_separation_seconds" => %{
+        "id" => "requirement-minimum-separation",
+        "name" => "contact_requirement[minimum_separation_seconds]",
+        "type" => "number",
+        "label" => "Minimum separation (seconds)",
+        "required" => false,
+        "value" => "0",
+        "min" => "0"
+      },
+      "allowed_providers" => %{
+        "id" => "requirement-allowed-providers",
+        "name" => "contact_requirement[allowed_providers]",
+        "type" => "text",
+        "label" => "Allowed provider IDs",
+        "required" => false,
+        "value" => "",
+        "placeholder" => "provider-a, provider-b"
+      },
+      "excluded_providers" => %{
+        "id" => "requirement-excluded-providers",
+        "name" => "contact_requirement[excluded_providers]",
+        "type" => "text",
+        "label" => "Excluded provider IDs",
+        "required" => false,
+        "value" => "",
+        "placeholder" => "provider-c"
+      },
+      "allowed_stations" => %{
+        "id" => "requirement-allowed-stations",
+        "name" => "contact_requirement[allowed_stations]",
+        "type" => "text",
+        "label" => "Allowed station refs",
+        "required" => false,
+        "value" => "",
+        "placeholder" => "station-a, station-b"
+      },
+      "excluded_stations" => %{
+        "id" => "requirement-excluded-stations",
+        "name" => "contact_requirement[excluded_stations]",
+        "type" => "text",
+        "label" => "Excluded station refs",
+        "required" => false,
+        "value" => "",
+        "placeholder" => "station-c"
+      },
+      "rationale" => %{
+        "id" => "requirement-rationale",
+        "name" => "contact_requirement[rationale]",
+        "type" => "textarea",
+        "label" => "Operator rationale",
+        "required" => true,
+        "value" => "",
+        "placeholder" => "Why this outcome and horizon are operationally important",
+        "maxlength" => "2000"
+      }
+    }
+  end
+
+  defp parsed_form_datetime(value) do
+    value
+    |> NaiveDateTime.from_iso8601!()
+    |> DateTime.from_naive!("Etc/UTC")
   end
 
   test "Requirement detail preserves no-route readiness as evidence rather than no availability" do
