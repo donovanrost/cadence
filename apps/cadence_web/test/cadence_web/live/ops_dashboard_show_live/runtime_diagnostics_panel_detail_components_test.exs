@@ -151,52 +151,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
     assert "total:2 resolved:1 context:1 missing:0" =
              invalidation_field_value(invalidation, "Source cache evidence")
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-source-dependency-causes")
-             |> LazyHTML.attribute("data-source-dependency-cause-count")
+    dependency_presentation =
+      html
+      |> LiveVue.Test.get_vue(id: "dashboard-source-dependency-causes-component")
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
 
-    assert "Limits waiting on telemetry input" =
-             document
-             |> LazyHTML.query("#dashboard-source-dependency-causes .font-medium")
-             |> LazyHTML.text()
-             |> String.trim()
+    [dependency] = dependency_presentation["items"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-source-capability-postures")
-             |> LazyHTML.attribute("data-source-capability-posture-count")
+    assert dependency_presentation["root"]["attrs"]["data-source-dependency-cause-count"] ==
+             "1"
 
-    assert ["fallback"] =
-             document
-             |> LazyHTML.query(~s([data-source-capability-posture="req-telemetry"]))
-             |> LazyHTML.attribute("data-source-capability-status")
+    assert dependency["primary"]["text"]["text"] ==
+             "Limits waiting on telemetry input"
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query(~s([data-source-capability-posture="req-telemetry"]))
-             |> LazyHTML.attribute("phx-click")
+    capability_presentation =
+      html
+      |> LiveVue.Test.get_vue(id: "dashboard-source-capability-postures-component")
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
 
-    assert ["source"] =
-             document
-             |> LazyHTML.query(~s([data-source-capability-posture="req-telemetry"]))
-             |> LazyHTML.attribute("phx-value-kind")
+    [posture] = capability_presentation["items"]
 
-    assert ["fallback"] =
-             document
-             |> LazyHTML.query(~s([data-source-capability-posture="req-telemetry"]))
-             |> LazyHTML.attribute("phx-value-source-capability-status")
+    assert capability_presentation["root"]["attrs"]["data-source-capability-posture-count"] ==
+             "1"
 
-    assert ["generation_time"] =
-             document
-             |> LazyHTML.query(~s([data-source-capability-posture="req-telemetry"]))
-             |> LazyHTML.attribute("phx-value-requested-time-axis")
+    assert posture["attrs"]["data-source-capability-status"] == "fallback"
+    assert posture["attrs"]["phx-click"] == "open_evidence"
+    assert posture["evidence_attrs"]["phx-value-kind"] == "source"
+    assert posture["evidence_attrs"]["phx-value-source-capability-status"] == "fallback"
 
-    assert "generation_time -> receipt_time" =
-             document
-             |> LazyHTML.query(~s([data-source-capability-field="Clock"]))
-             |> LazyHTML.text()
-             |> String.trim()
+    assert posture["evidence_attrs"]["phx-value-requested-time-axis"] ==
+             "generation_time"
+
+    assert hd(posture["fields"])["text"] == "generation_time -> receipt_time"
   end
 
   defp invalidation_field_value(invalidation, data_label) do

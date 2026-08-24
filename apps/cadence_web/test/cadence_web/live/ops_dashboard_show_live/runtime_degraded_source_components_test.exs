@@ -23,37 +23,82 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         }
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation =
+      html
+      |> runtime_degraded_source_vue(
+        "dashboard-source-execution-degraded-summary-component",
+        "summary"
+      )
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-source-execution-degraded-summary")
-             |> LazyHTML.attribute("data-source-execution-degraded-count")
+    assert presentation |> Map.keys() |> Enum.sort() ==
+             ["fields", "fields_class", "headline", "heading", "kind", "root"]
 
-    assert ["telemetry:request-1"] =
-             document
-             |> LazyHTML.query("#dashboard-source-execution-degraded-summary")
-             |> LazyHTML.attribute("data-source-execution-degraded-identity")
+    assert presentation["root"]["id"] == "dashboard-source-execution-degraded-summary"
 
-    assert ["flight"] =
-             document
-             |> LazyHTML.query("#dashboard-source-execution-degraded-summary")
-             |> LazyHTML.attribute("data-source-execution-realm")
+    assert presentation["root"]["class"] ==
+             "border border-warning/30 bg-warning/10 px-3 py-2 text-sm"
 
-    assert "source_degraded" =
-             document
-             |> LazyHTML.query(~s([data-source-execution-field="Status"]))
-             |> selected_text()
+    assert presentation["heading"] == %{
+             "class" => "hud-label",
+             "text" => "Source execution degraded"
+           }
 
-    assert "wait_for_refresh" =
-             document
-             |> LazyHTML.query(~s([data-source-execution-field="Runtime"]))
-             |> selected_text()
+    assert presentation["headline"] == %{
+             "class" => "mt-1 text-base-content",
+             "text" => "Source execution degraded."
+           }
 
-    assert "inspect_source" =
-             document
-             |> LazyHTML.query(~s([data-source-execution-field="Operator"]))
-             |> selected_text()
+    attrs = presentation["root"]["attrs"]
+
+    assert attrs["data-source-execution-degraded-count"] == "1"
+    assert attrs["data-source-execution-degraded-identity"] == "telemetry:request-1"
+    assert attrs["data-source-execution-realm"] == "flight"
+
+    assert attrs == %{
+             "data-diagnostics-section" => "Source execution degraded",
+             "data-source-execution-binding" => "binding-flight",
+             "data-source-execution-data-source" => "questdb-flight",
+             "data-source-execution-degraded-count" => "1",
+             "data-source-execution-degraded-identity" => "telemetry:request-1",
+             "data-source-execution-degraded-status" => "source_degraded",
+             "data-source-execution-operator-action" => "inspect_source",
+             "data-source-execution-realm" => "flight",
+             "data-source-execution-request" => "request-1",
+             "data-source-execution-runtime-action" => "wait_for_refresh"
+           }
+
+    assert Enum.map(presentation["fields"], & &1["label"]["text"]) == [
+             "Source",
+             "Status",
+             "Runtime",
+             "Operator"
+           ]
+
+    assert Enum.map(presentation["fields"], & &1["key"]) == [
+             "Source",
+             "Status",
+             "Runtime",
+             "Operator"
+           ]
+
+    fields = Map.new(presentation["fields"], &{&1["label"]["text"], &1["value"]})
+
+    assert fields["Status"]["text"] == "source_degraded"
+    assert fields["Runtime"]["text"] == "wait_for_refresh"
+    assert fields["Operator"]["text"] == "inspect_source"
+
+    assert Enum.map(presentation["fields"], & &1["value"]["attrs"]) == [
+             %{"data-source-execution-field" => "Source"},
+             %{"data-source-execution-field" => "Status"},
+             %{"data-source-execution-field" => "Runtime"},
+             %{"data-source-execution-field" => "Operator"}
+           ]
+
+    assert Enum.uniq(Enum.map(presentation["fields"], & &1["value"]["class"])) == [
+             "font-mono text-base-content break-all"
+           ]
   end
 
   test "degraded_source_summary renders nothing when hidden" do
@@ -62,11 +107,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         summary: %{visible?: false}
       )
 
-    document = LazyHTML.from_fragment(html)
-
     assert [] =
-             document
-             |> LazyHTML.query("#dashboard-source-execution-degraded-summary")
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-source-execution-degraded-summary-component")
              |> LazyHTML.attribute("id")
   end
 
@@ -97,54 +141,123 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         ]
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation =
+      html
+      |> runtime_degraded_source_vue(
+        "dashboard-degraded-source-drilldowns-component",
+        "drilldowns"
+      )
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
 
-    assert ["request-1", "request-2"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("data-degraded-source-drilldown")
+    assert presentation |> Map.keys() |> Enum.sort() ==
+             ["heading", "items", "items_container", "kind", "root"]
 
-    assert ["open_evidence", "open_evidence"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("phx-click")
+    assert presentation["root"] == %{
+             "attrs" => %{"data-diagnostics-section" => "Degraded sources"},
+             "class" => "space-y-2",
+             "id" => nil
+           }
 
-    assert ["source", "source"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("phx-value-kind")
+    assert presentation["heading"] == %{"class" => "hud-label", "text" => "Degraded sources"}
 
-    assert ["execution", "execution"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("phx-value-source-evidence-mode")
+    assert presentation["items_container"] == %{
+             "class" => "space-y-2",
+             "id" => "dashboard-degraded-source-drilldowns"
+           }
 
-    assert ["telemetry", "events"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("phx-value-logical-source")
+    [telemetry, events] = presentation["items"]
 
-    assert document
-           |> LazyHTML.query("[data-degraded-source-drilldown]")
-           |> selected_text() =~ "telemetry:request-1:source_degraded"
+    assert Enum.map(presentation["items"], & &1["key"]) == [
+             "degraded-source-drilldown-0",
+             "degraded-source-drilldown-1"
+           ]
 
-    assert document
-           |> LazyHTML.query("[data-degraded-source-drilldown]")
-           |> selected_text() =~ "wait_for_refresh:inspect_source"
+    assert Enum.map(presentation["items"], & &1["attrs"]["data-degraded-source-drilldown"]) ==
+             ["request-1", "request-2"]
 
-    assert ["source_degraded", "source_unavailable"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("data-degraded-source-status")
+    assert Enum.map(presentation["items"], & &1["attrs"]["phx-click"]) == [
+             "open_evidence",
+             "open_evidence"
+           ]
 
-    assert ["wait_for_refresh", "wait_for_source_health"] =
-             document
-             |> LazyHTML.query("[data-degraded-source-drilldown]")
-             |> LazyHTML.attribute("data-degraded-source-runtime-action")
+    assert Enum.map(presentation["items"], & &1["evidence_attrs"]["phx-value-kind"]) == [
+             "source",
+             "source"
+           ]
 
-    assert document
-           |> LazyHTML.query("[data-degraded-source-drilldown]")
-           |> selected_text() =~ "events:request-2:source_unavailable"
+    assert Enum.map(
+             presentation["items"],
+             & &1["evidence_attrs"]["phx-value-source-evidence-mode"]
+           ) == ["execution", "execution"]
+
+    assert Enum.map(
+             presentation["items"],
+             & &1["evidence_attrs"]["phx-value-logical-source"]
+           ) == ["telemetry", "events"]
+
+    assert telemetry["primary"]["text"]["text"] =~ "telemetry:request-1:source_degraded"
+    assert hd(telemetry["fields"])["text"] =~ "wait_for_refresh:inspect_source"
+    assert Enum.map(telemetry["fields"], & &1["key"]) == ["actions"]
+
+    assert Enum.map(presentation["items"], & &1["attrs"]["data-degraded-source-status"]) ==
+             ["source_degraded", "source_unavailable"]
+
+    assert Enum.map(
+             presentation["items"],
+             & &1["attrs"]["data-degraded-source-runtime-action"]
+           ) == ["wait_for_refresh", "wait_for_source_health"]
+
+    assert events["primary"]["text"]["text"] =~ "events:request-2:source_unavailable"
+
+    assert telemetry["attrs"] == %{
+             "data-degraded-source-drilldown" => "request-1",
+             "data-degraded-source-logical-source" => "telemetry",
+             "data-degraded-source-operator-action" => "inspect_source",
+             "data-degraded-source-runtime-action" => "wait_for_refresh",
+             "data-degraded-source-status" => "source_degraded",
+             "phx-click" => "open_evidence"
+           }
+
+    assert telemetry["evidence_attrs"] == %{
+             "phx-value-data-source-id" => "questdb-flight",
+             "phx-value-kind" => "source",
+             "phx-value-logical-source" => "telemetry",
+             "phx-value-realm" => "flight",
+             "phx-value-source-binding-id" => "binding-flight",
+             "phx-value-source-evidence-mode" => "execution",
+             "phx-value-source-request-id" => "request-1"
+           }
+
+    assert events["evidence_attrs"] == %{
+             "phx-value-data-source-id" => "events-store",
+             "phx-value-kind" => "source",
+             "phx-value-logical-source" => "events",
+             "phx-value-realm" => "rehearsal",
+             "phx-value-source-binding-id" => "events-binding",
+             "phx-value-source-evidence-mode" => "execution",
+             "phx-value-source-request-id" => "request-2"
+           }
+
+    assert telemetry["render_attrs"] == Map.merge(telemetry["attrs"], telemetry["evidence_attrs"])
+    assert events["render_attrs"] == Map.merge(events["attrs"], events["evidence_attrs"])
+
+    assert Enum.map(presentation["items"], & &1["type"]) == ["button", "button"]
+
+    assert telemetry["class"] ==
+             "w-full border border-warning/30 bg-warning/5 px-2 py-2 text-left text-xs hover:bg-warning/10"
+
+    assert telemetry["primary"] == %{
+             "class" => "flex items-center gap-2",
+             "icon" => %{
+               "class" => "h-3.5 w-3.5 text-warning",
+               "name" => "hero-document-magnifying-glass"
+             },
+             "text" => %{
+               "class" => "font-mono text-base-content break-all",
+               "text" => "telemetry:request-1:source_degraded"
+             }
+           }
   end
 
   test "degraded_source_drilldowns renders nothing without drilldowns" do
@@ -153,11 +266,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         drilldowns: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    assert [] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-degraded-source-drilldowns-component")
+             |> LazyHTML.attribute("id")
+
+    non_list_html =
+      render_component(&RuntimeDegradedSourceComponents.degraded_source_drilldowns/1,
+        drilldowns: nil
+      )
 
     assert [] =
-             document
-             |> LazyHTML.query("#dashboard-degraded-source-drilldowns")
+             non_list_html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-degraded-source-drilldowns-component")
              |> LazyHTML.attribute("id")
   end
 
@@ -186,56 +309,70 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         ]
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation =
+      html
+      |> runtime_degraded_source_vue(
+        "dashboard-source-dependency-causes-component",
+        "dependency_causes"
+      )
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-source-dependency-causes")
-             |> LazyHTML.attribute("data-source-dependency-cause-count")
+    assert presentation["root"]["attrs"]["data-source-dependency-cause-count"] == "1"
+    [dependency] = presentation["items"]
+    assert dependency["attrs"]["data-source-dependency-cause"] == "req-limits"
+    assert dependency["evidence_attrs"]["phx-value-logical-source"] == "telemetry"
+    assert dependency["evidence_attrs"]["phx-value-source-request-id"] == "req-circuit"
+    assert dependency["evidence_attrs"]["phx-value-source-evidence-mode"] == "execution"
+    assert dependency["evidence_attrs"]["phx-value-source-binding-id"] == "binding-flight"
+    assert dependency["attrs"]["data-source-dependency-upstream-status"] == "source_degraded"
+    assert dependency["primary"]["text"]["text"] =~ "Limits waiting on telemetry input"
 
-    assert ["req-limits"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("data-source-dependency-cause")
+    assert Enum.map(dependency["fields"], & &1["text"]) == [
+             "limits:req-limits -> telemetry:req-circuit",
+             "source_degraded:wait_for_source_health:stale"
+           ]
 
-    assert ["telemetry"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("phx-value-logical-source")
+    assert Enum.map(dependency["fields"], & &1["key"]) == ["path", "upstream"]
 
-    assert ["req-circuit"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("phx-value-source-request-id")
+    assert Enum.map(dependency["fields"], & &1["attrs"]) == [
+             %{"data-source-dependency-field" => "Path"},
+             %{"data-source-dependency-field" => "Upstream"}
+           ]
 
-    assert ["execution"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("phx-value-source-evidence-mode")
+    assert dependency["attrs"] == %{
+             "data-source-dependency-cause" => "req-limits",
+             "data-source-dependency-request-source" => "limits",
+             "data-source-dependency-upstream-request" => "req-circuit",
+             "data-source-dependency-upstream-runtime-action" => "wait_for_source_health",
+             "data-source-dependency-upstream-source" => "telemetry",
+             "data-source-dependency-upstream-status" => "source_degraded",
+             "data-source-dependency-upstream-watermark-state" => "stale",
+             "phx-click" => "open_evidence"
+           }
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("phx-value-source-binding-id")
+    assert dependency["evidence_attrs"] == %{
+             "phx-value-data-source-id" => "questdb-flight",
+             "phx-value-kind" => "source",
+             "phx-value-logical-source" => "telemetry",
+             "phx-value-realm" => "flight",
+             "phx-value-source-binding-id" => "binding-flight",
+             "phx-value-source-evidence-mode" => "execution",
+             "phx-value-source-request-id" => "req-circuit"
+           }
 
-    assert ["source_degraded"] =
-             document
-             |> LazyHTML.query("[data-source-dependency-cause]")
-             |> LazyHTML.attribute("data-source-dependency-upstream-status")
+    assert dependency["render_attrs"] ==
+             Map.merge(dependency["attrs"], dependency["evidence_attrs"])
 
-    assert document
-           |> LazyHTML.query("[data-source-dependency-cause]")
-           |> selected_text() =~ "Limits waiting on telemetry input"
+    assert dependency["type"] == "button"
 
-    assert "limits:req-limits -> telemetry:req-circuit" =
-             document
-             |> LazyHTML.query(~s([data-source-dependency-field="Path"]))
-             |> selected_text()
+    assert dependency["class"] ==
+             "w-full border border-warning/30 bg-warning/5 px-2 py-2 text-left text-xs hover:bg-warning/10"
 
-    assert "source_degraded:wait_for_source_health:stale" =
-             document
-             |> LazyHTML.query(~s([data-source-dependency-field="Upstream"]))
-             |> selected_text()
+    assert dependency["primary"]["icon"] == %{
+             "class" => "h-3.5 w-3.5 text-warning",
+             "name" => "hero-arrow-path"
+           }
   end
 
   test "source_dependency_causes renders nothing without dependency evidence" do
@@ -244,17 +381,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
         dependencies: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    assert [] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-source-dependency-causes-component")
+             |> LazyHTML.attribute("id")
+
+    non_list_html =
+      render_component(&RuntimeDegradedSourceComponents.source_dependency_causes/1,
+        dependencies: :unavailable
+      )
 
     assert [] =
-             document
-             |> LazyHTML.query("#dashboard-source-dependency-causes")
+             non_list_html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-source-dependency-causes-component")
              |> LazyHTML.attribute("id")
   end
 
-  defp selected_text(document) do
-    document
-    |> LazyHTML.text()
-    |> String.trim()
+  defp runtime_degraded_source_vue(html, id, kind) do
+    vue = LiveVue.Test.get_vue(html, id: id)
+
+    assert vue.component == "RuntimeDegradedSource"
+    assert vue.id == id
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == kind
+
+    vue
   end
 end
