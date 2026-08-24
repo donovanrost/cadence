@@ -20,144 +20,137 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Readiness")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:application_summary, application_summary)
-     |> assign(:type_binding, type_binding)
-     |> stream_configure(:readiness_applications, dom_id: &application_dom_id/1)
-     |> stream(:readiness_applications, applications)}
+     |> assign(
+       :readiness_page,
+       readiness_page_dto(mission, spacecraft, application_summary, type_binding)
+     )
+     |> assign(
+       :readiness_panels,
+       readiness_panels_dto(mission, spacecraft, application_summary, type_binding)
+     )
+     |> assign(:readiness_applications, Enum.map(applications, &application_dto/1))}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-    <div id="spacecraft-readiness-page" class="space-y-6">
-      <.page_header
-        title="Readiness"
-        subtitle="Identity, profile, and application setup for this spacecraft."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {@current_spacecraft.display_name,
-           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-          {"Readiness", nil}
-        ]}
-      >
-        <:title_suffix>&middot; {@current_spacecraft.display_name}</:title_suffix>
-        <:actions>
-          <.status_badge status={
-            overall_status(@current_spacecraft, @application_summary, @type_binding)
-          } />
-        </:actions>
-      </.page_header>
-
-      <div class="grid gap-4 xl:grid-cols-2">
-        <.readiness_panel
-          id="spacecraft-readiness-identity"
-          title="Identity"
-          status={identity_status(@current_spacecraft)}
-          status_label={identity_status_label(@current_spacecraft)}
-          description={identity_description(@current_spacecraft)}
-          action_label="Edit Identity"
-          action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-          }
-        >
-          <:detail label="SCID" value={format_scid(@current_spacecraft.scid)} />
-        </.readiness_panel>
-
-        <.readiness_panel
-          id="spacecraft-readiness-profile"
-          title="Spacecraft Profile"
-          status={profile_status(@type_binding)}
-          status_label={profile_status_label(@type_binding)}
-          description={profile_description(@type_binding)}
-          action_label={profile_action_label(@type_binding)}
-          action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-          }
-        >
-          <:detail label="Pinned Profile" value={profile_detail(@type_binding)} />
-        </.readiness_panel>
-
-        <.readiness_panel
-          id="spacecraft-readiness-applications"
-          title="Applications"
-          status={@application_summary.status.tone}
-          status_label={@application_summary.status.label}
-          description={@application_summary.description}
-          action_label={@application_summary.action_label}
-          action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"
-          }
-        >
-          <div id="spacecraft-readiness-application-list" phx-update="stream">
-            <p
-              id="spacecraft-readiness-applications-empty"
-              class="hidden only:block text-sm text-base-content/60"
-            >
-              No profile applications declared.
-            </p>
-            <div :for={{dom_id, application} <- @streams.readiness_applications} id={dom_id}>
-              <.detail_row label={application.display_name} value={application.status.label} />
-            </div>
-          </div>
-        </.readiness_panel>
-
-        <.readiness_panel
-          id="spacecraft-readiness-routing"
-          title="Routing"
-          status={:info}
-          status_label="Tracked in Comms"
-          description="Routing Rules describe durable spacecraft use of mission transports."
-          action_label="Review Routing"
-          action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/routing"
-          }
-        >
-          <:detail label="Setup Area" value="Routing Rules" />
-        </.readiness_panel>
-      </div>
-    </div>
+      <.vue
+        id="spacecraft-readiness-component"
+        v-component="SpacecraftReadiness"
+        page={@readiness_page}
+        panels={@readiness_panels}
+        applications={@readiness_applications}
+        v-ssr={false}
+      />
     </Layouts.app>
     """
   end
 
-  attr :id, :string, required: true
-  attr :title, :string, required: true
-  attr :status, :atom, required: true
-  attr :status_label, :string, required: true
-  attr :description, :string, required: true
-  attr :action_label, :string, default: nil
-  attr :action_navigate, :string, default: nil
-
-  slot :detail do
-    attr :label, :string, required: true
-    attr :value, :string, required: true
+  defp readiness_page_dto(mission, spacecraft, application_summary, type_binding) do
+    %{
+      id: "spacecraft-readiness-page",
+      title: "Readiness",
+      title_suffix: "· #{spacecraft.display_name}",
+      subtitle: "Identity, profile, and application setup for this spacecraft.",
+      breadcrumbs: [
+        breadcrumb_dto(mission.display_name, ~p"/missions/#{mission.mission_id}"),
+        breadcrumb_dto("Spacecraft", ~p"/missions/#{mission.mission_id}/spacecraft"),
+        breadcrumb_dto(
+          spacecraft.display_name,
+          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+        ),
+        breadcrumb_dto("Readiness", nil)
+      ],
+      status: status_dto(overall_status(spacecraft, application_summary, type_binding))
+    }
   end
 
-  slot :inner_block
+  defp readiness_panels_dto(mission, spacecraft, application_summary, type_binding) do
+    identity_href =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
 
-  defp readiness_panel(assigns) do
-    ~H"""
-    <.card id={@id}>
-      <div class="flex items-start justify-between gap-4">
-        <p class="hud-label">{@title}</p>
-        <.status_badge status={@status} label={@status_label} />
-      </div>
-      <h2 class="mt-3 text-base font-semibold">{@status_label}</h2>
-      <p class="mt-1 text-sm text-base-content/70">{@description}</p>
+    applications_href =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
 
-      <div class="mt-5 space-y-1">
-        <.detail_row :for={detail <- @detail} label={detail.label} value={detail.value} />
-        {render_slot(@inner_block)}
-      </div>
+    routing_href =
+      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
 
-      <.button :if={@action_navigate} navigate={@action_navigate} class="mt-5">
-        {@action_label}
-      </.button>
-    </.card>
-    """
+    [
+      panel_dto(
+        "spacecraft-readiness-identity",
+        "Identity",
+        status_dto(identity_status(spacecraft), identity_status_label(spacecraft)),
+        identity_description(spacecraft),
+        [detail_dto("SCID", format_scid(spacecraft.scid))],
+        action_dto("Edit Identity", identity_href)
+      ),
+      panel_dto(
+        "spacecraft-readiness-profile",
+        "Spacecraft Profile",
+        status_dto(profile_status(type_binding), profile_status_label(type_binding)),
+        profile_description(type_binding),
+        [detail_dto("Pinned Profile", profile_detail(type_binding))],
+        action_dto(profile_action_label(type_binding), identity_href)
+      ),
+      panel_dto(
+        "spacecraft-readiness-applications",
+        "Applications",
+        status_dto(application_summary.status.tone, application_summary.status.label),
+        application_summary.description,
+        [],
+        action_dto(application_summary.action_label, applications_href),
+        %{
+          id: "spacecraft-readiness-application-list",
+          empty_state: %{
+            id: "spacecraft-readiness-applications-empty",
+            description: "No profile applications declared."
+          }
+        }
+      ),
+      panel_dto(
+        "spacecraft-readiness-routing",
+        "Routing",
+        status_dto(:info, "Tracked in Comms"),
+        "Routing Rules describe durable spacecraft use of mission transports.",
+        [detail_dto("Setup Area", "Routing Rules")],
+        action_dto("Review Routing", routing_href)
+      )
+    ]
   end
+
+  defp panel_dto(id, title, status, description, details, action, application_list \\ nil) do
+    %{
+      id: id,
+      title: title,
+      status: status,
+      description: description,
+      details: details,
+      action: action,
+      application_list: application_list
+    }
+  end
+
+  defp breadcrumb_dto(label, href), do: %{label: label, href: href}
+  defp detail_dto(label, value), do: %{label: label, value: value}
+  defp action_dto(label, href), do: %{label: label, href: href}
+
+  defp application_dto(application) do
+    %{
+      id: application_dom_id(application),
+      application_key: application.application_key,
+      display_name: application.display_name,
+      status: status_dto(application.status.tone, application.status.label)
+    }
+  end
+
+  defp status_dto(tone), do: status_dto(tone, status_label(tone))
+  defp status_dto(tone, label), do: %{tone: Atom.to_string(tone), label: label}
+
+  defp status_label(:ready), do: "Ready"
+  defp status_label(:attention), do: "Needs Work"
+  defp status_label(:blocked), do: "Missing"
+  defp status_label(:info), do: "Setup"
 
   defp load_applications(scope, nil, host_context) do
     load_declared_applications(scope, host_context, %{})
