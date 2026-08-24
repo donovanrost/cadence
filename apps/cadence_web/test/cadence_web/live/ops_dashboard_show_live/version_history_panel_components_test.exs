@@ -35,49 +35,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    version_list =
+      LiveVue.Test.get_vue(html, id: "dashboard-version-overview-component")
+
+    [draft, published] = version_list.props["presentation"]["versions"]["list"]["rows"]
 
     assert ["2"] =
-             document
-             |> LazyHTML.query("#dashboard-version-list > li")
-             |> LazyHTML.attribute("id")
+             version_list.props["presentation"]["versions"]["list"]["rows"]
+             |> Enum.map(& &1["attrs"]["id"])
              |> Enum.map(&String.replace_prefix(&1, "dashboard-version-", ""))
              |> Enum.take(1)
 
     assert ["published"] =
-             document
-             |> LazyHTML.query("#dashboard-version-1 [data-version-pointer]")
-             |> LazyHTML.attribute("data-version-pointer")
+             Enum.map(
+               published["identity"]["pointers"],
+               & &1["attrs"]["data-version-pointer"]
+             )
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-version-2")
-             |> LazyHTML.attribute("data-version-publish-available")
+    assert "true" = draft["attrs"]["data-version-publish-available"]
 
-    assert ["already_latest"] =
-             document
-             |> LazyHTML.query("#dashboard-version-2")
-             |> LazyHTML.attribute("data-version-restore-reason")
+    assert "already_latest" = draft["attrs"]["data-version-restore-reason"]
 
-    assert "draft save" =
-             document
-             |> LazyHTML.query(~s(#dashboard-version-2 [data-version-field="Summary"]))
-             |> selected_text()
+    assert "draft save" = draft["summary"]["text"]
 
-    assert ["draft_save"] =
-             document
-             |> LazyHTML.query("#dashboard-version-2")
-             |> LazyHTML.attribute("data-version-lineage-kind")
+    assert "draft_save" = draft["attrs"]["data-version-lineage-kind"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-version-2")
-             |> LazyHTML.attribute("data-version-lineage-source-version")
+    assert "1" = draft["attrs"]["data-version-lineage-source-version"]
 
     assert "Draft saved from v1" =
-             document
-             |> LazyHTML.query(~s(#dashboard-version-2 [data-version-field="Origin"]))
-             |> selected_text()
+             draft["details"]["rows"]
+             |> Enum.find(&(&1["key"] == "origin"))
+             |> get_in(["value", "text"])
   end
 
   test "versions_panel filters and selects health snapshot activity" do
