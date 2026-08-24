@@ -30,24 +30,26 @@ defmodule CadenceWeb.LiveVueClipboardTestSupportTest do
       assert_clipboard_button(html, ~s(#copy-route[data-clipboard-text*="panel=evidence"))
     end
 
-    assert catch_error(assert_clipboard_button(html, "#missing-route"))
+    assert_raise RuntimeError, ~r/No Vue component found with id="missing-route-component"/, fn ->
+      assert_clipboard_button(html, "#missing-route")
+    end
 
-    assert catch_error(
-             assert_clipboard_button(
-               html,
-               ~s(#copy-route[data-clipboard-text*="panel=data_link"])
-             )
-           )
+    assert_raise ExUnit.AssertionError, fn ->
+      assert_clipboard_button(
+        html,
+        ~s(#copy-route[data-clipboard-text*="panel=data_link"])
+      )
+    end
 
-    assert catch_error(
-             render_mismatched_clipboard_button(component: "OtherButton")
-             |> assert_clipboard_button("#copy-route")
-           )
+    assert_raise ExUnit.AssertionError, fn ->
+      render_mismatched_clipboard_button(component: "OtherButton")
+      |> assert_clipboard_button("#copy-route")
+    end
 
-    assert catch_error(
-             render_mismatched_clipboard_button(button_id: "other-route")
-             |> assert_clipboard_button("#copy-route")
-           )
+    assert_raise ExUnit.AssertionError, fn ->
+      render_mismatched_clipboard_button(button_id: "other-route")
+      |> assert_clipboard_button("#copy-route")
+    end
   end
 
   defp render_clipboard_button do
