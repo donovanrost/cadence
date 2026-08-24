@@ -28,16 +28,37 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/planning")
 
-    assert has_element?(view, "#ops-fleet-planning-page")
-    assert has_element?(view, "#fleet-planning-runs-empty")
-    assert has_element?(view, "#fleet-planning-policy-required")
-    assert has_element?(view, "#new-fleet-planning-run-link")
-    assert has_element?(view, "#requirement-templates-link")
+    assert has_element?(view, "#ops-fleet-planning-component.contents")
 
     assert has_element?(
              view,
              ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/planning"][class*="text-primary"])
            )
+
+    planning_vue = fleet_planning_vue(view)
+
+    assert planning_vue.component == "OpsFleetPlanning"
+    assert planning_vue.class == "contents"
+    assert planning_vue.ssr == false
+    assert planning_vue.slots == %{}
+
+    assert planning_vue.handlers == %{
+             "refresh-planning" => Phoenix.LiveView.JS.push("refresh-planning")
+           }
+
+    assert planning_vue.props ==
+             workspace_props(
+               mission,
+               stopped_control_metrics(),
+               stopped_policy_props(mission),
+               ledger_props(0, ledger_empty_props())
+             )
+
+    assert fleet_run_stream_mutations(planning_vue) == [
+             ["replace", "/fleet_runs", []]
+           ]
+
+    assert_json_safe_fleet_planning_vue(planning_vue)
 
     {:ok, new_view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/planning/new")
@@ -103,6 +124,101 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert has_element?(template_view, "#ops-requirement-templates-page")
     assert has_element?(template_view, "#requirement-template-admin-required")
+  end
+
+  test "planning workspace refresh replaces the ledger with exact run contracts" do
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope(:organization_admin)
+    activate_policy!(scope, mission)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    horizon_end = DateTime.add(now, 6, :hour)
+
+    assert {:ok, requirement, _version} =
+             ContactRequirements.create(
+               scope,
+               mission.mission_id,
+               requirement_attrs(spacecraft.spacecraft_id, now),
+               now: now
+             )
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning")
+
+    initial_vue = fleet_planning_vue(view)
+
+    assert initial_vue.props ==
+             workspace_props(
+               mission,
+               active_control_metrics("0"),
+               nil,
+               ledger_props(0, ledger_empty_props())
+             )
+
+    assert fleet_run_stream_mutations(initial_vue) == [
+             ["replace", "/fleet_runs", []]
+           ]
+
+    assert {:ok, queued_run, [_queued_ref]} =
+             FleetPlanningRuns.create(scope, mission.mission_id, %{
+               horizon_start: now,
+               horizon_end: horizon_end,
+               trigger_kind: :manual
+             })
+
+    assert {:ok, partial_source, [_partial_ref]} =
+             FleetPlanningRuns.create(scope, mission.mission_id, %{
+               horizon_start: now,
+               horizon_end: horizon_end,
+               trigger_kind: :scheduled
+             })
+
+    assert {:ok, failed_source, [_failed_ref]} =
+             FleetPlanningRuns.create(scope, mission.mission_id, %{
+               horizon_start: now,
+               horizon_end: horizon_end,
+               trigger_kind: :manual
+             })
+
+    partial_run = finish_partial_run!(scope, mission, partial_source, requirement)
+
+    assert {:ok, failed_run} =
+             FleetPlanningRuns.fail(
+               scope,
+               mission.mission_id,
+               failed_source.fleet_planning_run_id,
+               :queued,
+               %{"code" => "provider_search_unavailable"}
+             )
+
+    render_hook(view, "refresh-planning", %{})
+
+    refreshed_vue = fleet_planning_vue(view)
+
+    assert refreshed_vue.props ==
+             workspace_props(
+               mission,
+               active_control_metrics("2"),
+               nil,
+               ledger_props(3, nil)
+             )
+
+    expected_rows = %{
+      queued_run.fleet_planning_run_id => queued_run_props(queued_run, mission),
+      partial_run.fleet_planning_run_id => partial_run_props(partial_run, mission),
+      failed_run.fleet_planning_run_id => failed_run_props(failed_run, mission)
+    }
+
+    assert Map.new(fleet_run_upserts(refreshed_vue), &{&1["fleet_planning_run_id"], &1}) ==
+             expected_rows
+
+    assert [
+             ["replace", "/fleet_runs", []],
+             ["upsert", "/fleet_runs/-", _first_run],
+             ["upsert", "/fleet_runs/-", _second_run],
+             ["upsert", "/fleet_runs/-", _third_run]
+           ] = fleet_run_stream_mutations(refreshed_vue)
+
+    assert_json_safe_fleet_planning_vue(refreshed_vue)
   end
 
   test "an organization administrator creates and activates the exact fleet policy in UI" do
@@ -381,6 +497,335 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert finished.phase == :finished
   end
+
+  defp fleet_planning_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-component")
+  end
+
+  defp fleet_run_upserts(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/fleet_runs/" <> _index, _run] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, run] -> run end)
+  end
+
+  defp fleet_run_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe_fleet_planning_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp workspace_props(mission, control_metrics, stopped_policy, ledger) do
+    %{
+      "page" => %{
+        "id" => "ops-fleet-planning-page",
+        "header" => %{
+          "eyebrow" => "Mission operations / fleet horizon",
+          "title" => "Fleet Planning",
+          "copy" =>
+            "Turn exact mission needs into one explainable provider commitment manifest. Healthy capacity stays quiet; gaps, contested resources, and stale evidence rise here."
+        }
+      },
+      "actions" => %{
+        "refresh" => %{
+          "id" => "refresh-fleet-planning",
+          "icon" => "hero-arrow-path",
+          "label" => "Refresh"
+        },
+        "policy" => %{
+          "id" => "fleet-planning-policy-link",
+          "href" => "/missions/#{mission.mission_id}/ops/planning/policy",
+          "icon" => "hero-adjustments-horizontal",
+          "label" => "Policy"
+        },
+        "new_run" => %{
+          "id" => "new-fleet-planning-run-link",
+          "href" => "/missions/#{mission.mission_id}/ops/planning/new",
+          "icon" => "hero-play",
+          "label" => "Plan horizon"
+        }
+      },
+      "control_metrics" => control_metrics,
+      "stopped_policy" => stopped_policy,
+      "ledger" => ledger,
+      "journey" => %{
+        "id" => "fleet-planning-journey",
+        "eyebrow" => "Operating loop",
+        "steps" => [
+          %{
+            "id" => "fleet-planning-journey-01",
+            "number" => "01",
+            "label" => "Demand",
+            "detail" => "Requirements and recurring templates"
+          },
+          %{
+            "id" => "fleet-planning-journey-02",
+            "number" => "02",
+            "label" => "Search",
+            "detail" => "Provider-owned opportunities"
+          },
+          %{
+            "id" => "fleet-planning-journey-03",
+            "number" => "03",
+            "label" => "Allocate",
+            "detail" => "Hard constraints before score"
+          },
+          %{
+            "id" => "fleet-planning-journey-04",
+            "number" => "04",
+            "label" => "Commit",
+            "detail" => "Exact Plan approval and execution"
+          },
+          %{
+            "id" => "fleet-planning-journey-05",
+            "number" => "05",
+            "label" => "Repair",
+            "detail" => "Preserve uncertain and successful work"
+          }
+        ]
+      },
+      "recurring_demand" => %{
+        "id" => "fleet-planning-recurring-demand-panel",
+        "eyebrow" => "Recurring demand",
+        "copy" =>
+          "Templates generate ordinary Requirements. They do not bypass the planning or approval journey.",
+        "action" => %{
+          "id" => "requirement-templates-link",
+          "href" => "/missions/#{mission.mission_id}/ops/requirement-templates",
+          "label" => "Manage templates",
+          "icon" => "hero-arrow-right"
+        }
+      }
+    }
+  end
+
+  defp stopped_control_metrics do
+    [
+      control_metric_props(
+        "fleet-planning-active-policy",
+        "Active policy",
+        "STOPPED",
+        "no approved boundary",
+        "warning"
+      ),
+      control_metric_props(
+        "fleet-planning-recurring-demand",
+        "Recurring demand",
+        "0",
+        "active templates",
+        "quiet"
+      ),
+      control_metric_props(
+        "fleet-planning-automation",
+        "Automation",
+        "0",
+        "active exact grants",
+        "muted"
+      ),
+      control_metric_props(
+        "fleet-planning-exceptions",
+        "Exceptions",
+        "0",
+        "partial or failed runs",
+        "quiet"
+      )
+    ]
+  end
+
+  defp active_control_metrics(exception_count) do
+    [
+      control_metric_props(
+        "fleet-planning-active-policy",
+        "Active policy",
+        "v1",
+        "24h maximum horizon",
+        "quiet"
+      ),
+      control_metric_props(
+        "fleet-planning-recurring-demand",
+        "Recurring demand",
+        "0",
+        "active templates",
+        "quiet"
+      ),
+      control_metric_props(
+        "fleet-planning-automation",
+        "Automation",
+        "0",
+        "active exact grants",
+        "muted"
+      ),
+      control_metric_props(
+        "fleet-planning-exceptions",
+        "Exceptions",
+        exception_count,
+        "partial or failed runs",
+        if(exception_count == "0", do: "quiet", else: "warning")
+      )
+    ]
+  end
+
+  defp control_metric_props(id, label, value, detail, tone) do
+    %{"id" => id, "label" => label, "value" => value, "detail" => detail, "tone" => tone}
+  end
+
+  defp stopped_policy_props(mission) do
+    %{
+      "id" => "fleet-planning-policy-required",
+      "eyebrow" => "Planning is intentionally stopped",
+      "title" => "Approve a fleet policy before searching providers.",
+      "copy" =>
+        "The policy fixes horizon, concurrency, resource, budget, repair, and automation boundaries.",
+      "action" => %{
+        "id" => "configure-fleet-planning-policy",
+        "href" => "/missions/#{mission.mission_id}/ops/planning/policy",
+        "label" => "Configure policy"
+      }
+    }
+  end
+
+  defp ledger_props(count, empty) do
+    %{
+      "eyebrow" => "Run ledger",
+      "copy" => "Immutable inputs, durable checkpoints, and ordinary candidate Plans.",
+      "count" => count,
+      "count_label" => "#{count} runs",
+      "runs_id" => "fleet-planning-runs",
+      "stream_empty_id" => "fleet-planning-runs-stream-empty",
+      "empty" => empty
+    }
+  end
+
+  defp ledger_empty_props do
+    %{
+      "id" => "fleet-planning-runs-empty",
+      "icon" => "hero-chart-bar-square",
+      "title" => "No fleet horizon has been planned",
+      "copy" =>
+        "Start with a bounded UTC horizon. Cadence will materialize recurring needs, search ready provider routes, and retain every decision."
+    }
+  end
+
+  defp queued_run_props(run, mission) do
+    fleet_run_props(
+      run,
+      mission,
+      %{
+        "state" => "queued",
+        "label" => "queued",
+        "tone" => "primary",
+        "class" =>
+          "border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-primary"
+      },
+      %{"kind" => "manual", "label" => "manual"},
+      %{"state" => "queued", "width_class" => "h-full w-[8%] bg-primary/55"},
+      %{"label" => "Coverage", "value" => "0/1", "shortfall" => false, "tone" => "quiet"}
+    )
+  end
+
+  defp partial_run_props(run, mission) do
+    fleet_run_props(
+      run,
+      mission,
+      %{
+        "state" => "partial",
+        "label" => "partial",
+        "tone" => "warning",
+        "class" =>
+          "border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-warning"
+      },
+      %{"kind" => "scheduled", "label" => "scheduled"},
+      %{"state" => "finished", "width_class" => "h-full w-full bg-primary/80"},
+      %{"label" => "Coverage", "value" => "1/1", "shortfall" => true, "tone" => "warning"}
+    )
+  end
+
+  defp failed_run_props(run, mission) do
+    fleet_run_props(
+      run,
+      mission,
+      %{
+        "state" => "failed",
+        "label" => "failed",
+        "tone" => "error",
+        "class" =>
+          "border border-error/40 bg-error/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-error"
+      },
+      %{"kind" => "manual", "label" => "manual"},
+      %{"state" => "finished", "width_class" => "h-full w-full bg-primary/80"},
+      %{
+        "label" => "Coverage",
+        "value" => "Stopped",
+        "shortfall" => true,
+        "tone" => "warning"
+      }
+    )
+  end
+
+  defp fleet_run_props(run, mission, lifecycle, trigger, phase, coverage) do
+    horizon_start = fleet_time(run.horizon_start)
+    horizon_end = fleet_time(run.horizon_end)
+
+    %{
+      "id" => run.fleet_planning_run_id,
+      "__dom_id" => "fleet-planning-run-#{run.fleet_planning_run_id}",
+      "fleet_planning_run_id" => run.fleet_planning_run_id,
+      "href" =>
+        "/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}",
+      "lifecycle" => lifecycle,
+      "trigger" => trigger,
+      "horizon" => %{
+        "label" => "UTC horizon",
+        "start" => horizon_start,
+        "end" => horizon_end,
+        "value" => "#{horizon_start} → #{horizon_end}"
+      },
+      "phase" => phase,
+      "coverage" => coverage,
+      "open_icon" => "hero-chevron-right"
+    }
+  end
+
+  defp finish_partial_run!(scope, mission, run, requirement) do
+    [
+      {:queued, :materializing, %{}},
+      {:materializing, :searching, %{}},
+      {:searching, :optimizing, %{}},
+      {:optimizing, :materializing_plan, %{}},
+      {:materializing_plan, :finished,
+       %{
+         outcome: :partial,
+         result_summary_document: %{
+           "coverage" => %{
+             requirement.contact_requirement_id => %{"state" => "satisfied"}
+           }
+         }
+       }}
+    ]
+    |> Enum.reduce(run, fn {expected, next, attrs}, current ->
+      assert {:ok, advanced} =
+               FleetPlanningRuns.advance_phase(
+                 scope,
+                 mission.mission_id,
+                 current.fleet_planning_run_id,
+                 expected,
+                 next,
+                 attrs
+               )
+
+      advanced
+    end)
+  end
+
+  defp fleet_time(datetime), do: Calendar.strftime(datetime, "%d %b %H:%MZ")
 
   defp activate_policy!(scope, mission) do
     assert {:ok, policy, version} =
