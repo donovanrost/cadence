@@ -17,8 +17,7 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
          socket
          |> assign(:page_title, revision.revision_label)
          |> assign(:nav_item, :catalog)
-         |> assign(:revision, revision)
-         |> assign_revision_context(organization_id, mission.mission_id, revision)}
+         |> assign_revision_context(organization_id, mission, revision)}
 
       {:error, _reason} ->
         {:ok,
@@ -28,7 +27,9 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
     end
   end
 
-  defp assign_revision_context(socket, organization_id, mission_id, revision) do
+  defp assign_revision_context(socket, organization_id, mission, revision) do
+    mission_id = mission.mission_id
+
     database =
       fetch_optional(fn ->
         Catalog.fetch_database(organization_id, mission_id, revision.catalog_database_id)
@@ -62,118 +63,144 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
         )
       end)
 
+    runtime_plans = runtime_plans || %{}
+
     socket
-    |> assign(:database, database)
-    |> assign(:artifact, artifact)
-    |> assign(:import_run, import_run)
-    |> assign(:mission_model, mission_model)
-    |> assign(:runtime_plans, runtime_plans || %{})
+    |> assign(:revision, revision_header_dto(revision))
+    |> assign(:navigation, navigation_dto(mission, database, revision))
+    |> assign(:provenance, provenance_dto(mission_id, revision, database, artifact, import_run))
+    |> assign(:runtime_usage, runtime_usage_dto())
+    |> assign(:mission_model, mission_model_dto(mission_model, runtime_plans))
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title={@revision.revision_label}
-        breadcrumbs={revision_breadcrumb_items(assigns)}
-      >
-        <:title_suffix>Revision {@revision.revision_number}</:title_suffix>
-      </.page_header>
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <.card title="Revision provenance" class="lg:col-span-2">
-          <div class="divide-y divide-base-300 mt-3">
-            <.detail_row label="Database" value={@database && @database.name} />
-            <.detail_row label="Artifact">
-              <.maybe_artifact_link current_mission={@current_mission} artifact={@artifact} />
-            </.detail_row>
-            <.detail_row label="Import run">
-              <.maybe_run_link current_mission={@current_mission} run={@import_run} />
-            </.detail_row>
-            <.detail_row label="Content SHA-256">
-              <span class="font-mono text-xs break-all">{@revision.content_sha256}</span>
-            </.detail_row>
-          </div>
-        </.card>
-
-        <.card title="Runtime usage">
-          <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
-            No runtime bindings yet.
-          </p>
-          <.button variant={:ghost} class="mt-3" disabled>
-            Use this revision in runtime
-          </.button>
-        </.card>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="catalog-revision-show-page">
+        <.vue
+          id="catalog-revision-show-component"
+          v-component="CatalogRevisionShow"
+          revision={@revision}
+          navigation={@navigation}
+          provenance={@provenance}
+          runtime_usage={@runtime_usage}
+          mission_model={@mission_model}
+          v-ssr={false}
+        />
       </div>
-
-      <.mission_model_card mission_model={@mission_model} runtime_plans={@runtime_plans} />
-    </div>
+    </Layouts.app>
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :artifact, :map, default: nil
-
-  defp maybe_artifact_link(%{artifact: nil} = assigns) do
-    ~H"""
-    <span>—</span>
-    """
+  defp revision_header_dto(revision) do
+    %{
+      title: revision.revision_label,
+      number_label: "Revision #{revision.revision_number}"
+    }
   end
 
-  defp maybe_artifact_link(assigns) do
-    ~H"""
-    <.link
-      navigate={
-        ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}"
+  defp navigation_dto(mission, nil, revision) do
+    %{
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Catalog", href: ~p"/missions/#{mission.mission_id}/catalog"},
+        %{label: revision.revision_label, href: nil}
+      ]
+    }
+  end
+
+  defp navigation_dto(mission, database, revision) do
+    %{
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Catalog", href: ~p"/missions/#{mission.mission_id}/catalog"},
+        %{
+          label: database.name,
+          href:
+            ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+        },
+        %{label: revision.revision_label, href: nil}
+      ]
+    }
+  end
+
+  defp provenance_dto(mission_id, revision, database, artifact, import_run) do
+    %{
+      id: "catalog-revision-provenance",
+      title: "Revision provenance",
+      rows: [
+        detail_row("Database", database && database.name),
+        detail_row("Artifact", artifact && artifact.artifact_name,
+          href: artifact_href(artifact, mission_id)
+        ),
+        detail_row("Import run", import_run && import_run.import_run_id,
+          href: import_run_href(import_run, mission_id),
+          style: "mono"
+        ),
+        detail_row("Content SHA-256", revision.content_sha256, style: "hash")
+      ]
+    }
+  end
+
+  defp artifact_href(nil, _mission_id), do: nil
+
+  defp artifact_href(artifact, mission_id) do
+    ~p"/missions/#{mission_id}/catalog/artifacts/#{artifact.artifact_id}"
+  end
+
+  defp import_run_href(nil, _mission_id), do: nil
+
+  defp import_run_href(import_run, mission_id) do
+    ~p"/missions/#{mission_id}/catalog/imports/#{import_run.import_run_id}"
+  end
+
+  defp runtime_usage_dto do
+    %{
+      id: "catalog-revision-runtime-usage",
+      title: "Runtime usage",
+      summary_id: "catalog-runtime-usage-summary",
+      summary: "No runtime bindings yet.",
+      action: %{
+        id: "catalog-revision-runtime-action",
+        label: "Use this revision in runtime",
+        disabled: true
       }
-      class="hover:underline"
-    >
-      {@artifact.artifact_name}
-    </.link>
-    """
+    }
   end
 
-  attr :current_mission, :map, required: true
-  attr :run, :map, default: nil
-
-  defp maybe_run_link(%{run: nil} = assigns) do
-    ~H"""
-    <span>—</span>
-    """
+  defp mission_model_dto(nil, _runtime_plans) do
+    %{
+      id: "catalog-mission-model",
+      title: "Mission Model",
+      available: false,
+      empty_message: "Mission Model unavailable.",
+      rows: []
+    }
   end
 
-  defp maybe_run_link(assigns) do
-    ~H"""
-    <.link
-      navigate={~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@run.import_run_id}"}
-      class="font-mono hover:underline"
-    >
-      {@run.import_run_id}
-    </.link>
-    """
+  defp mission_model_dto(mission_model, runtime_plans) do
+    %{
+      id: "catalog-mission-model",
+      title: "Mission Model",
+      available: true,
+      empty_message: "Mission Model unavailable.",
+      rows: [
+        detail_row("Revision", mission_model.revision_id, style: "hash"),
+        detail_row("Declarations", map_size(mission_model.declarations)),
+        detail_row("Space systems", map_size(mission_model.space_systems)),
+        detail_row("Ready plans", ready_plan_count(runtime_plans))
+      ]
+    }
   end
 
-  attr :mission_model, :map, default: nil
-  attr :runtime_plans, :map, required: true
-
-  defp mission_model_card(assigns) do
-    ~H"""
-    <.card id="catalog-mission-model" title="Mission Model">
-      <%= if @mission_model do %>
-        <div class="divide-y divide-base-300 mt-3">
-          <.detail_row label="Revision">
-            <span class="font-mono text-xs break-all">{@mission_model.revision_id}</span>
-          </.detail_row>
-          <.detail_row label="Declarations" value={map_size(@mission_model.declarations)} />
-          <.detail_row label="Space systems" value={map_size(@mission_model.space_systems)} />
-          <.detail_row label="Ready plans" value={ready_plan_count(@runtime_plans)} />
-        </div>
-      <% else %>
-        <.empty_state compact title="Mission Model unavailable." class="mt-2" />
-      <% end %>
-    </.card>
-    """
+  defp detail_row(label, value, opts \\ []) do
+    %{
+      label: label,
+      value: value,
+      href: Keyword.get(opts, :href),
+      style: Keyword.get(opts, :style, "default")
+    }
   end
 
   defp ready_plan_count(plans) do
@@ -185,27 +212,5 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
       {:ok, value} -> value
       {:error, _reason} -> nil
     end
-  end
-
-  defp revision_breadcrumb_items(%{current_mission: mission, database: nil, revision: revision}) do
-    [
-      {mission.display_name, ~p"/missions/#{mission.mission_id}"},
-      {"Catalog", ~p"/missions/#{mission.mission_id}/catalog"},
-      {revision.revision_label, nil}
-    ]
-  end
-
-  defp revision_breadcrumb_items(%{
-         current_mission: mission,
-         database: database,
-         revision: revision
-       }) do
-    [
-      {mission.display_name, ~p"/missions/#{mission.mission_id}"},
-      {"Catalog", ~p"/missions/#{mission.mission_id}/catalog"},
-      {database.name,
-       ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"},
-      {revision.revision_label, nil}
-    ]
   end
 end
