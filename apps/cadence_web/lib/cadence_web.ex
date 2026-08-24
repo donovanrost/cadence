@@ -50,20 +50,11 @@ defmodule CadenceWeb do
   defp html_helpers do
     quote do
       import Phoenix.HTML
-      import CadenceWeb.Components.ApplicationDiagnostics
-      import CadenceWeb.Components.ApplicationDomainAction
-      import CadenceWeb.Components.ApplicationLifecycleAction
-      import CadenceWeb.Components.ApplicationPreflight
       import CadenceWeb.Components.Badges
       import CadenceWeb.Components.Button
       import CadenceWeb.Components.Card
-      import CadenceWeb.Components.ExtensionConfiguration
       import CadenceWeb.Components.FormInputs
-      import CadenceWeb.Components.Forms
-      import CadenceWeb.Components.ListControls
       import CadenceWeb.Components.OpsContextRail
-      import CadenceWeb.Components.PageHeader
-      import CadenceWeb.Components.Table
       import CadenceWeb.CoreComponents
       import CadenceWeb.UI
 

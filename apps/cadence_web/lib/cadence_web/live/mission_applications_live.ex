@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Applications.{ActionConfirmation, HostContext, LifecycleActions}
-  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryCard, ApplicationInventoryLifecycle}
+  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryLifecycle}
   alias Phoenix.LiveView.JS
 
   @impl true
@@ -202,7 +202,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
   end
 
   defp application_row_dto(application, host_context, mission_id) do
-    card_id = ApplicationInventoryCard.dom_id(host_context, application.application_key)
+    card_id = ApplicationInventory.dom_id(host_context, application.application_key)
 
     %{
       id: card_id,

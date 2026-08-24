@@ -3,8 +3,6 @@ defmodule CadenceWeb.CoreComponents do
 
   use Phoenix.Component
 
-  import CadenceWeb.Components.Button, only: [button: 1]
-
   attr :name, :string, required: true
   attr :class, :string, default: nil
   attr :rest, :global
@@ -14,42 +12,6 @@ defmodule CadenceWeb.CoreComponents do
     <span class={[@name, @class]} {@rest}></span>
     """
   end
-
-  @doc """
-  Renders a colored status indicator dot. Same vocabulary as `status_badge/1`
-  in `CadenceWeb.Components.Badges` — denser visual for tight layouts.
-
-  ## Examples
-
-      <.status_dot status={:ready} />
-      <.status_dot status={:attention} size={:sm} />
-  """
-  attr :status, :atom,
-    required: true,
-    values: [:ready, :attention, :blocked, :info]
-
-  attr :size, :atom, values: [:sm, :md], default: :md
-  attr :class, :string, default: nil
-
-  def status_dot(assigns) do
-    ~H"""
-    <span class={[
-      "rounded-full flex-shrink-0",
-      size_class(@size),
-      status_color(@status),
-      @class
-    ]}>
-    </span>
-    """
-  end
-
-  defp size_class(:sm), do: "w-1.5 h-1.5"
-  defp size_class(:md), do: "w-2 h-2"
-
-  defp status_color(:ready), do: "bg-success"
-  defp status_color(:attention), do: "bg-warning"
-  defp status_color(:blocked), do: "bg-error"
-  defp status_color(:info), do: "bg-info"
 
   @doc """
   Renders a key-value detail row. Wrap multiple rows in a `divide-y divide-base-300`
@@ -86,56 +48,6 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
-  Renders an empty state placeholder for lists and tables with no data.
-
-  ## Examples
-
-      <.empty_state
-        icon="hero-building-office"
-        title="No organizations"
-        description="Create your first organization to get started."
-        action_label="Create Organization"
-        action_navigate={~p"/admin/organizations/new"}
-      />
-  """
-  attr :icon, :string, default: nil
-  attr :title, :string, required: true
-  attr :description, :string, default: nil
-  attr :action_label, :string, default: nil
-  attr :action_navigate, :string, default: nil
-  attr :action_patch, :string, default: nil
-
-  attr :compact, :boolean,
-    default: false,
-    doc: "muted one-line message for inside a card/sub-panel"
-
-  attr :class, :string, default: nil
-
-  def empty_state(%{compact: true} = assigns) do
-    ~H"""
-    <p class={["text-sm text-base-content/60", @class]}>{@title}</p>
-    """
-  end
-
-  def empty_state(assigns) do
-    ~H"""
-    <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
-      <span :if={@icon} class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
-      <p class={["hud-label", @icon && "mt-3"]}>{@title}</p>
-      <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
-        {@description}
-      </p>
-      <div :if={@action_label} class="mt-5">
-        <.button navigate={@action_navigate} patch={@action_patch}>
-          <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
-          {@action_label}
-        </.button>
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
   Renders an inline callout — a contextual in-page message that belongs where
   it appears (a failed import's reason, a warning about dropped selections).
   Not a toast: transient action feedback goes through flash.
@@ -166,67 +78,4 @@ defmodule CadenceWeb.CoreComponents do
   defp callout_class(:warning), do: "border-warning/40 bg-warning/10"
   defp callout_class(:error), do: "border-error/40 bg-error/10"
   defp callout_class(:success), do: "border-success/40 bg-success/10"
-
-  @doc """
-  Renders a panel/section header bar with an uppercase label and optional right-side controls.
-
-  ## Examples
-
-      <.panel_header label="Active Alarms" count={5}>
-        <:controls>
-          <.button variant={:ghost} size={:xs}>Filter</.button>
-        </:controls>
-      </.panel_header>
-  """
-  attr :label, :string, required: true
-  attr :count, :integer, default: nil
-  attr :class, :string, default: nil
-  slot :controls
-
-  def panel_header(assigns) do
-    ~H"""
-    <div class={["flex items-center justify-between px-2 py-1.5 border-b border-base-300", @class]}>
-      <div class="flex items-center gap-2">
-        <span class="hud-label">{@label}</span>
-        <span :if={@count} class="text-xs text-base-content/60">({@count})</span>
-      </div>
-      <div :if={@controls != []} class="flex items-center gap-1">
-        {render_slot(@controls)}
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
-  Renders a list item row with a status dot, name, detail text, and optional right-side info.
-
-  ## Examples
-
-      <.list_item
-        name={target.name}
-        detail={target.identifier}
-        status={:online}
-        badge={target.type}
-      />
-  """
-  attr :name, :string, required: true
-  attr :detail, :string, default: nil
-  attr :status, :atom, default: nil
-  attr :badge, :string, default: nil
-  attr :class, :string, default: nil
-
-  def list_item(assigns) do
-    ~H"""
-    <div class={["flex items-center justify-between py-2", @class]}>
-      <div class="flex items-center gap-3">
-        <.status_dot :if={@status} status={@status} />
-        <div>
-          <p class="font-medium text-sm">{@name}</p>
-          <p :if={@detail} class="text-xs text-base-content/60">{@detail}</p>
-        </div>
-      </div>
-      <span :if={@badge} class="text-xs text-base-content/60">{@badge}</span>
-    </div>
-    """
-  end
 end

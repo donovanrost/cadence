@@ -1,32 +1,12 @@
+# Test-only compatibility renderer preserving the pre-LiveVue component contract.
 defmodule CadenceWeb.Components.ListControls do
-  @moduledoc """
-  Search toolbar and pagination footer for fleet-scale list pages.
-
-  Contract: these components own markup and event emission only — the
-  LiveView owns state, URL, and data fetch. Handlers for the emitted
-  events (`"search"`, `"sort"`, `"paginate"` by default) should translate
-  into `push_patch` so all list state lives in the URL
-  (`?q=&sort=&dir=&page=&filter=`) and stays shareable and
-  back-button-safe. Parse params with `CadenceWeb.ListParams` and fetch
-  via a paged context function (e.g. `Cadence.SpacecraftStore.list_spacecraft_page/3`).
-  See `CadenceWeb.SpacecraftListLive` for the canonical pattern.
-
-  Lists that are organizationally bounded (missions, profiles, catalog)
-  can skip these controls; adopt them opportunistically when a list can
-  realistically exceed a screenful.
-  """
+  @moduledoc false
 
   use Phoenix.Component
 
   import CadenceWeb.Components.Button, only: [button: 1]
   import CadenceWeb.Components.FormInputs, only: [input: 1]
 
-  @doc """
-  Renders a search row for the top of a flush card, above a `<.table>`.
-
-  Emits `@on_search` (default `"search"`) with `%{"q" => term}` as the
-  user types, debounced.
-  """
   attr :id, :string, required: true
   attr :search, :string, default: nil
   attr :placeholder, :string, default: "Search"
@@ -68,12 +48,6 @@ defmodule CadenceWeb.Components.ListControls do
     """
   end
 
-  @doc """
-  Renders a pagination footer from `Cadence.Listing.Page` fields.
-
-  Emits `@on_paginate` (default `"paginate"`) with `%{"page" => n}`.
-  Renders nothing when everything fits on one page.
-  """
   attr :id, :string, required: true
   attr :page, :integer, required: true
   attr :page_size, :integer, required: true
