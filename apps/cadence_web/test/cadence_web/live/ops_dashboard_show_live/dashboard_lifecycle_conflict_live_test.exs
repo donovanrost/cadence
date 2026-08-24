@@ -55,24 +55,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
     {:ok, list_view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards?lifecycle=archived")
 
-    assert has_element?(
-             list_view,
-             ~s(#restore-dashboard-#{dashboard.dashboard_id}[phx-value-expected-version="1"])
-           )
+    [archived_row] = directory_rows(list_view)
+
+    assert archived_row["restore"] == %{
+             "id" => "restore-dashboard-#{dashboard.dashboard_id}",
+             "label" => "Restore",
+             "icon" => "hero-arrow-uturn-left",
+             "payload" => %{
+               "dashboard-id" => dashboard.dashboard_id,
+               "expected-version" => "1"
+             },
+             "disabled" => false,
+             "lifecycle_action" => "restore",
+             "action_available" => "true"
+           }
 
     bump_dashboard_row_latest_version!(org, mission, dashboard, 2)
 
-    html =
-      list_view
-      |> element("#restore-dashboard-#{dashboard.dashboard_id}")
-      |> render_click()
+    html = render_hook(list_view, "restore_dashboard", archived_row["restore"]["payload"])
 
     assert html =~ "Dashboard changed in another session. Reloaded version 2"
 
-    assert has_element?(
-             list_view,
-             ~s(#dashboard-directory-row-#{dashboard.dashboard_id}[data-dashboard-directory-lifecycle="archived"])
-           )
+    assert [%{"lifecycle" => %{"state" => "archived"}}] = directory_rows(list_view)
 
     assert [] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -116,10 +120,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
                expected_version: Document.version(dashboard)
              )
 
-    html =
-      view
-      |> element("#dashboard-activity-publish")
-      |> render_click()
+    html = render_hook(view, "publish_version", %{"version" => "1"})
 
     assert html =~ "Failed to publish dashboard"
 
@@ -160,10 +161,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
                expected_version: Document.version(dashboard)
              )
 
-    html =
-      view
-      |> element("#dashboard-settings-archive")
-      |> render_click()
+    html = render_hook(view, "archive_dashboard", %{})
 
     assert html =~ "Failed to archive dashboard"
 
@@ -182,5 +180,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleConflictLiveTest do
                mission.mission_id,
                dashboard.dashboard_id
              )
+  end
+
+  defp directory_rows(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "ops-dashboard-directory-component")
+    |> Map.fetch!(:streams_diff)
+    |> Enum.filter(fn
+      ["upsert", "/dashboard_directory/" <> _index, _row] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, row] -> row end)
   end
 end

@@ -57,16 +57,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/settings"
       )
 
-    view
-    |> form("#dashboard-settings-form",
-      settings: %{
-        name: "Power North",
-        description: "EPS",
-        tags: "",
-        defaults_json: "{}"
+    render_hook(view, "save_settings", %{
+      "settings" => %{
+        "name" => "Power North",
+        "description" => "EPS",
+        "tags" => "",
+        "defaults_json" => "{}"
       }
-    )
-    |> render_submit()
+    })
 
     renamed = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -75,13 +73,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
     assert version.change_summary == "Updated dashboard settings"
     assert version.created_by == user.user_id
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-settings-form input[name="settings[name]"][value="Power North"])
-           )
+    settings_vue = LiveVue.Test.get_vue(view, id: "ops-dashboard-settings-component")
 
-    assert has_element?(view, "#dashboard-settings-archive")
-    refute has_element?(view, ~s(button[phx-click="delete_dashboard"]))
+    assert settings_vue.props["settings_form"]["fields"]["name"]["value"] == "Power North"
+
+    assert settings_vue.props["page"]["lifecycle"]["archive"]["id"] ==
+             "dashboard-settings-archive"
+
+    refute Map.has_key?(settings_vue.handlers, "delete_dashboard")
   end
 
   test "publishes a historical version from the versions panel without discarding the newer draft" do
@@ -114,10 +113,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
       )
 
-    view |> element("#dashboard-version-1") |> render_click()
-    view |> element("#dashboard-activity-publish") |> render_click()
+    activity_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
 
-    assert has_element?(view, ~s([data-dashboard-activity-type="published"]))
+    render_patch(view, activity_path <> "?version=1")
+    render_hook(view, "publish_version", %{"version" => "1"})
+
+    assert "published" in activity_event_types(view)
 
     {:ok, viewer, _html} = live(conn, show_path(mission, dashboard))
     render_dashboard_async(viewer)
@@ -151,5 +153,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
     assert published.event_type == :published
     assert published.dashboard_version == 1
     assert published.actor_id == user.user_id
+  end
+
+  defp activity_event_types(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-activity-events-component")
+    |> Map.fetch!(:streams_diff)
+    |> Enum.flat_map(fn
+      ["upsert", "/dashboard_activity/" <> _index, event] -> [event["event_type"]]
+      _operation -> []
+    end)
   end
 end

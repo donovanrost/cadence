@@ -18,8 +18,17 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
 
     {:ok, directory, _html} = live(conn, directory_path(mission))
 
-    assert has_element?(directory, "#dashboard-directory-import")
-    assert has_element?(directory, "#clone-dashboard-#{source.dashboard_id}")
+    directory_vue = LiveVue.Test.get_vue(directory, id: "ops-dashboard-directory-component")
+
+    assert Enum.any?(
+             directory_vue.props["page"]["header"]["author_actions"],
+             &(&1["id"] == "dashboard-directory-import")
+           )
+
+    assert Enum.any?(
+             stream_upserts(directory_vue, "dashboard_directory"),
+             &(&1["clone"]["id"] == "clone-dashboard-#{source.dashboard_id}")
+           )
 
     {:ok, clone_view, _html} =
       live(
@@ -226,6 +235,15 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
 
   defp dashboard_new_vue(view) do
     LiveVue.Test.get_vue(view, id: "ops-dashboard-new-component")
+  end
+
+  defp stream_upserts(vue, stream_name) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", path, _item] -> String.starts_with?(path, "/#{stream_name}/")
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, item] -> item end)
   end
 
   defp signed_in_user_org_and_mission do

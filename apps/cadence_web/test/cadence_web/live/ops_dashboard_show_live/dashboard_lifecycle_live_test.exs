@@ -147,8 +147,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
 
     {:ok, activity, _html} = live(conn, activity_path)
     assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="2"]))
-    activity |> element("#dashboard-activity-publish") |> render_click()
-    assert has_element?(activity, ~s([data-dashboard-activity-type="published"]))
+    render_hook(activity, "publish_version", %{"version" => "2"})
+    assert "published" in activity_event_types(activity)
 
     assert [%Cadence.Dashboards.DashboardSummary{} = published_summary] =
              Cadence.Dashboards.list_dashboard_summaries(
@@ -160,18 +160,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     assert published_summary.draft_version == nil
     assert published_summary.published_version == 2
 
-    activity |> element("#dashboard-version-1") |> render_click()
+    render_patch(activity, activity_path <> "?version=1")
     assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="1"]))
-    activity |> element("#dashboard-activity-restore") |> render_click()
+    render_hook(activity, "restore_version", %{"version" => "1"})
 
     restored_draft = fetch_dashboard_document!(org, mission, created_summary)
     assert Document.version(restored_draft) == 3
     assert restored_draft.name == "Lifecycle Console"
     assert restored_draft.placements == []
-    assert has_element?(activity, ~s([data-dashboard-activity-type="reverted"]))
+    assert "reverted" in activity_event_types(activity)
 
     {:ok, settings, _html} = live(conn, settings_path)
-    settings |> element("#dashboard-settings-archive") |> render_click()
+    render_hook(settings, "archive_dashboard", %{})
 
     assert %{"info" => "Dashboard archived."} =
              assert_redirect(settings, ~p"/missions/#{mission.mission_id}/ops/dashboards")
@@ -194,19 +194,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     {:ok, list_view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards?lifecycle=all")
 
-    assert has_element?(
-             list_view,
-             ~s(#dashboard-directory-row-#{created_summary.dashboard_id}[data-dashboard-directory-lifecycle="archived"])
-           )
+    [archived_row] = directory_rows(list_view)
+    assert archived_row["dashboard_id"] == created_summary.dashboard_id
+    assert archived_row["lifecycle"]["state"] == "archived"
 
-    list_view
-    |> element("#restore-dashboard-#{created_summary.dashboard_id}")
-    |> render_click()
+    render_hook(list_view, "restore_dashboard", archived_row["restore"]["payload"])
 
-    assert has_element?(
-             list_view,
-             ~s(#dashboard-directory-row-#{created_summary.dashboard_id}[data-dashboard-directory-lifecycle="active"])
-           )
+    [restored_row] = directory_rows(list_view)
+    assert restored_row["dashboard_id"] == created_summary.dashboard_id
+    assert restored_row["lifecycle"]["state"] == "active"
 
     assert [
              %Cadence.Dashboards.LifecycleEvent{event_type: :published, dashboard_version: 2},
@@ -232,10 +228,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
            )
 
     {:ok, final_activity, _html} = live(conn, activity_path)
-    assert has_element?(final_activity, ~s([data-dashboard-activity-type="published"]))
-    assert has_element?(final_activity, ~s([data-dashboard-activity-type="reverted"]))
-    assert has_element?(final_activity, ~s([data-dashboard-activity-type="archived"]))
-    assert has_element?(final_activity, ~s([data-dashboard-activity-type="restored"]))
+    final_event_types = activity_event_types(final_activity)
+    assert "published" in final_event_types
+    assert "reverted" in final_event_types
+    assert "archived" in final_event_types
+    assert "restored" in final_event_types
 
     assert Cadence.Dashboards.list_lifecycle_events(
              org.organization_id,
@@ -244,5 +241,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
            )
            |> List.last()
            |> Map.fetch!(:actor_id) == user.user_id
+  end
+
+  defp activity_event_types(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-activity-events-component")
+    |> Map.fetch!(:streams_diff)
+    |> Enum.flat_map(fn
+      ["upsert", "/dashboard_activity/" <> _index, event] -> [event["event_type"]]
+      _operation -> []
+    end)
+  end
+
+  defp directory_rows(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "ops-dashboard-directory-component")
+    |> Map.fetch!(:streams_diff)
+    |> Enum.flat_map(fn
+      ["upsert", "/dashboard_directory/" <> _index, row] -> [row]
+      _operation -> []
+    end)
   end
 end

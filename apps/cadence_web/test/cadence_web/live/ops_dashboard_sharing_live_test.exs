@@ -21,11 +21,9 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/settings?scope_kind=spacecraft&scope_id=sc-1&time_mode=archive&from=2026-08-01T00%3A00%3A00Z&to=2026-08-01T01%3A00%3A00Z&ignored_secret=never"
       )
 
-    settings
-    |> form("#dashboard-share-form",
-      share: %{data_visibility: "definition_only", expires_in_hours: "4"}
-    )
-    |> render_submit()
+    render_hook(settings, "create_share", %{
+      "share" => %{"data_visibility" => "definition_only", "expires_in_hours" => "4"}
+    })
 
     assert [share] =
              Management.list_shares(
@@ -89,9 +87,9 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
     refute has_element?(share_view, "#dashboard-share-context")
     refute has_element?(share_view, "#dashboard-share-open-dashboard")
 
-    settings
-    |> form("#dashboard-snapshot-form", snapshot: %{data_visibility: "authorized_runtime_data"})
-    |> render_submit()
+    render_hook(settings, "create_snapshot", %{
+      "snapshot" => %{"data_visibility" => "authorized_runtime_data"}
+    })
 
     assert [snapshot] =
              Management.list_snapshots(

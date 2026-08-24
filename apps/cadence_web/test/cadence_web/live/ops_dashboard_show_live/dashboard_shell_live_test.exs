@@ -33,8 +33,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
       {conn, _org, mission} = signed_in_org_and_mission()
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
-      assert has_element?(view, "#ops-dashboards-page")
-      assert has_element?(view, "#dashboard-directory-empty")
+      directory_vue = dashboard_directory_vue(view)
+      assert directory_vue.props["page"]["id"] == "ops-dashboards-page"
+      assert directory_vue.props["page"]["list"]["empty"]["id"] == "dashboard-directory-empty"
+      assert directory_rows(directory_vue) == []
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 
@@ -135,16 +137,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
                  true
                )
 
-      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
-      assert has_element?(
-               view,
-               ~s(#ops-dashboards-page a[href="#{show_path(mission, dashboard)}"])
-             )
+      [directory_row] = view |> dashboard_directory_vue() |> directory_rows()
+
+      assert directory_row["open"]["href"] == show_path(mission, dashboard)
+      assert directory_row["name"] == "Thermal"
+      assert directory_row["widget_version_label"] == "0 widgets · v1"
 
       assert has_element?(view, ~s(#ops-nav-rail a[href="#{show_path(mission, dashboard)}"]))
-      assert html =~ "Thermal"
-      assert html =~ "0 widgets"
       assert has_element?(view, "#ops-utc-clock")
 
       utc_clock = LiveVue.Test.get_vue(view, id: "ops-utc-clock")
@@ -184,5 +185,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
                  |> LazyHTML.attribute("data-ops-context-collapsed-section")
       end
     end
+  end
+
+  defp dashboard_directory_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-dashboard-directory-component")
+  end
+
+  defp directory_rows(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/dashboard_directory/" <> _index, _row] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, row] -> row end)
   end
 end

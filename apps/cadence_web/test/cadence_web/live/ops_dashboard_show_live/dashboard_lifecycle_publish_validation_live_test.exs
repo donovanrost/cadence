@@ -75,7 +75,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view |> element("#dashboard-activity-publish") |> render_click()
+      render_hook(view, "publish_version", %{"version" => "1"})
 
       assert has_element?(
                view,
@@ -140,7 +140,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecyclePublishValidationLiv
                ~s([data-publish-validation-severity="warning"][data-publish-validation-code="unknown_widget_type"])
              )
 
-      view |> element("#dashboard-activity-publish") |> render_click()
+      render_hook(view, "publish_version", %{
+        "version" => Integer.to_string(Document.version(warning_document))
+      })
 
       {:ok, viewer, _html} =
         live(

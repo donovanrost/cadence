@@ -178,16 +178,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
   end
 
   defp save_runtime_defaults(view, dashboard, defaults) do
-    view
-    |> form("#dashboard-settings-form",
-      settings: %{
-        name: dashboard.name,
-        description: dashboard.description || "",
-        tags: "",
-        defaults_json: Jason.encode!(defaults)
+    render_hook(view, "save_settings", %{
+      "settings" => %{
+        "name" => dashboard.name,
+        "description" => dashboard.description || "",
+        "tags" => "",
+        "defaults_json" => Jason.encode!(defaults)
       }
-    )
-    |> render_submit()
+    })
   end
 
   defp fetch_dashboard_document!(org, mission, dashboard) do

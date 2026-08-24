@@ -82,15 +82,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleRestoreHistoryLiveTe
       )
 
     assert has_element?(activity, ~s(#dashboard-version-detail[data-selected-version="2"]))
-    assert has_element?(activity, "#dashboard-version-1")
-    assert has_element?(activity, ~s([data-dashboard-activity-type="published"]))
-    assert has_element?(activity, ~s(#dashboard-activity-restore[disabled]))
+    assert Enum.any?(activity_versions(activity), &(&1["version"] == 1))
+    assert "published" in activity_event_types(activity)
+    assert activity_restore_action(activity)["disabled"] == true
 
-    activity |> element("#dashboard-version-1") |> render_click()
-    refute has_element?(activity, ~s(#dashboard-activity-restore[disabled]))
-    activity |> element("#dashboard-activity-restore") |> render_click()
+    activity_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
 
-    assert has_element?(activity, ~s([data-dashboard-activity-type="reverted"]))
+    render_patch(activity, activity_path <> "?version=1")
+    assert activity_restore_action(activity)["disabled"] == false
+    render_hook(activity, "restore_version", %{"version" => "1"})
+
+    assert "reverted" in activity_event_types(activity)
 
     {:ok, restored_view, _html} = live(conn, show_path(mission, dashboard))
     render_dashboard_async(restored_view)
@@ -124,5 +127,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleRestoreHistoryLiveTe
     assert summary.latest_version == 3
     assert summary.draft_version == 3
     assert summary.published_version == 2
+  end
+
+  defp activity_versions(view) do
+    activity_stream_upserts(view, "dashboard-activity-versions-component", "dashboard_versions")
+  end
+
+  defp activity_event_types(view) do
+    view
+    |> activity_stream_upserts("dashboard-activity-events-component", "dashboard_activity")
+    |> Enum.map(& &1["event_type"])
+  end
+
+  defp activity_restore_action(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-activity-detail-component")
+    |> Map.fetch!(:props)
+    |> get_in(["selected_version_detail", "actions", "restore"])
+  end
+
+  defp activity_stream_upserts(view, component_id, stream_name) do
+    view
+    |> LiveVue.Test.get_vue(id: component_id)
+    |> Map.fetch!(:streams_diff)
+    |> Enum.flat_map(fn
+      ["upsert", path, item] ->
+        if String.starts_with?(path, "/#{stream_name}/"), do: [item], else: []
+
+      _operation ->
+        []
+    end)
   end
 end
