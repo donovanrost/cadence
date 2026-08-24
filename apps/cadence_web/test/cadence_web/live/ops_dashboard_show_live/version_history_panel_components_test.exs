@@ -68,8 +68,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              |> get_in(["value", "text"])
 
     assert summary["publish_validation"] == nil
-    assert summary["publish_impact"] == nil
-    assert summary["runtime_defaults"] == nil
+
+    assert summary["publish_impact"]["root"]["attrs"] == %{
+             "id" => "dashboard-publish-impact",
+             "class" => "space-y-2 border border-base-300/70 bg-base-100/40 p-2",
+             "data-dashboard-publish-impact-state" => "no_runtime_context_change",
+             "data-dashboard-publish-impact-severity" => "success",
+             "data-dashboard-publish-impact-from-version" => "v1",
+             "data-dashboard-publish-impact-to-version" => "v2",
+             "data-dashboard-publish-impact-from-realm" => "-",
+             "data-dashboard-publish-impact-to-realm" => "-",
+             "data-dashboard-publish-impact-from-source-binding" => "primary",
+             "data-dashboard-publish-impact-to-source-binding" => "primary",
+             "data-dashboard-publish-impact-from-data-view" => "canonical",
+             "data-dashboard-publish-impact-to-data-view" => "canonical"
+           }
+
+    assert summary["publish_impact"]["header"]["badge"] == %{
+             "attrs" => %{
+               "class" => "badge badge-xs badge-success",
+               "data-dashboard-publish-impact-label" => "runtime defaults unchanged"
+             },
+             "text" => "runtime defaults unchanged"
+           }
+
+    assert summary["publish_impact"]["message"] == %{
+             "attrs" => %{
+               "class" => "text-xs text-base-content/70",
+               "data-dashboard-publish-impact-message" => ""
+             },
+             "text" => "Publishing keeps operators on primary / canonical."
+           }
+
+    assert summary["runtime_defaults"]["root"]["attrs"][
+             "data-dashboard-runtime-defaults-differ"
+           ] == "false"
 
     assert [] =
              html
