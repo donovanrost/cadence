@@ -14,24 +14,24 @@ defmodule CadenceWeb.OpsContactRecordLive do
         window_start = contact_start(scheduled_contact, realized_contact)
         window_end = contact_end(scheduled_contact, realized_contact, window_start)
         canonical_id = canonical_id(scheduled_contact, realized_contact)
+        lifecycle_state = lifecycle_state(scheduled_contact, realized_contact)
 
         {:ok,
          socket
          |> assign(:page_title, "Contact #{canonical_id}")
          |> assign(:ops_nav_item, :contacts)
-         |> assign(:canonical_id, canonical_id)
-         |> assign(:scheduled_contact, scheduled_contact)
-         |> assign(:realized_contact, realized_contact)
-         |> assign(:lifecycle_state, lifecycle_state(scheduled_contact, realized_contact))
-         |> assign(:window_start, window_start)
-         |> assign(:window_end, window_end)
          |> assign(
-           :source_endpoint_refs,
-           source_endpoint_refs(scheduled_contact, realized_contact)
-         )
-         |> assign(:contact_intents, contact_intents(scheduled_contact, realized_contact))
-         |> assign(:paths, paths(scheduled_contact, realized_contact))
-         |> assign(:explore_query, explore_query(canonical_id, window_start, window_end))}
+           :contact_record,
+           contact_record_dto(
+             mission,
+             scheduled_contact,
+             realized_contact,
+             canonical_id,
+             lifecycle_state,
+             window_start,
+             window_end
+           )
+         )}
 
       {:error, :contact_not_found} ->
         {:ok,
@@ -45,161 +45,137 @@ defmodule CadenceWeb.OpsContactRecordLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <main id="ops-contact-record-page" class="min-h-0 flex-1 overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto flex max-w-[90rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="min-w-0">
-              <.link
-                id="contact-record-back"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/contacts"}
-                class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
-              >
-                <.icon name="hero-arrow-left" class="h-3 w-3" /> Contact ledger
-              </.link>
-              <div class="mt-3 flex flex-wrap items-center gap-3">
-                <h1 class="text-2xl font-bold tracking-tight">Mission contact record</h1>
-                <span class={[
-                  "border px-2 py-1 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em]",
-                  state_class(@lifecycle_state)
-                ]}>
-                  {@lifecycle_state}
-                </span>
-              </div>
-              <p id="contact-record-id" class="mt-2 break-all font-mono text-xs text-base-content/50">
-                {@canonical_id}
-              </p>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              <.link
-                id="contact-record-open-timeline"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/timeline?#{%{category: "operations", scope_kind: "contact", scope_id: @canonical_id}}"}
-                class="btn btn-sm btn-ghost"
-              >
-                <.icon name="hero-clock" class="h-4 w-4" /> Mission Timeline
-              </.link>
-              <.link
-                id="contact-record-explore-telemetry"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/explore?#{@explore_query}"}
-                class="btn btn-sm btn-primary"
-              >
-                <.icon name="hero-chart-bar" class="h-4 w-4" /> Explore this window
-              </.link>
-            </div>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7">
-          <div class="min-w-0 space-y-5">
-            <section id="contact-operational-window" class="border border-base-300 bg-base-200/25">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Operational window</p>
-                <h2 class="mt-1 text-base font-semibold">Planned and realized timing</h2>
-              </div>
-              <div class="grid gap-px bg-base-300 sm:grid-cols-2 xl:grid-cols-4">
-                <.fact label="Planned start" value={scheduled_time(@scheduled_contact, :starts_at)} />
-                <.fact label="Planned end" value={scheduled_time(@scheduled_contact, :ends_at)} />
-                <.fact label="Realized start" value={realized_start(@realized_contact)} />
-                <.fact label="Realized end" value={realized_end(@realized_contact)} />
-              </div>
-            </section>
-
-            <section id="contact-paths" class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Data paths</p>
-                <h2 class="mt-1 text-base font-semibold">Contact transport evidence</h2>
-              </div>
-              <div id="contact-path-list" class="divide-y divide-base-300">
-                <div :if={@paths == []} id="contact-paths-empty" class="px-4 py-8 text-sm text-base-content/50">
-                  No path evidence is attached to this contact record.
-                </div>
-                <article :for={path <- @paths} id={"contact-path-#{path.path_id}"} class="grid gap-3 px-4 py-4 md:grid-cols-[minmax(12rem,1fr)_9rem_9rem]">
-                  <div class="min-w-0">
-                    <p class="font-mono text-xs font-semibold">{path.path_id}</p>
-                    <p class="mt-1 truncate font-mono text-[0.68rem] text-base-content/45">
-                      {path.source_endpoint_ref || "No source endpoint"}
-                    </p>
-                  </div>
-                  <.fact_inline label="Direction" value={path.direction} />
-                  <.fact_inline label="Selection" value={path.selection_role} />
-                </article>
-              </div>
-            </section>
-          </div>
-
-          <aside class="min-w-0 space-y-5">
-            <section id="contact-identities" class="border border-base-300 bg-base-200/25">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Canonical identity</p>
-                <h2 class="mt-1 text-base font-semibold">Record lineage</h2>
-              </div>
-              <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-3 p-4 text-xs">
-                <dt class="text-base-content/45">Scheduled</dt>
-                <dd class="break-all font-mono">{scheduled_id(@scheduled_contact)}</dd>
-                <dt class="text-base-content/45">Realized</dt>
-                <dd class="break-all font-mono">{realized_id(@realized_contact)}</dd>
-                <dt class="text-base-content/45">Provider ref</dt>
-                <dd class="break-all font-mono">{provider_ref(@scheduled_contact)}</dd>
-                <dt class="text-base-content/45">Schedule rev</dt>
-                <dd class="font-mono">{schedule_revision(@scheduled_contact)}</dd>
-                <dt class="text-base-content/45">Clock mode</dt>
-                <dd class="font-mono">{clock_mode(@realized_contact)}</dd>
-              </dl>
-            </section>
-
-            <section id="contact-operational-context" class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Operational context</p>
-                <h2 class="mt-1 text-base font-semibold">Intent and sources</h2>
-              </div>
-              <div class="space-y-4 p-4 text-xs">
-                <div>
-                  <p class="hud-label">Contact intents</p>
-                  <div class="mt-2 flex flex-wrap gap-1.5">
-                    <span :for={intent <- @contact_intents} class="border border-primary/25 bg-primary/5 px-2 py-1 font-mono text-[0.65rem]">
-                      {humanize(intent)}
-                    </span>
-                    <span :if={@contact_intents == []} class="text-base-content/45">No declared intent</span>
-                  </div>
-                </div>
-                <div>
-                  <p class="hud-label">Source endpoints</p>
-                  <ul class="mt-2 space-y-1.5 font-mono text-[0.68rem] text-base-content/65">
-                    <li :for={source_endpoint_ref <- @source_endpoint_refs}>{source_endpoint_ref}</li>
-                    <li :if={@source_endpoint_refs == []} class="font-sans text-base-content/45">No source endpoint references</li>
-                  </ul>
-                </div>
-              </div>
-            </section>
-          </aside>
-        </div>
-      </main>
+      <.vue
+        id="ops-contact-record-component"
+        v-component="OpsContactRecord"
+        record={@contact_record}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
+  defp contact_record_dto(
+         mission,
+         scheduled_contact,
+         realized_contact,
+         canonical_id,
+         lifecycle_state,
+         window_start,
+         window_end
+       ) do
+    path_rows = paths(scheduled_contact, realized_contact)
+    intents = contact_intents(scheduled_contact, realized_contact)
+    sources = source_endpoint_refs(scheduled_contact, realized_contact)
 
-  defp fact(assigns) do
-    ~H"""
-    <div class="bg-base-100 px-4 py-4">
-      <p class="hud-label">{@label}</p>
-      <p class="mt-2 font-mono text-xs text-base-content/75">{format_value(@value)}</p>
-    </div>
-    """
+    %{
+      id: "ops-contact-record-page",
+      header: %{
+        title: "Mission contact record",
+        canonical_id: canonical_id,
+        lifecycle: %{
+          label: to_string(lifecycle_state),
+          class: state_class(lifecycle_state)
+        },
+        back: %{
+          id: "contact-record-back",
+          label: "Contact ledger",
+          icon: "hero-arrow-left",
+          href: ~p"/missions/#{mission.mission_id}/ops/contacts"
+        },
+        actions: [
+          %{
+            id: "contact-record-open-timeline",
+            label: "Mission Timeline",
+            icon: "hero-clock",
+            class: "btn btn-sm btn-ghost",
+            href:
+              ~p"/missions/#{mission.mission_id}/ops/timeline?#{%{category: "operations", scope_kind: "contact", scope_id: canonical_id}}"
+          },
+          %{
+            id: "contact-record-explore-telemetry",
+            label: "Explore this window",
+            icon: "hero-chart-bar",
+            class: "btn btn-sm btn-primary",
+            href:
+              ~p"/missions/#{mission.mission_id}/ops/explore?#{explore_query(canonical_id, window_start, window_end)}"
+          }
+        ]
+      },
+      window: %{
+        id: "contact-operational-window",
+        eyebrow: "Operational window",
+        title: "Planned and realized timing",
+        facts: [
+          fact_dto("Planned start", scheduled_time(scheduled_contact, :starts_at)),
+          fact_dto("Planned end", scheduled_time(scheduled_contact, :ends_at)),
+          fact_dto("Realized start", realized_start(realized_contact)),
+          fact_dto("Realized end", realized_end(realized_contact))
+        ]
+      },
+      paths: %{
+        id: "contact-paths",
+        list_id: "contact-path-list",
+        eyebrow: "Data paths",
+        title: "Contact transport evidence",
+        empty: path_rows == [],
+        empty_state: %{
+          id: "contact-paths-empty",
+          message: "No path evidence is attached to this contact record."
+        },
+        rows: Enum.map(path_rows, &path_dto/1)
+      },
+      lineage: %{
+        id: "contact-identities",
+        eyebrow: "Canonical identity",
+        title: "Record lineage",
+        fields: [
+          lineage_field_dto("Scheduled", scheduled_id(scheduled_contact), "break-all font-mono"),
+          lineage_field_dto("Realized", realized_id(realized_contact), "break-all font-mono"),
+          lineage_field_dto(
+            "Provider ref",
+            provider_ref(scheduled_contact),
+            "break-all font-mono"
+          ),
+          lineage_field_dto("Schedule rev", schedule_revision(scheduled_contact), "font-mono"),
+          lineage_field_dto("Clock mode", clock_mode(realized_contact), "font-mono")
+        ]
+      },
+      context: %{
+        id: "contact-operational-context",
+        eyebrow: "Operational context",
+        title: "Intent and sources",
+        intents: %{
+          label: "Contact intents",
+          empty: intents == [],
+          empty_state: "No declared intent",
+          values: Enum.map(intents, &humanize/1)
+        },
+        sources: %{
+          label: "Source endpoints",
+          empty: sources == [],
+          empty_state: "No source endpoint references",
+          values: sources
+        }
+      }
+    }
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
+  defp fact_dto(label, value), do: %{label: label, value: format_value(value)}
 
-  defp fact_inline(assigns) do
-    ~H"""
-    <div>
-      <p class="hud-label">{@label}</p>
-      <p class="mt-1 font-mono text-xs text-base-content/70">{format_value(@value)}</p>
-    </div>
-    """
+  defp path_dto(path) do
+    %{
+      id: "contact-path-#{path.path_id}",
+      path_id: path.path_id,
+      source_endpoint_ref: path.source_endpoint_ref || "No source endpoint",
+      direction: fact_dto("Direction", path.direction),
+      selection: fact_dto("Selection", path.selection_role)
+    }
+  end
+
+  defp lineage_field_dto(label, value, class) do
+    %{label: label, value: to_string(value), class: class}
   end
 
   defp fetch_record(organization_id, mission_id, contact_id) do
