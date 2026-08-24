@@ -28,7 +28,7 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
 
     assert copy.component == "ClipboardButton"
     assert copy.props["button_id"] == "dashboard-diagnostic-copy-identity"
-    assert copy.props["clipboard_text"] == "cache_contract"
+    assert copy.props["clipboard_text"] == "#{dashboard.dashboard_id}:cache"
     assert copy.props["button_class"] == "btn btn-outline btn-xs"
     assert copy.props["icon"] == "hero-clipboard"
     assert copy.props["icon_class"] == "h-3.5 w-3.5"
