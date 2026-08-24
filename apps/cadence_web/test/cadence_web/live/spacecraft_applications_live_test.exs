@@ -10,7 +10,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{SpacecraftApplicationsLive, TestFixtures}
   alias Phoenix.LiveView.JS
 
   defp setup_session do
@@ -52,45 +52,132 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    assert has_element?(view, "#spacecraft-applications-page")
-    assert has_element?(view, "#spacecraft-applications-component")
-    assert has_element?(view, "#spacecraft-applications-page > header h1", "Applications")
+    assert has_element?(view, "#spacecraft-applications-page-component")
 
-    assert has_element?(
-             view,
-             "#spacecraft-applications-page > header p",
-             "Install profile-declared product applications and open their host-rendered workspaces."
-           )
+    vue = spacecraft_applications_vue(view)
 
-    assert has_element?(
-             view,
-             "nav[aria-label='Breadcrumb'] a[href='/missions/#{context.mission.mission_id}']",
-             "Primary"
-           )
+    assert vue.component == "SpacecraftApplicationsPage"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.handlers["install"] == JS.push("install_application")
+    assert vue.handlers["disable"] == JS.push("disable_application")
+    assert vue.handlers["uninstall"] == JS.push("uninstall_application")
 
-    assert has_element?(
-             view,
-             "nav[aria-label='Breadcrumb'] a[href='/missions/#{context.mission.mission_id}/spacecraft']",
-             "Spacecraft"
-           )
+    presentation = vue.props["presentation"]
 
-    assert has_element?(
-             view,
-             "nav[aria-label='Breadcrumb'] a[href='/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}']",
-             "Nova-1"
-           )
+    assert presentation["root"] == %{
+             "attrs" => %{
+               "id" => "spacecraft-applications-page",
+               "class" => "space-y-6"
+             }
+           }
 
-    assert has_element?(
-             view,
-             "nav[aria-label='Breadcrumb'] span[class~='text-primary/90']",
-             "Applications"
-           )
+    assert presentation["header"]["attrs"] == %{
+             "class" => "border-b border-primary/20 pb-4"
+           }
 
-    assert has_element?(
-             view,
-             "#spacecraft-applications-page > header a[href='/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness']",
-             "Readiness"
-           )
+    assert presentation["header"]["body"]["attrs"] == %{
+             "class" => "flex items-end justify-between gap-4"
+           }
+
+    assert presentation["header"]["content"]["attrs"] == %{}
+
+    assert presentation["header"]["title"] == %{
+             "attrs" => %{
+               "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+             },
+             "text" => "Applications"
+           }
+
+    assert presentation["header"]["subtitle"] == %{
+             "attrs" => %{
+               "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+             },
+             "text" =>
+               "Install profile-declared product applications and open their host-rendered workspaces."
+           }
+
+    assert presentation["header"]["breadcrumbs"] == %{
+             "attrs" => %{
+               "aria-label" => "Breadcrumb",
+               "class" =>
+                 "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+             },
+             "items" => [
+               %{
+                 "key" => "mission",
+                 "separator" => nil,
+                 "link" => %{
+                   "attrs" => %{
+                     "href" => "/missions/#{context.mission.mission_id}",
+                     "data-phx-link" => "redirect",
+                     "data-phx-link-state" => "push",
+                     "class" => "hover:text-primary transition-colors"
+                   },
+                   "text" => "Primary"
+                 },
+                 "current" => nil
+               },
+               %{
+                 "key" => "spacecraft",
+                 "separator" => breadcrumb_separator_prop(),
+                 "link" => %{
+                   "attrs" => %{
+                     "href" => "/missions/#{context.mission.mission_id}/spacecraft",
+                     "data-phx-link" => "redirect",
+                     "data-phx-link-state" => "push",
+                     "class" => "hover:text-primary transition-colors"
+                   },
+                   "text" => "Spacecraft"
+                 },
+                 "current" => nil
+               },
+               %{
+                 "key" => "spacecraft-detail",
+                 "separator" => breadcrumb_separator_prop(),
+                 "link" => %{
+                   "attrs" => %{
+                     "href" =>
+                       "/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
+                     "data-phx-link" => "redirect",
+                     "data-phx-link-state" => "push",
+                     "class" => "hover:text-primary transition-colors"
+                   },
+                   "text" => "Nova-1"
+                 },
+                 "current" => nil
+               },
+               %{
+                 "key" => "applications",
+                 "separator" => breadcrumb_separator_prop(),
+                 "link" => nil,
+                 "current" => %{
+                   "attrs" => %{"class" => "text-primary/90"},
+                   "text" => "Applications"
+                 }
+               }
+             ]
+           }
+
+    assert presentation["header"]["actions"] == %{
+             "attrs" => %{"class" => "flex items-center gap-2"},
+             "readiness" => %{
+               "attrs" => %{
+                 "href" =>
+                   "/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness",
+                 "data-phx-link" => "redirect",
+                 "data-phx-link-state" => "push",
+                 "class" => "btn btn-ghost btn-sm"
+               },
+               "text" => "Readiness"
+             }
+           }
+
+    assert presentation["component"] == %{
+             "attrs" => %{"id" => "spacecraft-applications-component"}
+           }
 
     sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
 
@@ -108,16 +195,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     assert has_element?(view, "#user-menu-desktop")
 
-    vue = spacecraft_applications_vue(view)
-
-    assert vue.component == "SpacecraftApplications"
-    assert vue.ssr == false
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.handlers["install"] == JS.push("install_application")
-    assert vue.handlers["disable"] == JS.push("disable_application")
-    assert vue.handlers["uninstall"] == JS.push("uninstall_application")
-
-    assert vue.props["profile"] == %{
+    assert presentation["profile"] == %{
              "kind" => "pinned",
              "id" => "spacecraft-applications-profile",
              "label" => "Pinned Profile",
@@ -126,7 +204,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "status" => %{"tone" => "ready", "label" => "Current"}
            }
 
-    assert vue.props["applications"] == [
+    assert presentation["applications"] == [
              %{
                "id" => "spacecraft-application-telemetry_decom",
                "application_key" => "telemetry_decom",
@@ -174,6 +252,22 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
            ]
   end
 
+  test "preserves raw presentation attribute coercion at the parent boundary" do
+    assert SpacecraftApplicationsLive.presentation_attrs(%{
+             "nil" => nil,
+             "false" => false,
+             "true" => true,
+             "empty" => "",
+             "string_false" => "false",
+             "number" => 7
+           }) == %{
+             "true" => "",
+             "empty" => "",
+             "string_false" => "false",
+             "number" => "7"
+           }
+  end
+
   test "preserves pinned profile drift plus deterministic custom application order and safe IDs" do
     context = setup_session()
 
@@ -211,7 +305,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
       )
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
-    props = spacecraft_applications_vue(view).props
+    props = spacecraft_applications_presentation(view)
 
     assert props["profile"] == %{
              "kind" => "pinned",
@@ -270,7 +364,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    render_hook(view, "install_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "install_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
     assert application["lifecycle_state"] == "installed"
@@ -324,7 +418,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    render_hook(view, "disable_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "disable_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
     assert application["lifecycle_state"] == "disabled"
@@ -354,7 +448,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    render_hook(view, "uninstall_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "uninstall_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
     assert application["lifecycle_state"] == "uninstalled"
@@ -369,7 +463,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    render_hook(view, "install_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "install_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
     assert application["lifecycle_state"] == "installed"
@@ -391,10 +485,10 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    assert spacecraft_applications_vue(view).props["profile"]["kind"] == "missing"
+    assert spacecraft_applications_presentation(view)["profile"]["kind"] == "missing"
     assert application_prop(view, "telemetry_decom")["manageable"]
 
-    render_hook(view, "uninstall_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "uninstall_application", %{"key" => "telemetry_decom"})
     assert application_prop(view, "telemetry_decom")["install_action"]["label"] == "Reinstall"
 
     inventory_path = inventory_path(context.mission, spacecraft)
@@ -410,7 +504,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
                ~p"/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
              )
 
-    render_hook(view, "install_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "install_application", %{"key" => "telemetry_decom"})
     assert application_prop(view, "telemetry_decom")["manageable"]
   end
 
@@ -419,7 +513,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     spacecraft = TestFixtures.persist_spacecraft!(context.mission, display_name: "Nova-1")
 
     {:ok, missing_view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
-    missing_props = spacecraft_applications_vue(missing_view).props
+    missing_props = spacecraft_applications_presentation(missing_view)
 
     assert missing_props == %{
              "profile" => %{
@@ -454,7 +548,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     {:ok, profiled_view, _html} =
       live(context.conn, inventory_path(context.mission, profiled_spacecraft))
 
-    profiled_props = spacecraft_applications_vue(profiled_view).props
+    profiled_props = spacecraft_applications_presentation(profiled_view)
     assert profiled_props["profile"]["kind"] == "pinned"
     assert profiled_props["profile"]["id"] == "spacecraft-applications-profile"
     assert profiled_props["applications"] == []
@@ -478,7 +572,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
-    render_hook(view, "install_application", %{"key" => "telemetry_decom"})
+    render_application_hook(view, "install_application", %{"key" => "telemetry_decom"})
 
     assert has_element?(
              view,
@@ -486,7 +580,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "Application is neither declared by this profile nor retained at this scope."
            )
 
-    assert spacecraft_applications_vue(view).props["applications"] == []
+    assert spacecraft_applications_presentation(view)["applications"] == []
   end
 
   test "unknown application detail redirects back to the applications list" do
@@ -561,15 +655,37 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
   end
 
   defp spacecraft_applications_vue(view) do
-    LiveVue.Test.get_vue(view, id: "spacecraft-applications-component")
+    LiveVue.Test.get_vue(view, id: "spacecraft-applications-page-component")
+  end
+
+  defp spacecraft_applications_presentation(view) do
+    view
+    |> spacecraft_applications_vue()
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp render_application_hook(view, event, payload) do
+    view
+    |> element("#spacecraft-applications-page-component")
+    |> render_hook(event, payload)
   end
 
   defp application_prop(view, application_key) do
     view
-    |> spacecraft_applications_vue()
-    |> Map.fetch!(:props)
+    |> spacecraft_applications_presentation()
     |> Map.fetch!("applications")
     |> Enum.find(&(&1["application_key"] == application_key))
+  end
+
+  defp breadcrumb_separator_prop do
+    %{
+      "attrs" => %{
+        "class" => "text-base-content/20",
+        "aria-hidden" => "true"
+      },
+      "text" => "/"
+    }
   end
 
   defp inventory_path(mission, spacecraft) do

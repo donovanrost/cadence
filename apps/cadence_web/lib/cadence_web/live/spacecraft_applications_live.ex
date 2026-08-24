@@ -22,25 +22,16 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
     applications = application_rows(scope, type_binding, host_context)
 
+    presentation =
+      page_presentation_dto(mission, spacecraft, type_binding, applications, host_context)
+
     {:ok,
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Applications")
      |> assign(:nav_item, :spacecraft)
      |> assign(:type_binding, type_binding)
      |> assign(:application_host_context, host_context)
-     |> assign(
-       :profile_card,
-       profile_card_dto(type_binding, mission.mission_id, spacecraft.spacecraft_id)
-     )
-     |> assign(
-       :application_rows,
-       application_rows_dto(
-         applications,
-         host_context,
-         mission.mission_id,
-         spacecraft.spacecraft_id
-       )
-     )}
+     |> assign(:presentation, presentation)}
   end
 
   @impl true
@@ -70,44 +61,159 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="spacecraft-applications-page" class="space-y-6">
-        <.page_header
-          title="Applications"
-          subtitle="Install profile-declared product applications and open their host-rendered workspaces."
-          breadcrumbs={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-            {@current_spacecraft.display_name,
-             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-            {"Applications", nil}
-          ]}
-        >
-          <:actions>
-            <.button
-              variant={:ghost}
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
-              }
-            >
-              Readiness
-            </.button>
-          </:actions>
-        </.page_header>
-
-        <.vue
-          id="spacecraft-applications-component"
-          v-component="SpacecraftApplications"
-          profile={@profile_card}
-          applications={@application_rows}
-          v-on:install={JS.push("install_application")}
-          v-on:disable={JS.push("disable_application")}
-          v-on:uninstall={JS.push("uninstall_application")}
-          v-diff={false}
-          v-ssr={false}
-        />
-      </div>
+      <.vue
+        id="spacecraft-applications-page-component"
+        v-component="SpacecraftApplicationsPage"
+        presentation={@presentation}
+        v-on:install={JS.push("install_application")}
+        v-on:disable={JS.push("disable_application")}
+        v-on:uninstall={JS.push("uninstall_application")}
+        v-diff={false}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp page_presentation_dto(mission, spacecraft, type_binding, applications, host_context) do
+    mission_id = mission.mission_id
+    spacecraft_id = spacecraft.spacecraft_id
+
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "spacecraft-applications-page",
+            "class" => "space-y-6"
+          })
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{
+          "attrs" => presentation_attrs(%{"class" => "flex items-end justify-between gap-4"})
+        },
+        "content" => %{"attrs" => presentation_attrs(%{})},
+        "breadcrumbs" => breadcrumbs_presentation(mission, spacecraft),
+        "title" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+            }),
+          "text" => "Applications"
+        },
+        "subtitle" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+            }),
+          "text" =>
+            "Install profile-declared product applications and open their host-rendered workspaces."
+        },
+        "actions" => %{
+          "attrs" => presentation_attrs(%{"class" => "flex items-center gap-2"}),
+          "readiness" => %{
+            "attrs" =>
+              navigate_attrs(
+                ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/readiness",
+                %{"class" => "btn btn-ghost btn-sm"}
+              ),
+            "text" => "Readiness"
+          }
+        }
+      },
+      "component" => %{
+        "attrs" => presentation_attrs(%{"id" => "spacecraft-applications-component"})
+      },
+      "profile" => profile_card_dto(type_binding, mission_id, spacecraft_id),
+      "applications" =>
+        application_rows_dto(applications, host_context, mission_id, spacecraft_id)
+    }
+  end
+
+  defp breadcrumbs_presentation(mission, spacecraft) do
+    mission_id = mission.mission_id
+    spacecraft_id = spacecraft.spacecraft_id
+
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "aria-label" => "Breadcrumb",
+          "class" =>
+            "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+        }),
+      "items" => [
+        breadcrumb_link("mission", nil, mission.display_name, ~p"/missions/#{mission_id}"),
+        breadcrumb_link(
+          "spacecraft",
+          breadcrumb_separator(),
+          "Spacecraft",
+          ~p"/missions/#{mission_id}/spacecraft"
+        ),
+        breadcrumb_link(
+          "spacecraft-detail",
+          breadcrumb_separator(),
+          spacecraft.display_name,
+          ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}"
+        ),
+        %{
+          "key" => "applications",
+          "separator" => breadcrumb_separator(),
+          "link" => nil,
+          "current" => %{
+            "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+            "text" => "Applications"
+          }
+        }
+      ]
+    }
+  end
+
+  defp breadcrumb_link(key, separator, text, href) do
+    %{
+      "key" => key,
+      "separator" => separator,
+      "link" => %{
+        "attrs" => navigate_attrs(href, %{"class" => "hover:text-primary transition-colors"}),
+        "text" => text
+      },
+      "current" => nil
+    }
+  end
+
+  defp breadcrumb_separator do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "text-base-content/20",
+          "aria-hidden" => "true"
+        }),
+      "text" => "/"
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "href" => href,
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push"
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp application_rows(scope, nil, host_context) do
@@ -196,16 +302,16 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
         socket.assigns.application_host_context
       )
 
-    assign(
-      socket,
-      :application_rows,
-      application_rows_dto(
+    presentation =
+      page_presentation_dto(
+        socket.assigns.current_mission,
+        socket.assigns.current_spacecraft,
+        socket.assigns.type_binding,
         applications,
-        socket.assigns.application_host_context,
-        socket.assigns.current_mission.mission_id,
-        socket.assigns.current_spacecraft.spacecraft_id
+        socket.assigns.application_host_context
       )
-    )
+
+    assign(socket, :presentation, presentation)
   end
 
   defp profile_card_dto(nil, mission_id, spacecraft_id) do
