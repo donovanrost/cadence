@@ -576,7 +576,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
            }
 
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["activity_timeline"]["presentation"]
+    panel = vue.props["presentation"]
+
+    assert panel["activity_timeline"]["root"]["attrs"] == %{
+             "id" => "dashboard-activity-timeline-component",
+             "class" => "contents"
+           }
+
+    panel["activity_timeline"]["presentation"]
   end
 
   defp form_payload(form, overrides) do
