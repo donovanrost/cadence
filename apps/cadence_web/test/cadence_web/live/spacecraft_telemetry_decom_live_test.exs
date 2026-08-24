@@ -27,6 +27,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp setup_session do
     user = TestFixtures.persist_user!()
@@ -192,21 +193,62 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
   test "renders status card and links back to spacecraft" do
     {conn, _org, mission, spacecraft} = setup_session()
 
-    {:ok, view, html} =
+    {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    assert html =~ "Telemetry Decom"
-    assert html =~ "Not configured"
-    assert html =~ spacecraft.display_name
-    assert has_element?(view, "#application-activation-preflight[data-preflight-state='blocked']")
+    assert has_element?(view, "#spacecraft-telemetry-decom-component.contents")
 
-    assert has_element?(
-             view,
-             "#application-activation-preflight[data-activation-ready='false']"
-           )
+    vue = telemetry_decom_vue(view)
+
+    assert vue.component == "SpacecraftTelemetryDecom"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.slots == %{}
+
+    assert vue.handlers == %{
+             "change_revision" => JS.push("change_revision"),
+             "disable" => JS.push("disable"),
+             "enable" => JS.push("enable"),
+             "save_catalog_revision" => JS.push("save_catalog_revision")
+           }
+
+    assert vue.props["page"] == page_props(mission, spacecraft)
+    assert vue.props["card"] == %{"id" => "telemetry-decom-card"}
+    assert vue.props["status"] == status_props("not_configured")
+    assert vue.props["revision"] == nil
+
+    assert vue.props["no_revisions"] == %{
+             "message" =>
+               "No packet catalog revisions are available for this mission yet. Import a catalog revision first.",
+             "action" => %{
+               "label" => "Go to catalog",
+               "href" => "/missions/#{mission.mission_id}/catalog"
+             }
+           }
+
+    assert vue.props["packet_handoff"] == nil
+    assert vue.props["preview"] == nil
+    assert vue.props["pending_activation"] == nil
+
+    assert vue.props["lifecycle_actions"] == %{
+             "empty_message" => "Select at least one APID to save and apply.",
+             "disable" => nil,
+             "enable" => nil
+           }
+
+    preflight = vue.props["preflight"]
+    assert preflight == blocked_preflight_props()
+
+    assert Enum.map(preflight["checks"], & &1["id"]) == [
+             "application-preflight-check-configuration",
+             "application-preflight-check-packet-apid-binding",
+             "application-preflight-check-runtime-compilation"
+           ]
+
+    assert_json_safe(vue)
   end
 
   test "Manage saves catalog context and directs packet selection to the shared surface" do
@@ -224,18 +266,61 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
              "#spacecraft-application-host[data-application-key='telemetry_decom'][data-application-version='1'][data-surface-id='manage']"
            )
 
-    view
-    |> element("#telemetry-decom-save-revision")
-    |> render_click()
+    render_hook(view, "save_catalog_revision", %{})
 
-    assert has_element?(
-             view,
-             "#application-activation-preflight[data-preflight-state='blocked'][data-activation-ready='false']"
-           )
+    vue = telemetry_decom_vue(view)
 
-    assert has_element?(view, "#application-preflight-check-packet-apid-binding")
-    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
-    refute has_element?(view, "input[phx-click='toggle_apid']")
+    assert vue.props["preflight"]["state"] == "blocked"
+    assert vue.props["preflight"]["activation_ready"] == false
+
+    assert preflight_check(vue, "packet-apid-binding")["id"] ==
+             "application-preflight-check-packet-apid-binding"
+
+    assert vue.props["packet_handoff"]["action"]["id"] ==
+             "telemetry-decom-open-packet-bindings"
+
+    refute Map.has_key?(vue.props["packet_handoff"], "toggle_apid")
+
+    assert vue.props["lifecycle_actions"] == %{
+             "empty_message" => nil,
+             "disable" => disable_action_props(),
+             "enable" => enable_action_props(true)
+           }
+
+    assert Map.drop(vue.props["status"], ["saved_label"]) == %{
+             "state" => "configured",
+             "tone" => "info",
+             "label" => "Configured — not yet applied",
+             "description" => "Choices are saved. Request mission changes to publish them."
+           }
+
+    assert String.starts_with?(vue.props["status"]["saved_label"], "Saved ")
+
+    assert vue.props["preview"]["stats"] == [
+             %{
+               "id" => "telemetry-decom-preview-matched-packets",
+               "label" => "Matched packets",
+               "value" => 0
+             },
+             %{
+               "id" => "telemetry-decom-preview-compiled-defs",
+               "label" => "Compiled defs",
+               "value" => 0
+             },
+             %{
+               "id" => "telemetry-decom-preview-unassigned-apids",
+               "label" => "Unassigned APIDs",
+               "value" => 1
+             },
+             %{
+               "id" => "telemetry-decom-preview-notices",
+               "label" => "Notices",
+               "value" => 0
+             }
+           ]
+
+    assert vue.props["preview"]["diagnostics"] == nil
+    assert_json_safe(vue)
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -274,9 +359,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     {:ok, manage, _html} = live(conn, manage_path)
 
-    manage
-    |> element("#telemetry-decom-save-revision")
-    |> render_click()
+    render_hook(manage, "save_catalog_revision", %{})
 
     packet_bindings_path =
       ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
@@ -375,15 +458,34 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    assert has_element?(
-             view,
-             "#telemetry-decom-diagnostics[data-diagnostic-severity='warning'][data-diagnostic-count='1'][data-diagnostic-total='1']"
-           )
+    diagnostics = telemetry_decom_vue(view).props["preview"]["diagnostics"]
 
-    assert has_element?(
-             view,
-             "#telemetry-decom-diagnostics-item-compiler-001[data-diagnostic-code='MM_CALIBRATOR_RUNTIME_UNSUPPORTED'][data-diagnostic-severity='warning']"
-           )
+    assert diagnostics["id"] == "telemetry-decom-diagnostics"
+    assert diagnostics["severity"] == "warning"
+    assert diagnostics["count"] == 1
+    assert diagnostics["total_count"] == 1
+
+    assert [diagnostic] = diagnostics["items"]
+
+    assert Map.take(diagnostic, [
+             "id",
+             "diagnostic_id",
+             "code",
+             "severity",
+             "title",
+             "detail"
+           ]) == %{
+             "id" => "telemetry-decom-diagnostics-item-compiler-001",
+             "diagnostic_id" => "compiler-001",
+             "code" => "MM_CALIBRATOR_RUNTIME_UNSUPPORTED",
+             "severity" => "warning",
+             "title" => "Mm calibrator runtime unsupported",
+             "detail" => "calibrator is preserved but is not executable by telemetry target v1"
+           }
+
+    assert is_binary(diagnostic["value"])
+
+    assert_json_safe(telemetry_decom_vue(view))
   end
 
   test "disable button rolls back the enabled flag" do
@@ -405,12 +507,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    html =
-      view
-      |> element("#telemetry-decom-disable-button")
-      |> render_click()
+    render_hook(view, "disable", %{"action-id" => "disable"})
 
-    assert html =~ "Disabled"
+    disabled_vue = telemetry_decom_vue(view)
+    assert disabled_vue.props["status"]["label"] == "Disabled"
+    assert disabled_vue.props["lifecycle_actions"]["disable"] == nil
+    assert disabled_vue.props["lifecycle_actions"]["enable"] == enable_action_props(false)
+    assert disabled_vue.props["preflight"]["state"] == "attention"
+    assert disabled_vue.props["preflight"]["activation_ready"]
+
+    assert has_element?(
+             view,
+             "#flash-info",
+             "Telemetry Decom disabled for this spacecraft. Apply mission changes to remove it from the live mission."
+           )
 
     assert {:ok, disabled} =
              TelemetryDecom.fetch_config(
@@ -450,13 +560,21 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    html =
-      view
-      |> element("#telemetry-decom-enable-button")
-      |> render_click()
+    render_hook(view, "enable", %{"action-id" => "request_activation"})
 
-    assert html =~ "Telemetry Decom activation requested"
-    assert has_element?(view, "#telemetry-decom-activation-pending")
+    assert has_element?(view, "#flash-info", "Telemetry Decom activation requested")
+
+    activation_vue = telemetry_decom_vue(view)
+    pending = activation_vue.props["pending_activation"]
+    assert pending["id"] == "telemetry-decom-activation-pending"
+    assert is_binary(pending["activation_request_id"])
+
+    assert pending["message_before"] == "Activation request"
+
+    assert pending["message_after"] ==
+             "is waiting for approval from a different mission administrator."
+
+    assert activation_vue.props["lifecycle_actions"]["enable"] == enable_action_props(true)
 
     assert {:error, :no_active_binding_set} =
              Cadence.Activations.fetch_active_activation(
@@ -470,7 +588,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    assert has_element?(remounted_view, "#telemetry-decom-activation-pending")
+    assert telemetry_decom_vue(remounted_view).props["pending_activation"]["id"] ==
+             "telemetry-decom-activation-pending"
   end
 
   defp installation_read_scope(organization_id) do
@@ -486,25 +605,26 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {conn, org, mission, spacecraft} = setup_session()
     revision = persist_revision!(org, mission)
 
-    {:ok, view, html} =
+    {:ok, view, _html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    assert html =~ "Catalog revision"
-    assert html =~ "Packet inputs"
-    assert html =~ "Open Packet Bindings"
+    props = telemetry_decom_vue(view).props
 
-    assert has_element?(
-             view,
-             "#telemetry-decom-revision-select option[value='#{revision.catalog_revision_id}']",
-             "Rev 1 (#1)"
-           )
+    assert props["revision"]["field"]["label"] == "Catalog revision"
+    assert props["packet_handoff"]["label"] == "Packet inputs"
+    assert props["packet_handoff"]["action"]["label"] == "Open Packet Bindings"
 
-    refute html =~ "Data Source"
-    refute html =~ "New Data Source"
-    refute html =~ "Ingress source ref"
+    assert props["revision"]["field"]["options"] == [
+             %{"label" => "Rev 1 (#1)", "value" => revision.catalog_revision_id}
+           ]
+
+    serialized_props = inspect(props)
+    refute serialized_props =~ "Data Source"
+    refute serialized_props =~ "New Data Source"
+    refute serialized_props =~ "Ingress source ref"
   end
 
   test "spacecraft show page surfaces the telemetry decom section" do
@@ -553,10 +673,14 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    refute has_element?(view, "#telemetry-decom-select-all")
-    refute has_element?(view, "#telemetry-decom-clear")
-    refute has_element?(view, "#telemetry-decom-apid-table")
-    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
+    props = telemetry_decom_vue(view).props
+    ids = dto_ids(props)
+    refute "telemetry-decom-select-all" in ids
+    refute "telemetry-decom-clear" in ids
+    refute "telemetry-decom-apid-table" in ids
+
+    assert props["packet_handoff"]["action"]["id"] ==
+             "telemetry-decom-open-packet-bindings"
   end
 
   test "saving catalog context without packet bindings remains blocked for activation" do
@@ -569,16 +693,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    view
-    |> element("#telemetry-decom-save-revision")
-    |> render_click()
+    render_hook(view, "save_catalog_revision", %{})
 
-    assert has_element?(
-             view,
-             "#application-preflight-check-packet-apid-binding[data-check-state='blocked']"
-           )
+    vue = telemetry_decom_vue(view)
 
-    assert has_element?(view, "#telemetry-decom-enable-button[disabled]")
+    assert preflight_check(vue, "packet-apid-binding")["state"] == "blocked"
+
+    assert vue.props["lifecycle_actions"]["enable"]["disabled"]
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -622,15 +743,15 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    assert has_element?(
-             view,
-             "#application-preflight-check-packet-apid-binding[data-check-state='ready']"
-           )
+    vue = telemetry_decom_vue(view)
 
-    assert has_element?(view, "#telemetry-decom-enable-button:not([disabled])")
-    html = render(view)
-    refute html =~ "conflict"
-    assert html =~ "other applications may read the same packets"
+    assert preflight_check(vue, "packet-apid-binding")["state"] == "ready"
+
+    refute vue.props["lifecycle_actions"]["enable"]["disabled"]
+    refute inspect(vue.props) =~ "conflict"
+
+    assert vue.props["packet_handoff"]["detail"] ==
+             "APIDs route traffic; other applications may read the same packets and fields."
   end
 
   test "Packet Bindings groups packet identity and compatible resources" do
@@ -715,15 +836,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
-    view
-    |> form("#telemetry-decom-revision-form", %{
+    render_hook(view, "change_revision", %{
       "catalog_revision_id" => rev_b.catalog_revision_id
     })
-    |> render_change()
 
-    refute has_element?(view, "#telemetry-decom-dropped-unknowns")
-    refute has_element?(view, "#telemetry-decom-drop-unknowns")
-    assert has_element?(view, "#telemetry-decom-open-packet-bindings")
+    props = telemetry_decom_vue(view).props
+    ids = dto_ids(props)
+
+    refute "telemetry-decom-dropped-unknowns" in ids
+    refute "telemetry-decom-drop-unknowns" in ids
+
+    assert props["packet_handoff"]["action"]["id"] ==
+             "telemetry-decom-open-packet-bindings"
+
+    assert props["revision"]["field"]["value"] == rev_b.catalog_revision_id
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -734,5 +860,163 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     assert config.catalog_revision_id == rev_b.catalog_revision_id
     assert config.handled_apids == []
+  end
+
+  defp telemetry_decom_vue(view) do
+    LiveVue.Test.get_vue(view, id: "spacecraft-telemetry-decom-component")
+  end
+
+  defp preflight_check(vue, check_id) do
+    Enum.find(vue.props["preflight"]["checks"], &(&1["check_id"] == check_id))
+  end
+
+  defp dto_ids(value) when is_list(value), do: Enum.flat_map(value, &dto_ids/1)
+
+  defp dto_ids(value) when is_map(value) do
+    own_id = if is_binary(value["id"]), do: [value["id"]], else: []
+    own_id ++ Enum.flat_map(Map.values(value), &dto_ids/1)
+  end
+
+  defp dto_ids(_value), do: []
+
+  defp page_props(mission, spacecraft) do
+    %{
+      "id" => "spacecraft-telemetry-decom-page",
+      "title" => "Telemetry Decom",
+      "subtitle" =>
+        "Application packet inputs and publication state for #{spacecraft.display_name}.",
+      "breadcrumbs" => [
+        %{
+          "id" => "telemetry-decom-mission-breadcrumb",
+          "label" => mission.display_name,
+          "href" => "/missions/#{mission.mission_id}"
+        },
+        %{
+          "id" => "telemetry-decom-spacecraft-list-breadcrumb",
+          "label" => "Spacecraft",
+          "href" => "/missions/#{mission.mission_id}/spacecraft"
+        },
+        %{
+          "id" => "telemetry-decom-spacecraft-breadcrumb",
+          "label" => spacecraft.display_name,
+          "href" =>
+            "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+        },
+        %{
+          "id" => "telemetry-decom-applications-breadcrumb",
+          "label" => "Applications",
+          "href" =>
+            "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+        },
+        %{
+          "id" => "telemetry-decom-current-breadcrumb",
+          "label" => "Telemetry Decom",
+          "href" => nil
+        }
+      ]
+    }
+  end
+
+  defp status_props("not_configured") do
+    %{
+      "state" => "not_configured",
+      "tone" => "blocked",
+      "label" => "Not configured",
+      "description" =>
+        "Choose a catalog revision and packet inputs, then apply mission changes.",
+      "saved_label" => nil
+    }
+  end
+
+  defp blocked_preflight_props do
+    %{
+      "id" => "application-activation-preflight",
+      "checks_id" => "application-preflight-checks",
+      "state" => "blocked",
+      "activation_ready" => false,
+      "check_count" => 3,
+      "application_version" => 1,
+      "summary" => "3 blocking checks must be resolved before activation.",
+      "label" => "Blocked",
+      "checks" => [
+        %{
+          "id" => "application-preflight-check-configuration",
+          "check_id" => "configuration",
+          "category" => "configuration",
+          "state" => "blocked",
+          "title" => "Configuration required",
+          "detail" =>
+            "Select a catalog revision and packet APIDs before requesting mission changes.",
+          "value" => nil
+        },
+        %{
+          "id" => "application-preflight-check-packet-apid-binding",
+          "check_id" => "packet-apid-binding",
+          "category" => "resource",
+          "state" => "blocked",
+          "title" => "Packet binding unavailable",
+          "detail" => "No APIDs are declared because the application is not configured.",
+          "value" => nil
+        },
+        %{
+          "id" => "application-preflight-check-runtime-compilation",
+          "check_id" => "runtime-compilation",
+          "category" => "compilation",
+          "state" => "blocked",
+          "title" => "Compilation unavailable",
+          "detail" =>
+            "A saved configuration is required before runtime artifacts can be compiled.",
+          "value" => nil
+        }
+      ]
+    }
+  end
+
+  defp disable_action_props do
+    %{
+      "id" => "telemetry-decom-disable-button",
+      "action_id" => "disable",
+      "event" => "disable",
+      "label" => "Disable workspace",
+      "variant" => "secondary",
+      "effect" => "durable",
+      "execution" => "immediate",
+      "confirmation" => %{
+        "title" => "Disable application workspace?",
+        "message" =>
+          "Workspace access and configuration editing will stop. Existing configuration is retained, and active runtime state is unchanged until a separately governed mission change is applied.",
+        "confirm_label" => "Disable workspace",
+        "tone" => "attention",
+        "prompt" =>
+          "Disable application workspace?\n\nWorkspace access and configuration editing will stop. Existing configuration is retained, and active runtime state is unchanged until a separately governed mission change is applied."
+      },
+      "disabled" => false
+    }
+  end
+
+  defp enable_action_props(disabled) do
+    %{
+      "id" => "telemetry-decom-enable-button",
+      "action_id" => "request_activation",
+      "event" => "enable",
+      "label" => "Request mission changes",
+      "variant" => "primary",
+      "effect" => "durable",
+      "execution" => "approval_required",
+      "confirmation" => %{
+        "title" => "Request mission changes?",
+        "message" =>
+          "Submit the current application configuration for governed approval. It will not become live until an authorized approver accepts and executes the request.",
+        "confirm_label" => "Request mission changes",
+        "tone" => "attention",
+        "prompt" =>
+          "Request mission changes?\n\nSubmit the current application configuration for governed approval. It will not become live until an authorized approver accepts and executes the request."
+      },
+      "disabled" => disabled
+    }
+  end
+
+  defp assert_json_safe(vue) do
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
   end
 end
