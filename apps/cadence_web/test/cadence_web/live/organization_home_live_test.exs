@@ -30,9 +30,18 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
       org = TestFixtures.persist_org!()
       _membership = TestFixtures.grant_membership!(user, org)
 
-      {:ok, _view, html} = live(TestFixtures.member_conn(user), ~p"/")
+      {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/")
 
-      assert html =~ ~r/border-primary[^"]*".*Home/s
+      sidebar = LiveVue.Test.get_vue(view, id: "global-sidebar-navigation")
+
+      home =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "organization-home")
+        )
+
+      assert home["label"] == "Home"
+      assert home["class"] =~ "border-primary"
     end
 
     test "shows the current mission count and link to /missions" do

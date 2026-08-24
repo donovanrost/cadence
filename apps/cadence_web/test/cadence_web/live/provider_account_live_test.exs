@@ -27,7 +27,16 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     {conn, _user, _organization} = signed_in_organization_admin()
 
     {:ok, home, _html} = live(conn, ~p"/")
-    assert has_element?(home, "#provider-accounts-nav-link")
+
+    sidebar = LiveVue.Test.get_vue(home, id: "global-sidebar-navigation")
+
+    provider_accounts =
+      Enum.find(
+        sidebar.props["presentation"]["navigation"]["items"],
+        &(&1["key"] == "provider-accounts")
+      )
+
+    assert provider_accounts["attrs"]["id"] == "provider-accounts-nav-link"
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts")
     assert has_element?(view, "#provider-accounts-page")

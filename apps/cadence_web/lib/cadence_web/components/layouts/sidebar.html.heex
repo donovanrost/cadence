@@ -47,104 +47,13 @@
     </main>
   </div>
 
-  <div class="drawer-side">
-    <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-    <div
-      data-sidebar-collapsible
-      class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 flex flex-col border-r border-primary/20 hud-grid relative"
-    >
-      <div class="px-3 h-10 flex items-center border-b border-primary/20">
-        <.link navigate="/" class="flex items-center gap-2">
-          <span class="text-primary font-bold text-sm">◆</span>
-          <span class="text-xs font-bold tracking-[0.15em] text-primary sidebar-label">
-            CADENCE
-          </span>
-        </.link>
-      </div>
-
-      <nav class="flex-1 overflow-y-auto py-2">
-        <%= case assigns[:nav_context] do %>
-          <% :admin -> %>
-            <div class="px-3 mb-2 sidebar-expanded-only">
-              <span class="hud-label">Administration</span>
-            </div>
-            <ul class="menu menu-sm space-y-0.5">
-              <.nav_item
-                navigate={~p"/admin"}
-                icon="hero-chart-bar-square"
-                label="Dashboard"
-                active={assigns[:nav_item] == :admin_dashboard}
-              />
-              <.nav_item
-                navigate={~p"/admin/organizations"}
-                icon="hero-building-office"
-                label="Organizations"
-                active={assigns[:nav_item] == :admin_organizations}
-              />
-              <.nav_item
-                navigate={~p"/admin/runtime"}
-                icon="hero-signal"
-                label="Runtime"
-                active={assigns[:nav_item] == :admin_runtime}
-              />
-            </ul>
-
-          <% :organization -> %>
-            <div class="px-3 mb-2 sidebar-expanded-only">
-              <span class="hud-label">
-                <%= if @current_scope && @current_scope.organization do %>
-                  {@current_scope.organization.display_name}
-                <% else %>
-                  Organization
-                <% end %>
-              </span>
-            </div>
-            <ul class="menu menu-sm space-y-0.5">
-              <.nav_item
-                navigate={~p"/"}
-                icon="hero-home"
-                label="Home"
-                active={assigns[:nav_item] == :organization_home}
-              />
-              <.nav_item
-                navigate={~p"/missions"}
-                icon="hero-rocket-launch"
-                label="Missions"
-                active={assigns[:nav_item] == :missions}
-              />
-              <.nav_item
-                :if={provider_accounts_visible?(@current_scope)}
-                id="provider-accounts-nav-link"
-                navigate={~p"/provider-accounts"}
-                icon="hero-globe-alt"
-                label="Provider Accounts"
-                active={assigns[:nav_item] == :provider_accounts}
-              />
-            </ul>
-
-          <% _ -> %>
-        <% end %>
-      </nav>
-
-      <div class="px-2 py-2 border-t border-primary/20">
-        <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
-          <button type="submit" class="btn btn-ghost btn-sm w-full justify-start gap-2 text-xs uppercase tracking-wide text-base-content/60">
-            <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
-            <span class="sidebar-label">Sign out</span>
-          </button>
-        </.form>
-      </div>
-
-      <button
-        type="button"
-        class="sidebar-toggle-btn hidden lg:flex"
-        onclick="document.querySelectorAll('[data-sidebar-collapsible]').forEach(function(el){el.classList.toggle('sidebar-expanded');el.classList.toggle('sidebar-collapsed')})"
-        title="Toggle sidebar"
-      >
-        <span class="hero-chevron-left h-3 w-3 toggle-chevron transition-transform"></span>
-      </button>
-    </div>
-  </div>
+  <.vue
+    id="global-sidebar-navigation"
+    v-component="GlobalSidebarNavigation"
+    presentation={global_sidebar_navigation_presentation(assigns)}
+    v-ssr={false}
+    class="drawer-side"
+  />
 </div>
 
 <LiveToast.toast_group
