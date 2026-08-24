@@ -48,59 +48,44 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityBulkDecisionTe
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    bulk_form = presentation["actions"]["bulk_form"]
+    [finding] = presentation["findings"]["items"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-form")
+    assert "dashboard-lifecycle-event-1" =
+             bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-form"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-count")
+    assert "1" = bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-count"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-placements")
+    assert "placement-1" =
+             bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-placements"]
 
-    assert ["mark_conflict"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-kind")
+    assert "mark_conflict" =
+             bulk_form["button"]["attrs"][
+               "data-dashboard-comparison-review-bulk-decision-kind"
+             ]
 
-    assert ["identity-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute(
+    assert "identity-1" =
+             finding["attrs"][
                "data-dashboard-comparison-review-finding-observation-identity"
-             )
+             ]
 
-    assert ["transport"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-scope-kind")
+    assert "transport" =
+             finding["attrs"]["data-dashboard-comparison-review-finding-scope-kind"]
 
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-scope-id")
+    assert "transport-alpha" =
+             finding["attrs"]["data-dashboard-comparison-review-finding-scope-id"]
 
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-scope-ids")
+    assert "transport-alpha,transport-beta" =
+             finding["attrs"]["data-dashboard-comparison-review-finding-scope-ids"]
 
-    assert ["contact-alpha,contact-beta"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-contact-ids")
+    assert "contact-alpha,contact-beta" =
+             finding["attrs"]["data-dashboard-comparison-review-finding-contact-ids"]
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-source-endpoint-id")
+    assert "endpoint-alpha" =
+             finding["attrs"][
+               "data-dashboard-comparison-review-finding-source-endpoint-id"
+             ]
   end
 
   test "request_details scopes bulk decision action to actionable review findings" do
@@ -139,68 +124,53 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityBulkDecisionTe
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    bulk_form = presentation["actions"]["bulk_form"]
+    root_attrs = presentation["root"]["attrs"]
+    skipped_badge = presentation["actions"]["skipped_badge"]
+    findings = presentation["findings"]["items"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-form")
+    assert "dashboard-lifecycle-event-1" =
+             bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-form"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-count")
+    assert "1" = bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-count"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-placements")
+    assert "placement-1" =
+             bulk_form["attrs"]["data-dashboard-comparison-review-bulk-decision-placements"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-skipped-count")
+    assert "1" =
+             root_attrs["data-dashboard-comparison-review-bulk-decision-skipped-count"]
 
-    assert ["placement-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-bulk-decision-skipped-placements"
-             )
+    assert "placement-2" =
+             root_attrs["data-dashboard-comparison-review-bulk-decision-skipped-placements"]
 
-    assert ["missing_observation_identity"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-bulk-decision-skipped-reasons"
-             )
+    assert "missing_observation_identity" =
+             root_attrs["data-dashboard-comparison-review-bulk-decision-skipped-reasons"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-skipped]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-skipped-count")
+    assert "1" =
+             skipped_badge["attrs"][
+               "data-dashboard-comparison-review-bulk-decision-skipped-count"
+             ]
 
     assert ["included", "skipped"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-finding]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-bulk-decision")
-
-    assert ["missing_observation_identity"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-review-finding="placement-2"]))
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-finding-bulk-decision-reason"
+             Enum.map(
+               findings,
+               & &1["attrs"]["data-dashboard-comparison-review-finding-bulk-decision"]
              )
 
-    assert ["Skipped: missing observation identity"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-review-finding="placement-2"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-review-finding-bulk-decision-label")
+    skipped_finding = Enum.find(findings, &(&1["key"] == "placement-2"))
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-unavailable")
+    assert "missing_observation_identity" =
+             skipped_finding["attrs"][
+               "data-dashboard-comparison-review-finding-bulk-decision-reason"
+             ]
+
+    assert "Skipped: missing observation identity" =
+             skipped_finding["attrs"][
+               "data-dashboard-comparison-review-finding-bulk-decision-label"
+             ]
+
+    assert nil == presentation["actions"]["unavailable_badge"]
   end
 
   test "request_details explains unavailable bulk decisions when source context is missing" do
@@ -225,38 +195,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityBulkDecisionTe
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    unavailable_badge = presentation["actions"]["unavailable_badge"]
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-form")
+    assert nil == presentation["actions"]["bulk_form"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-unavailable")
+    assert "dashboard-lifecycle-event-1" =
+             unavailable_badge["attrs"][
+               "data-dashboard-comparison-review-bulk-decision-unavailable"
+             ]
 
-    assert ["missing_source_context"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "missing_source_context" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-reason"
-             )
+             ]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "1" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-count"
-             )
+             ]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "placement-1" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-placements"
-             )
+             ]
   end
 
   test "request_details explains unavailable bulk decisions when no findings are actionable" do
@@ -287,32 +249,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityBulkDecisionTe
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    unavailable_badge = presentation["actions"]["unavailable_badge"]
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-bulk-decision-form")
+    assert nil == presentation["actions"]["bulk_form"]
 
-    assert ["no_actionable_findings"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "no_actionable_findings" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-reason"
-             )
+             ]
 
-    assert ["0"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "0" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-count"
-             )
+             ]
 
-    assert [""] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-bulk-decision-unavailable]")
-             |> LazyHTML.attribute(
+    assert "" =
+             unavailable_badge["attrs"][
                "data-dashboard-comparison-review-bulk-decision-unavailable-placements"
-             )
+             ]
+  end
+
+  defp request_presentation(rendered, event_id) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-request-#{event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == "request"
+    vue.props["presentation"]
   end
 end

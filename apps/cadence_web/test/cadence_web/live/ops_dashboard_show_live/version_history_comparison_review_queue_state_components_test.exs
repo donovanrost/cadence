@@ -106,10 +106,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
              |> LazyHTML.query("[data-dashboard-comparison-review-queue-state-message]")
              |> selected_text()
 
+    presentation = comparison_request_presentation(html, open_request_event)
+
     assert ["false"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-placement-link]")
-             |> LazyHTML.attribute("data-dashboard-review-placement-selected")
+             presentation
+             |> placement_links()
+             |> Enum.map(& &1["attrs"]["data-dashboard-review-placement-selected"])
   end
 
   defp dashboard_document do
@@ -125,5 +127,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
     lazy_html
     |> LazyHTML.text()
     |> String.trim()
+  end
+
+  defp comparison_request_presentation(rendered, event) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+      )
+
+    assert vue.component == "ComparisonReviewActivityDetails"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
+  end
+
+  defp placement_links(presentation) do
+    presentation["details"]["rows"]
+    |> Enum.find(&(&1["key"] == "placements"))
+    |> Map.fetch!("links")
   end
 end

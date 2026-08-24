@@ -174,10 +174,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
       assert request_event.payload["source"] == "dashboard_comparison_rollup"
       assert request_event.payload["open_count"] == 1
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-status="open"])
-             )
+      request_event_id = request_event.dashboard_lifecycle_event_id
+
+      request_presentation =
+        comparison_presentation(view, "request", request_event_id)
+
+      assert %{
+               "data-dashboard-comparison-review-request" => ^request_event_id,
+               "data-dashboard-comparison-review-status" => "open"
+             } = request_presentation["root"]["attrs"]
 
       activity_controls =
         view
@@ -206,14 +211,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
                ~s(#dashboard-activity-section[data-dashboard-activity-mode="open_comparison_reviews"][data-dashboard-comparison-review-open-count="1"][data-dashboard-comparison-review-work-queue-count="1"])
              )
 
-      view
-      |> form(
-        "#dashboard-comparison-review-resolve-form-#{request_event.dashboard_lifecycle_event_id}",
-        %{
-          "review" => %{"resolution_reason" => "Resolved from rollup request"}
-        }
+      resolve_form = request_presentation["actions"]["resolve_form"]
+
+      render_submit(
+        view,
+        resolve_form["attrs"]["phx-submit"],
+        form_payload(resolve_form, %{"resolution_reason" => "Resolved from rollup request"})
       )
-      |> render_submit()
 
       patched_path = assert_patch(view)
       assert patched_path =~ "activity_filter=comparison_reviews"
@@ -242,15 +246,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
       assert resolution_event.payload["source_open_placement_ids"] ==
                request_event.payload["open_placement_ids"]
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-status="resolved"][data-dashboard-comparison-review-resolution-event="#{resolution_event.dashboard_lifecycle_event_id}"])
-             )
+      resolution_event_id = resolution_event.dashboard_lifecycle_event_id
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-resolution="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-workflow-kind="bulk_correction_authority_review"][data-dashboard-comparison-review-resolution-workflow-action="request_comparison_review"][data-dashboard-comparison-review-resolution-workflow-selection-count="1"][data-dashboard-comparison-review-resolution-source-open-count="1"])
-             )
+      request_presentation =
+        comparison_presentation(view, "request", request_event_id)
+
+      assert %{
+               "data-dashboard-comparison-review-request" => ^request_event_id,
+               "data-dashboard-comparison-review-status" => "resolved",
+               "data-dashboard-comparison-review-resolution-event" => ^resolution_event_id
+             } = request_presentation["root"]["attrs"]
+
+      resolution_presentation =
+        comparison_presentation(view, "resolution", resolution_event_id)
+
+      assert %{
+               "data-dashboard-comparison-review-resolution" => ^resolution_event_id,
+               "data-dashboard-comparison-review-resolution-workflow-kind" =>
+                 "bulk_correction_authority_review",
+               "data-dashboard-comparison-review-resolution-workflow-action" =>
+                 "request_comparison_review",
+               "data-dashboard-comparison-review-resolution-workflow-selection-count" => "1",
+               "data-dashboard-comparison-review-resolution-source-open-count" => "1"
+             } = resolution_presentation["root"]["attrs"]
     end
 
     test "resolves mixed comparison reviews with bulk decision audit context" do
@@ -311,21 +329,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
                  actor_id: user.user_id
                )
 
+      request_event_id = request_event.dashboard_lifecycle_event_id
+
       path =
         show_path(mission, dashboard) <>
-          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event_id}"
 
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      view
-      |> form(
-        "#dashboard-comparison-review-resolve-form-#{request_event.dashboard_lifecycle_event_id}",
-        %{
-          "review" => %{"resolution_reason" => "Mixed request reviewed"}
-        }
+      request_presentation =
+        comparison_presentation(view, "request", request_event_id)
+
+      resolve_form = request_presentation["actions"]["resolve_form"]
+
+      render_submit(
+        view,
+        resolve_form["attrs"]["phx-submit"],
+        form_payload(resolve_form, %{"resolution_reason" => "Mixed request reviewed"})
       )
-      |> render_submit()
 
       assert_patch(view)
 
@@ -361,11 +383,43 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
       assert resolution_event.payload["source_ground_station_ids"] == ["dss-14"]
       assert resolution_event.payload["source_scope_link_ids"] == ["link-alpha"]
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-resolution="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-source-actionable-count="1"][data-dashboard-comparison-review-resolution-source-actionable-placements="placement-counter"][data-dashboard-comparison-review-resolution-source-skipped-count="1"][data-dashboard-comparison-review-resolution-source-skipped-placements="placement-untracked"][data-dashboard-comparison-review-resolution-source-skipped-reasons="missing_observation_identity"][data-dashboard-comparison-review-resolution-source-scope-kind="transport"][data-dashboard-comparison-review-resolution-source-scope-ids="transport-alpha,transport-beta"][data-dashboard-comparison-review-resolution-source-contact-ids="contact-alpha,contact-beta"][data-dashboard-comparison-review-resolution-source-resource-ids="transport-alpha"][data-dashboard-comparison-review-resolution-source-transport-ids="transport-alpha"][data-dashboard-comparison-review-resolution-source-endpoint-ids="endpoint-alpha"][data-dashboard-comparison-review-resolution-source-ground-station-ids="dss-14"][data-dashboard-comparison-review-resolution-source-scope-link-ids="link-alpha"]),
+      resolution_event_id = resolution_event.dashboard_lifecycle_event_id
+
+      resolution_presentation =
+        comparison_presentation(view, "resolution", resolution_event_id)
+
+      assert {
+               %{
+                 "data-dashboard-comparison-review-resolution" => ^resolution_event_id,
+                 "data-dashboard-comparison-review-resolution-source-actionable-count" => "1",
+                 "data-dashboard-comparison-review-resolution-source-actionable-placements" =>
+                   "placement-counter",
+                 "data-dashboard-comparison-review-resolution-source-skipped-count" => "1",
+                 "data-dashboard-comparison-review-resolution-source-skipped-placements" =>
+                   "placement-untracked",
+                 "data-dashboard-comparison-review-resolution-source-skipped-reasons" =>
+                   "missing_observation_identity",
+                 "data-dashboard-comparison-review-resolution-source-scope-kind" => "transport",
+                 "data-dashboard-comparison-review-resolution-source-scope-ids" =>
+                   "transport-alpha,transport-beta",
+                 "data-dashboard-comparison-review-resolution-source-contact-ids" =>
+                   "contact-alpha,contact-beta",
+                 "data-dashboard-comparison-review-resolution-source-resource-ids" =>
+                   "transport-alpha",
+                 "data-dashboard-comparison-review-resolution-source-transport-ids" =>
+                   "transport-alpha",
+                 "data-dashboard-comparison-review-resolution-source-endpoint-ids" =>
+                   "endpoint-alpha",
+                 "data-dashboard-comparison-review-resolution-source-ground-station-ids" =>
+                   "dss-14",
+                 "data-dashboard-comparison-review-resolution-source-scope-link-ids" =>
+                   "link-alpha"
+               },
                "1 actionable / 1 skipped"
-             )
+             } = {
+               resolution_presentation["root"]["attrs"],
+               detail_value(resolution_presentation, "bulk-action")
+             }
     end
 
     test "resolves comparison reviews from the versions activity queue" do
@@ -403,26 +457,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
                  actor_id: user.user_id
                )
 
+      request_event_id = request_event.dashboard_lifecycle_event_id
+
       path =
         show_path(mission, dashboard) <>
-          "?panel=versions&activity_filter=comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+          "?panel=versions&activity_filter=comparison_reviews&activity_event=#{request_event_id}"
 
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-status="open"][data-dashboard-comparison-review-target-event-id="#{request_event.dashboard_lifecycle_event_id}"])
-             )
+      request_presentation =
+        comparison_presentation(view, "request", request_event_id)
 
-      view
-      |> form(
-        "#dashboard-comparison-review-resolve-form-#{request_event.dashboard_lifecycle_event_id}",
-        %{
-          "review" => %{"resolution_reason" => "Reviewed by dashboard operator"}
-        }
+      assert %{
+               "data-dashboard-comparison-review-request" => ^request_event_id,
+               "data-dashboard-comparison-review-status" => "open",
+               "data-dashboard-comparison-review-target-event-id" => ^request_event_id
+             } = request_presentation["root"]["attrs"]
+
+      resolve_form = request_presentation["actions"]["resolve_form"]
+
+      render_submit(
+        view,
+        resolve_form["attrs"]["phx-submit"],
+        form_payload(resolve_form, %{"resolution_reason" => "Reviewed by dashboard operator"})
       )
-      |> render_submit()
 
       patched_path = assert_patch(view)
       assert patched_path =~ "activity_filter=comparison_reviews"
@@ -441,16 +500,74 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
       assert resolution_event.payload["resolution_reason"] == "Reviewed by dashboard operator"
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-status="resolved"][data-dashboard-comparison-review-resolution-event="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-result-event-id="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-target-event-id="#{request_event.dashboard_lifecycle_event_id}"])
-             )
+      resolution_event_id = resolution_event.dashboard_lifecycle_event_id
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-resolution="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-result-event-id="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-target-event-id="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-source="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-disposition="review_completed"][data-dashboard-comparison-review-resolution-affected-placements="placement-1,placement-2"]),
+      request_presentation =
+        comparison_presentation(view, "request", request_event_id)
+
+      assert %{
+               "data-dashboard-comparison-review-request" => ^request_event_id,
+               "data-dashboard-comparison-review-status" => "resolved",
+               "data-dashboard-comparison-review-resolution-event" => ^resolution_event_id,
+               "data-dashboard-comparison-review-result-event-id" => ^resolution_event_id,
+               "data-dashboard-comparison-review-target-event-id" => ^request_event_id
+             } = request_presentation["root"]["attrs"]
+
+      resolution_presentation =
+        comparison_presentation(view, "resolution", resolution_event_id)
+
+      assert {
+               %{
+                 "data-dashboard-comparison-review-resolution" => ^resolution_event_id,
+                 "data-dashboard-comparison-review-resolution-result-event-id" =>
+                   ^resolution_event_id,
+                 "data-dashboard-comparison-review-resolution-target-event-id" =>
+                   ^resolution_event_id,
+                 "data-dashboard-comparison-review-resolution-source" => ^request_event_id,
+                 "data-dashboard-comparison-review-resolution-disposition" => "review_completed",
+                 "data-dashboard-comparison-review-resolution-affected-placements" =>
+                   "placement-1,placement-2"
+               },
                "Reviewed by dashboard operator"
-             )
+             } = {
+               resolution_presentation["root"]["attrs"],
+               detail_value(resolution_presentation, "reason")
+             }
     end
+  end
+
+  defp comparison_presentation(rendered, kind, event_id) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-#{kind}-#{event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == kind
+    vue.props["presentation"]
+  end
+
+  defp form_payload(form, overrides) do
+    hidden_params =
+      Map.new(form["hidden_fields"], fn field ->
+        name = field["attrs"]["name"]
+        key = name |> String.trim_leading("review[") |> String.trim_trailing("]")
+        {key, field["attrs"]["value"]}
+      end)
+
+    %{"review" => Map.merge(hidden_params, overrides)}
+  end
+
+  defp detail_value(presentation, key) do
+    presentation["details"]["rows"]
+    |> Enum.find(&(&1["key"] == key))
+    |> Map.fetch!("value")
   end
 end

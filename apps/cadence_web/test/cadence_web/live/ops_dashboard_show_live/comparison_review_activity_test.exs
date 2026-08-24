@@ -16,42 +16,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityTest do
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    root_attrs = presentation["root"]["attrs"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-request")
+    assert "dashboard-lifecycle-event-1" =
+             root_attrs["data-dashboard-comparison-review-request"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-target-event-id")
+    assert "dashboard-lifecycle-event-1" =
+             root_attrs["data-dashboard-comparison-review-target-event-id"]
 
-    assert ["open"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-status")
+    assert "open" = root_attrs["data-dashboard-comparison-review-status"]
 
-    assert ["placement-1,placement-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-placements")
+    assert "placement-1,placement-2" =
+             root_attrs["data-dashboard-comparison-review-placements"]
 
     assert ["true", "false"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-placement-link]")
-             |> LazyHTML.attribute("data-dashboard-review-placement-selected")
+             presentation
+             |> detail_row("placements")
+             |> Map.fetch!("links")
+             |> Enum.map(& &1["attrs"]["data-dashboard-review-placement-selected"])
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolve-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolve-form")
+    resolve_form = presentation["actions"]["resolve_form"]
 
-    assert ["placement-1,placement-2"] =
-             document
-             |> LazyHTML.query(~s(input[name="review[affected_placement_ids]"]))
-             |> LazyHTML.attribute("value")
+    assert "dashboard-lifecycle-event-1" =
+             resolve_form["attrs"]["data-dashboard-comparison-review-resolve-form"]
+
+    assert "placement-1,placement-2" =
+             hidden_value(resolve_form, "review[affected_placement_ids]")
   end
 
   test "request_details renders resolved review state without a form" do
@@ -64,32 +55,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityTest do
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = request_presentation(html, row.event_id)
+    root_attrs = presentation["root"]["attrs"]
 
-    assert ["resolved"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-status")
+    assert "resolved" = root_attrs["data-dashboard-comparison-review-status"]
 
-    assert ["dashboard-lifecycle-event-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-event")
+    assert "dashboard-lifecycle-event-2" =
+             root_attrs["data-dashboard-comparison-review-resolution-event"]
 
-    assert ["dashboard-lifecycle-event-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-request]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-result-event-id")
+    assert "dashboard-lifecycle-event-2" =
+             root_attrs["data-dashboard-comparison-review-result-event-id"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolved]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolved")
+    assert "dashboard-lifecycle-event-1" =
+             presentation["actions"]["resolved_badge"]["attrs"][
+               "data-dashboard-comparison-review-resolved"
+             ]
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolve-form]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolve-form")
+    assert nil == presentation["actions"]["resolve_form"]
   end
 
   test "resolution_details renders resolution context" do
@@ -126,152 +108,115 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityTest do
         row: row
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = resolution_presentation(html, row.event_id)
+    root_attrs = presentation["root"]["attrs"]
 
-    assert html =~ "1 actionable / 1 skipped"
+    assert detail_value(presentation, "bulk-action") == "1 actionable / 1 skipped"
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-source")
+    assert "dashboard-lifecycle-event-1" =
+             root_attrs["data-dashboard-comparison-review-resolution-source"]
 
-    assert ["dashboard-lifecycle-event-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-result-event-id")
+    assert "dashboard-lifecycle-event-2" =
+             root_attrs["data-dashboard-comparison-review-resolution-result-event-id"]
 
-    assert ["dashboard-lifecycle-event-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-target-event-id")
+    assert "dashboard-lifecycle-event-2" =
+             root_attrs["data-dashboard-comparison-review-resolution-target-event-id"]
 
-    assert ["review_completed"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-disposition")
+    assert "review_completed" =
+             root_attrs["data-dashboard-comparison-review-resolution-disposition"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-selected-placement"
-             )
+    assert "placement-1" =
+             root_attrs["data-dashboard-comparison-review-resolution-selected-placement"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-affected-placements"
-             )
+    assert "placement-1" =
+             root_attrs["data-dashboard-comparison-review-resolution-affected-placements"]
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-open-count"
-             )
+    assert "2" = root_attrs["data-dashboard-comparison-review-resolution-source-open-count"]
 
-    assert ["transport"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-scope-kind"
-             )
+    assert "transport" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-scope-kind"]
 
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-resolution-source-scope-ids")
+    assert "transport-alpha,transport-beta" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-scope-ids"]
 
-    assert ["contact-alpha,contact-beta"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-contact-ids"
-             )
+    assert "contact-alpha,contact-beta" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-contact-ids"]
 
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-resource-ids"
-             )
+    assert "transport-alpha" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-resource-ids"]
 
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-transport-ids"
-             )
+    assert "transport-alpha" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-transport-ids"]
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-endpoint-ids"
-             )
+    assert "endpoint-alpha" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-endpoint-ids"]
 
-    assert ["dss-14"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-ground-station-ids"
-             )
+    assert "dss-14" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-ground-station-ids"]
 
-    assert ["link-alpha"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-scope-link-ids"
-             )
+    assert "link-alpha" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-scope-link-ids"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-actionable-count"
-             )
+    assert "1" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-actionable-count"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
+    assert "placement-1" =
+             root_attrs[
                "data-dashboard-comparison-review-resolution-source-actionable-placements"
-             )
+             ]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-skipped-count"
-             )
+    assert "1" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-skipped-count"]
 
-    assert ["placement-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-skipped-placements"
-             )
+    assert "placement-2" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-skipped-placements"]
 
-    assert ["missing_observation_identity"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-             |> LazyHTML.attribute(
-               "data-dashboard-comparison-review-resolution-source-skipped-reasons"
-             )
+    assert "missing_observation_identity" =
+             root_attrs["data-dashboard-comparison-review-resolution-source-skipped-reasons"]
 
-    resolution_text =
-      document
-      |> LazyHTML.query("[data-dashboard-comparison-review-resolution]")
-      |> LazyHTML.text()
-      |> String.replace(~r/\s+/, " ")
-      |> String.trim()
+    assert detail_row(presentation, "scope")["label"] == "Scope"
+    assert detail_value(presentation, "scope-ids") == "transport-alpha,transport-beta"
+    assert detail_row(presentation, "contacts")["label"] == "Contacts"
+    assert detail_value(presentation, "contacts") == "contact-alpha,contact-beta"
+    assert detail_row(presentation, "source-endpoints")["label"] == "Source endpoints"
+    assert detail_value(presentation, "source-endpoints") == "endpoint-alpha"
+  end
 
-    assert resolution_text =~ "Scope"
-    assert resolution_text =~ "transport-alpha,transport-beta"
-    assert resolution_text =~ "Contacts"
-    assert resolution_text =~ "contact-alpha,contact-beta"
-    assert resolution_text =~ "Source endpoints"
-    assert resolution_text =~ "endpoint-alpha"
+  defp request_presentation(rendered, event_id) do
+    presentation(rendered, "request", event_id)
+  end
+
+  defp resolution_presentation(rendered, event_id) do
+    presentation(rendered, "resolution", event_id)
+  end
+
+  defp presentation(rendered, kind, event_id) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-#{kind}-#{event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == kind
+    vue.props["presentation"]
+  end
+
+  defp detail_row(presentation, key) do
+    Enum.find(presentation["details"]["rows"], &(&1["key"] == key))
+  end
+
+  defp detail_value(presentation, key), do: detail_row(presentation, key)["value"]
+
+  defp hidden_value(form, name) do
+    form["hidden_fields"]
+    |> Enum.find(&(&1["attrs"]["name"] == name))
+    |> get_in(["attrs", "value"])
   end
 end

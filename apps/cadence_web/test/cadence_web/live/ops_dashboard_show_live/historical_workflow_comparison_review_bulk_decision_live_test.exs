@@ -204,16 +204,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}[data-dashboard-comparison-review-bulk-decision-count="2"][data-dashboard-comparison-review-bulk-decision-placements="placement-counter,placement-voltage"])
-             )
+      presentation = comparison_request_presentation(view, request_event)
+      bulk_form = presentation["actions"]["bulk_form"]
 
-      view
-      |> form(
-        "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+      assert %{
+               "data-dashboard-comparison-review-bulk-decision-count" => "2",
+               "data-dashboard-comparison-review-bulk-decision-placements" =>
+                 "placement-counter,placement-voltage"
+             } = bulk_form["attrs"]
+
+      render_submit(
+        view,
+        bulk_form["attrs"]["phx-submit"],
+        form_payload(bulk_form)
       )
-      |> render_submit()
 
       assert_patch(view)
 
@@ -308,37 +312,58 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
                ~s(#dashboard-activity-section[data-dashboard-comparison-review-open-count="1"][data-dashboard-comparison-review-open-placements="placement-counter,placement-untracked"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}[data-dashboard-comparison-review-bulk-decision-count="1"][data-dashboard-comparison-review-bulk-decision-placements="placement-counter"])
-             )
+      presentation = comparison_request_presentation(view, request_event)
+      bulk_form = presentation["actions"]["bulk_form"]
+      root_attrs = presentation["root"]["attrs"]
+      skipped_badge = presentation["actions"]["skipped_badge"]
+      findings = presentation["findings"]["items"]
+      request_event_id = request_event.dashboard_lifecycle_event_id
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-skipped-count="1"][data-dashboard-comparison-review-bulk-decision-skipped-placements="placement-untracked"][data-dashboard-comparison-review-bulk-decision-skipped-reasons="missing_observation_identity"])
-             )
+      assert %{
+               "data-dashboard-comparison-review-bulk-decision-count" => "1",
+               "data-dashboard-comparison-review-bulk-decision-placements" => "placement-counter"
+             } = bulk_form["attrs"]
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-bulk-decision-skipped="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-skipped-count="1"]),
-               "1 finding skipped for bulk action."
-             )
+      assert %{
+               "data-dashboard-comparison-review-request" => ^request_event_id,
+               "data-dashboard-comparison-review-bulk-decision-skipped-count" => "1",
+               "data-dashboard-comparison-review-bulk-decision-skipped-placements" =>
+                 "placement-untracked",
+               "data-dashboard-comparison-review-bulk-decision-skipped-reasons" =>
+                 "missing_observation_identity"
+             } = root_attrs
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-finding="placement-counter"][data-dashboard-comparison-review-finding-bulk-decision="included"][data-dashboard-comparison-review-finding-bulk-decision-label="Included in bulk action"])
-             )
+      assert {%{
+                "data-dashboard-comparison-review-bulk-decision-skipped" => ^request_event_id,
+                "data-dashboard-comparison-review-bulk-decision-skipped-count" => "1"
+              }, "1 finding skipped for bulk action."} =
+               {skipped_badge["attrs"], skipped_badge["text"]}
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-finding="placement-untracked"][data-dashboard-comparison-review-finding-bulk-decision="skipped"][data-dashboard-comparison-review-finding-bulk-decision-reason="missing_observation_identity"][data-dashboard-comparison-review-finding-bulk-decision-label="Skipped: missing observation identity"])
-             )
+      included_finding = Enum.find(findings, &(&1["key"] == "placement-counter"))
 
-      view
-      |> form(
-        "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+      assert %{
+               "data-dashboard-comparison-review-finding" => "placement-counter",
+               "data-dashboard-comparison-review-finding-bulk-decision" => "included",
+               "data-dashboard-comparison-review-finding-bulk-decision-label" =>
+                 "Included in bulk action"
+             } = included_finding["attrs"]
+
+      skipped_finding = Enum.find(findings, &(&1["key"] == "placement-untracked"))
+
+      assert %{
+               "data-dashboard-comparison-review-finding" => "placement-untracked",
+               "data-dashboard-comparison-review-finding-bulk-decision" => "skipped",
+               "data-dashboard-comparison-review-finding-bulk-decision-reason" =>
+                 "missing_observation_identity",
+               "data-dashboard-comparison-review-finding-bulk-decision-label" =>
+                 "Skipped: missing observation identity"
+             } = skipped_finding["attrs"]
+
+      render_submit(
+        view,
+        bulk_form["attrs"]["phx-submit"],
+        form_payload(bulk_form)
       )
-      |> render_submit()
 
       assert_patch(view)
 
@@ -356,5 +381,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
 
       assert updated.validity_state == :conflict
     end
+  end
+
+  defp comparison_request_presentation(rendered, event) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == "request"
+    vue.props["presentation"]
+  end
+
+  defp form_payload(form) do
+    review =
+      Map.new(form["hidden_fields"], fn field ->
+        name = field["attrs"]["name"]
+        key = name |> String.trim_leading("review[") |> String.trim_trailing("]")
+        {key, field["attrs"]["value"]}
+      end)
+
+    %{"review" => review}
   end
 end

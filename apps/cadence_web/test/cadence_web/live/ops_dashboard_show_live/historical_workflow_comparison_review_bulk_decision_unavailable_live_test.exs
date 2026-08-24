@@ -179,16 +179,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      refute has_element?(
-               view,
-               "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
-             )
+      presentation = comparison_request_presentation(view, request_event)
+      unavailable_badge = presentation["actions"]["unavailable_badge"]
+      request_event_id = request_event.dashboard_lifecycle_event_id
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-bulk-decision-unavailable="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-unavailable-reason="missing_source_context"][data-dashboard-comparison-review-bulk-decision-unavailable-count="1"][data-dashboard-comparison-review-bulk-decision-unavailable-placements="placement-counter"]),
-               "Bulk decision unavailable: telemetry source context is missing."
-             )
+      refute presentation["actions"]["bulk_form"]
+
+      assert {%{
+                "data-dashboard-comparison-review-bulk-decision-unavailable" => ^request_event_id,
+                "data-dashboard-comparison-review-bulk-decision-unavailable-reason" =>
+                  "missing_source_context",
+                "data-dashboard-comparison-review-bulk-decision-unavailable-count" => "1",
+                "data-dashboard-comparison-review-bulk-decision-unavailable-placements" =>
+                  "placement-counter"
+              }, "Bulk decision unavailable: telemetry source context is missing."} =
+               {unavailable_badge["attrs"], unavailable_badge["text"]}
 
       assert [] =
                Storage.list_observation_identity_decision_events(
@@ -246,16 +251,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      refute has_element?(
-               view,
-               "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
-             )
+      presentation = comparison_request_presentation(view, request_event)
+      unavailable_badge = presentation["actions"]["unavailable_badge"]
+      request_event_id = request_event.dashboard_lifecycle_event_id
 
-      assert has_element?(
-               view,
-               ~s([data-dashboard-comparison-review-bulk-decision-unavailable="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-unavailable-reason="no_actionable_findings"][data-dashboard-comparison-review-bulk-decision-unavailable-count="0"][data-dashboard-comparison-review-bulk-decision-unavailable-placements=""]),
-               "Bulk decision unavailable: no actionable findings."
-             )
+      refute presentation["actions"]["bulk_form"]
+
+      assert {%{
+                "data-dashboard-comparison-review-bulk-decision-unavailable" => ^request_event_id,
+                "data-dashboard-comparison-review-bulk-decision-unavailable-reason" =>
+                  "no_actionable_findings",
+                "data-dashboard-comparison-review-bulk-decision-unavailable-count" => "0",
+                "data-dashboard-comparison-review-bulk-decision-unavailable-placements" => ""
+              }, "Bulk decision unavailable: no actionable findings."} =
+               {unavailable_badge["attrs"], unavailable_badge["text"]}
 
       assert [] =
                Storage.list_observation_identity_decision_events(
@@ -267,5 +276,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
                  binding_id: "default_flight_telemetry"
                )
     end
+  end
+
+  defp comparison_request_presentation(rendered, event) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == "request"
+    vue.props["presentation"]
   end
 end

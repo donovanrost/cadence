@@ -207,16 +207,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
     {:ok, view, _html} = live(conn, path)
     render_dashboard_async(view)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}[data-dashboard-comparison-review-bulk-decision-count="2"][data-dashboard-comparison-review-bulk-decision-placements="placement-counter,placement-missing"])
-           )
+    presentation = comparison_request_presentation(view, request_event)
+    bulk_form = presentation["actions"]["bulk_form"]
 
-    view
-    |> form(
-      "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+    assert %{
+             "data-dashboard-comparison-review-bulk-decision-count" => "2",
+             "data-dashboard-comparison-review-bulk-decision-placements" =>
+               "placement-counter,placement-missing"
+           } = bulk_form["attrs"]
+
+    render_submit(
+      view,
+      bulk_form["attrs"]["phx-submit"],
+      form_payload(bulk_form)
     )
-    |> render_submit()
 
     assert_patch(view)
 
@@ -285,5 +289,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
              Storage.fetch_observation_identity_state(state.observation_identity_id)
 
     assert updated_state.validity_state == :conflict
+  end
+
+  defp comparison_request_presentation(rendered, event) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+      )
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ComparisonReviewActivityDetails",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == "request"
+    vue.props["presentation"]
+  end
+
+  defp form_payload(form) do
+    review =
+      Map.new(form["hidden_fields"], fn field ->
+        name = field["attrs"]["name"]
+        key = name |> String.trim_leading("review[") |> String.trim_trailing("]")
+        {key, field["attrs"]["value"]}
+      end)
+
+    %{"review" => review}
   end
 end
