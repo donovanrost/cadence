@@ -3,9 +3,8 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   use CadenceWeb, :live_view
 
-  import CadenceWeb.OpsContactScheduleLive.Components
-
   alias CadenceWeb.OpsContactScheduleLive.{LiveDeps, OpportunityToken}
+  alias Phoenix.LiveView.JS
 
   @nonterminal_states [:requesting, :pending, :confirmed, :active, :unknown, :canceling]
 
@@ -22,17 +21,13 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     socket =
       socket
       |> stream_configure(:contact_records,
-        dom_id: fn row -> "contact-record-#{row.canonical_id}" end
+        dom_id: & &1["__dom_id"]
       )
       |> stream_configure(:opportunities,
-        dom_id: fn opportunity ->
-          "opportunity-#{opportunity["id"]}"
-        end
+        dom_id: & &1["__dom_id"]
       )
       |> stream_configure(:provider_reservations,
-        dom_id: fn row ->
-          "provider-reservation-#{row.reservation.provider_reservation_id}"
-        end
+        dom_id: & &1["__dom_id"]
       )
       |> assign(:page_title, "Contacts")
       |> assign(:ops_nav_item, :contacts)
@@ -45,6 +40,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       |> assign(:search_ref, nil)
       |> assign(:search_error, nil)
       |> assign(:reservation_busy, MapSet.new())
+      |> assign(:admin?, organization_admin?(scope))
       |> assign(:refresh_timer, nil)
       |> stream(:opportunities, [])
       |> assign_route_context(spacecraft_id, %{})
@@ -135,27 +131,33 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   end
 
   def handle_event("cancel", %{"reservation-id" => reservation_id}, socket) do
-    if MapSet.member?(socket.assigns.reservation_busy, reservation_id) do
-      {:noreply, socket}
-    else
-      %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
+    cond do
+      not socket.assigns.admin? ->
+        {:noreply,
+         put_flash(socket, :error, "Only organization administrators may cancel reservations.")}
 
-      socket =
-        socket
-        |> assign(
-          :reservation_busy,
-          MapSet.put(socket.assigns.reservation_busy, reservation_id)
-        )
-        |> start_async({:cancel_reservation, reservation_id}, fn ->
-          LiveDeps.cancel(
-            live_deps,
-            scope.organization_id,
-            mission.mission_id,
-            reservation_id
+      MapSet.member?(socket.assigns.reservation_busy, reservation_id) ->
+        {:noreply, socket}
+
+      true ->
+        %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
+
+        socket =
+          socket
+          |> assign(
+            :reservation_busy,
+            MapSet.put(socket.assigns.reservation_busy, reservation_id)
           )
-        end)
+          |> start_async({:cancel_reservation, reservation_id}, fn ->
+            LiveDeps.cancel(
+              live_deps,
+              scope.organization_id,
+              mission.mission_id,
+              reservation_id
+            )
+          end)
 
-      {:noreply, socket}
+        {:noreply, socket}
     end
   end
 
@@ -165,7 +167,12 @@ defmodule CadenceWeb.OpsContactScheduleLive do
         {:ok, {:ok, %{opportunities: opportunities, route: route}}},
         %{assigns: %{search_ref: search_ref}} = socket
       ) do
-    signed_opportunities = Enum.map(opportunities, &sign_opportunity(socket, route, &1))
+    signed_opportunities =
+      Enum.map(opportunities, fn opportunity ->
+        socket
+        |> sign_opportunity(route, opportunity)
+        |> opportunity_dto()
+      end)
 
     {:noreply,
      socket
@@ -272,212 +279,448 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <section id="ops-contacts-page" class="h-full overflow-y-auto bg-base-100">
-      <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-        <div class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-              Mission operations / contact control
-            </p>
-            <h1 class="mt-1 text-2xl font-bold tracking-tight text-base-content">
-              Contacts
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-              Inspect scheduled and realized mission contacts, then plan provider capacity without mixing contact state into telemetry charts.
-            </p>
-          </div>
-          <div class="flex items-center gap-4 border-l border-primary/30 pl-4 font-mono text-xs">
-            <div>
-              <p class="hud-label">Scope</p>
-              <p class="mt-1 text-base-content/70">Mission contact truth</p>
-            </div>
-            <div>
-              <p class="hud-label">Contacts</p>
-              <p id="contact-record-count" class="mt-1 text-primary">
-                {@contact_record_count}
-              </p>
-            </div>
-            <div>
-              <p class="hud-label">Reservations</p>
-              <p id="provider-reservation-count" class="mt-1 text-primary">
-                {@reservation_count}
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
-        <section id="mission-contact-ledger" class="border border-base-300 bg-base-200/20 shadow-sm">
-          <div class="flex flex-col gap-3 border-b border-base-300 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p class="hud-label">Canonical contact ledger</p>
-              <h2 class="mt-1 text-base font-semibold">Scheduled and realized mission contacts</h2>
-              <p class="mt-1 text-sm text-base-content/60">
-                Open a record for lifecycle evidence or hand its exact window to Telemetry Explore.
-              </p>
-            </div>
-            <.link
-              id="contacts-open-timeline"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/timeline?#{%{category: "operations"}}"}
-              class="btn btn-sm btn-ghost justify-start"
-            >
-              <.icon name="hero-clock" class="h-4 w-4" /> Mission Timeline
-            </.link>
-          </div>
-          <div id="contact-records" phx-update="stream">
-            <div id="contact-records-empty" class="hidden only:block px-4 py-12 text-center">
-              <.icon name="hero-signal-slash" class="mx-auto h-6 w-6 text-base-content/30" />
-              <p class="mt-3 text-sm text-base-content/55">No scheduled or realized contacts for this mission.</p>
-            </div>
-            <.contact_record_row
-              :for={{dom_id, row} <- @streams.contact_records}
-              id={dom_id}
-              row={row}
-              mission_id={@current_mission.mission_id}
-            />
-          </div>
-        </section>
-
-        <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)]">
-          <div class="min-w-0 space-y-5">
-          <section class="border border-base-300 bg-base-200/35 shadow-sm">
-            <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-              <div>
-                <p class="hud-label">01 / Opportunity search</p>
-                <p class="mt-1 text-sm text-base-content/60">All times are coordinated universal time.</p>
-              </div>
-              <.icon name="hero-signal" class="h-5 w-5 text-primary/60" />
-            </div>
-
-            <.form
-              for={@search_form}
-              id="contact-opportunity-search-form"
-              phx-change="validate"
-              phx-submit="search"
-              class="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4"
-            >
-              <.input
-                id="contact-spacecraft"
-                field={@search_form[:spacecraft_id]}
-                type="select"
-                label="Spacecraft"
-                options={spacecraft_options(@spacecraft)}
-              />
-              <.input
-                id="contact-route"
-                field={@search_form[:route_key]}
-                type="select"
-                label="Downlink route / provider"
-                options={route_options(@ready_routes)}
-              />
-              <.input
-                id="contact-window-start"
-                field={@search_form[:starts_at]}
-                type="datetime-local"
-                label="Window starts (UTC)"
-              />
-              <.input
-                id="contact-window-end"
-                field={@search_form[:ends_at]}
-                type="datetime-local"
-                label="Window ends (UTC)"
-              />
-              <div class="flex items-center gap-3 md:col-span-2 xl:col-span-4">
-                <button
-                  id="search-contact-opportunities"
-                  type="submit"
-                  disabled={@searching? or @ready_routes == []}
-                  class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider disabled:opacity-50"
-                >
-                  <%= if @searching? do %>
-                    Searching provider
-                  <% else %>
-                    Search opportunities
-                  <% end %>
-                </button>
-                <p :if={@search_error} id="contact-search-error" class="text-sm text-error">
-                  {@search_error}
-                </p>
-              </div>
-            </.form>
-
-            <div
-              :if={@ready_routes == []}
-              id="contact-readiness-empty"
-              class="mx-4 mb-4 border-l-2 border-warning bg-warning/5 px-4 py-3"
-            >
-              <p class="text-sm font-semibold text-warning">No provider-ready downlink route</p>
-              <div class="mt-2 space-y-1 text-xs text-base-content/60">
-                <p :for={finding <- @readiness_findings}>{finding.message}</p>
-              </div>
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-                class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-              >
-                Review Comms routing <.icon name="hero-arrow-right" class="h-3 w-3" />
-              </.link>
-            </div>
-          </section>
-
-          <section class="border border-base-300 bg-base-200/20">
-            <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-              <div>
-                <p class="hud-label">02 / Provider opportunities</p>
-                <p class="mt-1 text-sm text-base-content/60">
-                  Select a provider-owned window to create a durable reservation attempt.
-                </p>
-              </div>
-              <span id="contact-opportunity-count" class="font-mono text-sm text-primary">
-                {@opportunity_count}
-              </span>
-            </div>
-
-            <div id="contact-opportunities" phx-update="stream">
-              <div id="contact-opportunities-empty" class="hidden only:block px-4 py-12 text-center">
-                <.icon name="hero-magnifying-glass" class="mx-auto h-6 w-6 text-base-content/30" />
-                <p class="mt-3 text-sm text-base-content/55">Search a UTC window to load provider opportunities.</p>
-              </div>
-              <.opportunity_row
-                :for={{dom_id, opportunity} <- @streams.opportunities}
-                id={dom_id}
-                opportunity={opportunity}
-                busy?={MapSet.member?(@reservation_busy, opportunity["id"])}
-              />
-            </div>
-          </section>
-        </div>
-
-        <aside class="min-w-0 border border-base-300 bg-base-200/25 lg:sticky lg:top-0 lg:self-start">
-          <div class="border-b border-base-300 px-4 py-3">
-            <p class="hud-label">03 / Reservation ledger</p>
-            <p class="mt-1 text-sm text-base-content/60">
-              Provider truth and Cadence contact state remain visible independently.
-            </p>
-          </div>
-          <div id="provider-reservations" phx-update="stream">
-            <div id="provider-reservations-empty" class="hidden only:block px-4 py-12 text-center">
-              <.icon name="hero-calendar-days" class="mx-auto h-6 w-6 text-base-content/30" />
-              <p class="mt-3 text-sm text-base-content/55">No provider reservations for this mission.</p>
-            </div>
-            <.reservation_row
-              :for={{dom_id, row} <- @streams.provider_reservations}
-              id={dom_id}
-              row={row}
-              mission_id={@current_mission.mission_id}
-              admin?={organization_admin?(@current_scope)}
-              busy?={MapSet.member?(
-                @reservation_busy,
-                row.reservation.provider_reservation_id
-              )}
-            />
-          </div>
-          </aside>
-        </div>
-      </div>
-    </section>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="ops-contact-schedule-component"
+        v-component="OpsContactSchedule"
+        page={page_dto(
+          @current_mission,
+          @contact_record_count,
+          @opportunity_count,
+          @reservation_count,
+          @opportunities_empty?
+        )}
+        search={search_dto(
+          @search_form,
+          @spacecraft,
+          @ready_routes,
+          @searching?,
+          @search_error
+        )}
+        readiness={readiness_dto(@current_mission, @ready_routes, @readiness_findings)}
+        busy={busy_dto(@reservation_busy)}
+        contact_records={@streams.contact_records}
+        opportunities={@streams.opportunities}
+        provider_reservations={@streams.provider_reservations}
+        v-on:validate={JS.push("validate")}
+        v-on:search={JS.push("search")}
+        v-on:reserve={JS.push("reserve")}
+        v-on:cancel={JS.push("cancel")}
+        v-ssr={false}
+        class="contents"
+      />
+    </Layouts.app>
     """
   end
+
+  defp page_dto(
+         mission,
+         contact_record_count,
+         opportunity_count,
+         reservation_count,
+         opportunities_empty?
+       ) do
+    %{
+      id: "ops-contacts-page",
+      header: %{
+        eyebrow: "Mission operations / contact control",
+        title: "Contacts",
+        description:
+          "Inspect scheduled and realized mission contacts, then plan provider capacity without mixing contact state into telemetry charts.",
+        scope: %{label: "Scope", value: "Mission contact truth"},
+        contact_count: %{
+          id: "contact-record-count",
+          label: "Contacts",
+          value: contact_record_count
+        },
+        reservation_count: %{
+          id: "provider-reservation-count",
+          label: "Reservations",
+          value: reservation_count
+        }
+      },
+      contact_ledger: %{
+        id: "mission-contact-ledger",
+        eyebrow: "Canonical contact ledger",
+        title: "Scheduled and realized mission contacts",
+        description:
+          "Open a record for lifecycle evidence or hand its exact window to Telemetry Explore.",
+        timeline_action: %{
+          id: "contacts-open-timeline",
+          label: "Mission Timeline",
+          icon: "hero-clock",
+          href: ~p"/missions/#{mission.mission_id}/ops/timeline?#{%{category: "operations"}}"
+        },
+        rows_id: "contact-records",
+        empty: %{
+          id: "contact-records-empty",
+          icon: "hero-signal-slash",
+          copy: "No scheduled or realized contacts for this mission.",
+          visible: contact_record_count == 0
+        }
+      },
+      opportunity_search: %{
+        eyebrow: "01 / Opportunity search",
+        description: "All times are coordinated universal time.",
+        icon: "hero-signal"
+      },
+      opportunities: %{
+        eyebrow: "02 / Provider opportunities",
+        description: "Select a provider-owned window to create a durable reservation attempt.",
+        count: %{id: "contact-opportunity-count", value: opportunity_count},
+        rows_id: "contact-opportunities",
+        empty: %{
+          id: "contact-opportunities-empty",
+          icon: "hero-magnifying-glass",
+          copy: "Search a UTC window to load provider opportunities.",
+          visible: opportunities_empty?
+        }
+      },
+      reservations: %{
+        eyebrow: "03 / Reservation ledger",
+        description: "Provider truth and Cadence contact state remain visible independently.",
+        rows_id: "provider-reservations",
+        empty: %{
+          id: "provider-reservations-empty",
+          icon: "hero-calendar-days",
+          copy: "No provider reservations for this mission.",
+          visible: reservation_count == 0
+        }
+      }
+    }
+  end
+
+  defp search_dto(search_form, spacecraft, ready_routes, searching?, search_error) do
+    values =
+      Map.take(search_form.params, ["spacecraft_id", "route_key", "starts_at", "ends_at"])
+
+    %{
+      id: "contact-opportunity-search-form",
+      values: values,
+      fields: %{
+        spacecraft:
+          select_field_dto(
+            "contact-spacecraft",
+            "contact_search[spacecraft_id]",
+            "Spacecraft",
+            spacecraft_options(spacecraft)
+          ),
+        route:
+          select_field_dto(
+            "contact-route",
+            "contact_search[route_key]",
+            "Downlink route / provider",
+            route_options(ready_routes)
+          ),
+        starts_at:
+          datetime_field_dto(
+            "contact-window-start",
+            "contact_search[starts_at]",
+            "Window starts (UTC)"
+          ),
+        ends_at:
+          datetime_field_dto(
+            "contact-window-end",
+            "contact_search[ends_at]",
+            "Window ends (UTC)"
+          )
+      },
+      submit: %{
+        id: "search-contact-opportunities",
+        label: if(searching?, do: "Searching provider", else: "Search opportunities"),
+        busy: searching?,
+        disabled: searching? or ready_routes == []
+      },
+      error:
+        if(search_error,
+          do: %{id: "contact-search-error", message: search_error},
+          else: nil
+        )
+    }
+  end
+
+  defp select_field_dto(id, name, label, options) do
+    %{
+      id: id,
+      name: name,
+      type: "select",
+      label: label,
+      options:
+        Enum.map(options, fn {option_label, value} -> %{label: option_label, value: value} end)
+    }
+  end
+
+  defp datetime_field_dto(id, name, label) do
+    %{id: id, name: name, type: "datetime-local", label: label}
+  end
+
+  defp readiness_dto(_mission, ready_routes, _findings) when ready_routes != [], do: nil
+
+  defp readiness_dto(mission, _ready_routes, findings) do
+    %{
+      id: "contact-readiness-empty",
+      title: "No provider-ready downlink route",
+      findings: Enum.map(findings, &%{message: &1.message}),
+      action: %{
+        label: "Review Comms routing",
+        icon: "hero-arrow-right",
+        href: ~p"/missions/#{mission.mission_id}/comms/routing"
+      }
+    }
+  end
+
+  defp busy_dto(reservation_busy) do
+    keys = reservation_busy |> MapSet.to_list() |> Enum.sort()
+
+    %{
+      keys: keys,
+      actions: Map.new(keys, &{&1, %{busy: true, disabled: true}})
+    }
+  end
+
+  defp contact_record_dto(row, mission_id) do
+    canonical_id = row.canonical_id
+    realized? = not is_nil(row.realized_contact)
+    state = to_string(row.lifecycle_state)
+
+    %{
+      "__dom_id" => "contact-record-#{canonical_id}",
+      "id" => canonical_id,
+      "kind" => if(realized?, do: "realized", else: "scheduled"),
+      "state" => state,
+      "status" => %{
+        "label" => state,
+        "class" => reservation_status_class(row.lifecycle_state)
+      },
+      "record_kind_label" => if(realized?, do: "Realized contact", else: "Scheduled contact"),
+      "window" => %{
+        "starts_at" => format_time(row.starts_at),
+        "ends_at" => format_time(row.ends_at)
+      },
+      "intent" => contact_intents(row.contact_intents),
+      "source_endpoints" => source_endpoints(row.source_endpoint_refs),
+      "inspect_action" => %{
+        "id" => "open-contact-record-#{canonical_id}",
+        "label" => "Inspect",
+        "icon" => "hero-arrow-right",
+        "href" => ~p"/missions/#{mission_id}/ops/contacts/records/#{canonical_id}"
+      },
+      "telemetry_handoff" => %{
+        "owner" => "contact_record_detail",
+        "window_available" =>
+          match?(%DateTime{}, row.starts_at) and match?(%DateTime{}, row.ends_at)
+      }
+    }
+  end
+
+  defp opportunity_dto(opportunity) do
+    id = opportunity["id"]
+
+    %{
+      "__dom_id" => "opportunity-#{id}",
+      "id" => id,
+      "provider" => opportunity["provider_display_name"] || "Ground station provider",
+      "window" => %{
+        "starts_at" => format_time(opportunity["starts_at"]),
+        "ends_at" => format_time(opportunity["ends_at"])
+      },
+      "service_summary" =>
+        "#{opportunity["service_display_name"] || opportunity["service_profile_ref"]} · #{opportunity["delivery_operator_summary"] || opportunity["delivery_display_name"]}",
+      "delivery" => opportunity["delivery_display_name"] || "Provider managed",
+      "antenna" => opportunity["antenna_or_service_pool_ref"] || "Provider assigned",
+      "cost" => opportunity_cost(opportunity),
+      "reserve_action" => %{
+        "id" => "reserve-opportunity-#{id}",
+        "label" => "Reserve",
+        "busy_label" => "Reserving",
+        "busy" => false,
+        "disabled" => false,
+        "payload" => %{"token" => opportunity["booking_token"]}
+      }
+    }
+  end
+
+  defp opportunity_cost(opportunity) do
+    case get_in(opportunity, ["extensions", "cost"]) do
+      value when is_number(value) or is_binary(value) -> value
+      _missing_or_complex -> nil
+    end
+  end
+
+  defp reservation_dto(row, mission_id, admin?) do
+    reservation = row.reservation
+    id = reservation.provider_reservation_id
+    state = reservation.lifecycle_state
+
+    %{
+      "__dom_id" => "provider-reservation-#{id}",
+      "id" => id,
+      "state" => to_string(state),
+      "status" => %{
+        "label" => to_string(state),
+        "class" => reservation_status_class(state)
+      },
+      "provider_status" => reservation.provider_status || "awaiting provider",
+      "window" => %{
+        "starts_at" => format_time(reservation.starts_at),
+        "ends_at" => format_time(reservation.ends_at)
+      },
+      "cancel_action" => cancel_action_dto(id, state, admin?),
+      "detail_action" => %{
+        "id" => "open-reservation-#{id}",
+        "label" => "Open provider reservation",
+        "icon" => "hero-arrow-right",
+        "href" => ~p"/missions/#{mission_id}/ops/contacts/#{id}"
+      },
+      "observations" => [
+        observation_dto(
+          "reservation-contact-status-#{id}",
+          "Contact",
+          reservation.provider_status || reservation.lifecycle_state
+        ),
+        observation_dto("reservation-pass-phase-#{id}", "Pass", reservation.pass_phase),
+        observation_dto(
+          "reservation-delivery-status-#{id}",
+          "Delivery",
+          reservation.delivery_state
+        )
+      ],
+      "provider" => %{
+        "id" => "reservation-provider-#{id}",
+        "label" => "Provider",
+        "display" => reservation.metadata["provider_display_name"] || reservation.provider_id,
+        "version" => reservation.provider_version
+      },
+      "transport" => %{
+        "id" => "reservation-transport-#{id}",
+        "label" => "Transport",
+        "display" => reservation.metadata["transport_display_name"] || reservation.transport_id,
+        "version" => reservation.transport_version
+      },
+      "service" => %{
+        "id" => "reservation-service-#{id}",
+        "label" => "Service",
+        "display" =>
+          reservation.metadata["service_display_name"] ||
+            reference_value(reservation.service_profile_ref, "id"),
+        "version" => reference_value(reservation.service_profile_ref, "version")
+      },
+      "delivery" => %{
+        "id" => "reservation-delivery-#{id}",
+        "label" => "Delivery",
+        "display" =>
+          reservation.metadata["delivery_operator_summary"] ||
+            reservation.metadata["delivery_display_name"] ||
+            reference_value(reservation.delivery_profile_ref, "id"),
+        "version" => reference_value(reservation.delivery_profile_ref, "version")
+      },
+      "uncertain" => state in [:unknown, :canceling],
+      "configuration_failure" => configuration_failure?(reservation),
+      "diagnostics" => diagnostics_dto(row, admin?)
+    }
+  end
+
+  defp cancel_action_dto(id, state, true)
+       when state in [:pending, :confirmed, :active, :unknown] do
+    %{
+      "id" => "cancel-reservation-#{id}",
+      "label" => "Cancel",
+      "confirm" => "Cancel this provider reservation?",
+      "busy" => false,
+      "disabled" => false,
+      "payload" => %{"reservation-id" => id}
+    }
+  end
+
+  defp cancel_action_dto(_id, _state, _admin?), do: nil
+
+  defp observation_dto(id, label, value) do
+    %{"id" => id, "label" => label, "value" => json_display_value(value)}
+  end
+
+  defp diagnostics_dto(_row, false), do: nil
+
+  defp diagnostics_dto(row, true) do
+    reservation = row.reservation
+
+    %{
+      "id" => "reservation-diagnostics-#{reservation.provider_reservation_id}",
+      "title" => "Administrator diagnostics",
+      "rows" => [
+        %{
+          "label" => "Provider contact",
+          "value" => reservation.provider_contact_ref || "not assigned"
+        },
+        %{"label" => "Cadence contact", "value" => contact_state(row.scheduled_contact)},
+        %{
+          "label" => "Transport ref",
+          "value" => "#{reservation.transport_id}:v#{reservation.transport_version}"
+        },
+        %{
+          "label" => "Descriptor",
+          "value" => descriptor_state(reservation.delivery_descriptor_document)
+        }
+      ]
+    }
+  end
+
+  defp reference_value(reference, key) when is_map(reference), do: reference[key]
+  defp reference_value(_reference, _key), do: nil
+
+  defp json_display_value(value) when is_atom(value), do: Atom.to_string(value)
+
+  defp json_display_value(value) when is_binary(value) or is_number(value) or is_nil(value),
+    do: value
+
+  defp json_display_value(value), do: to_string(value)
+
+  defp reservation_status_class(state) when state in [:confirmed, :active, :completed],
+    do:
+      "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[0.62rem] font-bold uppercase tracking-wider border-success/40 bg-success/10 text-success"
+
+  defp reservation_status_class(state) when state in [:rejected, :failed, :canceled],
+    do:
+      "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[0.62rem] font-bold uppercase tracking-wider border-error/40 bg-error/10 text-error"
+
+  defp reservation_status_class(state) when state in [:unknown, :canceling],
+    do:
+      "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[0.62rem] font-bold uppercase tracking-wider border-warning/40 bg-warning/10 text-warning"
+
+  defp reservation_status_class(_state),
+    do:
+      "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[0.62rem] font-bold uppercase tracking-wider border-info/40 bg-info/10 text-info"
+
+  defp configuration_failure?(reservation) do
+    reservation.last_error_document["category"] == "provider_configuration_failure"
+  end
+
+  defp contact_state(nil), do: "not materialized"
+  defp contact_state(contact), do: Atom.to_string(contact.lifecycle_state)
+
+  defp descriptor_state(document) when document == %{}, do: "not observed"
+  defp descriptor_state(_document), do: "validated immutable snapshot"
+
+  defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%MZ")
+
+  defp format_time(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> format_time(datetime)
+      _error -> value
+    end
+  end
+
+  defp format_time(_value), do: "Time unavailable"
+
+  defp contact_intents([]), do: "No declared intent"
+
+  defp contact_intents(intents) do
+    Enum.map_join(intents, " · ", fn value ->
+      value |> to_string() |> String.replace("_", " ")
+    end)
+  end
+
+  defp source_endpoints([]), do: "No source endpoint"
+  defp source_endpoints(refs), do: Enum.join(refs, " · ")
 
   defp assign_route_context(socket, spacecraft_id, params) do
     %{current_scope: scope, current_mission: mission, live_deps: live_deps} = socket.assigns
@@ -683,11 +926,14 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     rows =
       LiveDeps.list_reservation_rows(live_deps, scope.organization_id, mission.mission_id)
 
+    reservation_rows =
+      Enum.map(rows, &reservation_dto(&1, mission.mission_id, socket.assigns.admin?))
+
     socket =
       socket
       |> refresh_contact_records()
       |> assign(:reservation_count, length(rows))
-      |> stream(:provider_reservations, rows, reset: true)
+      |> stream(:provider_reservations, reservation_rows, reset: true)
 
     if connected?(socket) and
          Enum.any?(rows, &(&1.reservation.lifecycle_state in @nonterminal_states)) do
@@ -702,9 +948,11 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
     rows = LiveDeps.list_contact_records(live_deps, scope.organization_id, mission.mission_id)
 
+    contact_rows = Enum.map(rows, &contact_record_dto(&1, mission.mission_id))
+
     socket
     |> assign(:contact_record_count, length(rows))
-    |> stream(:contact_records, rows, reset: true)
+    |> stream(:contact_records, contact_rows, reset: true)
   end
 
   defp schedule_reservation_refresh(%{assigns: %{refresh_timer: nil}} = socket) do
