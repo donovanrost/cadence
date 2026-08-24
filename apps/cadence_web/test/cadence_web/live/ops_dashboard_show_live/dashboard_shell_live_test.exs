@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -145,7 +146,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
       assert directory_row["name"] == "Thermal"
       assert directory_row["widget_version_label"] == "0 widgets · v1"
 
-      assert has_element?(view, ~s(#ops-nav-rail a[href="#{show_path(mission, dashboard)}"]))
+      assert ops_dashboard_nav_item(
+               ops_nav_vue(view),
+               "starred",
+               dashboard.dashboard_id
+             ) == %{
+               "active" => false,
+               "dashboard_id" => dashboard.dashboard_id,
+               "href" => show_path(mission, dashboard),
+               "label" => "Thermal"
+             }
+
       assert has_element?(view, "#ops-utc-clock")
 
       utc_clock = LiveVue.Test.get_vue(view, id: "ops-utc-clock")

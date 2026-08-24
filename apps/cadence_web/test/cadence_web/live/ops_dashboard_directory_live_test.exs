@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -197,10 +198,16 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
 
     assert_json_safe_directory_vue(starred_vue)
 
-    assert has_element?(
-             directory,
-             ~s([data-ops-dashboard-nav-group="starred"] [data-ops-dashboard-nav-item="#{dashboard.dashboard_id}"])
-           )
+    assert ops_dashboard_nav_item(
+             ops_nav_vue(directory),
+             "starred",
+             dashboard.dashboard_id
+           ) == %{
+             "active" => false,
+             "dashboard_id" => dashboard.dashboard_id,
+             "href" => "/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}",
+             "label" => "Mission Power"
+           }
 
     second_user = TestFixtures.persist_user!()
     _membership = TestFixtures.grant_membership!(second_user, org)
@@ -217,9 +224,10 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     assert second_user_row["starred"] == false
     assert second_user_row["star"]["aria_pressed"] == "false"
 
-    refute has_element?(
-             second_directory,
-             ~s([data-ops-dashboard-nav-group="starred"] [data-ops-dashboard-nav-item="#{dashboard.dashboard_id}"])
+    refute ops_dashboard_nav_item(
+             ops_nav_vue(second_directory),
+             "starred",
+             dashboard.dashboard_id
            )
 
     assert [%{dashboard_id: dashboard_id, starred: true}] =
@@ -239,10 +247,16 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
 
     assert dashboard_id == dashboard.dashboard_id
 
-    assert has_element?(
-             recent_view,
-             ~s([data-ops-dashboard-nav-group="recent"] [data-ops-dashboard-nav-item="#{dashboard.dashboard_id}"])
-           )
+    assert ops_dashboard_nav_item(
+             ops_nav_vue(recent_view),
+             "recent",
+             dashboard.dashboard_id
+           ) == %{
+             "active" => true,
+             "dashboard_id" => dashboard.dashboard_id,
+             "href" => "/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}",
+             "label" => "Mission Power"
+           }
   end
 
   test "archived dashboards have a dedicated filtered view and restore outcome" do

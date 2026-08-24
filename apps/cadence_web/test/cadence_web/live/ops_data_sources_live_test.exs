@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -281,10 +282,13 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     assert page["mode"] == "reader"
     refute Map.has_key?(page, "admin")
 
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/data-sources"])
-           )
+    assert ops_nav_item(ops_nav_vue(view), "data_sources") == %{
+             "active" => true,
+             "href" => "/missions/#{mission.mission_id}/ops/data-sources",
+             "icon" => "hero-circle-stack",
+             "key" => "data_sources",
+             "label" => "Data Sources"
+           }
 
     assert page["header"]["readiness_policy"] == %{
              "id" => "source-readiness-policy",

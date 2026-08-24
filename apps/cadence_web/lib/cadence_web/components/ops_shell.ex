@@ -104,172 +104,219 @@ defmodule CadenceWeb.Components.OpsShell do
   attr :operational_focus, :map, default: nil
 
   def ops_nav_rail(assigns) do
+    assigns = assign(assigns, :ops_nav_props, ops_nav_props(assigns))
+
     ~H"""
-    <nav
-      id="ops-nav-rail"
-      phx-hook="NavRail"
-      data-storage-key="cadence-ops-rail"
-      data-rail-role="navigation"
-      class="group/rail w-12 data-[expanded]:w-56 shrink-0 flex flex-col border-r border-primary/20 bg-base-200 hud-grid overflow-y-auto overflow-x-hidden transition-[width] duration-150"
-    >
-      <button
-        type="button"
-        data-rail-toggle
-        aria-label="Toggle navigation"
-        class="h-9 shrink-0 flex items-center justify-center text-base-content/60 hover:text-base-content"
-      >
-        <.icon name="hero-bars-3" class="h-4 w-4 pointer-events-none" />
-      </button>
-
-      <div data-ops-nav-group="observe" class="px-2 pt-2 space-y-0.5">
-        <span class="hud-label px-1 hidden group-data-[expanded]/rail:block">Observe</span>
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/dashboards", @operational_focus)}
-          icon="hero-squares-2x2"
-          label="Dashboards"
-          active={@active_item == :dashboards}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/explore", @operational_focus)}
-          icon="hero-magnifying-glass"
-          label="Explore"
-          active={@active_item == :explore}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/alarms", @operational_focus)}
-          icon="hero-bell-alert"
-          label="Alarms"
-          active={@active_item == :alarms}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/timeline", @operational_focus)}
-          icon="hero-clock"
-          label="Timeline"
-          active={@active_item == :timeline}
-        />
-      </div>
-
-      <div data-ops-nav-group="act" class="mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5">
-        <span class="hud-label px-1 hidden group-data-[expanded]/rail:block">Act</span>
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/commands", @operational_focus)}
-          icon="hero-command-line"
-          label="Commands"
-          active={@active_item == :commands}
-        />
-        <.rail_link
-          :if={activation_approver?(@current_scope)}
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/activations", @operational_focus)}
-          icon="hero-shield-check"
-          label="Approvals"
-          active={@active_item == :activations}
-        />
-      </div>
-
-      <div data-ops-nav-group="plan" class="mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5">
-        <span class="hud-label px-1 hidden group-data-[expanded]/rail:block">Plan</span>
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/planning", @operational_focus)}
-          icon="hero-chart-bar-square"
-          label="Planning"
-          active={@active_item == :planning}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/requirements", @operational_focus)}
-          icon="hero-clipboard-document-list"
-          label="Requirements"
-          active={@active_item == :requirements}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/contacts", @operational_focus)}
-          icon="hero-calendar-days"
-          label="Contacts"
-          active={@active_item == :contacts}
-        />
-      </div>
-
-      <div data-ops-nav-group="system" class="mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5">
-        <span class="hud-label px-1 hidden group-data-[expanded]/rail:block">System</span>
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/data-sources", @operational_focus)}
-          icon="hero-circle-stack"
-          label="Data Sources"
-          active={@active_item == :data_sources}
-        />
-        <.rail_link
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/data-operations", @operational_focus)}
-          icon="hero-arrow-path-rounded-square"
-          label="Data Operations"
-          active={@active_item == :data_operations}
-        />
-      </div>
-
-      <div class="mt-3 border-t border-primary/20 px-2 pt-2 space-y-1 min-h-0">
-        <.dashboard_nav_group
-          title="Starred"
-          dashboards={@dashboard_navigation.starred}
-          mission={@mission}
-          active_dashboard_id={@active_dashboard_id}
-          operational_focus={@operational_focus}
-          icon="hero-star-solid"
-        />
-        <.dashboard_nav_group
-          title="Recent"
-          dashboards={@dashboard_navigation.recent}
-          mission={@mission}
-          active_dashboard_id={@active_dashboard_id}
-          operational_focus={@operational_focus}
-          icon="hero-clock"
-        />
-        <p
-          :if={@dashboard_navigation.starred == [] and @dashboard_navigation.recent == []}
-          class="hidden px-2 py-1 text-[0.6875rem] leading-4 text-base-content/45 group-data-[expanded]/rail:block"
-        >
-          Star dashboards or open one to keep it close.
-        </p>
-        <.link
-          :if={@dashboard_author?}
-          navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/dashboards/new", @operational_focus)}
-          title="New dashboard"
-          class="flex items-center gap-2 px-2 py-1.5 text-xs text-base-content/60 hover:text-primary"
-        >
-          <.icon name="hero-plus" class="h-3.5 w-3.5 shrink-0" />
-          <span class="hidden group-data-[expanded]/rail:inline">New Dashboard</span>
-        </.link>
-      </div>
-    </nav>
+    <.vue
+      id="ops-nav-rail-component"
+      v-component="OpsNavRail"
+      props={@ops_nav_props}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
-  attr :title, :string, required: true
-  attr :dashboards, :list, required: true
-  attr :mission, :any, required: true
-  attr :active_dashboard_id, :string, required: true
-  attr :operational_focus, :map, default: nil
-  attr :icon, :string, required: true
+  defp ops_nav_props(assigns) do
+    dashboard_groups = dashboard_groups(assigns)
 
-  defp dashboard_nav_group(assigns) do
-    ~H"""
-    <div :if={@dashboards != []} data-ops-dashboard-nav-group={String.downcase(@title)}>
-      <span class="hud-label px-1 hidden group-data-[expanded]/rail:block">{@title}</span>
-      <.link
-        :for={dashboard <- @dashboards}
-        navigate={with_operational_focus(~p"/missions/#{@mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}", @operational_focus)}
-        title={dashboard.name}
-        data-ops-dashboard-nav-item={dashboard.dashboard_id}
-        class={[
-          "flex items-center gap-2 px-2 py-1.5 text-xs truncate",
-          dashboard.dashboard_id == @active_dashboard_id &&
-            "bg-primary/10 text-primary border-l-2 border-primary",
-          dashboard.dashboard_id != @active_dashboard_id &&
-            "text-base-content/70 hover:text-base-content"
-        ]}
-      >
-        <.icon name={@icon} class="h-3.5 w-3.5 shrink-0" />
-        <span class="truncate hidden group-data-[expanded]/rail:inline">{dashboard.name}</span>
-      </.link>
-    </div>
-    """
+    %{
+      "groups" => navigation_groups(assigns),
+      "dashboard_groups" => dashboard_groups,
+      "empty_state" =>
+        if(dashboard_groups == [],
+          do: "Star dashboards or open one to keep it close.",
+          else: nil
+        ),
+      "new_dashboard" => new_dashboard(assigns)
+    }
+  end
+
+  defp navigation_groups(assigns) do
+    mission_id = assigns.mission.mission_id
+
+    [
+      %{
+        "key" => "observe",
+        "label" => "Observe",
+        "class" => "px-2 pt-2 space-y-0.5",
+        "items" => [
+          nav_item(
+            assigns,
+            :dashboards,
+            "Dashboards",
+            "hero-squares-2x2",
+            ~p"/missions/#{mission_id}/ops/dashboards"
+          ),
+          nav_item(
+            assigns,
+            :explore,
+            "Explore",
+            "hero-magnifying-glass",
+            ~p"/missions/#{mission_id}/ops/explore"
+          ),
+          nav_item(
+            assigns,
+            :alarms,
+            "Alarms",
+            "hero-bell-alert",
+            ~p"/missions/#{mission_id}/ops/alarms"
+          ),
+          nav_item(
+            assigns,
+            :timeline,
+            "Timeline",
+            "hero-clock",
+            ~p"/missions/#{mission_id}/ops/timeline"
+          )
+        ]
+      },
+      %{
+        "key" => "act",
+        "label" => "Act",
+        "class" => "mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5",
+        "items" =>
+          [
+            nav_item(
+              assigns,
+              :commands,
+              "Commands",
+              "hero-command-line",
+              ~p"/missions/#{mission_id}/ops/commands"
+            )
+          ] ++
+            activation_items(assigns)
+      },
+      %{
+        "key" => "plan",
+        "label" => "Plan",
+        "class" => "mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5",
+        "items" => [
+          nav_item(
+            assigns,
+            :planning,
+            "Planning",
+            "hero-chart-bar-square",
+            ~p"/missions/#{mission_id}/ops/planning"
+          ),
+          nav_item(
+            assigns,
+            :requirements,
+            "Requirements",
+            "hero-clipboard-document-list",
+            ~p"/missions/#{mission_id}/ops/requirements"
+          ),
+          nav_item(
+            assigns,
+            :contacts,
+            "Contacts",
+            "hero-calendar-days",
+            ~p"/missions/#{mission_id}/ops/contacts"
+          )
+        ]
+      },
+      %{
+        "key" => "system",
+        "label" => "System",
+        "class" => "mt-3 border-t border-primary/20 px-2 pt-2 space-y-0.5",
+        "items" => [
+          nav_item(
+            assigns,
+            :data_sources,
+            "Data Sources",
+            "hero-circle-stack",
+            ~p"/missions/#{mission_id}/ops/data-sources"
+          ),
+          nav_item(
+            assigns,
+            :data_operations,
+            "Data Operations",
+            "hero-arrow-path-rounded-square",
+            ~p"/missions/#{mission_id}/ops/data-operations"
+          )
+        ]
+      }
+    ]
+  end
+
+  defp activation_items(assigns) do
+    if activation_approver?(assigns.current_scope) do
+      [
+        nav_item(
+          assigns,
+          :activations,
+          "Approvals",
+          "hero-shield-check",
+          ~p"/missions/#{assigns.mission.mission_id}/ops/activations"
+        )
+      ]
+    else
+      []
+    end
+  end
+
+  defp nav_item(assigns, item, label, icon, href) do
+    %{
+      "key" => nav_key(label),
+      "label" => label,
+      "icon" => icon,
+      "href" => with_operational_focus(href, assigns.operational_focus),
+      "active" => assigns.active_item == item
+    }
+  end
+
+  defp dashboard_groups(assigns) do
+    [
+      dashboard_group(
+        assigns,
+        "Starred",
+        "hero-star-solid",
+        assigns.dashboard_navigation.starred
+      ),
+      dashboard_group(assigns, "Recent", "hero-clock", assigns.dashboard_navigation.recent)
+    ]
+    |> Enum.reject(&(&1["items"] == []))
+  end
+
+  defp dashboard_group(assigns, label, icon, dashboards) do
+    %{
+      "key" => String.downcase(label),
+      "label" => label,
+      "icon" => icon,
+      "items" => Enum.map(dashboards, &dashboard_item(assigns, &1))
+    }
+  end
+
+  defp dashboard_item(assigns, dashboard) do
+    mission_id = assigns.mission.mission_id
+
+    %{
+      "dashboard_id" => dashboard.dashboard_id,
+      "label" => dashboard.name,
+      "href" =>
+        with_operational_focus(
+          ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard.dashboard_id}",
+          assigns.operational_focus
+        ),
+      "active" => dashboard.dashboard_id == assigns.active_dashboard_id
+    }
+  end
+
+  defp new_dashboard(%{dashboard_author?: false}), do: nil
+
+  defp new_dashboard(assigns) do
+    mission_id = assigns.mission.mission_id
+
+    %{
+      "label" => "New Dashboard",
+      "title" => "New dashboard",
+      "icon" => "hero-plus",
+      "href" =>
+        with_operational_focus(
+          ~p"/missions/#{mission_id}/ops/dashboards/new",
+          assigns.operational_focus
+        )
+    }
   end
 
   defp activation_approver?(scope) do
@@ -291,29 +338,6 @@ defmodule CadenceWeb.Components.OpsShell do
   end
 
   defp with_operational_focus(path, _operational_focus), do: path
-
-  attr :navigate, :string, required: true
-  attr :icon, :string, required: true
-  attr :label, :string, required: true
-  attr :active, :boolean, required: true
-
-  defp rail_link(assigns) do
-    ~H"""
-    <.link
-      navigate={@navigate}
-      title={@label}
-      data-ops-nav-item={nav_key(@label)}
-      class={[
-        "flex items-center gap-2 px-2 py-1.5 text-xs",
-        @active && "bg-primary/10 text-primary border-l-2 border-primary",
-        not @active && "text-base-content/70 hover:text-base-content"
-      ]}
-    >
-      <.icon name={@icon} class="h-4 w-4 shrink-0" />
-      <span class="truncate hidden group-data-[expanded]/rail:inline">{@label}</span>
-    </.link>
-    """
-  end
 
   defp nav_key(label) do
     label

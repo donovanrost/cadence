@@ -8,6 +8,7 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
   import CadenceWeb.AsyncLiveViewTestSupport,
     only: [render_async: 2, track_async_view: 1]
 
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest, except: [render_async: 2]
 
   use Phoenix.VerifiedRoutes,
@@ -58,10 +59,13 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
 
     assert_json_safe(vue)
 
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/contacts"][class*="text-primary"])
-           )
+    assert ops_nav_item(ops_nav_vue(view), "contacts") == %{
+             "active" => true,
+             "href" => "/missions/#{mission.mission_id}/ops/contacts",
+             "icon" => "hero-calendar-days",
+             "key" => "contacts",
+             "label" => "Contacts"
+           }
 
     refute has_element?(view, "#provider-profile-form")
     assert org.organization_id != nil

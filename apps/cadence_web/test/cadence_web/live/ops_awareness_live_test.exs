@@ -1,6 +1,7 @@
 defmodule CadenceWeb.OpsAwarenessLiveTest do
   use CadenceWeb.ConnCase, async: false
 
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
@@ -381,10 +382,8 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
              ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href*="/ops/planning"][href*="focus_command_id=command-1"])
-           )
+    assert ops_nav_item(ops_nav_vue(view), "planning")["href"] ==
+             "/missions/#{mission.mission_id}/ops/planning?focus_command_id=command-1"
 
     {:ok, planning_view, _html} =
       live(
@@ -397,10 +396,8 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
              ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
            )
 
-    assert has_element?(
-             planning_view,
-             ~s(#ops-nav-rail a[href*="/ops/commands"][href*="focus_command_id=command-1"])
-           )
+    assert ops_nav_item(ops_nav_vue(planning_view), "commands")["href"] ==
+             "/missions/#{mission.mission_id}/ops/commands?focus_command_id=command-1"
 
     render_hook(view, "clear_command_focus", %{})
     assert_patch(view, filtered_path)

@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   import CadenceWeb.AsyncLiveViewTestSupport,
     only: [render_async: 1, track_async_view: 1]
 
+  import CadenceWeb.OpsNavTestSupport
   import Phoenix.LiveViewTest, except: [render_async: 1]
 
   use Phoenix.VerifiedRoutes,
@@ -30,10 +31,13 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert vue.props["page"]["header"]["create_action"]["id"] ==
              "new-contact-requirement-link"
 
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/requirements"][class*="text-primary"])
-           )
+    assert ops_nav_item(ops_nav_vue(view), "requirements") == %{
+             "active" => true,
+             "href" => "/missions/#{mission.mission_id}/ops/requirements",
+             "icon" => "hero-clipboard-document-list",
+             "key" => "requirements",
+             "label" => "Requirements"
+           }
   end
 
   test "list page exposes an exact JSON-safe empty LiveVue contract" do
