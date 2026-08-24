@@ -8,8 +8,12 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.SpacecraftType
+  alias Cadence.SpacecraftTypeStore
   alias CadenceWeb.SpacecraftTypeListLive
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
+  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -20,7 +24,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   end
 
   defp spacecraft_profile_list_vue(view) do
-    vue = LiveVue.Test.get_vue(view, id: "spacecraft-type-list-page-component")
+    vue = Test.get_vue(view, id: "spacecraft-type-list-page-component")
 
     assert vue.component == "SpacecraftTypeListPage"
     assert vue.class == "contents"
@@ -33,7 +37,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   end
 
   defp spacecraft_profile_show_vue(view) do
-    vue = LiveVue.Test.get_vue(view, id: "spacecraft-profile-show-component")
+    vue = Test.get_vue(view, id: "spacecraft-profile-show-component")
 
     assert vue.component == "SpacecraftTypeShow"
     assert vue.ssr == false
@@ -43,7 +47,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   end
 
   defp spacecraft_profile_new_vue(view) do
-    vue = LiveVue.Test.get_vue(view, id: "spacecraft-profile-new-component")
+    vue = Test.get_vue(view, id: "spacecraft-profile-new-component")
 
     assert vue.component == "SpacecraftTypeNew"
     assert vue.class == "space-y-6 max-w-2xl"
@@ -51,8 +55,8 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     assert vue.handlers == %{
-             "save" => Phoenix.LiveView.JS.push("save"),
-             "validate" => Phoenix.LiveView.JS.push("validate")
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
            }
 
     vue
@@ -93,7 +97,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       assert has_element?(view, "#spacecraft-list-component")
 
-      vue = LiveVue.Test.get_vue(view, id: "spacecraft-list-component")
+      vue = Test.get_vue(view, id: "spacecraft-list-component")
       assert vue.component == "SpacecraftListPage"
       presentation = vue.props["presentation"]
 
@@ -128,7 +132,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+      sidebar = Test.get_vue(view, id: "mission-sidebar-navigation")
       navigation = sidebar.props["presentation"]["navigation"]["items"]
 
       links =
@@ -488,7 +492,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       assert target =~ "/missions/#{mission.mission_id}/spacecraft/profiles/"
 
       [persisted] =
-        Cadence.SpacecraftTypeStore.list_spacecraft_types(org.organization_id, mission.mission_id)
+        SpacecraftTypeStore.list_spacecraft_types(org.organization_id, mission.mission_id)
 
       assert persisted.display_name == "Lab TM/TC"
       assert persisted.mission_id == mission.mission_id
@@ -505,7 +509,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       assert persisted.applications == %{"telemetry_decom" => %{}}
       assert target =~ persisted.spacecraft_type_id
 
-      assert Cadence.SpacecraftTypeStore.list_spacecraft_types(
+      assert SpacecraftTypeStore.list_spacecraft_types(
                org.organization_id,
                other_mission.mission_id
              ) == []
@@ -590,9 +594,9 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
         render_hook(view, "save", %{"spacecraft_type" => params})
         {_target, _flash} = assert_redirect(view)
 
-        assert %Cadence.SpacecraftType{} =
+        assert %SpacecraftType{} =
                  persisted =
-                 Cadence.SpacecraftTypeStore.list_spacecraft_types(
+                 SpacecraftTypeStore.list_spacecraft_types(
                    org.organization_id,
                    mission.mission_id
                  )
@@ -632,7 +636,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
         assert spacecraft_profile_form_values(view) == params
       end
 
-      assert Cadence.SpacecraftTypeStore.list_spacecraft_types(
+      assert SpacecraftTypeStore.list_spacecraft_types(
                org.organization_id,
                mission.mission_id
              ) == []
@@ -664,7 +668,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     test "provides exact JSON-safe profile detail and version history props" do
       {conn, org, mission} = signed_in_org_and_mission()
 
-      %Cadence.SpacecraftType{} =
+      %SpacecraftType{} =
         profile_v1 =
         TestFixtures.persist_spacecraft_profile!(mission,
           display_name: "Aurora Bus",
@@ -674,7 +678,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
           applications: %{"telemetry_decom" => %{}}
         )
 
-      profile_v2 = %Cadence.SpacecraftType{
+      profile_v2 = %SpacecraftType{
         profile_v1
         | version: 2,
           downlink_protocol: :uslp,
@@ -692,7 +696,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       }
 
       assert {:ok, persisted_v2} =
-               Cadence.SpacecraftTypeStore.persist_spacecraft_type(
+               SpacecraftTypeStore.persist_spacecraft_type(
                  org.organization_id,
                  profile_v2
                )

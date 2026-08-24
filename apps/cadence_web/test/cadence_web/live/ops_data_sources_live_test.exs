@@ -10,17 +10,15 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Projections.DataSources.Health, as: SourceHealth
-
-  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
-
-  alias Cadence.Management.DataSources
-
-  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
-
+  alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.DataSources.{DataBinding, DataSource}
-
+  alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+  alias Cadence.Projections.DataSources.Health, as: SourceHealth
+  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
+  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -84,7 +82,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
                data_source_id: "rehearsal-questdb",
                owner: :customer,
                kind: :byo_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
+               adapter: Telemetry,
                organization_id: org.organization_id,
                mission_id: mission.mission_id,
                isolation_level: :customer_owned,
@@ -98,7 +96,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
                data_source_id: "managed-rehearsal-telemetry",
                owner: :cadence,
                kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
+               adapter: Telemetry,
                organization_id: org.organization_id,
                mission_id: mission.mission_id,
                isolation_level: :mission_isolated,
@@ -111,7 +109,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
                data_source_id: "failed-connection-telemetry",
                owner: :cadence,
                kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
+               adapter: Telemetry,
                organization_id: org.organization_id,
                mission_id: mission.mission_id,
                isolation_level: :mission_isolated,
@@ -261,21 +259,21 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     assert Map.keys(vue.props) == ["page"]
 
     assert vue.handlers == %{
-             "cancel-change-binding" => Phoenix.LiveView.JS.push("cancel_change_binding"),
-             "cancel-register-source" => Phoenix.LiveView.JS.push("cancel_register_source"),
-             "change-binding" => Phoenix.LiveView.JS.push("change_binding"),
-             "deprovision-tsdb-backend" => Phoenix.LiveView.JS.push("deprovision_tsdb_backend"),
-             "disable-source" => Phoenix.LiveView.JS.push("disable_source"),
-             "enable-source" => Phoenix.LiveView.JS.push("enable_source"),
-             "open-change-binding" => Phoenix.LiveView.JS.push("open_change_binding"),
-             "open-register-source" => Phoenix.LiveView.JS.push("open_register_source"),
-             "probe-source" => Phoenix.LiveView.JS.push("probe_source"),
-             "provision-tsdb-backend" => Phoenix.LiveView.JS.push("provision_tsdb_backend"),
-             "reconcile-tsdb-backend" => Phoenix.LiveView.JS.push("reconcile_tsdb_backend"),
-             "register-source" => Phoenix.LiveView.JS.push("register_source"),
-             "requeue-deployment-run" => Phoenix.LiveView.JS.push("requeue_deployment_run"),
-             "retry-deployment-run" => Phoenix.LiveView.JS.push("retry_deployment_run"),
-             "rotate-source-credential" => Phoenix.LiveView.JS.push("rotate_source_credential")
+             "cancel-change-binding" => JS.push("cancel_change_binding"),
+             "cancel-register-source" => JS.push("cancel_register_source"),
+             "change-binding" => JS.push("change_binding"),
+             "deprovision-tsdb-backend" => JS.push("deprovision_tsdb_backend"),
+             "disable-source" => JS.push("disable_source"),
+             "enable-source" => JS.push("enable_source"),
+             "open-change-binding" => JS.push("open_change_binding"),
+             "open-register-source" => JS.push("open_register_source"),
+             "probe-source" => JS.push("probe_source"),
+             "provision-tsdb-backend" => JS.push("provision_tsdb_backend"),
+             "reconcile-tsdb-backend" => JS.push("reconcile_tsdb_backend"),
+             "register-source" => JS.push("register_source"),
+             "requeue-deployment-run" => JS.push("requeue_deployment_run"),
+             "retry-deployment-run" => JS.push("retry_deployment_run"),
+             "rotate-source-credential" => JS.push("rotate_source_credential")
            }
 
     assert page["id"] == "ops-data-sources-page"
@@ -381,7 +379,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
   end
 
   defp ops_data_sources_vue(view_or_html) do
-    LiveVue.Test.get_vue(view_or_html, id: "ops-data-sources-component")
+    Test.get_vue(view_or_html, id: "ops-data-sources-component")
   end
 
   defp ops_data_sources_page(view_or_html) do

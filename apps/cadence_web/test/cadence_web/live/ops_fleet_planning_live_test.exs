@@ -12,17 +12,24 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceIdentity}
 
   alias Cadence.ContactPlanning.{
+    AutomationGrants,
     ContactRequirements,
     ContactRequirementTemplates,
+    FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRuns,
     Planner
   }
 
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
+  alias Phoenix.LiveView.JS
 
   test "authenticated mission operators can navigate the planning journey and see stopped state" do
     {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope(:member)
@@ -48,7 +55,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert planning_vue.slots == %{}
 
     assert planning_vue.handlers == %{
-             "refresh-planning" => Phoenix.LiveView.JS.push("refresh-planning")
+             "refresh-planning" => JS.push("refresh-planning")
            }
 
     assert planning_vue.props ==
@@ -73,7 +80,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     refute has_element?(new_view, "#fleet-planning-new-policy-required")
     refute has_element?(new_view, "#fleet-planning-run-form")
 
-    new_vue = LiveVue.Test.get_vue(new_view, id: "ops-fleet-planning-new-component")
+    new_vue = Test.get_vue(new_view, id: "ops-fleet-planning-new-component")
 
     assert new_vue.component == "OpsFleetPlanningNew"
     assert new_vue.class == "contents"
@@ -81,8 +88,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert new_vue.props == Jason.decode!(Jason.encode!(new_vue.props))
 
     assert new_vue.handlers == %{
-             "create-fleet-run" => Phoenix.LiveView.JS.push("create-fleet-run"),
-             "validate-fleet-run" => Phoenix.LiveView.JS.push("validate-fleet-run")
+             "create-fleet-run" => JS.push("create-fleet-run"),
+             "validate-fleet-run" => JS.push("validate-fleet-run")
            }
 
     assert new_vue.props == %{
@@ -244,12 +251,12 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert initial_vue.slots == %{}
 
     assert initial_vue.handlers == %{
-             "approve-policy" => Phoenix.LiveView.JS.push("approve-policy"),
-             "issue-grant" => Phoenix.LiveView.JS.push("issue-grant"),
-             "revoke-grant" => Phoenix.LiveView.JS.push("revoke-grant"),
-             "save-policy" => Phoenix.LiveView.JS.push("save-policy"),
-             "validate-grant" => Phoenix.LiveView.JS.push("validate-grant"),
-             "validate-policy" => Phoenix.LiveView.JS.push("validate-policy")
+             "approve-policy" => JS.push("approve-policy"),
+             "issue-grant" => JS.push("issue-grant"),
+             "revoke-grant" => JS.push("revoke-grant"),
+             "save-policy" => JS.push("save-policy"),
+             "validate-grant" => JS.push("validate-grant"),
+             "validate-policy" => JS.push("validate-policy")
            }
 
     assert initial_vue.props["page"] == %{
@@ -521,7 +528,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     activate_policy!(scope, mission)
 
     service_identity =
-      Cadence.Auth.ServiceIdentity.new(%{
+      ServiceIdentity.new(%{
         service_identity_id: "svc-fleet-policy",
         organization_id: scope.organization_id,
         mission_id: mission.mission_id,
@@ -530,7 +537,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       })
 
     assert {:ok, %{service_identity: %{service_identity_id: "svc-fleet-policy"}}} =
-             Cadence.Auth.issue_service_identity(service_identity)
+             Auth.issue_service_identity(service_identity)
 
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
@@ -577,7 +584,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert has_element?(view, "#flash-info", "Exact service automation grant issued.")
 
     [grant] =
-      Cadence.ContactPlanning.AutomationGrants.list(
+      AutomationGrants.list(
         scope.organization_id,
         mission.mission_id
       )
@@ -638,7 +645,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              "font-mono text-[0.58rem] uppercase text-base-content/45"
 
     assert {:ok, revoked} =
-             Cadence.ContactPlanning.AutomationGrants.fetch(
+             AutomationGrants.fetch(
                scope.organization_id,
                mission.mission_id,
                grant.automation_grant_id
@@ -663,11 +670,11 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert initial_vue.slots == %{}
 
     assert initial_vue.handlers == %{
-             "activate-template" => Phoenix.LiveView.JS.push("activate-template"),
-             "close-template" => Phoenix.LiveView.JS.push("close-template"),
-             "create-template" => Phoenix.LiveView.JS.push("create-template"),
-             "pause-template" => Phoenix.LiveView.JS.push("pause-template"),
-             "validate-template" => Phoenix.LiveView.JS.push("validate-template")
+             "activate-template" => JS.push("activate-template"),
+             "close-template" => JS.push("close-template"),
+             "create-template" => JS.push("create-template"),
+             "pause-template" => JS.push("pause-template"),
+             "validate-template" => JS.push("validate-template")
            }
 
     assert initial_vue.props["page"] == %{
@@ -887,15 +894,15 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     refute has_element?(view, "#fleet-run-policy-preview")
     refute has_element?(view, "#fleet-run-policy-progressive-details")
 
-    initial_vue = LiveVue.Test.get_vue(view, id: "ops-fleet-planning-new-component")
+    initial_vue = Test.get_vue(view, id: "ops-fleet-planning-new-component")
 
     assert initial_vue.component == "OpsFleetPlanningNew"
     assert initial_vue.class == "contents"
     assert initial_vue.ssr == false
 
     assert initial_vue.handlers == %{
-             "create-fleet-run" => Phoenix.LiveView.JS.push("create-fleet-run"),
-             "validate-fleet-run" => Phoenix.LiveView.JS.push("validate-fleet-run")
+             "create-fleet-run" => JS.push("create-fleet-run"),
+             "validate-fleet-run" => JS.push("validate-fleet-run")
            }
 
     assert initial_vue.props["form"]["id"] == "fleet-planning-run-form"
@@ -914,7 +921,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     render_hook(view, "validate-fleet-run", %{"fleet_run" => fleet_run_params})
 
-    validated_vue = LiveVue.Test.get_vue(view, id: "ops-fleet-planning-new-component")
+    validated_vue = Test.get_vue(view, id: "ops-fleet-planning-new-component")
 
     assert validated_vue.props == %{
              "form" => %{
@@ -1028,8 +1035,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert initial_run_vue.props["planning"] == true
 
     assert initial_run_vue.handlers == %{
-             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
-             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+             "refresh-fleet-run" => JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => JS.push("repair-fleet-run")
            }
 
     assert initial_run_vue.props["page"]["header"]["run_id"] ==
@@ -1285,8 +1292,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert vue.props["repair_form"] == nil
 
     assert vue.handlers == %{
-             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
-             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+             "refresh-fleet-run" => JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => JS.push("repair-fleet-run")
            }
 
     assert vue.props["page"]["failure"] == %{
@@ -1431,7 +1438,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              })
 
     assert {:ok, result} =
-             Cadence.ContactPlanning.FleetPlanner.run(
+             FleetPlanner.run(
                scope,
                mission.mission_id,
                source_run.fleet_planning_run_id
@@ -1442,7 +1449,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert %{} = result.plan_version
 
     plan_row =
-      Cadence.Repo.get_by!(Cadence.Management.Contacts.Store.ContactPlanRow,
+      Repo.get_by!(ContactPlanRow,
         organization_id: org.organization_id,
         mission_id: mission.mission_id,
         contact_plan_id: result.plan.contact_plan_id
@@ -1450,12 +1457,12 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert {:ok, _failed_plan_row} =
              plan_row
-             |> Cadence.Management.Contacts.Store.ContactPlanRow.projection_changeset(%{
+             |> ContactPlanRow.projection_changeset(%{
                lifecycle_state: "failed",
                lifecycle_changed_at: DateTime.utc_now(),
                lifecycle_reason: "Exercise authorized repair presentation"
              })
-             |> Cadence.Repo.update()
+             |> Repo.update()
 
     {:ok, view, _html} =
       live(
@@ -1469,8 +1476,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     assert vue.props["planning"] == false
 
     assert vue.handlers == %{
-             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
-             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+             "refresh-fleet-run" => JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => JS.push("repair-fleet-run")
            }
 
     assert vue.props["page"]["header"]["candidate_plan"] == %{
@@ -1536,11 +1543,11 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   end
 
   defp fleet_planning_run_vue(view) do
-    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-run-component")
+    Test.get_vue(view, id: "ops-fleet-planning-run-component")
   end
 
   defp contact_requirement_template_vue(view) do
-    LiveVue.Test.get_vue(view, id: "ops-contact-requirement-template-component")
+    Test.get_vue(view, id: "ops-contact-requirement-template-component")
   end
 
   defp contact_requirement_template_upserts(vue) do
@@ -1602,7 +1609,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   end
 
   defp fleet_policy_vue(view) do
-    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-policy-component")
+    Test.get_vue(view, id: "ops-fleet-planning-policy-component")
   end
 
   defp policy_form_field_contract(form) do
@@ -1700,7 +1707,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   end
 
   defp fleet_planning_vue(view) do
-    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-component")
+    Test.get_vue(view, id: "ops-fleet-planning-component")
   end
 
   defp fleet_run_upserts(vue) do

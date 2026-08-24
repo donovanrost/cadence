@@ -16,19 +16,23 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
   alias Cadence.GroundNetworks.{
     ProviderAccountGrants,
     ProviderAccounts,
+    ProviderAudit,
     ProviderCredentials,
     ProviderEventCursors,
     ProviderEventInbox
   }
 
+  alias CadenceWeb.ProviderAccountListLive
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
+  alias Phoenix.LiveView.JS
 
   test "organization administrators can navigate to the account registry" do
     {conn, _user, _organization} = signed_in_organization_admin()
 
     {:ok, home, _html} = live(conn, ~p"/")
 
-    sidebar = LiveVue.Test.get_vue(home, id: "global-sidebar-navigation")
+    sidebar = Test.get_vue(home, id: "global-sidebar-navigation")
 
     provider_accounts =
       Enum.find(
@@ -44,7 +48,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     refute has_element?(view, "#provider-accounts-page")
     refute has_element?(view, "#new-provider-account-link")
 
-    vue = LiveVue.Test.get_vue(view, id: "provider-account-list-page-component")
+    vue = Test.get_vue(view, id: "provider-account-list-page-component")
 
     assert vue.component == "ProviderAccountListPage"
     assert vue.ssr == false
@@ -107,7 +111,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     {account, _version, credential} = persist_account!(organization)
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts")
-    vue = LiveVue.Test.get_vue(view, id: "provider-account-list-page-component")
+    vue = Test.get_vue(view, id: "provider-account-list-page-component")
 
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props["presentation"]["header"]["title"]["suffix"]["text"] == "1 registered"
@@ -146,7 +150,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
   end
 
   test "Provider Account list raw attrs preserve HEEx coercion semantics" do
-    assert CadenceWeb.ProviderAccountListLive.presentation_attrs(%{
+    assert ProviderAccountListLive.presentation_attrs(%{
              "nil" => nil,
              "false" => false,
              "true" => true,
@@ -186,8 +190,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     assert vue.handlers == %{
-             "save" => Phoenix.LiveView.JS.push("save"),
-             "validate" => Phoenix.LiveView.JS.push("validate")
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
            }
 
     assert vue.props["page"] == %{
@@ -376,11 +380,11 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert initial_vue.ssr == false
 
     assert initial_vue.handlers == %{
-             "grant-mission" => Phoenix.LiveView.JS.push("grant-mission"),
-             "revoke-credential" => Phoenix.LiveView.JS.push("revoke-credential"),
-             "revoke-grant" => Phoenix.LiveView.JS.push("revoke-grant"),
-             "rotate-credential" => Phoenix.LiveView.JS.push("rotate-credential"),
-             "validate-account" => Phoenix.LiveView.JS.push("validate-account")
+             "grant-mission" => JS.push("grant-mission"),
+             "revoke-credential" => JS.push("revoke-credential"),
+             "revoke-grant" => JS.push("revoke-grant"),
+             "rotate-credential" => JS.push("rotate-credential"),
+             "validate-account" => JS.push("validate-account")
            }
 
     assert initial_vue.props == provider_account_show_props(account, version, credential)
@@ -847,7 +851,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
   end
 
   defp provider_account_show_vue(view) do
-    LiveVue.Test.get_vue(view, id: "provider-account-show-component")
+    Test.get_vue(view, id: "provider-account-show-component")
   end
 
   defp provider_account_show_props(account, version, credential, opts \\ []) do
@@ -1117,7 +1121,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
   defp provider_account_audit_rows(organization, account) do
     organization.organization_id
-    |> Cadence.GroundNetworks.ProviderAudit.list_entries(
+    |> ProviderAudit.list_entries(
       provider_account_id: account.provider_account_id,
       limit: 20
     )
@@ -1232,7 +1236,7 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%MZ")
 
   defp provider_account_new_vue(view) do
-    LiveVue.Test.get_vue(view, id: "provider-account-new-component")
+    Test.get_vue(view, id: "provider-account-new-component")
   end
 
   defp provider_account_fields(vue) do
