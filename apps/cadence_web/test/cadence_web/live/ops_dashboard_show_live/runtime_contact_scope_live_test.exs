@@ -260,18 +260,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
       assert query_evidence_path =~ "selected_contact_id=dashboard-runtime-empty-contact"
       assert query_evidence_path =~ "selected_source_endpoint_id=source-endpoint-alpha"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="query"][data-evidence-status="unknown"][data-evidence-subject="Counter Trend"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Widget"]),
                "Counter Trend"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Contact"]),
                "dashboard-runtime-empty-contact"
@@ -282,25 +282,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
         ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_contact_id=dashboard-runtime-empty-contact"])
       )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-source-inventory[href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
 
       render_hook(view, source_badge_attrs["phx-click"], event_params(source_badge_attrs))
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="unknown"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Contact"]),
                "dashboard-runtime-empty-contact"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Source endpoint"]),
                "source-endpoint-alpha"
@@ -309,12 +309,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
       assert render(view) =~
                "Widget source status is unknown; source health or watermark evidence could not prove freshness for this value."
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-source-health[href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-source-inventory[href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
@@ -436,13 +436,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
       assert decoded_query_evidence_path =~ "selected_contact_ids=#{scope_ids}"
       assert decoded_query_evidence_path =~ "selected_source_endpoint_id=source-endpoint-alpha"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Contacts"]),
                scope_ids
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Contact"]),
                contact_alpha.scheduled_contact_id

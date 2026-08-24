@@ -335,7 +335,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
       assert evidence_path =~ "scope_kind=source_endpoint"
       assert evidence_path =~ "scope_id=#{source_endpoint.source_endpoint_id}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
@@ -347,7 +347,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
       metric_event_selector =
         ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
 
-      assert has_element?(view, metric_event_selector)
+      assert evidence_inspector_has_element?(view, metric_event_selector)
 
       assert_clipboard_button(
         view,
@@ -356,7 +356,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
 
       metric_operational_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(metric_event_selector)
 

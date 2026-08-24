@@ -227,24 +227,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
         "data-status-matrix-row-evidence" => "HK.counter"
       })
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Observable"]),
                "HK.counter"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Value"]),
                "15"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-link-target="limit event"])
              )

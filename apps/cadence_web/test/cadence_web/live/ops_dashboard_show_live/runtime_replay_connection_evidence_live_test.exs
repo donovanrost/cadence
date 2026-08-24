@@ -64,7 +64,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     connection_operational_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(connection_event_selector)
 
@@ -233,7 +233,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     source_health_operational_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(source_health_event_selector)
 
@@ -510,32 +510,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"][data-evidence-ref-link-target="source_health_interval"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport connection state interval"][data-evidence-ref-id="#{connection_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{connection_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health event"][data-evidence-ref-id="#{source_health_event.source_health_event_id}"])
            )
@@ -712,7 +712,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     interval_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"][data-evidence-ref-link-target="source_health_interval"])
 
-    assert has_element?(view, interval_selector)
+    assert evidence_inspector_has_element?(view, interval_selector)
 
     view
     |> element(interval_selector)
@@ -882,17 +882,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="ground station antenna pointing state interval"][data-evidence-ref-id="#{antenna_pointing_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{antenna_pointing_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )

@@ -140,22 +140,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
     assert evidence_path =~ "scope_id=#{source_endpoint.source_endpoint_id}"
     assert evidence_path =~ "selected_realm=flight"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command queue entry"][data-evidence-ref-id="#{queue_entry.command_queue_entry_id}"][data-evidence-ref-link-target="command_queue_entry"])
            )
 
-    refute has_element?(
+    refute evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-id="live-command-queue-entry-beta"])
            )
 
-    refute has_element?(
+    refute evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-id="live-command-queue-entry-released"])
            )

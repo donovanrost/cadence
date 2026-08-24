@@ -325,12 +325,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
 
     assert query_evidence_path =~ "selected_contact_id=nil"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="query"][data-evidence-status="unknown"][data-evidence-subject="Counter Trend"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-detail="Source endpoint"]),
              source_endpoint.source_endpoint_id
@@ -341,7 +341,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_source_endpoint_id=#{source_endpoint.source_endpoint_id}"])
     )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-source-inventory[href*="source_endpoint_id=#{source_endpoint.source_endpoint_id}"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
            )
@@ -352,12 +352,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
       event_params(source_badge["badge"]["attrs"])
     )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="unknown"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-detail="Source endpoint"]),
              source_endpoint.source_endpoint_id
@@ -366,7 +366,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
     assert render(view) =~
              "Widget source status is unknown; source health or watermark evidence could not prove freshness for this value."
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-source-health[href*="source_endpoint_id=#{source_endpoint.source_endpoint_id}"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
            )

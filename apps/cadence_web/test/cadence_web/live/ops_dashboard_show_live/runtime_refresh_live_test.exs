@@ -285,18 +285,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
 
       render_dashboard_async(context_only_view)
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                context_only_view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="context_only"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                context_only_view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Source request"]),
                "missing-cache-source"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                context_only_view,
                ~s(#dashboard-evidence-inspector [data-evidence-detail="Cache evidence status"]),
                "hit"

@@ -396,17 +396,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       assert evidence_path =~ "selected_data_source=managed_operational_observables"
       assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport connection state interval"][data-evidence-ref-id="#{connection_interval.interval_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{connection_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
@@ -425,7 +425,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
 
       connection_operational_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(connection_event_selector)
 
@@ -752,17 +752,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       assert evidence_path =~ "scope_kind=ground_station"
       assert evidence_path =~ "scope_id=dss-14"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="ground station antenna pointing state interval"][data-evidence-ref-id="#{antenna_pointing_interval.interval_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{antenna_pointing_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
@@ -784,7 +784,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
 
       antenna_pointing_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(antenna_pointing_event_selector)
 

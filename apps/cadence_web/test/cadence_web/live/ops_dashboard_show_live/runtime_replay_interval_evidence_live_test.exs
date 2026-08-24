@@ -284,32 +284,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="ground station connection state interval"][data-evidence-ref-id="#{ground_station_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{ground_station_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health event"][data-evidence-ref-id="#{source_health_event.source_health_event_id}"])
            )
@@ -331,7 +331,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
 
     ground_station_operational_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(ground_station_event_selector)
 
@@ -582,32 +582,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport execution interval"][data-evidence-ref-id="#{transport_execution_interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{transport_execution_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health event"][data-evidence-ref-id="#{source_health_event.source_health_event_id}"])
            )
@@ -629,7 +629,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
 
     transport_execution_operational_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(transport_execution_event_selector)
 

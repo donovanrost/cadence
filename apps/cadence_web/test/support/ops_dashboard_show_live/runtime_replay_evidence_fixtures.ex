@@ -807,17 +807,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="#{rf_interval_evidence_kind(observable_id)}"][data-evidence-ref-id="#{interval.interval_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )

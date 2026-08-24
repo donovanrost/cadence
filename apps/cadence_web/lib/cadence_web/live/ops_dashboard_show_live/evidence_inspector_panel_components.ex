@@ -53,227 +53,377 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
   attr :dashboard_lifecycle_events, :list, required: true
 
   def evidence_panel(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :health_activity,
-        HealthEvidenceActivity.build(assigns.inspector, assigns.dashboard_lifecycle_events)
-      )
-      |> assign(
-        :presented_links,
-        DataLinkPresentation.evidence(
-          Map.get(assigns.inspector, :links, []),
-          assigns.inspector
-        )
-      )
+    assigns = assign(assigns, :presentation, presentation(assigns))
 
     ~H"""
-    <section
-      id="dashboard-evidence-inspector"
-      data-evidence-kind={text_value(@inspector.kind)}
-      data-evidence-subject={@inspector.subject || ""}
-      data-evidence-status={@inspector.status_text || ""}
-      class="space-y-4"
-    >
-      <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          <span class="badge badge-xs badge-outline">{@inspector.kind_text}</span>
-          <span class="badge badge-xs">{@inspector.status_text}</span>
-        </div>
-        <p :if={@inspector.message} class="text-sm text-base-content/70">
-          {@inspector.message}
-        </p>
-      </div>
+    <.vue
+      id={@presentation.component_id}
+      v-component="EvidenceInspectorPanel"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
+    """
+  end
 
-      <div class="grid gap-2">
-        <.vue
-          id="dashboard-evidence-copy-link-component"
-          v-component="ClipboardButton"
-          button_id="dashboard-evidence-copy-link"
-          clipboard_text={@dashboard_current_path}
-          button_class="btn btn-sm btn-outline justify-start"
-          icon="hero-link"
-          icon_class="h-4 w-4"
-          label="Copy evidence link"
-          v-ssr={false}
-          class="contents"
-        />
-        <.dashboard_actions
-          actions={evidence_actions(@mission_id, @inspector, @dashboard_document)}
-        />
-        <.link
-          :if={@health_activity.render?}
-          id="dashboard-evidence-health-activity-link"
-          navigate={
-            ActivityNavigation.link(
-              @dashboard_current_path,
-              :health_snapshots,
-              @health_activity.event
-            )
+  def presentation(assigns) do
+    inspector = assigns.inspector
+    health_activity = HealthEvidenceActivity.build(inspector, assigns.dashboard_lifecycle_events)
+
+    presented_links =
+      DataLinkPresentation.evidence(Map.get(inspector, :links, []), inspector)
+
+    %{
+      component_id: "dashboard-evidence-inspector-component",
+      root: %{
+        attrs:
+          raw_attributes(%{
+            "id" => "dashboard-evidence-inspector",
+            "data-evidence-kind" => text_value(Map.get(inspector, :kind)),
+            "data-evidence-subject" => text_value(Map.get(inspector, :subject) || ""),
+            "data-evidence-status" => text_value(Map.get(inspector, :status_text) || ""),
+            "class" => "space-y-4"
+          })
+      },
+      header: header_presentation(inspector),
+      actions: %{
+        attrs: %{"class" => "grid gap-2"},
+        copy: copy_presentation(assigns.dashboard_current_path),
+        dashboard:
+          assigns.mission_id
+          |> evidence_actions(inspector, assigns.dashboard_document)
+          |> dashboard_action_presentations(),
+        health:
+          health_activity_presentation(
+            health_activity,
+            assigns.dashboard_current_path
+          )
+      },
+      subject: rows_presentation("Subject", Map.get(inspector, :subject_rows, [])),
+      details: rows_presentation("Details", Map.get(inspector, :detail_rows, [])),
+      evidence:
+        evidence_presentation(
+          Map.get(inspector, :evidence, []),
+          inspector,
+          assigns.dashboard_current_path
+        ),
+      data_links: data_links_presentation(presented_links)
+    }
+  end
+
+  defp header_presentation(inspector) do
+    %{
+      attrs: %{"class" => "space-y-1"},
+      badges: %{
+        attrs: %{"class" => "flex items-center gap-2"},
+        items: [
+          %{
+            key: "kind",
+            attrs: %{"class" => "badge badge-xs badge-outline"},
+            text: rendered_body(Map.get(inspector, :kind_text))
+          },
+          %{
+            key: "status",
+            attrs: %{"class" => "badge badge-xs"},
+            text: rendered_body(Map.get(inspector, :status_text))
           }
-          class="btn btn-sm btn-outline justify-start"
-          data-dashboard-health-activity-link={@health_activity.event_id}
-          data-dashboard-health-activity-snapshot-id={@health_activity.snapshot_id}
-        >
-          <.icon name="hero-bookmark-square" class="h-4 w-4" /> Open activity
-        </.link>
-      </div>
-
-      <.evidence_rows
-        :if={@inspector.subject_rows != []}
-        title="Subject"
-        rows={@inspector.subject_rows}
-      />
-
-      <.evidence_rows
-        :if={@inspector.detail_rows != []}
-        title="Details"
-        rows={@inspector.detail_rows}
-      />
-
-      <section :if={@inspector.evidence != []} class="space-y-2" data-evidence-refs>
-        <h3 class="hud-label">Evidence</h3>
-        <div class="space-y-1">
-          <.evidence_ref_card
-            :for={evidence <- @inspector.evidence}
-            evidence={evidence}
-            inspector={@inspector}
-            dashboard_current_path={@dashboard_current_path}
-          />
-        </div>
-      </section>
-      <p
-        :if={@inspector.evidence == []}
-        class="rounded border border-base-300/70 bg-base-100/40 px-2 py-2 text-xs text-base-content/60"
-        data-evidence-empty="refs"
-      >
-        No evidence references were provided for this item.
-      </p>
-
-      <section :if={@presented_links != []} class="space-y-2" data-evidence-links>
-        <h3 class="hud-label">Data Links</h3>
-        <div class="space-y-1">
-          <button
-            :for={link <- @presented_links}
-            type="button"
-            phx-click="open_data_link"
-            {DataLinkAttrs.open(link)}
-            class="grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100"
-            data-evidence-link-target={link.target_text}
-            data-evidence-link-id={link.target_id || ""}
-            data-evidence-link-ref={link.link_id || ""}
-          >
-            <span class="text-base-content/60">{link.target_text}</span>
-            <span class="font-mono text-base-content break-all">{link.target_id}</span>
-            <span class="text-base-content/60">Label</span>
-            <span class="text-base-content break-all">{link.label}</span>
-          </button>
-        </div>
-      </section>
-      <p
-        :if={@presented_links == []}
-        class="rounded border border-base-300/70 bg-base-100/40 px-2 py-2 text-xs text-base-content/60"
-        data-evidence-empty="links"
-      >
-        No data links were provided for this item.
-      </p>
-    </section>
-    """
+        ]
+      },
+      message:
+        if(Map.get(inspector, :message),
+          do: %{
+            attrs: %{"class" => "text-sm text-base-content/70"},
+            text: rendered_body(Map.get(inspector, :message))
+          }
+        )
+    }
   end
 
-  attr :evidence, :map, required: true
-  attr :inspector, :map, required: true
-  attr :dashboard_current_path, :string, required: true
-
-  defp evidence_ref_card(assigns) do
-    assigns = assign(assigns, :data_link, evidence_data_link(assigns.evidence))
-
-    ~H"""
-    <button
-      :if={@data_link}
-      type="button"
-      phx-click="open_data_link"
-      {DataLinkAttrs.open(@data_link,
-        context_fallback: evidence_ref_context(@inspector, @dashboard_current_path),
-        timestamp_ms: evidence_timestamp_ms(@evidence)
-      )}
-      class="grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100"
-      data-evidence-ref-kind={@evidence.kind_text}
-      data-evidence-ref-id={@evidence.id || ""}
-      data-evidence-ref-link-target={@data_link.target}
-    >
-      <span class="text-base-content/60">Kind</span>
-      <span class="font-mono text-base-content break-all">{@evidence.kind_text}</span>
-      <span class="text-base-content/60">ID</span>
-      <span class="font-mono text-base-content break-all">{@evidence.id}</span>
-      <span class="text-base-content/60">Source</span>
-      <span class="font-mono text-base-content break-all">{@evidence.source_text}</span>
-      <span class="text-base-content/60">Confidence</span>
-      <span class="font-mono text-base-content break-all">{@evidence.confidence_text}</span>
-      <span class="text-base-content/60">Observed</span>
-      <span class="font-mono text-base-content break-all">{@evidence.observed_at_text}</span>
-    </button>
-    <div
-      :if={!@data_link}
-      class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-xs"
-      data-evidence-ref-kind={@evidence.kind_text}
-      data-evidence-ref-id={@evidence.id || ""}
-    >
-      <span class="text-base-content/60">Kind</span>
-      <span class="font-mono text-base-content break-all">{@evidence.kind_text}</span>
-      <span class="text-base-content/60">ID</span>
-      <span class="font-mono text-base-content break-all">{@evidence.id}</span>
-      <span class="text-base-content/60">Source</span>
-      <span class="font-mono text-base-content break-all">{@evidence.source_text}</span>
-      <span class="text-base-content/60">Confidence</span>
-      <span class="font-mono text-base-content break-all">{@evidence.confidence_text}</span>
-      <span class="text-base-content/60">Observed</span>
-      <span class="font-mono text-base-content break-all">{@evidence.observed_at_text}</span>
-    </div>
-    """
+  defp copy_presentation(current_path) do
+    %{
+      host: %{
+        attrs: %{
+          "id" => "dashboard-evidence-copy-link-component",
+          "class" => "contents",
+          "data-name" => "ClipboardButton"
+        }
+      },
+      props: %{
+        button_id: "dashboard-evidence-copy-link",
+        clipboard_text: current_path,
+        button_class: "btn btn-sm btn-outline justify-start",
+        icon: "hero-link",
+        icon_class: "h-4 w-4",
+        label: "Copy evidence link"
+      }
+    }
   end
 
-  attr :title, :string, required: true
-  attr :rows, :list, required: true
-
-  defp evidence_rows(assigns) do
-    ~H"""
-    <section class="space-y-2">
-      <h3 class="hud-label">{@title}</h3>
-      <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-        <%= for row <- @rows do %>
-          <dt class="text-base-content/60">{row.label}</dt>
-          <dd
-            class="font-mono text-base-content break-all"
-            data-evidence-subject-field={row.label}
-            data-evidence-detail={row.label}
-          >
-            {row.value}
-          </dd>
-        <% end %>
-      </dl>
-    </section>
-    """
+  defp dashboard_action_presentations(actions) do
+    actions
+    |> DashboardActionPresentation.visible()
+    |> Enum.with_index()
+    |> Enum.map(fn {%DashboardAction{} = action, order} ->
+      %{
+        key: action.action_id,
+        order: order,
+        attrs:
+          raw_attributes(%{
+            "id" => action.action_id,
+            "href" => action.route,
+            "class" => "btn btn-sm btn-outline w-full justify-start",
+            "data-dashboard-action" => action.action_id,
+            "data-dashboard-action-kind" => Atom.to_string(action.kind),
+            "data-dashboard-action-target" => Atom.to_string(action.target),
+            "data-dashboard-action-source" => Atom.to_string(action.source),
+            "data-dashboard-action-presentation" => Atom.to_string(action.presentation),
+            "data-phx-link" => "redirect",
+            "data-phx-link-state" => "push"
+          }),
+        icon: %{name: DashboardActionPresentation.icon(action), class: "h-4 w-4"},
+        text: rendered_body(action.label)
+      }
+    end)
   end
 
-  attr :actions, :list, required: true
+  defp health_activity_presentation(%{render?: true} = activity, current_path) do
+    %{
+      attrs:
+        raw_attributes(%{
+          "id" => "dashboard-evidence-health-activity-link",
+          "href" => ActivityNavigation.link(current_path, :health_snapshots, activity.event),
+          "class" => "btn btn-sm btn-outline justify-start",
+          "data-dashboard-health-activity-link" => activity.event_id,
+          "data-dashboard-health-activity-snapshot-id" => activity.snapshot_id,
+          "data-phx-link" => "redirect",
+          "data-phx-link-state" => "push"
+        }),
+      icon: %{name: "hero-bookmark-square", class: "h-4 w-4"},
+      text: "Open activity"
+    }
+  end
 
-  defp dashboard_actions(assigns) do
-    ~H"""
-    <.link
-      :for={%DashboardAction{} = action <- DashboardActionPresentation.visible(@actions)}
-      id={action.action_id}
-      navigate={action.route}
-      class="btn btn-sm btn-outline w-full justify-start"
-      data-dashboard-action={action.action_id}
-      data-dashboard-action-kind={Atom.to_string(action.kind)}
-      data-dashboard-action-target={Atom.to_string(action.target)}
-      data-dashboard-action-source={Atom.to_string(action.source)}
-      data-dashboard-action-presentation={Atom.to_string(action.presentation)}
-    >
-      <.icon name={DashboardActionPresentation.icon(action)} class="h-4 w-4" /> {action.label}
-    </.link>
-    """
+  defp health_activity_presentation(_activity, _current_path), do: nil
+
+  defp rows_presentation(_title, []), do: nil
+
+  defp rows_presentation(title, rows) do
+    %{
+      attrs: %{"class" => "space-y-2"},
+      heading: %{attrs: %{"class" => "hud-label"}, text: title},
+      list: %{
+        attrs: %{
+          "class" => "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs"
+        },
+        rows:
+          rows
+          |> Enum.with_index()
+          |> Enum.map(fn {row, order} -> row_presentation(row, order) end)
+      }
+    }
+  end
+
+  defp row_presentation(row, order) do
+    label = evidence_value(row, :label)
+
+    %{
+      key: "#{order}:#{rendered_body(label)}",
+      order: order,
+      label: %{
+        attrs: %{"class" => "text-base-content/60"},
+        text: rendered_body(label)
+      },
+      value: %{
+        attrs:
+          raw_attributes(%{
+            "class" => "font-mono text-base-content break-all",
+            "data-evidence-subject-field" => label,
+            "data-evidence-detail" => label
+          }),
+        text: rendered_body(evidence_value(row, :value))
+      }
+    }
+  end
+
+  defp evidence_presentation([], _inspector, _current_path) do
+    %{
+      items: [],
+      empty: %{
+        attrs: %{
+          "class" =>
+            "rounded border border-base-300/70 bg-base-100/40 px-2 py-2 text-xs text-base-content/60",
+          "data-evidence-empty" => "refs"
+        },
+        text: "No evidence references were provided for this item."
+      }
+    }
+  end
+
+  defp evidence_presentation(evidence, inspector, current_path) do
+    %{
+      root: %{
+        attrs: %{
+          "class" => "space-y-2",
+          "data-evidence-refs" => ""
+        }
+      },
+      heading: %{attrs: %{"class" => "hud-label"}, text: "Evidence"},
+      list: %{attrs: %{"class" => "space-y-1"}},
+      items:
+        evidence
+        |> Enum.with_index()
+        |> Enum.map(fn {item, order} ->
+          evidence_ref_presentation(item, inspector, current_path, order)
+        end),
+      empty: nil
+    }
+  end
+
+  defp evidence_ref_presentation(evidence, inspector, current_path, order) do
+    data_link = evidence_data_link(evidence)
+    kind_text = evidence_value(evidence, :kind_text)
+    id = evidence_value(evidence, :id)
+
+    attrs =
+      %{
+        "class" => evidence_ref_class(data_link),
+        "data-evidence-ref-kind" => kind_text,
+        "data-evidence-ref-id" => id || ""
+      }
+      |> Map.merge(evidence_ref_action_attrs(data_link, evidence, inspector, current_path))
+      |> raw_attributes()
+
+    %{
+      key: "#{order}:#{rendered_body(kind_text)}:#{rendered_body(id)}",
+      order: order,
+      tag: if(data_link, do: "button", else: "div"),
+      attrs: attrs,
+      rows: [
+        evidence_ref_row("kind", 0, "Kind", kind_text),
+        evidence_ref_row("id", 1, "ID", id),
+        evidence_ref_row("source", 2, "Source", evidence_value(evidence, :source_text)),
+        evidence_ref_row(
+          "confidence",
+          3,
+          "Confidence",
+          evidence_value(evidence, :confidence_text)
+        ),
+        evidence_ref_row(
+          "observed",
+          4,
+          "Observed",
+          evidence_value(evidence, :observed_at_text)
+        )
+      ]
+    }
+  end
+
+  defp evidence_ref_class(nil) do
+    "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-xs"
+  end
+
+  defp evidence_ref_class(_data_link) do
+    "grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100"
+  end
+
+  defp evidence_ref_action_attrs(nil, _evidence, _inspector, _current_path), do: %{}
+
+  defp evidence_ref_action_attrs(data_link, evidence, inspector, current_path) do
+    data_link
+    |> DataLinkAttrs.open(
+      context_fallback: evidence_ref_context(inspector, current_path),
+      timestamp_ms: evidence_timestamp_ms(evidence)
+    )
+    |> Map.merge(%{
+      "type" => "button",
+      "phx-click" => "open_data_link",
+      "data-evidence-ref-link-target" => Atom.to_string(data_link.target)
+    })
+  end
+
+  defp evidence_ref_row(key, order, label, value) do
+    %{
+      key: key,
+      order: order,
+      label: %{attrs: %{"class" => "text-base-content/60"}, text: label},
+      value: %{
+        attrs: %{"class" => "font-mono text-base-content break-all"},
+        text: rendered_body(value)
+      }
+    }
+  end
+
+  defp data_links_presentation([]) do
+    %{
+      items: [],
+      empty: %{
+        attrs: %{
+          "class" =>
+            "rounded border border-base-300/70 bg-base-100/40 px-2 py-2 text-xs text-base-content/60",
+          "data-evidence-empty" => "links"
+        },
+        text: "No data links were provided for this item."
+      }
+    }
+  end
+
+  defp data_links_presentation(links) do
+    %{
+      root: %{
+        attrs: %{
+          "class" => "space-y-2",
+          "data-evidence-links" => ""
+        }
+      },
+      heading: %{attrs: %{"class" => "hud-label"}, text: "Data Links"},
+      list: %{attrs: %{"class" => "space-y-1"}},
+      items:
+        links
+        |> Enum.with_index()
+        |> Enum.map(fn {link, order} -> data_link_presentation(link, order) end),
+      empty: nil
+    }
+  end
+
+  defp data_link_presentation(link, order) do
+    %{
+      key: "#{order}:#{rendered_body(link.link_id)}",
+      order: order,
+      attrs:
+        link
+        |> DataLinkAttrs.open()
+        |> Map.merge(%{
+          "type" => "button",
+          "phx-click" => "open_data_link",
+          "class" =>
+            "grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100",
+          "data-evidence-link-target" => link.target_text,
+          "data-evidence-link-id" => link.target_id || "",
+          "data-evidence-link-ref" => link.link_id || ""
+        })
+        |> raw_attributes(),
+      rows: [
+        %{
+          key: "target",
+          label: %{
+            attrs: %{"class" => "text-base-content/60"},
+            text: rendered_body(link.target_text)
+          },
+          value: %{
+            attrs: %{"class" => "font-mono text-base-content break-all"},
+            text: rendered_body(link.target_id)
+          }
+        },
+        %{
+          key: "label",
+          label: %{attrs: %{"class" => "text-base-content/60"}, text: "Label"},
+          value: %{
+            attrs: %{"class" => "text-base-content break-all"},
+            text: rendered_body(link.label)
+          }
+        }
+      ]
+    }
   end
 
   defp evidence_actions(mission_id, inspector, dashboard_document) do
@@ -289,6 +439,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
   defp text_value(value) when is_atom(value), do: Atom.to_string(value)
   defp text_value(value) when is_binary(value), do: value
   defp text_value(value), do: to_string(value)
+
+  defp raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), rendered_body(value))
+    end)
+  end
+
+  defp rendered_body(nil), do: ""
+  defp rendered_body(value), do: text_value(value)
 
   defp evidence_timestamp_ms(evidence) do
     evidence

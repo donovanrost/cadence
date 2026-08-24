@@ -2,6 +2,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
   use ExUnit.Case, async: true
 
   import CadenceWeb.DashboardReviewFixtures
+  import CadenceWeb.LiveVueClipboardTestSupport, only: [assert_clipboard_button: 2]
+
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport,
+    only: [evidence_inspector_html: 1, evidence_inspector_presentation: 1]
+
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias Cadence.Dashboards.{DashboardAction, Document}
@@ -35,7 +40,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
         dashboard_lifecycle_events: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = evidence_inspector_presentation(html)
+    document = html |> evidence_inspector_html() |> LazyHTML.from_fragment()
+
+    assert presentation["root"]["attrs"]["id"] == "dashboard-evidence-inspector"
 
     assert ["source"] =
              document
@@ -47,7 +55,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-evidence-inspector")
              |> LazyHTML.attribute("data-evidence-subject")
 
-    copy = LiveVue.Test.get_vue(html, id: "dashboard-evidence-copy-link-component")
+    copy = assert_clipboard_button(html, "#dashboard-evidence-copy-link")
 
     assert copy.component == "ClipboardButton"
     assert copy.props["button_id"] == "dashboard-evidence-copy-link"
@@ -90,6 +98,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
     assert explore_href =~ "/missions/mission-1/ops/explore"
     assert explore_href =~ "source_dashboard_id=dashboard-1"
 
+    assert ["redirect"] =
+             document
+             |> LazyHTML.query("#dashboard-evidence-explore")
+             |> LazyHTML.attribute("data-phx-link")
+
+    assert ["push"] =
+             document
+             |> LazyHTML.query("#dashboard-evidence-explore")
+             |> LazyHTML.attribute("data-phx-link-state")
+
     assert ["source_inventory"] =
              document
              |> LazyHTML.query("#dashboard-evidence-source-inventory")
@@ -102,6 +120,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
 
     assert source_inventory_href =~ "/missions/mission-1/ops/data-sources"
     assert source_inventory_href =~ "source_dashboard_id=dashboard-1"
+
+    assert ["redirect"] =
+             document
+             |> LazyHTML.query("#dashboard-evidence-source-inventory")
+             |> LazyHTML.attribute("data-phx-link")
+
+    assert ["push"] =
+             document
+             |> LazyHTML.query("#dashboard-evidence-source-inventory")
+             |> LazyHTML.attribute("data-phx-link-state")
   end
 
   test "evidence_panel renders dashboard health activity link" do
@@ -142,7 +170,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
         dashboard_lifecycle_events: [event]
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = evidence_inspector_presentation(html)
+    document = html |> evidence_inspector_html() |> LazyHTML.from_fragment()
+
+    assert presentation["actions"]["health"]["attrs"]["data-phx-link"] == "redirect"
+
+    assert presentation["actions"]["health"]["attrs"]["data-phx-link-state"] == "push"
+
+    assert presentation["evidence"]["empty"]["attrs"]["data-evidence-empty"] == "refs"
+    assert presentation["data_links"]["empty"]["attrs"]["data-evidence-empty"] == "links"
 
     assert ["dashboard-lifecycle-event-health"] =
              document

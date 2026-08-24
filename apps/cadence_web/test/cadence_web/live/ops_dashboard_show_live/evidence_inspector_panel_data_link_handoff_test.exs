@@ -1,6 +1,9 @@
 defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelDataLinkHandoffTest do
   use ExUnit.Case, async: true
 
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport,
+    only: [evidence_inspector_html: 1, evidence_inspector_presentation: 1]
+
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias Cadence.Dashboards.Document
@@ -17,7 +20,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelDataLinkHandoffT
         dashboard_lifecycle_events: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = evidence_inspector_presentation(html)
+    document = html |> evidence_inspector_html() |> LazyHTML.from_fragment()
+
+    assert presentation["evidence"]["empty"] == nil
 
     assert "limit-def-1 v3 / ops (2026-06-21T20:00:00Z -> open)" =
              document
@@ -236,7 +242,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelDataLinkHandoffT
         dashboard_lifecycle_events: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = evidence_inspector_presentation(html)
+    document = html |> evidence_inspector_html() |> LazyHTML.from_fragment()
+
+    assert presentation["data_links"]["empty"] == nil
 
     assert ["flight"] =
              document

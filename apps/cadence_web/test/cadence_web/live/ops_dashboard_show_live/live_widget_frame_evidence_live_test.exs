@@ -325,22 +325,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       assert evidence_path =~ "selected_data_source=#{source_health_event.data_source_id}"
       assert evidence_path =~ "selected_source_binding=#{source_health_event.source_binding_id}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{source_health_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health event"][data-evidence-ref-id="#{source_health_event.source_health_event_id}"])
              )
@@ -362,7 +362,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
 
       source_health_operational_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(source_health_event_selector)
 
@@ -553,33 +553,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       assert evidence_path =~ "selected_observable=HK.counter"
       refute evidence_path =~ "selected_link="
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="active"][data-dashboard-evidence-kind="frame"][data-dashboard-selection-state="none"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-source-request])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Observable"]),
                "HK.counter"
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="raw evidence"][data-evidence-ref-id="#{latest_sample.evidence_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-link-target="telemetry sample"][data-evidence-link-id="#{latest_sample.sample_id}"])
              )
@@ -594,12 +594,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
         ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_target="])
       )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-explore[data-dashboard-action-target="telemetry_explore"][data-dashboard-action-source="evidence_panel"][href*="/ops/explore"][href*="point_id=HK.counter"][href*="sample_id="][href*="data_source_id="][href*="source_binding_id="][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-source-inventory[data-dashboard-action-target="source_inventory"][data-dashboard-action-source="evidence_panel"][href*="/ops/data-sources"][href*="data_source_id="][href*="source_binding_id="][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
@@ -607,17 +607,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       {:ok, evidence_view, _html} = live(conn, evidence_path)
       render_dashboard_async(evidence_view)
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                evidence_view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-subject])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                evidence_view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="active"][data-dashboard-evidence-kind="frame"][data-dashboard-selection-state="none"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                evidence_view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Observable"]),
                "HK.counter"
@@ -629,17 +629,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       {:ok, missing_frame_view, _html} = live(conn, missing_frame_path)
       render_dashboard_async(missing_frame_view)
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_frame_view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="missing"][data-evidence-subject="HK.missing"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_frame_view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="missing"][data-dashboard-evidence-kind="frame"][data-dashboard-selection-state="none"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_frame_view,
                ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Observable"]),
                "HK.missing"
@@ -660,7 +660,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       refute cleared_evidence_path =~ "panel="
       refute cleared_evidence_path =~ "selected_evidence_kind="
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
              )

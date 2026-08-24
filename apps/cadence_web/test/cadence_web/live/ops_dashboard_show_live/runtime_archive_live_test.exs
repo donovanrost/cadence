@@ -420,18 +420,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_time_mode=archive"][data-clipboard-text*="selected_requested_realm=rehearsal"][data-clipboard-text*="selected_requested_data_view=canonical"])
     )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="unknown"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Source binding"]),
              binding_id
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Data source"]),
              source_v1

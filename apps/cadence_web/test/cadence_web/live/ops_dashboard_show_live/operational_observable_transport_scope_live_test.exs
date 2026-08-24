@@ -410,17 +410,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert evidence_path =~ "scope_kind=transport"
       assert evidence_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport execution interval"][data-evidence-ref-id="#{transport_execution_interval.interval_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{transport_execution_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
@@ -437,7 +437,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
       transport_execution_operational_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(transport_execution_event_selector)
 
@@ -734,7 +734,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert evidence_path =~ "scope_kind=transport"
       assert evidence_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
@@ -746,7 +746,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       metric_event_selector =
         ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
 
-      assert has_element?(view, metric_event_selector)
+      assert evidence_inspector_has_element?(view, metric_event_selector)
 
       assert_clipboard_button(
         view,
@@ -992,7 +992,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert evidence_path =~ "scope_kind=transport"
       assert evidence_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
@@ -1004,7 +1004,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       metric_event_selector =
         ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{metric_event_id}"][data-evidence-ref-link-target="operational_event"])
 
-      assert has_element?(view, metric_event_selector)
+      assert evidence_inspector_has_element?(view, metric_event_selector)
 
       assert_clipboard_button(
         view,

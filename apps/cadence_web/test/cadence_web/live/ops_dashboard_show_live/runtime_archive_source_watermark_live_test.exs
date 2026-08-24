@@ -328,18 +328,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     assert retention_evidence_path =~ "selected_requested_realm=rehearsal"
     assert retention_evidence_path =~ "selected_requested_data_view=canonical"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="retention_gap"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-detail="Time mode"]),
              "archive"
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-subject-field="Data source"]),
              data_source_id

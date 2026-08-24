@@ -220,21 +220,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
       assert warning_evidence_path =~
                "selected_placement=#{URI.encode_www_form(widget.widget_id)}"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="warning"][data-evidence-subject="missing_source_binding"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="active"][data-dashboard-evidence-kind="warning"][data-dashboard-evidence-logical-source="limits"][data-dashboard-evidence-realm="rehearsal"][data-dashboard-selection-state="none"])
              )
 
-      view
-      |> element(
-        ~s(#dashboard-evidence-inspector [data-evidence-link-target="telemetry point"][data-evidence-link-id="HK.counter"])
-      )
-      |> render_click()
+      data_link =
+        evidence_inspector_data_link(view, %{
+          "data-evidence-link-target" => "telemetry point",
+          "data-evidence-link-id" => "HK.counter"
+        })
+
+      assert data_link["attrs"]["phx-click"] == "open_data_link"
+      assert data_link["attrs"]["phx-value-target"] == "telemetry_point"
+      assert data_link["attrs"]["phx-value-target-id"] == "HK.counter"
+
+      render_hook(view, data_link["attrs"]["phx-click"], event_params(data_link["attrs"]))
 
       data_link_path = assert_patch(view)
       assert data_link_path =~ "panel=data_link"
@@ -247,7 +253,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#dashboard-data-link-inspector[data-data-link-target="telemetry_point"][data-data-link-status="context_only"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
              )
@@ -260,12 +266,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
       {:ok, missing_warning_view, _html} = live(conn, missing_warning_path)
       render_dashboard_async(missing_warning_view)
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_warning_view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="warning"][data-evidence-status="missing"][data-evidence-subject="missing_warning"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_warning_view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="missing"][data-dashboard-evidence-kind="warning"][data-dashboard-evidence-logical-source="limits"][data-dashboard-evidence-realm="rehearsal"])
              )
@@ -276,12 +282,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
       {:ok, missing_source_view, _html} = live(conn, missing_source_path)
       render_dashboard_async(missing_source_view)
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_source_view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="source"][data-evidence-status="missing"][data-evidence-subject="telemetry"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                missing_source_view,
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="missing"][data-dashboard-evidence-kind="source"][data-dashboard-evidence-logical-source="telemetry"][data-dashboard-evidence-realm="missing-realm"][data-dashboard-evidence-data-source-id="missing-source"][data-dashboard-evidence-source-binding-id="missing-binding"])
              )

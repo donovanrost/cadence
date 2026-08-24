@@ -85,6 +85,47 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     AsyncLiveViewTestSupport.stop_async_view(view, timeout)
   end
 
+  def evidence_inspector_has_element?(view, selector) do
+    Phoenix.LiveViewTest.has_element?(view, selector) or
+      virtual_evidence_inspector_has_element?(view, selector)
+  end
+
+  def evidence_inspector_has_element?(view, selector, text) do
+    Phoenix.LiveViewTest.has_element?(view, selector, text) or
+      virtual_evidence_inspector_has_element?(view, selector, text)
+  end
+
+  def evidence_inspector_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-evidence-inspector-component")
+
+    assert vue.component == "EvidenceInspectorPanel"
+    assert vue.id == "dashboard-evidence-inspector-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["component_id"] == vue.id
+
+    vue.props["presentation"]
+  end
+
+  def evidence_inspector_html(rendered) do
+    rendered
+    |> evidence_inspector_presentation()
+    |> evidence_inspector_html_from_presentation()
+  end
+
+  def evidence_inspector_data_link(rendered, expected_attrs) do
+    item =
+      rendered
+      |> evidence_inspector_presentation()
+      |> get_in(["data_links", "items"])
+      |> Enum.find(&attrs_match?(&1["attrs"], expected_attrs))
+
+    assert item
+    item
+  end
+
   def widget_point_presentation(rendered, component_id) do
     vue = LiveVue.Test.get_vue(rendered, id: component_id)
 
@@ -636,6 +677,204 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   defp attr_text(nil), do: ""
   defp attr_text(value) when is_binary(value), do: value
   defp attr_text(value), do: to_string(value)
+
+  defp virtual_evidence_inspector_has_element?(rendered, selector) do
+    if evidence_inspector_selector?(selector) do
+      rendered
+      |> evidence_inspector_html()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.attribute("class")
+      |> Kernel.!=([])
+    else
+      false
+    end
+  rescue
+    RuntimeError -> false
+  end
+
+  defp virtual_evidence_inspector_has_element?(rendered, selector, text) do
+    virtual_text =
+      rendered
+      |> evidence_inspector_html()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.text()
+
+    virtual_evidence_inspector_has_element?(rendered, selector) and
+      virtual_text_match?(virtual_text, text)
+  rescue
+    RuntimeError -> false
+  end
+
+  defp virtual_text_match?(text, expected) when is_binary(expected),
+    do: String.contains?(text, expected)
+
+  defp virtual_text_match?(text, %Regex{} = expected), do: Regex.match?(expected, text)
+  defp virtual_text_match?(_text, _expected), do: false
+
+  defp evidence_inspector_selector?(selector) when is_binary(selector) do
+    String.contains?(selector, [
+      "dashboard-evidence-inspector",
+      "dashboard-evidence-copy-link",
+      "dashboard-evidence-explore",
+      "dashboard-evidence-source-",
+      "dashboard-evidence-health-activity-link",
+      "data-evidence-"
+    ])
+  end
+
+  defp evidence_inspector_selector?(_selector), do: false
+
+  defp evidence_inspector_html_from_presentation(presentation) do
+    root_children = [
+      evidence_header_html(presentation["header"]),
+      evidence_actions_html(presentation["actions"]),
+      evidence_rows_html(presentation["subject"]),
+      evidence_rows_html(presentation["details"]),
+      evidence_refs_html(presentation["evidence"]),
+      evidence_links_html(presentation["data_links"])
+    ]
+
+    {:safe, html} = html_element("section", presentation["root"]["attrs"], root_children)
+    html
+  end
+
+  defp evidence_header_html(header) do
+    badges =
+      Enum.map(header["badges"]["items"], fn badge ->
+        html_element("span", badge["attrs"], badge["text"])
+      end)
+
+    message =
+      case header["message"] do
+        nil -> ""
+        message -> html_element("p", message["attrs"], message["text"])
+      end
+
+    html_element("div", header["attrs"], [
+      html_element("div", header["badges"]["attrs"], badges),
+      message
+    ])
+  end
+
+  defp evidence_actions_html(actions) do
+    copy = actions["copy"]
+    copy_props = copy["props"]
+
+    copy_attrs = %{
+      "id" => copy_props["button_id"],
+      "type" => "button",
+      "class" => copy_props["button_class"],
+      "data-clipboard-button" => "",
+      "data-clipboard-text" => copy_props["clipboard_text"]
+    }
+
+    copy_button = html_element("button", copy_attrs, copy_props["label"])
+    copy_html = html_element("div", copy["host"]["attrs"], copy_button)
+
+    dashboard_html =
+      Enum.map(actions["dashboard"], fn action ->
+        html_element("a", action["attrs"], action["text"])
+      end)
+
+    health_html =
+      case actions["health"] do
+        nil -> ""
+        health -> html_element("a", health["attrs"], health["text"])
+      end
+
+    html_element("div", actions["attrs"], [copy_html, dashboard_html, health_html])
+  end
+
+  defp evidence_rows_html(nil), do: ""
+
+  defp evidence_rows_html(section) do
+    rows =
+      Enum.map(section["list"]["rows"], fn row ->
+        [
+          html_element("dt", row["label"]["attrs"], row["label"]["text"]),
+          html_element("dd", row["value"]["attrs"], row["value"]["text"])
+        ]
+      end)
+
+    html_element("section", section["attrs"], [
+      html_element("h3", section["heading"]["attrs"], section["heading"]["text"]),
+      html_element("dl", section["list"]["attrs"], rows)
+    ])
+  end
+
+  defp evidence_refs_html(%{"items" => []} = evidence) do
+    html_element("p", evidence["empty"]["attrs"], evidence["empty"]["text"])
+  end
+
+  defp evidence_refs_html(evidence) do
+    items =
+      Enum.map(evidence["items"], fn item ->
+        rows =
+          Enum.map(item["rows"], fn row ->
+            [
+              html_element("span", row["label"]["attrs"], row["label"]["text"]),
+              html_element("span", row["value"]["attrs"], row["value"]["text"])
+            ]
+          end)
+
+        html_element(item["tag"], item["attrs"], rows)
+      end)
+
+    html_element("section", evidence["root"]["attrs"], [
+      html_element("h3", evidence["heading"]["attrs"], evidence["heading"]["text"]),
+      html_element("div", evidence["list"]["attrs"], items)
+    ])
+  end
+
+  defp evidence_links_html(%{"items" => []} = links) do
+    html_element("p", links["empty"]["attrs"], links["empty"]["text"])
+  end
+
+  defp evidence_links_html(links) do
+    items =
+      Enum.map(links["items"], fn item ->
+        rows =
+          Enum.map(item["rows"], fn row ->
+            [
+              html_element("span", row["label"]["attrs"], row["label"]["text"]),
+              html_element("span", row["value"]["attrs"], row["value"]["text"])
+            ]
+          end)
+
+        html_element("button", item["attrs"], rows)
+      end)
+
+    html_element("section", links["root"]["attrs"], [
+      html_element("h3", links["heading"]["attrs"], links["heading"]["text"]),
+      html_element("div", links["list"]["attrs"], items)
+    ])
+  end
+
+  defp html_element(tag, attrs, content) do
+    attributes =
+      attrs
+      |> Enum.sort_by(fn {name, _value} -> name end)
+      |> Enum.map_join(fn {name, value} ->
+        ~s( #{name}="#{html_escape(value)}")
+      end)
+
+    {:safe, "<#{tag}#{attributes}>#{html_content(content)}</#{tag}>"}
+  end
+
+  defp html_content(content) when is_list(content), do: Enum.map_join(content, &html_content/1)
+  defp html_content({:safe, content}), do: content
+  defp html_content(content), do: html_escape(content)
+
+  defp html_escape(nil), do: ""
+
+  defp html_escape(value) do
+    value
+    |> to_string()
+    |> Phoenix.HTML.html_escape()
+    |> Phoenix.HTML.safe_to_string()
+  end
 
   defp rendered_html(rendered) when is_binary(rendered), do: rendered
   defp rendered_html(view), do: render(view)

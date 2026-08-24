@@ -302,17 +302,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
       assert evidence_path =~ "scope_kind=ground_station"
       assert evidence_path =~ "scope_id=dss-14"
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="ground station connection state interval"][data-evidence-ref-id="#{ground_station_interval.interval_id}"])
              )
 
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{ground_station_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
@@ -334,7 +334,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
 
       ground_station_operational_event_evidence =
         view
-        |> render()
+        |> evidence_inspector_html()
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(ground_station_event_selector)
 

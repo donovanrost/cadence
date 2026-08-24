@@ -61,6 +61,31 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
 
   defp clipboard_button_component(renderable, button_id) do
     LiveVue.Test.get_vue(renderable, id: button_id <> "-component")
+  rescue
+    RuntimeError -> nested_evidence_clipboard_button!(renderable, button_id)
+  end
+
+  defp nested_evidence_clipboard_button!(renderable, "dashboard-evidence-copy-link" = button_id) do
+    parent = LiveVue.Test.get_vue(renderable, id: "dashboard-evidence-inspector-component")
+
+    assert parent.component == "EvidenceInspectorPanel"
+    assert parent.ssr == false
+
+    copy = get_in(parent.props, ["presentation", "actions", "copy"])
+    assert copy["props"]["button_id"] == button_id
+    assert copy["host"]["attrs"]["data-name"] == @clipboard_component
+
+    %{
+      component: @clipboard_component,
+      id: copy["host"]["attrs"]["id"],
+      class: copy["host"]["attrs"]["class"],
+      props: copy["props"],
+      ssr: false
+    }
+  end
+
+  defp nested_evidence_clipboard_button!(_renderable, button_id) do
+    raise RuntimeError, ~s(No Vue component found with id="#{button_id}-component")
   end
 
   defp clipboard_text_prop!(clipboard_button) do

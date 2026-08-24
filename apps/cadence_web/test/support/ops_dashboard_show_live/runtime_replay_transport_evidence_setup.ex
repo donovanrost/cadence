@@ -303,59 +303,59 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
     for transport_event <- transport_events do
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{transport_event.event_id}"])
              )
     end
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command release attempt"][data-evidence-ref-id="#{release_attempt.command_release_attempt_id}"][data-evidence-ref-link-target="command_release_attempt"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport action request"][data-evidence-ref-id="transport-action-request-1"][data-evidence-ref-link-target="transport_action_request"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="telemetry sample"][data-evidence-ref-id="#{telemetry_sample.sample_id}"][data-evidence-ref-link-target="telemetry_sample"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="transport capability record"][data-evidence-ref-id="transport-runtime-record-1"][data-evidence-ref-link-target="transport_capability_record"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{verifier_instance.command_verifier_instance_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{telemetry_verifier_instance.command_verifier_instance_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{capability_verifier_instance.command_verifier_instance_id}"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{failed_verifier_instance.command_verifier_instance_id}"][data-evidence-ref-link-target="command_verifier_instance"])
            )
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{timed_out_verifier_instance.command_verifier_instance_id}"])
            )

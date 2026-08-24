@@ -153,13 +153,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
     assert evidence_path =~ "selected_realm=flight"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
     for transport_event <- transport_events do
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{transport_event.event_id}"])
              )
@@ -174,7 +174,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
 
     record_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(record_event_selector)
 
@@ -371,13 +371,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
     assert evidence_path =~ "selected_realm=flight"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
     for transport_event <- transport_events do
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{transport_event.event_id}"])
              )
@@ -397,7 +397,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
 
     action_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(action_event_selector)
 
@@ -573,13 +573,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert evidence_path =~ "selected_source_binding=default_flight_operational_observables"
     assert evidence_path =~ "selected_realm=flight"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
     for transport_event <- transport_events do
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{transport_event.event_id}"])
              )
@@ -594,7 +594,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
 
     timer_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(timer_event_selector)
 
@@ -820,13 +820,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert evidence_path =~ "replay_run_id=#{replay_run_id}"
     assert evidence_path =~ "time_mode=replay_run"
 
-    assert has_element?(
+    assert evidence_inspector_has_element?(
              view,
              ~s(#dashboard-evidence-inspector[data-evidence-kind="frame"][data-evidence-status="resolved"])
            )
 
     for capability_event <- capability_events do
-      assert has_element?(
+      assert evidence_inspector_has_element?(
                view,
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{capability_event.event_id}"])
              )
@@ -846,7 +846,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
 
     record_event_evidence =
       view
-      |> render()
+      |> evidence_inspector_html()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(record_event_selector)
 
