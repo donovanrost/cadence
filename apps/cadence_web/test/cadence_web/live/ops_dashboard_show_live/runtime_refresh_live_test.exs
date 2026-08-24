@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
@@ -299,10 +300,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                "hit"
              )
 
-      assert has_element?(
-               context_only_view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_source_evidence_state=context_only"][data-clipboard-text*="selected_cache_evidence_status=hit"])
-             )
+      assert_clipboard_button(
+        context_only_view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_source_evidence_state=context_only"][data-clipboard-text*="selected_cache_evidence_status=hit"])
+      )
 
       assert has_element?(
                view,

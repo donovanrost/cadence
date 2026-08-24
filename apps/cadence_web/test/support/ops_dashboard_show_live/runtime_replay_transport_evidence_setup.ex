@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
@@ -359,10 +360,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command verifier instance"][data-evidence-ref-id="#{timed_out_verifier_instance.command_verifier_instance_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.transport_activity")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.transport_activity")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     %{
       action_at: action_at,

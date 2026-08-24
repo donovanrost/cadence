@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Comms.TransportStore
@@ -375,10 +376,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{rf_lock_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=link.rf_lock_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=link.rf_lock_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+      )
 
       rf_operational_event_id = rf_lock_interval.source_event_id
       rf_operational_event_route_id = URI.encode_www_form(rf_operational_event_id)
@@ -429,18 +430,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
       assert rf_event_path =~ "scope_kind=link"
       assert rf_event_path =~ "scope_id=link-alpha"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+      )
 
       rf_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+        clipboard_text(view, "#dashboard-data-link-copy-link")
 
       assert rf_event_copied_path =~ "panel=data_link"
       assert rf_event_copied_path =~ "selected_target=operational_event"
@@ -462,10 +458,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{rf_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
              )
 
-      assert has_element?(
-               reopened_rf_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="selected_time=#{rf_event_at_ms}"])
-             )
+      assert_clipboard_button(
+        reopened_rf_event_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="selected_time=#{rf_event_at_ms}"])
+      )
 
       assert has_element?(
                reopened_rf_event_view,
@@ -566,10 +562,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{frame_sync_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=link.frame_sync_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=link.frame_sync_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+      )
 
       assert has_element?(
                view,
@@ -615,10 +611,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
                "link-alpha"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"][data-clipboard-text*="selected_target=transport"][data-clipboard-text*="selected_id=dashboard-transport-alpha"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"][data-clipboard-text*="selected_target=transport"][data-clipboard-text*="selected_id=dashboard-transport-alpha"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+      )
 
       stop_dashboard_view(view)
     end
@@ -767,10 +763,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
     assert has_element?(view, metric_event_selector)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form(scenario.observable_id)}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form(scenario.observable_id)}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+    )
 
     metric_operational_event_evidence =
       view
@@ -821,18 +817,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
     assert metric_event_path =~ "scope_kind=link"
     assert metric_event_path =~ "scope_id=link-alpha"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+    )
 
     metric_event_copied_path =
-      view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("#dashboard-data-link-copy-link")
-      |> LazyHTML.attribute("data-clipboard-text")
-      |> List.first()
+      clipboard_text(view, "#dashboard-data-link-copy-link")
 
     assert metric_event_copied_path =~ "panel=data_link"
     assert metric_event_copied_path =~ "selected_target=operational_event"
@@ -854,10 +845,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
            )
 
-    assert has_element?(
-             reopened_metric_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-           )
+    assert_clipboard_button(
+      reopened_metric_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
+    )
 
     for {field, expected} <- [
           {"Operational metric sample", scenario.sample_id},

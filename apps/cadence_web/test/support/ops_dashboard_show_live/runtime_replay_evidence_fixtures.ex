@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -817,10 +818,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form(observable_id)}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form(observable_id)}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     rf_operational_event_id = interval.source_event_id
     rf_operational_event_route_id = URI.encode_www_form(rf_operational_event_id)
@@ -855,10 +856,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     assert rf_event_path =~ "selected_time=#{rf_event_at_ms}"
     assert rf_event_path =~ "replay_run_id=#{replay_run_id}"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
+    )
 
     rf_event_copied_path =
       view
@@ -880,10 +881,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{rf_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_rf_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="selected_time=#{rf_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_rf_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{rf_operational_event_route_id}"][data-clipboard-text*="selected_time=#{rf_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_rf_event_view,
@@ -959,6 +960,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
 
   def show_path(mission, dashboard) do
     ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+  end
+
+  def element_attribute(html, selector, "data-clipboard-text")
+      when selector in ["#dashboard-data-link-copy-link", "#dashboard-evidence-copy-link"] do
+    clipboard_text(html, selector)
   end
 
   def element_attribute(html, selector, attribute) do

@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
@@ -260,10 +261,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                "dashboard-runtime-empty-contact"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_contact_id=dashboard-runtime-empty-contact"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_contact_id=dashboard-runtime-empty-contact"])
+      )
 
       assert has_element?(
                view,
@@ -426,10 +427,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                contact_alpha.scheduled_contact_id
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_contact_ids=#{URI.encode_www_form(scope_ids)}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_contact_ids=#{URI.encode_www_form(scope_ids)}"])
+      )
 
       stop_dashboard_view(view)
     end

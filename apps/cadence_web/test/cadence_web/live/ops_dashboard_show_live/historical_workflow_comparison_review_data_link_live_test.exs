@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewData
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -83,10 +84,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewData
                "comparison_open_findings_review"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(request_event.dashboard_lifecycle_event_id)}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(request_event.dashboard_lifecycle_event_id)}"])
+      )
     end
 
     test "keeps missing dashboard lifecycle data-link routes inspectable" do
@@ -111,10 +112,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewData
                ~s(#ops-dashboard-show-page[data-dashboard-selection-state="missing_target"][data-dashboard-selection-target="dashboard_lifecycle_event"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{missing_event_id}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{missing_event_id}"])
+      )
     end
   end
 end

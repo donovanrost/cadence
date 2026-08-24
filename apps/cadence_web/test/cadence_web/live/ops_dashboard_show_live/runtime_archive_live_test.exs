@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
@@ -395,10 +396,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     assert source_evidence_path =~ "selected_requested_realm=rehearsal"
     assert source_evidence_path =~ "selected_requested_data_view=canonical"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_time_mode=archive"][data-clipboard-text*="selected_requested_realm=rehearsal"][data-clipboard-text*="selected_requested_data_view=canonical"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_time_mode=archive"][data-clipboard-text*="selected_requested_realm=rehearsal"][data-clipboard-text*="selected_requested_data_view=canonical"])
+    )
 
     assert has_element?(
              view,

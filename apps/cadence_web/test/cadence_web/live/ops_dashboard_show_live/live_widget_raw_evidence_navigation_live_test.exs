@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -257,10 +258,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
                ~s(#dashboard-data-link-inspector [data-data-link-related-target="telemetry sample"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="/ops/dashboards/#{dashboard.dashboard_id}"][data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=raw_evidence"][data-clipboard-text*="selected_id=#{URI.encode_www_form(latest_sample.evidence_id)}"][data-clipboard-text*="nav_from_target=telemetry_sample"][data-clipboard-text*="nav_from_target_id=#{URI.encode_www_form(latest_sample.sample_id)}"][data-clipboard-text*="realm=flight"][data-clipboard-text*="data_source_id=#{telemetry_data_source_id}"][data-clipboard-text*="source_binding_id=default_flight_telemetry"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="/ops/dashboards/#{dashboard.dashboard_id}"][data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=raw_evidence"][data-clipboard-text*="selected_id=#{URI.encode_www_form(latest_sample.evidence_id)}"][data-clipboard-text*="nav_from_target=telemetry_sample"][data-clipboard-text*="nav_from_target_id=#{URI.encode_www_form(latest_sample.sample_id)}"][data-clipboard-text*="realm=flight"][data-clipboard-text*="data_source_id=#{telemetry_data_source_id}"][data-clipboard-text*="source_binding_id=default_flight_telemetry"])
+      )
 
       assert has_element?(
                view,

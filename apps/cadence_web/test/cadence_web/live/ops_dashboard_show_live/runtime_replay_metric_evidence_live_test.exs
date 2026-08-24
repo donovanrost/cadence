@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
@@ -133,10 +134,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, metric_event_selector)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.snr_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.snr_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     view
     |> element(metric_event_selector)
@@ -169,10 +170,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
     assert metric_event_path =~ "selected_time=#{metric_event_at_ms}"
     assert metric_event_path =~ "replay_run_id=#{replay_run_id}"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
+    )
 
     metric_event_copied_path =
       view
@@ -198,10 +199,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_metric_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_metric_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_metric_event_view,
@@ -363,10 +364,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, metric_event_selector)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.eb_n0_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.eb_n0_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     view
     |> element(metric_event_selector)
@@ -402,10 +403,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
     assert metric_event_path =~ "scope_kind=link"
     assert metric_event_path =~ "scope_id=link-alpha"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+    )
 
     metric_event_copied_path =
       view
@@ -433,10 +434,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_metric_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_metric_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_metric_event_view,
@@ -630,10 +631,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, metric_event_selector)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.doppler_hz")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.doppler_hz")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     view
     |> element(metric_event_selector)
@@ -669,10 +670,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
     assert metric_event_path =~ "scope_kind=link"
     assert metric_event_path =~ "scope_id=link-alpha"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+    )
 
     metric_event_copied_path =
       view
@@ -700,10 +701,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_metric_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_metric_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_metric_event_view,
@@ -897,10 +898,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, metric_event_selector)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.symbol_rate_sps")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.symbol_rate_sps")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     view
     |> element(metric_event_selector)
@@ -936,10 +937,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
     assert metric_event_path =~ "scope_kind=link"
     assert metric_event_path =~ "scope_id=link-alpha"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
+    )
 
     metric_event_copied_path =
       view
@@ -967,10 +968,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_metric_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_metric_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_metric_event_view,

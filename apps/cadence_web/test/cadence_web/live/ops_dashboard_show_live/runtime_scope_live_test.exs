@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
@@ -321,10 +322,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              source_endpoint.source_endpoint_id
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_source_endpoint_id=#{source_endpoint.source_endpoint_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=query"][data-clipboard-text*="selected_widget_title=Counter+Trend"][data-clipboard-text*="selected_source_endpoint_id=#{source_endpoint.source_endpoint_id}"])
+    )
 
     assert has_element?(
              view,

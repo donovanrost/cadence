@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -37,6 +38,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
 
   defp show_path(mission, dashboard) do
     ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}"
+  end
+
+  defp element_attribute(html, selector, "data-clipboard-text")
+       when selector in ["#dashboard-data-link-copy-link", "#dashboard-evidence-copy-link"] do
+    clipboard_text(html, selector)
   end
 
   defp element_attribute(html, selector, attribute) do

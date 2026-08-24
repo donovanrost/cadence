@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   use CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyFixtures
   import CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures
@@ -109,10 +110,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     assert action_event_path =~ "selected_time=#{action_event_at_ms}"
     assert action_event_path =~ "replay_run_id=#{replay_run_id}"
 
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
-           )
+    assert_clipboard_button(
+      action_evidence_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
+    )
 
     action_event_copied_path =
       action_evidence_view
@@ -138,10 +139,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_action_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert has_element?(
              reopened_action_event_view,
@@ -369,10 +370,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{timer_event.event_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     timer_event_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{timer_event.event_id}"])
@@ -427,10 +428,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     assert timer_event_path =~ "selected_time=#{timer_event_at_ms}"
     assert timer_event_path =~ "replay_run_id=#{replay_run_id}"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"][data-clipboard-text*="data_source_id=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="source_binding_id=#{replay_sources.operational_binding_id}"])
+    )
 
     timer_event_copied_path =
       view
@@ -456,10 +457,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{timer_event_id}"][data-data-link-status="resolved"][data-data-link-selected-replay-run-id="#{replay_run_id}"][data-data-link-selected-data-source-id="#{replay_sources.operational_data_source_id}"][data-data-link-selected-source-binding-id="#{replay_sources.operational_binding_id}"])
            )
 
-    assert has_element?(
-             reopened_timer_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
-           )
+    assert_clipboard_button(
+      reopened_timer_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
+    )
 
     assert_managed_timer_runtime_context!(reopened_timer_event_view, replay_run_id)
 
@@ -574,10 +575,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{timer_event.event_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
+    )
 
     timer_event_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{timer_event.event_id}"])
@@ -626,10 +627,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     assert timer_event_path =~ "selected_time=#{timer_event_at_ms}"
     assert timer_event_path =~ "time_mode=live"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+    )
 
     timer_event_copied_path =
       view
@@ -653,10 +654,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{timer_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
            )
 
-    assert has_element?(
-             reopened_timer_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"])
-           )
+    assert_clipboard_button(
+      reopened_timer_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{timer_event_route_id}"][data-clipboard-text*="selected_time=#{timer_event_at_ms}"])
+    )
 
     assert_live_managed_timer_runtime_context!(reopened_timer_event_view)
 
@@ -709,10 +710,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     assert action_event_path =~ "selected_time=#{action_event_at_ms}"
     assert action_event_path =~ "time_mode=live"
 
-    assert has_element?(
-             action_evidence_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-           )
+    assert_clipboard_button(
+      action_evidence_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+    )
 
     action_event_copied_path =
       action_evidence_view
@@ -736,10 +737,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{action_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
            )
 
-    assert has_element?(
-             reopened_action_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"])
-           )
+    assert_clipboard_button(
+      reopened_action_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{action_event_route_id}"][data-clipboard-text*="selected_time=#{action_event_at_ms}"])
+    )
 
     assert_data_link_field(
       reopened_action_event_view,
@@ -908,10 +909,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              )
     end
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("runtime.managed_activity")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
+    )
 
     record_event_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational event"][data-evidence-ref-id="#{record_event.event_id}"])
@@ -960,10 +961,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
     assert record_event_path =~ "selected_time=#{record_event_at_ms}"
     assert record_event_path =~ "time_mode=live"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{record_event_route_id}"][data-clipboard-text*="selected_time=#{record_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{record_event_route_id}"][data-clipboard-text*="selected_time=#{record_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+    )
 
     record_event_copied_path =
       view
@@ -987,10 +988,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeManagedEvidenceLiveTest do
              ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{record_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
            )
 
-    assert has_element?(
-             reopened_record_event_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{record_event_route_id}"][data-clipboard-text*="selected_time=#{record_event_at_ms}"])
-           )
+    assert_clipboard_button(
+      reopened_record_event_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{record_event_route_id}"][data-clipboard-text*="selected_time=#{record_event_at_ms}"])
+    )
 
     assert_data_link_field(
       reopened_record_event_view,

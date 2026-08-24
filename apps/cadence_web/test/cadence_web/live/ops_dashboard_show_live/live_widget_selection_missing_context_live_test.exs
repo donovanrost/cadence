@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -93,10 +94,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
              )
 
-      assert has_element?(
-               stale_target_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="selected_target=telemetry_sample"][data-clipboard-text*="selected_id=missing-sample"])
-             )
+      assert_clipboard_button(
+        stale_target_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="selected_target=telemetry_sample"][data-clipboard-text*="selected_id=missing-sample"])
+      )
 
       stale_link_path =
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "data_link", selected_link: "stale-link-1"}}"

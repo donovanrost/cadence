@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Comms.TransportStore
@@ -320,10 +321,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
                "Alpha TCP"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=dashboard-transport-alpha"][data-clipboard-text*="selected_target=transport"][data-clipboard-text*="selected_id=dashboard-transport-alpha"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=dashboard-transport-alpha"][data-clipboard-text*="selected_target=transport"][data-clipboard-text*="selected_id=dashboard-transport-alpha"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+      )
 
       stop_dashboard_view(view)
     end
@@ -448,18 +449,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert transport_execution_event_path =~ "scope_kind=transport"
       assert transport_execution_event_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{transport_execution_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{transport_execution_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
+      )
 
       transport_execution_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+        clipboard_text(view, "#dashboard-data-link-copy-link")
 
       assert transport_execution_event_copied_path =~ "panel=data_link"
       assert transport_execution_event_copied_path =~ "selected_target=operational_event"
@@ -489,10 +485,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{transport_execution_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
              )
 
-      assert has_element?(
-               reopened_transport_execution_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{transport_execution_operational_event_route_id}"][data-clipboard-text*="selected_time=#{transport_execution_event_at_ms}"])
-             )
+      assert_clipboard_button(
+        reopened_transport_execution_event_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{transport_execution_operational_event_route_id}"][data-clipboard-text*="selected_time=#{transport_execution_event_at_ms}"])
+      )
 
       assert has_element?(
                reopened_transport_execution_event_view,
@@ -704,10 +700,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
       assert has_element?(view, metric_event_selector)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("comms.transport.downlink_bitrate")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("comms.transport.downlink_bitrate")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
+      )
 
       view
       |> element(metric_event_selector)
@@ -741,18 +737,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert metric_event_path =~ "scope_kind=transport"
       assert metric_event_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
+      )
 
       metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+        clipboard_text(view, "#dashboard-data-link-copy-link")
 
       assert metric_event_copied_path =~ "panel=data_link"
       assert metric_event_copied_path =~ "selected_target=operational_event"
@@ -774,10 +765,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
              )
 
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
+      assert_clipboard_button(
+        reopened_metric_event_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
+      )
 
       assert has_element?(
                reopened_metric_event_view,
@@ -959,10 +950,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
 
       assert has_element?(view, metric_event_selector)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("comms.transport.uplink_bitrate")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("comms.transport.uplink_bitrate")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"])
+      )
 
       view
       |> element(metric_event_selector)
@@ -996,18 +987,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
       assert metric_event_path =~ "scope_kind=transport"
       assert metric_event_path =~ "scope_id=#{transport.transport_id}"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=transport"][data-clipboard-text*="scope_id=#{transport.transport_id}"])
+      )
 
       metric_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+        clipboard_text(view, "#dashboard-data-link-copy-link")
 
       assert metric_event_copied_path =~ "panel=data_link"
       assert metric_event_copied_path =~ "selected_target=operational_event"
@@ -1029,10 +1015,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableTransportScopeLiv
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{metric_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
              )
 
-      assert has_element?(
-               reopened_metric_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
-             )
+      assert_clipboard_button(
+        reopened_metric_event_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{metric_event_route_id}"][data-clipboard-text*="selected_time=#{metric_event_at_ms}"])
+      )
 
       assert has_element?(
                reopened_metric_event_view,
