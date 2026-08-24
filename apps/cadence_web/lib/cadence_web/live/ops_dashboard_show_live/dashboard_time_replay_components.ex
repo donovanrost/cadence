@@ -83,48 +83,161 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
   attr :selected_data_ref, :any, default: nil
 
   def selected_datum_section(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :selected_datum_presentation,
+        selected_datum_presentation(
+          assigns.time_mode,
+          assigns.replay_run_id,
+          assigns.selected_data_ref
+        )
+      )
+
     ~H"""
-    <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-selection-time-heading">
-      <p id="dashboard-selection-time-heading" class="text-xs font-semibold text-base-content/85">
-        Selected datum
-      </p>
-      <div class="mt-2 flex flex-wrap gap-1.5">
-        <.button
-          id="dashboard-pause-at-selection"
-          variant={:ghost}
-          size={:xs}
-          phx-click="pause_at_selected_time"
-          disabled={not selected_timestamp?(@selected_data_ref)}
-          title="Pause dashboard time around the selected datum"
-        >
-          <.icon name="hero-pause" class="h-3.5 w-3.5" /> Pause here
-        </.button>
-        <.button
-          :if={@time_mode == "replay_run"}
-          id="dashboard-replay-scrub-to-selection"
-          variant={:ghost}
-          size={:xs}
-          phx-click="scrub_replay_to_selection"
-          disabled={not replay_scrub_available?(@replay_run_id, @selected_data_ref)}
-          data-dashboard-replay-scrub-available={replay_scrub_available_text(@replay_run_id, @selected_data_ref)}
-          title="Move replay time around the selected datum"
-        >
-          <.icon name="hero-arrows-right-left" class="h-3.5 w-3.5" /> Scrub here
-        </.button>
-        <.button
-          id="dashboard-clear-selection"
-          variant={:ghost}
-          size={:xs}
-          phx-click="clear_data_selection"
-          disabled={not SelectedDataRef.present?(@selected_data_ref)}
-          title="Clear the selected dashboard datum"
-        >
-          <.icon name="hero-x-mark" class="h-3.5 w-3.5" /> Clear selection
-        </.button>
-      </div>
-    </section>
+    <.vue
+      id="dashboard-selected-datum-actions-component"
+      v-component="DashboardSelectedDatumActions"
+      presentation={@selected_datum_presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
+
+  defp selected_datum_presentation(time_mode, replay_run_id, selected_data_ref) do
+    selected_datum_node(
+      "selected-datum-root",
+      "section",
+      %{
+        "class" => "cadence-dashboard-query-section",
+        "aria-labelledby" => "dashboard-selection-time-heading"
+      },
+      [
+        selected_datum_node(
+          "selected-datum-heading",
+          "p",
+          %{
+            "id" => "dashboard-selection-time-heading",
+            "class" => "text-xs font-semibold text-base-content/85"
+          },
+          ["Selected datum"]
+        ),
+        selected_datum_node(
+          "selected-datum-actions",
+          "div",
+          %{"class" => "mt-2 flex flex-wrap gap-1.5"},
+          selected_datum_actions(time_mode, replay_run_id, selected_data_ref)
+        )
+      ]
+    )
+  end
+
+  defp selected_datum_actions(time_mode, replay_run_id, selected_data_ref) do
+    pause_action =
+      selected_datum_action(
+        "pause-at-selection",
+        "dashboard-pause-at-selection",
+        "pause_at_selected_time",
+        not selected_timestamp?(selected_data_ref),
+        "Pause dashboard time around the selected datum",
+        "hero-pause",
+        "Pause here"
+      )
+
+    replay_actions =
+      if time_mode == "replay_run" do
+        scrub_available? = replay_scrub_available?(replay_run_id, selected_data_ref)
+
+        [
+          selected_datum_action(
+            "replay-scrub-to-selection",
+            "dashboard-replay-scrub-to-selection",
+            "scrub_replay_to_selection",
+            not scrub_available?,
+            "Move replay time around the selected datum",
+            "hero-arrows-right-left",
+            "Scrub here",
+            %{
+              "data-dashboard-replay-scrub-available" =>
+                replay_scrub_available_text(replay_run_id, selected_data_ref)
+            }
+          )
+        ]
+      else
+        []
+      end
+
+    clear_action =
+      selected_datum_action(
+        "clear-selection",
+        "dashboard-clear-selection",
+        "clear_data_selection",
+        not SelectedDataRef.present?(selected_data_ref),
+        "Clear the selected dashboard datum",
+        "hero-x-mark",
+        "Clear selection"
+      )
+
+    [pause_action] ++ replay_actions ++ [clear_action]
+  end
+
+  defp selected_datum_action(
+         key,
+         id,
+         event,
+         disabled?,
+         title,
+         icon,
+         label,
+         extra_attributes \\ %{}
+       ) do
+    attributes =
+      Map.merge(
+        %{
+          "id" => id,
+          "type" => "button",
+          "class" => "btn btn-ghost btn-xs",
+          "phx-click" => event,
+          "disabled" => disabled?,
+          "title" => title
+        },
+        extra_attributes
+      )
+
+    selected_datum_node(key, "button", attributes, [
+      selected_datum_node("#{key}-icon", "span", %{"class" => "#{icon} h-3.5 w-3.5"}, []),
+      " #{label}"
+    ])
+  end
+
+  defp selected_datum_node(key, tag, attributes, children) do
+    %{
+      key: key,
+      tag: tag,
+      attrs: selected_datum_attributes(attributes),
+      children: Enum.map(children, &selected_datum_child/1)
+    }
+  end
+
+  defp selected_datum_child(%{tag: _tag} = node), do: node
+  defp selected_datum_child(value), do: selected_datum_body(value)
+
+  defp selected_datum_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), selected_datum_body(value))
+    end)
+  end
+
+  defp selected_datum_body(nil), do: ""
+  defp selected_datum_body(value), do: to_string(value)
 
   defp replay_form_params(assigns) do
     %{

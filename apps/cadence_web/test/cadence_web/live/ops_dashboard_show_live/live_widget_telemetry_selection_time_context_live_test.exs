@@ -163,6 +163,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
     |> LazyHTML.attribute("id")
   end
 
+  defp selected_datum_action(html, id) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-selected-datum-actions-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+    |> find_selected_datum_node("id", id)
+  end
+
+  defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
+    if attrs[attribute] == value do
+      node
+    else
+      Enum.find_value(node["children"], fn
+        child when is_map(child) -> find_selected_datum_node(child, attribute, value)
+        _text -> nil
+      end)
+    end
+  end
+
   defp point_meta([_timestamp, _value, metadata]) when is_map(metadata), do: metadata
   defp point_meta(_point), do: %{}
 
@@ -356,14 +375,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
                ~s(#ops-dashboard-show-page[data-dashboard-selection-state="stale_context"])
              )
 
-      assert has_element?(stale_context_view, "#dashboard-pause-at-selection[disabled]")
+      assert selected_datum_action(
+               render(stale_context_view),
+               "dashboard-pause-at-selection"
+             )["attrs"]["disabled"] == ""
 
       shared_view
       |> element(~s(#dashboard-panel button[aria-label="Close panel"]))
       |> render_click()
 
       refute has_element?(shared_view, "#dashboard-data-link-inspector")
-      assert has_element?(shared_view, "#dashboard-pause-at-selection:not([disabled])")
+
+      refute Map.has_key?(
+               selected_datum_action(render(shared_view), "dashboard-pause-at-selection")[
+                 "attrs"
+               ],
+               "disabled"
+             )
 
       assert chart_optional_attribute(render(shared_view), trend_widget_id, "data-selected-ref")
 
@@ -378,7 +406,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
                ~s(#dashboard-data-link-inspector[data-data-link-target="telemetry_sample"][data-data-link-status="resolved"])
              )
 
-      direct_target_view |> element("#dashboard-clear-selection") |> render_click()
+      clear_action =
+        selected_datum_action(render(direct_target_view), "dashboard-clear-selection")
+
+      render_click(direct_target_view, clear_action["attrs"]["phx-click"])
 
       assert_push_event(
         direct_target_view,
@@ -400,8 +431,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
                "data-selected-ref"
              )
 
-      assert has_element?(direct_target_view, "#dashboard-pause-at-selection[disabled]")
-      assert has_element?(direct_target_view, "#dashboard-clear-selection[disabled]")
+      assert selected_datum_action(
+               render(direct_target_view),
+               "dashboard-pause-at-selection"
+             )["attrs"]["disabled"] == ""
+
+      assert selected_datum_action(
+               render(direct_target_view),
+               "dashboard-clear-selection"
+             )["attrs"]["disabled"] == ""
     end
   end
 end

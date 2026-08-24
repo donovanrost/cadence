@@ -53,6 +53,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
     end
   end
 
+  defp selected_datum_action(html, id) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-selected-datum-actions-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+    |> find_selected_datum_node("id", id)
+  end
+
+  defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
+    if attrs[attribute] == value do
+      node
+    else
+      Enum.find_value(node["children"], fn
+        child when is_map(child) -> find_selected_datum_node(child, attribute, value)
+        _text -> nil
+      end)
+    end
+  end
+
   describe "live widget missing selection contexts" do
     test "renders missing telemetry sample, stale link, and unsupported target URLs" do
       {conn, org, mission} = signed_in_org_and_mission()
@@ -145,8 +164,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
                "data-selected-ref"
              )
 
-      assert has_element?(unsupported_target_view, "#dashboard-pause-at-selection[disabled]")
-      assert has_element?(unsupported_target_view, "#dashboard-clear-selection[disabled]")
+      assert selected_datum_action(
+               render(unsupported_target_view),
+               "dashboard-pause-at-selection"
+             )["attrs"]["disabled"] == ""
+
+      assert selected_datum_action(
+               render(unsupported_target_view),
+               "dashboard-clear-selection"
+             )["attrs"]["disabled"] == ""
     end
   end
 end

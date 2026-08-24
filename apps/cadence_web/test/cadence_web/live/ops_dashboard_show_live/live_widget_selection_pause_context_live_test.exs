@@ -190,6 +190,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
     end)
   end
 
+  defp selected_datum_action(html, id) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-selected-datum-actions-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+    |> find_selected_datum_node("id", id)
+  end
+
+  defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
+    if attrs[attribute] == value do
+      node
+    else
+      Enum.find_value(node["children"], fn
+        child when is_map(child) -> find_selected_datum_node(child, attribute, value)
+        _text -> nil
+      end)
+    end
+  end
+
   defp context_selector_presentation(view) do
     view
     |> LiveVue.Test.get_vue(id: "dashboard-runtime-context-selector-component")
@@ -313,7 +332,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       assert selected_path =~ "panel=data_link"
       assert selected_path =~ "selected_target=telemetry_sample"
 
-      assert has_element?(view, "#dashboard-pause-at-selection:not([disabled])")
+      refute Map.has_key?(
+               selected_datum_action(render(view), "dashboard-pause-at-selection")["attrs"],
+               "disabled"
+             )
 
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 25, 1_700_000_500)
       evaluate_limits!(mission)
@@ -332,7 +354,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
 
       {expected_from, expected_to} = centered_archive_range(older_timestamp_ms)
 
-      view |> element("#dashboard-pause-at-selection") |> render_click()
+      pause_action = selected_datum_action(render(view), "dashboard-pause-at-selection")
+      render_click(view, pause_action["attrs"]["phx-click"])
 
       paused_path = assert_patch(view)
       assert paused_path =~ "time_mode=archive"
