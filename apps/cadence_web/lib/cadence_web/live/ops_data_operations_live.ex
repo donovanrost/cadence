@@ -8,6 +8,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   }
 
   alias CadenceWeb.OpsDataOperationsLive.Presentation
+  alias Phoenix.LiveView.JS
 
   @request_context_keys ~w(
     workflow run_id realm data_source_id source_binding_id observable_id point_id point_ids
@@ -24,6 +25,40 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     comparison_review_scope_link_ids reason
   )
 
+  @request_visible_fields ~w(
+    workflow run_id realm data_source_id source_binding_id point_ids source_from source_to reason
+    confirmed
+  )a
+
+  @request_hidden_fields [
+    :dashboard_id,
+    :dashboard_version,
+    :dashboard_time_mode,
+    :dashboard_replay_run_id,
+    :dashboard_data_view,
+    :dashboard_limit_mode,
+    :comparison_review_request_event_id,
+    :comparison_review_request_kind,
+    :comparison_review_open_count,
+    :comparison_review_open_placement_ids,
+    :comparison_review_workflow_kind,
+    :comparison_review_workflow_action,
+    :comparison_review_workflow_selection_kind,
+    :comparison_review_workflow_selection_count,
+    :comparison_review_primary_data_view,
+    :comparison_review_compare_data_view,
+    :comparison_review_scope_kind,
+    :comparison_review_scope_ids,
+    :comparison_review_contact_ids,
+    :comparison_review_resource_ids,
+    :comparison_review_transport_ids,
+    :comparison_review_source_endpoint_ids,
+    :comparison_review_ground_station_ids,
+    :comparison_review_scope_link_ids,
+    :observable_id,
+    :point_id
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -36,7 +71,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
      |> assign(:selected_group_id, nil)
      |> assign(:operation_groups_empty?, true)
      |> assign(:request_form, to_form(request_defaults(%{}), as: :historical_workflow_request))
-     |> stream(:data_operation_groups, [], dom_id: & &1.dom_id)}
+     |> stream(:data_operation_groups, [], dom_id: & &1["__dom_id"])}
   end
 
   @impl true
@@ -54,11 +89,25 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   end
 
   @impl true
-  def handle_event("validate_request", %{"historical_workflow_request" => params}, socket) do
-    {:noreply, assign(socket, :request_form, to_form(params, as: :historical_workflow_request))}
+  def handle_event("validate_request", %{"historical_workflow_request" => params}, socket)
+      when is_map(params) do
+    if string_form_values?(params) do
+      {:noreply, assign(socket, :request_form, to_form(params, as: :historical_workflow_request))}
+    else
+      {:noreply, request_error(socket, :invalid_request)}
+    end
   end
 
-  def handle_event("record_historical_workflow_request", params, socket) do
+  def handle_event("validate_request", _params, socket) do
+    {:noreply, request_error(socket, :invalid_request)}
+  end
+
+  def handle_event(
+        "record_historical_workflow_request",
+        %{"historical_workflow_request" => request_params} = params,
+        socket
+      )
+      when is_map(request_params) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
     case confirmed_request(params) do
@@ -86,6 +135,10 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     end
   end
 
+  def handle_event("record_historical_workflow_request", _params, socket) do
+    {:noreply, request_error(socket, :invalid_request)}
+  end
+
   def handle_event(
         "transition_group",
         _params,
@@ -100,7 +153,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
         %{"group-id" => group_id, "stage" => stage},
         socket
       )
-      when stage in ~w(approved rejected started completed failed) do
+      when is_binary(group_id) and stage in ~w(approved rejected started completed failed) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     group = Enum.find(operation_groups(socket), &(&1.id == group_id))
 
@@ -125,12 +178,17 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     end
   end
 
+  def handle_event("transition_group", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Historical request parameters are invalid.")}
+  end
+
   def handle_event("retry_group", _params, %{assigns: %{data_operations_admin?: false}} = socket) do
     {:noreply,
      put_flash(socket, :error, "Workflow recovery requires Data Operations administration.")}
   end
 
-  def handle_event("retry_group", %{"group-id" => group_id}, socket) do
+  def handle_event("retry_group", %{"group-id" => group_id}, socket)
+      when is_binary(group_id) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
     case HistoricalWorkflowCommands.retry_group_failed_jobs(group_id, scope, mission) do
@@ -143,6 +201,10 @@ defmodule CadenceWeb.OpsDataOperationsLive do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, error_text(reason))}
     end
+  end
+
+  def handle_event("retry_group", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Historical request parameters are invalid.")}
   end
 
   def handle_event(
@@ -158,7 +220,8 @@ defmodule CadenceWeb.OpsDataOperationsLive do
         "request_correction",
         %{"event-id" => event_id, "group-id" => group_id},
         socket
-      ) do
+      )
+      when is_binary(event_id) and is_binary(group_id) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
     with %{failed_events: failed_events, workflow: workflow} <-
@@ -193,240 +256,269 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     end
   end
 
+  def handle_event("request_correction", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Historical request parameters are invalid.")}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <main id="ops-data-operations-page" class="min-h-0 flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-[96rem] space-y-5 px-5 py-6">
-          <header class="flex flex-col gap-3 border-b border-primary/20 pb-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p class="hud-label">System / Historical data plane</p>
-              <h1 class="mt-1 text-xl font-semibold tracking-tight">Data Operations</h1>
-              <p class="mt-1 max-w-3xl text-sm text-base-content/60">
-                Request, follow, correct, and close historical telemetry repair without returning to the dashboard that exposed the gap.
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <.link
-                :if={admin_eligible?(@current_scope) and not @data_operations_admin?}
-                id="data-operations-manage-link"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-operations/manage?#{%{group: @selected_group_id}}"}
-                class="btn btn-sm btn-outline"
-              >
-                <.icon name="hero-wrench-screwdriver" class="h-4 w-4" /> Manage recovery
-              </.link>
-              <.link
-                :if={@data_operations_admin?}
-                id="data-operations-reader-link"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-operations?#{%{group: @selected_group_id}}"}
-                class="btn btn-sm btn-ghost"
-              >
-                Reader view
-              </.link>
-            </div>
-          </header>
-
-          <section class="grid min-h-[42rem] gap-4 xl:grid-cols-[22rem_minmax(0,1fr)_24rem]">
-            <aside class="border border-base-300 bg-base-200/45">
-              <div class="border-b border-base-300 px-3 py-2">
-                <h2 class="hud-label">Request groups</h2>
-              </div>
-              <div id="data-operation-groups" phx-update="stream" class="divide-y divide-base-300">
-                <div id="data-operation-groups-empty" class="hidden only:block p-5 text-sm text-base-content/50">
-                  No historical data operations have been recorded for this mission.
-                </div>
-                <.link
-                  :for={{dom_id, group} <- @streams.data_operation_groups}
-                  id={dom_id}
-                  patch={~p"/missions/#{@current_mission.mission_id}/ops/data-operations?#{%{group: group.id}}"}
-                  class={[
-                    "block space-y-2 px-3 py-3 hover:bg-primary/5",
-                    @selected_group_id == group.id && "border-l-2 border-primary bg-primary/10"
-                  ]}
-                  data-operation-state={group.state}
-                  data-operation-workflow={group.workflow}
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="truncate font-mono text-xs font-semibold">{group.id}</span>
-                    <span class={status_badge_class(group.state)}>{group.state}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-[0.6875rem] text-base-content/55">
-                    <span>{group.workflow} · {group.size} item(s)</span>
-                    <span>{group.progress}</span>
-                  </div>
-                </.link>
-              </div>
-            </aside>
-
-            <section id="data-operation-detail" class="min-w-0 border border-base-300 bg-base-100">
-              <div :if={is_nil(@selected_group)} class="grid min-h-[34rem] place-items-center p-8 text-center">
-                <div class="max-w-sm">
-                  <.icon name="hero-circle-stack" class="mx-auto h-8 w-8 text-base-content/30" />
-                  <h2 class="mt-3 text-sm font-semibold">Select an operation</h2>
-                  <p class="mt-1 text-sm text-base-content/55">Choose a request group to follow progress, affected dashboards, recovery, and audit evidence.</p>
-                </div>
-              </div>
-
-              <div :if={@selected_group} class="space-y-5 p-5">
-                <div class="flex flex-col gap-3 border-b border-base-300 pb-4 md:flex-row md:items-start md:justify-between">
-                  <div class="min-w-0">
-                    <p class="hud-label">{@selected_group.workflow} request group</p>
-                    <h2 id="data-operation-group-id" class="mt-1 break-all font-mono text-sm font-semibold">{@selected_group.id}</h2>
-                    <p class="mt-2 text-xs text-base-content/55">
-                      {@selected_group.realm || "realm unknown"} · {@selected_group.data_source_id || "source unknown"} · {@selected_group.binding_id || "binding unknown"}
-                    </p>
-                  </div>
-                  <span class={status_badge_class(@selected_group.state)}>{@selected_group.state}</span>
-                </div>
-
-                <dl id="data-operation-progress" class="grid grid-cols-2 gap-px bg-base-300 sm:grid-cols-4">
-                  <.progress_cell label="Requested" value={@selected_group.requested} />
-                  <.progress_cell label="Approved" value={@selected_group.approved} />
-                  <.progress_cell label="Started" value={@selected_group.started} />
-                  <.progress_cell label="Completed" value={@selected_group.completed} />
-                </dl>
-
-                <section id="data-operation-affected-dashboards" class="space-y-2">
-                  <h3 class="hud-label">Affected dashboards</h3>
-                  <p :if={@selected_group.affected_dashboards == []} class="text-xs text-base-content/45">No dashboard origin was recorded.</p>
-                  <div class="flex flex-wrap gap-2">
-                    <.link
-                      :for={dashboard <- @selected_group.affected_dashboards}
-                      id={"data-operation-dashboard-#{dashboard.dashboard_id}"}
-                      navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{dashboard.query}"}
-                      class="btn btn-xs btn-outline"
-                    >
-                      <.icon name="hero-squares-2x2" class="h-3.5 w-3.5" /> {dashboard.dashboard_id}
-                    </.link>
-                  </div>
-                </section>
-
-                <section id="data-operation-comparison-reviews" class="space-y-2">
-                  <h3 class="hud-label">Comparison & revision context</h3>
-                  <p :if={@selected_group.comparison_reviews == []} class="text-xs text-base-content/45">No comparison-review origin is attached.</p>
-                  <div
-                    :for={review <- @selected_group.comparison_reviews}
-                    id={"data-operation-comparison-#{review["request_event_id"]}"}
-                    class="border border-base-300 bg-base-200/40 p-3 text-xs"
-                  >
-                    <p class="font-mono font-semibold">{review["request_event_id"]}</p>
-                    <p class="mt-1 text-base-content/60">
-                      {review["request_kind"] || "comparison review"} · {review["open_count"] || "?"} open finding(s)
-                    </p>
-                    <p class="mt-1 font-mono text-base-content/45">{review["open_placement_ids"] || "placements not recorded"}</p>
-                  </div>
-                </section>
-
-                <section id="data-operation-audit" class="space-y-2">
-                  <h3 class="hud-label">Audit history</h3>
-                  <div class="divide-y divide-base-300 border border-base-300">
-                    <div
-                      :for={event <- @selected_group.audit_events}
-                      id={"data-operation-event-#{event.backfill_lifecycle_event_id}"}
-                      class="grid gap-1 px-3 py-2 text-xs sm:grid-cols-[10rem_minmax(0,1fr)_12rem]"
-                    >
-                      <span class="font-mono font-semibold">{event.event_type}</span>
-                      <span class="truncate text-base-content/60">{event.reason || "no reason recorded"}</span>
-                      <time class="font-mono text-base-content/45 sm:text-right">{format_time(event.occurred_at)}</time>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </section>
-
-            <aside class="space-y-4">
-              <section id="data-operation-request-panel" class="border border-base-300 bg-base-200/45 p-4">
-                <h2 class="hud-label">New historical request</h2>
-                <p class="mt-1 text-xs text-base-content/55">Dashboard and Explore links prefill this same durable request.</p>
-                <.form
-                  for={@request_form}
-                  id="data-operation-request-form"
-                  phx-change="validate_request"
-                  phx-submit="record_historical_workflow_request"
-                  class="mt-4 space-y-3"
-                >
-                  <.input field={@request_form[:workflow]} type="select" label="Workflow" options={[{"Backfill", "backfill"}, {"Import", "import"}]} />
-                  <.input field={@request_form[:run_id]} type="text" label="Request group" />
-                  <.input field={@request_form[:realm]} type="text" label="Realm" />
-                  <.input field={@request_form[:data_source_id]} type="text" label="Data source" />
-                  <.input field={@request_form[:source_binding_id]} type="text" label="Source binding" />
-                  <.input field={@request_form[:point_ids]} type="text" label="Point IDs" placeholder="HK.counter, HK.voltage" />
-                  <div class="grid grid-cols-2 gap-2">
-                    <.input field={@request_form[:source_from]} type="text" label="Source from" />
-                    <.input field={@request_form[:source_to]} type="text" label="Source to" />
-                  </div>
-                  <.input field={@request_form[:reason]} type="text" label="Reason" />
-                  <.input field={@request_form[:confirmed]} type="checkbox" label="Confirm request" />
-                  <%= for field <- hidden_request_fields() do %>
-                    <input type="hidden" name={@request_form[field].name} value={@request_form[field].value} />
-                  <% end %>
-                  <p :if={@request_error} id="data-operation-request-error" class="text-xs text-error">{@request_error}</p>
-                  <button id="data-operation-request-submit" type="submit" class="btn btn-sm btn-primary w-full">
-                    <.icon name="hero-document-plus" class="h-4 w-4" /> Record request
-                  </button>
-                </.form>
-              </section>
-
-              <section :if={@data_operations_admin? and @selected_group} id="data-operation-recovery-panel" class="border border-warning/35 bg-warning/5 p-4">
-                <h2 class="hud-label">Privileged workflow controls</h2>
-                <p class="mt-1 text-xs text-base-content/55">Transitions and recovery write audit events and may change canonical historical telemetry.</p>
-                <div class="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    :for={{stage, label} <- transition_actions(@selected_group)}
-                    id={"data-operation-transition-#{stage}"}
-                    type="button"
-                    phx-click="transition_group"
-                    phx-value-group-id={@selected_group.id}
-                    phx-value-stage={stage}
-                    data-confirm={"Record the #{stage} transition for this request group?"}
-                    class="btn btn-xs btn-outline"
-                  >{label}</button>
-                </div>
-                <button
-                  :if={@selected_group.failed > 0}
-                  id="data-operation-retry-group"
-                  type="button"
-                  phx-click="retry_group"
-                  phx-value-group-id={@selected_group.id}
-                  data-confirm="Retry every eligible failed job in this request group?"
-                  class="btn btn-xs btn-warning mt-3 w-full"
-                >Retry eligible failures</button>
-                <div :if={@selected_group.failed_events != []} class="mt-3 space-y-2">
-                  <div :for={failure <- @selected_group.failed_events} class="border border-base-300 bg-base-100 p-2 text-xs">
-                    <p class="font-mono">{failure.point_id || failure.run_id}</p>
-                    <p class="mt-1 text-base-content/55">{failure.recovery_action || "manual investigation"}</p>
-                    <button
-                      :if={failure.recovery_action == "correct_workflow_request"}
-                      id={"data-operation-correct-#{failure.event_id}"}
-                      type="button"
-                      phx-click="request_correction"
-                      phx-value-group-id={@selected_group.id}
-                      phx-value-event-id={failure.event_id}
-                      data-confirm="Create a corrected request that supersedes this failed item?"
-                      class="btn btn-xs btn-outline mt-2"
-                    >Request correction</button>
-                  </div>
-                </div>
-              </section>
-            </aside>
-          </section>
-        </div>
-      </main>
+      <.vue
+        id="ops-data-operations-component"
+        v-component="OpsDataOperations"
+        page={page_dto(
+          @current_mission,
+          @data_operations_admin?,
+          admin_eligible?(@current_scope),
+          @selected_group_id,
+          @operation_groups_empty?
+        )}
+        request_form={request_form_dto(@request_form, @request_error)}
+        selected_group={selected_group_dto(
+          @selected_group,
+          @current_mission,
+          @data_operations_admin?
+        )}
+        data_operation_groups={@streams.data_operation_groups}
+        v-on:validate-request={JS.push("validate_request")}
+        v-on:record-historical-workflow-request={
+          JS.push("record_historical_workflow_request")
+        }
+        v-on:transition-group={JS.push("transition_group")}
+        v-on:retry-group={JS.push("retry_group")}
+        v-on:request-correction={JS.push("request_correction")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
+  defp page_dto(mission, admin?, admin_eligible?, selected_group_id, groups_empty?) do
+    navigation =
+      %{}
+      |> maybe_put_manage_navigation(mission, admin?, admin_eligible?, selected_group_id)
+      |> maybe_put_reader_navigation(mission, admin?, selected_group_id)
 
-  defp progress_cell(assigns) do
-    ~H"""
-    <div class="bg-base-100 px-3 py-3">
-      <dt class="hud-label">{@label}</dt>
-      <dd class="mt-1 font-mono text-lg font-semibold">{@value}</dd>
-    </div>
-    """
+    %{
+      id: "ops-data-operations-page",
+      selected_group_id: selected_group_id,
+      groups_empty: groups_empty?,
+      navigation: navigation
+    }
+  end
+
+  defp maybe_put_manage_navigation(navigation, _mission, true, _eligible?, _selected_group_id),
+    do: navigation
+
+  defp maybe_put_manage_navigation(navigation, _mission, false, false, _selected_group_id),
+    do: navigation
+
+  defp maybe_put_manage_navigation(navigation, mission, false, true, selected_group_id) do
+    Map.put(navigation, :manage, %{
+      id: "data-operations-manage-link",
+      label: "Manage recovery",
+      href:
+        ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?#{%{group: selected_group_id}}"
+    })
+  end
+
+  defp maybe_put_reader_navigation(navigation, _mission, false, _selected_group_id),
+    do: navigation
+
+  defp maybe_put_reader_navigation(navigation, mission, true, selected_group_id) do
+    Map.put(navigation, :reader, %{
+      id: "data-operations-reader-link",
+      label: "Reader view",
+      href: ~p"/missions/#{mission.mission_id}/ops/data-operations?#{%{group: selected_group_id}}"
+    })
+  end
+
+  defp request_form_dto(form, request_error) do
+    %{
+      id: "data-operation-request-form",
+      values: request_values(form),
+      fields: %{
+        workflow:
+          request_field_dto(form, :workflow, "select", "Workflow",
+            options: [
+              %{label: "Backfill", value: "backfill"},
+              %{label: "Import", value: "import"}
+            ]
+          ),
+        run_id: request_field_dto(form, :run_id, "text", "Request group"),
+        realm: request_field_dto(form, :realm, "text", "Realm"),
+        data_source_id: request_field_dto(form, :data_source_id, "text", "Data source"),
+        source_binding_id: request_field_dto(form, :source_binding_id, "text", "Source binding"),
+        point_ids:
+          request_field_dto(form, :point_ids, "text", "Point IDs",
+            placeholder: "HK.counter, HK.voltage"
+          ),
+        source_from: request_field_dto(form, :source_from, "text", "Source from"),
+        source_to: request_field_dto(form, :source_to, "text", "Source to"),
+        reason: request_field_dto(form, :reason, "text", "Reason"),
+        confirmed: request_field_dto(form, :confirmed, "checkbox", "Confirm request")
+      },
+      hidden_fields:
+        Enum.map(@request_hidden_fields, fn field ->
+          %{name: form[field].name, value_key: Atom.to_string(field)}
+        end),
+      error:
+        if(request_error,
+          do: %{id: "data-operation-request-error", message: request_error},
+          else: nil
+        ),
+      submit: %{id: "data-operation-request-submit", label: "Record request"}
+    }
+  end
+
+  defp request_field_dto(form, field, type, label, options \\ []) do
+    form_field = form[field]
+
+    %{
+      id: form_field.id,
+      name: form_field.name,
+      type: type,
+      label: label,
+      placeholder: Keyword.get(options, :placeholder),
+      options: Keyword.get(options, :options, [])
+    }
+  end
+
+  defp request_values(form) do
+    (@request_visible_fields ++ @request_hidden_fields)
+    |> Map.new(fn field ->
+      {Atom.to_string(field), form |> Phoenix.HTML.Form.input_value(field) |> form_value()}
+    end)
+  end
+
+  defp form_value(nil), do: ""
+  defp form_value(value) when is_binary(value), do: value
+  defp form_value(value) when is_boolean(value), do: to_string(value)
+  defp form_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp form_value(value) when is_integer(value), do: Integer.to_string(value)
+  defp form_value(value) when is_float(value), do: Float.to_string(value)
+  defp form_value(_value), do: ""
+
+  defp selected_group_dto(nil, _mission, _admin?), do: nil
+
+  defp selected_group_dto(group, mission, admin?) do
+    %{
+      id: group.id,
+      workflow: group.workflow,
+      state: group.state,
+      context: %{
+        realm: display_text(group.realm) || "realm unknown",
+        data_source_id: display_text(group.data_source_id) || "source unknown",
+        binding_id: display_text(group.binding_id) || "binding unknown"
+      },
+      progress: [
+        %{label: "Requested", value: group.requested},
+        %{label: "Approved", value: group.approved},
+        %{label: "Started", value: group.started},
+        %{label: "Completed", value: group.completed}
+      ],
+      affected_dashboards:
+        Enum.map(group.affected_dashboards, &affected_dashboard_dto(&1, mission)),
+      comparison_reviews: Enum.map(group.comparison_reviews, &comparison_review_dto/1),
+      audit_events: Enum.map(group.audit_events, &audit_event_dto/1)
+    }
+    |> maybe_put_recovery(group, admin?)
+  end
+
+  defp affected_dashboard_dto(dashboard, mission) do
+    %{
+      id: "data-operation-dashboard-#{dashboard.dashboard_id}",
+      label: dashboard.dashboard_id,
+      href:
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{dashboard.query}"
+    }
+  end
+
+  defp comparison_review_dto(review) do
+    request_event_id = display_text(Map.get(review, "request_event_id"))
+
+    %{
+      id: "data-operation-comparison-#{request_event_id}",
+      request_event_id: request_event_id,
+      request_kind: display_text(Map.get(review, "request_kind")) || "comparison review",
+      open_count: display_text(Map.get(review, "open_count")) || "?",
+      open_placement_ids:
+        display_text(Map.get(review, "open_placement_ids")) || "placements not recorded"
+    }
+  end
+
+  defp audit_event_dto(event) do
+    event_id = Map.get(event, :backfill_lifecycle_event_id)
+
+    %{
+      id: "data-operation-event-#{event_id}",
+      event_type: display_text(Map.get(event, :event_type)),
+      reason: display_text(Map.get(event, :reason)) || "no reason recorded",
+      occurred_at: format_time(Map.get(event, :occurred_at))
+    }
+  end
+
+  defp maybe_put_recovery(selected_group, _group, false), do: selected_group
+
+  defp maybe_put_recovery(selected_group, group, true) do
+    Map.put(selected_group, :recovery, %{
+      transitions: transition_actions(group),
+      retry: retry_action(group),
+      failures: Enum.map(group.failed_events, &failure_dto(&1, group.id))
+    })
+  end
+
+  defp transition_actions(group) do
+    [
+      {"approved", "Approve", group.eligibility.approve},
+      {"rejected", "Reject", group.eligibility.reject},
+      {"started", "Start", group.eligibility.start},
+      {"completed", "Complete", group.eligibility.complete},
+      {"failed", "Mark failed", group.eligibility.fail}
+    ]
+    |> Enum.filter(fn {_stage, _label, count} -> count > 0 end)
+    |> Enum.map(fn {stage, label, count} ->
+      %{
+        id: "data-operation-transition-#{stage}",
+        label: "#{label} (#{count})",
+        confirm: "Record the #{stage} transition for this request group?",
+        payload: %{"group-id" => group.id, "stage" => stage}
+      }
+    end)
+  end
+
+  defp retry_action(%{failed: failed}) when failed <= 0, do: nil
+
+  defp retry_action(group) do
+    %{
+      id: "data-operation-retry-group",
+      label: "Retry eligible failures",
+      confirm: "Retry every eligible failed job in this request group?",
+      payload: %{"group-id" => group.id}
+    }
+  end
+
+  defp failure_dto(failed_event, group_id) do
+    %{
+      label: display_text(failed_event.point_id) || display_text(failed_event.run_id),
+      recovery_action: display_text(failed_event.recovery_action) || "manual investigation"
+    }
+    |> maybe_put_correction_action(failed_event, group_id)
+  end
+
+  defp maybe_put_correction_action(failure, failed_event, _group_id)
+       when failed_event.recovery_action != "correct_workflow_request",
+       do: failure
+
+  defp maybe_put_correction_action(failure, failed_event, group_id) do
+    Map.put(failure, :correction, %{
+      id: "data-operation-correct-#{failed_event.event_id}",
+      label: "Request correction",
+      confirm: "Create a corrected request that supersedes this failed item?",
+      payload: %{"group-id" => group_id, "event-id" => failed_event.event_id}
+    })
   end
 
   defp refresh_groups(socket) do
@@ -447,26 +539,48 @@ defmodule CadenceWeb.OpsDataOperationsLive do
       end
 
     selected_group_id = selected_group && selected_group.id
+    group_rows = Enum.map(groups, &group_row_dto(&1, mission))
 
     socket
     |> assign(:operation_groups, groups)
     |> assign(:operation_groups_empty?, groups == [])
     |> assign(:selected_group, selected_group)
     |> assign(:selected_group_id, selected_group_id)
-    |> stream(:data_operation_groups, groups, reset: true, dom_id: & &1.dom_id)
+    |> stream(:data_operation_groups, group_rows, reset: true, dom_id: & &1["__dom_id"])
+  end
+
+  defp group_row_dto(group, mission) do
+    %{
+      "__dom_id" => group.dom_id,
+      "id" => group.id,
+      "href" => ~p"/missions/#{mission.mission_id}/ops/data-operations?#{%{group: group.id}}",
+      "state" => group.state,
+      "workflow" => group.workflow,
+      "size" => group.size,
+      "progress" => group.progress
+    }
   end
 
   defp operation_groups(socket), do: socket.assigns[:operation_groups] || []
 
   defp confirmed_request(%{"historical_workflow_request" => params}) when is_map(params) do
-    if params["confirmed"] in ["true", "on", "confirmed"] do
-      {:ok, %{"historical_workflow_request" => params}}
-    else
-      {:error, :confirmation_required}
+    cond do
+      not string_form_values?(params) ->
+        {:error, :invalid_request}
+
+      params["confirmed"] in ["true", "on", "confirmed"] ->
+        {:ok, %{"historical_workflow_request" => params}}
+
+      true ->
+        {:error, :confirmation_required}
     end
   end
 
   defp confirmed_request(_params), do: {:error, :invalid_request}
+
+  defp string_form_values?(params) do
+    Enum.all?(params, fn {key, value} -> is_binary(key) and is_binary(value) end)
+  end
 
   defp request_defaults(params) do
     aliases = %{
@@ -485,51 +599,13 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     context
     |> HistoricalWorkflowRequestDefaults.new()
     |> HistoricalWorkflowRequestDefaults.form_params()
-    |> Map.merge(Map.take(context, @request_context_keys))
+    |> Map.merge(
+      context
+      |> Map.take(@request_context_keys)
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
+    )
     |> Map.put_new("confirmed", "")
-  end
-
-  defp hidden_request_fields do
-    [
-      :dashboard_id,
-      :dashboard_version,
-      :dashboard_time_mode,
-      :dashboard_replay_run_id,
-      :dashboard_data_view,
-      :dashboard_limit_mode,
-      :comparison_review_request_event_id,
-      :comparison_review_request_kind,
-      :comparison_review_open_count,
-      :comparison_review_open_placement_ids,
-      :comparison_review_workflow_kind,
-      :comparison_review_workflow_action,
-      :comparison_review_workflow_selection_kind,
-      :comparison_review_workflow_selection_count,
-      :comparison_review_primary_data_view,
-      :comparison_review_compare_data_view,
-      :comparison_review_scope_kind,
-      :comparison_review_scope_ids,
-      :comparison_review_contact_ids,
-      :comparison_review_resource_ids,
-      :comparison_review_transport_ids,
-      :comparison_review_source_endpoint_ids,
-      :comparison_review_ground_station_ids,
-      :comparison_review_scope_link_ids,
-      :observable_id,
-      :point_id
-    ]
-  end
-
-  defp transition_actions(group) do
-    [
-      {"approved", "Approve", group.eligibility.approve},
-      {"rejected", "Reject", group.eligibility.reject},
-      {"started", "Start", group.eligibility.start},
-      {"completed", "Complete", group.eligibility.complete},
-      {"failed", "Mark failed", group.eligibility.fail}
-    ]
-    |> Enum.filter(fn {_stage, _label, count} -> count > 0 end)
-    |> Enum.map(fn {stage, label, count} -> {stage, "#{label} (#{count})"} end)
   end
 
   defp admin_eligible?(%{capabilities: %MapSet{} = capabilities}) do
@@ -539,19 +615,9 @@ defmodule CadenceWeb.OpsDataOperationsLive do
 
   defp admin_eligible?(_scope), do: false
 
-  defp status_badge_class(state) do
-    [
-      "badge badge-xs font-mono",
-      cond do
-        state in ["completed", "closed"] -> "badge-success"
-        state in ["failed", "blocked"] -> "badge-error"
-        state in ["started", "in_progress"] -> "badge-info"
-        true -> "badge-warning"
-      end
-    ]
-  end
+  defp format_time(%DateTime{} = datetime),
+    do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%SZ")
 
-  defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%SZ")
   defp format_time(_datetime), do: "unknown"
 
   defp request_error(socket, reason) do
@@ -563,7 +629,18 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   defp error_text(:confirmation_required), do: "Confirm the request before recording it."
   defp error_text(:invalid_request), do: "Historical request parameters are invalid."
   defp error_text({:missing_field, field}), do: "#{field} is required."
-  defp error_text(reason), do: "Data operation failed: #{inspect(reason)}"
+  defp error_text(_reason), do: "Data operation failed."
+
+  defp display_text(nil), do: nil
+
+  defp display_text(value) when is_binary(value) do
+    value = String.trim(value)
+    if value == "", do: nil, else: value
+  end
+
+  defp display_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp display_text(value) when is_integer(value), do: Integer.to_string(value)
+  defp display_text(_value), do: nil
 
   defp text(value) when is_binary(value) do
     value = String.trim(value)
