@@ -129,7 +129,26 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     track_dashboard_view(data_operations)
     assert has_element?(data_operations, "#ops-context-rail")
-    assert has_element?(data_operations, "#ops-data-operations-page")
+
+    data_operations_vue =
+      LiveVue.Test.get_vue(data_operations, id: "ops-data-operations-component")
+
+    assert data_operations_vue.component == "OpsDataOperations"
+    assert data_operations_vue.props["page"]["id"] == "ops-data-operations-page"
+
+    assert Map.take(data_operations_vue.props["request_form"]["values"], [
+             "dashboard_id",
+             "dashboard_time_mode",
+             "dashboard_data_view",
+             "data_source_id",
+             "source_binding_id"
+           ]) == %{
+             "dashboard_id" => dashboard.dashboard_id,
+             "dashboard_time_mode" => "archive",
+             "dashboard_data_view" => "all_revisions",
+             "data_source_id" => "investigation-source",
+             "source_binding_id" => "investigation-binding"
+           }
 
     {:ok, diagnostics, _html} =
       live(conn, diagnostics_path)
