@@ -15,6 +15,7 @@ defmodule CadenceWeb.AdminLiveTest do
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   setup %{conn: conn} do
     issued_session = issue_platform_admin_session!()

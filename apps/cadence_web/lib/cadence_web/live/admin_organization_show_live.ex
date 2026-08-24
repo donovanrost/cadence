@@ -3,6 +3,7 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Auth.ServiceIdentity
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"org_id" => org_id}, _session, socket) do
