@@ -133,9 +133,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponents do
             value_class: "truncate text-base-content/70",
             data_field: "Author"
           ),
-          detail_row_dto("origin", 2, "Origin", version.lineage.label,
-            data_field: "Origin"
-          ),
+          detail_row_dto("origin", 2, "Origin", version.lineage.label, data_field: "Origin"),
           detail_row_dto("parent", 3, "Parent", version.parent_version),
           detail_row_dto("based-on", 4, "Based on", version.based_on_version)
         ]

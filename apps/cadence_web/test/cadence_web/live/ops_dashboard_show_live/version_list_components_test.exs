@@ -91,8 +91,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponentsTest do
     [draft, published] = versions["list"]["rows"]
 
     assert Enum.map(versions["list"]["rows"], fn row ->
-             {row["key"], row["attrs"]["id"], row["order"],
-              row["identity"]["version"]["text"]}
+             {row["key"], row["attrs"]["id"], row["order"], row["identity"]["version"]["text"]}
            end) == [
              {"dashboard-version-2", "dashboard-version-2", 0, "v2"},
              {"dashboard-version-1", "dashboard-version-1", 1, "v1"}
@@ -198,8 +197,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponentsTest do
                 "data-version-field" => "Origin"
               }, "Draft saved from v1"},
              {"parent", 3, "Parent", %{"class" => "font-mono text-base-content/70"}, "1"},
-             {"based-on", 4, "Based on", %{"class" => "font-mono text-base-content/70"},
-              "1"}
+             {"based-on", 4, "Based on", %{"class" => "font-mono text-base-content/70"}, "1"}
            ]
 
     assert detail_contract(published) == [
@@ -216,8 +214,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponentsTest do
                 "data-version-field" => "Origin"
               }, "Published for operators"},
              {"parent", 3, "Parent", %{"class" => "font-mono text-base-content/70"}, "-"},
-             {"based-on", 4, "Based on", %{"class" => "font-mono text-base-content/70"},
-              "-"}
+             {"based-on", 4, "Based on", %{"class" => "font-mono text-base-content/70"}, "-"}
            ]
 
     assert draft["details"]["attrs"] == %{
