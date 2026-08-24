@@ -9,11 +9,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents do
   import CadenceWeb.OpsDashboardShowLive.Components,
     only: [comparison_rollup_strip: 1]
 
-  attr :open?, :boolean, required: true
-  attr :rollup, :map, required: true
-  attr :preset, :map, default: nil
-  attr :open_review_summary, :map, default: %{}
-  attr :saved_presets, :list, default: []
+  attr(:open?, :boolean, required: true)
+  attr(:rollup, :map, required: true)
+  attr(:preset, :map, default: nil)
+  attr(:open_review_summary, :map, default: %{})
+  attr(:saved_presets, :list, default: [])
 
   def comparison_inspector(assigns) do
     assigns = assign(assigns, :header, comparison_inspector_header_dto())
