@@ -3,21 +3,21 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Organizations.Organization
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
-    form = to_form(%{"display_name" => "", "slug" => ""}, as: :organization)
-
     {:ok,
      socket
      |> assign(:page_title, "New Organization")
      |> assign(:nav_item, :admin_organizations)
-     |> assign(:form, form)}
+     |> assign(:page, page_dto())
+     |> assign(:form, form_dto(%{}))}
   end
 
   @impl true
   def handle_event("validate", %{"organization" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :organization))}
+    {:noreply, assign(socket, :form, form_dto(params))}
   end
 
   @impl true
@@ -26,7 +26,10 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
     slug = normalize_param(params["slug"])
 
     if is_nil(display_name) or is_nil(slug) do
-      {:noreply, put_flash(socket, :error, "Display name and slug are required.")}
+      {:noreply,
+       socket
+       |> assign(:form, form_dto(params))
+       |> put_flash(:error, "Display name and slug are required.")}
     else
       organization = Organization.new(%{display_name: display_name, slug: slug})
 
@@ -38,7 +41,10 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
            |> push_navigate(to: ~p"/admin/organizations")}
 
         {:error, %Ecto.Changeset{} = changeset} ->
-          {:noreply, put_flash(socket, :error, format_changeset_errors(changeset))}
+          {:noreply,
+           socket
+           |> assign(:form, form_dto(params))
+           |> put_flash(:error, format_changeset_errors(changeset))}
       end
     end
   end
@@ -46,23 +52,46 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-xl">
-      <.page_header
-        title="Create Organization"
-        breadcrumbs={[
-          {"Platform Admin", ~p"/admin"},
-          {"Organizations", ~p"/admin/organizations"},
-          {"Create Organization", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="admin-organization-new-component"
+        v-component="AdminOrganizationNew"
+        page={@page}
+        form={@form}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
       />
-
-      <.form for={@form} id="org-form" phx-change="validate" phx-submit="save" class="space-y-4">
-        <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        <.input field={@form[:slug]} type="text" label="Slug" required />
-        <.form_actions submit="Create organization" cancel_navigate={~p"/admin/organizations"} />
-      </.form>
-    </div>
+    </Layouts.app>
     """
+  end
+
+  defp page_dto do
+    %{
+      title: "Create Organization",
+      breadcrumbs: [
+        %{label: "Platform Admin", href: ~p"/admin"},
+        %{label: "Organizations", href: ~p"/admin/organizations"},
+        %{label: "Create Organization", href: nil}
+      ],
+      submit_label: "Create organization",
+      cancel_label: "Cancel",
+      cancel_href: ~p"/admin/organizations"
+    }
+  end
+
+  defp form_dto(params) do
+    %{
+      display_name: string_param(params, "display_name"),
+      slug: string_param(params, "slug")
+    }
+  end
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 
   defp normalize_param(value) when is_binary(value) do

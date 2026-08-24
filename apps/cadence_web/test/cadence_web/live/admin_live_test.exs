@@ -177,11 +177,41 @@ defmodule CadenceWeb.AdminLiveTest do
     test "admin can create an organization", %{admin_conn: admin_conn} do
       {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/new")
 
-      view
-      |> form("#org-form", organization: %{display_name: "Test Org", slug: "test-org"})
-      |> render_submit()
+      assert has_element?(view, "#admin-organization-new-component")
 
-      assert_redirect(view, ~p"/admin/organizations")
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-new-component")
+
+      assert vue.component == "AdminOrganizationNew"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "form" => %{"display_name" => "", "slug" => ""},
+               "page" => %{
+                 "title" => "Create Organization",
+                 "breadcrumbs" => [
+                   %{"label" => "Platform Admin", "href" => "/admin"},
+                   %{"label" => "Organizations", "href" => "/admin/organizations"},
+                   %{"label" => "Create Organization", "href" => nil}
+                 ],
+                 "submit_label" => "Create organization",
+                 "cancel_label" => "Cancel",
+                 "cancel_href" => "/admin/organizations"
+               }
+             }
+
+      assert vue.handlers == %{
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
+             }
+
+      render_hook(view, "save", %{
+        "organization" => %{"display_name" => "  Test Org  ", "slug" => "  test-org  "}
+      })
+
+      {redirect_path, flash} = assert_redirect(view)
+      assert redirect_path == ~p"/admin/organizations"
+      assert flash["info"] == "Organization created successfully."
 
       # Verify the org appears in the list
       {:ok, list_view, _html} = live(admin_conn, ~p"/admin/organizations")
@@ -203,6 +233,71 @@ defmodule CadenceWeb.AdminLiveTest do
                  }
                ]
              }
+    end
+
+    test "organization validation preserves the Vue-owned form values", %{
+      admin_conn: admin_conn
+    } do
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/new")
+
+      render_hook(view, "validate", %{
+        "organization" => %{"display_name" => "Mission Support", "slug" => "mission-support"}
+      })
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-new-component")
+
+      assert vue.props["form"] == %{
+               "display_name" => "Mission Support",
+               "slug" => "mission-support"
+             }
+
+      assert is_binary(Jason.encode!(vue.props))
+    end
+
+    test "organization creation rejects required whitespace and preserves submitted values", %{
+      admin_conn: admin_conn
+    } do
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/new")
+
+      render_hook(view, "save", %{
+        "organization" => %{"display_name" => "   ", "slug" => "\t"}
+      })
+
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Display name and slug are required."
+             )
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-new-component")
+      assert vue.props["form"] == %{"display_name" => "   ", "slug" => "\t"}
+      assert Cadence.Organizations.list_organizations() == []
+    end
+
+    test "organization creation formats persistence changeset errors", %{
+      admin_conn: admin_conn
+    } do
+      existing = create_test_org!("Existing Org", "existing-org")
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/new")
+
+      render_hook(view, "save", %{
+        "organization" => %{"display_name" => "Another Org", "slug" => existing.slug}
+      })
+
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Slug has already been taken"
+             )
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-new-component")
+
+      assert vue.props["form"] == %{
+               "display_name" => "Another Org",
+               "slug" => "existing-org"
+             }
+
+      assert Cadence.Organizations.list_organizations() == [existing]
     end
 
     test "admin can view organization detail with no members", %{admin_conn: admin_conn} do
