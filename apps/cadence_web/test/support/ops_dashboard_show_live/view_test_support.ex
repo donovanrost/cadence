@@ -765,8 +765,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     "data-event-timeline"
   ]
   defp migrated_data_link_selector?(selector) when is_binary(selector) do
-    selector == "#dashboard-data-link-inspector" or
-      String.starts_with?(selector, "#dashboard-data-link-inspector ") or
+    String.starts_with?(selector, "#dashboard-data-link-inspector") or
       Enum.any?(@migrated_data_link_ids, &String.contains?(selector, &1))
   end
 

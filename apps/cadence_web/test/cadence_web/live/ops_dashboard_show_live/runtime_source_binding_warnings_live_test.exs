@@ -2,7 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
