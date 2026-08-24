@@ -292,14 +292,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              ~s(#{widget_selector} button[data-widget-source-badge="unknown"][data-widget-source-badge-inventory-action="source_inventory"][data-widget-source-badge-inventory-href*="/ops/data-sources"][data-widget-source-badge-inventory-href*="source_endpoint_id=#{source_endpoint.source_endpoint_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#{widget_selector} [data-widget-query-diagnostics][data-widget-query-source-state="unknown"][data-widget-query-data-view="canonical"][data-widget-query-time-modes="live"][data-widget-query-source-endpoint-ids="#{source_endpoint.source_endpoint_id}"])
-           )
+    query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
+    expected_source_endpoint_id = source_endpoint.source_endpoint_id
 
-    view
-    |> element(~s(#{widget_selector} [data-widget-query-evidence-open]))
-    |> render_click()
+    assert %{
+             "data-widget-query-diagnostics" => "",
+             "data-widget-query-source-state" => "unknown",
+             "data-widget-query-data-view" => "canonical",
+             "data-widget-query-time-modes" => "live",
+             "data-widget-query-source-endpoint-ids" => ^expected_source_endpoint_id
+           } = query_diagnostics["overlay"]["attrs"]
+
+    evidence_attrs = query_diagnostics["body"]["evidence_button"]["attrs"]
+    render_hook(view, evidence_attrs["phx-click"], event_params(evidence_attrs))
 
     query_evidence_path = assert_patch(view)
     assert query_evidence_path =~ "panel=evidence"
@@ -379,5 +384,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              mission_scope_view,
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="mission"][data-dashboard-scope-id="#{mission.mission_id}"])
            )
+  end
+
+  defp widget_query_presentation(view, placement_id) do
+    view
+    |> LiveVue.Test.get_vue(id: "widget-query-#{placement_id}-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
   end
 end

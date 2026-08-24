@@ -26,89 +26,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
   attr :warnings, :list, default: []
 
   def widget_query_diagnostics(assigns) do
-    assigns =
-      assigns
-      |> assign(
-        :rows,
-        widget_query_diagnostic_rows(
-          assigns.widget,
-          assigns.data,
-          assigns.data_view,
-          assigns.compare_data_view
-        )
-      )
-      |> assign(:source_status, source_status(assigns.data))
-      |> assign(
-        :evidence_attrs,
-        widget_query_evidence_attrs(
-          assigns.placement_id,
-          assigns.widget,
-          assigns.data,
-          assigns.data_view,
-          assigns.compare_data_view,
-          assigns.warnings
-        )
+    presentation =
+      widget_query_diagnostics_presentation(
+        assigns.placement_id,
+        assigns.widget,
+        assigns.data,
+        assigns.data_view,
+        assigns.compare_data_view,
+        assigns.warnings
       )
 
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <.popover
-      id={"widget-query-#{@placement_id}"}
-      label="Widget query diagnostics"
-      width={:md}
-      data-widget-query-diagnostics
-      data-widget-query-data-view={query_diagnostic_value(@data_view)}
-      data-widget-query-compare-data-view={query_diagnostic_value(@compare_data_view)}
-      data-widget-query-binding-source={widget_binding_value(@widget, :source)}
-      data-widget-query-binding-mode={widget_binding_value(@widget, :mode)}
-      data-widget-query-observables={widget_observable_ids(@widget)}
-      data-widget-query-sampling={widget_binding_value(@widget, :sampling)}
-      data-widget-query-window-seconds={widget_option_value(@widget, :window_seconds)}
-      data-widget-query-source-state={source_status_text(@source_status, :state)}
-      data-widget-query-source-data-state={source_status_text(@source_status, :data_state)}
-      data-widget-query-source-request-ids={source_status_list_text(@source_status, :source_request_ids)}
-      data-widget-query-logical-sources={source_status_list_text(@source_status, :logical_sources)}
-      data-widget-query-data-source-ids={source_status_list_text(@source_status, :data_source_ids)}
-      data-widget-query-source-binding-ids={source_status_list_text(@source_status, :source_binding_ids)}
-      data-widget-query-realms={source_status_list_text(@source_status, :realms)}
-      data-widget-query-time-modes={source_status_list_text(@source_status, :time_modes)}
-      data-widget-query-time-axes={source_status_list_text(@source_status, :time_axes)}
-      data-widget-query-scope-kinds={source_status_list_text(@source_status, :scope_kinds)}
-      data-widget-query-scope-ids={source_status_list_text(@source_status, :scope_ids)}
-      data-widget-query-contact-ids={source_status_list_text(@source_status, :contact_ids)}
-      data-widget-query-source-endpoint-ids={source_status_list_text(@source_status, :source_endpoint_ids)}
-      data-widget-query-source-health-states={source_status_list_text(@source_status, :source_health_states)}
-      data-widget-query-source-health-reasons={source_status_list_text(@source_status, :source_health_reasons)}
-      data-widget-query-source-health-event-ids={source_status_list_text(@source_status, :source_health_event_ids)}
-      data-widget-query-empty-reason={source_status_empty_reason_text(@source_status)}
-      data-widget-query-warning-codes={warning_codes(@warnings)}
-    >
-      <:trigger>
-        <span class="btn btn-ghost btn-xs btn-square" title={widget_query_diagnostic_title(@rows)} data-widget-query-diagnostics-open>
-          <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5" />
-        </span>
-      </:trigger>
-      <div class="p-2 text-xs">
-        <div class="font-semibold text-base-content">Widget query</div>
-        <dl class="mt-2 grid grid-cols-[7.25rem_minmax(0,1fr)] gap-x-2 gap-y-1">
-          <%= for row <- @rows do %>
-            <dt class="text-base-content/60" data-widget-query-field={row.label}>{row.label}</dt>
-            <dd class="font-mono text-base-content break-all" data-widget-query-value={row.key}>
-              {row.value}
-            </dd>
-          <% end %>
-        </dl>
-        <button
-          type="button"
-          phx-click="open_evidence"
-          {@evidence_attrs}
-          class="btn btn-xs btn-outline mt-2 w-full justify-start"
-          data-widget-query-evidence-open
-        >
-          <.icon name="hero-link" class="h-3.5 w-3.5" />
-          Open query evidence
-        </button>
-      </div>
-    </.popover>
+    <.vue
+      id={@presentation.component_id}
+      v-component="WidgetQueryDiagnostics"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
@@ -254,6 +191,165 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
   def widget_query_diagnostics?(widget, data, data_view, compare_data_view) do
     widget_query_diagnostic_rows(widget, data, data_view, compare_data_view) != []
   end
+
+  defp widget_query_diagnostics_presentation(
+         placement_id,
+         widget,
+         data,
+         data_view,
+         compare_data_view,
+         warnings
+       ) do
+    overlay_id = "widget-query-#{placement_id}"
+    rows = widget_query_diagnostic_rows(widget, data, data_view, compare_data_view)
+    source_status = source_status(data)
+
+    %{
+      component_id: "#{overlay_id}-component",
+      overlay: %{
+        id: overlay_id,
+        class: "cadence-overlay",
+        attrs:
+          widget_query_attrs(%{
+            "data-overlay-kind" => "popover",
+            "data-overlay-placement" => "bottom-end",
+            "data-widget-query-diagnostics" => true,
+            "data-widget-query-data-view" => query_diagnostic_value(data_view),
+            "data-widget-query-compare-data-view" => query_diagnostic_value(compare_data_view),
+            "data-widget-query-binding-source" => widget_binding_value(widget, :source),
+            "data-widget-query-binding-mode" => widget_binding_value(widget, :mode),
+            "data-widget-query-observables" => widget_observable_ids(widget),
+            "data-widget-query-sampling" => widget_binding_value(widget, :sampling),
+            "data-widget-query-window-seconds" => widget_option_value(widget, :window_seconds),
+            "data-widget-query-source-state" => source_status_text(source_status, :state),
+            "data-widget-query-source-data-state" =>
+              source_status_text(source_status, :data_state),
+            "data-widget-query-source-request-ids" =>
+              source_status_list_text(source_status, :source_request_ids),
+            "data-widget-query-logical-sources" =>
+              source_status_list_text(source_status, :logical_sources),
+            "data-widget-query-data-source-ids" =>
+              source_status_list_text(source_status, :data_source_ids),
+            "data-widget-query-source-binding-ids" =>
+              source_status_list_text(source_status, :source_binding_ids),
+            "data-widget-query-realms" => source_status_list_text(source_status, :realms),
+            "data-widget-query-time-modes" => source_status_list_text(source_status, :time_modes),
+            "data-widget-query-time-axes" => source_status_list_text(source_status, :time_axes),
+            "data-widget-query-scope-kinds" =>
+              source_status_list_text(source_status, :scope_kinds),
+            "data-widget-query-scope-ids" => source_status_list_text(source_status, :scope_ids),
+            "data-widget-query-contact-ids" =>
+              source_status_list_text(source_status, :contact_ids),
+            "data-widget-query-source-endpoint-ids" =>
+              source_status_list_text(source_status, :source_endpoint_ids),
+            "data-widget-query-source-health-states" =>
+              source_status_list_text(source_status, :source_health_states),
+            "data-widget-query-source-health-reasons" =>
+              source_status_list_text(source_status, :source_health_reasons),
+            "data-widget-query-source-health-event-ids" =>
+              source_status_list_text(source_status, :source_health_event_ids),
+            "data-widget-query-empty-reason" => source_status_empty_reason_text(source_status),
+            "data-widget-query-warning-codes" => warning_codes(warnings)
+          })
+      },
+      trigger: %{
+        id: "#{overlay_id}-trigger",
+        type: "button",
+        class: "cadence-overlay-trigger",
+        attrs: %{
+          "data-overlay-trigger" => "",
+          "aria-haspopup" => "dialog",
+          "aria-expanded" => "false",
+          "aria-controls" => "#{overlay_id}-panel",
+          "aria-label" => "Widget query diagnostics"
+        },
+        content: %{
+          class: "btn btn-ghost btn-xs btn-square",
+          attrs: %{
+            "title" => widget_query_diagnostic_title(rows),
+            "data-widget-query-diagnostics-open" => ""
+          },
+          icon: %{name: "hero-adjustments-horizontal", class: "h-3.5 w-3.5"}
+        }
+      },
+      panel: %{
+        id: "#{overlay_id}-panel",
+        class: "cadence-overlay-panel cadence-popover-panel",
+        hidden: true,
+        attrs: %{
+          "data-overlay-panel" => "",
+          "data-overlay-width" => "md",
+          "aria-label" => "Widget query diagnostics"
+        }
+      },
+      body: %{
+        class: "p-2 text-xs",
+        heading: %{class: "font-semibold text-base-content", text: "Widget query"},
+        rows_class: "mt-2 grid grid-cols-[7.25rem_minmax(0,1fr)] gap-x-2 gap-y-1",
+        rows:
+          rows
+          |> Enum.with_index()
+          |> Enum.map(&widget_query_row_presentation(&1, overlay_id)),
+        evidence_button: %{
+          type: "button",
+          class: "btn btn-xs btn-outline mt-2 w-full justify-start",
+          attrs:
+            placement_id
+            |> widget_query_evidence_attrs(
+              widget,
+              data,
+              data_view,
+              compare_data_view,
+              warnings
+            )
+            |> Map.merge(%{
+              "phx-click" => "open_evidence",
+              "data-widget-query-evidence-open" => true
+            })
+            |> widget_query_attrs(),
+          icon: %{name: "hero-link", class: "h-3.5 w-3.5"},
+          text: "Open query evidence"
+        }
+      }
+    }
+  end
+
+  defp widget_query_row_presentation({row, index}, overlay_id) do
+    %{
+      key: "#{overlay_id}-row-#{index}",
+      order: index,
+      label: %{
+        class: "text-base-content/60",
+        attrs: widget_query_attrs(%{"data-widget-query-field" => row.label}),
+        text: widget_query_text(row.label)
+      },
+      value: %{
+        class: "font-mono text-base-content break-all",
+        attrs: widget_query_attrs(%{"data-widget-query-value" => row.key}),
+        text: widget_query_text(row.value)
+      }
+    }
+  end
+
+  defp widget_query_attrs(attrs) do
+    attrs
+    |> Enum.flat_map(fn {key, value} ->
+      case widget_query_attr_value(value) do
+        nil -> []
+        attr_value -> [{key, attr_value}]
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp widget_query_attr_value(value) when value in [nil, false], do: nil
+  defp widget_query_attr_value(true), do: ""
+  defp widget_query_attr_value(value), do: widget_query_text(value)
+
+  defp widget_query_text(nil), do: ""
+  defp widget_query_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp widget_query_text(value) when is_binary(value), do: value
+  defp widget_query_text(value), do: to_string(value)
 
   defp widget_query_evidence_attrs(
          placement_id,

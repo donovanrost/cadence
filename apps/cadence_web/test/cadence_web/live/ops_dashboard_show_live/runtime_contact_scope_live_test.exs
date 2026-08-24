@@ -220,20 +220,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                ~s(#{widget_selector} a[data-widget-source-badge-inventory-open="unknown"][href*="/ops/data-sources"][href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} [data-widget-query-diagnostics][data-widget-query-source-state="unknown"][data-widget-query-data-view="canonical"][data-widget-query-time-modes="live"][data-widget-query-contact-ids="dashboard-runtime-empty-contact"][data-widget-query-source-endpoint-ids="source-endpoint-alpha"])
-             )
+      query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} [data-widget-query-value="contacts"]),
-               "dashboard-runtime-empty-contact"
-             )
+      assert %{
+               "data-widget-query-diagnostics" => "",
+               "data-widget-query-source-state" => "unknown",
+               "data-widget-query-data-view" => "canonical",
+               "data-widget-query-time-modes" => "live",
+               "data-widget-query-contact-ids" => "dashboard-runtime-empty-contact",
+               "data-widget-query-source-endpoint-ids" => "source-endpoint-alpha"
+             } = query_diagnostics["overlay"]["attrs"]
 
-      view
-      |> element(~s(#{widget_selector} [data-widget-query-evidence-open]))
-      |> render_click()
+      assert Enum.any?(query_diagnostics["body"]["rows"], fn row ->
+               row["value"]["attrs"]["data-widget-query-value"] == "contacts" and
+                 row["value"]["text"] == "dashboard-runtime-empty-contact"
+             end)
+
+      evidence_attrs = query_diagnostics["body"]["evidence_button"]["attrs"]
+      render_hook(view, evidence_attrs["phx-click"], event_params(evidence_attrs))
 
       query_evidence_path = assert_patch(view)
       assert query_evidence_path =~ "panel=evidence"
@@ -389,19 +393,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                ~s(#{widget_selector}[data-widget-source-contact-ids="#{scope_ids}"][data-widget-source-source-endpoint-ids="source-endpoint-alpha,source-endpoint-gamma"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} [data-widget-query-diagnostics][data-widget-query-source-state="unknown"][data-widget-query-contact-ids="#{scope_ids}"][data-widget-query-source-endpoint-ids="source-endpoint-alpha,source-endpoint-gamma"])
-             )
+      query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
+
+      assert %{
+               "data-widget-query-diagnostics" => "",
+               "data-widget-query-source-state" => "unknown",
+               "data-widget-query-contact-ids" => ^scope_ids,
+               "data-widget-query-source-endpoint-ids" =>
+                 "source-endpoint-alpha,source-endpoint-gamma"
+             } = query_diagnostics["overlay"]["attrs"]
 
       assert has_element?(
                view,
                ~s(#{widget_selector} button[data-widget-source-badge="unknown"][phx-value-contact-id="#{contact_alpha.scheduled_contact_id}"][phx-value-contact-ids="#{scope_ids}"][phx-value-source-endpoint-id="source-endpoint-alpha"])
              )
 
-      view
-      |> element(~s(#{widget_selector} [data-widget-query-evidence-open]))
-      |> render_click()
+      evidence_attrs = query_diagnostics["body"]["evidence_button"]["attrs"]
+      render_hook(view, evidence_attrs["phx-click"], event_params(evidence_attrs))
 
       query_evidence_path = assert_patch(view)
       decoded_query_evidence_path = URI.decode(query_evidence_path)
@@ -434,5 +442,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
 
       stop_dashboard_view(view)
     end
+  end
+
+  defp widget_query_presentation(view, placement_id) do
+    view
+    |> LiveVue.Test.get_vue(id: "widget-query-#{placement_id}-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
   end
 end
