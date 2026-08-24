@@ -156,7 +156,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel-component")
-      assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
+
+      assert Enum.any?(
+               dashboard_widget_shells(view),
+               &(&1["gs-auto-position"] == "true")
+             )
 
       click_editor_action(view, "dashboard-editor-save")
 

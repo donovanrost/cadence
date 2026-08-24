@@ -48,10 +48,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
       comparison_toggle["root"]["attrs"]["phx-click"]
     )
 
-    comparison_inspector =
-      LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
-
-    comparison_presentation = comparison_inspector.props["presentation"]
+    comparison_presentation = dashboard_comparison_inspector_presentation(view)
 
     assert comparison_presentation["inspector"]["root"]["attrs"]["id"] ==
              "dashboard-comparison-inspector"
@@ -128,9 +125,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
   end
 
   defp comparison_saved_preset(view, preset_id) do
-    inspector = LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
-
-    inspector.props["presentation"]["rollup"]["saved_presets"]["body"]["items"]
+    view
+    |> dashboard_comparison_inspector_presentation()
+    |> get_in(["rollup", "saved_presets", "body", "items"])
     |> Enum.find(fn preset ->
       preset["root"]["attrs"]["data-dashboard-comparison-saved-preset"] == preset_id
     end)

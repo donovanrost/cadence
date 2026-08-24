@@ -11,7 +11,6 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
-  alias Phoenix.LiveView.JS
 
   test "viewer route rejects editor-only events" do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
@@ -20,14 +19,13 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {:ok, viewer, _html} =
       await_live_result(live(conn, viewer_path(mission, dashboard)))
 
-    grid_controller =
-      LiveVue.Test.get_vue(viewer, id: "dashboard-grid-#{dashboard.dashboard_id}-controller")
+    grid = dashboard_grid_presentation(viewer, "dashboard-grid-#{dashboard.dashboard_id}")
 
-    assert grid_controller.component == "DashboardGrid"
-    assert grid_controller.props["target_id"] == "dashboard-grid-#{dashboard.dashboard_id}"
-    assert grid_controller.props["edit_mode"] == false
-    assert grid_controller.props["item_ids"] == []
-    assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
+    assert grid["controller"]["props"]["target_id"] ==
+             "dashboard-grid-#{dashboard.dashboard_id}"
+
+    assert grid["controller"]["props"]["edit_mode"] == false
+    assert grid["controller"]["props"]["item_ids"] == []
     refute has_element?(viewer, "#dashboard-editor-guard-controller")
     refute has_element?(viewer, "#dashboard-panel-component")
     render_hook(viewer, "open_add_widget", %{})
@@ -186,7 +184,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     editor |> element("#dashboard-editor-reload") |> render_click()
 
     refute has_element?(editor, "#dashboard-editor-conflict")
-    refute has_element?(editor, "[data-dashboard-section]")
+    refute Enum.any?(dashboard_canvas_groups(editor), & &1["section"])
   end
 
   defp add_section(view, title) do

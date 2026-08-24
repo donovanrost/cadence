@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   import Phoenix.LiveViewTest, only: [has_element?: 2, render: 1]
 
   alias CadenceWeb.AsyncLiveViewTestSupport
+  alias Phoenix.LiveView.JS
 
   @default_timeout 5_000
   @resolved_runtime_selector ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-resolved="true"])
@@ -177,17 +178,93 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def dashboard_widget_presentation(rendered, placement_id) do
     component_id = "dashboard-widget-#{placement_id}-component"
-    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    html = rendered_html(rendered)
 
-    assert vue.component == "DashboardWidget"
-    assert vue.id == component_id
+    presentation =
+      case direct_vue(html, component_id, "DashboardWidget") do
+        nil ->
+          html
+          |> dashboard_canvas_widgets()
+          |> Enum.find_value(fn widget ->
+            if widget["presentation"]["component_id"] == component_id,
+              do: widget["presentation"]
+          end)
+
+        vue ->
+          assert vue.id == component_id
+          assert vue.ssr == false
+          assert vue.class == "contents"
+          assert vue.handlers == %{}
+          assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+          vue.props["presentation"]
+      end
+
+    assert presentation
+    assert presentation["component_id"] == component_id
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
+    presentation
+  end
+
+  def dashboard_canvas_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-canvas-component")
+
+    assert vue.component == "DashboardCanvas"
+    assert vue.id == "dashboard-canvas-component"
     assert vue.ssr == false
     assert vue.class == "contents"
-    assert vue.handlers == %{}
+    assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["component_id"] == component_id
+    assert vue.handlers == %{"layout_changed" => JS.push("layout_changed")}
 
     vue.props["presentation"]
+  end
+
+  def dashboard_canvas_groups(rendered) do
+    rendered
+    |> dashboard_canvas_presentation()
+    |> Map.fetch!("groups")
+  end
+
+  def dashboard_canvas_widgets(rendered) do
+    rendered
+    |> dashboard_canvas_groups()
+    |> Enum.flat_map(&get_in(&1, ["grid", "widgets"]))
+  end
+
+  def dashboard_widget_shells(rendered) do
+    rendered
+    |> dashboard_canvas_widgets()
+    |> Enum.map(&get_in(&1, ["shell", "attrs"]))
+  end
+
+  def dashboard_widget_shell_attrs(rendered, placement_id) do
+    rendered
+    |> dashboard_canvas_widgets()
+    |> Enum.find_value(fn widget ->
+      if widget["key"] == placement_id, do: get_in(widget, ["shell", "attrs"])
+    end)
+  end
+
+  def dashboard_grid_presentation(rendered, target_id) do
+    rendered
+    |> dashboard_canvas_groups()
+    |> Enum.find_value(fn group ->
+      if get_in(group, ["grid", "root", "attrs", "id"]) == target_id,
+        do: group["grid"]
+    end)
+  end
+
+  def dashboard_comparison_inspector_presentation(rendered) do
+    html = rendered_html(rendered)
+
+    case direct_vue(
+           html,
+           "dashboard-comparison-inspector-component",
+           "DashboardComparisonInspector"
+         ) do
+      nil -> get_in(dashboard_canvas_presentation(html), ["comparison_inspector", "presentation"])
+      vue -> vue.props["presentation"]
+    end
   end
 
   def widget_point_presentation(rendered, component_id) do
@@ -1102,14 +1179,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   defp dashboard_widget_presentations(html) do
-    html
-    |> dashboard_widget_host_ids()
-    |> Enum.map(fn host_id ->
+    direct_presentations =
       html
-      |> LiveVue.Test.get_vue(id: host_id)
-      |> Map.fetch!(:props)
-      |> Map.fetch!("presentation")
-    end)
+      |> dashboard_widget_host_ids()
+      |> Enum.map(fn host_id ->
+        html
+        |> LiveVue.Test.get_vue(id: host_id)
+        |> Map.fetch!(:props)
+        |> Map.fetch!("presentation")
+      end)
+
+    nested_presentations =
+      html
+      |> dashboard_canvas_widgets_if_present()
+      |> Enum.map(& &1["presentation"])
+
+    direct_presentations ++ nested_presentations
+  end
+
+  defp dashboard_canvas_widgets_if_present(html) do
+    html
+    |> dashboard_canvas_presentation()
+    |> Map.fetch!("groups")
+    |> Enum.flat_map(&get_in(&1, ["grid", "widgets"]))
+  rescue
+    RuntimeError -> []
   end
 
   defp dashboard_widget_host_ids(html) do

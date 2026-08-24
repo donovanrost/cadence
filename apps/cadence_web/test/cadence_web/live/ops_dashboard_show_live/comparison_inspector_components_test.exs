@@ -54,6 +54,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
     assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
+    expected_presentation =
+      ComparisonInspectorComponents.presentation(true, rollup(), nil, %{}, [])
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    assert vue.props["presentation"] == expected_presentation
+
     assert vue.props["presentation"]["inspector"]["header"] == %{
              "root" => %{
                "tag" => "header",
@@ -134,6 +141,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
                |> LazyHTML.query("#dashboard-comparison-inspector-component")
                |> LazyHTML.attribute("id")
     end
+
+    assert ComparisonInspectorComponents.presentation(false, rollup(), nil, %{}, []) == nil
+
+    assert ComparisonInspectorComponents.presentation(true, empty_rollup(), nil, %{}, []) == nil
 
     saved_only =
       render_component(&ComparisonInspectorComponents.comparison_inspector/1,

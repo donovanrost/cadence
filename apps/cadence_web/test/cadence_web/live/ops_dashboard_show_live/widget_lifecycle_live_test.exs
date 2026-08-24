@@ -16,7 +16,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
-  alias Phoenix.LiveView.JS
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -185,7 +184,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
                ~s(#dashboard-editor-conflict[data-editor-starting-version="1"][data-editor-current-version="2"])
              )
 
-      assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
+      assert Enum.any?(
+               dashboard_widget_shells(view),
+               &(&1["gs-auto-position"] == "true")
+             )
 
       document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -218,14 +220,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
                "Live updates paused while editing"
 
       # Layout changes remain local until the staged Editor transaction is saved.
-      grid_controller =
-        LiveVue.Test.get_vue(view, id: "dashboard-grid-#{dashboard.dashboard_id}-controller")
+      grid = dashboard_grid_presentation(view, "dashboard-grid-#{dashboard.dashboard_id}")
 
-      assert grid_controller.component == "DashboardGrid"
-      assert grid_controller.props["target_id"] == "dashboard-grid-#{dashboard.dashboard_id}"
-      assert grid_controller.props["edit_mode"] == true
-      assert grid_controller.props["item_ids"] == [widget_id]
-      assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
+      assert grid["controller"]["props"]["target_id"] ==
+               "dashboard-grid-#{dashboard.dashboard_id}"
+
+      assert grid["controller"]["props"]["edit_mode"] == true
+      assert grid["controller"]["props"]["item_ids"] == [widget_id]
 
       render_hook(view, "layout_changed", %{
         "layouts" => [%{"widget_id" => widget_id, "x" => 2, "y" => 1, "w" => 6, "h" => 3}]
@@ -235,7 +236,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       assert Document.version(unchanged) == 1
       assert [%{placement_id: ^widget_id, layout: %{x: nil, y: nil}}] = unchanged.placements
 
-      assert has_element?(view, ~s(.grid-stack-item[gs-x="2"][gs-y="1"][gs-w="6"][gs-h="3"]))
+      assert Map.take(dashboard_widget_shell_attrs(view, widget_id), ~w(gs-x gs-y gs-w gs-h)) ==
+               %{"gs-x" => "2", "gs-y" => "1", "gs-w" => "6", "gs-h" => "3"}
 
       click_editor_action(view, "dashboard-editor-save")
 
@@ -249,7 +251,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       assert version.change_summary == "Updated layout"
       assert version.created_by == user.user_id
 
-      assert has_element?(view, ~s(.grid-stack-item[gs-x="2"][gs-y="1"][gs-w="6"][gs-h="3"]))
+      assert Map.take(dashboard_widget_shell_attrs(view, widget_id), ~w(gs-x gs-y gs-w gs-h)) ==
+               %{"gs-x" => "2", "gs-y" => "1", "gs-w" => "6", "gs-h" => "3"}
 
       # Live data is frozen while editing…
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 5678, 1_700_000_110)

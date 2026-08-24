@@ -42,6 +42,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
     Map.get(rollup, :visible?) == true or saved_presets != []
   end
 
+  def presentation(assigns) when is_map(assigns), do: comparison_rollup_presentation(assigns)
+
   defp comparison_rollup_presentation(assigns) do
     groups = comparison_rollup_groups(assigns.rollup)
     workflow_groups = comparison_rollup_workflow_groups(assigns.rollup)

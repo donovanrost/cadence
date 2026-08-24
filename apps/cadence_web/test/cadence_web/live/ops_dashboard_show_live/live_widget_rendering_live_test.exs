@@ -258,11 +258,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       html = render_dashboard_async(view)
 
       # Status bar reflects the limit projection.
-      assert html =~ "violating"
+      assert widget_header_presentation(view, trend_placement.placement_id)["status_indicators"][
+               "limit"
+             ]["text"] == "violating"
 
       # Grid items carry GridStack placement attributes.
-      assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
-      assert has_element?(view, ~s(.grid-stack-item[gs-x="4"][gs-w="6"][gs-h="3"]))
+      assert dashboard_widget_shell_attrs(view, context_item.placement_id)["gs-auto-position"] ==
+               "true"
+
+      assert Map.take(
+               dashboard_widget_shell_attrs(view, trend_placement.placement_id),
+               ~w(gs-x gs-w gs-h)
+             ) == %{"gs-x" => "4", "gs-w" => "6", "gs-h" => "3"}
 
       chart_presentation =
         widget_point_presentation_by_widget_id(view, trend_widget.widget_id)

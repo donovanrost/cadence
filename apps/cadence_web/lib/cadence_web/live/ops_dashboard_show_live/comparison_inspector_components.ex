@@ -34,6 +34,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents do
 
   def comparison_inspector(assigns), do: ~H""
 
+  def presentation(true, rollup, preset, open_review_summary, saved_presets) do
+    if available?(rollup, saved_presets) do
+      ComparisonRollupComponents.presentation(%{
+        inspector: comparison_inspector_dto(),
+        rollup: rollup,
+        preset: preset,
+        open_review_summary: open_review_summary,
+        saved_presets: saved_presets
+      })
+    end
+  end
+
+  def presentation(_open?, _rollup, _preset, _open_review_summary, _saved_presets), do: nil
+
   defp comparison_inspector_dto do
     %{
       root: %{

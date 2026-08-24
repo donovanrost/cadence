@@ -135,10 +135,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
         comparison_toggle["root"]["attrs"]["phx-click"]
       )
 
-      comparison_inspector =
-        LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
-
-      comparison_presentation = comparison_inspector.props["presentation"]
+      comparison_presentation = dashboard_comparison_inspector_presentation(view)
 
       assert comparison_presentation["inspector"]["root"]["attrs"]["id"] ==
                "dashboard-comparison-inspector"

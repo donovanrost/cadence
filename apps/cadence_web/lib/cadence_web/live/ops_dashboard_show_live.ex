@@ -4,8 +4,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
 
   import CadenceWeb.OpsDashboardShowLive.Components
 
-  alias CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents
   alias CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents
+  alias CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentation
   alias CadenceWeb.OpsDashboardShowLive.DashboardSectionEditing
   alias CadenceWeb.OpsDashboardShowLive.FormComponents
   alias CadenceWeb.OpsDashboardShowLive.HealthSnapshotEvents
@@ -755,7 +755,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, :render_model, RenderContext.model(assigns))
+    render_model = RenderContext.model(assigns)
+
+    canvas_presentation =
+      DashboardCanvasPresentation.build(render_model, %{
+        editor_route?: assigns.editor_route?,
+        dashboard_author?: assigns.dashboard_author?,
+        empty_edit_path:
+          ~p"/missions/#{assigns.current_mission.mission_id}/ops/dashboards/#{assigns.dashboard_document.dashboard_id}/edit"
+      })
+
+    assigns =
+      assigns
+      |> assign(:render_model, render_model)
+      |> assign(:canvas_presentation, canvas_presentation)
 
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
@@ -790,134 +803,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
           Reload latest
         </.button>
       </div>
-      <div class="flex flex-1 min-h-0">
-        <div {@render_model.content_attrs}>
-          <section
-            :for={group <- @render_model.widget_groups}
-            id={"dashboard-widget-group-#{group.id}"}
-            class={[
-              @editor_route? && "border-b border-base-300/45 last:border-b-0",
-              not @editor_route? && "pt-1"
-            ]}
-            data-dashboard-widget-group={group.id}
-          >
-            <%= if group.section do %>
-              <details
-                id={"dashboard-section-group-#{group.id}"}
-                open={group.open?}
-                class={["group/dashboard-section"]}
-                data-dashboard-section={group.id}
-              >
-                <summary class={[
-                  "flex cursor-pointer list-none items-center gap-2 marker:hidden",
-                  if(@editor_route?,
-                    do: "sticky top-0 z-10 border-b border-base-300/50 bg-base-200/90 px-3 py-2 backdrop-blur",
-                    else: "mx-2 rounded px-1 py-1.5 text-base-content/65 hover:text-base-content"
-                  )
-                ]}>
-                  <.icon name="hero-chevron-right" class="h-3.5 w-3.5 text-base-content/45 transition-transform group-open/dashboard-section:rotate-90" />
-                  <div class="min-w-0 flex-1">
-                    <h2 class="text-xs font-semibold uppercase tracking-wide">{group.section.title}</h2>
-                    <p :if={@editor_route? and group.section.description} class="truncate text-[0.65rem] text-base-content/50">
-                      {group.section.description}
-                    </p>
-                  </div>
-                  <span :if={@editor_route?} class="font-mono text-[0.65rem] text-base-content/45">
-                    {length(group.widget_items)} {if length(group.widget_items) == 1, do: "widget", else: "widgets"}
-                  </span>
-                </summary>
-                <.dashboard_widget_grid group={group} />
-              </details>
-            <% else %>
-              <header
-                :if={group.show_header?}
-                class={[
-                  "flex items-center gap-2 px-3",
-                  if(@editor_route?,
-                    do: "border-b border-base-300/50 bg-base-200/65 py-2",
-                    else: "py-1.5 text-base-content/65"
-                  )
-                ]}
-              >
-                <.icon name="hero-square-3-stack-3d" class="h-3.5 w-3.5 text-base-content/45" />
-                <h2 class="text-xs font-semibold uppercase tracking-wide">Unsectioned canvas</h2>
-                <span :if={@editor_route?} class="ml-auto font-mono text-[0.65rem] text-base-content/45">
-                  {length(group.widget_items)} {if length(group.widget_items) == 1, do: "widget", else: "widgets"}
-                </span>
-              </header>
-              <.dashboard_widget_grid group={group} />
-            <% end %>
-          </section>
-          <div
-            :if={@render_model.empty_state.visible?}
-            class={@render_model.empty_state.wrapper_class}
-          >
-            <%!-- empty_state actions only take navigate/patch; this dashboard needs a phx-click add --%>
-            <div class={@render_model.empty_state.card_class}>
-              <span class={@render_model.empty_state.icon_class}></span>
-              <p class="hud-label mt-3">{@render_model.empty_state.title}</p>
-              <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
-                {@render_model.empty_state.message}
-              </p>
-              <div class="mt-5">
-                <.button
-                  :if={@editor_route?}
-                  id="dashboard-editor-empty-add-widget"
-                  phx-click={@render_model.empty_state.action_event}
-                >
-                  <.icon name={@render_model.empty_state.action_icon} class="-ml-0.5 mr-1 h-4 w-4" />
-                  {@render_model.empty_state.action_label}
-                </.button>
-                <.link
-                  :if={not @editor_route? and @dashboard_author?}
-                  id="dashboard-viewer-empty-edit"
-                  navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_document.dashboard_id}/edit"}
-                  class="btn btn-primary btn-sm"
-                >
-                  <.icon name="hero-pencil-square" class="h-4 w-4" /> Open Dashboard Editor
-                </.link>
-              </div>
-            </div>
-          </div>
-        </div>
-        <ComparisonInspectorComponents.comparison_inspector
-          open?={@render_model.comparison_inspector_open?}
-          rollup={@render_model.comparison_rollup}
-          preset={@render_model.comparison_preset}
-          open_review_summary={@render_model.open_review_summary}
-          saved_presets={@render_model.comparison_presets}
-        />
-      </div>
+      <.vue
+        id="dashboard-canvas-component"
+        v-component="DashboardCanvas"
+        presentation={@canvas_presentation}
+        v-on:layout_changed={JS.push("layout_changed")}
+        v-ssr={false}
+        class="contents"
+      />
       <FormComponents.widget_panel
         :if={@render_model.panel_open?}
         {@render_model.panel_props}
       />
     </div>
     </Layouts.app>
-    """
-  end
-
-  attr :group, :map, required: true
-
-  defp dashboard_widget_grid(assigns) do
-    ~H"""
-    <div {@group.grid_props}>
-      <div :for={widget_item <- @group.widget_items} {widget_item.shell_attrs}>
-        <div class={widget_item.content_class}>
-          <.widget {widget_item.component_props} />
-        </div>
-      </div>
-    </div>
-    <.vue
-      id={@group.grid_controller_props.id}
-      v-component="DashboardGrid"
-      target_id={@group.grid_controller_props.target_id}
-      edit_mode={@group.grid_controller_props.edit_mode}
-      item_ids={@group.grid_controller_props.item_ids}
-      v-on:layout_changed={JS.push("layout_changed")}
-      v-ssr={false}
-      class="hidden"
-    />
     """
   end
 end
