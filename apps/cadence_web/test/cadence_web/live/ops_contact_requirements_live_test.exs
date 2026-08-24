@@ -1299,6 +1299,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     member_vue = contact_plan_show_vue(member_view)
     assert member_vue.props["admin_controls"] == nil
+
     assert member_vue.props["page"]["decision"]["admin_required"]["id"] ==
              "contact-plan-admin-required"
 
@@ -1519,6 +1520,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert [completed_item] = contact_plan_stream_rows(completed_vue, "execution_items")
     assert completed_item["attempt_count"] == 1
     assert completed_item["state"]["label"] == "failed"
+
     assert completed_item["state"]["class"] ==
              "font-mono text-[0.65rem] uppercase text-warning"
 
@@ -1563,7 +1565,9 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     assert MapSet.disjoint?(
              keys,
-             MapSet.new(~w(current_scope current_user user users capabilities token tokens secrets))
+             MapSet.new(
+               ~w(current_scope current_user user users capabilities token tokens secrets)
+             )
            )
   end
 

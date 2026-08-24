@@ -325,8 +325,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
           %{
             requirement_label:
               "#{item["contact_requirement_id"]} v#{item["contact_requirement_version"]}",
-            hard_failures:
-              Enum.map(item["hard_failures"] || [], &humanize(&1["code"]))
+            hard_failures: Enum.map(item["hard_failures"] || [], &humanize(&1["code"]))
           }
         end)
     }
@@ -481,8 +480,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
         if(item.provider_reservation_id,
           do: %{
             label: "Contact",
-            href:
-              ~p"/missions/#{mission_id}/ops/contacts/#{item.provider_reservation_id}"
+            href: ~p"/missions/#{mission_id}/ops/contacts/#{item.provider_reservation_id}"
           },
           else: nil
         )
