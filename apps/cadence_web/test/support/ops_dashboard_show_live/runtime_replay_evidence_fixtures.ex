@@ -779,7 +779,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
   def frame_sync_state_value(_observable_id, _state), do: nil
 
   def open_and_assert_replay_rf_evidence!(view, conn, attrs) do
-    row_selector = Map.fetch!(attrs, :row_selector)
     widget_id = Map.fetch!(attrs, :widget_id)
     observable_id = Map.fetch!(attrs, :observable_id)
     replay_sources = Map.fetch!(attrs, :replay_sources)
@@ -790,7 +789,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     expected_transport_id = Map.fetch!(attrs, :expected_transport_id)
     component_id = Map.fetch!(attrs, :component_id)
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "phx-click" => "open_evidence",

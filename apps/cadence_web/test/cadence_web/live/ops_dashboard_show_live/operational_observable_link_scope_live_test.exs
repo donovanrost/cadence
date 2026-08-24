@@ -324,18 +324,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
       alpha_endpoint: alpha_endpoint,
       alpha_component_id:
         "status-row-links-#{rf_lock_widget.widget_id}-link.rf_lock_state:link-alpha-component",
-      alpha_row_selector:
-        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-alpha"]),
       alpha_transport: alpha_transport,
-      beta_row_selector:
-        ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-beta"]),
       conn: conn,
       frame_sync_interval: frame_sync_interval,
       frame_sync_component_id:
         "status-row-links-#{frame_sync_widget.widget_id}-link.frame_sync_state:link-alpha-component",
-      frame_sync_row_selector:
-        ~s(#widget-#{frame_sync_widget.widget_id} [data-status-matrix-row="link.frame_sync_state:link-alpha"]),
+      frame_sync_widget_id: frame_sync_widget.widget_id,
       observed_at: observed_at,
+      rf_lock_widget_id: rf_lock_widget.widget_id,
       rf_lock_interval: rf_lock_interval,
       view: view
     }
@@ -347,17 +343,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="link"][data-dashboard-scope-id="link-alpha"])
            )
 
-    assert has_element?(
-             fixture.view,
-             fixture.alpha_row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="lock_state"][data-status-matrix-resource-id="link-alpha"][data-status-matrix-scope-kind="link"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="dashboard-transport-alpha"][data-status-matrix-source-endpoint-id="#{fixture.alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-           )
-
-    assert has_element?(
-             fixture.view,
-             fixture.alpha_row_selector <>
-               ~s([data-status-matrix-frame-observable-id="link.rf_lock_state"][data-status-matrix-product-family="link_rf"][data-status-matrix-supported-capability="link_rf_lock_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-           )
+    assert_widget_row(fixture.view, "status_matrix", fixture.rf_lock_widget_id, %{
+      "data-status-matrix-row" => "link.rf_lock_state:link-alpha",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-status-policy" => "lock_state",
+      "data-status-matrix-resource-id" => "link-alpha",
+      "data-status-matrix-scope-kind" => "link",
+      "data-status-matrix-link-id" => "link-alpha",
+      "data-status-matrix-transport-id" => "dashboard-transport-alpha",
+      "data-status-matrix-source-endpoint-id" => fixture.alpha_endpoint.source_endpoint_id,
+      "data-status-matrix-ground-station-id" => "dss-14",
+      "data-status-matrix-frame-observable-id" => "link.rf_lock_state",
+      "data-status-matrix-product-family" => "link_rf",
+      "data-status-matrix-supported-capability" => "link_rf_lock_state",
+      "data-status-matrix-data-source-id" => "managed_operational_observables",
+      "data-status-matrix-source-binding-id" => "default_flight_operational_observables"
+    })
   end
 
   describe "link operational observable scope rendering" do
@@ -370,19 +371,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
       %{
         alpha_endpoint: alpha_endpoint,
         alpha_component_id: alpha_component_id,
-        alpha_row_selector: alpha_row_selector,
         alpha_transport: alpha_transport,
-        beta_row_selector: beta_row_selector,
         conn: conn,
         frame_sync_interval: frame_sync_interval,
         frame_sync_component_id: frame_sync_component_id,
-        frame_sync_row_selector: frame_sync_row_selector,
+        frame_sync_widget_id: frame_sync_widget_id,
         observed_at: observed_at,
+        rf_lock_widget_id: rf_lock_widget_id,
         rf_lock_interval: rf_lock_interval,
         view: view
       } = fixture
 
-      assert has_element?(view, "#{alpha_row_selector} [id=\"#{alpha_component_id}\"]")
+      assert widget_data_link_presentation(view, alpha_component_id)
 
       click_widget_data_link(view, alpha_component_id, %{
         "data-status-matrix-row-evidence" => "link.rf_lock_state:link-alpha"
@@ -555,19 +555,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
       stop_dashboard_view(reopened_rf_event_view)
 
-      assert has_element?(
-               view,
-               frame_sync_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="frame_sync_state"][data-status-matrix-resource-id="link-alpha"][data-status-matrix-scope-kind="link"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="dashboard-transport-alpha"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
+      assert_widget_row(view, "status_matrix", frame_sync_widget_id, %{
+        "data-status-matrix-row" => "link.frame_sync_state:link-alpha",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "frame_sync_state",
+        "data-status-matrix-resource-id" => "link-alpha",
+        "data-status-matrix-scope-kind" => "link",
+        "data-status-matrix-link-id" => "link-alpha",
+        "data-status-matrix-transport-id" => "dashboard-transport-alpha",
+        "data-status-matrix-source-endpoint-id" => alpha_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-14",
+        "data-status-matrix-frame-observable-id" => "link.frame_sync_state",
+        "data-status-matrix-product-family" => "link_rf",
+        "data-status-matrix-supported-capability" => "link_rf_frame_sync_state",
+        "data-status-matrix-data-source-id" => "managed_operational_observables",
+        "data-status-matrix-source-binding-id" => "default_flight_operational_observables"
+      })
 
-      assert has_element?(
-               view,
-               frame_sync_row_selector <>
-                 ~s([data-status-matrix-frame-observable-id="link.frame_sync_state"][data-status-matrix-product-family="link_rf"][data-status-matrix-supported-capability="link_rf_frame_sync_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(view, "#{frame_sync_row_selector} [id=\"#{frame_sync_component_id}\"]")
+      assert widget_data_link_presentation(view, frame_sync_component_id)
 
       click_widget_data_link(view, frame_sync_component_id, %{
         "data-status-matrix-row-evidence" => "link.frame_sync_state:link-alpha"
@@ -617,7 +622,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
       assert_widget_data_link_item(view, alpha_component_id, link_attrs)
 
-      refute has_element?(view, beta_row_selector)
+      refute_widget_row(view, "status_matrix", rf_lock_widget_id, %{
+        "data-status-matrix-row" => "link.rf_lock_state:link-beta"
+      })
 
       click_widget_data_link(view, alpha_component_id, %{
         "data-status-matrix-row-link" => "link.rf_lock_state:link-alpha",

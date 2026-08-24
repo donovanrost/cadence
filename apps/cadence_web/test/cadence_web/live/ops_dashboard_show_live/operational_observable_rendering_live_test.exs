@@ -310,43 +310,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="contacts.phase:dashboard-contact-phase-alpha"])
+      row =
+        assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+          "data-status-matrix-row" => "contacts.phase:dashboard-contact-phase-alpha",
+          "data-status-matrix-source" => "operational_observables",
+          "data-status-matrix-status-policy" => "contact_phase",
+          "data-status-matrix-contact-kind" => "scheduled",
+          "data-status-matrix-phase" => "scheduled"
+        })
 
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="contact_phase"][data-status-matrix-contact-kind="scheduled"][data-status-matrix-phase="scheduled"])
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="value"]),
-               "Scheduled"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="quality"]),
-               "Scheduled"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="limit"]),
-               "Scheduled"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="time"]),
-               scheduled_contact.scheduled_contact_id
-             )
+      assert_widget_row_field(row, "value", "Scheduled")
+      assert_widget_row_field(row, "quality", "Scheduled")
+      assert_widget_row_field(row, "limit", "Scheduled")
+      assert_widget_row_field(row, "time", scheduled_contact.scheduled_contact_id)
 
       component_id =
         "status-row-links-#{matrix_widget.widget_id}-contacts.phase:dashboard-contact-phase-alpha-component"
 
-      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       assert_widget_data_link_item(view, component_id, %{
         "data-status-matrix-row-link-target" => "contact",
@@ -365,25 +346,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      row_selector =
-        ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
-
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dashboard-transport-alpha"][data-status-matrix-transport-id="dashboard-transport-alpha"][data-status-matrix-source-endpoint-id="dashboard-source-endpoint-alpha"][data-status-matrix-ground-station-id="dss-14"][data-status-matrix-connection-state="connected"])
-             )
-
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-frame-observable-id="comms.transport.connection_state"][data-status-matrix-product-family="connection_state"][data-status-matrix-supported-capability="connection_state"][data-status-matrix-data-source-id="managed_operational_observables"])
-             )
+      row =
+        assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+          "data-status-matrix-row" =>
+            "comms.transport.connection_state:dashboard-transport-alpha",
+          "data-status-matrix-source" => "operational_observables",
+          "data-status-matrix-status-policy" => "connection_state",
+          "data-status-matrix-resource-id" => "dashboard-transport-alpha",
+          "data-status-matrix-transport-id" => "dashboard-transport-alpha",
+          "data-status-matrix-source-endpoint-id" => "dashboard-source-endpoint-alpha",
+          "data-status-matrix-ground-station-id" => "dss-14",
+          "data-status-matrix-connection-state" => "connected",
+          "data-status-matrix-frame-observable-id" => "comms.transport.connection_state",
+          "data-status-matrix-product-family" => "connection_state",
+          "data-status-matrix-supported-capability" => "connection_state",
+          "data-status-matrix-data-source-id" => "managed_operational_observables"
+        })
 
       component_id =
         "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:dashboard-transport-alpha-component"
 
-      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       evidence_attrs = %{
         "data-status-matrix-row-evidence" =>
@@ -573,29 +556,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                "connected"
              )
 
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="value"]),
-               "Connected"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="quality"]),
-               "Tcp socket"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="limit"]),
-               "Connected"
-             )
-
-      assert has_element?(
-               view,
-               row_selector <> ~s( [data-status-matrix-field="time"]),
-               "dashboard-transport-alpha"
-             )
+      assert_widget_row_field(row, "value", "Connected")
+      assert_widget_row_field(row, "quality", "Tcp socket")
+      assert_widget_row_field(row, "limit", "Connected")
+      assert_widget_row_field(row, "time", "dashboard-transport-alpha")
 
       transport_link_path =
         show_path(mission, dashboard) <>
@@ -751,25 +715,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="ground_station"][data-dashboard-scope-id="dss-14"])
              )
 
-      row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="ground.station.antenna_pointing_state:dss-14"])
-
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="antenna_pointing_state"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-ground-station-id="dss-14"][data-status-matrix-transport-id="#{transport.transport_id}"][data-status-matrix-source-endpoint-id="#{source_endpoint.source_endpoint_id}"])
-             )
-
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-frame-observable-id="ground.station.antenna_pointing_state"][data-status-matrix-product-family="ground_station"][data-status-matrix-supported-capability="ground_station_antenna_pointing_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-             )
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "ground.station.antenna_pointing_state:dss-14",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "antenna_pointing_state",
+        "data-status-matrix-resource-id" => "dss-14",
+        "data-status-matrix-scope-kind" => "ground_station",
+        "data-status-matrix-ground-station-id" => "dss-14",
+        "data-status-matrix-transport-id" => transport.transport_id,
+        "data-status-matrix-source-endpoint-id" => source_endpoint.source_endpoint_id,
+        "data-status-matrix-frame-observable-id" => "ground.station.antenna_pointing_state",
+        "data-status-matrix-product-family" => "ground_station",
+        "data-status-matrix-supported-capability" => "ground_station_antenna_pointing_state",
+        "data-status-matrix-data-source-id" => "managed_operational_observables",
+        "data-status-matrix-source-binding-id" => "default_flight_operational_observables"
+      })
 
       component_id =
         "status-row-links-#{matrix_widget.widget_id}-ground.station.antenna_pointing_state:dss-14-component"
 
-      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       click_widget_data_link(view, component_id, %{
         "data-status-matrix-row-evidence" => "ground.station.antenna_pointing_state:dss-14"

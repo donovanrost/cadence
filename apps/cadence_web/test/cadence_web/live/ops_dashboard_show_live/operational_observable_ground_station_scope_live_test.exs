@@ -274,28 +274,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="ground_station"][data-dashboard-scope-id="#{dss_14.ground_station_id}"])
              )
 
-      ground_station_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="ground.station.connection_state:dss-14"])
-
-      alpha_transport_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
-
-      beta_transport_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-beta"])
-
-      beta_ground_station_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="ground.station.connection_state:dss-63"])
-
-      assert has_element?(
-               view,
-               ground_station_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "ground.station.connection_state:dss-14",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "connection_state",
+        "data-status-matrix-resource-id" => "dss-14",
+        "data-status-matrix-scope-kind" => "ground_station",
+        "data-status-matrix-source-endpoint-id" => alpha_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-14"
+      })
 
       component_id =
         "status-row-links-#{matrix_widget.widget_id}-ground.station.connection_state:dss-14-component"
 
-      assert has_element?(view, "#{ground_station_row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       click_widget_data_link(view, component_id, %{
         "data-status-matrix-row-evidence" => "ground.station.connection_state:dss-14"
@@ -486,14 +478,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                "connected"
              )
 
-      assert has_element?(
-               view,
-               alpha_transport_row_selector <>
-                 ~s([data-status-matrix-resource-id="dashboard-transport-alpha"][data-status-matrix-scope-kind="transport"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-resource-id" => "dashboard-transport-alpha",
+        "data-status-matrix-scope-kind" => "transport",
+        "data-status-matrix-source-endpoint-id" => alpha_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-14"
+      })
 
-      refute has_element?(view, beta_transport_row_selector)
-      refute has_element?(view, beta_ground_station_row_selector)
+      refute_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-beta"
+      })
+
+      refute_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "ground.station.connection_state:dss-63"
+      })
 
       link_attrs = %{
         "data-status-matrix-row-link" => "ground.station.connection_state:dss-14",

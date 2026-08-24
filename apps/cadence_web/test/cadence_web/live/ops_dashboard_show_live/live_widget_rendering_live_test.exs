@@ -290,7 +290,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       assert latest_meta["sample_id"] == latest_sample.sample_id
 
       component_id = "widget-data-links-#{trend_widget.widget_id}-component"
-      assert has_element?(view, "#widget-#{trend_widget.widget_id} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       assert_widget_data_link_item(view, component_id, %{
         "data-widget-data-link-target" => "telemetry sample"

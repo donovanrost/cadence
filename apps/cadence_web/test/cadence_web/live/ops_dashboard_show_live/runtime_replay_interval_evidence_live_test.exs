@@ -247,19 +247,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
 
     assert has_element?(view, root_selector)
 
-    row_selector =
-      ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="ground.station.connection_state:dss-14"])
-
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{source_health_event.data_source_id}"][data-status-matrix-source-binding-id="#{source_health_event.source_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-ground-station-id="dss-14"][data-status-matrix-connection-state="connected"])
-           )
+    assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+      "data-status-matrix-row" => "ground.station.connection_state:dss-14",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-status-policy" => "connection_state",
+      "data-status-matrix-realm" => "replay",
+      "data-status-matrix-data-source-id" => source_health_event.data_source_id,
+      "data-status-matrix-source-binding-id" => source_health_event.source_binding_id,
+      "data-status-matrix-replay-run-id" => replay_run_id,
+      "data-status-matrix-dataset" => "operational_observables_replay",
+      "data-status-matrix-resource-id" => "dss-14",
+      "data-status-matrix-scope-kind" => "ground_station",
+      "data-status-matrix-ground-station-id" => "dss-14",
+      "data-status-matrix-connection-state" => "connected"
+    })
 
     component_id =
       "status-row-links-#{matrix_widget_id}-ground.station.connection_state:dss-14-component"
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-status-matrix-row-evidence" => "ground.station.connection_state:dss-14"
@@ -548,16 +554,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     row_id =
       "state:comms.transport.execution_state:#{DateTime.to_unix(observed_at, :millisecond)}:0"
 
-    row_selector = ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{row_id}"])
-
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-state-timeline-observable="comms.transport.execution_state"][data-state-timeline-state="Initialized"][data-state-timeline-realm="replay"][data-state-timeline-data-source-id="#{source_health_event.data_source_id}"][data-state-timeline-source-binding-id="#{source_health_event.source_binding_id}"][data-state-timeline-replay-run-id="#{replay_run_id}"][data-state-timeline-dataset="operational_observables_replay"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => row_id,
+      "data-state-timeline-observable" => "comms.transport.execution_state",
+      "data-state-timeline-state" => "Initialized",
+      "data-state-timeline-realm" => "replay",
+      "data-state-timeline-data-source-id" => source_health_event.data_source_id,
+      "data-state-timeline-source-binding-id" => source_health_event.source_binding_id,
+      "data-state-timeline-replay-run-id" => replay_run_id,
+      "data-state-timeline-dataset" => "operational_observables_replay"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{row_id}-component"
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-state-timeline-row-evidence" => row_id
@@ -844,20 +853,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
 
     assert has_element?(view, root_selector)
 
-    rf_lock_row_selector =
-      ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-alpha"])
-
-    assert has_element?(
-             view,
-             rf_lock_row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{replay_sources.operational_data_source_id}"][data-status-matrix-source-binding-id="#{replay_sources.operational_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="#{transport.transport_id}"])
-           )
+    assert_widget_row(view, "status_matrix", rf_lock_widget.widget_id, %{
+      "data-status-matrix-row" => "link.rf_lock_state:link-alpha",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-realm" => "replay",
+      "data-status-matrix-data-source-id" => replay_sources.operational_data_source_id,
+      "data-status-matrix-source-binding-id" => replay_sources.operational_binding_id,
+      "data-status-matrix-replay-run-id" => replay_run_id,
+      "data-status-matrix-dataset" => "operational_observables_replay",
+      "data-status-matrix-link-id" => "link-alpha",
+      "data-status-matrix-transport-id" => transport.transport_id
+    })
 
     open_and_assert_replay_rf_evidence!(
       view,
       conn,
       %{
-        row_selector: rf_lock_row_selector,
         widget_id: rf_lock_widget.widget_id,
         observable_id: "link.rf_lock_state",
         replay_sources: replay_sources,
@@ -871,20 +882,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
       }
     )
 
-    frame_sync_row_selector =
-      ~s(#widget-#{frame_sync_widget.widget_id} [data-status-matrix-row="link.frame_sync_state:link-alpha"])
-
-    assert has_element?(
-             view,
-             frame_sync_row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{replay_sources.operational_data_source_id}"][data-status-matrix-source-binding-id="#{replay_sources.operational_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-link-id="link-alpha"][data-status-matrix-transport-id="#{transport.transport_id}"])
-           )
+    assert_widget_row(view, "status_matrix", frame_sync_widget.widget_id, %{
+      "data-status-matrix-row" => "link.frame_sync_state:link-alpha",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-realm" => "replay",
+      "data-status-matrix-data-source-id" => replay_sources.operational_data_source_id,
+      "data-status-matrix-source-binding-id" => replay_sources.operational_binding_id,
+      "data-status-matrix-replay-run-id" => replay_run_id,
+      "data-status-matrix-dataset" => "operational_observables_replay",
+      "data-status-matrix-link-id" => "link-alpha",
+      "data-status-matrix-transport-id" => transport.transport_id
+    })
 
     open_and_assert_replay_rf_evidence!(
       view,
       conn,
       %{
-        row_selector: frame_sync_row_selector,
         widget_id: frame_sync_widget.widget_id,
         observable_id: "link.frame_sync_state",
         replay_sources: replay_sources,

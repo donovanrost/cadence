@@ -163,28 +163,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{alpha_endpoint.source_endpoint_id}"])
              )
 
-      alpha_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
-
-      beta_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-beta"])
-
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dashboard-transport-alpha"][data-status-matrix-scope-kind="transport"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
-
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"][data-status-matrix-supported-capability="connection_state"])
-             )
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "connection_state",
+        "data-status-matrix-resource-id" => "dashboard-transport-alpha",
+        "data-status-matrix-scope-kind" => "transport",
+        "data-status-matrix-source-endpoint-id" => alpha_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-14",
+        "data-status-matrix-data-source-id" => "managed_operational_observables",
+        "data-status-matrix-source-binding-id" => "default_flight_operational_observables",
+        "data-status-matrix-supported-capability" => "connection_state"
+      })
 
       component_id =
         "status-row-links-#{matrix_widget.widget_id}-comms.transport.connection_state:dashboard-transport-alpha-component"
 
-      assert has_element?(view, "#{alpha_row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       link_attrs = %{
         "data-status-matrix-row-link" =>
@@ -197,7 +192,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
 
       assert_widget_data_link_item(view, component_id, link_attrs)
 
-      refute has_element?(view, beta_row_selector)
+      refute_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-beta"
+      })
 
       click_widget_data_link(view, component_id, %{
         "data-status-matrix-row-link" =>

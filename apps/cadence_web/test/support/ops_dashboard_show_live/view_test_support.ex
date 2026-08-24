@@ -98,26 +98,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   def widget_row_field(row, key) do
-    row
-    |> Map.get("cells", [])
-    |> Enum.find(&(&1["key"] == key))
-    |> case do
-      nil -> nil
-      cell -> cell["text"]
-    end
+    Enum.find(Map.get(row, "cells", []), &(&1["key"] == key))
+  end
+
+  def assert_widget_row_field(row, key, expected_text) do
+    field = widget_row_field(row, key)
+    assert field
+
+    texts =
+      [field["text"] | Enum.map(Map.get(field, "badges", []), & &1["text"])]
+      |> Enum.reject(&is_nil/1)
+
+    assert expected_text in texts
+    field
   end
 
   def widget_data_link_presentation(rendered, component_id) do
-    rendered
-    |> rendered_html()
-    |> widget_rows_host_ids()
-    |> Enum.find_value(fn host_id ->
-      rendered
-      |> LiveVue.Test.get_vue(id: host_id)
-      |> Map.fetch!(:props)
-      |> Map.fetch!("presentation")
-      |> find_component_presentation(component_id)
-    end)
+    html = rendered_html(rendered)
+
+    direct_widget_data_link_presentation(html, component_id) ||
+      Enum.find_value(widget_rows_host_ids(html), fn host_id ->
+        html
+        |> LiveVue.Test.get_vue(id: host_id)
+        |> Map.fetch!(:props)
+        |> Map.fetch!("presentation")
+        |> find_component_presentation(component_id)
+      end)
   end
 
   def dashboard_runtime_controls(view_or_html) do
@@ -236,8 +242,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   defp widget_rows_host_ids(html) do
     html
     |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([id^="widget-rows-"][id$="-component"]))
+    |> LazyHTML.query(~s([phx-hook="VueHook"][data-name="WidgetRows"]))
     |> LazyHTML.attribute("id")
+  end
+
+  defp direct_widget_data_link_presentation(html, component_id) do
+    vue = LiveVue.Test.get_vue(html, id: component_id)
+
+    if vue.component == "WidgetDataLinks" do
+      vue.props["presentation"]
+    end
+  rescue
+    RuntimeError -> nil
   end
 
   defp find_component_presentation(

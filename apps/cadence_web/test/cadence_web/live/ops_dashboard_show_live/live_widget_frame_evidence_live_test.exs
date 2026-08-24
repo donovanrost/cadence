@@ -291,19 +291,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      row_selector =
-        ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:#{transport.transport_id}"])
-
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-data-source-id="#{source_health_event.data_source_id}"][data-status-matrix-source-binding-id="#{source_health_event.source_binding_id}"])
-             )
+      assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:#{transport.transport_id}",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-data-source-id" => source_health_event.data_source_id,
+        "data-status-matrix-source-binding-id" => source_health_event.source_binding_id
+      })
 
       component_id =
         "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:#{transport.transport_id}-component"
 
-      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       click_widget_data_link(view, component_id, %{
         "data-status-matrix-row-evidence" =>

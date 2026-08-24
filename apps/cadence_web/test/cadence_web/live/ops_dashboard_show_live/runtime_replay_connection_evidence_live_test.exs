@@ -478,19 +478,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     assert has_element?(view, root_selector)
 
-    row_selector =
-      ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:#{transport.transport_id}"])
-
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{source_health_event.data_source_id}"][data-status-matrix-source-binding-id="#{source_health_event.source_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-connection-state="degraded"])
-           )
+    assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+      "data-status-matrix-row" => "comms.transport.connection_state:#{transport.transport_id}",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-status-policy" => "connection_state",
+      "data-status-matrix-realm" => "replay",
+      "data-status-matrix-data-source-id" => source_health_event.data_source_id,
+      "data-status-matrix-source-binding-id" => source_health_event.source_binding_id,
+      "data-status-matrix-replay-run-id" => replay_run_id,
+      "data-status-matrix-dataset" => "operational_observables_replay",
+      "data-status-matrix-connection-state" => "degraded"
+    })
 
     component_id =
       "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:#{transport.transport_id}-component"
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-status-matrix-row-evidence" =>
@@ -692,13 +695,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     render_dashboard_async(view)
 
-    row_selector =
-      ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="comms.transport.connection_state:#{transport.transport_id}"])
-
     component_id =
       "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:#{transport.transport_id}-component"
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+      "data-status-matrix-row" => "comms.transport.connection_state:#{transport.transport_id}"
+    })
+
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-status-matrix-row-evidence" =>
@@ -843,19 +847,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     assert has_element?(view, root_selector)
 
-    row_selector =
-      ~s(#widget-#{matrix_widget_id} [data-status-matrix-row="ground.station.antenna_pointing_state:dss-14"])
-
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{replay_sources.operational_data_source_id}"][data-status-matrix-source-binding-id="#{replay_sources.operational_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-ground-station-id="dss-14"])
-           )
+    assert_widget_row(view, "status_matrix", matrix_widget_id, %{
+      "data-status-matrix-row" => "ground.station.antenna_pointing_state:dss-14",
+      "data-status-matrix-source" => "operational_observables",
+      "data-status-matrix-realm" => "replay",
+      "data-status-matrix-data-source-id" => replay_sources.operational_data_source_id,
+      "data-status-matrix-source-binding-id" => replay_sources.operational_binding_id,
+      "data-status-matrix-replay-run-id" => replay_run_id,
+      "data-status-matrix-dataset" => "operational_observables_replay",
+      "data-status-matrix-resource-id" => "dss-14",
+      "data-status-matrix-scope-kind" => "ground_station",
+      "data-status-matrix-ground-station-id" => "dss-14"
+    })
 
     component_id =
       "status-row-links-#{matrix_widget_id}-ground.station.antenna_pointing_state:dss-14-component"
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-status-matrix-row-evidence" => "ground.station.antenna_pointing_state:dss-14"

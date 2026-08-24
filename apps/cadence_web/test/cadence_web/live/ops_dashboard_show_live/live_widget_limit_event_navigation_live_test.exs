@@ -192,7 +192,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
       assert html =~ "Red"
 
       component_id = "widget-data-links-#{value_widget.widget_id}-component"
-      assert has_element?(view, "#widget-#{value_widget.widget_id} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
 
       assert_widget_data_link_item(view, component_id, %{
         "data-widget-data-link-target" => "limit event"

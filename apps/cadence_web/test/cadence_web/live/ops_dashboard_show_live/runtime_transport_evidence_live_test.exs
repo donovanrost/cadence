@@ -122,17 +122,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     record_row_id =
       "state:runtime.transport_activity:#{DateTime.to_unix(record_at, :millisecond)}:0"
 
-    record_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{record_row_id}"])
-
-    assert has_element?(
-             view,
-             record_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport control input handled"][data-state-timeline-realm="flight"][data-state-timeline-data-source-id="managed_operational_observables"][data-state-timeline-source-binding-id="default_flight_operational_observables"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => record_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport control input handled",
+      "data-state-timeline-realm" => "flight",
+      "data-state-timeline-data-source-id" => "managed_operational_observables",
+      "data-state-timeline-source-binding-id" => "default_flight_operational_observables"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{record_row_id}-component"
-    assert has_element?(view, "#{record_row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     evidence_attrs = %{
       "data-state-timeline-row-evidence" => record_row_id,
@@ -326,35 +326,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     timer_row_id =
       "state:runtime.transport_activity:#{DateTime.to_unix(timer_at, :millisecond)}:2"
 
-    record_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{record_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => record_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport control input handled",
+      "data-state-timeline-realm" => "flight",
+      "data-state-timeline-data-source-id" => "managed_operational_observables",
+      "data-state-timeline-source-binding-id" => "default_flight_operational_observables"
+    })
 
-    action_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{action_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => action_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport action requested",
+      "data-state-timeline-realm" => "flight"
+    })
 
-    timer_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{timer_row_id}"])
-
-    assert has_element?(
-             view,
-             record_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport control input handled"][data-state-timeline-realm="flight"][data-state-timeline-data-source-id="managed_operational_observables"][data-state-timeline-source-binding-id="default_flight_operational_observables"])
-           )
-
-    assert has_element?(
-             view,
-             action_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport action requested"][data-state-timeline-realm="flight"])
-           )
-
-    assert has_element?(
-             view,
-             timer_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport timer fired"][data-state-timeline-realm="flight"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => timer_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport timer fired",
+      "data-state-timeline-realm" => "flight"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{action_row_id}-component"
-    assert has_element?(view, "#{action_row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     evidence_attrs = %{
       "data-state-timeline-row-evidence" => action_row_id,
@@ -546,17 +542,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     timer_row_id =
       "state:runtime.transport_activity:#{DateTime.to_unix(timer_at, :millisecond)}:2"
 
-    timer_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{timer_row_id}"])
-
-    assert has_element?(
-             view,
-             timer_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport timer fired"][data-state-timeline-realm="flight"][data-state-timeline-data-source-id="managed_operational_observables"][data-state-timeline-source-binding-id="default_flight_operational_observables"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => timer_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport timer fired",
+      "data-state-timeline-realm" => "flight",
+      "data-state-timeline-data-source-id" => "managed_operational_observables",
+      "data-state-timeline-source-binding-id" => "default_flight_operational_observables"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{timer_row_id}-component"
-    assert has_element?(view, "#{timer_row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     evidence_attrs = %{
       "data-state-timeline-row-evidence" => timer_row_id,
@@ -775,35 +771,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     timer_row_id =
       "state:runtime.managed_activity:#{DateTime.to_unix(timer_at, :millisecond)}:2"
 
-    initialized_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{initialized_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => initialized_row_id,
+      "data-state-timeline-observable" => "runtime.managed_activity",
+      "data-state-timeline-state" => "Managed capability initialized",
+      "data-state-timeline-realm" => "replay",
+      "data-state-timeline-data-source-id" => replay_sources.operational_data_source_id,
+      "data-state-timeline-source-binding-id" => replay_sources.operational_binding_id,
+      "data-state-timeline-replay-run-id" => replay_run_id,
+      "data-state-timeline-dataset" => "operational_observables_replay"
+    })
 
-    record_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{record_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => record_row_id,
+      "data-state-timeline-observable" => "runtime.managed_activity",
+      "data-state-timeline-state" => "Managed capability record handled",
+      "data-state-timeline-realm" => "replay"
+    })
 
-    timer_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{timer_row_id}"])
-
-    assert has_element?(
-             view,
-             initialized_row_selector <>
-               ~s([data-state-timeline-observable="runtime.managed_activity"][data-state-timeline-state="Managed capability initialized"][data-state-timeline-realm="replay"][data-state-timeline-data-source-id="#{replay_sources.operational_data_source_id}"][data-state-timeline-source-binding-id="#{replay_sources.operational_binding_id}"][data-state-timeline-replay-run-id="#{replay_run_id}"][data-state-timeline-dataset="operational_observables_replay"])
-           )
-
-    assert has_element?(
-             view,
-             record_row_selector <>
-               ~s([data-state-timeline-observable="runtime.managed_activity"][data-state-timeline-state="Managed capability record handled"][data-state-timeline-realm="replay"])
-           )
-
-    assert has_element?(
-             view,
-             timer_row_selector <>
-               ~s([data-state-timeline-observable="runtime.managed_activity"][data-state-timeline-state="Managed capability timer handled"][data-state-timeline-realm="replay"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => timer_row_id,
+      "data-state-timeline-observable" => "runtime.managed_activity",
+      "data-state-timeline-state" => "Managed capability timer handled",
+      "data-state-timeline-realm" => "replay"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{timer_row_id}-component"
-    assert has_element?(view, "#{timer_row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     evidence_attrs = %{
       "data-state-timeline-row-evidence" => timer_row_id,

@@ -201,43 +201,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
                ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix][data-engine-backed="true"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="HK.counter"] [data-status-matrix-field="value"]),
-               "15"
-             )
+      counter_row =
+        assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+          "data-status-matrix-row" => "HK.counter"
+        })
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="HK.counter"] [data-status-matrix-field="quality"]),
-               "Good"
-             )
+      assert_widget_row_field(counter_row, "value", "15")
+      assert_widget_row_field(counter_row, "quality", "Good")
+      assert_widget_row_field(counter_row, "limit", "Yellow")
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="HK.counter"] [data-status-matrix-field="limit"]),
-               "Yellow"
-             )
+      voltage_row =
+        assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+          "data-status-matrix-row" => "HK.voltage"
+        })
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="HK.voltage"] [data-status-matrix-field="value"]),
-               "28"
-             )
-
-      assert has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="HK.voltage"] [data-status-matrix-field="limit"]),
-               "None"
-             )
+      assert_widget_row_field(voltage_row, "value", "28")
+      assert_widget_row_field(voltage_row, "limit", "None")
 
       counter_component_id =
         "status-row-links-#{matrix_widget.widget_id}-HK.counter-component"
 
-      assert has_element?(
-               view,
-               "#widget-#{matrix_widget.widget_id} [id=\"#{counter_component_id}\"]"
-             )
+      assert widget_data_link_presentation(view, counter_component_id)
 
       click_widget_data_link(view, counter_component_id, %{
         "data-status-matrix-row-evidence" => "HK.counter"
@@ -294,10 +278,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
       voltage_component_id =
         "status-row-links-#{matrix_widget.widget_id}-HK.voltage-component"
 
-      assert has_element?(
-               view,
-               "#widget-#{matrix_widget.widget_id} [id=\"#{voltage_component_id}\"]"
-             )
+      assert widget_data_link_presentation(view, voltage_component_id)
 
       click_widget_data_link(view, voltage_component_id, %{
         "data-status-matrix-row-link" => "HK.voltage",
@@ -359,37 +340,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
                ~s(#widget-#{table_widget.widget_id} [data-data-table][data-engine-backed="true"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{table_widget.widget_id} [data-data-table-row="HK.counter"] [data-data-table-field="value"]),
-               "15"
-             )
+      counter_row =
+        assert_widget_row(view, "data_table", table_widget.widget_id, %{
+          "data-data-table-row" => "HK.counter"
+        })
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{table_widget.widget_id} [data-data-table-row="HK.counter"] [data-data-table-field="quality"]),
-               "Good"
-             )
+      assert_widget_row_field(counter_row, "value", "15")
+      assert_widget_row_field(counter_row, "quality", "Good")
+      assert_widget_row_field(counter_row, "state", "Yellow")
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{table_widget.widget_id} [data-data-table-row="HK.counter"] [data-data-table-field="state"]),
-               "Yellow"
-             )
+      voltage_row =
+        assert_widget_row(view, "data_table", table_widget.widget_id, %{
+          "data-data-table-row" => "HK.voltage"
+        })
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{table_widget.widget_id} [data-data-table-row="HK.voltage"] [data-data-table-field="value"]),
-               "28"
-             )
+      assert_widget_row_field(voltage_row, "value", "28")
 
       voltage_component_id =
         "data-row-links-#{table_widget.widget_id}-HK.voltage-component"
 
-      assert has_element?(
-               view,
-               "#widget-#{table_widget.widget_id} [id=\"#{voltage_component_id}\"]"
-             )
+      assert widget_data_link_presentation(view, voltage_component_id)
 
       click_widget_data_link(view, voltage_component_id, %{
         "data-data-table-row-link" => "HK.voltage",

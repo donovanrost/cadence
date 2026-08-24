@@ -126,20 +126,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
 
     await_dashboard_resolved(view)
 
-    row_selector =
-      ~s(#widget-#{events_widget.widget_id} [data-event-timeline-record-id="#{source_capability_posture_id}"])
-
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-event-timeline-category="Source capability"][data-event-timeline-kind="Source capability fallback"][data-event-timeline-target="Operational event"][data-event-timeline-target-id="#{persisted_event.event_id}"][data-event-timeline-logical-source="events"][data-event-timeline-realm="flight"][data-event-timeline-data-source-id="#{DataSources.default_events_data_source().data_source_id}"][data-event-timeline-source-binding-id="#{DataSources.default_flight_events_binding().binding_id}"][data-event-timeline-dataset="mission_events"])
-           )
+    assert_widget_row(view, "event_timeline", events_widget.widget_id, %{
+      "data-event-timeline-record-id" => source_capability_posture_id,
+      "data-event-timeline-category" => "Source capability",
+      "data-event-timeline-kind" => "Source capability fallback",
+      "data-event-timeline-target" => "Operational event",
+      "data-event-timeline-target-id" => persisted_event.event_id,
+      "data-event-timeline-logical-source" => "events",
+      "data-event-timeline-realm" => "flight",
+      "data-event-timeline-data-source-id" =>
+        DataSources.default_events_data_source().data_source_id,
+      "data-event-timeline-source-binding-id" =>
+        DataSources.default_flight_events_binding().binding_id,
+      "data-event-timeline-dataset" => "mission_events"
+    })
 
     row_id =
       "event:#{source_capability_posture_id}:#{DateTime.to_unix(persisted_event.occurred_at, :millisecond)}:0"
 
     component_id = "event-row-links-#{events_widget.widget_id}-#{row_id}-component"
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     link_attrs = %{
       "data-event-timeline-row-link-target" => "operational event",

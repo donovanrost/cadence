@@ -180,37 +180,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="mission"][data-dashboard-scope-id="#{mission.mission_id}"])
              )
 
-      mission_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="commanding.queue_depth:#{mission.mission_id}"])
+      row =
+        assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+          "data-status-matrix-row" => "commanding.queue_depth:#{mission.mission_id}",
+          "data-status-matrix-source" => "operational_observables",
+          "data-status-matrix-status-policy" => "metric_value",
+          "data-status-matrix-resource-id" => mission.mission_id,
+          "data-status-matrix-scope-kind" => "mission",
+          "data-status-matrix-frame-observable-id" => "commanding.queue_depth",
+          "data-status-matrix-product-family" => "commanding",
+          "data-status-matrix-supported-capability" => "command_queue_depth",
+          "data-status-matrix-data-source-id" => "managed_operational_observables",
+          "data-status-matrix-source-binding-id" => "default_flight_operational_observables"
+        })
 
-      assert has_element?(
-               view,
-               mission_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="metric_value"][data-status-matrix-resource-id="#{mission.mission_id}"][data-status-matrix-scope-kind="mission"])
-             )
-
-      assert has_element?(
-               view,
-               mission_row_selector <>
-                 ~s([data-status-matrix-frame-observable-id="commanding.queue_depth"][data-status-matrix-product-family="commanding"][data-status-matrix-supported-capability="command_queue_depth"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-             )
-
-      assert has_element?(
-               view,
-               mission_row_selector <> ~s( [data-status-matrix-field="observable"]),
-               "Pending commands"
-             )
-
-      assert has_element?(
-               view,
-               mission_row_selector <> ~s( [data-status-matrix-field="value"]),
-               "2"
-             )
+      assert_widget_row_field(row, "observable", "Pending commands")
+      assert_widget_row_field(row, "value", "2")
 
       component_id =
         "status-row-links-#{matrix_widget.widget_id}-commanding.queue_depth:#{mission.mission_id}-component"
 
-      assert has_element?(view, "#{mission_row_selector} [id=\"#{component_id}\"]")
+      assert widget_data_link_presentation(view, component_id)
       [evidence] = widget_data_link_items(view, component_id)
 
       assert Map.take(evidence["attrs"], [
